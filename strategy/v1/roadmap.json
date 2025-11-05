@@ -267,8 +267,8 @@
       "version": "0.2.0",
       "codename": "Fractal",
       "target_date": "2025-12-15",
-      "confidence": "medium",
-      "status": "planned",
+      "confidence": "high",
+      "status": "in_progress",
       "theme": "Validation - Arquitectura Fractal",
       "goals": [
         "2 cores locales comunicándose via MQTT",
@@ -276,9 +276,9 @@
         "Security P2P handshake entre cores"
       ],
       "kpis": {
-        "multi_core_local_working": {"baseline": 0, "target": 1},
-        "discovery_system_working": {"baseline": 0, "target": 1},
-        "p2p_handshake_working": {"baseline": 0, "target": 1}
+        "multi_core_local_working": {"baseline": 0, "target": 1, "actual": 0.7, "achieved": false},
+        "discovery_system_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "p2p_handshake_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false}
       },
       "items": [
         {
@@ -286,7 +286,7 @@
           "description": "Sistema de discovery de cores usando retained messages en MQTT",
           "type": "feature",
           "priority": "P0",
-          "status": "planned",
+          "status": "completed",
           "effort_story_points": 8,
           "assigned_team": "core_team",
           "dependencies": [],
@@ -304,7 +304,7 @@
           "description": "Probar que 2 cores se comunican via MQTT broker compartido",
           "type": "feature",
           "priority": "P0",
-          "status": "planned",
+          "status": "in_progress",
           "effort_story_points": 5,
           "assigned_team": "core_team",
           "dependencies": ["Discovery system"],

@@ -30,6 +30,7 @@ const { MQTTClient } = require('./core/mqtt');
 const EventBus = require('./core/events/bus');
 const HookManager = require('./core/hooks');
 const ModuleLoader = require('./core/modules/loader');
+const ModuleRegistry = require('./core/modules/registry');
 const HTTPGateway = require('./core/gateway/http');
 const Discovery = require('./core/discovery');
 const { Logger, Tracer, Metrics } = require('./core/observability');
@@ -138,6 +139,7 @@ async function main() {
     eventBus: null,
     hooks: null,
     moduleLoader: null,
+    moduleRegistry: null,
     httpGateway: null,
     discovery: null,
     logger: null,
@@ -240,6 +242,11 @@ async function main() {
       console.log(`   ⚠️  Modules path not found: ${modulesPath}`);
       console.log(`   ℹ️  Continuing without modules...\n`);
     } else {
+      // Create Module Registry
+      core.moduleRegistry = new ModuleRegistry({
+        logger: core.logger
+      });
+
       // Create the core context that will be passed to modules
       const coreContext = {
         id: config.core.id,
@@ -254,6 +261,7 @@ async function main() {
       core.moduleLoader = new ModuleLoader({
         modulesPath,
         core: coreContext,
+        registry: core.moduleRegistry,
         logger: core.logger,
         metrics: core.metrics
       });
@@ -344,10 +352,10 @@ async function main() {
     core.httpGateway = new HTTPGateway({
       port: httpPort,
       coreId: config.core.id,
+      registry: core.moduleRegistry,
+      hooks: core.hooks,
       logger: core.logger,
       metrics: core.metrics,
-      eventBus: core.eventBus,
-      moduleLoader: core.moduleLoader,
       core: core  // Pass core for UI Gateway
     });
 

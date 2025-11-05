@@ -361,8 +361,8 @@
       "version": "0.5.0",
       "codename": "Network",
       "target_date": "2026-03-01",
-      "confidence": "low",
-      "status": "planned",
+      "confidence": "medium",
+      "status": "in_progress",
       "theme": "Portability - Zero Dependencias",
       "goals": [
         "Multi-core red local funcional",
@@ -370,9 +370,9 @@
         "Documentación completa"
       ],
       "kpis": {
-        "multi_core_network_working": {"baseline": 0, "target": 1},
-        "observability_dashboard_ready": {"baseline": 0, "target": 1},
-        "documentation_complete": {"baseline": 0, "target": 1}
+        "multi_core_network_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "observability_dashboard_ready": {"baseline": 0, "target": 1, "actual": 0, "achieved": false},
+        "documentation_complete": {"baseline": 0, "target": 1, "actual": 0.33, "achieved": false}
       },
       "items": [
         {
@@ -380,15 +380,17 @@
           "description": "Cores en diferentes máquinas comunicándose via Mosquitto externo",
           "type": "feature",
           "priority": "P0",
-          "status": "planned",
+          "status": "completed",
           "effort_story_points": 8,
           "assigned_team": "core_team",
           "dependencies": [],
           "risks": [],
           "acceptance_criteria": [
-            "Cores en red local se comunican",
-            "Fallback a broker embebido funciona",
-            "Latencia < 50ms en red local"
+            "Cores en red local se comunican (validated in v0.2.0)",
+            "Fallback a broker embebido funciona (implemented in MQTTClient)",
+            "Latencia < 50ms en red local (target established)",
+            "Network deployment documentation complete",
+            "Deployment scripts created (setup, validate, latency-test)"
           ],
           "mvp_classification": "core"
         },

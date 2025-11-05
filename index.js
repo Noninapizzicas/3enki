@@ -246,6 +246,7 @@ async function main() {
         logger: core.logger,
         metrics: core.metrics,
         hooks: core.hooks,
+        events: core.eventBus,  // Alias for EventBus (modules use core.events)
         eventBus: core.eventBus,
         tracer: core.tracer
       };

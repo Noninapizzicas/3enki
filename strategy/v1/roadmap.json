@@ -276,9 +276,9 @@
         "Security P2P handshake entre cores"
       ],
       "kpis": {
-        "multi_core_local_working": {"baseline": 0, "target": 1, "actual": 0.7, "achieved": false},
+        "multi_core_local_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
         "discovery_system_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
-        "p2p_handshake_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false}
+        "p2p_handshake_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true}
       },
       "items": [
         {
@@ -304,7 +304,7 @@
           "description": "Probar que 2 cores se comunican via MQTT broker compartido",
           "type": "feature",
           "priority": "P0",
-          "status": "in_progress",
+          "status": "completed",
           "effort_story_points": 5,
           "assigned_team": "core_team",
           "dependencies": ["Discovery system"],

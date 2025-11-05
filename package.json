@@ -1,7 +1,7 @@
 {
   "name": "event-core",
-  "version": "0.1.0",
-  "description": "Meta-core fractal event-driven architecture",
+  "version": "0.2.0",
+  "description": "Meta-core fractal event-driven architecture with discovery system",
   "main": "index.js",
   "bin": {
     "event-core": "./cli/index.js"

@@ -1,0 +1,490 @@
+{
+  "roadmap_version": "1.0",
+  "created_at": "2025-10-06T00:00:00Z",
+  "last_updated": "2025-10-06T00:00:00Z",
+  "timeframe_months": 12,
+  "themes": [
+    {
+      "theme": "Foundation - Core Minimalista",
+      "description": "Implementar core completo con arquitectura correcta: hook system, module loader, security como módulo, CLI como HTTP client",
+      "aligned_okrs": ["2025-Q4:O1"],
+      "duration": "Q4 2025"
+    },
+    {
+      "theme": "Validation - Arquitectura Fractal",
+      "description": "Validar que la arquitectura fractal funciona: multi-core local, discovery automático, security P2P handshake",
+      "aligned_okrs": ["2025-Q4:O2"],
+      "duration": "Q4 2025 - Q1 2026"
+    },
+    {
+      "theme": "Portability - Zero Dependencias",
+      "description": "Probar portabilidad completa en Termux, Linux y Docker sin cambios de código",
+      "aligned_okrs": ["2025-Q4:O3"],
+      "duration": "Q4 2025 - Q1 2026"
+    }
+  ],
+  "now_next_later": {
+    "now": {
+      "timeframe": "0-3 months",
+      "focus": [
+        "Implementar Core minimalista con hook system",
+        "Implementar 3 módulos de ejemplo",
+        "Implementar CLI HTTP client",
+        "Probar en Termux y Linux"
+      ],
+      "releases": ["v0.1.0"]
+    },
+    "next": {
+      "timeframe": "3-6 months",
+      "focus": [
+        "Multi-core local comunicándose via MQTT",
+        "Discovery automático de cores",
+        "Security P2P handshake funcional",
+        "Docker image lista"
+      ],
+      "releases": ["v0.2.0"]
+    },
+    "later": {
+      "timeframe": "6-12 months",
+      "focus": [
+        "Multi-core red local (IPC mejorado)",
+        "Observabilidad completa (metrics dashboard)",
+        "HTTP API Gateway avanzado",
+        "Documentación completa con ejemplos"
+      ],
+      "releases": ["v0.5.0", "v1.0.0"]
+    }
+  },
+  "releases": [
+    {
+      "release_id": "v0.1.0",
+      "version": "0.1.0",
+      "codename": "Foundation",
+      "target_date": "2025-10-27",
+      "confidence": "high",
+      "status": "planned",
+      "theme": "Foundation - Core Minimalista",
+      "goals": [
+        "Core completo funcional con arquitectura correcta",
+        "3 módulos de ejemplo funcionando",
+        "CLI HTTP client completamente operativo"
+      ],
+      "kpis": {
+        "core_implementation_complete": {"baseline": 0, "target": 1},
+        "modules_implemented": {"baseline": 0, "target": 3},
+        "cli_implementation_complete": {"baseline": 0, "target": 1}
+      },
+      "items": [
+        {
+          "title": "Implementar HookManager con soporte para beforeEventPublish, afterEventReceive",
+          "description": "Core hook system que permite a módulos interceptar operaciones sin acoplamiento directo",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "HookManager registra y ejecuta hooks correctamente",
+            "Hooks pueden modificar context o bloquear operaciones",
+            "Tests unitarios completos"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar Module Loader con autodescubrimiento de ./modules/",
+          "description": "Sistema que escanea ./modules/, valida module.json, carga módulos y registra sus APIs",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 13,
+          "assigned_team": "core_team",
+          "dependencies": ["HookManager"],
+          "risks": ["RISK-001"],
+          "acceptance_criteria": [
+            "Autodescubrimiento de módulos funciona",
+            "module.json validation con JSON Schema",
+            "Hot-reload funciona correctamente",
+            "Lifecycle hooks (onLoad, onUnload) ejecutados"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar HTTP API Gateway con registro de rutas de módulos",
+          "description": "Gateway HTTP que expone APIs de módulos automáticamente en /modules/{name}/{path}",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 10,
+          "assigned_team": "core_team",
+          "dependencies": ["Module Loader"],
+          "risks": [],
+          "acceptance_criteria": [
+            "HTTP server escuchando en puerto configurable",
+            "Rutas de módulos registradas automáticamente",
+            "Request/response JSON automático",
+            "Error handling correcto"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar MQTT Broker embebido (Aedes) con fallback automático",
+          "description": "Broker MQTT embebido que arranca automáticamente si no hay broker externo disponible",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Aedes broker arranca correctamente",
+            "Fallback automático si broker externo no disponible",
+            "Topics core/* funcionando",
+            "QoS 0/1 configurables"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar módulo security-p2p con hook-based encryption",
+          "description": "Módulo de seguridad P2P que intercepta eventos via hooks para cifrar/descifrar",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 21,
+          "assigned_team": "core_team",
+          "dependencies": ["HookManager", "Module Loader"],
+          "risks": ["RISK-002"],
+          "acceptance_criteria": [
+            "KeyManager genera y gestiona llaves X25519",
+            "CryptoHandshake completa 4-step protocol",
+            "SecureEnvelope cifra/descifra eventos correctamente",
+            "Hook beforeEventPublish cifra eventos salientes",
+            "Hook afterEventReceive descifra eventos entrantes",
+            "APIs HTTP expuestas (status, public-key, trust-peer)"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar CLI HTTP client puro",
+          "description": "CLI que consume APIs HTTP del core, sin lógica de negocio",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": ["HTTP API Gateway"],
+          "risks": [],
+          "acceptance_criteria": [
+            "CLI hace HTTP requests a core",
+            "Comandos: security, modules, status, logs",
+            "CORE_URL env var para core remoto",
+            "Error handling claro"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar módulos echo y file-watcher como ejemplos",
+          "description": "Módulos simples que demuestran el sistema de módulos",
+          "type": "feature",
+          "priority": "P1",
+          "status": "planned",
+          "effort_story_points": 5,
+          "assigned_team": "core_team",
+          "dependencies": ["Module Loader"],
+          "risks": [],
+          "acceptance_criteria": [
+            "Módulo echo responde a eventos test.echo",
+            "Módulo file-watcher observa directorio y emite eventos",
+            "Ambos tienen module.json válido"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar Observability básico (Logger, Tracer, Metrics)",
+          "description": "Sistema de logs estructurados, tracing W3C, y métricas básicas",
+          "type": "feature",
+          "priority": "P1",
+          "status": "planned",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Logger con niveles (debug, info, warn, error)",
+            "Tracer con W3C Trace Context",
+            "Metrics counter e histogram básicos",
+            "Logs publicados a MQTT core/{id}/logs/{level}"
+          ],
+          "mvp_classification": "nice_to_have"
+        },
+        {
+          "title": "Tests de integración completos",
+          "description": "Tests que validan todo el flujo: core + módulos + CLI",
+          "type": "tech_debt",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 13,
+          "assigned_team": "core_team",
+          "dependencies": ["All features"],
+          "risks": [],
+          "acceptance_criteria": [
+            "Tests de integración core + módulos",
+            "Tests de CLI HTTP client",
+            "Tests de security handshake",
+            "Coverage > 80%"
+          ],
+          "mvp_classification": "core"
+        }
+      ],
+      "capacity": {
+        "allocated_story_points": 94,
+        "team_assigned": "solo_developer",
+        "estimated_sprints": 3
+      },
+      "go_no_go_criteria": [
+        "Todos los items P0 completados",
+        "Core funciona en Termux sin errores",
+        "3 módulos cargados y funcionando",
+        "CLI puede conectarse a core local y remoto",
+        "Tests de integración passing"
+      ],
+      "rollback_plan": "No aplicable (primera versión)",
+      "assumptions": [
+        "Velocity estimada: ~30 SP/sprint (solo developer)",
+        "No blockers técnicos inesperados",
+        "Arquitectura refactorizada es correcta"
+      ],
+      "user_stories": [
+        "Como developer, quiero cargar módulos hot-reloadables para iterar rápidamente",
+        "Como developer, quiero usar CLI remotamente para gestionar core en otra máquina",
+        "Como security-conscious developer, quiero que security sea módulo opcional"
+      ]
+    },
+    {
+      "release_id": "v0.2.0",
+      "version": "0.2.0",
+      "codename": "Fractal",
+      "target_date": "2025-12-15",
+      "confidence": "medium",
+      "status": "planned",
+      "theme": "Validation - Arquitectura Fractal",
+      "goals": [
+        "2 cores locales comunicándose via MQTT",
+        "Discovery automático funcional",
+        "Security P2P handshake entre cores"
+      ],
+      "kpis": {
+        "multi_core_local_working": {"baseline": 0, "target": 1},
+        "discovery_system_working": {"baseline": 0, "target": 1},
+        "p2p_handshake_working": {"baseline": 0, "target": 1}
+      },
+      "items": [
+        {
+          "title": "Implementar Discovery system con retained messages",
+          "description": "Sistema de discovery de cores usando retained messages en MQTT",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Cores publican status a core/{id}/status con retain:true",
+            "Cores reciben status de otros cores automáticamente",
+            "Heartbeat cada 30s para verificar alive",
+            "Last Will & Testament para detectar cores muertos"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Validar multi-core local (2 cores en misma máquina)",
+          "description": "Probar que 2 cores se comunican via MQTT broker compartido",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 5,
+          "assigned_team": "core_team",
+          "dependencies": ["Discovery system"],
+          "risks": ["RISK-003"],
+          "acceptance_criteria": [
+            "Core A y Core B se descubren automáticamente",
+            "Core A publica evento, Core B lo recibe",
+            "Security P2P handshake completa exitosamente",
+            "Encrypted events fluyen entre cores"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar Docker image con multi-stage build",
+          "description": "Dockerfile optimizado para producción con imagen pequeña",
+          "type": "feature",
+          "priority": "P1",
+          "status": "planned",
+          "effort_story_points": 5,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Dockerfile funcional",
+            "Imagen < 100MB",
+            "Core arranca correctamente en container",
+            "docker-compose.yml para multi-core local"
+          ],
+          "mvp_classification": "nice_to_have"
+        }
+      ],
+      "capacity": {
+        "allocated_story_points": 18,
+        "team_assigned": "solo_developer",
+        "estimated_sprints": 1
+      },
+      "go_no_go_criteria": [
+        "2 cores se comunican exitosamente",
+        "Discovery automático funciona",
+        "P2P handshake completa sin errores"
+      ],
+      "rollback_plan": "Volver a v0.1.0 si multi-core rompe single-core",
+      "assumptions": [
+        "Single-core (v0.1.0) sigue funcionando",
+        "No breaking changes en MQTT protocol"
+      ],
+      "user_stories": [
+        "Como architect, quiero probar que 2 cores se comunican para validar arquitectura fractal",
+        "Como developer, quiero discovery automático para no configurar peers manualmente"
+      ]
+    },
+    {
+      "release_id": "v0.5.0",
+      "version": "0.5.0",
+      "codename": "Network",
+      "target_date": "2026-03-01",
+      "confidence": "low",
+      "status": "planned",
+      "theme": "Portability - Zero Dependencias",
+      "goals": [
+        "Multi-core red local funcional",
+        "Observabilidad completa con dashboard",
+        "Documentación completa"
+      ],
+      "kpis": {
+        "multi_core_network_working": {"baseline": 0, "target": 1},
+        "observability_dashboard_ready": {"baseline": 0, "target": 1},
+        "documentation_complete": {"baseline": 0, "target": 1}
+      },
+      "items": [
+        {
+          "title": "Multi-core red local con MQTT broker externo",
+          "description": "Cores en diferentes máquinas comunicándose via Mosquitto externo",
+          "type": "feature",
+          "priority": "P0",
+          "status": "planned",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Cores en red local se comunican",
+            "Fallback a broker embebido funciona",
+            "Latencia < 50ms en red local"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Dashboard de observabilidad",
+          "description": "Web UI para ver logs, traces, métricas de todos los cores",
+          "type": "feature",
+          "priority": "P1",
+          "status": "planned",
+          "effort_story_points": 21,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Dashboard muestra cores activos",
+            "Logs en tiempo real",
+            "Métricas históricas"
+          ],
+          "mvp_classification": "nice_to_have"
+        }
+      ],
+      "capacity": {
+        "allocated_story_points": 29,
+        "team_assigned": "solo_developer",
+        "estimated_sprints": 1
+      },
+      "go_no_go_criteria": [
+        "Multi-core red funciona",
+        "Performance aceptable"
+      ],
+      "rollback_plan": "Volver a v0.2.0 si network introduces regressions",
+      "assumptions": [
+        "Red local disponible para testing"
+      ],
+      "user_stories": [
+        "Como architect, quiero cores en diferentes máquinas para probar escalabilidad"
+      ]
+    },
+    {
+      "release_id": "v1.0.0",
+      "version": "1.0.0",
+      "codename": "Cloud Ready",
+      "target_date": "2026-06-01",
+      "confidence": "low",
+      "status": "planned",
+      "theme": "Production Ready",
+      "goals": [
+        "Production ready con documentación completa",
+        "Kubernetes deployment ready",
+        "Security hardened"
+      ],
+      "kpis": {
+        "production_ready": {"baseline": 0, "target": 1},
+        "k8s_deployment_ready": {"baseline": 0, "target": 1}
+      },
+      "items": [
+        {
+          "title": "Kubernetes Helm chart",
+          "description": "Helm chart para deployment en K8s",
+          "type": "feature",
+          "priority": "P1",
+          "status": "planned",
+          "effort_story_points": 13,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Helm chart funcional",
+            "Multi-core en K8s funciona"
+          ],
+          "mvp_classification": "nice_to_have"
+        }
+      ],
+      "capacity": {
+        "allocated_story_points": 13,
+        "team_assigned": "solo_developer",
+        "estimated_sprints": 1
+      },
+      "go_no_go_criteria": [
+        "Production ready validated"
+      ],
+      "rollback_plan": "N/A",
+      "assumptions": [
+        "K8s cluster disponible"
+      ],
+      "user_stories": [
+        "Como DevOps, quiero deploy en K8s"
+      ]
+    }
+  ],
+  "budget_allocation": {
+    "total_eur": 0,
+    "by_theme": {
+      "Foundation - Core Minimalista": 0,
+      "Validation - Arquitectura Fractal": 0,
+      "Portability - Zero Dependencias": 0
+    }
+  }
+}

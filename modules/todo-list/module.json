@@ -1,0 +1,446 @@
+{
+  "name": "todo-list",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de tareas",
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/todos",
+      "handler": "handleListTodos",
+      "description": "List all todos"
+    },
+    {
+      "method": "GET",
+      "path": "/todos/:id",
+      "handler": "handleGetTodo",
+      "description": "Get a single todo"
+    },
+    {
+      "method": "POST",
+      "path": "/todos",
+      "handler": "handleCreateTodo",
+      "description": "Create a new todo"
+    },
+    {
+      "method": "PUT",
+      "path": "/todos/:id",
+      "handler": "handleUpdateTodo",
+      "description": "Update a todo"
+    },
+    {
+      "method": "DELETE",
+      "path": "/todos/:id",
+      "handler": "handleDeleteTodo",
+      "description": "Delete a todo"
+    }
+  ],
+  "ui": {
+    "enabled": true,
+    "title": "Lista de Tareas",
+    "description": "Gestiona tus tareas pendientes",
+    "icon": "✓",
+    "views": [
+      {
+        "id": "list",
+        "type": "table",
+        "title": "Todas las Tareas",
+        "description": "Vista de todas las tareas",
+        "api": {
+          "method": "GET",
+          "url": "/modules/todo-list/todos",
+          "dataPath": "todos"
+        },
+        "columns": [
+          {
+            "field": "id",
+            "label": "ID",
+            "type": "text",
+            "width": "80px",
+            "sortable": true
+          },
+          {
+            "field": "title",
+            "label": "Título",
+            "type": "text",
+            "sortable": true
+          },
+          {
+            "field": "status",
+            "label": "Estado",
+            "type": "badge",
+            "width": "120px",
+            "sortable": true
+          },
+          {
+            "field": "priority",
+            "label": "Prioridad",
+            "type": "badge",
+            "width": "100px",
+            "sortable": true
+          },
+          {
+            "field": "dueDate",
+            "label": "Fecha límite",
+            "type": "date",
+            "width": "140px",
+            "sortable": true
+          }
+        ],
+        "actions": [
+          {
+            "id": "create",
+            "label": "Nueva Tarea",
+            "type": "button",
+            "variant": "primary",
+            "icon": "+",
+            "handler": "showCreateForm",
+            "context": "global"
+          },
+          {
+            "id": "view",
+            "label": "Ver",
+            "type": "button",
+            "variant": "ghost",
+            "handler": "showDetail",
+            "context": "row"
+          },
+          {
+            "id": "edit",
+            "label": "Editar",
+            "type": "button",
+            "variant": "secondary",
+            "icon": "✎",
+            "handler": "showEditForm",
+            "context": "row"
+          },
+          {
+            "id": "delete",
+            "label": "Eliminar",
+            "type": "button",
+            "variant": "danger",
+            "icon": "✕",
+            "confirm": true,
+            "confirmMessage": "¿Estás seguro de eliminar esta tarea?",
+            "api": {
+              "method": "DELETE",
+              "url": "/modules/todo-list/todos/:id"
+            },
+            "context": "row"
+          }
+        ],
+        "filters": [
+          {
+            "field": "status",
+            "label": "Estado",
+            "type": "select",
+            "operator": "equals",
+            "options": [
+              { "value": "pending", "label": "Pendiente" },
+              { "value": "in_progress", "label": "En Progreso" },
+              { "value": "completed", "label": "Completada" }
+            ]
+          },
+          {
+            "field": "priority",
+            "label": "Prioridad",
+            "type": "select",
+            "operator": "equals",
+            "options": [
+              { "value": "low", "label": "Baja" },
+              { "value": "medium", "label": "Media" },
+              { "value": "high", "label": "Alta" }
+            ]
+          },
+          {
+            "field": "title",
+            "label": "Buscar",
+            "type": "text",
+            "operator": "contains"
+          }
+        ],
+        "pagination": true,
+        "pageSize": 10
+      },
+      {
+        "id": "create",
+        "type": "form",
+        "title": "Nueva Tarea",
+        "description": "Crea una nueva tarea",
+        "api": {
+          "method": "POST",
+          "url": "/modules/todo-list/todos"
+        },
+        "fields": [
+          {
+            "name": "title",
+            "label": "Título",
+            "type": "text",
+            "required": true,
+            "placeholder": "Título de la tarea",
+            "helpText": "Ingresa un título descriptivo para la tarea"
+          },
+          {
+            "name": "description",
+            "label": "Descripción",
+            "type": "textarea",
+            "rows": 4,
+            "placeholder": "Descripción detallada de la tarea",
+            "helpText": "Opcional: añade más detalles sobre la tarea"
+          },
+          {
+            "name": "status",
+            "label": "Estado",
+            "type": "select",
+            "required": true,
+            "defaultValue": "pending",
+            "options": [
+              { "value": "pending", "label": "Pendiente" },
+              { "value": "in_progress", "label": "En Progreso" },
+              { "value": "completed", "label": "Completada" }
+            ]
+          },
+          {
+            "name": "priority",
+            "label": "Prioridad",
+            "type": "select",
+            "required": true,
+            "defaultValue": "medium",
+            "options": [
+              { "value": "low", "label": "Baja" },
+              { "value": "medium", "label": "Media" },
+              { "value": "high", "label": "Alta" }
+            ]
+          },
+          {
+            "name": "dueDate",
+            "label": "Fecha límite",
+            "type": "date",
+            "helpText": "Fecha en la que debe completarse la tarea"
+          },
+          {
+            "name": "tags",
+            "label": "Etiquetas",
+            "type": "text",
+            "placeholder": "trabajo, personal, urgente",
+            "helpText": "Etiquetas separadas por comas"
+          }
+        ],
+        "actions": [
+          {
+            "id": "submit",
+            "label": "Crear Tarea",
+            "type": "submit",
+            "variant": "primary"
+          },
+          {
+            "id": "cancel",
+            "label": "Cancelar",
+            "type": "button",
+            "variant": "ghost",
+            "handler": "goBack"
+          }
+        ]
+      },
+      {
+        "id": "edit",
+        "type": "form",
+        "title": "Editar Tarea",
+        "description": "Modifica los detalles de la tarea",
+        "api": {
+          "method": "PUT",
+          "url": "/modules/todo-list/todos/:id"
+        },
+        "fields": [
+          {
+            "name": "title",
+            "label": "Título",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "description",
+            "label": "Descripción",
+            "type": "textarea",
+            "rows": 4
+          },
+          {
+            "name": "status",
+            "label": "Estado",
+            "type": "select",
+            "required": true,
+            "options": [
+              { "value": "pending", "label": "Pendiente" },
+              { "value": "in_progress", "label": "En Progreso" },
+              { "value": "completed", "label": "Completada" }
+            ]
+          },
+          {
+            "name": "priority",
+            "label": "Prioridad",
+            "type": "select",
+            "required": true,
+            "options": [
+              { "value": "low", "label": "Baja" },
+              { "value": "medium", "label": "Media" },
+              { "value": "high", "label": "Alta" }
+            ]
+          },
+          {
+            "name": "dueDate",
+            "label": "Fecha límite",
+            "type": "date"
+          },
+          {
+            "name": "tags",
+            "label": "Etiquetas",
+            "type": "text"
+          }
+        ],
+        "actions": [
+          {
+            "id": "submit",
+            "label": "Guardar Cambios",
+            "type": "submit",
+            "variant": "primary"
+          },
+          {
+            "id": "cancel",
+            "label": "Cancelar",
+            "type": "button",
+            "variant": "ghost",
+            "handler": "goBack"
+          }
+        ]
+      },
+      {
+        "id": "detail",
+        "type": "detail",
+        "title": "Detalle de Tarea",
+        "api": {
+          "method": "GET",
+          "url": "/modules/todo-list/todos/:id"
+        },
+        "layout": "vertical",
+        "fields": [
+          {
+            "name": "id",
+            "label": "ID",
+            "type": "text"
+          },
+          {
+            "name": "title",
+            "label": "Título",
+            "type": "text"
+          },
+          {
+            "name": "description",
+            "label": "Descripción",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "label": "Estado",
+            "type": "badge"
+          },
+          {
+            "name": "priority",
+            "label": "Prioridad",
+            "type": "badge"
+          },
+          {
+            "name": "dueDate",
+            "label": "Fecha límite",
+            "type": "date"
+          },
+          {
+            "name": "tags",
+            "label": "Etiquetas",
+            "type": "text"
+          },
+          {
+            "name": "createdAt",
+            "label": "Creado",
+            "type": "datetime"
+          },
+          {
+            "name": "updatedAt",
+            "label": "Actualizado",
+            "type": "datetime"
+          }
+        ],
+        "actions": [
+          {
+            "id": "edit",
+            "label": "Editar",
+            "variant": "primary",
+            "handler": "showEditForm"
+          },
+          {
+            "id": "delete",
+            "label": "Eliminar",
+            "variant": "danger",
+            "confirm": true,
+            "api": {
+              "method": "DELETE",
+              "url": "/modules/todo-list/todos/:id"
+            }
+          },
+          {
+            "id": "back",
+            "label": "Volver",
+            "variant": "ghost",
+            "handler": "goBack"
+          }
+        ]
+      },
+      {
+        "id": "dashboard",
+        "type": "dashboard",
+        "title": "Dashboard de Tareas",
+        "description": "Resumen y estadísticas de tus tareas",
+        "widgets": [
+          {
+            "id": "total-tasks",
+            "type": "stat",
+            "title": "Total de Tareas",
+            "size": "small",
+            "api": {
+              "method": "GET",
+              "url": "/modules/todo-list/stats/total"
+            }
+          },
+          {
+            "id": "pending-tasks",
+            "type": "stat",
+            "title": "Pendientes",
+            "size": "small",
+            "api": {
+              "method": "GET",
+              "url": "/modules/todo-list/stats/pending"
+            }
+          },
+          {
+            "id": "completed-tasks",
+            "type": "stat",
+            "title": "Completadas",
+            "size": "small",
+            "api": {
+              "method": "GET",
+              "url": "/modules/todo-list/stats/completed"
+            }
+          },
+          {
+            "id": "recent-tasks",
+            "type": "list",
+            "title": "Tareas Recientes",
+            "size": "medium",
+            "api": {
+              "method": "GET",
+              "url": "/modules/todo-list/todos?limit=5"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

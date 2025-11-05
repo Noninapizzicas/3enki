@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Core - Admin Panel</title>
+
+  <!-- Design System CSS -->
+  <link rel="stylesheet" href="../styles/variables.css">
+  <link rel="stylesheet" href="../styles/components.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1 class="topbar-title">Event Core</h1>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-ghost btn-icon" id="theme-toggle" title="Cambiar tema">
+        <span>🌙</span>
+      </button>
+      <div class="topbar-user">
+        <span id="user-name">Admin</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <h3 class="sidebar-section-title">Dashboard</h3>
+          <ul class="sidebar-menu">
+            <li>
+              <a href="#/" class="sidebar-link active" data-route="/">
+                <span class="sidebar-link-icon">📊</span>
+                <span class="sidebar-link-text">Inicio</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3 class="sidebar-section-title">Módulos</h3>
+          <ul class="sidebar-menu" id="modules-menu">
+            <!-- Modules will be loaded dynamically -->
+            <li class="sidebar-loading">
+              <div class="loader loader-sm"></div>
+              <span>Cargando módulos...</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3 class="sidebar-section-title">Sistema</h3>
+          <ul class="sidebar-menu">
+            <li>
+              <a href="#/settings" class="sidebar-link" data-route="/settings">
+                <span class="sidebar-link-icon">⚙️</span>
+                <span class="sidebar-link-text">Configuración</span>
+              </a>
+            </li>
+            <li>
+              <a href="#/logs" class="sidebar-link" data-route="/logs">
+                <span class="sidebar-link-icon">📝</span>
+                <span class="sidebar-link-text">Logs</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="content">
+      <div id="app-container">
+        <!-- Content will be rendered here -->
+        <div class="content-loading">
+          <div class="loader"></div>
+          <p class="text-muted mt-4">Cargando...</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Container for notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>

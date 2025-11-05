@@ -1,0 +1,37 @@
+{
+  "name": "file-watcher",
+  "version": "1.0.0",
+  "description": "File watcher module - observa cambios en archivos y directorios",
+  "author": "Event Core Team",
+  "provides": {
+    "apis": [
+      {
+        "name": "watch",
+        "method": "POST",
+        "path": "/watch",
+        "description": "Start watching a path"
+      },
+      {
+        "name": "unwatch",
+        "method": "POST",
+        "path": "/unwatch",
+        "description": "Stop watching a path"
+      },
+      {
+        "name": "list",
+        "method": "GET",
+        "path": "/list",
+        "description": "List all watched paths"
+      }
+    ],
+    "hooks": []
+  },
+  "subscribes": [],
+  "requires": {
+    "core": ">=0.1.0"
+  },
+  "config": {
+    "max_watchers": 10,
+    "debounce_ms": 500
+  }
+}

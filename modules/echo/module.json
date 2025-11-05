@@ -1,0 +1,29 @@
+{
+  "name": "echo",
+  "version": "1.0.0",
+  "description": "Echo module - responde a eventos y expone API de ejemplo",
+  "author": "Event Core Team",
+  "provides": {
+    "apis": [
+      {
+        "name": "ping",
+        "method": "GET",
+        "path": "/ping",
+        "description": "Health check endpoint"
+      },
+      {
+        "name": "echo",
+        "method": "POST",
+        "path": "/echo",
+        "description": "Echo back request body"
+      }
+    ],
+    "hooks": ["beforeEventPublish"]
+  },
+  "subscribes": [
+    "core/+/events/echo/#"
+  ],
+  "requires": {
+    "core": ">=0.1.0"
+  }
+}

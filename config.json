@@ -1,0 +1,62 @@
+{
+  "core": {
+    "id": "core-a",
+    "version": "0.1.0",
+    "environment": "development"
+  },
+  "http": {
+    "port": 3000,
+    "host": "0.0.0.0",
+    "cors": {
+      "enabled": true,
+      "origins": ["*"]
+    }
+  },
+  "mqtt": {
+    "broker": {
+      "port": 1883,
+      "host": "0.0.0.0"
+    },
+    "client": {
+      "reconnect_period": 5000,
+      "keep_alive": 60,
+      "clean_session": false
+    }
+  },
+  "modules": {
+    "path": "./modules",
+    "auto_load": true,
+    "hot_reload": true,
+    "enabled": [
+      "echo",
+      "file-watcher",
+      "security-p2p"
+    ],
+    "disabled": []
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "outputs": ["console"],
+      "structured": true
+    },
+    "tracing": {
+      "enabled": true,
+      "sample_rate": 1.0
+    },
+    "metrics": {
+      "enabled": true,
+      "flush_interval": 60000
+    }
+  },
+  "security": {
+    "encryption": {
+      "enabled": true,
+      "algorithm": "aes-256-gcm"
+    },
+    "p2p": {
+      "key_rotation_days": 90,
+      "trust_on_first_use": false
+    }
+  }
+}

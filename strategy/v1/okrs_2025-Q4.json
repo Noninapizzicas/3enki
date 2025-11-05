@@ -1,0 +1,139 @@
+{
+  "quarter": "2025-Q4",
+  "created_at": "2025-10-06T00:00:00Z",
+  "objectives": [
+    {
+      "objective": "Implementar Core completo funcional con arquitectura minimalista validada",
+      "rationale": "El core es la base de todo. Sin un core completo y correctamente arquitecturado (security como módulo, CLI como HTTP client, hook system), no podemos escalar ni demostrar la propuesta de valor fractal.",
+      "key_results": [
+        {
+          "kr": "Core minimalista implementado con hook system funcional",
+          "baseline": 0,
+          "target": 1,
+          "metric": "core_implementation_complete",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.9,
+          "at_risk": false
+        },
+        {
+          "kr": "3 módulos de ejemplo funcionando (echo, security-p2p, file-watcher)",
+          "baseline": 0,
+          "target": 3,
+          "metric": "modules_implemented",
+          "unit": "count",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.85,
+          "at_risk": false
+        },
+        {
+          "kr": "CLI HTTP client completamente funcional con todos los comandos",
+          "baseline": 0,
+          "target": 1,
+          "metric": "cli_implementation_complete",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.9,
+          "at_risk": false
+        }
+      ],
+      "owner": "core_team",
+      "status": "planned",
+      "aligned_releases": ["v0.1.0"],
+      "aligned_business_goals": ["foundation:core_complete"]
+    },
+    {
+      "objective": "Validar arquitectura fractal con multi-core local funcionando",
+      "rationale": "La propuesta de valor principal es la arquitectura fractal. Debemos demostrar que 2 cores locales se pueden comunicar via MQTT sin cambios de código, validando el concepto central.",
+      "key_results": [
+        {
+          "kr": "2 cores locales comunicándose via MQTT broker embebido",
+          "baseline": 0,
+          "target": 1,
+          "metric": "multi_core_local_working",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.8,
+          "at_risk": false
+        },
+        {
+          "kr": "Discovery automático de cores via retained messages funcional",
+          "baseline": 0,
+          "target": 1,
+          "metric": "discovery_system_working",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.85,
+          "at_risk": false
+        },
+        {
+          "kr": "Security P2P handshake entre 2 cores completado exitosamente",
+          "baseline": 0,
+          "target": 1,
+          "metric": "p2p_handshake_working",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.75,
+          "at_risk": true
+        }
+      ],
+      "owner": "core_team",
+      "status": "planned",
+      "aligned_releases": ["v0.2.0"],
+      "aligned_business_goals": ["validation:fractal_architecture"]
+    },
+    {
+      "objective": "Documentar y probar portabilidad completa (Termux → Linux → Docker)",
+      "rationale": "Zero dependencias y portabilidad son diferenciadores clave. Debemos probar que el mismo código funciona en Termux, Linux y Docker sin cambios, validando la filosofía 'portable everywhere'.",
+      "key_results": [
+        {
+          "kr": "Core funciona en Termux sin modificaciones",
+          "baseline": 0,
+          "target": 1,
+          "metric": "termux_compatibility",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.9,
+          "at_risk": false
+        },
+        {
+          "kr": "Core funciona en Linux (Ubuntu/Debian) sin modificaciones",
+          "baseline": 0,
+          "target": 1,
+          "metric": "linux_compatibility",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.95,
+          "at_risk": false
+        },
+        {
+          "kr": "Dockerfile funcional con imagen < 100MB",
+          "baseline": 0,
+          "target": 1,
+          "metric": "docker_image_ready",
+          "unit": "boolean",
+          "current": 0,
+          "progress_pct": 0,
+          "confidence": 0.85,
+          "at_risk": false
+        }
+      ],
+      "owner": "core_team",
+      "status": "planned",
+      "aligned_releases": ["v0.1.0", "v0.2.0"],
+      "aligned_business_goals": ["validation:portability"]
+    }
+  ],
+  "alignment": {
+    "business_goals_coverage_pct": 100,
+    "roadmap_alignment_score": 100
+  }
+}

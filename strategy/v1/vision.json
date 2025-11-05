@@ -1,0 +1,37 @@
+{
+  "mission": "Proveer una arquitectura event-driven fractal y modular que escala desde un proceso standalone hasta sistemas distribuidos complejos, con zero dependencias externas, seguridad P2P integrada, y desarrollo guiado por IA - permitiendo a desarrolladores crear sistemas robustos sin la complejidad típica de frameworks enterprise.",
+  "vision": "Ser la arquitectura de referencia para sistemas event-driven modulares en 2028, adoptada por desarrolladores que valoran simplicidad radical, portabilidad absoluta (Termux→Linux→Cloud), y arquitecturas limpias donde el core es infraestructura pura y cada feature es un módulo hot-reloadable.",
+  "values": [
+    "Simplicidad Radical - Menos código, más valor. No MVPs ni medias tintas.",
+    "Core Minimalista - El core es solo infraestructura, NUNCA features.",
+    "Modularidad Total - Todo feature es un módulo, incluso security.",
+    "API-First - Toda comunicación via APIs HTTP/MQTT, zero acceso directo.",
+    "Zero Dependencias - Solo Node.js built-ins + Aedes + mqtt + Ajv.",
+    "Implementación Completa - Full features desde día 1, no TODOs para después.",
+    "Portable Everywhere - Termux, Linux, Docker, K8s sin cambios de código."
+  ],
+  "differentiation": {
+    "unique_value_props": [
+      "Arquitectura Fractal - Mismo código escala de 1 proceso a N cores distribuidos",
+      "Security como Módulo - P2P E2E encryption hot-reloadable, no en core",
+      "CLI HTTP Puro - Cliente remoto que consume mismas APIs que Web UI",
+      "Hook System - Módulos interceptan operaciones del core sin acoplamiento",
+      "MQTT Broker Embebido - Aedes fallback automático, zero setup externo",
+      "Zero Dependencias Filosófico - No external services, no PKI, no OAuth",
+      "Termux-First - Diseñado para Termux desde día 1, no como afterthought"
+    ],
+    "competitive_moats": [
+      "15 Prompts Especializados - Estratega, Arquitecto, Gobernanza, etc.",
+      "Documentación Sin Resumir - Todos los matices capturados, nada omitido",
+      "Filosofía 'Full desde Día 1' - No MVPs, implementación completa siempre",
+      "Arquitectura Correcta Validada - User feedback + refactorización rápida",
+      "Event-Driven 100% - Todo es evento, W3C Trace Context nativo"
+    ]
+  },
+  "target_personas": [
+    "Solo Developer - Necesita infraestructura escalable sin complejidad",
+    "Termux Power User - Desarrolla en Android sin root, necesita portabilidad",
+    "Architect - Busca arquitectura limpia, modular, API-first sin vendor lock-in",
+    "DevOps Engineer - Valora zero dependencias y portabilidad multi-plataforma"
+  ]
+}

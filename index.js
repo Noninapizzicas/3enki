@@ -219,6 +219,9 @@ async function main() {
       metrics: core.metrics
     });
 
+    // Alias for modules that use core.events
+    core.events = core.eventBus;
+
     core.logger.info('core.eventbus.initialized', {
       core_id: config.core.id
     });

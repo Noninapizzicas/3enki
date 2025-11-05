@@ -6,6 +6,9 @@
 
 Esta guía te enseñará a crear un módulo completo desde cero con APIs REST.
 
+> **📱 Interfaces Gráficas:** Los módulos pueden tener UI automática definiendo JSON en `module.json`.
+> Ver **`UI_DEVELOPER_GUIDE.md`** para agregar interfaces a tus módulos.
+
 ---
 
 ## 📋 Tabla de Contenidos
@@ -1250,6 +1253,7 @@ return {
 
 ## 🎯 Checklist para Crear un Módulo
 
+**Backend (APIs):**
 - [ ] Crear directorio `modules/mi-modulo/`
 - [ ] Crear `module.json` con APIs definidas
 - [ ] Crear `index.js` con clase del módulo
@@ -1266,6 +1270,22 @@ return {
 - [ ] Probar todas las APIs con curl
 - [ ] Documentar en README.md
 
+**Interfaz Gráfica (Opcional):**
+- [ ] Agregar sección `ui` en `module.json` (ver `UI_DEVELOPER_GUIDE.md`)
+- [ ] Probar la interfaz en `http://localhost:3000/ui`
+
 ---
 
-**Siguiente:** Lee `docs/GUIA_HOOKS.md` para aprender sobre autenticación con hooks.
+> **💡 Tip:** Event Core incluye un sistema UI que genera interfaces gráficas automáticamente desde JSON.
+> No necesitas escribir HTML/CSS/JS. Solo define vistas en `module.json`.
+> Ver **`docs/UI_DEVELOPER_GUIDE.md`** para detalles completos.
+
+---
+
+## 📚 Guías Relacionadas
+
+**Siguiente lectura recomendada:**
+- **`docs/GUIA_HOOKS.md`** - Autenticación y middleware con hooks
+- **`docs/GUIA_EVENT_BUS.md`** - Comunicación entre módulos con eventos
+- **`docs/UI_DEVELOPER_GUIDE.md`** - Agregar interfaces gráficas a tus módulos
+- **`docs/GUIA_TESTING.md`** - Testing de módulos

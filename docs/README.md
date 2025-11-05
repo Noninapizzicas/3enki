@@ -42,6 +42,7 @@
 | **[GUIA_HOOKS.md](./GUIA_HOOKS.md)** | Autenticación e interceptación con Hooks | Intermedio | 30 min |
 | **[GUIA_TESTING.md](./GUIA_TESTING.md)** | Testing completo de APIs y módulos | Intermedio | 45 min |
 | **[GUIA_EVENT_BUS.md](./GUIA_EVENT_BUS.md)** | Integración con Event Bus para eventos | Intermedio | 30 min |
+| **[UI_DEVELOPER_GUIDE.md](./UI_DEVELOPER_GUIDE.md)** | Agregar interfaces gráficas a módulos | Todos | 20 min |
 
 #### GUIA_CREAR_MODULO.md
 
@@ -123,6 +124,26 @@
 - Comunicación desacoplada entre módulos
 - Workflows automáticos basados en eventos
 - Distribución de eventos vía MQTT
+
+#### UI_DEVELOPER_GUIDE.md
+
+**Contenido:**
+- Sistema UI JSON-Driven (zero dependencies)
+- 5 tipos de vistas: Table, Form, Detail, Dashboard, Custom
+- Design System con CSS variables
+- Ejemplo completo del módulo TODO con UI
+- JSON schemas para cada tipo de vista
+- Componentes disponibles
+- Field types (13+ tipos de campos)
+
+**Aprenderás:**
+- Agregar interfaces gráficas a módulos sin HTML/CSS/JS
+- Definir vistas en `module.json`
+- Crear tablas con filtros y paginación
+- Crear formularios con validación
+- Dashboards con widgets
+- Usar el Design System
+- Ver la UI en `http://localhost:3000/ui`
 
 ---
 

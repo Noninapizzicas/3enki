@@ -344,6 +344,15 @@ async function main() {
     console.log(`   ✅ Discovery system started`);
     console.log(`   📡 Publishing status to core/${config.core.id}/status\n`);
 
+    // Pass discovery to dashboard module if loaded
+    if (core.moduleLoader) {
+      const dashboardModule = core.moduleLoader.getModule('dashboard');
+      if (dashboardModule && dashboardModule.instance && typeof dashboardModule.instance.setDiscovery === 'function') {
+        dashboardModule.instance.setDiscovery(core.discovery);
+        core.logger.debug('core.discovery.passed_to_dashboard');
+      }
+    }
+
     // ========================================================================
     // Step 8: Start HTTP Gateway
     // ========================================================================

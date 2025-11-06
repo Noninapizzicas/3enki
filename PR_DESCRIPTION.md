@@ -9,11 +9,11 @@
 This PR consolidates **3 major releases** (v0.1.0, v0.2.0, v0.5.0) into main, bringing Event Core from initial foundation to production-ready multi-machine deployment with observability.
 
 **Key Metrics**:
-- **Commits**: 13
-- **Files Changed**: 27 (15 new, 3 updated, 9 added)
-- **Insertions**: 5,593+
-- **Story Points**: 128 SP total (81 + 18 + 29)
-- **Documentation**: 23,000+ words
+- **Commits**: 15
+- **Files Changed**: 32 (20 new, 8 updated, 4 modified)
+- **Insertions**: 5,788+
+- **Story Points**: 131 SP total (81 + 18 + 29 + 3)
+- **Documentation**: 24,000+ words
 
 ---
 
@@ -93,6 +93,17 @@ Production-ready containerization:
 - ✅ Health checks and validation
 - ✅ Complete Docker documentation
 
+### 5. Credential Management (.env Support)
+Secure management of credentials and external service secrets:
+- ✅ dotenv integration for environment variables
+- ✅ `.env.example` template with all configuration options
+- ✅ MQTT broker authentication support
+- ✅ External service credentials (APIs, databases)
+- ✅ Best practices documentation
+- ✅ `.env` in .gitignore (never committed)
+
+**Files**: `.env.example`, `index.js`, `core/config/index.js`, `docs/NETWORK_DEPLOYMENT.md`
+
 ---
 
 ## 📦 New Components
@@ -129,6 +140,11 @@ Production-ready containerization:
 - **`docker/README.md`** - Docker guide (NEW)
 - **`docker/validate.sh`** - Config validation (NEW)
 - **`.dockerignore`** - Build optimization (NEW)
+
+### Configuration
+- **`.env.example`** - Environment variables template (NEW)
+- **`core/config/index.js`** - Enhanced with BROKER_URL support (ENHANCED)
+- **`index.js`** - dotenv integration (ENHANCED)
 
 ---
 

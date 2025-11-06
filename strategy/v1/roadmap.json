@@ -360,9 +360,9 @@
       "release_id": "v0.5.0",
       "version": "0.5.0",
       "codename": "Network",
-      "target_date": "2026-03-01",
-      "confidence": "medium",
-      "status": "in_progress",
+      "target_date": "2025-11-06",
+      "confidence": "high",
+      "status": "released",
       "theme": "Portability - Zero Dependencias",
       "goals": [
         "Multi-core red local funcional",
@@ -372,7 +372,7 @@
       "kpis": {
         "multi_core_network_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
         "observability_dashboard_ready": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
-        "documentation_complete": {"baseline": 0, "target": 1, "actual": 0.33, "achieved": false}
+        "documentation_complete": {"baseline": 0, "target": 1, "actual": 1, "achieved": true}
       },
       "items": [
         {

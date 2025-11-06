@@ -310,36 +310,52 @@ node index.js --version
 
 ### Step 3: Configure Environment Variables
 
+Event Core uses a `.env` file to manage configuration and credentials securely.
+
+> **🔒 Security Note**: The `.env` file contains sensitive information (like MQTT credentials) and should **NEVER** be committed to git. It's already included in `.gitignore`.
+
+**On each machine, create `.env` from the template:**
+
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit with your actual values
+nano .env   # or vim, code, etc.
+```
+
 **Machine B (Core B):**
 
-Create `.env` file:
+Edit `.env` file:
 ```bash
 # Core Configuration
 EVENT_CORE_ID=core-b
 EVENT_CORE_PORT=3000
 
-# MQTT Configuration
+# MQTT Configuration (with credentials if needed)
 EVENT_CORE_BROKER_URL=mqtt://192.168.1.12:1883
-EVENT_CORE_BROKER_PORT=1883
+# For authenticated broker:
+# EVENT_CORE_BROKER_URL=mqtt://event-core:SecurePassword123@192.168.1.12:1883
 
 # Logging
-LOG_LEVEL=info
+EVENT_CORE_LOG_LEVEL=info
 ```
 
 **Machine C (Core C):**
 
-Create `.env` file:
+Edit `.env` file:
 ```bash
 # Core Configuration
 EVENT_CORE_ID=core-c
 EVENT_CORE_PORT=3000
 
-# MQTT Configuration
+# MQTT Configuration (with credentials if needed)
 EVENT_CORE_BROKER_URL=mqtt://192.168.1.12:1883
-EVENT_CORE_BROKER_PORT=1883
+# For authenticated broker:
+# EVENT_CORE_BROKER_URL=mqtt://event-core:SecurePassword123@192.168.1.12:1883
 
 # Logging
-LOG_LEVEL=info
+EVENT_CORE_LOG_LEVEL=info
 ```
 
 > **💡 Tip**: Use different `EVENT_CORE_ID` for each core. IDs must be unique across the network.
@@ -839,6 +855,59 @@ EVENT_CORE_BROKER_URL=mqtts://event-core:PASSWORD@192.168.1.12:8883
 **5. Enable P2P Encryption:**
 - Use `security-p2p` module for end-to-end encryption
 - Exchange keys via secure channel (not MQTT)
+
+### Managing External Service Credentials
+
+Event Core modules often need to access external services (APIs, databases, etc.). Store these credentials securely in the `.env` file:
+
+**Example `.env` with external service credentials:**
+
+```bash
+# Event Core Configuration
+EVENT_CORE_ID=core-prod-1
+EVENT_CORE_BROKER_URL=mqtt://event-core:SecurePass123@broker.example.com:1883
+
+# External Services
+WEATHER_API_KEY=sk-1234567890abcdef
+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxx
+DATABASE_URL=postgresql://user:password@localhost:5432/eventcore
+REDIS_URL=redis://user:password@localhost:6379
+WEBHOOK_SECRET=your-webhook-secret-here
+
+# Custom Module Credentials
+MY_MODULE_API_KEY=custom-key-here
+MY_MODULE_SECRET=custom-secret-here
+```
+
+**Best Practices:**
+
+1. **Never commit `.env` to git** - It's already in `.gitignore`
+2. **Use `.env.example` as template** - Document required variables without actual values
+3. **Rotate credentials regularly** - Update passwords/keys every 90 days
+4. **Use different credentials per environment** - dev/staging/production should have separate keys
+5. **For production, prefer system environment variables** over `.env` file
+6. **Use secrets managers** for sensitive production deployments (HashiCorp Vault, AWS Secrets Manager)
+
+**Accessing credentials in your modules:**
+
+```javascript
+// modules/my-module/index.js
+class MyModule {
+  async onLoad(core) {
+    // Access environment variables
+    const apiKey = process.env.MY_MODULE_API_KEY;
+    const secret = process.env.MY_MODULE_SECRET;
+
+    if (!apiKey) {
+      core.logger.error('MY_MODULE_API_KEY not configured');
+      throw new Error('Missing required credential');
+    }
+
+    // Use credentials securely
+    this.apiClient = new APIClient({ apiKey, secret });
+  }
+}
+```
 
 ---
 

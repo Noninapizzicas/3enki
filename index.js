@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 /**
  * Event Core - Main Entry Point
  *
@@ -14,12 +17,15 @@
  * Usage:
  *   node index.js [--port 3000] [--broker-port 1883] [--core-id mycore]
  *
- * Environment variables:
+ * Environment variables (can be defined in .env file):
  *   EVENT_CORE_PORT=3000
  *   EVENT_CORE_BROKER_PORT=1883
+ *   EVENT_CORE_BROKER_URL=mqtt://user:pass@host:1883
  *   EVENT_CORE_ID=mycore
  *   EVENT_CORE_MODULES_PATH=./modules
  *   EVENT_CORE_LOG_LEVEL=info
+ *
+ * See .env.example for all available environment variables.
  */
 
 const path = require('path');

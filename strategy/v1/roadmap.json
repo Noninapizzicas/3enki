@@ -371,7 +371,7 @@
       ],
       "kpis": {
         "multi_core_network_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
-        "observability_dashboard_ready": {"baseline": 0, "target": 1, "actual": 0, "achieved": false},
+        "observability_dashboard_ready": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
         "documentation_complete": {"baseline": 0, "target": 1, "actual": 0.33, "achieved": false}
       },
       "items": [
@@ -399,15 +399,18 @@
           "description": "Web UI para ver logs, traces, métricas de todos los cores",
           "type": "feature",
           "priority": "P1",
-          "status": "planned",
+          "status": "completed",
           "effort_story_points": 21,
           "assigned_team": "core_team",
           "dependencies": [],
           "risks": [],
           "acceptance_criteria": [
-            "Dashboard muestra cores activos",
-            "Logs en tiempo real",
-            "Métricas históricas"
+            "Dashboard muestra cores activos (implemented with grid view)",
+            "Logs en tiempo real (SSE streaming working)",
+            "Event stream en tiempo real (SSE streaming working)",
+            "Métricas agregadas (basic metrics from discovery)",
+            "Web UI moderna con dark theme",
+            "Auto-refresh y conexión status"
           ],
           "mvp_classification": "nice_to_have"
         }

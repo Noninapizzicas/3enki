@@ -39,9 +39,6 @@ class DashboardModule {
     // Discovery will be set later via setDiscovery()
     this.discovery = null;
 
-    // Track cores manually from MQTT messages
-    this.activeCores = new Map();
-
     if (this.logger) {
       this.logger.info('dashboard.loaded', {
         module: 'dashboard',
@@ -71,10 +68,14 @@ class DashboardModule {
   async onUnload() {
     // Close all SSE connections
     for (const client of this.sseClients.logs) {
-      client.end();
+      try {
+        client.end();
+      } catch (e) {}
     }
     for (const client of this.sseClients.events) {
-      client.end();
+      try {
+        client.end();
+      } catch (e) {}
     }
 
     if (this.logger) {
@@ -88,7 +89,7 @@ class DashboardModule {
   subscribeToStreams() {
     if (!this.core.eventBus) return;
 
-    // Buffer logs
+    // Buffer logs and events
     this.core.eventBus.on('message', (topic, message) => {
       if (topic.includes('/logs/')) {
         this.addToBuffer('logs', { topic, message, timestamp: Date.now() });
@@ -137,14 +138,19 @@ class DashboardModule {
   }
 
   /**
-   * API: Serve Dashboard UI (HTML)
+   * Serve Dashboard UI or static files
    */
-  async serveDashboardUI(req, res) {
-    // Check if request is for static assets
-    const url = req.url || '/';
+  async serveDashboardUI(req) {
+    const requestPath = req.path || '/';
 
-    if (url.startsWith('/css/') || url.startsWith('/js/')) {
-      return this.serveStaticFile(req, res);
+    // Handle CSS
+    if (requestPath.includes('/css/')) {
+      return this.serveStaticFile(req, 'css');
+    }
+
+    // Handle JS
+    if (requestPath.includes('/js/')) {
+      return this.serveStaticFile(req, 'javascript');
     }
 
     // Serve main HTML
@@ -152,54 +158,56 @@ class DashboardModule {
 
     try {
       const html = fs.readFileSync(htmlPath, 'utf-8');
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      return {
+        _responseType: 'html',
+        content: html
+      };
     } catch (error) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Dashboard UI not found');
+      return {
+        _responseType: 'html',
+        content: '<html><body><h1>Dashboard UI not found</h1></body></html>'
+      };
     }
   }
 
   /**
    * Serve static files (CSS, JS)
    */
-  async serveStaticFile(req, res) {
-    const url = req.url || '/';
-    const filePath = path.join(__dirname, 'public', url);
+  async serveStaticFile(req, type) {
+    const requestPath = req.path || '/';
+    const fileName = path.basename(requestPath);
+    const filePath = path.join(__dirname, 'public', type === 'css' ? 'css' : 'js', fileName);
 
     try {
-      const content = fs.readFileSync(filePath);
-
-      // Determine content type
-      let contentType = 'text/plain';
-      if (url.endsWith('.css')) contentType = 'text/css';
-      if (url.endsWith('.js')) contentType = 'application/javascript';
-      if (url.endsWith('.html')) contentType = 'text/html';
-
-      res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return {
+        _responseType: type,
+        content
+      };
     } catch (error) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('File not found');
+      return {
+        error: 'File not found',
+        path: requestPath
+      };
     }
   }
 
   /**
-   * API: Get list of active cores
+   * Get list of active cores
    */
-  async getCoresList(req, res) {
+  async getCoresList(req) {
     if (!this.discovery) {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({
-        error: 'Discovery system not available'
-      }));
+      return {
+        error: 'Discovery system not available',
+        cores: [],
+        total: 0
+      };
     }
 
     try {
       const cores = this.discovery.getActiveCores();
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+      return {
         cores: Array.from(cores.values()).map(core => ({
           id: core.core_id,
           version: core.version,
@@ -214,29 +222,32 @@ class DashboardModule {
         })),
         total: cores.size,
         timestamp: Date.now()
-      }));
+      };
     } catch (error) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: error.message }));
+      return {
+        error: error.message,
+        cores: [],
+        total: 0
+      };
     }
   }
 
   /**
-   * API: Get detailed info about specific core
+   * Get detailed info about specific core
    */
-  async getCoreDetail(req, res) {
+  async getCoreDetail(req) {
     const coreId = req.params?.id;
 
     if (!coreId) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Core ID required' }));
+      return {
+        error: 'Core ID required'
+      };
     }
 
     if (!this.discovery) {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({
+      return {
         error: 'Discovery system not available'
-      }));
+      };
     }
 
     try {
@@ -244,12 +255,12 @@ class DashboardModule {
       const core = cores.get(coreId);
 
       if (!core) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: 'Core not found' }));
+        return {
+          error: 'Core not found'
+        };
       }
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+      return {
         id: core.core_id,
         version: core.version,
         host: core.host,
@@ -262,68 +273,64 @@ class DashboardModule {
         capabilities: core.capabilities || {},
         uptime_ms: Date.now() - core.started_at,
         uptime_human: this.formatUptime(Date.now() - core.started_at)
-      }));
+      };
     } catch (error) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: error.message }));
+      return {
+        error: error.message
+      };
     }
   }
 
   /**
-   * API: Stream logs via Server-Sent Events
+   * Stream logs via Server-Sent Events
    */
-  async streamLogs(req, res) {
-    // Set SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    });
+  async streamLogs(req) {
+    return {
+      _responseType: 'sse',
+      onConnect: (res) => {
+        // Add client to set
+        this.sseClients.logs.add(res);
 
-    // Add client to set
-    this.sseClients.logs.add(res);
+        // Send initial buffer
+        for (const log of this.logBuffer.slice(-50)) { // Last 50 logs
+          res.write(`data: ${JSON.stringify(log)}\n\n`);
+        }
 
-    // Send initial buffer
-    for (const log of this.logBuffer) {
-      res.write(`data: ${JSON.stringify(log)}\n\n`);
-    }
-
-    // Handle client disconnect
-    req.on('close', () => {
-      this.sseClients.logs.delete(res);
-    });
+        // Handle client disconnect
+        req.on('close', () => {
+          this.sseClients.logs.delete(res);
+        });
+      }
+    };
   }
 
   /**
-   * API: Stream events via Server-Sent Events
+   * Stream events via Server-Sent Events
    */
-  async streamEvents(req, res) {
-    // Set SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    });
+  async streamEvents(req) {
+    return {
+      _responseType: 'sse',
+      onConnect: (res) => {
+        // Add client to set
+        this.sseClients.events.add(res);
 
-    // Add client to set
-    this.sseClients.events.add(res);
+        // Send initial buffer
+        for (const event of this.eventBuffer.slice(-20)) { // Last 20 events
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
 
-    // Send initial buffer
-    for (const event of this.eventBuffer) {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    }
-
-    // Handle client disconnect
-    req.on('close', () => {
-      this.sseClients.events.delete(res);
-    });
+        // Handle client disconnect
+        req.on('close', () => {
+          this.sseClients.events.delete(res);
+        });
+      }
+    };
   }
 
   /**
-   * API: Get aggregated metrics
+   * Get aggregated metrics
    */
-  async getMetrics(req, res) {
-    // Collect metrics from all cores
+  async getMetrics(req) {
     const metrics = {
       timestamp: Date.now(),
       cores: {},
@@ -338,8 +345,7 @@ class DashboardModule {
       const cores = this.discovery.getActiveCores();
       metrics.aggregate.total_cores = cores.size;
 
-      // In a real implementation, you'd query each core's /api/metrics endpoint
-      // For now, we'll return basic discovery data
+      // Basic metrics from discovery
       for (const [coreId, core] of cores) {
         metrics.cores[coreId] = {
           uptime_ms: Date.now() - core.started_at,
@@ -349,8 +355,7 @@ class DashboardModule {
       }
     }
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(metrics));
+    return metrics;
   }
 
   /**
@@ -371,43 +376,43 @@ class DashboardModule {
   /**
    * API Handler: Dashboard UI (called by ModuleLoader)
    */
-  async handleUi(req, res) {
-    return this.serveDashboardUI(req, res);
+  async handleUi(req) {
+    return this.serveDashboardUI(req);
   }
 
   /**
    * API Handler: Get cores list (called by ModuleLoader)
    */
-  async handleCores(req, res) {
-    return this.getCoresList(req, res);
+  async handleCores(req) {
+    return this.getCoresList(req);
   }
 
   /**
    * API Handler: Get core detail (called by ModuleLoader)
    */
-  async handleCoreDetail(req, res) {
-    return this.getCoreDetail(req, res);
+  async handleCoreDetail(req) {
+    return this.getCoreDetail(req);
   }
 
   /**
    * API Handler: Stream logs (called by ModuleLoader)
    */
-  async handleLogs(req, res) {
-    return this.streamLogs(req, res);
+  async handleLogs(req) {
+    return this.streamLogs(req);
   }
 
   /**
    * API Handler: Get metrics (called by ModuleLoader)
    */
-  async handleMetrics(req, res) {
-    return this.getMetrics(req, res);
+  async handleMetrics(req) {
+    return this.getMetrics(req);
   }
 
   /**
    * API Handler: Stream events (called by ModuleLoader)
    */
-  async handleEvents(req, res) {
-    return this.streamEvents(req, res);
+  async handleEvents(req) {
+    return this.streamEvents(req);
   }
 }
 

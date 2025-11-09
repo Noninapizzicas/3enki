@@ -1,0 +1,70 @@
+{
+  "timestamp": "2025-11-09T17:06:49.258Z",
+  "standard": "WCAG AA",
+  "min_ratio": 4.5,
+  "total_colors": 6,
+  "passing": 6,
+  "failing": 0,
+  "colors": [
+    {
+      "nombre": "verde_accion",
+      "hex": "#2FBF71",
+      "significado": "Confirmar/Continuar/OK",
+      "contrasteBlanco": "2.38",
+      "contrasteNegro": "8.81",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Usar texto NEGRO"
+    },
+    {
+      "nombre": "ambar_pendiente",
+      "hex": "#F5B700",
+      "significado": "Pendiente/Espera/Confirmación requerida",
+      "contrasteBlanco": "1.80",
+      "contrasteNegro": "11.66",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Usar texto NEGRO"
+    },
+    {
+      "nombre": "rojo_error",
+      "hex": "#E63946",
+      "significado": "Error/Bloqueo/Urgente",
+      "contrasteBlanco": "4.17",
+      "contrasteNegro": "5.04",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Usar texto NEGRO"
+    },
+    {
+      "nombre": "azul_info",
+      "hex": "#1D4ED8",
+      "significado": "Información/Contexto",
+      "contrasteBlanco": "6.70",
+      "contrasteNegro": "3.13",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Usar texto BLANCO"
+    },
+    {
+      "nombre": "gris_base",
+      "hex": "#6B7280",
+      "significado": "Neutro/Deshabilitado",
+      "contrasteBlanco": "4.83",
+      "contrasteNegro": "4.34",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Usar texto BLANCO"
+    },
+    {
+      "nombre": "gris_fondo",
+      "hex": "#0F1216",
+      "significado": "Fondo oscuro",
+      "contrasteBlanco": "18.78",
+      "contrasteNegro": "1.12",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Usar texto BLANCO"
+    }
+  ]
+}

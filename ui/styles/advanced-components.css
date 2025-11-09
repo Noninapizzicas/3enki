@@ -10,11 +10,17 @@
  */
 
 /* ========================================================================
-   ICON LIBRARY - EMOJIS SEMÁNTICOS
+   ICON LIBRARY - DICCIONARIO OFICIAL (Manual v1.0.0)
    ======================================================================== */
 
 :root {
-  /* Acciones */
+  /* Iconos oficiales del diccionario */
+  --icon-cobro: '💳';        /* Cobro/Pago - rect_redondeado, dirección → */
+  --icon-productos: '🧾';    /* Productos/Lista - rect_redondeado, dirección ↓ */
+  --icon-alerta: '⚠️';       /* Alerta - rombo_suave */
+  --icon-info: 'ℹ️';         /* Info - círculo */
+
+  /* Acciones comunes */
   --icon-add: '➕';
   --icon-edit: '✏️';
   --icon-delete: '🗑️';
@@ -30,19 +36,18 @@
   --icon-share: '🔗';
   --icon-settings: '⚙️';
 
-  /* Estados */
-  --icon-pending: '⏳';
+  /* Estados funcionales */
+  --icon-pending: '⏳';      /* Pendiente - ámbar */
   --icon-in-progress: '🔄';
-  --icon-completed: '✅';
-  --icon-error: '❌';
+  --icon-completed: '✅';    /* Completado - verde acción */
+  --icon-error: '❌';        /* Error - rojo error */
   --icon-warning: '⚠️';
-  --icon-info: 'ℹ️';
   --icon-success: '✓';
 
   /* Prioridades */
-  --icon-high: '🔴';
-  --icon-medium: '🟡';
-  --icon-low: '🟢';
+  --icon-high: '🔴';         /* Alta - rojo error */
+  --icon-medium: '🟡';       /* Media - ámbar pendiente */
+  --icon-low: '🟢';          /* Baja - verde acción */
 
   /* Categorías */
   --icon-work: '💼';
@@ -54,35 +59,79 @@
 }
 
 /* ========================================================================
-   COLOR-CODED SYSTEM
+   COLOR-CODED SYSTEM (Paleta Funcional Oficial)
    ======================================================================== */
 
-/* Buttons con color semántico */
-.btn-create { background: var(--success-500); color: white; }
-.btn-create:hover { background: var(--success-600); }
+/* Buttons con color semántico - usando colores oficiales */
+/* NOTA: Colores verificados con WCAG AA ≥4.5:1 */
 
-.btn-edit { background: var(--primary-500); color: white; }
-.btn-edit:hover { background: var(--primary-600); }
+.btn-create {
+  background: var(--color-verde-accion);
+  color: black;  /* WCAG AA: 8.81:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-create:hover {
+  background: var(--success-700);
+  color: white;
+}
 
-.btn-delete { background: var(--danger-500); color: white; }
-.btn-delete:hover { background: var(--danger-600); }
+.btn-edit {
+  background: var(--color-azul-info);
+  color: white;  /* WCAG AA: 6.70:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-edit:hover { background: var(--primary-700); }
 
-.btn-view { background: var(--gray-100); color: var(--gray-700); }
+.btn-delete {
+  background: var(--color-rojo-error);
+  color: black;  /* WCAG AA: 5.04:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-delete:hover {
+  background: var(--danger-700);
+  color: white;
+}
+
+.btn-view {
+  background: var(--gray-100);
+  color: var(--gray-700);
+  border-radius: var(--forma-accion);
+}
 .btn-view:hover { background: var(--gray-200); }
 
-.btn-save { background: var(--success-500); color: white; }
-.btn-save:hover { background: var(--success-600); }
+.btn-save {
+  background: var(--color-verde-accion);
+  color: black;  /* WCAG AA: 8.81:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-save:hover {
+  background: var(--success-700);
+  color: white;
+}
 
-.btn-cancel { background: var(--gray-200); color: var(--gray-700); }
-.btn-cancel:hover { background: var(--gray-300); }
+.btn-cancel {
+  background: var(--color-gris-base);
+  color: white;
+  border-radius: var(--forma-accion);
+}
+.btn-cancel:hover { background: var(--gray-600); }
+
+.btn-warning {
+  background: var(--color-ambar-pendiente);
+  color: var(--gray-900);
+  border-radius: var(--forma-pendiente);
+}
+.btn-warning:hover { background: var(--warning-700); }
 
 /* ========================================================================
-   ICON-ONLY BUTTONS (Solo emoji, sin texto)
+   ICON-ONLY BUTTONS (Cumple tap target ≥56px)
    ======================================================================== */
 
 .btn-icon {
-  width: 40px;
-  height: 40px;
+  min-width: var(--touch-target-min);   /* 56px mínimo */
+  min-height: var(--touch-target-min);  /* 56px mínimo */
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -90,10 +139,11 @@
   border: none;
   border-radius: var(--border-radius-md);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  font-size: 20px;
+  transition: all var(--latencia-visual-max);  /* ≤120ms */
+  font-size: 24px;  /* Emoji más grande */
   background: var(--gray-100);
   color: var(--gray-700);
+  margin: calc(var(--touch-separation-min) / 2);  /* 4px margin = 8px separación */
 }
 
 .btn-icon:hover {
@@ -489,23 +539,66 @@
 }
 
 /* ========================================================================
-   RESPONSIVE
+   ANIMACIONES DE RITMO (Biblioteca de Componentes v1.0.0)
+   ======================================================================== */
+
+/* Animación crítica - 1Hz (1 parpadeo por segundo) */
+@keyframes ritmo-critico {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.ritmo-critico {
+  animation: ritmo-critico var(--ritmo-critico-ms) ease-in-out infinite;
+}
+
+/* Animación no crítica - 0.33Hz (1 parpadeo cada 3 segundos) */
+@keyframes ritmo-no-critico {
+  0%, 90%, 100% { opacity: 1; }
+  95% { opacity: 0.5; }
+}
+
+.ritmo-no-critico {
+  animation: ritmo-no-critico var(--ritmo-no-critico-ms) ease-in-out infinite;
+}
+
+/* Pulso suave para alertas */
+@keyframes pulso-alerta {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.pulso-alerta {
+  animation: pulso-alerta var(--ritmo-critico-ms) ease-in-out infinite;
+}
+
+/* Estados con ritmo aplicado automáticamente */
+.status-badge-danger.critico,
+.btn-delete.critico,
+[data-criticidad="alta"] {
+  animation: ritmo-critico var(--ritmo-critico-ms) ease-in-out infinite;
+}
+
+/* ========================================================================
+   RESPONSIVE (Mantiene tap targets en móvil)
    ======================================================================== */
 
 @media (max-width: 768px) {
+  /* IMPORTANTE: Mantener 56px en móvil para accesibilidad táctil */
   .btn-icon {
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
+    /* NO reducir por debajo de --touch-target-min */
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+    font-size: 20px;  /* Emoji ligeramente más pequeño */
   }
 
   .card-compact {
-    padding: var(--spacing-3);
+    padding: var(--spacing-2);
   }
 
   .card-compact-icon {
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     font-size: 20px;
   }
 }

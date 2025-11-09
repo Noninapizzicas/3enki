@@ -32,6 +32,24 @@
       "path": "/todos/:id",
       "handler": "handleDeleteTodo",
       "description": "Delete a todo"
+    },
+    {
+      "method": "GET",
+      "path": "/stats/total",
+      "handler": "handleGetStatsTotal",
+      "description": "Get total todos count"
+    },
+    {
+      "method": "GET",
+      "path": "/stats/pending",
+      "handler": "handleGetStatsPending",
+      "description": "Get pending todos count"
+    },
+    {
+      "method": "GET",
+      "path": "/stats/completed",
+      "handler": "handleGetStatsCompleted",
+      "description": "Get completed todos count"
     }
   ],
   "ui": {

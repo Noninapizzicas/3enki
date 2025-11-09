@@ -47,6 +47,8 @@ class HTTPGateway {
     this.hooks = options.hooks || null;
     this.cors = options.cors !== false;
     this.coreId = options.coreId || 'unknown';
+    this.moduleLoader = options.moduleLoader || null;
+    this.eventBus = options.eventBus || null;
 
     this.server = null;
     this.isRunning = false;

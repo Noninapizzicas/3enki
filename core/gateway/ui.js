@@ -33,25 +33,6 @@ class UIGateway {
     };
   }
 
-  /**
-   * Register UI routes in the HTTP Gateway
-   */
-  register(httpGateway) {
-    // Serve UI admin panel
-    httpGateway.registerRoute('GET', '/ui', this.serveAdminPanel.bind(this));
-    httpGateway.registerRoute('GET', '/ui/', this.serveAdminPanel.bind(this));
-
-    // Serve static UI files
-    httpGateway.registerRoute('GET', '/ui/*', this.serveStaticFile.bind(this));
-
-    // API: List modules with UI
-    httpGateway.registerRoute('GET', '/ui/modules', this.listModulesWithUI.bind(this));
-
-    // API: Get module UI definition
-    httpGateway.registerRoute('GET', '/ui/modules/:name', this.getModuleUI.bind(this));
-
-    this.core.logger.info('[UIGateway] Routes registered');
-  }
 
   /**
    * Serve the admin panel (index.html)

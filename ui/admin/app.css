@@ -276,6 +276,41 @@ body {
 }
 
 /* ========================================================================
+   MODULE TABS
+   ======================================================================== */
+
+.module-tabs {
+  display: flex;
+  gap: var(--spacing-2);
+  border-bottom: 2px solid var(--border);
+  margin-bottom: var(--spacing-4);
+}
+
+.module-tab {
+  background: none;
+  border: none;
+  padding: var(--spacing-3) var(--spacing-4);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition-fast);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.module-tab:hover {
+  color: var(--primary-500);
+  background-color: var(--primary-50);
+}
+
+.module-tab.active {
+  color: var(--primary-500);
+  border-bottom-color: var(--primary-500);
+}
+
+/* ========================================================================
    UTILITY CLASSES
    ======================================================================== */
 

@@ -58,7 +58,7 @@ export class DetailView {
 
     switch (field.type) {
       case 'badge':
-        return `<span class="badge badge-primary">${value}</span>`;
+        return this.renderStatusBadge(value, field);
       case 'boolean':
         return value ? '✓ Sí' : '✗ No';
       case 'date':
@@ -74,13 +74,75 @@ export class DetailView {
     }
   }
 
+  /**
+   * Render status badge with emoji icon
+   */
+  renderStatusBadge(value, field) {
+    const lowercaseValue = String(value).toLowerCase();
+    let badgeClass = 'status-badge';
+    let emoji = '';
+
+    // Determine status type and emoji
+    if (['active', 'success', 'completed', 'done'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-success';
+      emoji = '✅';
+    } else if (['pending', 'in_progress'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-warning';
+      emoji = '⏳';
+    } else if (['error', 'failed', 'cancelled', 'inactive'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-danger';
+      emoji = '❌';
+    } else if (['info', 'draft'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-info';
+      emoji = 'ℹ️';
+    } else {
+      badgeClass += ' status-badge-default';
+      emoji = '⚪';
+    }
+
+    // Handle priority badges
+    if (field.name === 'priority') {
+      if (lowercaseValue === 'high') {
+        badgeClass = 'status-badge status-badge-danger';
+        emoji = '🔴';
+      } else if (lowercaseValue === 'medium') {
+        badgeClass = 'status-badge status-badge-warning';
+        emoji = '🟡';
+      } else if (lowercaseValue === 'low') {
+        badgeClass = 'status-badge status-badge-success';
+        emoji = '🟢';
+      }
+    }
+
+    return `<span class="${badgeClass}">${emoji} ${this.escapeHTML(value)}</span>`;
+  }
+
   renderActions(actions) {
     return actions.map(action => {
-      const btnClass = `btn btn-${action.variant || 'primary'}`;
+      // Map action IDs to semantic button classes and icons
+      const actionMap = {
+        edit: { class: 'btn-edit', icon: '✏️' },
+        delete: { class: 'btn-delete', icon: '🗑️', longPress: true },
+        back: { class: 'btn-ghost', icon: '←' },
+        save: { class: 'btn-save', icon: '💾' },
+        cancel: { class: 'btn-cancel', icon: '✕' },
+        download: { class: 'btn-download', icon: '⬇️' },
+        share: { class: 'btn-primary', icon: '↗️' },
+        print: { class: 'btn-ghost', icon: '🖨️' },
+      };
+
+      const actionInfo = actionMap[action.id] || {
+        class: `btn-${action.variant || 'primary'}`,
+        icon: action.icon || ''
+      };
+
+      const longPressClass = actionInfo.longPress ? ' btn-long-press' : '';
+
       return `
-        <button class="${btnClass}" data-action="${action.id}"
+        <button class="btn ${actionInfo.class}${longPressClass}"
+                data-action="${action.id}"
                 onclick="EventCoreUI.handleAction('${action.id}', this)">
-          ${action.icon ? action.icon + ' ' : ''}${action.label}
+          ${actionInfo.icon} ${action.label}
         </button>
       `;
     }).join('');

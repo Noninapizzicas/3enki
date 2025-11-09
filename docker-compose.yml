@@ -1,0 +1,93 @@
+version: '3.8'
+
+# Event Core - Multi-Core Docker Compose Setup
+#
+# This configuration demonstrates the fractal architecture by running
+# two independent cores that discover and communicate with each other.
+#
+# Usage:
+#   docker-compose up          # Start both cores
+#   docker-compose logs -f     # Follow logs
+#   docker-compose down        # Stop and remove containers
+
+services:
+  # ============================================================================
+  # Core A - Primary core with embedded MQTT broker
+  # ============================================================================
+  core-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: event-core-a
+    hostname: core-a
+    environment:
+      - NODE_ENV=production
+      - EVENT_CORE_ID=core-a
+      - EVENT_CORE_PORT=3000
+      - EVENT_CORE_BROKER_PORT=1883
+      - EVENT_CORE_LOG_LEVEL=info
+      - EVENT_CORE_MODULES_PATH=./modules
+    ports:
+      - "3000:3000"    # HTTP Gateway
+      - "1883:1883"    # MQTT Broker (shared)
+    volumes:
+      - core-a-data:/app/data
+    networks:
+      - event-core-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ============================================================================
+  # Core B - Secondary core connecting to Core A's broker
+  # ============================================================================
+  core-b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: event-core-b
+    hostname: core-b
+    environment:
+      - NODE_ENV=production
+      - EVENT_CORE_ID=core-b
+      - EVENT_CORE_PORT=3000
+      - EVENT_CORE_BROKER_PORT=1883
+      - EVENT_CORE_LOG_LEVEL=info
+      - EVENT_CORE_MODULES_PATH=./modules
+    ports:
+      - "3001:3000"    # HTTP Gateway (mapped to host 3001)
+    volumes:
+      - core-b-data:/app/data
+    networks:
+      - event-core-network
+    depends_on:
+      core-a:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  event-core-network:
+    driver: bridge
+    name: event-core-net
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  core-a-data:
+    name: event-core-a-data
+  core-b-data:
+    name: event-core-b-data

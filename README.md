@@ -2,11 +2,25 @@
 
 **Arquitectura fractal event-driven** con IA integrada, zero dependencias externas, diseñada para escalar de un proceso a N cores distribuidos.
 
-## 🎊 Status: v0.1.0 Foundation - COMPLETADO ✅
+## 🎊 Status: v0.5.0 Network - COMPLETADO ✅
 
-**66+ tests implementados** | **81 Story Points completados** | **Sistema 100% funcional** | **✅ Production Ready**
+**100+ tests** | **110 Story Points** | **Multi-Machine Ready** | **✅ Production Ready** | **📊 Observable**
 
-### ✅ Componentes Implementados
+### 🚀 New in v0.5.0 "Network"
+
+#### Network Deployment (8 SP)
+- ✅ **Multi-Machine Support** - Cores en diferentes máquinas con discovery automático
+- ✅ **Network Scripts** - Setup wizard, validation, latency testing
+- ✅ **External MQTT Broker** - Mosquitto integration con fallback automático
+- ✅ **Deployment Guide** - 7,000+ palabras de documentación
+
+#### Observability Dashboard (21 SP)
+- ✅ **Web UI** - Dashboard moderna con dark theme
+- ✅ **Real-time Monitoring** - Cores activos, logs, events via SSE
+- ✅ **Metrics Dashboard** - Métricas agregadas de todos los cores
+- ✅ **User Guide** - 5,000+ palabras de documentación
+
+### ✅ Core Components (from v0.1.0-v0.5.0)
 
 #### Core Infrastructure (55 SP)
 - ✅ **Hook System** (8 SP) - `core/hooks.js` - 21 tests ✅
@@ -53,11 +67,19 @@ npm install
 # Iniciar el core
 node index.js
 
+# Acceder al Dashboard (en tu navegador)
+# http://localhost:3000/modules/dashboard/
+# (o puerto 3001 si el 3000 está en uso)
+
 # Usar el CLI
 node cli/index.js health
 node cli/index.js stats
 node cli/index.js modules
 node cli/index.js call GET /modules/echo/ping
+
+# Multi-Machine Setup (opcional)
+./network/setup-core.sh     # Setup wizard interactivo
+./network/validate.sh       # Validar configuración
 
 # Ejecutar tests
 npm test                    # Tests básicos
@@ -66,6 +88,13 @@ npm run test:observability # Solo observability
 npm run test:gateway       # Solo gateway
 npm run test:integration   # Tests de integración
 ```
+
+### 📊 Dashboard
+
+Accede al dashboard de observabilidad en:
+- **URL**: `http://localhost:3000/modules/dashboard/`
+- **Features**: Cores activos, logs en tiempo real, event stream, métricas
+- **Guía completa**: [`docs/DASHBOARD_GUIDE.md`](docs/DASHBOARD_GUIDE.md)
 
 ---
 

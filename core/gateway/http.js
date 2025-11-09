@@ -418,6 +418,47 @@ class HTTPGateway {
       res.setHeader('Access-Control-Allow-Origin', '*');
     }
 
+    // Check for special response types (HTML, SSE, etc.)
+    if (data && typeof data === 'object' && data._responseType) {
+      const type = data._responseType;
+
+      if (type === 'html') {
+        res.setHeader('Content-Type', 'text/html');
+        res.statusCode = statusCode;
+        res.end(data.content || '');
+        return;
+      }
+
+      if (type === 'css') {
+        res.setHeader('Content-Type', 'text/css');
+        res.statusCode = statusCode;
+        res.end(data.content || '');
+        return;
+      }
+
+      if (type === 'javascript') {
+        res.setHeader('Content-Type', 'application/javascript');
+        res.statusCode = statusCode;
+        res.end(data.content || '');
+        return;
+      }
+
+      if (type === 'sse') {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.statusCode = 200;
+
+        // Keep connection open and let handler manage it
+        // Handler should store res and write to it
+        if (data.onConnect && typeof data.onConnect === 'function') {
+          data.onConnect(res);
+        }
+        return;
+      }
+    }
+
+    // Default: JSON response
     res.setHeader('Content-Type', 'application/json');
     res.statusCode = statusCode;
 

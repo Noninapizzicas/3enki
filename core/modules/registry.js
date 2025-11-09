@@ -82,10 +82,13 @@ class ModuleRegistry {
     if (data.apis) {
       for (const api of data.apis) {
         const apiPath = `/modules/${moduleName}${api.path}`;
-        this.apiIndex.set(apiPath, {
+        // Use method + path as key to allow multiple HTTP methods on same path
+        const apiKey = `${api.method}:${apiPath}`;
+        this.apiIndex.set(apiKey, {
           moduleName,
           apiName: api.name,
           method: api.method,
+          path: apiPath,
           handler: api.handler
         });
       }
@@ -205,11 +208,9 @@ class ModuleRegistry {
    * @returns {Object|null} API data o null
    */
   findAPI(path, method) {
-    const apiData = this.apiIndex.get(path);
-    if (apiData && apiData.method === method) {
-      return apiData;
-    }
-    return null;
+    const apiKey = `${method}:${path}`;
+    const apiData = this.apiIndex.get(apiKey);
+    return apiData || null;
   }
 
   /**
@@ -218,8 +219,8 @@ class ModuleRegistry {
    * @returns {Array<Object>} Array de APIs
    */
   getAllAPIs() {
-    return Array.from(this.apiIndex.entries()).map(([path, data]) => ({
-      path,
+    return Array.from(this.apiIndex.entries()).map(([key, data]) => ({
+      path: data.path,
       method: data.method,
       moduleName: data.moduleName,
       apiName: data.apiName

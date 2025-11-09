@@ -170,21 +170,47 @@ class ModuleLoader {
   buildAPIsFromManifest(manifest, instance) {
     const apis = [];
 
-    if (!manifest.provides || !manifest.provides.apis) {
+    // Support both manifest.apis and manifest.provides.apis formats
+    const apiDefinitions = manifest.apis || manifest.provides?.apis;
+
+    if (!apiDefinitions || apiDefinitions.length === 0) {
       return apis;
     }
 
-    for (const apiDef of manifest.provides.apis) {
-      // Buscar handler en la instancia
-      // Convención: handlePing para API 'ping', handleEcho para API 'echo'
-      const handlerName = `handle${apiDef.name.charAt(0).toUpperCase()}${apiDef.name.slice(1)}`;
+    for (const apiDef of apiDefinitions) {
+      // Support two formats:
+      // 1. { name: "ping", ... } - auto-detect handler as handlePing
+      // 2. { handler: "handleListTodos", ... } - use handler directly
+
+      let handlerName;
+      let apiName;
+
+      if (apiDef.handler) {
+        // Format: { handler: "handleListTodos", path: "/todos", method: "GET" }
+        handlerName = apiDef.handler;
+        // Extract API name from path (e.g., "/todos" -> "todos")
+        apiName = apiDef.path.split('/').filter(p => p && !p.startsWith(':')).pop() || apiDef.handler;
+      } else if (apiDef.name) {
+        // Format: { name: "ping", ... }
+        apiName = apiDef.name;
+        handlerName = `handle${apiName.charAt(0).toUpperCase()}${apiName.slice(1)}`;
+      } else {
+        if (this.logger) {
+          this.logger.warn('module.api.invalid', {
+            module: manifest.name,
+            reason: 'API definition must have either "name" or "handler"'
+          });
+        }
+        continue;
+      }
+
       const handler = instance[handlerName];
 
       if (typeof handler !== 'function') {
         if (this.logger) {
           this.logger.warn('module.api.handler.missing', {
             module: manifest.name,
-            api: apiDef.name,
+            api: apiName,
             expected_handler: handlerName
           });
         }
@@ -192,7 +218,7 @@ class ModuleLoader {
       }
 
       apis.push({
-        name: apiDef.name,
+        name: apiName,
         method: apiDef.method,
         path: apiDef.path,
         description: apiDef.description,

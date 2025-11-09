@@ -29,7 +29,7 @@ const fs = require('fs');
 const { MQTTClient } = require('./core/mqtt');
 const EventBus = require('./core/events/bus');
 const HookManager = require('./core/hooks');
-const ModuleLoader = require('./core/modules/loader');
+const { ModuleLoader, ModuleRegistry } = require('./core/modules');
 const HTTPGateway = require('./core/gateway/http');
 const { Logger, Tracer, Metrics } = require('./core/observability');
 const { loadConfig, getConfigValue } = require('./core/config');
@@ -245,9 +245,16 @@ async function main() {
         tracer: core.tracer
       };
 
+      // Create Module Registry
+      core.moduleRegistry = new ModuleRegistry({
+        logger: core.logger,
+        metrics: core.metrics
+      });
+
       core.moduleLoader = new ModuleLoader({
         modulesPath,
         core: coreContext,
+        registry: core.moduleRegistry,
         logger: core.logger,
         metrics: core.metrics
       });
@@ -307,6 +314,7 @@ async function main() {
       metrics: core.metrics,
       eventBus: core.eventBus,
       moduleLoader: core.moduleLoader,
+      registry: core.moduleRegistry,
       core: core  // Pass core for UI Gateway
     });
 

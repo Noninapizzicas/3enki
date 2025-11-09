@@ -1,0 +1,147 @@
+{
+  "artifact_name": "biblioteca_componentes_ui_v1",
+  "version": "1.0.0",
+  "tokens": {
+    "color": {
+      "verde_accion": "#2FBF71",
+      "ambar_pendiente": "#F5B700",
+      "rojo_error": "#E63946",
+      "azul_info": "#1D4ED8",
+      "gris_base": "#6B7280",
+      "gris_fondo": "#0F1216"
+    },
+    "forma": {
+      "accion": "rect_redondeado_12",
+      "alerta": "rombo_suave",
+      "info": "circulo_10",
+      "pendiente": "hex_suave"
+    },
+    "tipografia": {
+      "base_size_px": 14,
+      "scale": [
+        12,
+        14,
+        16,
+        18,
+        20
+      ],
+      "weight": {
+        "regular": 400,
+        "medium": 500,
+        "bold": 700
+      }
+    },
+    "espaciado": {
+      "xs": 4,
+      "sm": 8,
+      "md": 12,
+      "lg": 16
+    },
+    "ritmo": {
+      "critico_hz": 1.0,
+      "no_critico_hz": 0.33,
+      "max_duracion_ms": 1500
+    },
+    "touch": {
+      "min_objetivo_px": {
+        "ancho": 56,
+        "alto": 56
+      },
+      "zonas_porcentaje": {
+        "izquierda": 30,
+        "derecha": 70
+      }
+    }
+  },
+  "componentes": [
+    {
+      "name": "BotonOperativo",
+      "props": {
+        "prioridad": [
+          "alta",
+          "media",
+          "baja"
+        ],
+        "estado": [
+          "activo",
+          "pendiente",
+          "error",
+          "info",
+          "deshabilitado"
+        ],
+        "badge_num": "integer|optional",
+        "icon": "enum|diccionario_simbolos",
+        "dual_zone": "bool"
+      },
+      "estados": {
+        "activo": {
+          "color": "verde_accion",
+          "contraste_min_WCAG": "≥ 4.5:1"
+        },
+        "pendiente": {
+          "color": "ambar_pendiente"
+        },
+        "error": {
+          "color": "rojo_error"
+        },
+        "info": {
+          "color": "azul_info"
+        },
+        "deshabilitado": {
+          "color": "gris_base"
+        }
+      },
+      "interaccion": {
+        "feedback": [
+          "visual",
+          "háptico|opcional"
+        ],
+        "tiempo_respuesta_ms": "<=120"
+      },
+      "zonas": [
+        {
+          "zona": "izquierda",
+          "ratio_%": 30,
+          "accion": "cobro|configurable"
+        },
+        {
+          "zona": "derecha",
+          "ratio_%": 70,
+          "accion": "productos|configurable"
+        }
+      ]
+    },
+    {
+      "name": "IndicadorEstado",
+      "props": {
+        "nivel": [
+          "ok",
+          "atencion",
+          "critico"
+        ],
+        "texto": "string|opcional"
+      },
+      "niveles": {
+        "ok": {
+          "color": "verde_accion",
+          "forma": "circulo_10"
+        },
+        "atencion": {
+          "color": "ambar_pendiente",
+          "forma": "hex_suave"
+        },
+        "critico": {
+          "color": "rojo_error",
+          "forma": "rombo_suave",
+          "ritmo_hz": "critico_hz"
+        }
+      }
+    }
+  ],
+  "accesibilidad": {
+    "contraste_min": "WCAG AA",
+    "area_tap_min_px": 56,
+    "targets_separacion_px": 8,
+    "alternativas_texto": "siempre que sea posible, pero no dependientes del texto"
+  }
+}

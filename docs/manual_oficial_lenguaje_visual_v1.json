@@ -1,0 +1,101 @@
+{
+  "artifact_name": "manual_oficial_lenguaje_visual_v1",
+  "version": "1.0.0",
+  "principios": [
+    "Claridad antes que estética",
+    "Un símbolo = Un significado",
+    "Color ligado a intención, no a marca",
+    "Ritmo sólo para criticidad real",
+    "Coherencia entre estados en todo el sistema"
+  ],
+  "paleta_funcional": [
+    {
+      "color": "verde_accion",
+      "hex": "#2FBF71",
+      "significado": "confirmar/continuar/ok"
+    },
+    {
+      "color": "ambar_pendiente",
+      "hex": "#F5B700",
+      "significado": "pendiente/espera/confirmación requerida"
+    },
+    {
+      "color": "rojo_error",
+      "hex": "#E63946",
+      "significado": "error/bloqueo/urgente"
+    },
+    {
+      "color": "azul_info",
+      "hex": "#1D4ED8",
+      "significado": "información/contexto"
+    },
+    {
+      "color": "gris_base",
+      "hex": "#6B7280",
+      "significado": "neutro/deshabilitado"
+    }
+  ],
+  "diccionario_signos": [
+    {
+      "nombre": "cobro",
+      "forma": "rect_redondeado",
+      "icono": "💳",
+      "direccion": "→",
+      "regla": "avance/confirmación"
+    },
+    {
+      "nombre": "productos",
+      "forma": "rect_redondeado",
+      "icono": "🧾",
+      "direccion": "↓",
+      "regla": "detalle/lista"
+    },
+    {
+      "nombre": "alerta",
+      "forma": "rombo_suave",
+      "icono": "⚠️",
+      "regla": "atención/critico"
+    },
+    {
+      "nombre": "info",
+      "forma": "círculo",
+      "icono": "ℹ️",
+      "regla": "contexto/no bloqueante"
+    }
+  ],
+  "estados_ui": [
+    {
+      "estado": "activo",
+      "color": "verde_accion"
+    },
+    {
+      "estado": "pendiente",
+      "color": "ambar_pendiente"
+    },
+    {
+      "estado": "error",
+      "color": "rojo_error",
+      "ritmo_hz": 1.0
+    },
+    {
+      "estado": "info",
+      "color": "azul_info"
+    }
+  ],
+  "layout_y_espaciado": {
+    "grid_min_cols": 2,
+    "gutters_px": 8,
+    "margen_min_px": 12
+  },
+  "microinteracciones": {
+    "latencia_visual_ms": "<=120",
+    "latencia_haptica_ms": "<=40"
+  },
+  "checklist_auditoria": [
+    "¿Cada color corresponde a una intención única?",
+    "¿Existe un símbolo inequívoco por acción?",
+    "¿El contraste cumple WCAG AA?",
+    "¿El ritmo (parpadeo) se usa solo para criticidad real?",
+    "¿Tap targets ≥ 56 px y separados ≥ 8 px?"
+  ]
+}

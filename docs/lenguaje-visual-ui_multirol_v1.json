@@ -1,0 +1,96 @@
+{
+  "artifact_name": "lenguaje-visual-ui_multirol_v1",
+  "contexto": "Lenguaje visual psicológico para comanderos y pantallas táctiles de trabajo",
+  "variables": {
+    "tema_proyecto": "Lenguaje visual para pantallas táctiles profesionales",
+    "alcance": "local",
+    "stakeholders": [
+      "diseñadores UI/UX",
+      "psicólogos cognitivos",
+      "desarrolladores front-end",
+      "personal de hostelería"
+    ],
+    "objetivo_principal": "Comunicar estados y acciones con mínima carga cognitiva",
+    "restricciones": [
+      "espacio visual limitado",
+      "baja saturación cromática",
+      "interpretación <1s",
+      "coherencia simbólica"
+    ],
+    "criterios_exito": [
+      "comprensión instantánea",
+      "reducción de errores",
+      "consistencia visual",
+      "validación perceptiva"
+    ],
+    "riesgos_clave": [
+      "ruido visual",
+      "pérdida jerárquica",
+      "contradicciones semióticas"
+    ]
+  },
+  "roles": [
+    {
+      "nombre": "Psicólogo Cognitivo/PNL",
+      "faro": "Maximizar claridad cognitiva y procesamiento rápido",
+      "producto_definido": "Guía de reducción de carga mental + patrones de comunicación intuitiva"
+    },
+    {
+      "nombre": "Especialista en Colorimetría Emocional",
+      "faro": "Asociación cromática directa a intención/acción",
+      "producto_definido": "Mapa color → emoción → acción"
+    },
+    {
+      "nombre": "Semiólogo Visual",
+      "faro": "Definir símbolos universales eficaces",
+      "producto_definido": "Diccionario y reglas semióticas"
+    },
+    {
+      "nombre": "Neurodiseñador UX",
+      "faro": "Optimización perceptiva y microinteracciones",
+      "producto_definido": "Jerarquías visuales y patrones perceptivos"
+    },
+    {
+      "nombre": "Diseñador de Sistemas Visuales",
+      "faro": "Convertir teoría en patrones y tokens",
+      "producto_definido": "Sistema de tokens + reglas de estado"
+    },
+    {
+      "nombre": "Integrador PNL‑Diseño",
+      "faro": "Unificar intención psicológica con ejecución visual",
+      "producto_definido": "Matriz intención → color → forma → acción"
+    }
+  ],
+  "flujo_trabajo": [
+    {
+      "paso": 1,
+      "rol": "Psicólogo Cognitivo/PNL",
+      "salida": "modelo cognitivo"
+    },
+    {
+      "paso": 2,
+      "rol": "Especialista en Colorimetría Emocional",
+      "salida": "mapa emocional cromático"
+    },
+    {
+      "paso": 3,
+      "rol": "Semiólogo Visual",
+      "salida": "diccionario simbólico"
+    },
+    {
+      "paso": 4,
+      "rol": "Neurodiseñador UX",
+      "salida": "jerarquía perceptiva"
+    },
+    {
+      "paso": 5,
+      "rol": "Diseñador de Sistemas Visuales",
+      "salida": "tokens y reglas"
+    },
+    {
+      "paso": 6,
+      "rol": "Integrador PNL‑Diseño",
+      "salida": "matriz final operativa"
+    }
+  ]
+}

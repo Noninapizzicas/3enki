@@ -1,0 +1,131 @@
+{
+  "artifact_name": "modelo_entrenamiento_mental_operadores_v1",
+  "version": "1.0.0",
+  "contexto": "Entrenamiento cognitivo-perceptivo para comanderos de hostelería y pantallas táctiles de trabajo.",
+  "objetivo": "Acelerar el reconocimiento y la reacción ante señales visuales (color, forma, ritmo) con <1s de interpretación.",
+  "kpis": [
+    {
+      "nombre": "tiempo_reaccion_ms",
+      "meta": "<= 700"
+    },
+    {
+      "nombre": "tasa_error_visual_%",
+      "meta": "<= 1%"
+    },
+    {
+      "nombre": "retencion_patrones_%",
+      "meta": ">= 90% a 7 días"
+    },
+    {
+      "nombre": "transferencia_contexto_%",
+      "meta": ">= 85%"
+    }
+  ],
+  "modulos": [
+    {
+      "id": "M1",
+      "nombre": "Atención Selectiva",
+      "duracion_min": 20,
+      "resultados": [
+        "Identificar prioridad visual primaria",
+        "Ignorar distracciones"
+      ]
+    },
+    {
+      "id": "M2",
+      "nombre": "Mapa Color→Acción",
+      "duracion_min": 25,
+      "resultados": [
+        "Asociar color a intención/estado",
+        "Responder sin texto"
+      ]
+    },
+    {
+      "id": "M3",
+      "nombre": "Semiótica Funcional",
+      "duracion_min": 25,
+      "resultados": [
+        "Reconocer iconos estandarizados",
+        "Evitar ambigüedad"
+      ]
+    },
+    {
+      "id": "M4",
+      "nombre": "Jerarquía & Ritmo",
+      "duracion_min": 20,
+      "resultados": [
+        "Priorizar señales críticas",
+        "Usar ritmo/parpadeo con mesura"
+      ]
+    },
+    {
+      "id": "M5",
+      "nombre": "Tareas de Transferencia",
+      "duracion_min": 30,
+      "resultados": [
+        "Aplicar en escenarios reales",
+        "Medir desempeño"
+      ]
+    }
+  ],
+  "ejercicios": [
+    {
+      "id": "E1",
+      "modulo": "M1",
+      "tipo": "reaccion_visual",
+      "descripcion": "Tocar el estímulo con mayor contraste en <700ms.",
+      "parametros": {
+        "repeticiones": 30,
+        "umbral_ms": 700
+      }
+    },
+    {
+      "id": "E2",
+      "modulo": "M2",
+      "tipo": "asociacion_color_accion",
+      "descripcion": "Mapear color a acción (verde=continuar, ámbar=pendiente, rojo=error, azul=info).",
+      "parametros": {
+        "repeticiones": 40
+      }
+    },
+    {
+      "id": "E3",
+      "modulo": "M3",
+      "tipo": "eleccion_forzada",
+      "descripcion": "Seleccionar icono correcto entre 3 opciones semánticamente próximas.",
+      "parametros": {
+        "repeticiones": 24,
+        "tiempo_max_ms": 1500
+      }
+    },
+    {
+      "id": "E4",
+      "modulo": "M4",
+      "tipo": "priorizacion_critica",
+      "descripcion": "Detectar señal crítica (parpadeo lento 1Hz) y ejecutar acción.",
+      "parametros": {
+        "repeticiones": 20
+      }
+    },
+    {
+      "id": "E5",
+      "modulo": "M5",
+      "tipo": "simulacion_flujo",
+      "descripcion": "Flujo simulado de comanda con 10 eventos y 3 niveles de prioridad.",
+      "parametros": {
+        "ciclos": 5
+      }
+    }
+  ],
+  "protocolo_sesiones": {
+    "frecuencia": "3 sesiones/semana",
+    "duracion_min": 30,
+    "semanas": 3,
+    "evaluaciones": [
+      "baseline",
+      "post-semana2",
+      "post-final",
+      "follow-up 7 días"
+    ]
+  }
+}

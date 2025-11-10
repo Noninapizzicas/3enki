@@ -52,15 +52,36 @@ export class DashboardView {
     const label = widget.title || widget.config?.label || 'Stat';
     const change = data?.change;
 
+    // Map widget titles/ids to icons
+    const iconMap = {
+      'Total de Tareas': '📊',
+      'Pendientes': '⏳',
+      'Completadas': '✅',
+      'En Progreso': '🔄',
+      'Usuarios': '👥',
+      'Ventas': '💰',
+      'Productos': '📦',
+      'total-tasks': '📊',
+      'pending-tasks': '⏳',
+      'completed-tasks': '✅',
+    };
+
+    const icon = iconMap[widget.title] || iconMap[widget.id] || '📊';
+
     return `
-<div class="stat-card">
-  <p class="stat-label">${label}</p>
-  <p class="stat-value">${value}</p>
-  ${change ? `
-    <p class="stat-change ${change > 0 ? 'positive' : 'negative'}">
-      ${change > 0 ? '↑' : '↓'} ${Math.abs(change)}%
-    </p>
-  ` : ''}
+<div class="stat-card compact-card">
+  <div class="compact-card-header">
+    <span class="compact-card-icon">${icon}</span>
+  </div>
+  <div class="compact-card-body">
+    <p class="stat-value">${value}</p>
+    <p class="stat-label">${label}</p>
+    ${change !== undefined ? `
+      <p class="stat-change ${change > 0 ? 'positive' : 'negative'}">
+        ${change > 0 ? '↑' : '↓'} ${Math.abs(change)}%
+      </p>
+    ` : ''}
+  </div>
 </div>
     `.trim();
   }

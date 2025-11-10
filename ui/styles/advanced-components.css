@@ -1,0 +1,604 @@
+/**
+ * Event Core UI - Advanced Components
+ *
+ * Componentes avanzados para UI intuitiva y minimalista:
+ * - Split Buttons (botón dividido con acción principal + dropdown)
+ * - Long-press Actions (mantener presionado)
+ * - Icon-only Buttons (solo emoji/icono, sin texto)
+ * - Color-coded Buttons (semántica visual por color)
+ * - Compact Cards (tarjetas minimalistas)
+ */
+
+/* ========================================================================
+   ICON LIBRARY - DICCIONARIO OFICIAL (Manual v1.0.0)
+   ======================================================================== */
+
+:root {
+  /* Iconos oficiales del diccionario */
+  --icon-cobro: '💳';        /* Cobro/Pago - rect_redondeado, dirección → */
+  --icon-productos: '🧾';    /* Productos/Lista - rect_redondeado, dirección ↓ */
+  --icon-alerta: '⚠️';       /* Alerta - rombo_suave */
+  --icon-info: 'ℹ️';         /* Info - círculo */
+
+  /* Acciones comunes */
+  --icon-add: '➕';
+  --icon-edit: '✏️';
+  --icon-delete: '🗑️';
+  --icon-view: '👁️';
+  --icon-save: '💾';
+  --icon-cancel: '❌';
+  --icon-search: '🔍';
+  --icon-filter: '🔎';
+  --icon-refresh: '🔄';
+  --icon-download: '⬇️';
+  --icon-upload: '⬆️';
+  --icon-copy: '📋';
+  --icon-share: '🔗';
+  --icon-settings: '⚙️';
+
+  /* Estados funcionales */
+  --icon-pending: '⏳';      /* Pendiente - ámbar */
+  --icon-in-progress: '🔄';
+  --icon-completed: '✅';    /* Completado - verde acción */
+  --icon-error: '❌';        /* Error - rojo error */
+  --icon-warning: '⚠️';
+  --icon-success: '✓';
+
+  /* Prioridades */
+  --icon-high: '🔴';         /* Alta - rojo error */
+  --icon-medium: '🟡';       /* Media - ámbar pendiente */
+  --icon-low: '🟢';          /* Baja - verde acción */
+
+  /* Categorías */
+  --icon-work: '💼';
+  --icon-personal: '👤';
+  --icon-urgent: '🚨';
+  --icon-calendar: '📅';
+  --icon-list: '📝';
+  --icon-stats: '📊';
+}
+
+/* ========================================================================
+   COLOR-CODED SYSTEM (Paleta Funcional Oficial)
+   ======================================================================== */
+
+/* Buttons con color semántico - usando colores oficiales */
+/* NOTA: Colores verificados con WCAG AA ≥4.5:1 */
+
+.btn-create {
+  background: var(--color-verde-accion);
+  color: black;  /* WCAG AA: 8.81:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-create:hover {
+  background: var(--success-700);
+  color: white;
+}
+
+.btn-edit {
+  background: var(--color-azul-info);
+  color: white;  /* WCAG AA: 6.70:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-edit:hover { background: var(--primary-700); }
+
+.btn-delete {
+  background: var(--color-rojo-error);
+  color: black;  /* WCAG AA: 5.04:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-delete:hover {
+  background: var(--danger-700);
+  color: white;
+}
+
+.btn-view {
+  background: var(--gray-100);
+  color: var(--gray-700);
+  border-radius: var(--forma-accion);
+}
+.btn-view:hover { background: var(--gray-200); }
+
+.btn-save {
+  background: var(--color-verde-accion);
+  color: black;  /* WCAG AA: 8.81:1 ✅ */
+  border-radius: var(--forma-accion);
+}
+.btn-save:hover {
+  background: var(--success-700);
+  color: white;
+}
+
+.btn-cancel {
+  background: var(--color-gris-base);
+  color: white;
+  border-radius: var(--forma-accion);
+}
+.btn-cancel:hover { background: var(--gray-600); }
+
+.btn-warning {
+  background: var(--color-ambar-pendiente);
+  color: var(--gray-900);
+  border-radius: var(--forma-pendiente);
+}
+.btn-warning:hover { background: var(--warning-700); }
+
+/* ========================================================================
+   ICON-ONLY BUTTONS (Cumple tap target ≥56px)
+   ======================================================================== */
+
+.btn-icon {
+  min-width: var(--touch-target-min);   /* 56px mínimo */
+  min-height: var(--touch-target-min);  /* 56px mínimo */
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all var(--latencia-visual-max);  /* ≤120ms */
+  font-size: 24px;  /* Emoji más grande */
+  background: var(--gray-100);
+  color: var(--gray-700);
+  margin: calc(var(--touch-separation-min) / 2);  /* 4px margin = 8px separación */
+}
+
+.btn-icon:hover {
+  background: var(--gray-200);
+  transform: scale(1.1);
+}
+
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
+/* Variantes de tamaño */
+.btn-icon-sm {
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+}
+
+.btn-icon-lg {
+  width: 48px;
+  height: 48px;
+  font-size: 24px;
+}
+
+/* Variantes de color */
+.btn-icon.create { background: var(--success-50); color: var(--success-700); }
+.btn-icon.create:hover { background: var(--success-100); }
+
+.btn-icon.edit { background: var(--primary-50); color: var(--primary-700); }
+.btn-icon.edit:hover { background: var(--primary-100); }
+
+.btn-icon.delete { background: var(--danger-50); color: var(--danger-700); }
+.btn-icon.delete:hover { background: var(--danger-100); }
+
+.btn-icon.view { background: var(--gray-100); color: var(--gray-600); }
+.btn-icon.view:hover { background: var(--gray-200); }
+
+/* ========================================================================
+   SPLIT BUTTONS (Acción principal + Dropdown)
+   ======================================================================== */
+
+.btn-split {
+  display: inline-flex;
+  position: relative;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-split-main {
+  padding: var(--spacing-2) var(--spacing-4);
+  background: var(--primary-500);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  transition: background var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.btn-split-main:hover {
+  background: var(--primary-600);
+}
+
+.btn-split-toggle {
+  padding: var(--spacing-2) var(--spacing-3);
+  background: var(--primary-600);
+  color: white;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-split-toggle:hover {
+  background: var(--primary-700);
+}
+
+.btn-split-toggle::after {
+  content: '▼';
+  font-size: 10px;
+}
+
+/* Dropdown menu del split button */
+.btn-split-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-lg);
+  margin-top: var(--spacing-1);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all var(--transition-fast);
+  z-index: var(--z-dropdown);
+  min-width: 200px;
+}
+
+.btn-split.open .btn-split-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.btn-split-menu-item {
+  padding: var(--spacing-2) var(--spacing-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  transition: background var(--transition-fast);
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+}
+
+.btn-split-menu-item:hover {
+  background: var(--gray-100);
+}
+
+.btn-split-menu-item:first-child {
+  border-top-left-radius: var(--border-radius-md);
+  border-top-right-radius: var(--border-radius-md);
+}
+
+.btn-split-menu-item:last-child {
+  border-bottom-left-radius: var(--border-radius-md);
+  border-bottom-right-radius: var(--border-radius-md);
+}
+
+/* ========================================================================
+   LONG-PRESS BUTTONS (Mantener presionado)
+   ======================================================================== */
+
+.btn-long-press {
+  position: relative;
+  overflow: hidden;
+  background: var(--danger-500);
+  color: white;
+  border: none;
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  transition: all var(--transition-fast);
+}
+
+.btn-long-press:hover {
+  background: var(--danger-600);
+}
+
+.btn-long-press::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: width 1.5s ease-out;
+  pointer-events: none;
+}
+
+.btn-long-press.pressing::before {
+  width: 100%;
+}
+
+.btn-long-press .btn-long-press-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.btn-long-press-hint {
+  font-size: var(--font-size-xs);
+  opacity: 0.8;
+  margin-left: var(--spacing-2);
+}
+
+/* ========================================================================
+   COMPACT CARDS (Tarjetas minimalistas)
+   ======================================================================== */
+
+.card-compact {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-4);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.card-compact:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-300);
+}
+
+.card-compact-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--border-radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.card-compact-icon.success { background: var(--success-100); }
+.card-compact-icon.warning { background: var(--warning-100); }
+.card-compact-icon.danger { background: var(--danger-100); }
+.card-compact-icon.info { background: var(--info-100); }
+.card-compact-icon.primary { background: var(--primary-100); }
+
+.card-compact-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-compact-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-1) 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-compact-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-compact-actions {
+  display: flex;
+  gap: var(--spacing-1);
+  flex-shrink: 0;
+}
+
+/* ========================================================================
+   STATUS BADGES (Badges con emoji)
+   ======================================================================== */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.status-badge.pending {
+  background: var(--warning-50);
+  color: var(--warning-700);
+}
+
+.status-badge.in-progress {
+  background: var(--info-50);
+  color: var(--info-700);
+}
+
+.status-badge.completed {
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.status-badge.error {
+  background: var(--danger-50);
+  color: var(--danger-700);
+}
+
+/* ========================================================================
+   PRIORITY INDICATORS (Indicadores de prioridad)
+   ======================================================================== */
+
+.priority-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.priority-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--border-radius-full);
+}
+
+.priority-indicator.high .priority-dot {
+  background: var(--danger-500);
+}
+
+.priority-indicator.medium .priority-dot {
+  background: var(--warning-500);
+}
+
+.priority-indicator.low .priority-dot {
+  background: var(--success-500);
+}
+
+/* ========================================================================
+   ACTION BAR (Barra de acciones compacta)
+   ======================================================================== */
+
+.action-bar {
+  display: flex;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  background: var(--gray-50);
+  border-radius: var(--border-radius-lg);
+  justify-content: space-between;
+  align-items: center;
+}
+
+.action-bar-group {
+  display: flex;
+  gap: var(--spacing-1);
+}
+
+/* ========================================================================
+   TOOLTIP (Tooltips para botones icon-only)
+   ======================================================================== */
+
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: var(--gray-900);
+  color: white;
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--transition-fast);
+  pointer-events: none;
+  z-index: var(--z-tooltip);
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  border: 4px solid transparent;
+  border-top-color: var(--gray-900);
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--transition-fast);
+  pointer-events: none;
+}
+
+.tooltip:hover::before,
+.tooltip:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ========================================================================
+   ANIMACIONES DE RITMO (Biblioteca de Componentes v1.0.0)
+   ======================================================================== */
+
+/* Animación crítica - 1Hz (1 parpadeo por segundo) */
+@keyframes ritmo-critico {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.ritmo-critico {
+  animation: ritmo-critico var(--ritmo-critico-ms) ease-in-out infinite;
+}
+
+/* Animación no crítica - 0.33Hz (1 parpadeo cada 3 segundos) */
+@keyframes ritmo-no-critico {
+  0%, 90%, 100% { opacity: 1; }
+  95% { opacity: 0.5; }
+}
+
+.ritmo-no-critico {
+  animation: ritmo-no-critico var(--ritmo-no-critico-ms) ease-in-out infinite;
+}
+
+/* Pulso suave para alertas */
+@keyframes pulso-alerta {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.pulso-alerta {
+  animation: pulso-alerta var(--ritmo-critico-ms) ease-in-out infinite;
+}
+
+/* Estados con ritmo aplicado automáticamente */
+.status-badge-danger.critico,
+.btn-delete.critico,
+[data-criticidad="alta"] {
+  animation: ritmo-critico var(--ritmo-critico-ms) ease-in-out infinite;
+}
+
+/* ========================================================================
+   RESPONSIVE (Mantiene tap targets en móvil)
+   ======================================================================== */
+
+@media (max-width: 768px) {
+  /* IMPORTANTE: Mantener 56px en móvil para accesibilidad táctil */
+  .btn-icon {
+    /* NO reducir por debajo de --touch-target-min */
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+    font-size: 20px;  /* Emoji ligeramente más pequeño */
+  }
+
+  .card-compact {
+    padding: var(--spacing-2);
+  }
+
+  .card-compact-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+}

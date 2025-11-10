@@ -114,8 +114,8 @@ export class TableView {
 
     switch (column.type) {
       case 'badge':
-        const badgeClass = this.getBadgeClass(value);
-        return `<span class="badge ${badgeClass}">${value}</span>`;
+        // Use new status-badge with emoji icons
+        return this.renderStatusBadge(value, column);
 
       case 'boolean':
         return value ? '✓' : '✗';
@@ -144,6 +144,49 @@ export class TableView {
   }
 
   /**
+   * Render status badge with emoji icon
+   */
+  renderStatusBadge(value, column) {
+    const lowercaseValue = String(value).toLowerCase();
+    let badgeClass = 'status-badge';
+    let emoji = '';
+
+    // Determine status type and emoji
+    if (['active', 'success', 'completed', 'done'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-success';
+      emoji = '✅';
+    } else if (['pending', 'in_progress'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-warning';
+      emoji = '⏳';
+    } else if (['error', 'failed', 'cancelled', 'inactive'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-danger';
+      emoji = '❌';
+    } else if (['info', 'draft'].includes(lowercaseValue)) {
+      badgeClass += ' status-badge-info';
+      emoji = 'ℹ️';
+    } else {
+      badgeClass += ' status-badge-default';
+      emoji = '⚪';
+    }
+
+    // Handle priority badges
+    if (column.field === 'priority') {
+      if (lowercaseValue === 'high') {
+        badgeClass = 'status-badge status-badge-danger';
+        emoji = '🔴';
+      } else if (lowercaseValue === 'medium') {
+        badgeClass = 'status-badge status-badge-warning';
+        emoji = '🟡';
+      } else if (lowercaseValue === 'low') {
+        badgeClass = 'status-badge status-badge-success';
+        emoji = '🟢';
+      }
+    }
+
+    return `<span class="${badgeClass}">${emoji} ${this.escapeHTML(value)}</span>`;
+  }
+
+  /**
    * Get badge CSS class based on value
    */
   getBadgeClass(value) {
@@ -167,23 +210,62 @@ export class TableView {
 
   /**
    * Render action buttons
+   * Global actions: Full buttons with icons
+   * Row actions: Icon-only buttons with tooltips
    */
   renderActions(actions, context, row = null) {
     return actions
       .filter(action => !action.context || action.context === context)
       .map(action => {
-        const btnClass = `btn btn-${action.variant || 'primary'} btn-sm`;
         const dataAttrs = row ? `data-row-id="${row.id || ''}" data-row='${JSON.stringify(row)}'` : '';
+        const isRowAction = context === 'row';
 
-        return `
-          <button
-            class="${btnClass}"
-            data-action="${action.id}"
-            ${dataAttrs}
-            onclick="EventCoreUI.handleAction('${action.id}', this)">
-            ${action.icon ? action.icon + ' ' : ''}${action.label}
-          </button>
-        `;
+        // Map action IDs to semantic button classes and icons
+        const actionMap = {
+          create: { class: 'btn-create', icon: '➕', tooltip: 'Crear nuevo' },
+          add: { class: 'btn-create', icon: '➕', tooltip: 'Añadir' },
+          edit: { class: 'btn-edit', icon: '✏️', tooltip: 'Editar' },
+          view: { class: 'btn-view', icon: '👁️', tooltip: 'Ver detalles' },
+          delete: { class: 'btn-delete', icon: '🗑️', tooltip: 'Eliminar', longPress: true },
+          save: { class: 'btn-save', icon: '💾', tooltip: 'Guardar' },
+          cancel: { class: 'btn-cancel', icon: '✕', tooltip: 'Cancelar' },
+          download: { class: 'btn-download', icon: '⬇️', tooltip: 'Descargar' },
+          upload: { class: 'btn-upload', icon: '⬆️', tooltip: 'Subir' },
+          refresh: { class: 'btn-refresh', icon: '🔄', tooltip: 'Actualizar' },
+          settings: { class: 'btn-settings', icon: '⚙️', tooltip: 'Configuración' },
+        };
+
+        const actionInfo = actionMap[action.id] || {
+          class: `btn-${action.variant || 'primary'}`,
+          icon: action.icon || '●',
+          tooltip: action.label
+        };
+
+        if (isRowAction) {
+          // Row actions: Icon-only buttons
+          const longPressClass = actionInfo.longPress ? ' btn-long-press' : '';
+          return `
+            <button
+              class="btn-icon ${actionInfo.class} btn-sm${longPressClass}"
+              data-action="${action.id}"
+              data-tooltip="${actionInfo.tooltip}"
+              ${dataAttrs}
+              onclick="EventCoreUI.handleAction('${action.id}', this)">
+              ${actionInfo.icon}
+            </button>
+          `;
+        } else {
+          // Global actions: Full buttons with icon + text
+          return `
+            <button
+              class="btn ${actionInfo.class}"
+              data-action="${action.id}"
+              ${dataAttrs}
+              onclick="EventCoreUI.handleAction('${action.id}', this)">
+              ${actionInfo.icon} ${action.label}
+            </button>
+          `;
+        }
       })
       .join('');
   }
@@ -204,10 +286,10 @@ export class TableView {
       `).join('')}
       <div style="margin-top: 28px;">
         <button class="btn btn-primary" onclick="EventCoreUI.applyFilters()">
-          Filtrar
+          🔍 Filtrar
         </button>
         <button class="btn btn-ghost" onclick="EventCoreUI.clearFilters()">
-          Limpiar
+          ✕ Limpiar
         </button>
       </div>
     </div>

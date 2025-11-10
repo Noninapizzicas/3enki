@@ -179,32 +179,50 @@ export class FormView {
   }
 
   /**
-   * Render action buttons
+   * Render action buttons with semantic colors and icons
    */
   renderActions(actions) {
     if (actions.length === 0) {
-      // Default submit button
+      // Default submit button with semantic styling
       return `
-        <button type="submit" class="btn btn-primary">
-          Guardar
+        <button type="submit" class="btn btn-save">
+          💾 Guardar
         </button>
-        <button type="button" class="btn btn-ghost" onclick="history.back()">
-          Cancelar
+        <button type="button" class="btn btn-cancel" onclick="history.back()">
+          ✕ Cancelar
         </button>
       `;
     }
 
     return actions.map(action => {
-      const btnClass = `btn btn-${action.variant || 'primary'}`;
+      // Map action IDs to semantic button classes and icons
+      const actionMap = {
+        submit: { class: 'btn-save', icon: '💾', label: action.label || 'Guardar' },
+        save: { class: 'btn-save', icon: '💾', label: action.label || 'Guardar' },
+        create: { class: 'btn-create', icon: '➕', label: action.label || 'Crear' },
+        update: { class: 'btn-save', icon: '💾', label: action.label || 'Actualizar' },
+        delete: { class: 'btn-delete', icon: '🗑️', label: action.label || 'Eliminar', longPress: true },
+        cancel: { class: 'btn-cancel', icon: '✕', label: action.label || 'Cancelar' },
+        reset: { class: 'btn-cancel', icon: '🔄', label: action.label || 'Restablecer' },
+        back: { class: 'btn-ghost', icon: '←', label: action.label || 'Volver' },
+      };
+
+      const actionInfo = actionMap[action.id] || {
+        class: `btn-${action.variant || 'primary'}`,
+        icon: action.icon || '',
+        label: action.label
+      };
+
       const btnType = action.type === 'submit' ? 'submit' : 'button';
+      const longPressClass = actionInfo.longPress ? ' btn-long-press' : '';
 
       return `
         <button
           type="${btnType}"
-          class="${btnClass}"
+          class="btn ${actionInfo.class}${longPressClass}"
           data-action="${action.id}"
           onclick="EventCoreUI.handleFormAction('${action.id}', this, event)">
-          ${action.icon ? action.icon + ' ' : ''}${action.label}
+          ${actionInfo.icon} ${actionInfo.label}
         </button>
       `;
     }).join(' ');

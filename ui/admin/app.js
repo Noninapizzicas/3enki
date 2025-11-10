@@ -308,6 +308,15 @@ class App {
     `;
   }
 
+  /**
+   * Get nested property from object using dot notation
+   * Example: getPath(obj, 'data.items') returns obj.data.items
+   */
+  getPath(obj, path) {
+    if (!path) return obj;
+    return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+  }
+
   registerRoutes() {
     // Home / Dashboard
     this.router.register('/', async () => {
@@ -374,31 +383,99 @@ class App {
 
     // Module view - will load UI definition and render with UIRenderer
     this.router.register('/module/:name', async (params) => {
-      const moduleName = params.name || window.location.hash.split('/').pop();
+      const moduleName = params.name || window.location.hash.split('/').pop().split('?')[0];
+      const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+      const viewId = urlParams.get('view');
 
       try {
         // Load module UI definition
         const response = await fetch(`/ui/modules/${moduleName}`);
         const moduleUI = await response.json();
 
-        // For now, show a placeholder - UIRenderer will handle this later
-        this.router.render(`
-          <div class="page-header">
-            <h1 class="page-title">${moduleUI.title || moduleName}</h1>
-            <p class="page-description">${moduleUI.description || ''}</p>
-          </div>
+        // Store current module
+        this.currentModule = moduleUI;
 
-          <div class="alert alert-info">
-            <h3>UI Renderer en desarrollo</h3>
-            <p>El módulo "${moduleName}" tiene una interfaz definida, pero el renderer aún no está implementado.</p>
-            <p class="mt-2"><strong>Vistas disponibles:</strong></p>
-            <ul>
-              ${moduleUI.views ? moduleUI.views.map(view => `
-                <li>${view.title || view.id} (${view.type})</li>
-              `).join('') : '<li>No hay vistas definidas</li>'}
-            </ul>
+        // Get the view to display (first view or specified view)
+        let activeView = moduleUI.views[0];
+        if (viewId) {
+          activeView = moduleUI.views.find(v => v.id === viewId) || activeView;
+        }
+
+        // Render module container with tabs if multiple views
+        let html = `
+          <div class="page-header">
+            <h1 class="page-title">${moduleUI.icon || ''} ${moduleUI.title || moduleName}</h1>
+            ${moduleUI.description ? `<p class="page-description">${moduleUI.description}</p>` : ''}
           </div>
-        `);
+        `;
+
+        // Add view tabs if multiple views
+        if (moduleUI.views.length > 1) {
+          html += `
+            <nav class="module-tabs mb-4">
+              ${moduleUI.views.map(view => `
+                <button
+                  class="module-tab ${view.id === activeView.id ? 'active' : ''}"
+                  onclick="window.location.hash = '#/module/${moduleName}?view=${view.id}'">
+                  ${view.title || view.id}
+                </button>
+              `).join('')}
+            </nav>
+          `;
+        }
+
+        // Render the active view
+        html += `<div id="view-container">`;
+
+        // Check if renderer is available
+        if (window.EventCoreUI && window.EventCoreUI.renderer) {
+          try {
+            // Load data if view has API
+            let viewData = null;
+            if (activeView.api) {
+              const dataResponse = await this.api.request(
+                activeView.api.method || 'GET',
+                activeView.api.url
+              );
+              viewData = activeView.api.dataPath
+                ? this.getPath(dataResponse, activeView.api.dataPath)
+                : dataResponse;
+            }
+
+            // Render view with UIRenderer
+            const rendered = await window.EventCoreUI.renderer.renderView(activeView, viewData);
+            html += rendered.html;
+
+            // Execute JS after rendering
+            setTimeout(() => {
+              if (rendered.js) {
+                try {
+                  eval(rendered.js);
+                } catch (e) {
+                  console.error('Error executing view JS:', e);
+                }
+              }
+            }, 100);
+          } catch (error) {
+            console.error('Error rendering view:', error);
+            html += `
+              <div class="alert alert-danger">
+                <h3>Error al renderizar vista</h3>
+                <p>${error.message}</p>
+              </div>
+            `;
+          }
+        } else {
+          html += `
+            <div class="alert alert-warning">
+              <p>UI Renderer no está disponible. Cargando...</p>
+            </div>
+          `;
+        }
+
+        html += `</div>`;
+
+        this.router.render(html);
       } catch (error) {
         this.toast.error('Error', `No se pudo cargar el módulo: ${error.message}`);
         this.router.render(`
@@ -472,6 +549,157 @@ class App {
 }
 
 // ============================================================================
+// GLOBAL EVENT CORE UI HELPERS
+// ============================================================================
+
+// Initialize EventCoreUI global object
+if (!window.EventCoreUI) {
+  window.EventCoreUI = {};
+}
+
+/**
+ * Handle action button clicks (for tables, detail views, etc.)
+ */
+window.EventCoreUI.handleAction = async function(actionId, button) {
+  const rowId = button.dataset.rowId;
+  const rowData = button.dataset.row ? JSON.parse(button.dataset.row) : null;
+
+  console.log('Action clicked:', actionId, rowId, rowData);
+
+  // Handle standard actions
+  switch (actionId) {
+    case 'create':
+      // Navigate to create form
+      const moduleName = window.eventCoreApp.currentModule.name;
+      window.location.hash = `#/module/${moduleName}?view=create`;
+      break;
+
+    case 'edit':
+      // Navigate to edit form with row data
+      if (rowId) {
+        const moduleName = window.eventCoreApp.currentModule.name;
+        window.location.hash = `#/module/${moduleName}?view=edit&id=${rowId}`;
+      }
+      break;
+
+    case 'view':
+      // Navigate to detail view
+      if (rowId) {
+        const moduleName = window.eventCoreApp.currentModule.name;
+        window.location.hash = `#/module/${moduleName}?view=detail&id=${rowId}`;
+      }
+      break;
+
+    case 'delete':
+      // Confirm and delete
+      if (confirm('¿Estás seguro de eliminar este elemento?')) {
+        try {
+          // Get delete API from button data or action definition
+          const deleteUrl = button.dataset.deleteUrl || `/modules/${window.eventCoreApp.currentModule.name}/todos/${rowId}`;
+          await window.eventCoreApp.api.delete(deleteUrl);
+          window.eventCoreApp.toast.success('Eliminado', 'El elemento se eliminó correctamente');
+
+          // Reload current view
+          window.location.reload();
+        } catch (error) {
+          window.eventCoreApp.toast.error('Error', 'No se pudo eliminar: ' + error.message);
+        }
+      }
+      break;
+
+    default:
+      console.warn('Unknown action:', actionId);
+  }
+};
+
+/**
+ * Handle form submission
+ */
+window.EventCoreUI.handleFormSubmit = async function(event, formId) {
+  event.preventDefault();
+
+  const form = window.EventCoreUI.forms[formId];
+  if (!form) {
+    console.error('Form not found:', formId);
+    return false;
+  }
+
+  const formData = form.getData();
+  const success = await form.submit(formData);
+
+  if (success) {
+    // Navigate back to list view
+    const moduleName = window.eventCoreApp.currentModule.name;
+    window.location.hash = `#/module/${moduleName}`;
+  }
+
+  return false;
+};
+
+/**
+ * Handle form action buttons (cancel, etc.)
+ */
+window.EventCoreUI.handleFormAction = function(actionId, button, event) {
+  if (event) event.preventDefault();
+
+  switch (actionId) {
+    case 'cancel':
+      history.back();
+      break;
+
+    case 'submit':
+      // Let form handle it naturally
+      break;
+
+    default:
+      console.warn('Unknown form action:', actionId);
+  }
+};
+
+/**
+ * Show success toast
+ */
+window.EventCoreUI.showSuccess = function(title, message) {
+  window.eventCoreApp.toast.success(title, message);
+};
+
+/**
+ * Show error toast
+ */
+window.EventCoreUI.showError = function(title, message) {
+  window.eventCoreApp.toast.error(title, message);
+};
+
+/**
+ * Apply filters to table
+ */
+window.EventCoreUI.applyFilters = function() {
+  console.log('Apply filters');
+  // TODO: Implement filtering logic
+};
+
+/**
+ * Clear filters from table
+ */
+window.EventCoreUI.clearFilters = function() {
+  console.log('Clear filters');
+  // TODO: Implement clear filters logic
+};
+
+/**
+ * Get nested property from object using dot notation
+ */
+window.EventCoreUI.getPath = function(obj, path) {
+  if (!path) return obj;
+  return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+};
+
+/**
+ * API client reference
+ */
+window.EventCoreUI.api = null; // Will be set by App
+
+// ============================================================================
 // INITIALIZE APP
 // ============================================================================
 
@@ -479,3 +707,6 @@ const app = new App();
 
 // Expose app globally for debugging
 window.eventCoreApp = app;
+
+// Expose API client to EventCoreUI
+window.EventCoreUI.api = app.api;

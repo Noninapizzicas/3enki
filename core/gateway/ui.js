@@ -33,25 +33,6 @@ class UIGateway {
     };
   }
 
-  /**
-   * Register UI routes in the HTTP Gateway
-   */
-  register(httpGateway) {
-    // Serve UI admin panel
-    httpGateway.registerRoute('GET', '/ui', this.serveAdminPanel.bind(this));
-    httpGateway.registerRoute('GET', '/ui/', this.serveAdminPanel.bind(this));
-
-    // Serve static UI files
-    httpGateway.registerRoute('GET', '/ui/*', this.serveStaticFile.bind(this));
-
-    // API: List modules with UI
-    httpGateway.registerRoute('GET', '/ui/modules', this.listModulesWithUI.bind(this));
-
-    // API: Get module UI definition
-    httpGateway.registerRoute('GET', '/ui/modules/:name', this.getModuleUI.bind(this));
-
-    this.core.logger.info('[UIGateway] Routes registered');
-  }
 
   /**
    * Serve the admin panel (index.html)
@@ -138,15 +119,15 @@ class UIGateway {
       // Get all loaded modules from ModuleLoader
       const moduleLoader = this.core.moduleLoader;
 
-      if (!moduleLoader || !moduleLoader.modules) {
+      if (!moduleLoader || !moduleLoader.loadedModules) {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ modules: [] }));
         return;
       }
 
       // Iterate through loaded modules
-      for (const [moduleName, moduleInstance] of moduleLoader.modules.entries()) {
-        const moduleConfig = moduleInstance.config;
+      for (const [moduleName, moduleData] of moduleLoader.loadedModules.entries()) {
+        const moduleConfig = moduleData.manifest;
 
         // Check if module has UI enabled
         if (moduleConfig.ui && moduleConfig.ui.enabled) {
@@ -191,15 +172,15 @@ class UIGateway {
 
       // Get module from ModuleLoader
       const moduleLoader = this.core.moduleLoader;
-      const moduleInstance = moduleLoader?.modules.get(moduleName);
+      const moduleData = moduleLoader?.loadedModules.get(moduleName);
 
-      if (!moduleInstance) {
+      if (!moduleData) {
         response.writeHead(404, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ error: `Module "${moduleName}" not found` }));
         return;
       }
 
-      const moduleConfig = moduleInstance.config;
+      const moduleConfig = moduleData.manifest;
 
       // Check if module has UI
       if (!moduleConfig.ui || !moduleConfig.ui.enabled) {

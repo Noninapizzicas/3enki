@@ -66,6 +66,7 @@ function loadFromEnv() {
     'EVENT_CORE_HTTP_HOST': 'http.host',
     'EVENT_CORE_BROKER_PORT': 'mqtt.broker.port',
     'EVENT_CORE_BROKER_HOST': 'mqtt.broker.host',
+    'EVENT_CORE_BROKER_URL': 'mqtt.broker.url',
     'EVENT_CORE_MODULES_PATH': 'modules.path',
     'EVENT_CORE_LOG_LEVEL': 'observability.logging.level',
     'EVENT_CORE_TRACING_ENABLED': 'observability.tracing.enabled',

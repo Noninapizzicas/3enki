@@ -1,0 +1,55 @@
+{
+  "name": "dashboard",
+  "version": "1.0.0",
+  "description": "Observability Dashboard - Web UI para monitorear todos los cores",
+  "author": "Event Core Team",
+  "provides": {
+    "apis": [
+      {
+        "name": "ui",
+        "method": "GET",
+        "path": "/",
+        "description": "Dashboard web interface"
+      },
+      {
+        "name": "cores",
+        "method": "GET",
+        "path": "/api/cores",
+        "description": "Get list of active cores"
+      },
+      {
+        "name": "coreDetail",
+        "method": "GET",
+        "path": "/api/cores/:id",
+        "description": "Get detailed info about specific core"
+      },
+      {
+        "name": "logs",
+        "method": "GET",
+        "path": "/api/logs/stream",
+        "description": "Stream logs in real-time (SSE)"
+      },
+      {
+        "name": "metrics",
+        "method": "GET",
+        "path": "/api/metrics",
+        "description": "Get aggregated metrics from all cores"
+      },
+      {
+        "name": "events",
+        "method": "GET",
+        "path": "/api/events/stream",
+        "description": "Stream events in real-time (SSE)"
+      }
+    ],
+    "hooks": []
+  },
+  "subscribes": [
+    "core/+/logs/#",
+    "core/+/events/#",
+    "core/+/metrics/#"
+  ],
+  "requires": {
+    "core": ">=0.5.0"
+  }
+}

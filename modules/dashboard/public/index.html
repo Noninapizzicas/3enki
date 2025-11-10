@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Core Dashboard</title>
+    <link rel="stylesheet" href="/modules/dashboard/css/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>⚡ Event Core Dashboard</h1>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="stat-label">Active Cores</span>
+                        <span class="stat-value" id="total-cores">-</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Status</span>
+                        <span class="stat-value">
+                            <span id="status-indicator" class="status-indicator status-ok"></span>
+                            <span id="status-text">Connected</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Cores Section -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>🖥️ Active Cores</h2>
+                    <button class="btn-refresh" onclick="dashboard.refreshCores()">↻ Refresh</button>
+                </div>
+                <div id="cores-grid" class="cores-grid">
+                    <div class="loading">Loading cores...</div>
+                </div>
+            </section>
+
+            <!-- Logs Section -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>📝 Real-time Logs</h2>
+                    <div class="section-controls">
+                        <label>
+                            <input type="checkbox" id="auto-scroll" checked> Auto-scroll
+                        </label>
+                        <button class="btn-clear" onclick="dashboard.clearLogs()">Clear</button>
+                    </div>
+                </div>
+                <div id="logs-container" class="logs-container">
+                    <div class="log-item log-info">Dashboard initialized. Waiting for logs...</div>
+                </div>
+            </section>
+
+            <!-- Events Section (collapsible) -->
+            <section class="section">
+                <div class="section-header" onclick="dashboard.toggleSection('events')">
+                    <h2>📡 Event Stream <span id="events-toggle" class="toggle-icon">▼</span></h2>
+                    <div class="section-controls">
+                        <button class="btn-clear" onclick="dashboard.clearEvents()">Clear</button>
+                    </div>
+                </div>
+                <div id="events-container" class="events-container" style="display: none;">
+                    <div class="event-item">Waiting for events...</div>
+                </div>
+            </section>
+
+            <!-- Metrics Section (optional, for future) -->
+            <section class="section" style="display: none;">
+                <div class="section-header">
+                    <h2>📊 Metrics</h2>
+                </div>
+                <div id="metrics-container" class="metrics-container">
+                    <!-- Metrics will be added here -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Event Core v0.5.0 "Network" - Dashboard v1.0.0</p>
+            <p>Last updated: <span id="last-updated">-</span></p>
+        </footer>
+    </div>
+
+    <script src="/modules/dashboard/js/dashboard.js"></script>
+</body>
+</html>

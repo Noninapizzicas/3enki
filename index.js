@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 /**
  * Event Core - Main Entry Point
  *
@@ -14,12 +17,15 @@
  * Usage:
  *   node index.js [--port 3000] [--broker-port 1883] [--core-id mycore]
  *
- * Environment variables:
+ * Environment variables (can be defined in .env file):
  *   EVENT_CORE_PORT=3000
  *   EVENT_CORE_BROKER_PORT=1883
+ *   EVENT_CORE_BROKER_URL=mqtt://user:pass@host:1883
  *   EVENT_CORE_ID=mycore
  *   EVENT_CORE_MODULES_PATH=./modules
  *   EVENT_CORE_LOG_LEVEL=info
+ *
+ * See .env.example for all available environment variables.
  */
 
 const path = require('path');
@@ -30,7 +36,9 @@ const { MQTTClient } = require('./core/mqtt');
 const EventBus = require('./core/events/bus');
 const HookManager = require('./core/hooks');
 const ModuleLoader = require('./core/modules/loader');
+const ModuleRegistry = require('./core/modules/registry');
 const HTTPGateway = require('./core/gateway/http');
+const Discovery = require('./core/discovery');
 const { Logger, Tracer, Metrics } = require('./core/observability');
 const { loadConfig, getConfigValue } = require('./core/config');
 
@@ -117,7 +125,7 @@ async function main() {
   });
 
   console.log('╔════════════════════════════════════════════════════════════╗');
-  console.log('║                    EVENT CORE v0.1.0                       ║');
+  console.log('║                    EVENT CORE v0.2.0                       ║');
   console.log('║          Meta-Core Event-Driven Framework                  ║');
   console.log('╚════════════════════════════════════════════════════════════╝\n');
 
@@ -137,7 +145,9 @@ async function main() {
     eventBus: null,
     hooks: null,
     moduleLoader: null,
+    moduleRegistry: null,
     httpGateway: null,
+    discovery: null,
     logger: null,
     tracer: null,
     metrics: null,
@@ -217,6 +227,9 @@ async function main() {
       metrics: core.metrics
     });
 
+    // Alias for modules that use core.events
+    core.events = core.eventBus;
+
     core.logger.info('core.eventbus.initialized', {
       core_id: config.core.id
     });
@@ -235,12 +248,18 @@ async function main() {
       console.log(`   ⚠️  Modules path not found: ${modulesPath}`);
       console.log(`   ℹ️  Continuing without modules...\n`);
     } else {
+      // Create Module Registry
+      core.moduleRegistry = new ModuleRegistry({
+        logger: core.logger
+      });
+
       // Create the core context that will be passed to modules
       const coreContext = {
         id: config.core.id,
         logger: core.logger,
         metrics: core.metrics,
         hooks: core.hooks,
+        events: core.eventBus,  // Alias for EventBus (modules use core.events)
         eventBus: core.eventBus,
         tracer: core.tracer
       };
@@ -248,6 +267,7 @@ async function main() {
       core.moduleLoader = new ModuleLoader({
         modulesPath,
         core: coreContext,
+        registry: core.moduleRegistry,
         logger: core.logger,
         metrics: core.metrics
       });
@@ -271,7 +291,7 @@ async function main() {
     // ========================================================================
     // Step 6: Initialize Service Registry & Allocate Port
     // ========================================================================
-    console.log('📋 [6/7] Initializing Service Registry...');
+    console.log('📋 [6/8] Initializing Service Registry...');
 
     core.serviceRegistry = new ServiceRegistry({
       autocleanup: true
@@ -296,17 +316,61 @@ async function main() {
     }
 
     // ========================================================================
-    // Step 7: Start HTTP Gateway
+    // Step 7: Initialize Discovery System
     // ========================================================================
-    console.log('🌐 [7/7] Starting HTTP Gateway...');
+    console.log('🔍 [7/8] Initializing Discovery System...');
+
+    const loadedModules = core.moduleLoader ? core.moduleLoader.getLoadedModules() : [];
+
+    core.discovery = new Discovery({
+      coreId: config.core.id,
+      version: '0.2.0',
+      port: httpPort, // Port is now allocated
+      host: config.http.host || '0.0.0.0',
+      modules: loadedModules.map(m => m.name),
+      capabilities: {
+        mqtt: true,
+        http: true,
+        embedded_broker: mqttStats.usingEmbedded
+      },
+      mqttClient: core.mqttClient,
+      logger: core.logger,
+      heartbeatInterval: 30000, // 30s
+      aliveTimeout: 60000 // 1 min
+    });
+
+    // Start discovery
+    await core.discovery.start();
+
+    core.logger.info('core.discovery.initialized', {
+      core_id: config.core.id,
+      heartbeat_interval: 30000
+    });
+
+    console.log(`   ✅ Discovery system started`);
+    console.log(`   📡 Publishing status to core/${config.core.id}/status\n`);
+
+    // Pass discovery to dashboard module if loaded
+    if (core.moduleLoader) {
+      const dashboardModule = core.moduleLoader.getModule('dashboard');
+      if (dashboardModule && dashboardModule.instance && typeof dashboardModule.instance.setDiscovery === 'function') {
+        dashboardModule.instance.setDiscovery(core.discovery);
+        core.logger.debug('core.discovery.passed_to_dashboard');
+      }
+    }
+
+    // ========================================================================
+    // Step 8: Start HTTP Gateway
+    // ========================================================================
+    console.log('🌐 [8/8] Starting HTTP Gateway...');
 
     core.httpGateway = new HTTPGateway({
       port: httpPort,
       coreId: config.core.id,
+      registry: core.moduleRegistry,
+      hooks: core.hooks,
       logger: core.logger,
       metrics: core.metrics,
-      eventBus: core.eventBus,
-      moduleLoader: core.moduleLoader,
       core: core  // Pass core for UI Gateway
     });
 
@@ -318,14 +382,14 @@ async function main() {
     });
 
     // ========================================================================
-    // Register Service in Registry
+    // Register Service in Registry & Update Discovery Port
     // ========================================================================
-    const loadedModules = core.moduleLoader ? core.moduleLoader.getLoadedModules() : [];
+    const modules = core.moduleLoader ? core.moduleLoader.getLoadedModules() : [];
 
     core.serviceRegistry.register(config.core.id, 'EVENT_CORE', httpPort, {
-      version: '0.1.0',
+      version: '0.2.0',
       pid: process.pid,
-      modules: loadedModules.map(m => m.name),
+      modules: modules.map(m => m.name),
       mqtt_port: config.mqtt.broker.port,
       using_embedded_mqtt: mqttStats.usingEmbedded
     });
@@ -381,28 +445,38 @@ async function main() {
 
         // Step 2: Unregister from Service Registry
         if (core.serviceRegistry) {
-          console.log('   [1/5] Unregistering from Service Registry...');
+          console.log('   [1/6] Unregistering from Service Registry...');
           core.serviceRegistry.unregister(config.core.id);
           core.logger.info('core.registry.unregistered');
         }
 
         // Step 3: Stop HTTP Gateway
         if (core.httpGateway) {
-          console.log('   [2/5] Stopping HTTP Gateway...');
+          console.log('   [2/6] Stopping HTTP Gateway...');
           await core.httpGateway.stop();
           core.logger.info('core.gateway.stopped');
         }
 
         // Step 4: Unload Modules
         if (core.moduleLoader) {
-          console.log('   [3/5] Unloading modules...');
+          console.log('   [3/6] Unloading modules...');
           await core.moduleLoader.unloadAll();
           core.logger.info('core.modules.unloaded');
         }
 
-        // Step 5: Disconnect MQTT Client (also stops embedded broker if used)
+        // Step 5: Stop Discovery System (antes de desconectar MQTT)
+        if (core.discovery) {
+          console.log('   [4/6] Stopping Discovery System...');
+          await core.discovery.stop();
+          core.logger.info('core.discovery.stopped');
+
+          // Small delay to let MQTT process pending messages
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // Step 6: Disconnect MQTT Client (also stops embedded broker if used)
         if (core.mqttClient) {
-          console.log('   [4/5] Disconnecting MQTT Client...');
+          console.log('   [5/6] Disconnecting MQTT Client...');
           await core.mqttClient.disconnect();
           core.logger.info('core.mqtt.disconnected');
         }

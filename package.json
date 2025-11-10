@@ -1,7 +1,7 @@
 {
   "name": "event-core",
-  "version": "0.1.0",
-  "description": "Meta-core fractal event-driven architecture",
+  "version": "0.2.0",
+  "description": "Meta-core fractal event-driven architecture with discovery system",
   "main": "index.js",
   "bin": {
     "event-core": "./cli/index.js"
@@ -29,10 +29,10 @@
   "license": "MIT",
   "dependencies": {
     "aedes": "^0.51.3",
-    "mqtt": "^5.3.5",
-    "ajv": "^8.12.0"
+    "ajv": "^8.12.0",
+    "dotenv": "^17.2.3",
+    "mqtt": "^5.3.5"
   },
-  "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
   }

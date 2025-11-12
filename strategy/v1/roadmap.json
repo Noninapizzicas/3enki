@@ -1,7 +1,7 @@
 {
-  "roadmap_version": "1.0",
+  "roadmap_version": "1.1",
   "created_at": "2025-10-06T00:00:00Z",
-  "last_updated": "2025-10-06T00:00:00Z",
+  "last_updated": "2025-11-12T00:00:00Z",
   "timeframe_months": 12,
   "themes": [
     {
@@ -21,6 +21,12 @@
       "description": "Probar portabilidad completa en Termux, Linux y Docker sin cambios de código",
       "aligned_okrs": ["2025-Q4:O3"],
       "duration": "Q4 2025 - Q1 2026"
+    },
+    {
+      "theme": "AI Integration - IA como Ciudadano de Primera Clase",
+      "description": "Integrar IA profundamente en el sistema: AI Gateway multi-proveedor, Prompt Manager, y AI Agent Framework event-driven",
+      "aligned_okrs": ["2025-Q4:O4"],
+      "duration": "Q4 2025"
     }
   ],
   "now_next_later": {
@@ -430,6 +436,151 @@
       ],
       "user_stories": [
         "Como architect, quiero cores en diferentes máquinas para probar escalabilidad"
+      ]
+    },
+    {
+      "release_id": "v0.6.0",
+      "version": "0.6.0",
+      "codename": "AI Integration",
+      "target_date": "2025-11-26",
+      "confidence": "high",
+      "status": "in_progress",
+      "theme": "AI Integration - IA como Ciudadano de Primera Clase",
+      "goals": [
+        "Prompt Manager con versionado y templates",
+        "AI Gateway multi-proveedor (DeepSeek, Claude, OpenAI, Ollama)",
+        "AI Agent Framework event-driven"
+      ],
+      "kpis": {
+        "prompt_manager_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false},
+        "ai_gateway_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false},
+        "ai_agents_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false}
+      },
+      "items": [
+        {
+          "title": "Implementar Prompt Manager Module",
+          "description": "Sistema de gestión de prompts con versionado, templates, y analytics",
+          "type": "feature",
+          "priority": "P0",
+          "status": "in_progress",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": ["Module Loader"],
+          "risks": [],
+          "acceptance_criteria": [
+            "CRUD de prompts via API HTTP",
+            "Versionado de prompts (semver)",
+            "Template system con variables",
+            "Storage en filesystem JSON",
+            "A/B testing de prompts",
+            "Analytics de performance (tokens, latency, cost)"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar AI Gateway Module",
+          "description": "Cliente unificado para múltiples proveedores LLM con rate limiting y cost tracking",
+          "type": "feature",
+          "priority": "P0",
+          "status": "pending",
+          "effort_story_points": 21,
+          "assigned_team": "core_team",
+          "dependencies": ["Prompt Manager"],
+          "risks": ["RISK-004"],
+          "acceptance_criteria": [
+            "Soporte para DeepSeek, Claude (Anthropic), OpenAI, Ollama local",
+            "Rate limiting inteligente por proveedor",
+            "Retry con exponential backoff",
+            "Streaming responses (SSE)",
+            "Cost tracking por modelo y request",
+            "Fallback automático entre proveedores",
+            "API HTTP unificada para chat completion"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar AI Agent Framework",
+          "description": "Framework para crear agentes IA event-driven que responden a eventos MQTT",
+          "type": "feature",
+          "priority": "P0",
+          "status": "pending",
+          "effort_story_points": 13,
+          "assigned_team": "core_team",
+          "dependencies": ["AI Gateway", "Prompt Manager"],
+          "risks": [],
+          "acceptance_criteria": [
+            "Agentes se suscriben a eventos MQTT",
+            "Context management (memoria de conversaciones)",
+            "Tool calling (agentes pueden llamar APIs de módulos)",
+            "Agentic workflows via eventos",
+            "Agent registry (descubrimiento de agentes)",
+            "Agent orchestration (múltiples agentes coordinados)"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Ejemplo de Agente: Code Reviewer",
+          "description": "Agente de ejemplo que revisa código en git push events",
+          "type": "feature",
+          "priority": "P1",
+          "status": "pending",
+          "effort_story_points": 5,
+          "assigned_team": "core_team",
+          "dependencies": ["AI Agent Framework"],
+          "risks": [],
+          "acceptance_criteria": [
+            "Agente se suscribe a eventos git.push",
+            "Lee archivos modificados",
+            "Analiza código con LLM",
+            "Publica evento code.review.completed con resultados",
+            "Usa prompt desde Prompt Manager"
+          ],
+          "mvp_classification": "nice_to_have"
+        },
+        {
+          "title": "Tests de integración AI modules",
+          "description": "Tests end-to-end para validar flujo completo de AI",
+          "type": "tech_debt",
+          "priority": "P0",
+          "status": "pending",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": ["All AI features"],
+          "risks": [],
+          "acceptance_criteria": [
+            "Tests con proveedores mock",
+            "Tests de rate limiting",
+            "Tests de fallback",
+            "Tests de cost tracking",
+            "Tests de agent workflows",
+            "Coverage >= 80%"
+          ],
+          "mvp_classification": "core"
+        }
+      ],
+      "capacity": {
+        "allocated_story_points": 55,
+        "team_assigned": "solo_developer",
+        "estimated_sprints": 2
+      },
+      "go_no_go_criteria": [
+        "Todos los items P0 completados",
+        "Al menos 2 proveedores LLM funcionando (DeepSeek + 1 más)",
+        "Prompt Manager funcional",
+        "1 agente de ejemplo funcionando",
+        "Tests de integración passing"
+      ],
+      "rollback_plan": "Volver a v0.5.0 si AI modules afectan estabilidad del core",
+      "assumptions": [
+        "API keys disponibles para testing (DeepSeek, Claude, OpenAI)",
+        "Ollama instalado localmente para testing offline",
+        "Velocity estimada: ~30 SP/sprint (solo developer)"
+      ],
+      "user_stories": [
+        "Como developer, quiero gestionar prompts versionados para iterar rápidamente",
+        "Como developer, quiero un AI Gateway unificado para no depender de un solo proveedor",
+        "Como architect, quiero crear agentes IA event-driven que respondan a eventos del sistema",
+        "Como user, quiero que el sistema use DeepSeek como primera opción por costo/performance"
       ]
     },
     {

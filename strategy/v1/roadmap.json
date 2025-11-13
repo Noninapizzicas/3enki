@@ -1,5 +1,5 @@
 {
-  "roadmap_version": "1.2",
+  "roadmap_version": "1.3",
   "created_at": "2025-10-06T00:00:00Z",
   "last_updated": "2025-11-13T00:00:00Z",
   "timeframe_months": 12,
@@ -648,6 +648,152 @@
       ],
       "user_stories": [
         "Como DevOps, quiero deploy en K8s"
+      ]
+    },
+    {
+      "release_id": "v1.1.0",
+      "version": "1.1.0",
+      "codename": "Universal Plugin System",
+      "target_date": "2025-11-20",
+      "confidence": "high",
+      "status": "completed",
+      "theme": "Extensibility - Plugin Ecosystem",
+      "goals": [
+        "Plugin system para herramientas infinitas sin código",
+        "Tool Orchestrator para validación y ejecución",
+        "Calling Generator para HTTP y funciones locales",
+        "Integración completa con AI Agent Framework",
+        "Plugins de ejemplo: GitHub, Slack, Weather, HTTP"
+      ],
+      "kpis": {
+        "plugin_system_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "plugins_created": {"baseline": 0, "target": 4, "actual": 4, "achieved": true},
+        "ai_agents_use_plugins": {"baseline": 0, "target": 1, "actual": 1, "achieved": true}
+      },
+      "items": [
+        {
+          "title": "Implementar Plugin Manager Module",
+          "description": "Discovery, carga y gestión de plugins JSON",
+          "type": "feature",
+          "priority": "P0",
+          "status": "completed",
+          "effort_story_points": 5,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Escanea directorio plugins/ automáticamente",
+            "Carga archivos *.functions.json",
+            "Valida estructura de plugins",
+            "Publica eventos plugin.loaded",
+            "API HTTP para listar y recargar plugins",
+            "Watch mode opcional para hot-reload"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar Tool Orchestrator Module",
+          "description": "Orquestación, validación y ejecución de herramientas",
+          "type": "feature",
+          "priority": "P0",
+          "status": "completed",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Registro de herramientas con registerTool()",
+            "Validación de argumentos con AJV (JSON Schema)",
+            "Ejecución de funciones con timeout",
+            "Manejo de eventos tool.call.request/response",
+            "API HTTP para listar y ejecutar tools",
+            "Métricas de éxito/error/timeout"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar Calling Generator Module",
+          "description": "Generador de funciones ejecutables desde definiciones JSON",
+          "type": "feature",
+          "priority": "P0",
+          "status": "completed",
+          "effort_story_points": 13,
+          "assigned_team": "core_team",
+          "dependencies": ["Plugin Manager", "Tool Orchestrator"],
+          "risks": [],
+          "acceptance_criteria": [
+            "Genera funciones HTTP (GET, POST, PUT, DELETE, PATCH)",
+            "Soporte para Bearer, API Key, Basic Auth",
+            "Genera funciones locales vía eventos",
+            "Path parameters, query parameters, body",
+            "Timeout y retry logic",
+            "Registro automático en Tool Orchestrator",
+            "Métricas por plugin y función"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Integrar con AI Agent Framework",
+          "description": "Modificar ToolManager para soportar plugin tools",
+          "type": "feature",
+          "priority": "P0",
+          "status": "completed",
+          "effort_story_points": 5,
+          "assigned_team": "core_team",
+          "dependencies": ["Tool Orchestrator", "AI Agent Framework"],
+          "risks": [],
+          "acceptance_criteria": [
+            "ToolManager soporta built-in tools (http_request, publish_event, etc.)",
+            "ToolManager delega a Tool Orchestrator para plugin tools",
+            "Agentes pueden llamar github.*, slack.*, weather.*, etc.",
+            "Timeout y error handling consistente",
+            "Backwards compatible con agentes existentes"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Crear Plugins de Ejemplo",
+          "description": "GitHub, Slack, Weather, HTTP Utils",
+          "type": "feature",
+          "priority": "P1",
+          "status": "completed",
+          "effort_story_points": 3,
+          "assigned_team": "core_team",
+          "dependencies": ["Plugin Manager"],
+          "risks": [],
+          "acceptance_criteria": [
+            "GitHub: create_issue, create_comment, get_repository, list_issues, create_pull_request",
+            "Slack: send_message, create_channel, invite_user, upload_file",
+            "Weather: get_current_weather, get_forecast, get_air_pollution",
+            "HTTP Utils: get_request, post_request, webhook_call",
+            "Todos con documentación completa en JSON"
+          ],
+          "mvp_classification": "nice_to_have"
+        }
+      ],
+      "capacity": {
+        "allocated_story_points": 34,
+        "team_assigned": "solo_developer",
+        "estimated_sprints": 1
+      },
+      "go_no_go_criteria": [
+        "3 módulos funcionando (Plugin Manager, Tool Orchestrator, Calling Generator)",
+        "Al menos 4 plugins de ejemplo creados",
+        "AI Agents pueden usar plugin tools exitosamente",
+        "Validación JSON Schema funciona correctamente",
+        "Documentación completa del sistema"
+      ],
+      "rollback_plan": "Volver a v1.0.0 si plugin system afecta estabilidad",
+      "assumptions": [
+        "Agentes AI necesitan acceso a APIs externas",
+        "JSON es formato adecuado para definir plugins",
+        "Event-driven es arquitectura correcta para tool execution"
+      ],
+      "user_stories": [
+        "Como developer, quiero agregar nuevas APIs sin tocar código del core",
+        "Como AI agent, quiero acceder a GitHub, Slack y Weather APIs",
+        "Como architect, quiero un sistema extensible que escale a 100+ herramientas",
+        "Como user, quiero que los agentes puedan crear issues, enviar mensajes y consultar el clima"
       ]
     }
   ],

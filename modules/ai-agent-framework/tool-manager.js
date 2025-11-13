@@ -4,12 +4,16 @@ const http = require('http');
  * Tool Manager
  *
  * Gestiona tools (APIs) que los agentes pueden llamar
+ * Soporta:
+ * - Built-in tools (http_request, publish_event, read_file, write_file)
+ * - Plugin tools via Tool Orchestrator (github.*, slack.*, weather.*, etc.)
  */
 class ToolManager {
-  constructor(config, logger, coreConfig) {
+  constructor(config, logger, coreConfig, eventBus = null) {
     this.config = config;
     this.logger = logger;
     this.coreConfig = coreConfig;
+    this.eventBus = eventBus;
 
     // Available tools: Map<toolName, toolSpec>
     this.tools = new Map();
@@ -23,7 +27,8 @@ class ToolManager {
     this.registerBuiltinTools();
 
     this.logger.info('tool-manager.initialized', {
-      tools_count: this.tools.size
+      tools_count: this.tools.size,
+      plugin_tools_enabled: !!this.eventBus
     });
   }
 
@@ -119,37 +124,94 @@ class ToolManager {
 
   /**
    * Execute tool
+   * Supports both built-in tools and plugin tools via Tool Orchestrator
    */
   async executeTool(toolName, args, allowedTools = []) {
-    // Check if tool exists
-    const tool = this.tools.get(toolName);
-
-    if (!tool) {
-      throw new Error(`Tool '${toolName}' not found`);
-    }
-
     // Check if agent is allowed to use this tool
     if (allowedTools.length > 0 && !allowedTools.includes(toolName)) {
       throw new Error(`Tool '${toolName}' not allowed for this agent`);
     }
 
-    // Validate parameters
-    this.validateParameters(tool, args);
+    // Check if tool exists locally (built-in)
+    const tool = this.tools.get(toolName);
 
-    // Execute with timeout
-    const timeout = this.config.timeout_ms || 10000;
+    if (tool) {
+      // Execute built-in tool
+      this.logger.debug('tool-manager.executing.builtin', { tool: toolName });
 
-    const result = await Promise.race([
-      tool.handler(args),
-      this.timeoutPromise(timeout)
-    ]);
+      // Validate parameters
+      this.validateParameters(tool, args);
 
-    this.logger.info('tool-manager.tool.executed', {
-      tool: toolName,
-      args
+      // Execute with timeout
+      const timeout = this.config.timeout_ms || 10000;
+
+      const result = await Promise.race([
+        tool.handler(args),
+        this.timeoutPromise(timeout)
+      ]);
+
+      this.logger.info('tool-manager.tool.executed', {
+        tool: toolName,
+        type: 'builtin',
+        args
+      });
+
+      return result;
+    }
+
+    // If not built-in, try calling via Tool Orchestrator (plugin tool)
+    if (this.eventBus) {
+      this.logger.debug('tool-manager.executing.plugin', { tool: toolName });
+      return this.executePluginTool(toolName, args);
+    }
+
+    // Tool not found
+    throw new Error(`Tool '${toolName}' not found (neither built-in nor plugin)`);
+  }
+
+  /**
+   * Execute a plugin tool via Tool Orchestrator
+   */
+  async executePluginTool(toolName, args) {
+    const crypto = require('crypto');
+    const requestId = crypto.randomUUID();
+    const responseTopic = `tool.call.response.${requestId}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.eventBus.unsubscribe(responseTopic);
+        reject(new Error(`Plugin tool '${toolName}' execution timeout`));
+      }, this.config.timeout_ms || 30000);
+
+      // Subscribe to response
+      this.eventBus.subscribe(responseTopic, (response) => {
+        clearTimeout(timeout);
+        this.eventBus.unsubscribe(responseTopic);
+
+        if (response.success) {
+          this.logger.info('tool-manager.tool.executed', {
+            tool: toolName,
+            type: 'plugin',
+            duration: response.duration
+          });
+          resolve(response.result);
+        } else {
+          this.logger.error('tool-manager.tool.failed', {
+            tool: toolName,
+            error: response.error
+          });
+          reject(new Error(response.error || `Plugin tool '${toolName}' failed`));
+        }
+      });
+
+      // Publish request to Tool Orchestrator
+      this.eventBus.publish('tool.call.request', {
+        toolName,
+        args,
+        requesterRespondToTopic: responseTopic,
+        requestId
+      });
     });
-
-    return result;
   }
 
   /**

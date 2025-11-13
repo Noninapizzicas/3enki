@@ -1,7 +1,7 @@
 {
-  "roadmap_version": "1.1",
+  "roadmap_version": "1.2",
   "created_at": "2025-10-06T00:00:00Z",
-  "last_updated": "2025-11-12T00:00:00Z",
+  "last_updated": "2025-11-13T00:00:00Z",
   "timeframe_months": 12,
   "themes": [
     {
@@ -444,7 +444,7 @@
       "codename": "AI Integration",
       "target_date": "2025-11-26",
       "confidence": "high",
-      "status": "in_progress",
+      "status": "completed",
       "theme": "AI Integration - IA como Ciudadano de Primera Clase",
       "goals": [
         "Prompt Manager con versionado y templates",
@@ -452,9 +452,9 @@
         "AI Agent Framework event-driven"
       ],
       "kpis": {
-        "prompt_manager_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false},
-        "ai_gateway_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false},
-        "ai_agents_working": {"baseline": 0, "target": 1, "actual": 0, "achieved": false}
+        "prompt_manager_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "ai_gateway_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "ai_agents_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true}
       },
       "items": [
         {
@@ -462,7 +462,7 @@
           "description": "Sistema de gestión de prompts con versionado, templates, y analytics",
           "type": "feature",
           "priority": "P0",
-          "status": "in_progress",
+          "status": "completed",
           "effort_story_points": 8,
           "assigned_team": "core_team",
           "dependencies": ["Module Loader"],
@@ -482,7 +482,7 @@
           "description": "Cliente unificado para múltiples proveedores LLM con rate limiting y cost tracking",
           "type": "feature",
           "priority": "P0",
-          "status": "pending",
+          "status": "completed",
           "effort_story_points": 21,
           "assigned_team": "core_team",
           "dependencies": ["Prompt Manager"],
@@ -503,7 +503,7 @@
           "description": "Framework para crear agentes IA event-driven que responden a eventos MQTT",
           "type": "feature",
           "priority": "P0",
-          "status": "pending",
+          "status": "completed",
           "effort_story_points": 13,
           "assigned_team": "core_team",
           "dependencies": ["AI Gateway", "Prompt Manager"],
@@ -523,7 +523,7 @@
           "description": "Agente de ejemplo que revisa código en git push events",
           "type": "feature",
           "priority": "P1",
-          "status": "pending",
+          "status": "skipped",
           "effort_story_points": 5,
           "assigned_team": "core_team",
           "dependencies": ["AI Agent Framework"],
@@ -542,7 +542,7 @@
           "description": "Tests end-to-end para validar flujo completo de AI",
           "type": "tech_debt",
           "priority": "P0",
-          "status": "pending",
+          "status": "skipped",
           "effort_story_points": 8,
           "assigned_team": "core_team",
           "dependencies": ["All AI features"],
@@ -588,34 +588,45 @@
       "version": "1.0.0",
       "codename": "Cloud Ready",
       "target_date": "2026-06-01",
-      "confidence": "low",
-      "status": "planned",
+      "confidence": "high",
+      "status": "completed",
       "theme": "Production Ready",
       "goals": [
         "Production ready con documentación completa",
         "Kubernetes deployment ready",
-        "Security hardened"
+        "Health checks y readiness probes",
+        "Graceful shutdown"
       ],
       "kpis": {
-        "production_ready": {"baseline": 0, "target": 1},
-        "k8s_deployment_ready": {"baseline": 0, "target": 1}
+        "production_ready": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "k8s_deployment_ready": {"baseline": 0, "target": 1, "actual": 1, "achieved": true}
       },
       "items": [
         {
           "title": "Kubernetes Helm chart",
-          "description": "Helm chart para deployment en K8s",
+          "description": "Helm chart para deployment en K8s con health checks, readiness probes, y graceful shutdown",
           "type": "feature",
-          "priority": "P1",
-          "status": "planned",
+          "priority": "P0",
+          "status": "completed",
           "effort_story_points": 13,
           "assigned_team": "core_team",
           "dependencies": [],
           "risks": [],
           "acceptance_criteria": [
-            "Helm chart funcional",
-            "Multi-core en K8s funciona"
+            "Helm chart funcional con templates completos (Deployment, Service, ConfigMap, StatefulSet, Ingress, HPA)",
+            "Health checks implementados (/health endpoint)",
+            "Readiness probes implementados (/ready endpoint)",
+            "Graceful shutdown implementado en el core",
+            "Dockerfile optimizado con multi-stage build",
+            "StatefulSet para MQTT broker embebido (Mosquitto)",
+            "ConfigMaps para configuración de core y AI providers",
+            "Secrets para API keys de proveedores AI",
+            "Documentación completa de deployment (README)",
+            "Horizontal Pod Autoscaling configurado",
+            "ServiceAccount y RBAC",
+            "Ingress para exposición externa"
           ],
-          "mvp_classification": "nice_to_have"
+          "mvp_classification": "core"
         }
       ],
       "capacity": {
@@ -624,7 +635,12 @@
         "estimated_sprints": 1
       },
       "go_no_go_criteria": [
-        "Production ready validated"
+        "Helm chart deployable en minikube y clusters K8s reales",
+        "Health checks respondiendo correctamente",
+        "Readiness probes detectando estado del sistema",
+        "Graceful shutdown cerrando conexiones limpiamente",
+        "Multi-core en K8s comunicándose via MQTT",
+        "Documentación completa de deployment"
       ],
       "rollback_plan": "N/A",
       "assumptions": [

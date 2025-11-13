@@ -197,6 +197,12 @@ class HTTPGateway {
         return;
       }
 
+      // Readiness check endpoint
+      if (pathname === '/ready') {
+        this.handleReady(req, res);
+        return;
+      }
+
       // Stats endpoint
       if (pathname === '/stats') {
         this.handleStats(req, res);
@@ -347,6 +353,41 @@ class HTTPGateway {
     };
 
     this.sendResponse(res, 200, health);
+  }
+
+  /**
+   * Maneja /ready endpoint - Kubernetes readiness probe
+   *
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   */
+  handleReady(req, res) {
+    // Check if all components are ready
+    const checks = {
+      gateway: this.isRunning,
+      event_bus: this.eventBus !== null,
+      module_loader: this.moduleLoader !== null,
+      registry: this.registry !== null
+    };
+
+    // Check if modules are loaded (if module loader exists)
+    if (this.moduleLoader) {
+      const loadedModules = this.moduleLoader.getLoadedModules();
+      checks.modules_loaded = loadedModules.length > 0;
+      checks.module_count = loadedModules.length;
+    }
+
+    const isReady = Object.values(checks).every(v => v === true || typeof v === 'number');
+
+    const readiness = {
+      ready: isReady,
+      core_id: this.coreId,
+      checks,
+      timestamp: new Date().toISOString()
+    };
+
+    const statusCode = isReady ? 200 : 503;
+    this.sendResponse(res, statusCode, readiness);
   }
 
   /**

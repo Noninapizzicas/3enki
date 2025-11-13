@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Overlay Panel - Demo</title>
+    <link rel="stylesheet" href="emoji-action-button.css">
+    <link rel="stylesheet" href="overlay-panel.css">
+    <style>
+        :root {
+            --color-base: #6B7280;
+            --color-info: #1D4ED8;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0F1216;
+            color: white;
+            min-height: 100vh;
+        }
+
+        .demo-section {
+            margin-bottom: 40px;
+        }
+
+        .demo-section h2 {
+            font-size: 20px;
+            margin-bottom: 16px;
+            color: #d1d5db;
+        }
+
+        .demo-section p {
+            color: #9ca3af;
+            margin-bottom: 16px;
+            line-height: 1.6;
+        }
+
+        .instruction-box {
+            background: #1f2937;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            border-left: 4px solid #2FBF71;
+        }
+
+        .instruction-box h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #2FBF71;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, 62px);
+            gap: 16px;
+            padding: 16px;
+            background: #1a1d24;
+            border-radius: 12px;
+        }
+
+        .demo-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+            padding: 16px;
+            background: #1a1d24;
+            border-radius: 12px;
+        }
+
+        .demo-card {
+            background: #1f2937;
+            padding: 16px;
+            border-radius: 12px;
+            border: 2px solid #374151;
+        }
+
+        .demo-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            color: white;
+        }
+
+        .demo-card p {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: #9ca3af;
+        }
+
+        .demo-card-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .demo-btn {
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex: 1;
+        }
+
+        .demo-btn-primary {
+            background: #2FBF71;
+            color: white;
+        }
+
+        .demo-btn-primary:hover {
+            background: #27a563;
+            transform: translateY(-2px);
+        }
+
+        .demo-btn-secondary {
+            background: #374151;
+            color: white;
+        }
+
+        .demo-btn-secondary:hover {
+            background: #4B5563;
+        }
+
+        .background-reference {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1f2937;
+            border: 2px solid #2FBF71;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            color: #2FBF71;
+            font-weight: 600;
+            z-index: 1;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>📱 Overlay Panel Demo</h1>
+
+    <div class="instruction-box">
+        <h3>¿Qué es un Overlay Panel?</h3>
+        <p>Panel superpuesto semi-transparente que te permite ver detalles sin perder de vista la pantalla anterior.</p>
+        <p><strong>Ventajas:</strong></p>
+        <ul style="margin: 8px 0 0 20px; color: #d1d5db;">
+            <li>Fondo semi-transparente con blur: ves la pantalla debajo</li>
+            <li>3 tamaños: pequeño (320px), mediano (480px), grande (640px)</li>
+            <li>Scroll interno: contenido largo sin problema</li>
+            <li>Cierra con: botón ×, click fuera, tecla ESC</li>
+        </ul>
+    </div>
+
+    <!-- Sección 1: Emoji Buttons + Overlays -->
+    <div class="demo-section">
+        <h2>🎮 Emoji Buttons con Overlays</h2>
+        <p>Click simple en cada botón para ver detalles en overlay</p>
+        <div class="demo-grid" id="emoji-buttons"></div>
+    </div>
+
+    <!-- Sección 2: Tamaños de Overlays -->
+    <div class="demo-section">
+        <h2>📏 Tamaños de Panel</h2>
+        <div class="demo-cards">
+            <div class="demo-card">
+                <h3>Pequeño (320px)</h3>
+                <p>Ideal para confirmaciones, detalles rápidos, alertas</p>
+                <button class="demo-btn demo-btn-primary" onclick="showSmallOverlay()">
+                    Abrir Pequeño
+                </button>
+            </div>
+            <div class="demo-card">
+                <h3>Mediano (480px)</h3>
+                <p>Ideal para detalles de agentes, plugins, configuración</p>
+                <button class="demo-btn demo-btn-primary" onclick="showMediumOverlay()">
+                    Abrir Mediano
+                </button>
+            </div>
+            <div class="demo-card">
+                <h3>Grande (640px)</h3>
+                <p>Ideal para editar prompts, código, contenido extenso</p>
+                <button class="demo-btn demo-btn-primary" onclick="showLargeOverlay()">
+                    Abrir Grande
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sección 3: Casos de Uso -->
+    <div class="demo-section">
+        <h2>💼 Casos de Uso Comunes</h2>
+        <div class="demo-cards">
+            <div class="demo-card">
+                <h3>Confirmación de Eliminación</h3>
+                <p>Confirmar antes de eliminar (long press en emoji button)</p>
+                <button class="demo-btn demo-btn-secondary" onclick="showConfirmOverlay()">
+                    Simular Eliminación
+                </button>
+            </div>
+            <div class="demo-card">
+                <h3>Detalles de Agente AI</h3>
+                <p>Ver información completa del agente sin salir de la lista</p>
+                <button class="demo-btn demo-btn-secondary" onclick="showAgentDetails()">
+                    Ver Agente
+                </button>
+            </div>
+            <div class="demo-card">
+                <h3>Editor de Prompt</h3>
+                <p>Editar prompt largo con preview en tiempo real</p>
+                <button class="demo-btn demo-btn-secondary" onclick="showPromptEditor()">
+                    Editar Prompt
+                </button>
+            </div>
+            <div class="demo-card">
+                <h3>Overlays Apilados</h3>
+                <p>Abrir un overlay desde otro (máximo 3 niveles)</p>
+                <button class="demo-btn demo-btn-secondary" onclick="showStackedOverlay()">
+                    Abrir Apilado
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Referencia visual fija -->
+    <div class="background-reference">
+        👋 Esta caja demuestra que ves la pantalla debajo del overlay
+    </div>
+
+    <script src="emoji-action-button.js"></script>
+    <script src="overlay-panel.js"></script>
+    <script>
+        // Sección 1: Emoji Buttons con Overlays
+        const emojiData = [
+            { emoji: '🤖', title: 'Agente AI', info: 'Code Reviewer Agent\nEstado: Activo\nProvider: DeepSeek' },
+            { emoji: '🔌', title: 'Plugin', info: 'GitHub Plugin\nFunciones: 5\nAuth: Bearer Token' },
+            { emoji: '💬', title: 'Prompt', info: 'Code Review Prompt\nVersión: 2.1.0\nCategoría: Development' },
+            { emoji: '⚙️', title: 'Configuración', info: 'API Keys\nModules: 8\nPlugins: 4' },
+            { emoji: '📊', title: 'Estadísticas', info: 'Requests: 1,234\nTokens: 456,789\nCosto: $12.34' },
+            { emoji: '🔔', title: 'Notificaciones', info: '3 nuevas notificaciones\nÚltima: hace 2 minutos' }
+        ];
+
+        emojiData.forEach(data => {
+            const btn = new EmojiActionButton(data.emoji, {
+                singleClick: () => {
+                    showInfoOverlay(data.title, data.info);
+                },
+                doubleClick: () => {
+                    alert(`Editar ${data.title}`);
+                },
+                longPress: () => {
+                    const confirmOverlay = OverlayPanel.confirm({
+                        title: '¿Eliminar?',
+                        message: `¿Estás seguro de eliminar ${data.title}?`,
+                        danger: true,
+                        onConfirm: () => {
+                            alert(`${data.title} eliminado`);
+                        }
+                    });
+                    confirmOverlay.open();
+                }
+            }, {
+                label: data.title
+            });
+            document.getElementById('emoji-buttons').appendChild(btn.element);
+        });
+
+        // Función helper para mostrar info
+        function showInfoOverlay(title, info) {
+            const lines = info.split('\n');
+            const content = `
+                <div style="line-height: 1.8;">
+                    ${lines.map(line => `<p style="margin: 8px 0;">${line}</p>`).join('')}
+                </div>
+            `;
+
+            const overlay = new OverlayPanel({
+                title: title,
+                content: content,
+                size: 'medium',
+                showFooter: true,
+                footerButtons: [
+                    {
+                        label: 'Editar',
+                        type: 'primary',
+                        onClick: () => alert(`Editar ${title}`)
+                    },
+                    {
+                        label: 'Cerrar',
+                        type: 'secondary'
+                    }
+                ]
+            });
+
+            overlay.open();
+        }
+
+        // Tamaños de overlay
+        function showSmallOverlay() {
+            const overlay = new OverlayPanel({
+                title: 'Panel Pequeño',
+                content: `
+                    <p>Este es un panel pequeño (320px).</p>
+                    <p>Ideal para:</p>
+                    <ul>
+                        <li>Confirmaciones</li>
+                        <li>Alertas</li>
+                        <li>Detalles rápidos</li>
+                    </ul>
+                `,
+                size: 'small',
+                showFooter: true,
+                footerButtons: [
+                    { label: 'Entendido', type: 'primary' }
+                ]
+            });
+            overlay.open();
+        }
+
+        function showMediumOverlay() {
+            const overlay = new OverlayPanel({
+                title: 'Panel Mediano',
+                content: `
+                    <p>Este es un panel mediano (480px).</p>
+                    <p>Ideal para detalles de agentes, plugins y configuraciones.</p>
+                    <div class="overlay-code">
+                    {
+                      "name": "code-reviewer",
+                      "status": "active",
+                      "provider": "deepseek"
+                    }
+                    </div>
+                    <p>Puedes hacer scroll si hay mucho contenido...</p>
+                    ${Array(10).fill('<p>Línea de contenido para demostrar scroll</p>').join('')}
+                `,
+                size: 'medium',
+                showFooter: true,
+                footerButtons: [
+                    { label: 'Guardar', type: 'primary' },
+                    { label: 'Cancelar', type: 'secondary' }
+                ]
+            });
+            overlay.open();
+        }
+
+        function showLargeOverlay() {
+            const overlay = new OverlayPanel({
+                title: 'Panel Grande',
+                content: `
+                    <p>Este es un panel grande (640px).</p>
+                    <p>Ideal para editar contenido extenso como prompts o código.</p>
+                    <textarea style="width: 100%; height: 300px; padding: 12px; background: #0F1216; border: 1px solid #374151; border-radius: 8px; color: white; font-family: monospace; resize: vertical;">
+Eres un asistente experto en revisión de código.
+
+Tu tarea es:
+1. Analizar el código proporcionado
+2. Identificar problemas de seguridad
+3. Sugerir mejoras de rendimiento
+4. Verificar mejores prácticas
+
+Responde en formato JSON con:
+- issues: array de problemas encontrados
+- suggestions: array de sugerencias
+- security: nivel de seguridad (low, medium, high)
+                    </textarea>
+                `,
+                size: 'large',
+                showFooter: true,
+                footerButtons: [
+                    { label: 'Guardar', type: 'primary' },
+                    { label: 'Vista Previa', type: 'secondary', closeOnClick: false },
+                    { label: 'Cancelar', type: 'secondary' }
+                ],
+                resizable: true
+            });
+            overlay.open();
+        }
+
+        // Casos de uso
+        function showConfirmOverlay() {
+            const confirm = OverlayPanel.confirm({
+                title: '¿Eliminar Agente?',
+                message: 'Esta acción no se puede deshacer. El agente "Code Reviewer" será eliminado permanentemente.',
+                danger: true,
+                confirmLabel: 'Sí, Eliminar',
+                cancelLabel: 'Cancelar',
+                onConfirm: () => {
+                    alert('¡Agente eliminado!');
+                },
+                onCancel: () => {
+                    console.log('Cancelado');
+                }
+            });
+            confirm.open();
+        }
+
+        function showAgentDetails() {
+            const overlay = OverlayPanel.details({
+                title: 'Code Reviewer Agent',
+                size: 'medium',
+                sections: [
+                    {
+                        title: 'Información General',
+                        items: [
+                            { label: 'Nombre', value: 'Code Reviewer' },
+                            { label: 'ID', value: 'agent-1234' },
+                            { label: 'Estado', value: 'Activo' },
+                            { label: 'Provider', value: 'DeepSeek' }
+                        ]
+                    },
+                    {
+                        title: 'Configuración',
+                        items: [
+                            { label: 'Suscripciones', value: 'git.push, code.change' },
+                            { label: 'Prompt', value: 'code-reviewer-v2' },
+                            { label: 'Timeout', value: '30s' },
+                            { label: 'Max Tokens', value: '4000' }
+                        ]
+                    },
+                    {
+                        title: 'Estadísticas',
+                        items: [
+                            { label: 'Ejecuciones', value: '1,234' },
+                            { label: 'Tokens Usados', value: '456,789' },
+                            { label: 'Costo Total', value: '$12.34' },
+                            { label: 'Última Ejecución', value: 'Hace 5 min' }
+                        ]
+                    }
+                ],
+                showFooter: true,
+                footerButtons: [
+                    { label: 'Editar', type: 'primary' },
+                    { label: 'Desactivar', type: 'secondary' },
+                    { label: 'Cerrar', type: 'secondary' }
+                ]
+            });
+            overlay.open();
+        }
+
+        function showPromptEditor() {
+            const overlay = new OverlayPanel({
+                title: 'Editar Prompt: Code Reviewer',
+                content: `
+                    <div class="overlay-section">
+                        <div class="overlay-section-title">Contenido del Prompt</div>
+                        <textarea id="prompt-editor" style="width: 100%; height: 200px; padding: 12px; background: #0F1216; border: 1px solid #374151; border-radius: 8px; color: white; font-family: monospace; font-size: 13px; line-height: 1.6;">Eres un experto revisor de código.
+
+Analiza el código y proporciona:
+1. Problemas de seguridad
+2. Mejoras de rendimiento
+3. Best practices
+4. Sugerencias específicas
+
+Formato de respuesta: JSON</textarea>
+                    </div>
+                    <div class="overlay-section">
+                        <div class="overlay-section-title">Metadatos</div>
+                        <div class="overlay-info-grid">
+                            <div class="overlay-info-item">
+                                <div class="overlay-info-label">Versión</div>
+                                <input type="text" value="2.1.0" style="width: 100%; padding: 8px; background: #0F1216; border: 1px solid #374151; border-radius: 6px; color: white; font-size: 14px;">
+                            </div>
+                            <div class="overlay-info-item">
+                                <div class="overlay-info-label">Categoría</div>
+                                <input type="text" value="development" style="width: 100%; padding: 8px; background: #0F1216; border: 1px solid #374151; border-radius: 6px; color: white; font-size: 14px;">
+                            </div>
+                        </div>
+                    </div>
+                `,
+                size: 'large',
+                showFooter: true,
+                footerButtons: [
+                    {
+                        label: 'Guardar',
+                        type: 'primary',
+                        onClick: () => {
+                            const content = document.getElementById('prompt-editor').value;
+                            alert(`Prompt guardado (${content.length} caracteres)`);
+                        }
+                    },
+                    {
+                        label: 'Preview',
+                        type: 'secondary',
+                        closeOnClick: false,
+                        onClick: () => {
+                            alert('Preview del prompt...');
+                        }
+                    },
+                    { label: 'Cancelar', type: 'secondary' }
+                ],
+                resizable: true
+            });
+            overlay.open();
+        }
+
+        function showStackedOverlay() {
+            const overlay1 = new OverlayPanel({
+                title: 'Overlay Nivel 1',
+                content: `
+                    <p>Este es el primer overlay.</p>
+                    <p>Haz click abajo para abrir un segundo overlay encima:</p>
+                    <button class="demo-btn demo-btn-primary" onclick="
+                        const overlay2 = new OverlayPanel({
+                            title: 'Overlay Nivel 2',
+                            content: '<p>Este es el segundo overlay.</p><p>Puedes abrir hasta 3 niveles.</p>',
+                            size: 'small',
+                            level: 2,
+                            showFooter: true,
+                            footerButtons: [{ label: 'Cerrar', type: 'primary' }]
+                        });
+                        overlay2.open();
+                    ">Abrir Overlay Nivel 2</button>
+                `,
+                size: 'medium',
+                level: 1
+            });
+            overlay1.open();
+        }
+    </script>
+</body>
+</html>

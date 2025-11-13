@@ -1,0 +1,47 @@
+{
+  "name": "tool-orchestrator",
+  "version": "1.0.0",
+  "description": "Orchestrates tool calls between AI agents and tool providers with validation and execution",
+  "main": "index.js",
+  "author": "event-core team",
+  "license": "MIT",
+  "provides": [
+    "tool-registration",
+    "tool-execution",
+    "tool-validation"
+  ],
+  "dependencies": [],
+  "apis": {
+    "list_tools": {
+      "method": "GET",
+      "path": "/tools",
+      "description": "List all registered tools"
+    },
+    "get_tool": {
+      "method": "GET",
+      "path": "/tool/:name",
+      "description": "Get details about a specific tool"
+    },
+    "call_tool": {
+      "method": "POST",
+      "path": "/tool/:name/call",
+      "description": "Directly call a tool via HTTP"
+    }
+  },
+  "events": {
+    "publishes": [
+      "tool.registered",
+      "tool.unregistered",
+      "tool.call.response",
+      "tool.call.error"
+    ],
+    "subscribes": [
+      "tool.call.request"
+    ]
+  },
+  "config": {
+    "validation_enabled": true,
+    "timeout_ms": 30000,
+    "max_retries": 0
+  }
+}

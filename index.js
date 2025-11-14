@@ -366,6 +366,11 @@ async function main() {
         validateResponses: false,
         strict: true
       },
+      compression: config.http?.compression || {
+        enabled: true,
+        minSize: 1024,
+        level: 6
+      },
       core: core  // Pass core for UI Gateway
     });
 

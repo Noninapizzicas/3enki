@@ -25,6 +25,7 @@
 const http = require('http');
 const url = require('url');
 const { ValidationError, createValidationMiddleware, createResponseValidationMiddleware, formatValidationErrorResponse } = require('../validation');
+const CompressionMiddleware = require('./compression');
 
 class HTTPGateway {
   /**
@@ -40,6 +41,7 @@ class HTTPGateway {
    * @param {Object} options.core - Core instance (for UI Gateway)
    * @param {Object} options.validationManager - ValidationManager instance (optional)
    * @param {Object} options.validation - Validation config (optional)
+   * @param {Object} options.compression - Compression config (optional)
    */
   constructor(options = {}) {
     this.port = options.port || 3000;
@@ -83,6 +85,21 @@ class HTTPGateway {
         });
       }
     }
+
+    // Compression setup
+    this.compressionConfig = options.compression || {
+      enabled: true,
+      minSize: 1024,
+      level: 6
+    };
+
+    this.compression = new CompressionMiddleware({
+      enabled: this.compressionConfig.enabled,
+      minSize: this.compressionConfig.minSize,
+      level: this.compressionConfig.level,
+      logger: this.logger,
+      metrics: this.metrics
+    });
 
     // UI Gateway integration
     this.uiGateway = null;
@@ -218,25 +235,25 @@ class HTTPGateway {
       // CORS preflight
       if (this.cors && req.method === 'OPTIONS') {
         this.handleCORS(req, res);
-        this.sendResponse(res, 204, null);
+        await this.sendResponse(res, 204, null, req);
         return;
       }
 
       // Health check endpoint
       if (pathname === '/health') {
-        this.handleHealth(req, res);
+        await this.handleHealth(req, res);
         return;
       }
 
       // Readiness check endpoint
       if (pathname === '/ready') {
-        this.handleReady(req, res);
+        await this.handleReady(req, res);
         return;
       }
 
       // Stats endpoint
       if (pathname === '/stats') {
-        this.handleStats(req, res);
+        await this.handleStats(req, res);
         return;
       }
 
@@ -400,7 +417,7 @@ class HTTPGateway {
       }
 
       // Enviar respuesta
-      this.sendResponse(res, responseContext.status, responseContext.data);
+      await this.sendResponse(res, responseContext.status, responseContext.data, req);
 
       // Metrics
       if (this.metrics) {
@@ -447,7 +464,7 @@ class HTTPGateway {
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
    */
-  handleHealth(req, res) {
+  async handleHealth(req, res) {
     const health = {
       status: 'healthy',
       core_id: this.coreId,
@@ -455,7 +472,7 @@ class HTTPGateway {
       timestamp: new Date().toISOString()
     };
 
-    this.sendResponse(res, 200, health);
+    await this.sendResponse(res, 200, health, req);
   }
 
   /**
@@ -464,7 +481,7 @@ class HTTPGateway {
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
    */
-  handleReady(req, res) {
+  async handleReady(req, res) {
     // Check if all components are ready
     const checks = {
       gateway: this.isRunning,
@@ -490,7 +507,7 @@ class HTTPGateway {
     };
 
     const statusCode = isReady ? 200 : 503;
-    this.sendResponse(res, statusCode, readiness);
+    await this.sendResponse(res, statusCode, readiness, req);
   }
 
   /**
@@ -499,7 +516,7 @@ class HTTPGateway {
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
    */
-  handleStats(req, res) {
+  async handleStats(req, res) {
     const stats = {
       ...this.stats,
       uptime: Date.now() - this.stats.started_at,
@@ -512,7 +529,12 @@ class HTTPGateway {
       stats.total_apis = stats.apis.length;
     }
 
-    this.sendResponse(res, 200, stats);
+    // Include compression statistics
+    if (this.compression) {
+      stats.compression = this.compression.getStats();
+    }
+
+    await this.sendResponse(res, 200, stats, req);
   }
 
   /**
@@ -554,8 +576,9 @@ class HTTPGateway {
    * @param {http.ServerResponse} res - HTTP response
    * @param {number} statusCode - HTTP status code
    * @param {Object|null} data - Response data
+   * @param {Object} req - HTTP request (optional, for compression headers)
    */
-  sendResponse(res, statusCode, data) {
+  async sendResponse(res, statusCode, data, req = null) {
     // Actualizar estadísticas
     this.stats.by_status[statusCode] = (this.stats.by_status[statusCode] || 0) + 1;
 
@@ -569,23 +592,17 @@ class HTTPGateway {
       const type = data._responseType;
 
       if (type === 'html') {
-        res.setHeader('Content-Type', 'text/html');
-        res.statusCode = statusCode;
-        res.end(data.content || '');
+        await this._sendCompressedResponse(res, statusCode, data.content || '', 'text/html', req);
         return;
       }
 
       if (type === 'css') {
-        res.setHeader('Content-Type', 'text/css');
-        res.statusCode = statusCode;
-        res.end(data.content || '');
+        await this._sendCompressedResponse(res, statusCode, data.content || '', 'text/css', req);
         return;
       }
 
       if (type === 'javascript') {
-        res.setHeader('Content-Type', 'application/javascript');
-        res.statusCode = statusCode;
-        res.end(data.content || '');
+        await this._sendCompressedResponse(res, statusCode, data.content || '', 'application/javascript', req);
         return;
       }
 
@@ -605,11 +622,59 @@ class HTTPGateway {
     }
 
     // Default: JSON response
-    res.setHeader('Content-Type', 'application/json');
+    const jsonData = data !== null ? JSON.stringify(data) : '';
+    await this._sendCompressedResponse(res, statusCode, jsonData, 'application/json', req);
+  }
+
+  /**
+   * Send response with optional compression
+   *
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {number} statusCode - HTTP status code
+   * @param {string|Buffer} data - Response data
+   * @param {string} contentType - Content-Type
+   * @param {Object} req - HTTP request (for headers)
+   * @private
+   */
+  async _sendCompressedResponse(res, statusCode, data, contentType, req) {
+    res.setHeader('Content-Type', contentType);
     res.statusCode = statusCode;
 
-    if (data !== null) {
-      res.end(JSON.stringify(data));
+    // Try compression if request headers available
+    if (req && req.headers && data) {
+      try {
+        const result = await this.compression.compress(data, req.headers, contentType);
+
+        if (result.compressed) {
+          // Set compression headers
+          res.setHeader('Content-Encoding', result.encoding);
+          res.setHeader('Vary', 'Accept-Encoding');
+          res.setHeader('Content-Length', result.compressedSize);
+
+          if (this.logger) {
+            this.logger.debug('gateway.response.compressed', {
+              encoding: result.encoding,
+              ratio: `${result.ratio}%`,
+              bytes_saved: result.bytesSaved
+            });
+          }
+
+          res.end(result.data);
+          return;
+        }
+      } catch (error) {
+        if (this.logger) {
+          this.logger.error('gateway.compression.error', {
+            error: error.message
+          }, error);
+        }
+        // Fall through to uncompressed
+      }
+    }
+
+    // Send uncompressed
+    if (data) {
+      res.end(data);
     } else {
       res.end();
     }

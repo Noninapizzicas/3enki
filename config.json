@@ -21,6 +21,14 @@
       "reconnect_period": 5000,
       "keep_alive": 60,
       "clean_session": false
+    },
+    "pool": {
+      "enabled": false,
+      "min": 2,
+      "max": 10,
+      "idle_timeout": 30000,
+      "acquire_timeout": 5000,
+      "health_check_interval": 10000
     }
   },
   "modules": {

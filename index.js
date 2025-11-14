@@ -208,7 +208,15 @@ async function main() {
       coreId: config.core.id,
       brokerPort: config.mqtt.broker.port,
       logger: core.logger,
-      metrics: core.metrics
+      metrics: core.metrics,
+      usePool: config.mqtt.pool?.enabled || false,
+      poolConfig: config.mqtt.pool ? {
+        min: config.mqtt.pool.min,
+        max: config.mqtt.pool.max,
+        idleTimeout: config.mqtt.pool.idle_timeout,
+        acquireTimeout: config.mqtt.pool.acquire_timeout,
+        healthCheckInterval: config.mqtt.pool.health_check_interval
+      } : {}
     });
 
     await core.mqttClient.connect();
@@ -216,9 +224,14 @@ async function main() {
     const mqttStats = core.mqttClient.getStats();
     console.log(`   ✅ ${mqttStats.usingEmbedded ? 'Started embedded broker' : 'Connected to external broker'} on port ${config.mqtt.broker.port}`);
 
+    if (mqttStats.pooling?.enabled) {
+      console.log(`   🔄 Connection pooling enabled (${config.mqtt.pool.min}-${config.mqtt.pool.max} connections)`);
+    }
+
     core.logger.info('core.mqtt.connected', {
       using_embedded: mqttStats.usingEmbedded,
-      port: config.mqtt.broker.port
+      port: config.mqtt.broker.port,
+      pooling_enabled: mqttStats.pooling?.enabled || false
     });
 
     // ========================================================================

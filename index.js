@@ -33,6 +33,7 @@ const { ModuleLoader, ModuleRegistry } = require('./core/modules');
 const HTTPGateway = require('./core/gateway/http');
 const { Logger, Tracer, Metrics } = require('./core/observability');
 const { loadConfig, getConfigValue } = require('./core/config');
+const { ValidationManager, commonSchemas } = require('./core/validation');
 
 // Port Management & Service Registry
 const { ServiceRegistry } = require('./core/utils');
@@ -141,6 +142,7 @@ async function main() {
     logger: null,
     tracer: null,
     metrics: null,
+    validationManager: null,
     serviceRegistry: null,
     heartbeatTimer: null
   };
@@ -149,7 +151,7 @@ async function main() {
     // ========================================================================
     // Step 1: Initialize Observability
     // ========================================================================
-    console.log('🔍 [1/6] Initializing Observability...');
+    console.log('🔍 [1/7] Initializing Observability...');
 
     core.logger = new Logger({
       level: config.observability.logging.level,
@@ -168,9 +170,38 @@ async function main() {
     });
 
     // ========================================================================
-    // Step 2: Initialize MQTT Client (with embedded broker fallback)
+    // Step 2: Initialize Validation System
     // ========================================================================
-    console.log('📡 [2/6] Connecting to MQTT Broker...');
+    console.log('✓ [2/7] Initializing Validation System...');
+
+    core.validationManager = new ValidationManager({
+      logger: core.logger,
+      allErrors: true,
+      removeAdditional: true,
+      useDefaults: true,
+      coerceTypes: true
+    });
+
+    // Registrar schemas comunes
+    Object.entries(commonSchemas).forEach(([schemaId, schema]) => {
+      try {
+        core.validationManager.registerSchema(schemaId, schema);
+      } catch (error) {
+        core.logger.warn('validation.schema.registration_failed', {
+          schema_id: schemaId,
+          error: error.message
+        });
+      }
+    });
+
+    core.logger.info('core.validation.initialized', {
+      schemas_registered: Object.keys(commonSchemas).length
+    });
+
+    // ========================================================================
+    // Step 3: Initialize MQTT Client (with embedded broker fallback)
+    // ========================================================================
+    console.log('📡 [3/8] Connecting to MQTT Broker...');
 
     core.mqttClient = new MQTTClient({
       brokerUrl: `mqtt://localhost:${config.mqtt.broker.port}`,
@@ -191,9 +222,9 @@ async function main() {
     });
 
     // ========================================================================
-    // Step 3: Initialize Hook System
+    // Step 4: Initialize Hook System
     // ========================================================================
-    console.log('🪝 [3/6] Initializing Hook System...');
+    console.log('🪝 [4/8] Initializing Hook System...');
 
     core.hooks = new HookManager({
       logger: core.logger
@@ -206,7 +237,7 @@ async function main() {
     // ========================================================================
     // Step 4: Initialize Event Bus
     // ========================================================================
-    console.log('🔄 [4/6] Initializing Event Bus...');
+    console.log('🔄 [5/8] Initializing Event Bus...');
 
     core.eventBus = new EventBus({
       coreId: config.core.id,
@@ -224,7 +255,7 @@ async function main() {
     // ========================================================================
     // Step 5: Load Modules
     // ========================================================================
-    console.log('📦 [5/6] Loading Modules...');
+    console.log('📦 [6/8] Loading Modules...');
 
     const modulesPath = path.resolve(__dirname, config.modules.path);
 
@@ -278,7 +309,7 @@ async function main() {
     // ========================================================================
     // Step 6: Initialize Service Registry & Allocate Port
     // ========================================================================
-    console.log('📋 [6/7] Initializing Service Registry...');
+    console.log('📋 [7/8] Initializing Service Registry...');
 
     core.serviceRegistry = new ServiceRegistry({
       autocleanup: true
@@ -305,7 +336,7 @@ async function main() {
     // ========================================================================
     // Step 7: Start HTTP Gateway
     // ========================================================================
-    console.log('🌐 [7/7] Starting HTTP Gateway...');
+    console.log('🌐 [8/8] Starting HTTP Gateway...');
 
     core.httpGateway = new HTTPGateway({
       port: httpPort,
@@ -315,6 +346,13 @@ async function main() {
       eventBus: core.eventBus,
       moduleLoader: core.moduleLoader,
       registry: core.moduleRegistry,
+      validationManager: core.validationManager,
+      validation: config.validation || {
+        enabled: true,
+        requireSchemas: false,
+        validateResponses: false,
+        strict: true
+      },
       core: core  // Pass core for UI Gateway
     });
 

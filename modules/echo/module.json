@@ -9,13 +9,73 @@
         "name": "ping",
         "method": "GET",
         "path": "/ping",
-        "description": "Health check endpoint"
+        "description": "Health check endpoint",
+        "schemas": {
+          "response": {
+            "type": "object",
+            "required": ["message", "module", "version", "timestamp"],
+            "properties": {
+              "message": {
+                "type": "string",
+                "enum": ["pong"]
+              },
+              "module": { "type": "string" },
+              "version": { "type": "string" },
+              "request_id": { "type": "string" },
+              "timestamp": { "type": "number" },
+              "stats": {
+                "type": "object",
+                "properties": {
+                  "requests": { "type": "number" },
+                  "events_received": { "type": "number" },
+                  "events_published": { "type": "number" },
+                  "hooks_executed": { "type": "number" }
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
       },
       {
         "name": "echo",
         "method": "POST",
         "path": "/echo",
-        "description": "Echo back request body"
+        "description": "Echo back request body",
+        "schemas": {
+          "request": {
+            "body": {
+              "type": "object",
+              "required": ["message"],
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
+                  "description": "Message to echo back"
+                },
+                "metadata": {
+                  "type": "object",
+                  "description": "Optional metadata"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "response": {
+            "type": "object",
+            "required": ["echo", "timestamp"],
+            "properties": {
+              "echo": {
+                "type": "object",
+                "description": "Echoed request body"
+              },
+              "request_id": { "type": "string" },
+              "timestamp": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        }
       }
     ],
     "hooks": ["beforeEventPublish"]

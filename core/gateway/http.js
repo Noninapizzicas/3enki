@@ -24,6 +24,7 @@
 
 const http = require('http');
 const url = require('url');
+const { ValidationError, createValidationMiddleware, createResponseValidationMiddleware, formatValidationErrorResponse } = require('../validation');
 
 class HTTPGateway {
   /**
@@ -37,6 +38,8 @@ class HTTPGateway {
    * @param {boolean} options.cors - Enable CORS (default: true)
    * @param {string} options.coreId - Core ID para logs
    * @param {Object} options.core - Core instance (for UI Gateway)
+   * @param {Object} options.validationManager - ValidationManager instance (optional)
+   * @param {Object} options.validation - Validation config (optional)
    */
   constructor(options = {}) {
     this.port = options.port || 3000;
@@ -52,6 +55,34 @@ class HTTPGateway {
 
     this.server = null;
     this.isRunning = false;
+
+    // Validation setup
+    this.validationManager = options.validationManager || null;
+    this.validationConfig = options.validation || {
+      enabled: true,
+      requireSchemas: false,
+      validateResponses: false,
+      strict: true
+    };
+
+    // Create validation middleware if ValidationManager is provided
+    this.validateRequest = null;
+    this.validateResponse = null;
+
+    if (this.validationManager && this.validationConfig.enabled) {
+      this.validateRequest = createValidationMiddleware(this.validationManager, {
+        requireSchemas: this.validationConfig.requireSchemas,
+        strict: this.validationConfig.strict,
+        logger: this.logger
+      });
+
+      if (this.validationConfig.validateResponses) {
+        this.validateResponse = createResponseValidationMiddleware(this.validationManager, {
+          strict: false,  // Responses solo warning, nunca strict
+          logger: this.logger
+        });
+      }
+    }
 
     // UI Gateway integration
     this.uiGateway = null;
@@ -253,6 +284,57 @@ class HTTPGateway {
         return;
       }
 
+      // Validar request si está habilitado
+      if (this.validateRequest) {
+        try {
+          await this.validateRequest(
+            {
+              method: req.method,
+              path: pathname,
+              query,
+              body: context.body,
+              headers: req.headers
+            },
+            {
+              moduleAPI: apiData,
+              method: req.method,
+              path: pathname
+            }
+          );
+
+          if (this.metrics) {
+            this.metrics.increment('gateway.validation.success');
+          }
+
+        } catch (validationError) {
+          if (validationError instanceof ValidationError) {
+            if (this.logger) {
+              this.logger.warn('gateway.validation.failed', {
+                request_id: requestId,
+                module: apiData.moduleName,
+                api: apiData.apiName,
+                error_count: validationError.errors?.length || 0
+              });
+            }
+
+            if (this.metrics) {
+              this.metrics.increment('gateway.validation.failed');
+            }
+
+            const errorResponse = formatValidationErrorResponse(validationError, {
+              includeDetails: true
+            });
+
+            this.sendError(res, 400, errorResponse.error, {
+              validation_errors: errorResponse.validation_errors
+            });
+            return;
+          }
+          // Re-throw si no es ValidationError
+          throw validationError;
+        }
+      }
+
       // Ejecutar handler del módulo
       let result;
       try {
@@ -278,6 +360,27 @@ class HTTPGateway {
           error: handlerError.message
         });
         return;
+      }
+
+      // Validar response si está habilitado (modo warning)
+      if (this.validateResponse) {
+        try {
+          await this.validateResponse(result, {
+            moduleAPI: apiData,
+            method: req.method,
+            path: pathname
+          });
+        } catch (validationError) {
+          // Response validation solo hace warning, no falla
+          if (this.logger) {
+            this.logger.warn('gateway.response.validation.warning', {
+              request_id: requestId,
+              module: apiData.moduleName,
+              api: apiData.apiName,
+              error: validationError.message
+            });
+          }
+        }
       }
 
       // Ejecutar hook afterResponse

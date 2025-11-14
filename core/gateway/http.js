@@ -26,6 +26,7 @@ const http = require('http');
 const url = require('url');
 const { ValidationError, createValidationMiddleware, createResponseValidationMiddleware, formatValidationErrorResponse } = require('../validation');
 const CompressionMiddleware = require('./compression');
+const { CacheManager } = require('./cache');
 
 class HTTPGateway {
   /**
@@ -42,6 +43,7 @@ class HTTPGateway {
    * @param {Object} options.validationManager - ValidationManager instance (optional)
    * @param {Object} options.validation - Validation config (optional)
    * @param {Object} options.compression - Compression config (optional)
+   * @param {Object} options.cache - Cache config (optional)
    */
   constructor(options = {}) {
     this.port = options.port || 3000;
@@ -97,6 +99,21 @@ class HTTPGateway {
       enabled: this.compressionConfig.enabled,
       minSize: this.compressionConfig.minSize,
       level: this.compressionConfig.level,
+      logger: this.logger,
+      metrics: this.metrics
+    });
+
+    // Cache setup
+    this.cacheConfig = options.cache || {
+      enabled: false,
+      maxSize: 100,
+      defaultTTL: 60000
+    };
+
+    this.cache = new CacheManager({
+      enabled: this.cacheConfig.enabled,
+      maxSize: this.cacheConfig.maxSize,
+      defaultTTL: this.cacheConfig.defaultTTL,
       logger: this.logger,
       metrics: this.metrics
     });
@@ -257,6 +274,18 @@ class HTTPGateway {
         return;
       }
 
+      // Cache stats endpoint
+      if (pathname === '/cache/stats') {
+        await this.handleCacheStats(req, res);
+        return;
+      }
+
+      // Cache clear endpoint
+      if (pathname === '/cache/clear' && req.method === 'POST') {
+        await this.handleCacheClear(req, res);
+        return;
+      }
+
       // UI routes - delegate to UI Gateway
       if (this.uiGateway && pathname.startsWith('/ui')) {
         await this.handleUIRoute(req, res, pathname, query);
@@ -286,6 +315,36 @@ class HTTPGateway {
           this.sendError(res, 403, 'Request blocked by hook');
           return;
         }
+      }
+
+      // Check cache first
+      const cached = this.cache.get(req);
+      if (cached) {
+        if (cached.notModified) {
+          // 304 Not Modified
+          res.setHeader('ETag', cached.etag);
+          await this.sendResponse(res, 304, null, req);
+          return;
+        }
+
+        // Cache hit - return cached data
+        if (cached.etag) {
+          res.setHeader('ETag', cached.etag);
+          res.setHeader('X-Cache', 'HIT');
+          res.setHeader('Age', Math.floor(cached.age / 1000).toString());
+        }
+
+        await this.sendResponse(res, 200, cached.data, req);
+
+        if (this.metrics) {
+          this.metrics.observe('gateway.request.duration', Date.now() - startTime);
+        }
+        return;
+      }
+
+      // Cache miss - add header
+      if (this.cache.shouldCache(req)) {
+        res.setHeader('X-Cache', 'MISS');
       }
 
       // Buscar handler en registry
@@ -414,6 +473,14 @@ class HTTPGateway {
           this.sendError(res, 500, 'Response blocked by hook');
           return;
         }
+      }
+
+      // Cache successful responses
+      if (responseContext.status >= 200 && responseContext.status < 300) {
+        this.cache.set(req, responseContext.data, {
+          status: responseContext.status,
+          ttl: this.cacheConfig.defaultTTL
+        });
       }
 
       // Enviar respuesta

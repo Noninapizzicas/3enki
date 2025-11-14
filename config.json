@@ -15,6 +15,11 @@
       "enabled": true,
       "min_size": 1024,
       "level": 6
+    },
+    "cache": {
+      "enabled": false,
+      "max_size": 100,
+      "default_ttl": 60000
     }
   },
   "mqtt": {

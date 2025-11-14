@@ -371,6 +371,11 @@ async function main() {
         minSize: 1024,
         level: 6
       },
+      cache: config.http?.cache || {
+        enabled: false,
+        maxSize: 100,
+        defaultTTL: 60000
+      },
       core: core  // Pass core for UI Gateway
     });
 

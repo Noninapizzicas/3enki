@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Floating Input Bar - Demo</title>
+    <link rel="stylesheet" href="floating-input-bar.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            padding-bottom: 120px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0F1216 0%, #1a1d24 100%);
+            color: white;
+            min-height: 200vh; /* Para probar scroll */
+        }
+
+        .demo-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #9ca3af;
+            font-size: 18px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .instruction-box {
+            background: #1f2937;
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 32px;
+            border-left: 4px solid #2FBF71;
+        }
+
+        .instruction-box h3 {
+            margin-top: 0;
+            color: #2FBF71;
+            font-size: 20px;
+        }
+
+        .instruction-box ul {
+            margin: 12px 0 0 20px;
+            line-height: 2;
+        }
+
+        .demo-section {
+            background: #1a1d24;
+            padding: 32px;
+            border-radius: 16px;
+            margin-bottom: 32px;
+            border: 2px solid #374151;
+        }
+
+        .demo-section h2 {
+            margin-top: 0;
+            font-size: 24px;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .demo-section p {
+            color: #9ca3af;
+            line-height: 1.8;
+            margin-bottom: 24px;
+        }
+
+        .demo-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .demo-btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .demo-btn-primary {
+            background: #2FBF71;
+            color: white;
+        }
+
+        .demo-btn-primary:hover {
+            background: #27a563;
+            transform: translateY(-2px);
+        }
+
+        .demo-btn-secondary {
+            background: #374151;
+            color: white;
+        }
+
+        .demo-btn-secondary:hover {
+            background: #4B5563;
+        }
+
+        .demo-btn-danger {
+            background: #E63946;
+            color: white;
+        }
+
+        .result-box {
+            background: #0F1216;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+            border: 2px solid #374151;
+            min-height: 60px;
+        }
+
+        .result-box h4 {
+            margin-top: 0;
+            color: #2FBF71;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .result-box pre {
+            margin: 0;
+            color: #e5e7eb;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .log-container {
+            background: #0F1216;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .log-item {
+            padding: 4px 0;
+            color: #2FBF71;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        .log-item:last-child {
+            border-bottom: none;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .feature-card {
+            background: #0F1216;
+            padding: 16px;
+            border-radius: 10px;
+            border: 1px solid #374151;
+        }
+
+        .feature-card h4 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            color: white;
+        }
+
+        .feature-card p {
+            margin: 0;
+            font-size: 13px;
+            color: #9ca3af;
+            line-height: 1.6;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .alert {
+            background: rgba(47, 191, 113, 0.1);
+            border: 2px solid #2FBF71;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .demo-section {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1>📝 Floating Input Bar Demo</h1>
+        <p class="subtitle">Barra de texto flotante ancho completo (20mm) con botón 10x10mm</p>
+
+        <!-- Instrucciones -->
+        <div class="instruction-box">
+            <h3>✨ Características</h3>
+            <ul>
+                <li><strong>📏 Dimensiones:</strong> 20mm de alto, ancho completo, botón 10x10mm</li>
+                <li><strong>📍 Posición:</strong> Flotante en bottom, draggable</li>
+                <li><strong>⌨️ Controles:</strong> Enter para enviar, ESC para limpiar</li>
+                <li><strong>🎤 Voice:</strong> Integración con reconocimiento de voz</li>
+                <li><strong>💾 Persistencia:</strong> Recuerda la posición</li>
+                <li><strong>👁️ Mira abajo:</strong> La barra está en la parte inferior de la pantalla</li>
+            </ul>
+        </div>
+
+        <!-- Controles del Demo -->
+        <div class="demo-section">
+            <h2>🎮 Controles del Demo</h2>
+            <p>Usa los botones para cambiar entre diferentes ejemplos de la barra flotante.</p>
+
+            <div class="demo-controls">
+                <button class="demo-btn demo-btn-primary" onclick="createSimpleBar()">
+                    📝 Barra Simple
+                </button>
+                <button class="demo-btn demo-btn-primary" onclick="createVoiceBar()">
+                    🎤 Con Voz
+                </button>
+                <button class="demo-btn demo-btn-primary" onclick="createSearchBar()">
+                    🔍 Búsqueda
+                </button>
+                <button class="demo-btn demo-btn-primary" onclick="createChatBar()">
+                    💬 Chat
+                </button>
+            </div>
+
+            <div class="demo-controls">
+                <button class="demo-btn demo-btn-secondary" onclick="toggleBar()">
+                    👁️ Toggle Visibilidad
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="setBarValue()">
+                    ✏️ Establecer Valor
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="getBarValue()">
+                    📋 Obtener Valor
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="focusBar()">
+                    🎯 Focus
+                </button>
+                <button class="demo-btn demo-btn-danger" onclick="destroyBar()">
+                    🗑️ Destruir Barra
+                </button>
+            </div>
+        </div>
+
+        <!-- Resultado -->
+        <div class="demo-section">
+            <h2>📄 Resultado</h2>
+            <p>Los mensajes enviados aparecerán aquí.</p>
+
+            <div class="result-box">
+                <h4>📝 Último mensaje:</h4>
+                <pre id="last-message">Envía un mensaje usando la barra inferior...</pre>
+            </div>
+
+            <div class="log-container" id="log-container">
+                <div class="log-item">📝 Log de mensajes:</div>
+            </div>
+        </div>
+
+        <!-- Casos de Uso -->
+        <div class="demo-section">
+            <h2>💡 Casos de Uso</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🔍</span>
+                    <h4>Búsqueda Global</h4>
+                    <p>Barra de búsqueda accesible desde cualquier parte de la app</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">💬</span>
+                    <h4>Chat Input</h4>
+                    <p>Input para mensajería instantánea con envío rápido</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📝</span>
+                    <h4>Notas Rápidas</h4>
+                    <p>Captura ideas rápidamente sin salir del contexto</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🤖</span>
+                    <h4>AI Chat</h4>
+                    <p>Interfaz para chat con asistente AI</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🎤</span>
+                    <h4>Comandos por Voz</h4>
+                    <p>Entrada de texto o voz para comandos</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">✍️</span>
+                    <h4>Comentarios</h4>
+                    <p>Input rápido para comentarios en contenido</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Integración -->
+        <div class="demo-section">
+            <h2>🔗 Integración</h2>
+            <p>La barra flotante se integra con otros componentes:</p>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🎤</span>
+                    <h4>Voice Input</h4>
+                    <p>Reconocimiento de voz integrado con Web Speech API</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📊</span>
+                    <h4>Floating Topbar</h4>
+                    <p>Complementa la topbar para acciones rápidas</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📄</span>
+                    <h4>Overlay Panel</h4>
+                    <p>Puede abrir overlays con resultados o detalles</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">⚙️</span>
+                    <h4>Admin Panel</h4>
+                    <p>Input para comandos de administración</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scroll para probar auto-hide -->
+        <div class="demo-section">
+            <h2>📜 Scroll Test</h2>
+            <p style="line-height: 1.8; color: #9ca3af;">
+                Este contenido extra permite probar el comportamiento de la barra al hacer scroll.
+                La barra flotante permanece visible en bottom mientras navegas el contenido.<br><br>
+                Si activas el modo <strong>auto-hide</strong>, la barra se ocultará al hacer scroll down
+                y reaparecerá al hacer scroll up, dándote más espacio visual.<br><br>
+                <strong style="color: #2FBF71;">Características del drag:</strong> Puedes arrastrar
+                la barra desde el handle superior (línea horizontal) para reposicionarla verticalmente.
+                La posición se guardará automáticamente en localStorage.
+            </p>
+        </div>
+
+        <div class="alert" id="status-alert" style="display: none;"></div>
+    </div>
+
+    <script src="floating-input-bar.js"></script>
+    <script>
+        let inputBar = null;
+
+        // Log helper
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('log-container');
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            const time = new Date().toLocaleTimeString();
+            item.textContent = `[${time}] ${message}`;
+            logContainer.appendChild(item);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Limitar a 20 items
+            if (logContainer.children.length > 21) {
+                logContainer.children[1].remove();
+            }
+        }
+
+        // Mostrar alerta temporal
+        function showAlert(message) {
+            const alert = document.getElementById('status-alert');
+            alert.textContent = message;
+            alert.style.display = 'block';
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 3000);
+        }
+
+        // =============================================
+        // BARRA SIMPLE
+        // =============================================
+
+        function createSimpleBar() {
+            if (inputBar) {
+                inputBar.destroy();
+            }
+
+            inputBar = new FloatingInputBar({
+                placeholder: 'Escribe algo y presiona Enter...',
+                buttonEmoji: '➤',
+                buttonTooltip: 'Enviar',
+                clearOnSubmit: true,
+                showCounter: true,
+                onSubmit: (value) => {
+                    document.getElementById('last-message').textContent = value;
+                    addLog(`📝 Enviado: "${value}"`);
+                    showAlert('✓ Mensaje enviado');
+                },
+                onChange: (value) => {
+                    console.log('Cambio:', value);
+                }
+            });
+
+            addLog('✓ Barra simple creada');
+            showAlert('📝 Barra Simple activada');
+        }
+
+        // =============================================
+        // BARRA CON VOZ
+        // =============================================
+
+        function createVoiceBar() {
+            if (inputBar) {
+                inputBar.destroy();
+            }
+
+            inputBar = new FloatingInputBar({
+                placeholder: 'Presiona 🎤 para hablar o escribe...',
+                voiceEnabled: true,
+                voiceLanguage: 'es-ES',
+                voiceContinuous: false,
+                clearOnSubmit: true,
+                showCounter: true,
+                onSubmit: (value) => {
+                    document.getElementById('last-message').textContent = value;
+                    addLog(`🎤 Mensaje de voz: "${value}"`);
+                    showAlert('✓ Mensaje de voz enviado');
+                },
+                onVoiceStart: () => {
+                    addLog('🔴 Escuchando...');
+                },
+                onVoiceEnd: (value) => {
+                    addLog(`✓ Voz transcrita: "${value}"`);
+                },
+                onError: (error) => {
+                    addLog(`⚠️ Error: ${error}`, 'error');
+                }
+            });
+
+            addLog('✓ Barra con voz creada');
+            showAlert('🎤 Barra con Voz activada - Presiona 🎤');
+        }
+
+        // =============================================
+        // BARRA DE BÚSQUEDA
+        // =============================================
+
+        function createSearchBar() {
+            if (inputBar) {
+                inputBar.destroy();
+            }
+
+            inputBar = new FloatingInputBar({
+                placeholder: '🔍 Buscar...',
+                buttonEmoji: '🔍',
+                buttonTooltip: 'Buscar',
+                variant: 'search',
+                clearOnSubmit: false,
+                onSubmit: (value) => {
+                    document.getElementById('last-message').textContent = `Buscando: "${value}"`;
+                    addLog(`🔍 Búsqueda: "${value}"`);
+                    showAlert('🔍 Búsqueda iniciada...');
+
+                    // Simular búsqueda
+                    inputBar.setLoading(true);
+                    setTimeout(() => {
+                        inputBar.setLoading(false);
+                        showAlert('✓ Búsqueda completada');
+                    }, 2000);
+                }
+            });
+
+            addLog('✓ Barra de búsqueda creada');
+            showAlert('🔍 Barra de Búsqueda activada');
+        }
+
+        // =============================================
+        // BARRA DE CHAT
+        // =============================================
+
+        function createChatBar() {
+            if (inputBar) {
+                inputBar.destroy();
+            }
+
+            inputBar = new FloatingInputBar({
+                placeholder: '💬 Escribe un mensaje...',
+                buttonEmoji: '📤',
+                buttonTooltip: 'Enviar mensaje',
+                variant: 'chat',
+                clearOnSubmit: true,
+                maxLength: 1000,
+                showCounter: true,
+                onSubmit: (value) => {
+                    document.getElementById('last-message').textContent = value;
+                    addLog(`💬 Chat: "${value}"`);
+
+                    // Simular respuesta del chat
+                    setTimeout(() => {
+                        const responses = [
+                            '¡Hola! 👋',
+                            'Entiendo, déjame ayudarte con eso.',
+                            '¿Algo más en lo que pueda ayudarte?',
+                            '¡Excelente pregunta!',
+                            'Déjame pensarlo... 🤔'
+                        ];
+                        const response = responses[Math.floor(Math.random() * responses.length)];
+                        addLog(`🤖 Bot: "${response}"`);
+                    }, 1000);
+                }
+            });
+
+            addLog('✓ Barra de chat creada');
+            showAlert('💬 Barra de Chat activada');
+        }
+
+        // =============================================
+        // CONTROLES
+        // =============================================
+
+        function toggleBar() {
+            if (!inputBar) {
+                showAlert('⚠️ Crea una barra primero');
+                return;
+            }
+            inputBar.toggle();
+            addLog('🔄 Toggle visibilidad');
+        }
+
+        function setBarValue() {
+            if (!inputBar) {
+                showAlert('⚠️ Crea una barra primero');
+                return;
+            }
+            inputBar.setValue('Este es un texto de ejemplo');
+            addLog('✏️ Valor establecido');
+            showAlert('✏️ Valor establecido');
+        }
+
+        function getBarValue() {
+            if (!inputBar) {
+                showAlert('⚠️ Crea una barra primero');
+                return;
+            }
+            const value = inputBar.getValue();
+            alert('Valor actual: ' + (value || '(vacío)'));
+            addLog(`📋 Valor obtenido: "${value}"`);
+        }
+
+        function focusBar() {
+            if (!inputBar) {
+                showAlert('⚠️ Crea una barra primero');
+                return;
+            }
+            inputBar.focus();
+            addLog('🎯 Focus activado');
+        }
+
+        function destroyBar() {
+            if (!inputBar) {
+                showAlert('⚠️ No hay barra para destruir');
+                return;
+            }
+            inputBar.destroy();
+            inputBar = null;
+            addLog('🗑️ Barra destruida');
+            showAlert('🗑️ Barra destruida');
+        }
+
+        // =============================================
+        // INICIALIZACIÓN
+        // =============================================
+
+        window.addEventListener('load', () => {
+            addLog('✓ Demo cargado');
+            addLog('💡 Tip: Usa los botones para crear diferentes barras');
+
+            // Crear barra simple por defecto
+            setTimeout(() => {
+                createSimpleBar();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

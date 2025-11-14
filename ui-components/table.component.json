@@ -1,0 +1,24 @@
+{
+  "component": "table",
+  "name": "Data Table",
+  "description": "Table component for displaying tabular data",
+  "features": {
+    "sortable": true,
+    "filterable": true,
+    "paginated": false,
+    "hoverable": true
+  },
+  "styling": {
+    "header_background": "#374151",
+    "row_hover": "#1f2937",
+    "border_color": "#374151"
+  },
+  "columns": {
+    "min_width": "100px",
+    "padding": "12px"
+  },
+  "accessibility": {
+    "headers": true,
+    "aria_labels": true
+  }
+}

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Emoji Action Button - Demo</title>
+    <link rel="stylesheet" href="emoji-action-button.css">
+    <style>
+        :root {
+            --color-base: #6B7280;
+            --color-info: #1D4ED8;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0F1216;
+            color: white;
+        }
+
+        .demo-section {
+            margin-bottom: 40px;
+        }
+
+        .demo-section h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #d1d5db;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, 62px);
+            gap: 16px;
+            padding: 16px;
+            background: #1a1d24;
+            border-radius: 12px;
+        }
+
+        .demo-inline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding: 16px;
+            background: #1a1d24;
+            border-radius: 12px;
+        }
+
+        .instruction-box {
+            background: #1f2937;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            border-left: 4px solid #2FBF71;
+        }
+
+        .instruction-box h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #2FBF71;
+        }
+
+        .instruction-box p {
+            margin: 8px 0;
+            font-size: 14px;
+            color: #d1d5db;
+        }
+
+        .action-log {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: #1f2937;
+            border: 2px solid #2FBF71;
+            border-radius: 12px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .action-log-item {
+            padding: 4px 0;
+            border-bottom: 1px solid #374151;
+        }
+
+        .action-log-item:last-child {
+            border-bottom: none;
+        }
+
+        .action-log-item.single {
+            color: #2FBF71;
+        }
+
+        .action-log-item.double {
+            color: #1D4ED8;
+        }
+
+        .action-log-item.long {
+            color: #E63946;
+        }
+
+        .ruler {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .ruler-line {
+            width: 38px;
+            height: 2px;
+            background: #2FBF71;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Emoji Action Button Demo</h1>
+
+    <div class="instruction-box">
+        <h3>Instrucciones de Uso</h3>
+        <p>👆 <strong>Click simple</strong>: Toca una vez rápido</p>
+        <p>👆👆 <strong>Doble click</strong>: Toca dos veces rápido (< 300ms)</p>
+        <p>👆⏱️ <strong>Long press</strong>: Mantén presionado 3 segundos (verás barra de progreso)</p>
+    </div>
+
+    <!-- Sección 1: Botones de Acción -->
+    <div class="demo-section">
+        <h2>🎮 Botones de Acción</h2>
+        <div class="demo-inline" id="action-buttons"></div>
+        <div class="ruler">
+            <span>Tamaño real:</span>
+            <div class="ruler-line"></div>
+            <span>10mm (38px)</span>
+        </div>
+    </div>
+
+    <!-- Sección 2: Botones con Labels -->
+    <div class="demo-section">
+        <h2>🏷️ Botones con Etiquetas</h2>
+        <div class="demo-inline" id="labeled-buttons"></div>
+    </div>
+
+    <!-- Sección 3: Grid de Botones -->
+    <div class="demo-section">
+        <h2>📱 Grid de Iconos (Tipo App Launcher)</h2>
+        <div class="demo-grid" id="grid-buttons"></div>
+    </div>
+
+    <!-- Sección 4: Estados de Marco -->
+    <div class="demo-section">
+        <h2>🎨 Estados de Marco</h2>
+        <div class="demo-inline" id="frame-buttons"></div>
+    </div>
+
+    <!-- Log de Acciones -->
+    <div class="action-log" id="action-log">
+        <div style="color: #9ca3af; margin-bottom: 8px;">📝 Log de Acciones:</div>
+    </div>
+
+    <script src="emoji-action-button.js"></script>
+    <script>
+        // Helper para log
+        function logAction(emoji, action, description) {
+            const log = document.getElementById('action-log');
+            const item = document.createElement('div');
+            item.className = `action-log-item ${action}`;
+            const time = new Date().toLocaleTimeString();
+            item.textContent = `[${time}] ${emoji} → ${action.toUpperCase()}: ${description}`;
+            log.appendChild(item);
+            log.scrollTop = log.scrollHeight;
+
+            // Limitar a 10 items
+            if (log.children.length > 11) {
+                log.children[1].remove();
+            }
+        }
+
+        // Sección 1: Botones de Acción
+        const actionButtons = [
+            { emoji: '🏠', single: 'Ver Home', double: 'Editar Home', long: 'Resetear Home' },
+            { emoji: '⚙️', single: 'Ver Config', double: 'Editar Config', long: 'Resetear Config' },
+            { emoji: '🔍', single: 'Buscar', double: 'Búsqueda Avanzada', long: 'Limpiar Búsqueda' },
+            { emoji: '➕', single: 'Añadir', double: 'Añadir Múltiple', long: 'Añadir Plantilla' },
+            { emoji: '✏️', single: 'Editar', double: 'Editar Rápido', long: 'Editar Avanzado' },
+            { emoji: '🗑️', single: 'Papelera', double: 'Ver Papelera', long: 'Eliminar Permanente' }
+        ];
+
+        actionButtons.forEach(config => {
+            const btn = new EmojiActionButton(config.emoji, {
+                singleClick: () => logAction(config.emoji, 'single', config.single),
+                doubleClick: () => logAction(config.emoji, 'double', config.double),
+                longPress: () => logAction(config.emoji, 'long', config.long)
+            });
+            document.getElementById('action-buttons').appendChild(btn.element);
+        });
+
+        // Sección 2: Botones con Labels
+        const labeledButtons = [
+            { emoji: '💾', label: 'Guardar', single: 'Guardar', double: 'Guardar como', long: 'Guardar todo' },
+            { emoji: '📤', label: 'Enviar', single: 'Enviar', double: 'Enviar ahora', long: 'Programar envío' },
+            { emoji: '⭐', label: 'Favorito', single: 'Añadir', double: 'Ver favoritos', long: 'Organizar' }
+        ];
+
+        labeledButtons.forEach(config => {
+            const btn = new EmojiActionButton(config.emoji, {
+                singleClick: () => logAction(config.emoji, 'single', config.single),
+                doubleClick: () => logAction(config.emoji, 'double', config.double),
+                longPress: () => logAction(config.emoji, 'long', config.long)
+            }, {
+                label: config.label
+            });
+            document.getElementById('labeled-buttons').appendChild(btn.element);
+        });
+
+        // Sección 3: Grid de Botones
+        const gridEmojis = [
+            '🏠', '📱', '📊', '💬', '📧', '📅',
+            '📷', '🎵', '🎮', '🌐', '🔔', '🔒',
+            '👤', '❤️', '🎯', '📝', '🗂️', '🔍'
+        ];
+
+        gridEmojis.forEach(emoji => {
+            const btn = new EmojiActionButton(emoji, {
+                singleClick: () => logAction(emoji, 'single', 'Abrir app'),
+                doubleClick: () => logAction(emoji, 'double', 'Abrir en nueva ventana'),
+                longPress: () => logAction(emoji, 'long', 'Opciones de app')
+            });
+            document.getElementById('grid-buttons').appendChild(btn.element);
+        });
+
+        // Sección 4: Estados de Marco
+        const frameStates = [
+            { emoji: '✅', frame: 'default', label: 'Default' },
+            { emoji: '🟢', frame: 'active', label: 'Active' },
+            { emoji: '🟡', frame: 'pressed', label: 'Pressed' },
+            { emoji: '🔴', frame: 'critical', label: 'Critical' }
+        ];
+
+        frameStates.forEach(config => {
+            const btn = new EmojiActionButton(config.emoji, {
+                singleClick: () => logAction(config.emoji, 'single', `Estado: ${config.label}`),
+                doubleClick: () => logAction(config.emoji, 'double', `Estado: ${config.label}`),
+                longPress: () => logAction(config.emoji, 'long', `Estado: ${config.label}`)
+            }, {
+                frameStyle: config.frame,
+                label: config.label
+            });
+            document.getElementById('frame-buttons').appendChild(btn.element);
+        });
+
+        // Log inicial
+        logAction('🎉', 'info', 'Demo cargado - Prueba las interacciones');
+    </script>
+</body>
+</html>

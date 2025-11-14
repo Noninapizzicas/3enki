@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Floating Topbar - Demo</title>
+    <link rel="stylesheet" href="emoji-action-button.css">
+    <link rel="stylesheet" href="floating-topbar.css">
+    <link rel="stylesheet" href="overlay-panel.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            padding-top: 100px; /* Espacio para el topbar */
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0F1216 0%, #1a1d24 100%);
+            color: white;
+            min-height: 200vh; /* Para probar auto-hide */
+        }
+
+        .demo-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .subtitle {
+            color: #9ca3af;
+            font-size: 16px;
+            margin-bottom: 32px;
+        }
+
+        .instruction-box {
+            background: #1f2937;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 32px;
+            border-left: 4px solid #2FBF71;
+        }
+
+        .instruction-box h3 {
+            margin-top: 0;
+            color: #2FBF71;
+        }
+
+        .instruction-box ul {
+            margin: 12px 0 0 20px;
+            line-height: 1.8;
+        }
+
+        .demo-section {
+            background: #1a1d24;
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            border: 2px solid #374151;
+        }
+
+        .demo-section h2 {
+            margin-top: 0;
+            font-size: 20px;
+            color: white;
+            margin-bottom: 16px;
+        }
+
+        .demo-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .demo-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .demo-btn-primary {
+            background: #2FBF71;
+            color: white;
+        }
+
+        .demo-btn-primary:hover {
+            background: #27a563;
+            transform: translateY(-2px);
+        }
+
+        .demo-btn-secondary {
+            background: #374151;
+            color: white;
+        }
+
+        .demo-btn-secondary:hover {
+            background: #4B5563;
+        }
+
+        .demo-btn-danger {
+            background: #E63946;
+            color: white;
+        }
+
+        .content-area {
+            background: #1f2937;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .content-area h3 {
+            font-size: 24px;
+            margin-bottom: 16px;
+            color: white;
+        }
+
+        .content-area p {
+            color: #9ca3af;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        .log-area {
+            background: #0F1216;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            color: #2FBF71;
+        }
+
+        .log-item {
+            padding: 4px 0;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        .log-item:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .feature-item {
+            background: #0F1216;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .feature-item span {
+            color: #2FBF71;
+            margin-right: 8px;
+        }
+
+        .scroll-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(26, 29, 36, 0.9);
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 2px solid #2FBF71;
+            font-size: 14px;
+            z-index: 800;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1>📊 Floating Topbar Demo</h1>
+        <p class="subtitle">Barra superior flotante horizontal para botones emoji 10x10mm</p>
+
+        <div class="instruction-box">
+            <h3>✨ Características</h3>
+            <ul>
+                <li><strong>🎯 Alineación:</strong> Izquierda, Centro, Derecha</li>
+                <li><strong>📦 Grupos:</strong> Organiza botones relacionados con separadores</li>
+                <li><strong>🖐️ Draggable:</strong> Arrastra el handle (⋮⋮) para moverla</li>
+                <li><strong>▼ Colapsable:</strong> Click en el botón para minimizar</li>
+                <li><strong>📜 Auto-Hide:</strong> Se oculta al hacer scroll down (modo opcional)</li>
+                <li><strong>💬 Tooltips:</strong> Hover sobre botones para ver etiquetas</li>
+                <li><strong>👀 Mira arriba:</strong> La topbar está en la parte superior de la pantalla</li>
+            </ul>
+        </div>
+
+        <!-- Controles -->
+        <div class="demo-section">
+            <h2>🎮 Controles del Demo</h2>
+            <div class="demo-controls">
+                <button class="demo-btn demo-btn-primary" onclick="createCenterTopbar()">
+                    Crear Topbar Centro (Default)
+                </button>
+                <button class="demo-btn demo-btn-primary" onclick="createLeftTopbar()">
+                    Crear Topbar Izquierda
+                </button>
+                <button class="demo-btn demo-btn-primary" onclick="createRightTopbar()">
+                    Crear Topbar Derecha
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="toggleTopbar()">
+                    Toggle Collapse
+                </button>
+                <button class="demo-btn demo-btn-danger" onclick="destroyTopbar()">
+                    Destruir Topbar
+                </button>
+            </div>
+
+            <div class="demo-controls">
+                <button class="demo-btn demo-btn-secondary" onclick="addDynamicButton()">
+                    ➕ Añadir Botón Dinámico
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="setBadges()">
+                    🔔 Activar Badges
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="clearBadges()">
+                    Limpiar Badges
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="setAlign('left')">
+                    ← Alinear Izquierda
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="setAlign('center')">
+                    ↕ Alinear Centro
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="setAlign('right')">
+                    → Alinear Derecha
+                </button>
+            </div>
+        </div>
+
+        <!-- Área de Contenido -->
+        <div class="demo-section">
+            <h2>📄 Área de Contenido</h2>
+            <div class="content-area">
+                <h3>Prueba la Topbar Flotante</h3>
+                <p>
+                    La barra superior flotante te permite tener acceso rápido a acciones
+                    mientras mantienes visible el contenido principal. Ideal para barras de
+                    herramientas de editor, navegación principal o acciones contextuales.
+                </p>
+                <p style="margin-top: 20px; color: #2FBF71;">
+                    👆 Mira arriba para ver la topbar en acción
+                </p>
+
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <span>✓</span> Semi-transparente con blur
+                    </div>
+                    <div class="feature-item">
+                        <span>✓</span> Grupos con separadores
+                    </div>
+                    <div class="feature-item">
+                        <span>✓</span> Auto-hide en scroll
+                    </div>
+                    <div class="feature-item">
+                        <span>✓</span> Responsive (bottom en móvil)
+                    </div>
+                    <div class="feature-item">
+                        <span>✓</span> Integración con overlays
+                    </div>
+                    <div class="feature-item">
+                        <span>✓</span> Recuerda posición
+                    </div>
+                </div>
+            </div>
+
+            <div class="log-area" id="log-area">
+                <div class="log-item">📝 Log de acciones:</div>
+            </div>
+        </div>
+
+        <!-- Más contenido para probar scroll -->
+        <div class="demo-section">
+            <h2>📜 Scroll para Probar Auto-Hide</h2>
+            <p style="line-height: 1.8; color: #9ca3af;">
+                Cuando hagas scroll hacia abajo, la topbar se ocultará automáticamente para darte más espacio.
+                Al hacer scroll hacia arriba, volverá a aparecer.<br><br>
+                Esta característica es opcional y se puede activar/desactivar según las necesidades de tu aplicación.
+                Es especialmente útil en dispositivos móviles donde el espacio de pantalla es limitado.<br><br>
+                <strong style="color: #2FBF71;">Pruébalo ahora:</strong> Haz scroll hacia abajo y observa cómo la topbar se oculta suavemente.
+                Luego, haz scroll hacia arriba para verla reaparecer.
+            </p>
+        </div>
+
+        <div class="demo-section">
+            <h2>💡 Casos de Uso</h2>
+            <div style="line-height: 2; color: #d1d5db;">
+                <strong style="color: #2FBF71;">Editor de Texto/Código:</strong> Barra de herramientas con acciones como guardar, deshacer, copiar, pegar.<br>
+                <strong style="color: #2FBF71;">Navegación Principal:</strong> Menú principal de la aplicación con secciones clave.<br>
+                <strong style="color: #2FBF71;">Status Bar:</strong> Indicadores de estado como notificaciones, mensajes, conexión.<br>
+                <strong style="color: #2FBF71;">Acciones Contextuales:</strong> Botones que cambian según el contexto actual de la aplicación.
+            </div>
+        </div>
+    </div>
+
+    <div class="scroll-indicator">
+        Scroll Y: <span id="scroll-position">0</span>px
+    </div>
+
+    <script src="emoji-action-button.js"></script>
+    <script src="floating-topbar.js"></script>
+    <script src="overlay-panel.js"></script>
+    <script>
+        let topbar = null;
+
+        // Log helper
+        function log(message) {
+            const logArea = document.getElementById('log-area');
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            const time = new Date().toLocaleTimeString();
+            item.textContent = `[${time}] ${message}`;
+            logArea.appendChild(item);
+            logArea.scrollTop = logArea.scrollHeight;
+
+            // Limitar a 20 items
+            if (logArea.children.length > 21) {
+                logArea.children[1].remove();
+            }
+        }
+
+        // Crear topbar centrada (default)
+        function createCenterTopbar() {
+            if (topbar) {
+                log('⚠️ Topbar ya existe. Destrúyela primero.');
+                return;
+            }
+
+            const groups = [
+                {
+                    label: 'Archivo',
+                    buttons: [
+                        {
+                            emoji: '📄',
+                            tooltip: 'Nuevo',
+                            onClick: () => {
+                                log('📄 Nuevo documento');
+                                showOverlay('Nuevo Documento', 'Crear un nuevo archivo');
+                            }
+                        },
+                        {
+                            emoji: '📁',
+                            tooltip: 'Abrir',
+                            onClick: () => {
+                                log('📁 Abrir archivo');
+                                showOverlay('Abrir', 'Selecciona un archivo para abrir');
+                            }
+                        },
+                        {
+                            emoji: '💾',
+                            tooltip: 'Guardar',
+                            onClick: () => {
+                                log('💾 Guardando...');
+                            }
+                        }
+                    ]
+                },
+                {
+                    label: 'Editar',
+                    buttons: [
+                        {
+                            emoji: '↩️',
+                            tooltip: 'Deshacer',
+                            onClick: () => log('↩️ Deshacer')
+                        },
+                        {
+                            emoji: '↪️',
+                            tooltip: 'Rehacer',
+                            onClick: () => log('↪️ Rehacer')
+                        },
+                        {
+                            emoji: '📋',
+                            tooltip: 'Copiar',
+                            onClick: () => log('📋 Copiar')
+                        },
+                        {
+                            emoji: '✂️',
+                            tooltip: 'Cortar',
+                            onClick: () => log('✂️ Cortar')
+                        },
+                        {
+                            emoji: '📌',
+                            tooltip: 'Pegar',
+                            onClick: () => log('📌 Pegar')
+                        }
+                    ]
+                },
+                {
+                    label: 'Ver',
+                    buttons: [
+                        {
+                            emoji: '🔍',
+                            tooltip: 'Buscar',
+                            onClick: () => {
+                                log('🔍 Buscar');
+                                showOverlay('Buscar', 'Ingresa el texto a buscar');
+                            }
+                        },
+                        {
+                            emoji: '⚙️',
+                            tooltip: 'Configuración',
+                            onClick: () => {
+                                log('⚙️ Configuración');
+                                showOverlay('Configuración', 'Ajustes de la aplicación');
+                            }
+                        }
+                    ]
+                }
+            ];
+
+            topbar = new FloatingTopbar({
+                align: 'center',
+                groups: groups,
+                collapsible: true,
+                draggable: true,
+                showTooltips: true,
+                rememberPosition: true,
+                autoHide: true,
+                storageKey: 'demo-topbar-position'
+            });
+
+            log('✓ Topbar centrada creada con grupos');
+        }
+
+        // Crear topbar izquierda
+        function createLeftTopbar() {
+            if (topbar) {
+                log('⚠️ Topbar ya existe. Destrúyela primero.');
+                return;
+            }
+
+            topbar = new FloatingTopbar({
+                align: 'left',
+                buttons: [
+                    { emoji: '🏠', tooltip: 'Home', onClick: () => log('🏠 Home') },
+                    { emoji: '📊', tooltip: 'Dashboard', badge: '3', onClick: () => log('📊 Dashboard') },
+                    { emoji: '💬', tooltip: 'Mensajes', badge: '12', onClick: () => log('💬 Mensajes') },
+                    { emoji: '👤', tooltip: 'Perfil', onClick: () => log('👤 Perfil') },
+                    { emoji: '⚙️', tooltip: 'Ajustes', onClick: () => log('⚙️ Ajustes') }
+                ],
+                collapsible: true,
+                draggable: true,
+                showTooltips: true,
+                autoHide: true
+            });
+
+            log('✓ Topbar izquierda creada');
+        }
+
+        // Crear topbar derecha
+        function createRightTopbar() {
+            if (topbar) {
+                log('⚠️ Topbar ya existe. Destrúyela primero.');
+                return;
+            }
+
+            topbar = new FloatingTopbar({
+                align: 'right',
+                buttons: [
+                    { emoji: '🔔', tooltip: 'Notificaciones', badge: '5' },
+                    { emoji: '📧', tooltip: 'Email', badge: '3' },
+                    { emoji: '⭐', tooltip: 'Favoritos' },
+                    { emoji: '🔍', tooltip: 'Buscar' },
+                    { emoji: '❓', tooltip: 'Ayuda' }
+                ],
+                collapsible: true,
+                draggable: true,
+                showTooltips: true,
+                autoHide: true,
+                onButtonClick: (btn, idx) => log(`Click en botón ${btn.emoji}`)
+            });
+
+            log('✓ Topbar derecha creada');
+        }
+
+        // Toggle collapse
+        function toggleTopbar() {
+            if (!topbar) {
+                log('⚠️ Crea una topbar primero');
+                return;
+            }
+            topbar.toggleCollapse();
+            log('🔄 Toggle collapse');
+        }
+
+        // Destruir topbar
+        function destroyTopbar() {
+            if (!topbar) {
+                log('⚠️ No hay topbar para destruir');
+                return;
+            }
+            topbar.destroy();
+            topbar = null;
+            log('🗑️ Topbar destruida');
+        }
+
+        // Añadir botón dinámico
+        function addDynamicButton() {
+            if (!topbar) {
+                log('⚠️ Crea una topbar primero');
+                return;
+            }
+
+            topbar.addButtonDynamic({
+                emoji: '🎯',
+                tooltip: 'Botón Dinámico',
+                badge: 'NEW',
+                onClick: () => log('🎯 Click en botón dinámico')
+            });
+
+            log('✓ Botón dinámico añadido');
+        }
+
+        // Activar badges
+        function setBadges() {
+            if (!topbar) {
+                log('⚠️ Crea una topbar primero');
+                return;
+            }
+
+            topbar.setBadge(0, '!');
+            topbar.setBadge(1, '99+');
+            topbar.setBadge(2, '★');
+
+            log('🔔 Badges activados');
+        }
+
+        // Limpiar badges
+        function clearBadges() {
+            if (!topbar) {
+                log('⚠️ Crea una topbar primero');
+                return;
+            }
+
+            topbar.setBadge(0, null);
+            topbar.setBadge(1, null);
+            topbar.setBadge(2, null);
+
+            log('✓ Badges limpiados');
+        }
+
+        // Cambiar alineación
+        function setAlign(align) {
+            if (!topbar) {
+                log('⚠️ Crea una topbar primero');
+                return;
+            }
+
+            topbar.setAlign(align);
+            log(`✓ Alineación cambiada a: ${align}`);
+        }
+
+        // Helper para mostrar overlay
+        function showOverlay(title, content) {
+            const overlay = new OverlayPanel({
+                title: title,
+                content: `<div style="padding: 20px; text-align: center;">
+                    <p style="font-size: 16px; color: #d1d5db;">${content}</p>
+                    <p style="margin-top: 20px; color: #9ca3af; font-size: 14px;">
+                        Ejemplo de integración entre Floating Topbar y Overlay Panel.
+                    </p>
+                </div>`,
+                size: 'medium',
+                showFooter: true,
+                footerButtons: [
+                    { label: 'Cerrar', type: 'primary' }
+                ]
+            });
+            overlay.open();
+        }
+
+        // Actualizar indicador de scroll
+        window.addEventListener('scroll', () => {
+            document.getElementById('scroll-position').textContent = Math.round(window.scrollY);
+        });
+
+        // Inicializar demo
+        window.addEventListener('load', () => {
+            log('✓ Demo cargado');
+            log('💡 Tip: Crea la topbar usando los botones de arriba');
+            log('📜 Haz scroll para probar el auto-hide');
+
+            // Crear topbar por defecto después de 500ms
+            setTimeout(() => {
+                createCenterTopbar();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

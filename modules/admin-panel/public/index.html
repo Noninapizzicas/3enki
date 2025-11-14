@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Core - Admin Panel</title>
+    <link rel="stylesheet" href="/modules/admin-panel/css/admin-panel.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>⚙️ Event Core Admin Panel</h1>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="stat-label">Modules</span>
+                        <span class="stat-value" id="total-modules">-</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Plugins</span>
+                        <span class="stat-value" id="total-plugins">-</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Agents</span>
+                        <span class="stat-value" id="active-agents">-</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Prompts</span>
+                        <span class="stat-value" id="total-prompts">-</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="modules" onclick="adminPanel.switchTab('modules')">
+                🧩 Modules
+            </button>
+            <button class="tab" data-tab="plugins" onclick="adminPanel.switchTab('plugins')">
+                🔌 Plugins
+            </button>
+            <button class="tab" data-tab="agents" onclick="adminPanel.switchTab('agents')">
+                🤖 AI Agents
+            </button>
+            <button class="tab" data-tab="prompts" onclick="adminPanel.switchTab('prompts')">
+                💬 Prompts
+            </button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Modules Tab -->
+            <section id="tab-modules" class="tab-content active">
+                <div class="section-header">
+                    <h2>Loaded Modules</h2>
+                    <button class="btn-refresh" onclick="adminPanel.refreshModules()">↻ Refresh</button>
+                </div>
+                <div id="modules-container" class="cards-grid">
+                    <div class="loading">Loading modules...</div>
+                </div>
+            </section>
+
+            <!-- Plugins Tab -->
+            <section id="tab-plugins" class="tab-content">
+                <div class="section-header">
+                    <h2>Available Plugins</h2>
+                    <button class="btn-refresh" onclick="adminPanel.refreshPlugins()">↻ Refresh</button>
+                </div>
+                <div id="plugins-container" class="cards-grid">
+                    <div class="loading">Loading plugins...</div>
+                </div>
+            </section>
+
+            <!-- AI Agents Tab -->
+            <section id="tab-agents" class="tab-content">
+                <div class="section-header">
+                    <h2>AI Agents</h2>
+                    <div class="section-actions">
+                        <button class="btn-primary" onclick="adminPanel.showCreateAgentModal()">+ Create Agent</button>
+                        <button class="btn-refresh" onclick="adminPanel.refreshAgents()">↻ Refresh</button>
+                    </div>
+                </div>
+                <div id="agents-container" class="cards-grid">
+                    <div class="loading">Loading agents...</div>
+                </div>
+            </section>
+
+            <!-- Prompts Tab -->
+            <section id="tab-prompts" class="tab-content">
+                <div class="section-header">
+                    <h2>Prompts</h2>
+                    <div class="section-actions">
+                        <button class="btn-primary" onclick="adminPanel.showCreatePromptModal()">+ Create Prompt</button>
+                        <button class="btn-refresh" onclick="adminPanel.refreshPrompts()">↻ Refresh</button>
+                    </div>
+                </div>
+                <div id="prompts-container" class="cards-grid">
+                    <div class="loading">Loading prompts...</div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Modals -->
+        <div id="create-agent-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Create AI Agent</h3>
+                    <button class="modal-close" onclick="adminPanel.closeModal('create-agent-modal')">×</button>
+                </div>
+                <form id="create-agent-form" onsubmit="adminPanel.createAgent(event)">
+                    <div class="form-group">
+                        <label>Agent Name</label>
+                        <input type="text" name="name" required placeholder="e.g., Code Reviewer">
+                    </div>
+                    <div class="form-group">
+                        <label>AI Provider</label>
+                        <select name="provider" required>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="claude">Claude</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="ollama">Ollama</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Subscribe to Events (comma-separated)</label>
+                        <input type="text" name="subscribes" placeholder="e.g., git.push, code.change">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-success">Create</button>
+                        <button type="button" class="btn-secondary" onclick="adminPanel.closeModal('create-agent-modal')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="create-prompt-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Create Prompt</h3>
+                    <button class="modal-close" onclick="adminPanel.closeModal('create-prompt-modal')">×</button>
+                </div>
+                <form id="create-prompt-form" onsubmit="adminPanel.createPrompt(event)">
+                    <div class="form-group">
+                        <label>Prompt Name</label>
+                        <input type="text" name="name" required placeholder="e.g., code-reviewer">
+                    </div>
+                    <div class="form-group">
+                        <label>Version</label>
+                        <input type="text" name="version" required placeholder="e.g., 1.0.0" value="1.0.0">
+                    </div>
+                    <div class="form-group">
+                        <label>Prompt Content</label>
+                        <textarea name="content" required rows="8" placeholder="Enter your prompt template..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-success">Create</button>
+                        <button type="button" class="btn-secondary" onclick="adminPanel.closeModal('create-prompt-modal')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Event Core v1.2.0 "Visual Admin" - Admin Panel v1.0.0</p>
+            <p>Last updated: <span id="last-updated">-</span></p>
+        </footer>
+    </div>
+
+    <script src="/modules/admin-panel/js/admin-panel.js"></script>
+</body>
+</html>

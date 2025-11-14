@@ -1,0 +1,90 @@
+{
+  "component": "floating-sidebar",
+  "name": "Floating Sidebar",
+  "description": "Barra vertical lateral flotante para botones emoji 10x10mm, posicionable a izquierda o derecha",
+  "positioning": {
+    "side": ["left", "right"],
+    "vertical_alignment": ["top", "center", "bottom"],
+    "offset_x": "16px",
+    "offset_y": "80px",
+    "draggable": true,
+    "remember_position": true
+  },
+  "sizing": {
+    "width": "62px",
+    "button_size": "38px",
+    "button_gap": "12px",
+    "padding": "12px",
+    "min_height": "auto",
+    "max_height": "calc(100vh - 160px)"
+  },
+  "styling": {
+    "background": "rgba(26, 29, 36, 0.85)",
+    "backdrop_filter": "blur(8px)",
+    "border_radius": "16px",
+    "border": "2px solid rgba(55, 65, 81, 0.5)",
+    "box_shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
+    "z_index": 900
+  },
+  "behavior": {
+    "collapsible": true,
+    "auto_hide": false,
+    "show_on_hover": false,
+    "sticky": true,
+    "scroll_with_page": false
+  },
+  "features": {
+    "drag_handle": true,
+    "collapse_button": true,
+    "position_indicator": true,
+    "badge_support": true,
+    "tooltip_on_hover": true
+  },
+  "animations": {
+    "expand_collapse": {
+      "duration": "200ms",
+      "easing": "ease-out"
+    },
+    "button_hover": {
+      "scale": 1.1,
+      "duration": "150ms"
+    },
+    "slide_in": {
+      "duration": "300ms",
+      "from": "translateX(-100%)",
+      "to": "translateX(0)"
+    }
+  },
+  "responsive": {
+    "mobile": {
+      "position": "bottom",
+      "orientation": "horizontal",
+      "width": "100%",
+      "height": "auto"
+    },
+    "tablet": {
+      "position": "side",
+      "orientation": "vertical"
+    }
+  },
+  "examples": [
+    {
+      "title": "Barra de Navegación",
+      "position": "left",
+      "buttons": ["🏠", "📊", "⚙️", "👤"],
+      "use_case": "Navegación principal de la app"
+    },
+    {
+      "title": "Acciones Rápidas",
+      "position": "right",
+      "buttons": ["➕", "🔍", "✏️", "🗑️"],
+      "use_case": "Acciones comunes de CRUD"
+    },
+    {
+      "title": "Herramientas de Editor",
+      "position": "left",
+      "buttons": ["💾", "↩️", "↪️", "📋", "✂️"],
+      "use_case": "Editor de texto/código"
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "component": "floating-topbar",
+  "name": "Floating Topbar",
+  "description": "Barra superior flotante horizontal para botones emoji 10x10mm, posicionable en top",
+  "positioning": {
+    "side": "top",
+    "horizontal_alignment": ["left", "center", "right"],
+    "offset_x": "16px",
+    "offset_y": "16px",
+    "draggable": true,
+    "remember_position": true,
+    "sticky": true
+  },
+  "sizing": {
+    "height": "62px",
+    "button_size": "38px",
+    "button_gap": "12px",
+    "padding": "12px",
+    "min_width": "auto",
+    "max_width": "calc(100vw - 32px)"
+  },
+  "styling": {
+    "background": "rgba(26, 29, 36, 0.85)",
+    "backdrop_filter": "blur(8px)",
+    "border_radius": "16px",
+    "border": "2px solid rgba(55, 65, 81, 0.5)",
+    "box_shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
+    "z_index": 900
+  },
+  "behavior": {
+    "collapsible": true,
+    "auto_hide": false,
+    "show_on_scroll_up": false,
+    "hide_on_scroll_down": false,
+    "sticky": true
+  },
+  "features": {
+    "drag_handle": true,
+    "collapse_button": true,
+    "groups": true,
+    "separators": true,
+    "badge_support": true,
+    "tooltip_on_hover": true,
+    "overflow_scroll": true
+  },
+  "animations": {
+    "expand_collapse": {
+      "duration": "200ms",
+      "easing": "ease-out"
+    },
+    "slide_in": {
+      "duration": "300ms",
+      "from": "translateY(-100%)",
+      "to": "translateY(0)"
+    }
+  },
+  "groups": {
+    "enabled": true,
+    "separator": true,
+    "separator_color": "rgba(55, 65, 81, 0.6)",
+    "description": "Agrupar botones relacionados con separadores visuales"
+  },
+  "responsive": {
+    "mobile": {
+      "max_buttons_visible": 5,
+      "overflow": "scroll",
+      "show_more_button": true
+    },
+    "tablet": {
+      "max_buttons_visible": 8
+    }
+  },
+  "examples": [
+    {
+      "title": "Barra de Herramientas de Editor",
+      "align": "center",
+      "groups": [
+        {
+          "name": "file",
+          "buttons": ["💾", "📁", "📄"]
+        },
+        {
+          "name": "edit",
+          "buttons": ["↩️", "↪️", "✂️", "📋"]
+        },
+        {
+          "name": "format",
+          "buttons": ["𝐁", "𝐼", "U̲"]
+        }
+      ],
+      "use_case": "Editor de texto con herramientas agrupadas"
+    },
+    {
+      "title": "Barra de Acciones Principales",
+      "align": "left",
+      "buttons": ["🏠", "🔍", "➕", "⚙️", "👤"],
+      "use_case": "Navegación principal de la app"
+    },
+    {
+      "title": "Barra de Estado",
+      "align": "right",
+      "buttons": ["🔔", "💬", "🔗", "📊"],
+      "use_case": "Notificaciones y estado del sistema"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
-  "roadmap_version": "1.3",
+  "roadmap_version": "1.4",
   "created_at": "2025-10-06T00:00:00Z",
-  "last_updated": "2025-11-13T00:00:00Z",
+  "last_updated": "2025-11-13T12:00:00Z",
   "timeframe_months": 12,
   "themes": [
     {
@@ -794,6 +794,115 @@
         "Como AI agent, quiero acceder a GitHub, Slack y Weather APIs",
         "Como architect, quiero un sistema extensible que escale a 100+ herramientas",
         "Como user, quiero que los agentes puedan crear issues, enviar mensajes y consultar el clima"
+      ]
+    },
+    {
+      "release_id": "v1.2.0",
+      "version": "1.2.0",
+      "codename": "Visual Admin",
+      "target_date": "2025-11-13",
+      "confidence": "high",
+      "status": "completed",
+      "theme": "User Experience - JSON-Driven UI",
+      "goals": [
+        "Sistema de componentes UI configurables por JSON",
+        "Panel de administración web para gestionar el sistema",
+        "Integración visual con plugin system, AI agents y prompts",
+        "Design system implementado con tokens psicológicos"
+      ],
+      "kpis": {
+        "ui_renderer_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "admin_panel_working": {"baseline": 0, "target": 1, "actual": 1, "achieved": true},
+        "components_created": {"baseline": 0, "target": 4, "actual": 4, "achieved": true}
+      },
+      "items": [
+        {
+          "title": "Implementar UI Renderer Module",
+          "description": "Sistema JSON-driven para definir y renderizar componentes UI con design tokens",
+          "type": "feature",
+          "priority": "P0",
+          "status": "completed",
+          "effort_story_points": 8,
+          "assigned_team": "core_team",
+          "dependencies": [],
+          "risks": [],
+          "acceptance_criteria": [
+            "Lee componentes JSON desde ui-components/",
+            "Carga design system tokens desde biblioteca_componentes_ui_v1.json",
+            "Templates para button, card, table, form",
+            "API HTTP para renderizar componentes",
+            "Genera HTML + CSS dinámicamente"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Crear Componentes UI Base",
+          "description": "Componentes JSON para button, card, table y form con estados y variantes",
+          "type": "feature",
+          "priority": "P0",
+          "status": "completed",
+          "effort_story_points": 3,
+          "assigned_team": "core_team",
+          "dependencies": ["UI Renderer Module"],
+          "risks": [],
+          "acceptance_criteria": [
+            "button.component.json con estados (success, error, pending, info)",
+            "card.component.json con variantes",
+            "table.component.json con features (sortable, filterable)",
+            "form.component.json con field types y validación",
+            "Todos usan tokens del design system"
+          ],
+          "mvp_classification": "core"
+        },
+        {
+          "title": "Implementar Admin Panel Module",
+          "description": "Panel web para gestionar módulos, plugins, agentes AI y prompts",
+          "type": "feature",
+          "priority": "P0",
+          "status": "completed",
+          "effort_story_points": 13,
+          "assigned_team": "core_team",
+          "dependencies": ["UI Renderer Module", "Plugin Manager", "AI Gateway", "Prompt Manager"],
+          "risks": [],
+          "acceptance_criteria": [
+            "Web UI moderna con tabs (Modules, Plugins, Agents, Prompts)",
+            "Dashboard con estadísticas agregadas",
+            "CRUD para agentes AI (crear, listar, eliminar)",
+            "CRUD para prompts (crear, listar, editar, ver)",
+            "Visualización de plugins y sus funciones",
+            "Listado de módulos cargados",
+            "Design system aplicado (colores, espaciado, tipografía)",
+            "Responsive design para móvil/tablet/desktop",
+            "Modales para crear agentes y prompts",
+            "Integración HTTP con otros módulos"
+          ],
+          "mvp_classification": "core"
+        }
+      ],
+      "capacity": {
+        "allocated_story_points": 24,
+        "team_assigned": "solo_developer",
+        "estimated_sprints": 1
+      },
+      "go_no_go_criteria": [
+        "UI Renderer Module funcional",
+        "Admin Panel accesible en /modules/admin-panel/",
+        "Puede gestionar plugins visualmente",
+        "Puede crear/eliminar agentes AI",
+        "Puede crear/editar prompts",
+        "Design system tokens aplicados correctamente"
+      ],
+      "rollback_plan": "Volver a v1.1.0 si UI introduce problemas de rendimiento",
+      "assumptions": [
+        "Los módulos existentes (plugin-manager, ai-gateway, prompt-manager) están funcionales",
+        "Design system JSON es correcto y completo",
+        "Navegadores modernos con soporte ES6+"
+      ],
+      "user_stories": [
+        "Como developer, quiero una UI visual para gestionar el sistema sin CLI",
+        "Como architect, quiero ver todos los módulos, plugins y agentes en un solo lugar",
+        "Como user, quiero crear agentes AI desde una interfaz gráfica",
+        "Como designer, quiero un design system JSON-driven reutilizable"
       ]
     }
   ],

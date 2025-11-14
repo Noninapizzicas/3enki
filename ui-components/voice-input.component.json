@@ -1,0 +1,107 @@
+{
+  "component": "voice-input",
+  "version": "1.0.0",
+  "description": "Input de texto con reconocimiento de voz (Speech-to-Text) mediante Web Speech API",
+  "features": {
+    "speech_recognition": {
+      "enabled": true,
+      "api": "Web Speech API",
+      "description": "Convierte voz a texto usando el micrófono del dispositivo"
+    },
+    "auto_activation": {
+      "enabled": true,
+      "on_focus": false,
+      "on_button_click": true,
+      "description": "Activar micrófono automáticamente al focus o click"
+    },
+    "visual_feedback": {
+      "listening_indicator": true,
+      "waveform_animation": true,
+      "interim_results": true,
+      "description": "Indicadores visuales mientras escucha y procesa voz"
+    },
+    "languages": {
+      "default": "es-ES",
+      "supported": [
+        "es-ES",
+        "es-MX",
+        "es-AR",
+        "en-US",
+        "en-GB",
+        "pt-BR",
+        "fr-FR",
+        "de-DE",
+        "it-IT"
+      ],
+      "description": "Soporte multi-idioma para reconocimiento"
+    },
+    "modes": {
+      "continuous": {
+        "enabled": true,
+        "description": "Escucha continua sin parar después de cada frase"
+      },
+      "interim_results": {
+        "enabled": true,
+        "description": "Muestra resultados provisionales mientras hablas"
+      },
+      "punctuation": {
+        "enabled": true,
+        "auto_punctuation": true,
+        "description": "Puntuación automática basada en pausas"
+      }
+    },
+    "ui_elements": {
+      "input_type": "text",
+      "textarea_support": true,
+      "mic_button": {
+        "type": "emoji",
+        "icon": "🎤",
+        "active_icon": "🔴",
+        "position": "right"
+      },
+      "clear_button": {
+        "enabled": true,
+        "icon": "🗑️"
+      },
+      "language_selector": {
+        "enabled": true,
+        "icon": "🌐"
+      }
+    },
+    "integration": {
+      "standalone": true,
+      "overlay_panel": true,
+      "floating_topbar": true,
+      "description": "Puede usarse solo o integrado con otros componentes"
+    }
+  },
+  "browser_support": {
+    "chrome": true,
+    "edge": true,
+    "safari": true,
+    "firefox": false,
+    "mobile_chrome": true,
+    "mobile_safari": true,
+    "note": "Firefox no soporta Web Speech API nativamente"
+  },
+  "permissions": {
+    "microphone": {
+      "required": true,
+      "description": "El navegador solicitará permiso para usar el micrófono"
+    }
+  },
+  "use_cases": [
+    "Notas rápidas por voz",
+    "Transcripción de reuniones",
+    "Mensajería con dictado",
+    "Búsqueda por voz",
+    "Formularios con entrada de voz",
+    "Accesibilidad para usuarios con dificultades de escritura"
+  ],
+  "technical": {
+    "max_length": 5000,
+    "auto_save": true,
+    "debounce_ms": 500,
+    "silence_timeout_ms": 2000
+  }
+}

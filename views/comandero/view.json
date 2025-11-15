@@ -1,0 +1,219 @@
+{
+  "view": "comandero",
+  "version": "1.0.0",
+  "description": "Vista de toma de pedidos - Comandero",
+  "author": "Event Core Team",
+  "created": "2025-01-15",
+
+  "layout": {
+    "type": "grid-adaptive",
+    "columns_per_row": 2,
+    "alignment": "dynamic",
+    "alignment_rules": {
+      "sidebar_right": "flex-start",
+      "sidebar_left": "flex-end"
+    },
+    "gap": "12px",
+    "padding": {
+      "top": "20px",
+      "bottom": "20px",
+      "left": "20px",
+      "right": "70px"
+    }
+  },
+
+  "header": {
+    "show": true,
+    "elements": {
+      "cuenta_nombre": {
+        "position": "left",
+        "icon": "📝"
+      },
+      "pedido_summary": {
+        "position": "right",
+        "fields": ["items_count", "total_amount"]
+      }
+    }
+  },
+
+  "topbar": {
+    "type": "horizontal-categories",
+    "position": "sticky",
+    "scroll": "horizontal",
+    "buttons": []
+  },
+
+  "sidebar": {
+    "position": "right",
+    "draggable": true,
+    "buttons": [
+      {
+        "id": "cobrar",
+        "emoji": "💰",
+        "type": "success",
+        "label": "Cobrar",
+        "action": "scroll-to-cobro"
+      },
+      {
+        "id": "mitad-mitad",
+        "emoji": "🍕",
+        "type": "warning",
+        "label": "Mitad y Mitad",
+        "action": "open-modal-mitad"
+      },
+      {
+        "id": "pizza-gusto",
+        "emoji": "🎨",
+        "type": "purple",
+        "label": "Pizza al Gusto",
+        "action": "open-modal-gusto"
+      },
+      {
+        "id": "separator-1",
+        "type": "separator"
+      },
+      {
+        "id": "ver-cuentas",
+        "emoji": "📋",
+        "type": "info",
+        "label": "Ver Cuentas",
+        "action": "navigate",
+        "route": "/cuentas"
+      },
+      {
+        "id": "separator-2",
+        "type": "separator"
+      },
+      {
+        "id": "nueva-local",
+        "emoji": "🍽️",
+        "type": "cuenta-type",
+        "cuenta_type": "local",
+        "label": "Nueva Mesa",
+        "action": "create-and-switch-cuenta",
+        "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        "shadow": "0 4px 12px rgba(102, 126, 234, 0.4)"
+      },
+      {
+        "id": "nueva-delivery",
+        "emoji": "🛵",
+        "type": "cuenta-type",
+        "cuenta_type": "delivery",
+        "label": "Nuevo Delivery",
+        "action": "create-and-switch-cuenta",
+        "background": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+        "shadow": "0 4px 12px rgba(240, 147, 251, 0.4)"
+      },
+      {
+        "id": "nueva-llevar",
+        "emoji": "🥡",
+        "type": "cuenta-type",
+        "cuenta_type": "llevar",
+        "label": "Nuevo Para Llevar",
+        "action": "create-and-switch-cuenta",
+        "background": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+        "shadow": "0 4px 12px rgba(79, 172, 254, 0.4)"
+      }
+    ]
+  },
+
+  "categorias": [
+    {
+      "id": "pizzas",
+      "nombre": "Pizzas",
+      "emoji": "🍕",
+      "color": "#f97316",
+      "order": 1
+    },
+    {
+      "id": "entrantes",
+      "nombre": "Entrantes",
+      "emoji": "🥗",
+      "color": "#22c55e",
+      "order": 2
+    },
+    {
+      "id": "pasta",
+      "nombre": "Pasta",
+      "emoji": "🍝",
+      "color": "#f59e0b",
+      "order": 3
+    },
+    {
+      "id": "carnes",
+      "nombre": "Carnes",
+      "emoji": "🥩",
+      "color": "#ef4444",
+      "order": 4
+    },
+    {
+      "id": "pescados",
+      "nombre": "Pescados",
+      "emoji": "🐟",
+      "color": "#3b82f6",
+      "order": 5
+    },
+    {
+      "id": "bebidas",
+      "nombre": "Bebidas",
+      "emoji": "🥤",
+      "color": "#06b6d4",
+      "order": 6
+    },
+    {
+      "id": "postres",
+      "nombre": "Postres",
+      "emoji": "🍰",
+      "color": "#ec4899",
+      "order": 7
+    }
+  ],
+
+  "cobro_section": {
+    "show": true,
+    "position": "end",
+    "scroll_to_on_click": true
+  },
+
+  "interactions": {
+    "producto_click_left": "show-variations",
+    "producto_click_right": "add-to-order",
+    "category_scroll": "auto-highlight",
+    "sidebar_drag": "remember-position"
+  },
+
+  "api": {
+    "load_cuenta": {
+      "method": "GET",
+      "endpoint": "/modules/comandero/cuentas/:id"
+    },
+    "load_productos": {
+      "method": "GET",
+      "endpoint": "/modules/comandero/productos"
+    },
+    "add_item": {
+      "method": "POST",
+      "endpoint": "/modules/comandero/cuentas/:id/items"
+    },
+    "create_cuenta": {
+      "method": "POST",
+      "endpoint": "/modules/comandero/cuentas"
+    }
+  },
+
+  "realtime": {
+    "enabled": true,
+    "websocket": {
+      "url": "ws://localhost:9883",
+      "topics": [
+        "comandero/+/cuenta/updated",
+        "comandero/+/producto/stock_changed"
+      ]
+    }
+  },
+
+  "components": {
+    "producto-button": "../../ui-components/producto-button",
+    "sidebar-button": "../../ui-components/sidebar-button"
+  }
+}

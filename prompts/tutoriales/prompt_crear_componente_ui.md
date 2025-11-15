@@ -835,118 +835,260 @@ ui-components/[NOMBRE_COMPONENTE]/
 
 ---
 
-## 🧾 5. Ejemplo de component.json completo
+## 🧾 5. Ejemplos de component.json por tipo
+
+### Ejemplo A: Data Table (componente de tabla)
 
 ```json
 {
-  "component": "cuenta-button",
+  "component": "data-table",
   "version": "1.0.0",
-  "description": "Botón de cuenta para POS/Comandero con estados visuales",
+  "description": "Tabla de datos con paginación, ordenamiento y filtros",
   "author": "Event Core Team",
-  "created": "2025-01-14",
-  "license": "MIT",
   "dimensions": {
-    "width": "40mm",
-    "height": "30mm",
-    "width_px": 151,
-    "height_px": 113,
-    "responsive": true,
-    "minWidth": "150px",
-    "minHeight": "100px"
+    "width": "100%",
+    "height": "auto",
+    "responsive": true
   },
   "props": {
-    "required": [
-      "id",
-      "nombre",
-      "tipo",
-      "estado"
-    ],
-    "optional": [
-      "emojis",
-      "callbacks",
-      "theme"
-    ],
+    "required": ["id", "columns", "dataSource"],
+    "optional": ["pageSize", "sortable", "filterable", "selectable"],
     "types": {
       "id": "string",
-      "nombre": "string",
-      "tipo": "enum['local','delivery','llevar']",
-      "estado": "enum['pendiente','preparacion','listo','entregado','pagado','problema','cancelado']",
-      "emojis": "object",
-      "callbacks": "object",
-      "theme": "string"
+      "columns": "array",
+      "dataSource": "string|array",
+      "pageSize": "number",
+      "sortable": "boolean",
+      "filterable": "boolean",
+      "selectable": "boolean"
     }
   },
   "states": {
-    "pendiente": {
-      "name": "Pendiente",
-      "color": "#fbbf24",
-      "description": "Cuenta creada, esperando preparación"
-    },
-    "preparacion": {
-      "name": "En Preparación",
-      "color": "#fb923c",
-      "description": "Pedido en cocina"
-    },
-    "listo": {
-      "name": "Listo",
-      "color": "#4ade80",
-      "description": "Pedido listo para entregar"
-    },
-    "entregado": {
-      "name": "Entregado",
-      "color": "#60a5fa",
-      "description": "Pedido entregado al cliente"
-    },
-    "pagado": {
-      "name": "Pagado",
-      "color": "#34d399",
-      "description": "Cuenta cobrada"
-    },
-    "problema": {
-      "name": "Problema",
-      "color": "#f87171",
-      "description": "Hay un problema con el pedido"
-    },
-    "cancelado": {
-      "name": "Cancelado",
-      "color": "#94a3b8",
-      "description": "Pedido cancelado"
-    }
+    "idle": { "description": "Estado inicial" },
+    "loading": { "description": "Cargando datos" },
+    "ready": { "description": "Datos cargados" },
+    "error": { "description": "Error al cargar" },
+    "empty": { "description": "Sin datos" }
   },
   "events": {
     "emits": [
-      "cuenta:click-left",
-      "cuenta:click-right",
-      "cuenta:long-press",
-      "cuenta:double-tap",
-      "cuenta:state-change"
+      "table:ready",
+      "row:click",
+      "row:select",
+      "page:change",
+      "sort:change",
+      "filter:change"
     ],
     "listens": [
-      "cuenta:update",
-      "cuenta:delete"
+      "data:refresh",
+      "data:update"
     ]
   },
   "api": {
     "endpoints": [
       {
         "method": "GET",
-        "path": "/modules/comandero/orders/:id",
-        "description": "Obtener datos de la cuenta"
-      },
-      {
-        "method": "POST",
-        "path": "/modules/comandero/orders/:id/state",
-        "description": "Actualizar estado de la cuenta"
+        "path": "/api/{resource}?page={page}&size={size}",
+        "description": "Obtener datos paginados"
       }
     ],
     "mqtt": [
       {
-        "topic": "/events/order.updated",
-        "description": "Escuchar actualizaciones de pedidos"
+        "topic": "/events/{resource}.updated",
+        "description": "Actualización de datos en tiempo real"
+      }
+    ]
+  },
+  "accessibility": {
+    "aria": true,
+    "keyboard": true,
+    "screenReader": true
+  }
+}
+```
+
+### Ejemplo B: Modal Dialog (componente de diálogo modal)
+
+```json
+{
+  "component": "modal-dialog",
+  "version": "1.0.0",
+  "description": "Diálogo modal con backdrop y animaciones",
+  "author": "Event Core Team",
+  "dimensions": {
+    "width": "600px",
+    "maxWidth": "90vw",
+    "height": "auto",
+    "responsive": true
+  },
+  "props": {
+    "required": ["id", "title"],
+    "optional": ["content", "buttons", "closable", "size"],
+    "types": {
+      "id": "string",
+      "title": "string",
+      "content": "string|HTMLElement",
+      "buttons": "array",
+      "closable": "boolean",
+      "size": "enum['small','medium','large']"
+    }
+  },
+  "states": {
+    "closed": { "description": "Modal cerrado" },
+    "opening": { "description": "Animación de apertura" },
+    "open": { "description": "Modal abierto" },
+    "closing": { "description": "Animación de cierre" }
+  },
+  "events": {
+    "emits": [
+      "modal:open",
+      "modal:close",
+      "modal:confirm",
+      "modal:cancel",
+      "button:click"
+    ],
+    "listens": [
+      "modal:show",
+      "modal:hide"
+    ]
+  },
+  "api": {
+    "endpoints": [],
+    "mqtt": []
+  },
+  "accessibility": {
+    "aria": true,
+    "keyboard": true,
+    "screenReader": true,
+    "trapFocus": true,
+    "escapeToClose": true
+  }
+}
+```
+
+### Ejemplo C: Form Builder (componente de formulario dinámico)
+
+```json
+{
+  "component": "form-builder",
+  "version": "1.0.0",
+  "description": "Generador de formularios dinámicos con validación",
+  "author": "Event Core Team",
+  "dimensions": {
+    "width": "100%",
+    "height": "auto",
+    "responsive": true
+  },
+  "props": {
+    "required": ["id", "schema"],
+    "optional": ["initialValues", "validationRules", "submitEndpoint"],
+    "types": {
+      "id": "string",
+      "schema": "object",
+      "initialValues": "object",
+      "validationRules": "object",
+      "submitEndpoint": "string"
+    }
+  },
+  "states": {
+    "pristine": { "description": "Sin cambios" },
+    "dirty": { "description": "Con cambios" },
+    "validating": { "description": "Validando datos" },
+    "valid": { "description": "Datos válidos" },
+    "invalid": { "description": "Datos inválidos" },
+    "submitting": { "description": "Enviando datos" },
+    "submitted": { "description": "Datos enviados" },
+    "error": { "description": "Error al enviar" }
+  },
+  "events": {
+    "emits": [
+      "form:ready",
+      "form:change",
+      "form:validate",
+      "form:submit",
+      "form:success",
+      "form:error",
+      "field:change",
+      "field:blur"
+    ],
+    "listens": [
+      "form:reset",
+      "form:populate"
+    ]
+  },
+  "api": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/{resource}",
+        "description": "Enviar formulario"
       },
       {
-        "topic": "/events/order.state.changed",
-        "description": "Escuchar cambios de estado"
+        "method": "PUT",
+        "path": "/api/{resource}/{id}",
+        "description": "Actualizar datos"
+      }
+    ],
+    "mqtt": []
+  },
+  "accessibility": {
+    "aria": true,
+    "keyboard": true,
+    "screenReader": true,
+    "errorAnnouncement": true
+  }
+}
+```
+
+### Ejemplo D: Notification Toast (componente de notificaciones)
+
+```json
+{
+  "component": "notification-toast",
+  "version": "1.0.0",
+  "description": "Sistema de notificaciones tipo toast",
+  "author": "Event Core Team",
+  "dimensions": {
+    "width": "350px",
+    "height": "auto",
+    "responsive": true
+  },
+  "props": {
+    "required": ["id", "message"],
+    "optional": ["type", "duration", "position", "dismissible"],
+    "types": {
+      "id": "string",
+      "message": "string",
+      "type": "enum['success','error','warning','info']",
+      "duration": "number",
+      "position": "enum['top-left','top-right','bottom-left','bottom-right']",
+      "dismissible": "boolean"
+    }
+  },
+  "states": {
+    "queued": { "description": "En cola" },
+    "showing": { "description": "Mostrando" },
+    "visible": { "description": "Visible" },
+    "hiding": { "description": "Ocultando" },
+    "hidden": { "description": "Oculto" }
+  },
+  "events": {
+    "emits": [
+      "toast:show",
+      "toast:hide",
+      "toast:dismiss",
+      "toast:click"
+    ],
+    "listens": [
+      "notification:push"
+    ]
+  },
+  "api": {
+    "endpoints": [],
+    "mqtt": [
+      {
+        "topic": "/events/notifications",
+        "description": "Recibir notificaciones en tiempo real"
       }
     ]
   },
@@ -954,36 +1096,50 @@ ui-components/[NOMBRE_COMPONENTE]/
     "aria": true,
     "keyboard": true,
     "screenReader": true,
-    "minTouchTarget": "44px",
-    "contrastRatio": "4.5:1"
-  },
-  "dependencies": [],
-  "browser": {
-    "modern": true,
-    "ie11": false,
-    "mobile": true
-  },
-  "performance": {
-    "lazy": false,
-    "bundle": "standalone"
+    "role": "alert"
   }
 }
 ```
+
+**Nota:** Estos son ejemplos de referencia. Adapta la estructura según el tipo de componente que necesites crear.
 
 ---
 
 ## 📦 6. Convenciones del Agente Núcleo
 
-- **Nomenclatura:** kebab-case para archivos y clases (ej: `cuenta-button`)
+- **Nomenclatura:** kebab-case para archivos y clases (ej: `data-table`, `modal-dialog`)
 - **Clases CSS:** BEM naming (`component-name__element--modifier`)
-- **Variables CSS:** Prefijo `--component-` (ej: `--component-bg`)
-- **Data attributes:** `data-component`, `data-state`, `data-action`
-- **Event names:** dot notation (`component:ready`, `state:change`)
-- **API responses:** Siempre JSON con estructura `{ status, data }`
+  - Ejemplo: `.data-table__header`, `.modal-dialog__close-button--disabled`
+- **Variables CSS:** Prefijo `--component-` (ej: `--component-bg`, `--component-primary`)
+- **Data attributes:** `data-component`, `data-state`, `data-action`, `data-id`
+  - Ejemplo: `<div data-component="form-builder" data-state="validating">`
+- **Event names:** colon notation (`component:action`, `entity:event`)
+  - Ejemplo: `table:row-click`, `form:submit`, `modal:close`
+- **API responses:** Siempre JSON con estructura estándar
+  ```json
+  {
+    "status": "success|error",
+    "data": { ... },
+    "message": "...",
+    "timestamp": "2025-01-15T10:00:00Z"
+  }
+  ```
 - **MQTT topics:** slash notation (`/events/entity.action`)
-- **Accessibility:** ARIA labels obligatorios, keyboard navigation
-- **Responsive:** Mobile-first, breakpoints estándar (768px, 1024px)
-- **Performance:** Debouncing en eventos frecuentes (scroll, resize)
+  - Ejemplo: `/events/user.created`, `/events/order.updated`
+- **Accessibility:**
+  - ARIA labels obligatorios
+  - Keyboard navigation completa (Tab, Enter, Escape, Arrow keys)
+  - Focus visible en todos los elementos interactivos
+  - Contraste mínimo WCAG AA (4.5:1)
+- **Responsive:**
+  - Mobile-first approach
+  - Breakpoints estándar: 768px (tablet), 1024px (desktop), 1440px (large)
+  - Touch targets mínimo 44x44px
+- **Performance:**
+  - Debouncing en eventos frecuentes (scroll, resize, input)
+  - Throttling en animaciones
+  - Lazy loading de recursos pesados
+  - Virtual scrolling para listas grandes
 
 ---
 

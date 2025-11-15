@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Producto Button - Ejemplos</title>
+
+  <!-- Component Styles -->
+  <link rel="stylesheet" href="../producto-button.css">
+
+  <!-- Page Styles -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    header h1 {
+      color: #1f2937;
+      margin-bottom: 8px;
+      font-size: 32px;
+    }
+
+    header p {
+      color: #6b7280;
+      font-size: 16px;
+    }
+
+    section {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    section h2 {
+      color: #1f2937;
+      margin-bottom: 16px;
+      font-size: 24px;
+    }
+
+    section h3 {
+      color: #374151;
+      margin: 20px 0 12px;
+      font-size: 18px;
+    }
+
+    section p {
+      color: #6b7280;
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .category-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .category-section {
+      margin-bottom: 32px;
+    }
+
+    .category-section h3 {
+      font-size: 20px;
+      margin-bottom: 12px;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .event-log {
+      background: #1f2937;
+      color: #10b981;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 16px;
+    }
+
+    .event-log .event {
+      padding: 4px 0;
+      border-bottom: 1px solid #374151;
+    }
+
+    .event-log .event:last-child {
+      border-bottom: none;
+    }
+
+    .event-log .event-time {
+      color: #9ca3af;
+      margin-right: 8px;
+    }
+
+    .event-log .event-name {
+      color: #fbbf24;
+      font-weight: bold;
+    }
+
+    .event-log .event-data {
+      color: #60a5fa;
+    }
+
+    .controls {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    .controls h2 {
+      color: #1f2937;
+      margin-bottom: 16px;
+      font-size: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .control-group button {
+      padding: 10px 20px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .control-group button:hover {
+      background: #2563eb;
+    }
+
+    .order-summary {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .order-summary h3 {
+      margin: 0 0 12px;
+      color: #1f2937;
+      font-size: 18px;
+    }
+
+    .order-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .order-item:last-child {
+      border-bottom: none;
+    }
+
+    .order-total {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 2px solid #1f2937;
+      font-size: 18px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .badge-oferta {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge-nuevo {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge-destacado {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .code-block {
+      background: #1f2937;
+      color: #e5e7eb;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🍕 Producto Button Component</h1>
+      <p>Botón rectangular 30mm×12mm para productos con categorías, eventos y emojis</p>
+    </header>
+
+    <!-- Controles -->
+    <div class="controls">
+      <h2>🎮 Controles</h2>
+      <div class="control-group">
+        <button onclick="cambiarEventoAleatorio()">🎲 Evento Aleatorio</button>
+        <button onclick="simularStockAgotado()">❌ Simular Sin Stock</button>
+        <button onclick="aplicarOferta()">🔥 Aplicar Oferta</button>
+        <button onclick="resetearProductos()">🔄 Resetear</button>
+        <button onclick="clearLog()">🗑️ Limpiar Log</button>
+      </div>
+
+      <div class="order-summary" id="orderSummary">
+        <h3>🛒 Orden Actual</h3>
+        <div id="orderItems"></div>
+        <div class="order-total">
+          <span>Total:</span>
+          <span id="orderTotal">€0.00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ejemplo 1: Categorías -->
+    <section>
+      <h2>📊 Ejemplo 1: Todas las Categorías</h2>
+      <p>Cada categoría tiene su propio gradiente de color distintivo.</p>
+
+      <div class="category-section">
+        <h3>🍕 Pizzas</h3>
+        <div class="category-grid" data-categoria="pizzas"></div>
+      </div>
+
+      <div class="category-section">
+        <h3>🥤 Bebidas</h3>
+        <div class="category-grid" data-categoria="bebidas"></div>
+      </div>
+
+      <div class="category-section">
+        <h3>🥗 Ensaladas</h3>
+        <div class="category-grid" data-categoria="ensaladas"></div>
+      </div>
+
+      <div class="category-section">
+        <h3>🍰 Postres</h3>
+        <div class="category-grid" data-categoria="postres"></div>
+      </div>
+    </section>
+
+    <!-- Ejemplo 2: Eventos -->
+    <section>
+      <h2>✨ Ejemplo 2: Todos los Eventos</h2>
+      <p>El marco del botón cambia de color según el evento, con emojis y animaciones.</p>
+
+      <div class="grid" id="eventosGrid"></div>
+    </section>
+
+    <!-- Ejemplo 3: Interactivo -->
+    <section>
+      <h2>⚡ Ejemplo 3: Demo Interactiva</h2>
+      <p>Haz click en el botón para añadir a la orden. Click izquierdo (30%) para ver variaciones.</p>
+
+      <div class="grid" id="interactiveGrid"></div>
+
+      <div class="event-log" id="eventLog">
+        <div class="event">
+          <span class="event-time">00:00:00</span>
+          <span class="event-name">READY</span>
+          <span>Componentes inicializados</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ejemplo 4: Código -->
+    <section>
+      <h2>💻 Ejemplo 4: Uso del Componente</h2>
+
+      <h3>HTML</h3>
+      <div class="code-block">&lt;button class="producto-button" id="mi-producto"&gt;&lt;/button&gt;</div>
+
+      <h3>JavaScript</h3>
+      <div class="code-block">// Obtener elemento
+const element = document.getElementById('mi-producto');
+
+// Inicializar componente
+const productoBtn = new ProductoButton(element, {
+  id: 'pizza-margarita',
+  nombre: 'Margarita',
+  precio: 8.50,
+  categoria: 'pizzas',
+  evento: 'oferta'
+});
+
+// Eventos
+productoBtn.on('producto:add', (data) => {
+  console.log('Añadido:', data);
+  // Añadir a la orden...
+});
+
+productoBtn.on('producto:variations', (data) => {
+  console.log('Ver variaciones:', data);
+  // Mostrar modal de variaciones...
+});
+
+// Actualizar precio
+productoBtn.update({ precio: 7.50 });
+
+// Cambiar evento
+productoBtn.updateEvento('destacado');</div>
+    </section>
+  </div>
+
+  <!-- Component Script -->
+  <script src="../producto-button.js"></script>
+
+  <!-- Demo Script -->
+  <script>
+    // Datos de productos
+    const productosData = {
+      pizzas: [
+        { id: 'pizza-margarita', nombre: 'Margarita', precio: 8.50, evento: 'normal' },
+        { id: 'pizza-carbonara', nombre: 'Carbonara', precio: 10.50, evento: 'destacado' },
+        { id: 'pizza-vegetariana', nombre: 'Vegetariana', precio: 9.50, evento: 'vegano' },
+        { id: 'pizza-4quesos', nombre: '4 Quesos', precio: 11.50, evento: 'nuevo' }
+      ],
+      bebidas: [
+        { id: 'coca-cola', nombre: 'Coca-Cola', precio: 2.50, evento: 'normal' },
+        { id: 'agua', nombre: 'Agua', precio: 1.50, evento: 'normal' },
+        { id: 'cerveza', nombre: 'Cerveza', precio: 3.00, evento: 'oferta' }
+      ],
+      ensaladas: [
+        { id: 'ensalada-cesar', nombre: 'Ensalada César', precio: 7.50, evento: 'oferta' },
+        { id: 'ensalada-mixta', nombre: 'Mixta', precio: 6.00, evento: 'vegano' }
+      ],
+      postres: [
+        { id: 'tiramisu', nombre: 'Tiramisú', precio: 4.50, evento: 'nuevo' },
+        { id: 'helado', nombre: 'Helado', precio: 3.50, evento: 'normal' }
+      ]
+    };
+
+    // Todos los eventos para demo
+    const eventosDemo = [
+      { evento: 'normal', nombre: 'Normal', precio: 8.50 },
+      { evento: 'oferta', nombre: 'Oferta 🔥', precio: 6.50 },
+      { evento: 'promocion', nombre: 'Promoción ⭐', precio: 7.00 },
+      { evento: 'destacado', nombre: 'Destacado ✨', precio: 8.50 },
+      { evento: 'nuevo', nombre: 'Nuevo 🆕', precio: 8.50 },
+      { evento: 'vegano', nombre: 'Vegano 🌱', precio: 9.00 },
+      { evento: 'picante', nombre: 'Picante 🌶️', precio: 9.50 },
+      { evento: 'sin_stock', nombre: 'Sin Stock', precio: 0 },
+      { evento: 'no_disponible', nombre: 'No Disponible', precio: 0 }
+    ];
+
+    // Map de instancias
+    const components = new Map();
+    const order = new Map();
+
+    // Inicializar productos por categoría
+    function initCategoryProducts() {
+      Object.entries(productosData).forEach(([categoria, productos]) => {
+        const grid = document.querySelector(`.category-grid[data-categoria="${categoria}"]`);
+        if (!grid) return;
+
+        productos.forEach(producto => {
+          const button = document.createElement('button');
+          button.className = 'producto-button';
+          button.id = producto.id;
+          grid.appendChild(button);
+
+          const component = new ProductoButton(button, {
+            ...producto,
+            categoria,
+            config: { enableMQTT: false }
+          });
+
+          components.set(producto.id, component);
+        });
+      });
+    }
+
+    // Inicializar grid de eventos
+    function initEventosGrid() {
+      const grid = document.getElementById('eventosGrid');
+
+      eventosDemo.forEach((item, index) => {
+        const button = document.createElement('button');
+        button.className = 'producto-button';
+        button.id = `evento-${item.evento}`;
+        grid.appendChild(button);
+
+        const component = new ProductoButton(button, {
+          id: `evento-${item.evento}`,
+          nombre: item.nombre,
+          precio: item.precio,
+          categoria: 'pizzas',
+          evento: item.evento,
+          config: { enableMQTT: false }
+        });
+
+        components.set(`evento-${item.evento}`, component);
+      });
+    }
+
+    // Inicializar grid interactivo
+    function initInteractiveGrid() {
+      const grid = document.getElementById('interactiveGrid');
+
+      const productosInteractivos = [
+        { id: 'int-margarita', nombre: 'Margarita', precio: 8.50, categoria: 'pizzas', evento: 'oferta' },
+        { id: 'int-carbonara', nombre: 'Carbonara', precio: 10.50, categoria: 'pizzas', evento: 'destacado' },
+        { id: 'int-coca', nombre: 'Coca-Cola', precio: 2.50, categoria: 'bebidas', evento: 'normal' },
+        { id: 'int-cerveza', nombre: 'Cerveza', precio: 3.00, categoria: 'bebidas', evento: 'promocion' },
+        { id: 'int-tiramisu', nombre: 'Tiramisú', precio: 4.50, categoria: 'postres', evento: 'nuevo' },
+        { id: 'int-ensalada', nombre: 'César', precio: 7.50, categoria: 'ensaladas', evento: 'vegano' }
+      ];
+
+      productosInteractivos.forEach(producto => {
+        const button = document.createElement('button');
+        button.className = 'producto-button';
+        button.id = producto.id;
+        grid.appendChild(button);
+
+        const component = new ProductoButton(button, {
+          ...producto,
+          config: { enableMQTT: false }
+        });
+
+        // Event listeners
+        component.on('producto:add', (data) => {
+          addToOrder(data);
+          logEvent('producto:add', `${data.nombre} - €${data.precio.toFixed(2)}`);
+        });
+
+        component.on('producto:variations', (data) => {
+          logEvent('producto:variations', `Ver variaciones de ${data.nombre}`);
+        });
+
+        component.on('producto:click', (data) => {
+          logEvent('producto:click', data.nombre);
+        });
+
+        components.set(producto.id, component);
+      });
+    }
+
+    // Añadir a la orden
+    function addToOrder(data) {
+      if (order.has(data.id)) {
+        const item = order.get(data.id);
+        item.cantidad++;
+      } else {
+        order.set(data.id, {
+          id: data.id,
+          nombre: data.nombre,
+          precio: data.precio,
+          cantidad: 1
+        });
+      }
+      updateOrderSummary();
+    }
+
+    // Actualizar resumen de orden
+    function updateOrderSummary() {
+      const itemsContainer = document.getElementById('orderItems');
+      const totalElement = document.getElementById('orderTotal');
+
+      itemsContainer.innerHTML = '';
+      let total = 0;
+
+      if (order.size === 0) {
+        itemsContainer.innerHTML = '<p style="color: #9ca3af; font-style: italic;">Orden vacía</p>';
+      } else {
+        order.forEach((item) => {
+          const div = document.createElement('div');
+          div.className = 'order-item';
+          div.innerHTML = `
+            <span>${item.nombre} (x${item.cantidad})</span>
+            <span>€${(item.precio * item.cantidad).toFixed(2)}</span>
+          `;
+          itemsContainer.appendChild(div);
+          total += item.precio * item.cantidad;
+        });
+      }
+
+      totalElement.textContent = `€${total.toFixed(2)}`;
+    }
+
+    // Log de eventos
+    function logEvent(eventName, message) {
+      const eventLog = document.getElementById('eventLog');
+      const now = new Date();
+      const time = now.toLocaleTimeString('es-ES');
+
+      const eventDiv = document.createElement('div');
+      eventDiv.className = 'event';
+      eventDiv.innerHTML = `
+        <span class="event-time">${time}</span>
+        <span class="event-name">${eventName.toUpperCase()}</span>
+        <span class="event-data">${message}</span>
+      `;
+
+      eventLog.insertBefore(eventDiv, eventLog.firstChild);
+
+      while (eventLog.children.length > 50) {
+        eventLog.removeChild(eventLog.lastChild);
+      }
+    }
+
+    // Controles
+    function cambiarEventoAleatorio() {
+      const eventos = ['oferta', 'promocion', 'destacado', 'nuevo', 'vegano', 'picante'];
+      const eventoAleatorio = eventos[Math.floor(Math.random() * eventos.length)];
+
+      components.forEach((component, id) => {
+        if (id.startsWith('int-')) {
+          component.updateEvento(eventoAleatorio);
+        }
+      });
+
+      logEvent('control', `Evento cambiado a: ${eventoAleatorio}`);
+    }
+
+    function simularStockAgotado() {
+      const component = components.get('int-margarita');
+      if (component) {
+        component.updateEvento('sin_stock');
+        logEvent('control', 'Margarita sin stock');
+      }
+    }
+
+    function aplicarOferta() {
+      components.forEach((component, id) => {
+        if (id.startsWith('int-')) {
+          component.updateEvento('oferta');
+          component.update({ precio: component.precio * 0.8 });
+        }
+      });
+      logEvent('control', '20% descuento aplicado a todos los productos');
+    }
+
+    function resetearProductos() {
+      order.clear();
+      updateOrderSummary();
+
+      // Re-inicializar
+      components.forEach(c => c.destroy());
+      components.clear();
+
+      document.querySelectorAll('.category-grid').forEach(g => g.innerHTML = '');
+      document.getElementById('eventosGrid').innerHTML = '';
+      document.getElementById('interactiveGrid').innerHTML = '';
+
+      initCategoryProducts();
+      initEventosGrid();
+      initInteractiveGrid();
+
+      logEvent('control', 'Productos reseteados');
+    }
+
+    function clearLog() {
+      const eventLog = document.getElementById('eventLog');
+      eventLog.innerHTML = '<div class="event"><span class="event-time">--:--:--</span><span class="event-name">CLEARED</span><span>Log limpiado</span></div>';
+    }
+
+    // Inicializar al cargar
+    document.addEventListener('DOMContentLoaded', () => {
+      initCategoryProducts();
+      initEventosGrid();
+      initInteractiveGrid();
+      updateOrderSummary();
+      logEvent('init', 'Demo inicializada - Click en productos para añadir');
+    });
+  </script>
+</body>
+</html>

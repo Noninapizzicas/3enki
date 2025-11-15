@@ -1,0 +1,255 @@
+{
+  "view": "cobro",
+  "version": "1.0.0",
+  "description": "Vista de cobro y edición de pedido - Unificada",
+  "author": "Event Core Team",
+  "created": "2025-01-15",
+
+  "layout": {
+    "type": "single-column",
+    "max_width": "600px",
+    "alignment": "center",
+    "padding": {
+      "top": "20px",
+      "bottom": "20px",
+      "left": "20px",
+      "right": "70px"
+    }
+  },
+
+  "header": {
+    "show": true,
+    "elements": {
+      "cuenta_nombre": {
+        "position": "left",
+        "icon": "💰"
+      },
+      "total": {
+        "position": "right",
+        "highlight": true,
+        "size": "large"
+      }
+    }
+  },
+
+  "sidebar": {
+    "position": "right",
+    "draggable": true,
+    "buttons": [
+      {
+        "id": "volver-comandero",
+        "emoji": "📝",
+        "type": "info",
+        "label": "Volver al Comandero",
+        "action": "navigate",
+        "route": "/comandero"
+      },
+      {
+        "id": "ver-cuentas",
+        "emoji": "📋",
+        "type": "primary",
+        "label": "Ver Cuentas",
+        "action": "navigate",
+        "route": "/cuentas"
+      },
+      {
+        "id": "separator-1",
+        "type": "separator"
+      },
+      {
+        "id": "nueva-local",
+        "emoji": "🍽️",
+        "type": "cuenta-type",
+        "cuenta_type": "local",
+        "label": "Nueva Mesa",
+        "action": "create-and-switch-cuenta",
+        "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        "shadow": "0 4px 12px rgba(102, 126, 234, 0.4)"
+      },
+      {
+        "id": "nueva-delivery",
+        "emoji": "🛵",
+        "type": "cuenta-type",
+        "cuenta_type": "delivery",
+        "label": "Nuevo Delivery",
+        "action": "create-and-switch-cuenta",
+        "background": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+        "shadow": "0 4px 12px rgba(240, 147, 251, 0.4)"
+      },
+      {
+        "id": "nueva-llevar",
+        "emoji": "🥡",
+        "type": "cuenta-type",
+        "cuenta_type": "llevar",
+        "label": "Nuevo Para Llevar",
+        "action": "create-and-switch-cuenta",
+        "background": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+        "shadow": "0 4px 12px rgba(79, 172, 254, 0.4)"
+      }
+    ]
+  },
+
+  "sections": {
+    "resumen_pedido": {
+      "title": "Resumen del Pedido",
+      "editable": true,
+      "show_empty_message": true,
+      "empty_message": "No hay items en el pedido",
+      "item_controls": {
+        "increase": {
+          "icon": "➕",
+          "label": "Aumentar cantidad"
+        },
+        "decrease": {
+          "icon": "➖",
+          "label": "Disminuir cantidad"
+        },
+        "edit": {
+          "icon": "✏️",
+          "label": "Editar variaciones",
+          "show_when": "has_variations"
+        },
+        "delete": {
+          "icon": "🗑️",
+          "label": "Eliminar",
+          "confirm": true
+        }
+      }
+    },
+
+    "totales": {
+      "show_subtotal": true,
+      "show_descuento": true,
+      "show_propina": true,
+      "show_iva": true,
+      "iva_rate": 0.21,
+      "total_highlight": true,
+      "descuento": {
+        "editable": true,
+        "type": "percentage",
+        "max": 100,
+        "default": 0
+      },
+      "propina": {
+        "editable": true,
+        "type": "amount",
+        "presets": [0, 1, 2, 5],
+        "default": 0
+      }
+    },
+
+    "formas_pago": {
+      "title": "Forma de Pago",
+      "multiple": false,
+      "metodos": [
+        {
+          "id": "efectivo",
+          "nombre": "Efectivo",
+          "emoji": "💵",
+          "color": "#22c55e",
+          "show_recibido": true,
+          "calculate_vuelto": true
+        },
+        {
+          "id": "tarjeta",
+          "nombre": "Tarjeta",
+          "emoji": "💳",
+          "color": "#3b82f6",
+          "show_recibido": false
+        },
+        {
+          "id": "mixto",
+          "nombre": "Mixto",
+          "emoji": "🔄",
+          "color": "#f59e0b",
+          "show_split_inputs": true
+        },
+        {
+          "id": "bizum",
+          "nombre": "Bizum",
+          "emoji": "📱",
+          "color": "#06b6d4",
+          "show_recibido": false
+        }
+      ]
+    },
+
+    "acciones": {
+      "buttons": [
+        {
+          "id": "volver",
+          "label": "Volver",
+          "emoji": "🔙",
+          "variant": "secondary",
+          "action": "navigate-back"
+        },
+        {
+          "id": "imprimir",
+          "label": "Imprimir Ticket",
+          "emoji": "🖨️",
+          "variant": "secondary",
+          "action": "print-ticket"
+        },
+        {
+          "id": "confirmar",
+          "label": "Confirmar y Cerrar",
+          "emoji": "✅",
+          "variant": "success",
+          "action": "process-payment",
+          "confirm": true,
+          "confirm_message": "¿Confirmar pago y cerrar cuenta?"
+        }
+      ]
+    }
+  },
+
+  "interactions": {
+    "auto_calculate": true,
+    "confirm_delete_item": true,
+    "print_ticket_after_payment": true,
+    "close_cuenta_after_payment": true,
+    "navigate_after_payment": "/cuentas"
+  },
+
+  "api": {
+    "load_cuenta": {
+      "method": "GET",
+      "endpoint": "/modules/comandero/cuentas/:id"
+    },
+    "update_item": {
+      "method": "PUT",
+      "endpoint": "/modules/comandero/cuentas/:id/items/:itemId"
+    },
+    "delete_item": {
+      "method": "DELETE",
+      "endpoint": "/modules/comandero/cuentas/:id/items/:itemId"
+    },
+    "apply_descuento": {
+      "method": "POST",
+      "endpoint": "/modules/comandero/cuentas/:id/descuento"
+    },
+    "apply_propina": {
+      "method": "POST",
+      "endpoint": "/modules/comandero/cuentas/:id/propina"
+    },
+    "process_payment": {
+      "method": "POST",
+      "endpoint": "/modules/comandero/cuentas/:id/cobrar"
+    }
+  },
+
+  "realtime": {
+    "enabled": true,
+    "websocket": {
+      "url": "ws://localhost:9883",
+      "topics": [
+        "comandero/+/cuenta/updated",
+        "comandero/+/cuenta/item_changed"
+      ]
+    }
+  },
+
+  "components": {
+    "sidebar-button": "../../ui-components/sidebar-button"
+  }
+}

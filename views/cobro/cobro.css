@@ -1,0 +1,960 @@
+/**
+ * Cobro View Styles
+ * Vista de cobro/pago para sistemas POS
+ * Version: 1.0.0
+ */
+
+/* ==========================================
+ * CSS Variables
+ * ========================================== */
+:root {
+  /* Colors */
+  --cobro-bg: #0f172a;
+  --cobro-bg-secondary: #1e293b;
+  --cobro-bg-tertiary: #334155;
+  --cobro-text: #f1f5f9;
+  --cobro-text-secondary: #94a3b8;
+  --cobro-border: rgba(255, 255, 255, 0.1);
+  --cobro-shadow: rgba(0, 0, 0, 0.2);
+
+  /* Accent Colors */
+  --cobro-success: #10b981;
+  --cobro-success-hover: #059669;
+  --cobro-danger: #ef4444;
+  --cobro-danger-hover: #dc2626;
+  --cobro-warning: #f59e0b;
+  --cobro-info: #3b82f6;
+
+  /* Layout */
+  --cobro-header-height: 70px;
+  --cobro-sidebar-width: 60px;
+  --cobro-max-width: 600px;
+  --cobro-padding: 20px;
+  --cobro-gap: 12px;
+
+  /* Transitions */
+  --cobro-transition: all 0.3s ease;
+}
+
+/* ==========================================
+ * Base Styles
+ * ========================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--cobro-bg);
+  color: var(--cobro-text);
+  overflow-x: hidden;
+}
+
+/* ==========================================
+ * Main Container
+ * ========================================== */
+.cobro-view {
+  display: grid;
+  grid-template-rows: var(--cobro-header-height) 1fr;
+  grid-template-columns: 1fr var(--cobro-sidebar-width);
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ==========================================
+ * Header
+ * ========================================== */
+.cobro-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--cobro-padding);
+  background: var(--cobro-bg-secondary);
+  border-bottom: 1px solid var(--cobro-border);
+  box-shadow: 0 2px 8px var(--cobro-shadow);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  font-size: 28px;
+}
+
+.header-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.header-tipo {
+  padding: 4px 12px;
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid rgba(102, 126, 234, 0.4);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5b4fc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.header-total {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 8px;
+}
+
+.total-label {
+  font-size: 14px;
+  color: var(--cobro-text-secondary);
+}
+
+.total-amount {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--cobro-success);
+}
+
+/* ==========================================
+ * Main Content
+ * ========================================== */
+.cobro-main {
+  grid-column: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--cobro-padding);
+  scrollbar-width: thin;
+  scrollbar-color: var(--cobro-bg-tertiary) transparent;
+}
+
+.cobro-main::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cobro-main::-webkit-scrollbar-thumb {
+  background: var(--cobro-bg-tertiary);
+  border-radius: 3px;
+}
+
+.cobro-container {
+  max-width: var(--cobro-max-width);
+  margin: 0 auto;
+}
+
+/* ==========================================
+ * Sections
+ * ========================================== */
+.section-resumen,
+.section-totales,
+.section-pago,
+.section-acciones {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: var(--cobro-bg-secondary);
+  border: 1px solid var(--cobro-border);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px var(--cobro-shadow);
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cobro-text);
+}
+
+/* ==========================================
+ * Items List
+ * ========================================== */
+.items-list {
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cobro-bg-tertiary) transparent;
+}
+
+.items-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.items-list::-webkit-scrollbar-thumb {
+  background: var(--cobro-bg-tertiary);
+  border-radius: 3px;
+}
+
+.order-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--cobro-border);
+  border-radius: 8px;
+  transition: var(--cobro-transition);
+}
+
+.order-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.item-nombre {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--cobro-text);
+}
+
+.item-variacion {
+  font-size: 13px;
+  color: var(--cobro-text-secondary);
+  font-style: italic;
+}
+
+.item-precio-unitario {
+  font-size: 14px;
+  color: var(--cobro-text-secondary);
+}
+
+.item-notas {
+  font-size: 12px;
+  color: var(--cobro-warning);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.item-quantity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cobro-border);
+  border-radius: 6px;
+}
+
+.qty-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--cobro-border);
+  border-radius: 4px;
+  color: var(--cobro-text);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--cobro-transition);
+}
+
+.qty-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.qty-btn:active {
+  transform: scale(0.95);
+}
+
+.qty-value {
+  min-width: 32px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.item-precio {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--cobro-text);
+  min-width: 70px;
+  text-align: right;
+}
+
+.item-delete {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: var(--cobro-danger);
+  font-size: 18px;
+  cursor: pointer;
+  transition: var(--cobro-transition);
+}
+
+.item-delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--cobro-text-secondary);
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-message {
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ==========================================
+ * Totales Grid
+ * ========================================== */
+.totales-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  font-size: 15px;
+}
+
+.total-row.total-descuento,
+.total-row.total-propina {
+  padding: 14px 0;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 14px 12px;
+  border-radius: 8px;
+  margin: 4px 0;
+}
+
+.total-row.total-final {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 2px solid var(--cobro-border);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.total-label {
+  color: var(--cobro-text-secondary);
+  font-weight: 500;
+}
+
+.total-label-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.total-value {
+  font-weight: 600;
+  color: var(--cobro-text);
+}
+
+.total-negative {
+  color: var(--cobro-danger);
+}
+
+.total-positive {
+  color: var(--cobro-success);
+}
+
+.total-final .total-value {
+  color: var(--cobro-success);
+  font-size: 24px;
+}
+
+/* Descuento Input */
+.descuento-input {
+  width: 60px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cobro-border);
+  border-radius: 6px;
+  color: var(--cobro-text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  transition: var(--cobro-transition);
+}
+
+.descuento-input:focus {
+  outline: none;
+  border-color: var(--cobro-info);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.descuento-unit {
+  font-size: 14px;
+  color: var(--cobro-text-secondary);
+  font-weight: 600;
+}
+
+/* Propina Controls */
+.propina-presets {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.preset-btn {
+  padding: 6px 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  color: var(--cobro-success);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--cobro-transition);
+  white-space: nowrap;
+}
+
+.preset-btn:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.preset-btn.active {
+  background: rgba(16, 185, 129, 0.3);
+  border-color: var(--cobro-success);
+}
+
+.propina-input {
+  width: 70px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cobro-border);
+  border-radius: 6px;
+  color: var(--cobro-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  transition: var(--cobro-transition);
+}
+
+.propina-input:focus {
+  outline: none;
+  border-color: var(--cobro-success);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ==========================================
+ * Métodos de Pago
+ * ========================================== */
+.metodos-pago {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metodo-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid var(--cobro-border);
+  border-radius: 10px;
+  color: var(--cobro-text);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--cobro-transition);
+}
+
+.metodo-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.metodo-btn.active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--cobro-info);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+.metodo-emoji {
+  font-size: 32px;
+}
+
+.metodo-nombre {
+  font-size: 14px;
+}
+
+/* Pago Details */
+.pago-details {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--cobro-border);
+  border-radius: 8px;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.input-label {
+  min-width: 80px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cobro-text-secondary);
+}
+
+.input-amount {
+  flex: 1;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cobro-border);
+  border-radius: 6px;
+  color: var(--cobro-text);
+  font-size: 16px;
+  font-weight: 600;
+  transition: var(--cobro-transition);
+}
+
+.input-amount:focus {
+  outline: none;
+  border-color: var(--cobro-info);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.input-currency {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--cobro-text-secondary);
+}
+
+.vuelto-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.vuelto-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cobro-success);
+}
+
+.vuelto-amount {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cobro-success);
+}
+
+/* ==========================================
+ * Acciones
+ * ========================================== */
+.acciones-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.btn-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 12px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--cobro-transition);
+}
+
+.btn-action:hover {
+  transform: translateY(-2px);
+}
+
+.btn-action:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--cobro-border);
+  color: var(--cobro-text);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, var(--cobro-success) 0%, var(--cobro-success-hover) 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-success:hover {
+  background: linear-gradient(135deg, var(--cobro-success-hover) 0%, #047857 100%);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
+}
+
+.btn-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-icon {
+  font-size: 24px;
+}
+
+.btn-text {
+  font-size: 13px;
+}
+
+/* ==========================================
+ * Sidebar
+ * ========================================== */
+.cobro-sidebar {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 8px;
+  background: var(--cobro-bg-secondary);
+  border-left: 1px solid var(--cobro-border);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.cobro-sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ==========================================
+ * Modal
+ * ========================================== */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  background: var(--cobro-bg-secondary);
+  border: 1px solid var(--cobro-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--cobro-border);
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--cobro-border);
+  border-radius: 6px;
+  color: var(--cobro-text);
+  font-size: 18px;
+  cursor: pointer;
+  transition: var(--cobro-transition);
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.confirm-details {
+  margin-bottom: 20px;
+}
+
+.confirm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  font-size: 15px;
+  border-bottom: 1px solid var(--cobro-border);
+}
+
+.confirm-row:last-child {
+  border-bottom: none;
+}
+
+.confirm-label {
+  color: var(--cobro-text-secondary);
+  font-weight: 500;
+}
+
+.confirm-value {
+  font-weight: 700;
+  color: var(--cobro-text);
+  font-size: 16px;
+}
+
+.confirm-message {
+  text-align: center;
+  font-size: 14px;
+  color: var(--cobro-text-secondary);
+  margin: 0;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--cobro-border);
+  justify-content: flex-end;
+}
+
+.modal-footer .btn-secondary,
+.modal-footer .btn-success {
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ==========================================
+ * Toast Notifications
+ * ========================================== */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toast {
+  min-width: 300px;
+  padding: 16px 20px;
+  background: var(--cobro-bg-secondary);
+  border: 1px solid var(--cobro-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px var(--cobro-shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-icon {
+  font-size: 24px;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+}
+
+.toast.success {
+  border-left: 4px solid var(--cobro-success);
+}
+
+.toast.error {
+  border-left: 4px solid var(--cobro-danger);
+}
+
+.toast.warning {
+  border-left: 4px solid var(--cobro-warning);
+}
+
+.toast.info {
+  border-left: 4px solid var(--cobro-info);
+}
+
+/* ==========================================
+ * Responsive
+ * ========================================== */
+
+/* Tablet (< 1024px) */
+@media (max-width: 1024px) {
+  .cobro-container {
+    max-width: 100%;
+  }
+
+  .metodos-pago {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .acciones-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Mobile (< 768px) */
+@media (max-width: 768px) {
+  .cobro-view {
+    grid-template-columns: 1fr;
+  }
+
+  .cobro-sidebar {
+    display: none;
+  }
+
+  .header-title {
+    font-size: 18px;
+  }
+
+  .header-tipo {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .total-amount {
+    font-size: 18px;
+  }
+
+  .metodos-pago {
+    grid-template-columns: 1fr;
+  }
+
+  .acciones-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .propina-presets {
+    flex-wrap: wrap;
+  }
+
+  .order-item {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .item-quantity,
+  .item-precio {
+    justify-self: start;
+  }
+}
+
+/* ==========================================
+ * Print Styles
+ * ========================================== */
+@media print {
+  .cobro-header,
+  .cobro-sidebar,
+  .section-pago,
+  .section-acciones {
+    display: none;
+  }
+
+  .cobro-main {
+    overflow: visible;
+  }
+
+  .section-resumen,
+  .section-totales {
+    break-inside: avoid;
+  }
+}

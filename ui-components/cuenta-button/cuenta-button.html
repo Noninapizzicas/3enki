@@ -1,0 +1,66 @@
+<!--
+  Cuenta Button Component
+  Botón de cuenta para POS/Comandero
+-->
+<button
+  class="cuenta-button"
+  data-component="cuenta-button"
+  data-cuenta-id=""
+  data-tipo=""
+  data-estado=""
+  role="button"
+  tabindex="0"
+  aria-label="">
+
+  <!-- Marco Exterior -->
+  <div class="cuenta-button__marco cuenta-button__marco--exterior"></div>
+
+  <!-- Marco Medio -->
+  <div class="cuenta-button__marco cuenta-button__marco--medio"></div>
+
+  <!-- Marco Interior -->
+  <div class="cuenta-button__marco cuenta-button__marco--interior"></div>
+
+  <!-- Centro con Gradiente del Tipo -->
+  <div class="cuenta-button__centro">
+    <!-- Información de la cuenta -->
+    <div class="cuenta-button__info">
+      <div class="cuenta-button__nombre" data-bind="nombre">
+        <!-- Mesa 5 / Delivery #15 / etc -->
+      </div>
+      <div class="cuenta-button__meta">
+        <span class="cuenta-button__tiempo" data-bind="tiempo">
+          <!-- 15:30 -->
+        </span>
+        <span class="cuenta-button__total" data-bind="total">
+          <!-- 45.50€ -->
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Esquinas con Emojis -->
+  <div class="cuenta-button__corners">
+    <span class="cuenta-button__corner cuenta-button__corner--top-left" data-corner="top-left"></span>
+    <span class="cuenta-button__corner cuenta-button__corner--top-right" data-corner="top-right"></span>
+    <span class="cuenta-button__corner cuenta-button__corner--bottom-left" data-corner="bottom-left"></span>
+    <span class="cuenta-button__corner cuenta-button__corner--bottom-right" data-corner="bottom-right"></span>
+  </div>
+
+  <!-- Zona de Acción Derecha (Cobro) -->
+  <div class="cuenta-button__action-zone cuenta-button__action-zone--right" data-action="cobro">
+    <span class="cuenta-button__action-icon">💰</span>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="cuenta-button__loading" data-state="loading" hidden>
+    <div class="cuenta-button__spinner" role="status" aria-live="polite">
+      <span class="sr-only">Cargando...</span>
+    </div>
+  </div>
+
+  <!-- Screen Reader Info -->
+  <span class="sr-only" data-bind="aria-description">
+    <!-- Mesa 5, Estado: Pendiente, Total: 45.50€, Tiempo: 15:30 -->
+  </span>
+</button>

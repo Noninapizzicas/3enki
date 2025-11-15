@@ -1,0 +1,231 @@
+{
+  "component": "cuenta-button",
+  "version": "1.0.0",
+  "description": "Botón de cuenta para POS/Comandero con estados visuales y actualización en tiempo real",
+  "author": "Event Core Team",
+  "created": "2025-01-14",
+  "license": "MIT",
+  "dimensions": {
+    "width": "40mm",
+    "height": "30mm",
+    "width_px": 151,
+    "height_px": 113,
+    "responsive": true,
+    "minWidth": "150px",
+    "minHeight": "100px"
+  },
+  "props": {
+    "required": [
+      "id",
+      "nombre",
+      "tipo",
+      "estado"
+    ],
+    "optional": [
+      "total",
+      "tiempo",
+      "emojis",
+      "callbacks",
+      "theme"
+    ],
+    "types": {
+      "id": "string",
+      "nombre": "string",
+      "tipo": "enum['local','delivery','llevar']",
+      "estado": "enum['pendiente','preparacion','listo','entregado','pagado','problema','cancelado']",
+      "total": "number",
+      "tiempo": "string",
+      "emojis": "object",
+      "callbacks": "object",
+      "theme": "string"
+    }
+  },
+  "types": {
+    "local": {
+      "name": "Mesa Local",
+      "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      "defaultEmoji": "🍽️"
+    },
+    "delivery": {
+      "name": "Delivery",
+      "background": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+      "defaultEmoji": "🛵"
+    },
+    "llevar": {
+      "name": "Para Llevar",
+      "background": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+      "defaultEmoji": "🥡"
+    }
+  },
+  "states": {
+    "pendiente": {
+      "name": "Pendiente",
+      "marcos": {
+        "exterior": "#fbbf24",
+        "medio": "#f59e0b",
+        "interior": "#d97706"
+      },
+      "emojis": {
+        "top-left": "⏱️"
+      },
+      "description": "Cuenta creada, esperando preparación"
+    },
+    "preparacion": {
+      "name": "En Preparación",
+      "marcos": {
+        "exterior": "#fb923c",
+        "medio": "#f97316",
+        "interior": "#ea580c"
+      },
+      "emojis": {
+        "top-left": "👨‍🍳",
+        "top-right": "🔥"
+      },
+      "description": "Pedido en cocina"
+    },
+    "listo": {
+      "name": "Listo",
+      "marcos": {
+        "exterior": "#4ade80",
+        "medio": "#22c55e",
+        "interior": "#16a34a"
+      },
+      "emojis": {
+        "top-left": "✅",
+        "top-right": "🍕"
+      },
+      "description": "Pedido listo para entregar"
+    },
+    "entregado": {
+      "name": "Entregado",
+      "marcos": {
+        "exterior": "#60a5fa",
+        "medio": "#3b82f6",
+        "interior": "#2563eb"
+      },
+      "emojis": {
+        "top-left": "🎉",
+        "top-right": "✅"
+      },
+      "description": "Pedido entregado al cliente"
+    },
+    "pagado": {
+      "name": "Pagado",
+      "marcos": {
+        "exterior": "#34d399",
+        "medio": "#10b981",
+        "interior": "#059669"
+      },
+      "emojis": {
+        "top-left": "💰",
+        "top-right": "✅"
+      },
+      "description": "Cuenta cobrada"
+    },
+    "problema": {
+      "name": "Problema",
+      "marcos": {
+        "exterior": "#f87171",
+        "medio": "#ef4444",
+        "interior": "#dc2626"
+      },
+      "emojis": {
+        "top-left": "⚠️",
+        "top-right": "❌",
+        "bottom-left": "🚨"
+      },
+      "description": "Hay un problema con el pedido"
+    },
+    "cancelado": {
+      "name": "Cancelado",
+      "marcos": {
+        "exterior": "#94a3b8",
+        "medio": "#64748b",
+        "interior": "#475569"
+      },
+      "emojis": {
+        "top-left": "🚫"
+      },
+      "description": "Pedido cancelado"
+    }
+  },
+  "touchZones": {
+    "left": {
+      "width": "75%",
+      "action": "open-comandero",
+      "description": "Zona principal: ir al comandero (gestión de pedido)",
+      "label": "📝 Pedido",
+      "route": "/comandero/:cuenta_id"
+    },
+    "right": {
+      "type": "corner-button",
+      "size": "30px",
+      "position": "bottom-right",
+      "action": "open-cobro",
+      "description": "Botón esquina: ir a cobro (cerrar cuenta)",
+      "label": "💰",
+      "route": "/cobro/:cuenta_id"
+    }
+  },
+  "events": {
+    "emits": [
+      "cuenta:click",
+      "cuenta:long-press",
+      "cuenta:double-tap",
+      "cuenta:state-change",
+      "cuenta:action"
+    ],
+    "listens": [
+      "cuenta:update",
+      "cuenta:delete",
+      "order:updated",
+      "order:state:changed"
+    ]
+  },
+  "api": {
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/modules/comandero/orders/:id",
+        "description": "Obtener datos de la cuenta"
+      },
+      {
+        "method": "POST",
+        "path": "/modules/comandero/orders/:id/state",
+        "description": "Actualizar estado de la cuenta"
+      },
+      {
+        "method": "POST",
+        "path": "/modules/comandero/orders/:id/close",
+        "description": "Cerrar cuenta"
+      }
+    ],
+    "mqtt": [
+      {
+        "topic": "/events/order.updated",
+        "description": "Escuchar actualizaciones de pedidos"
+      },
+      {
+        "topic": "/events/order.state.changed",
+        "description": "Escuchar cambios de estado"
+      }
+    ]
+  },
+  "accessibility": {
+    "aria": true,
+    "keyboard": true,
+    "screenReader": true,
+    "minTouchTarget": "44px",
+    "contrastRatio": "4.5:1"
+  },
+  "dependencies": [],
+  "browser": {
+    "modern": true,
+    "ie11": false,
+    "mobile": true
+  },
+  "performance": {
+    "lazy": false,
+    "bundle": "standalone"
+  }
+}

@@ -22,6 +22,7 @@
 
 const { EventEmitter } = require('events');
 const EmbeddedBroker = require('../broker/embedded');
+const ConnectionPool = require('./pool');
 
 class MQTTClient extends EventEmitter {
   /**
@@ -32,6 +33,8 @@ class MQTTClient extends EventEmitter {
    * @param {number} options.brokerPort - Puerto del broker embebido (default: 1883)
    * @param {Object} options.logger - Logger instance (opcional)
    * @param {Object} options.metrics - Metrics instance (opcional)
+   * @param {boolean} options.usePool - Enable connection pooling for publish operations (default: false)
+   * @param {Object} options.poolConfig - Connection pool configuration (optional)
    */
   constructor(options = {}) {
     super();
@@ -47,6 +50,11 @@ class MQTTClient extends EventEmitter {
     this.embeddedBroker = null;
     this.isConnected = false;
     this.usingEmbedded = false;
+
+    // Connection pooling
+    this.usePool = options.usePool || false;
+    this.pool = null;
+    this.poolConfig = options.poolConfig || {};
 
     // Suscripciones activas
     this.subscriptions = new Map(); // topic -> qos
@@ -100,7 +108,65 @@ class MQTTClient extends EventEmitter {
     }
 
     this.isConnected = true;
+
+    // Initialize connection pool if enabled
+    if (this.usePool) {
+      await this._initializePool();
+    }
+
     this.emit('connected', { usingEmbedded: this.usingEmbedded });
+  }
+
+  /**
+   * Initialize connection pool for publish operations
+   *
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _initializePool() {
+    if (this.pool) {
+      return; // Already initialized
+    }
+
+    const poolOptions = {
+      brokerUrl: this.brokerUrl,
+      mqttOptions: {
+        clientId: `${this.coreId}-pool`,
+        clean: true,
+        reconnectPeriod: 5000
+      },
+      logger: this.logger,
+      metrics: this.metrics,
+      ...this.poolConfig
+    };
+
+    this.pool = new ConnectionPool(poolOptions);
+
+    try {
+      await this.pool.initialize();
+
+      if (this.logger) {
+        this.logger.info('mqtt.pool.initialized', {
+          min: this.pool.minConnections,
+          max: this.pool.maxConnections
+        });
+      }
+
+      if (this.metrics) {
+        this.metrics.increment('mqtt.pool.enabled');
+      }
+
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error('mqtt.pool.init.failed', {
+          error: error.message
+        }, error);
+      }
+
+      // Continue without pool
+      this.pool = null;
+      this.usePool = false;
+    }
   }
 
   /**
@@ -259,6 +325,85 @@ class MQTTClient extends EventEmitter {
       throw new Error('MQTT client not connected');
     }
 
+    // Use connection pool if enabled
+    if (this.usePool && this.pool) {
+      return this._publishPooled(topic, message, options);
+    }
+
+    // Use primary connection
+    return this._publishDirect(topic, message, options);
+  }
+
+  /**
+   * Publish using the connection pool
+   *
+   * @param {string} topic - Topic
+   * @param {*} message - Message
+   * @param {Object} options - MQTT options
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _publishPooled(topic, message, options = {}) {
+    const payload = typeof message === 'string'
+      ? message
+      : JSON.stringify(message);
+
+    let conn;
+    try {
+      // Acquire connection from pool
+      conn = await this.pool.acquire();
+
+      // Publish using pooled connection
+      await new Promise((resolve, reject) => {
+        conn.publish(topic, payload, {
+          qos: options.qos || 0,
+          retain: options.retain || false
+        }, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      });
+
+      if (this.metrics) {
+        this.metrics.increment('mqtt.messages.published');
+        this.metrics.increment('mqtt.pool.publishes');
+      }
+
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error('mqtt.publish.pooled.failed', {
+          topic,
+          error: error.message
+        }, error);
+      }
+
+      if (this.metrics) {
+        this.metrics.increment('mqtt.publish.failed');
+      }
+
+      throw error;
+
+    } finally {
+      // Always release connection back to pool
+      if (conn) {
+        this.pool.release(conn);
+      }
+    }
+  }
+
+  /**
+   * Publish using the primary connection (non-pooled)
+   *
+   * @param {string} topic - Topic
+   * @param {*} message - Message
+   * @param {Object} options - MQTT options
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _publishDirect(topic, message, options = {}) {
     const payload = typeof message === 'string'
       ? message
       : JSON.stringify(message);
@@ -401,6 +546,24 @@ class MQTTClient extends EventEmitter {
       return;
     }
 
+    // Shutdown connection pool first
+    if (this.pool) {
+      try {
+        await this.pool.shutdown();
+        this.pool = null;
+
+        if (this.logger) {
+          this.logger.info('mqtt.pool.shutdown');
+        }
+      } catch (error) {
+        if (this.logger) {
+          this.logger.error('mqtt.pool.shutdown.failed', {
+            error: error.message
+          }, error);
+        }
+      }
+    }
+
     // Desconectar cliente MQTT
     if (this.mqtt) {
       await new Promise((resolve) => {
@@ -432,12 +595,23 @@ class MQTTClient extends EventEmitter {
    * @returns {Object} Estadísticas
    */
   getStats() {
-    return {
+    const stats = {
       isConnected: this.isConnected,
       usingEmbedded: this.usingEmbedded,
       subscriptions: Array.from(this.subscriptions.keys()),
-      broker: this.embeddedBroker ? this.embeddedBroker.getStats() : null
+      broker: this.embeddedBroker ? this.embeddedBroker.getStats() : null,
+      pooling: {
+        enabled: this.usePool,
+        active: !!this.pool
+      }
     };
+
+    // Add pool statistics if available
+    if (this.pool) {
+      stats.pooling.stats = this.pool.getStats();
+    }
+
+    return stats;
   }
 }
 

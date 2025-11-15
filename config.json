@@ -10,6 +10,16 @@
     "cors": {
       "enabled": true,
       "origins": ["*"]
+    },
+    "compression": {
+      "enabled": true,
+      "min_size": 1024,
+      "level": 6
+    },
+    "cache": {
+      "enabled": false,
+      "max_size": 100,
+      "default_ttl": 60000
     }
   },
   "mqtt": {
@@ -21,6 +31,14 @@
       "reconnect_period": 5000,
       "keep_alive": 60,
       "clean_session": false
+    },
+    "pool": {
+      "enabled": false,
+      "min": 2,
+      "max": 10,
+      "idle_timeout": 30000,
+      "acquire_timeout": 5000,
+      "health_check_interval": 10000
     }
   },
   "modules": {

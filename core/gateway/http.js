@@ -24,6 +24,9 @@
 
 const http = require('http');
 const url = require('url');
+const { ValidationError, createValidationMiddleware, createResponseValidationMiddleware, formatValidationErrorResponse } = require('../validation');
+const CompressionMiddleware = require('./compression');
+const { CacheManager } = require('./cache');
 
 class HTTPGateway {
   /**
@@ -37,6 +40,10 @@ class HTTPGateway {
    * @param {boolean} options.cors - Enable CORS (default: true)
    * @param {string} options.coreId - Core ID para logs
    * @param {Object} options.core - Core instance (for UI Gateway)
+   * @param {Object} options.validationManager - ValidationManager instance (optional)
+   * @param {Object} options.validation - Validation config (optional)
+   * @param {Object} options.compression - Compression config (optional)
+   * @param {Object} options.cache - Cache config (optional)
    */
   constructor(options = {}) {
     this.port = options.port || 3000;
@@ -52,6 +59,64 @@ class HTTPGateway {
 
     this.server = null;
     this.isRunning = false;
+
+    // Validation setup
+    this.validationManager = options.validationManager || null;
+    this.validationConfig = options.validation || {
+      enabled: true,
+      requireSchemas: false,
+      validateResponses: false,
+      strict: true
+    };
+
+    // Create validation middleware if ValidationManager is provided
+    this.validateRequest = null;
+    this.validateResponse = null;
+
+    if (this.validationManager && this.validationConfig.enabled) {
+      this.validateRequest = createValidationMiddleware(this.validationManager, {
+        requireSchemas: this.validationConfig.requireSchemas,
+        strict: this.validationConfig.strict,
+        logger: this.logger
+      });
+
+      if (this.validationConfig.validateResponses) {
+        this.validateResponse = createResponseValidationMiddleware(this.validationManager, {
+          strict: false,  // Responses solo warning, nunca strict
+          logger: this.logger
+        });
+      }
+    }
+
+    // Compression setup
+    this.compressionConfig = options.compression || {
+      enabled: true,
+      minSize: 1024,
+      level: 6
+    };
+
+    this.compression = new CompressionMiddleware({
+      enabled: this.compressionConfig.enabled,
+      minSize: this.compressionConfig.minSize,
+      level: this.compressionConfig.level,
+      logger: this.logger,
+      metrics: this.metrics
+    });
+
+    // Cache setup
+    this.cacheConfig = options.cache || {
+      enabled: false,
+      maxSize: 100,
+      defaultTTL: 60000
+    };
+
+    this.cache = new CacheManager({
+      enabled: this.cacheConfig.enabled,
+      maxSize: this.cacheConfig.maxSize,
+      defaultTTL: this.cacheConfig.defaultTTL,
+      logger: this.logger,
+      metrics: this.metrics
+    });
 
     // UI Gateway integration
     this.uiGateway = null;
@@ -187,25 +252,37 @@ class HTTPGateway {
       // CORS preflight
       if (this.cors && req.method === 'OPTIONS') {
         this.handleCORS(req, res);
-        this.sendResponse(res, 204, null);
+        await this.sendResponse(res, 204, null, req);
         return;
       }
 
       // Health check endpoint
       if (pathname === '/health') {
-        this.handleHealth(req, res);
+        await this.handleHealth(req, res);
         return;
       }
 
       // Readiness check endpoint
       if (pathname === '/ready') {
-        this.handleReady(req, res);
+        await this.handleReady(req, res);
         return;
       }
 
       // Stats endpoint
       if (pathname === '/stats') {
-        this.handleStats(req, res);
+        await this.handleStats(req, res);
+        return;
+      }
+
+      // Cache stats endpoint
+      if (pathname === '/cache/stats') {
+        await this.handleCacheStats(req, res);
+        return;
+      }
+
+      // Cache clear endpoint
+      if (pathname === '/cache/clear' && req.method === 'POST') {
+        await this.handleCacheClear(req, res);
         return;
       }
 
@@ -240,6 +317,36 @@ class HTTPGateway {
         }
       }
 
+      // Check cache first
+      const cached = this.cache.get(req);
+      if (cached) {
+        if (cached.notModified) {
+          // 304 Not Modified
+          res.setHeader('ETag', cached.etag);
+          await this.sendResponse(res, 304, null, req);
+          return;
+        }
+
+        // Cache hit - return cached data
+        if (cached.etag) {
+          res.setHeader('ETag', cached.etag);
+          res.setHeader('X-Cache', 'HIT');
+          res.setHeader('Age', Math.floor(cached.age / 1000).toString());
+        }
+
+        await this.sendResponse(res, 200, cached.data, req);
+
+        if (this.metrics) {
+          this.metrics.observe('gateway.request.duration', Date.now() - startTime);
+        }
+        return;
+      }
+
+      // Cache miss - add header
+      if (this.cache.shouldCache(req)) {
+        res.setHeader('X-Cache', 'MISS');
+      }
+
       // Buscar handler en registry
       if (!this.registry) {
         this.sendError(res, 500, 'Module registry not configured');
@@ -251,6 +358,57 @@ class HTTPGateway {
       if (!apiData) {
         this.sendError(res, 404, 'API endpoint not found');
         return;
+      }
+
+      // Validar request si está habilitado
+      if (this.validateRequest) {
+        try {
+          await this.validateRequest(
+            {
+              method: req.method,
+              path: pathname,
+              query,
+              body: context.body,
+              headers: req.headers
+            },
+            {
+              moduleAPI: apiData,
+              method: req.method,
+              path: pathname
+            }
+          );
+
+          if (this.metrics) {
+            this.metrics.increment('gateway.validation.success');
+          }
+
+        } catch (validationError) {
+          if (validationError instanceof ValidationError) {
+            if (this.logger) {
+              this.logger.warn('gateway.validation.failed', {
+                request_id: requestId,
+                module: apiData.moduleName,
+                api: apiData.apiName,
+                error_count: validationError.errors?.length || 0
+              });
+            }
+
+            if (this.metrics) {
+              this.metrics.increment('gateway.validation.failed');
+            }
+
+            const errorResponse = formatValidationErrorResponse(validationError, {
+              includeDetails: true
+            });
+
+            this.sendError(res, 400, errorResponse.error, {
+              validation_errors: errorResponse.validation_errors
+            });
+            return;
+          }
+          // Re-throw si no es ValidationError
+          throw validationError;
+        }
       }
 
       // Ejecutar handler del módulo
@@ -280,6 +438,27 @@ class HTTPGateway {
         return;
       }
 
+      // Validar response si está habilitado (modo warning)
+      if (this.validateResponse) {
+        try {
+          await this.validateResponse(result, {
+            moduleAPI: apiData,
+            method: req.method,
+            path: pathname
+          });
+        } catch (validationError) {
+          // Response validation solo hace warning, no falla
+          if (this.logger) {
+            this.logger.warn('gateway.response.validation.warning', {
+              request_id: requestId,
+              module: apiData.moduleName,
+              api: apiData.apiName,
+              error: validationError.message
+            });
+          }
+        }
+      }
+
       // Ejecutar hook afterResponse
       let responseContext = {
         request_id: requestId,
@@ -296,8 +475,16 @@ class HTTPGateway {
         }
       }
 
+      // Cache successful responses
+      if (responseContext.status >= 200 && responseContext.status < 300) {
+        this.cache.set(req, responseContext.data, {
+          status: responseContext.status,
+          ttl: this.cacheConfig.defaultTTL
+        });
+      }
+
       // Enviar respuesta
-      this.sendResponse(res, responseContext.status, responseContext.data);
+      await this.sendResponse(res, responseContext.status, responseContext.data, req);
 
       // Metrics
       if (this.metrics) {
@@ -344,7 +531,7 @@ class HTTPGateway {
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
    */
-  handleHealth(req, res) {
+  async handleHealth(req, res) {
     const health = {
       status: 'healthy',
       core_id: this.coreId,
@@ -352,7 +539,7 @@ class HTTPGateway {
       timestamp: new Date().toISOString()
     };
 
-    this.sendResponse(res, 200, health);
+    await this.sendResponse(res, 200, health, req);
   }
 
   /**
@@ -361,7 +548,7 @@ class HTTPGateway {
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
    */
-  handleReady(req, res) {
+  async handleReady(req, res) {
     // Check if all components are ready
     const checks = {
       gateway: this.isRunning,
@@ -387,7 +574,7 @@ class HTTPGateway {
     };
 
     const statusCode = isReady ? 200 : 503;
-    this.sendResponse(res, statusCode, readiness);
+    await this.sendResponse(res, statusCode, readiness, req);
   }
 
   /**
@@ -396,7 +583,7 @@ class HTTPGateway {
    * @param {http.IncomingMessage} req - HTTP request
    * @param {http.ServerResponse} res - HTTP response
    */
-  handleStats(req, res) {
+  async handleStats(req, res) {
     const stats = {
       ...this.stats,
       uptime: Date.now() - this.stats.started_at,
@@ -409,7 +596,12 @@ class HTTPGateway {
       stats.total_apis = stats.apis.length;
     }
 
-    this.sendResponse(res, 200, stats);
+    // Include compression statistics
+    if (this.compression) {
+      stats.compression = this.compression.getStats();
+    }
+
+    await this.sendResponse(res, 200, stats, req);
   }
 
   /**
@@ -451,8 +643,9 @@ class HTTPGateway {
    * @param {http.ServerResponse} res - HTTP response
    * @param {number} statusCode - HTTP status code
    * @param {Object|null} data - Response data
+   * @param {Object} req - HTTP request (optional, for compression headers)
    */
-  sendResponse(res, statusCode, data) {
+  async sendResponse(res, statusCode, data, req = null) {
     // Actualizar estadísticas
     this.stats.by_status[statusCode] = (this.stats.by_status[statusCode] || 0) + 1;
 
@@ -466,23 +659,17 @@ class HTTPGateway {
       const type = data._responseType;
 
       if (type === 'html') {
-        res.setHeader('Content-Type', 'text/html');
-        res.statusCode = statusCode;
-        res.end(data.content || '');
+        await this._sendCompressedResponse(res, statusCode, data.content || '', 'text/html', req);
         return;
       }
 
       if (type === 'css') {
-        res.setHeader('Content-Type', 'text/css');
-        res.statusCode = statusCode;
-        res.end(data.content || '');
+        await this._sendCompressedResponse(res, statusCode, data.content || '', 'text/css', req);
         return;
       }
 
       if (type === 'javascript') {
-        res.setHeader('Content-Type', 'application/javascript');
-        res.statusCode = statusCode;
-        res.end(data.content || '');
+        await this._sendCompressedResponse(res, statusCode, data.content || '', 'application/javascript', req);
         return;
       }
 
@@ -502,11 +689,59 @@ class HTTPGateway {
     }
 
     // Default: JSON response
-    res.setHeader('Content-Type', 'application/json');
+    const jsonData = data !== null ? JSON.stringify(data) : '';
+    await this._sendCompressedResponse(res, statusCode, jsonData, 'application/json', req);
+  }
+
+  /**
+   * Send response with optional compression
+   *
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {number} statusCode - HTTP status code
+   * @param {string|Buffer} data - Response data
+   * @param {string} contentType - Content-Type
+   * @param {Object} req - HTTP request (for headers)
+   * @private
+   */
+  async _sendCompressedResponse(res, statusCode, data, contentType, req) {
+    res.setHeader('Content-Type', contentType);
     res.statusCode = statusCode;
 
-    if (data !== null) {
-      res.end(JSON.stringify(data));
+    // Try compression if request headers available
+    if (req && req.headers && data) {
+      try {
+        const result = await this.compression.compress(data, req.headers, contentType);
+
+        if (result.compressed) {
+          // Set compression headers
+          res.setHeader('Content-Encoding', result.encoding);
+          res.setHeader('Vary', 'Accept-Encoding');
+          res.setHeader('Content-Length', result.compressedSize);
+
+          if (this.logger) {
+            this.logger.debug('gateway.response.compressed', {
+              encoding: result.encoding,
+              ratio: `${result.ratio}%`,
+              bytes_saved: result.bytesSaved
+            });
+          }
+
+          res.end(result.data);
+          return;
+        }
+      } catch (error) {
+        if (this.logger) {
+          this.logger.error('gateway.compression.error', {
+            error: error.message
+          }, error);
+        }
+        // Fall through to uncompressed
+      }
+    }
+
+    // Send uncompressed
+    if (data) {
+      res.end(data);
     } else {
       res.end();
     }

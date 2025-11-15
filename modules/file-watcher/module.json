@@ -9,19 +9,111 @@
         "name": "watch",
         "method": "POST",
         "path": "/watch",
-        "description": "Start watching a path"
+        "description": "Start watching a path",
+        "schemas": {
+          "request": {
+            "body": {
+              "type": "object",
+              "required": ["path"],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "description": "File or directory path to watch"
+                },
+                "recursive": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Watch subdirectories recursively"
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["change", "rename", "add", "delete"]
+                  },
+                  "description": "Events to watch for"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "response": {
+            "type": "object",
+            "required": ["success", "path"],
+            "properties": {
+              "success": { "type": "boolean" },
+              "path": { "type": "string" },
+              "watcher_id": { "type": "string" },
+              "message": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
       },
       {
         "name": "unwatch",
         "method": "POST",
         "path": "/unwatch",
-        "description": "Stop watching a path"
+        "description": "Stop watching a path",
+        "schemas": {
+          "request": {
+            "body": {
+              "type": "object",
+              "required": ["path"],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "description": "Path to stop watching"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "response": {
+            "type": "object",
+            "required": ["success", "path"],
+            "properties": {
+              "success": { "type": "boolean" },
+              "path": { "type": "string" },
+              "message": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
       },
       {
         "name": "list",
         "method": "GET",
         "path": "/list",
-        "description": "List all watched paths"
+        "description": "List all watched paths",
+        "schemas": {
+          "response": {
+            "type": "object",
+            "required": ["success", "watchers"],
+            "properties": {
+              "success": { "type": "boolean" },
+              "count": { "type": "number" },
+              "watchers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string" },
+                    "watcher_id": { "type": "string" },
+                    "recursive": { "type": "boolean" },
+                    "events": { "type": "array", "items": { "type": "string" } },
+                    "created_at": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
       }
     ],
     "hooks": []

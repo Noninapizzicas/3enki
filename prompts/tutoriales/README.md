@@ -120,6 +120,26 @@ Son **instrucciones completas y ejecutables** que un agente IA puede seguir para
 
 ---
 
+### 7. [Crear Componente UI](./prompt_crear_componente_ui.md)
+**Prompt para:** Crear componentes UI totalmente funcionales con HTML, CSS y JavaScript vanilla.
+
+**Complejidad:** 2-13 Story Points
+**Lo que obtienes:**
+- Especificación JSON del componente
+- HTML semántico y accesible
+- CSS modular con estados y transiciones
+- JavaScript vanilla con gestión de estado
+- Integración con Event Core (APIs + MQTT)
+- Documentación completa con ejemplos
+
+**Usar cuando:**
+- Necesitas crear un componente UI reutilizable
+- Quieres componentes con actualización en tiempo real (MQTT)
+- Necesitas componentes accesibles y responsive
+- Quieres integración completa con Event Core
+
+---
+
 ## 🚀 Cómo usar estos prompts
 
 ### Método 1: Copiar y pegar a IA
@@ -171,6 +191,7 @@ Contexto adicional:
 | UI JSON-Driven | 5 SP | 13 SP | 5-13 | 2h - 2d |
 | Logging/Métricas | 2 SP | 8 SP | 2-8 | 30m - 5h |
 | Hooks | 2 SP | 8 SP | 2-8 | 30m - 5h |
+| Componente UI | 2 SP | 13 SP | 2-13 | 30m - 2d |
 
 ---
 

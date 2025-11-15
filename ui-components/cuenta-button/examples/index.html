@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cuenta Button - Ejemplos</title>
+
+  <!-- Component Styles -->
+  <link rel="stylesheet" href="../cuenta-button.css">
+
+  <!-- Page Styles -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    header h1 {
+      color: #1f2937;
+      margin-bottom: 8px;
+      font-size: 32px;
+    }
+
+    header p {
+      color: #6b7280;
+      font-size: 16px;
+    }
+
+    .controls {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    .controls h2 {
+      color: #1f2937;
+      margin-bottom: 16px;
+      font-size: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .control-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-group label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .control-group select,
+    .control-group input {
+      padding: 8px 12px;
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .control-group select:focus,
+    .control-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .control-group button {
+      padding: 10px 20px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .control-group button:hover {
+      background: #5568d3;
+    }
+
+    .control-group button:active {
+      transform: translateY(1px);
+    }
+
+    section {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    section h2 {
+      color: #1f2937;
+      margin-bottom: 16px;
+      font-size: 24px;
+    }
+
+    section h3 {
+      color: #374151;
+      margin: 24px 0 12px;
+      font-size: 18px;
+    }
+
+    section p {
+      color: #6b7280;
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .event-log {
+      background: #1f2937;
+      color: #10b981;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 16px;
+    }
+
+    .event-log .event {
+      padding: 4px 0;
+      border-bottom: 1px solid #374151;
+    }
+
+    .event-log .event:last-child {
+      border-bottom: none;
+    }
+
+    .event-log .event-time {
+      color: #9ca3af;
+      margin-right: 8px;
+    }
+
+    .event-log .event-name {
+      color: #fbbf24;
+      font-weight: bold;
+    }
+
+    .code-block {
+      background: #1f2937;
+      color: #e5e7eb;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: rgba(255, 255, 255, 0.95);
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      font-size: 20px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s;
+    }
+
+    .theme-toggle:hover {
+      transform: scale(1.05);
+    }
+
+    [data-theme="dark"] {
+      --cuenta-button-shadow: rgba(0, 0, 0, 0.3);
+    }
+
+    [data-theme="dark"] body {
+      background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+
+  <div class="container">
+    <header>
+      <h1>🎯 Cuenta Button Component</h1>
+      <p>Botón de cuenta para POS/Comandero con estados visuales y actualización en tiempo real</p>
+    </header>
+
+    <!-- Controls -->
+    <div class="controls">
+      <h2>🎮 Controles Interactivos</h2>
+      <div class="control-group">
+        <label>
+          Estado:
+          <select id="estadoSelect">
+            <option value="pendiente">Pendiente</option>
+            <option value="preparacion">Preparación</option>
+            <option value="listo" selected>Listo</option>
+            <option value="entregado">Entregado</option>
+            <option value="pagado">Pagado</option>
+            <option value="problema">Problema</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </label>
+
+        <label>
+          Tipo:
+          <select id="tipoSelect">
+            <option value="local" selected>Local</option>
+            <option value="delivery">Delivery</option>
+            <option value="llevar">Para Llevar</option>
+          </select>
+        </label>
+
+        <label>
+          Total:
+          <input type="number" id="totalInput" value="125.50" step="0.01">
+        </label>
+
+        <label>
+          Tiempo (min):
+          <input type="number" id="tiempoInput" value="15" step="1">
+        </label>
+
+        <button onclick="actualizarComponente()">Actualizar</button>
+        <button onclick="simularMQTT()">Simular MQTT</button>
+        <button onclick="clearLog()">Limpiar Log</button>
+      </div>
+    </div>
+
+    <!-- Example 1: Estados -->
+    <section>
+      <h2>📊 Ejemplo 1: Todos los Estados</h2>
+      <p>Visualización de todos los estados posibles del componente.</p>
+
+      <div class="grid">
+        <button class="cuenta-button" data-id="mesa-1" data-tipo="local" data-estado="pendiente"></button>
+        <button class="cuenta-button" data-id="mesa-2" data-tipo="local" data-estado="preparacion"></button>
+        <button class="cuenta-button" data-id="mesa-3" data-tipo="local" data-estado="listo"></button>
+        <button class="cuenta-button" data-id="mesa-4" data-tipo="local" data-estado="entregado"></button>
+        <button class="cuenta-button" data-id="mesa-5" data-tipo="local" data-estado="pagado"></button>
+        <button class="cuenta-button" data-id="mesa-6" data-tipo="local" data-estado="problema"></button>
+        <button class="cuenta-button" data-id="mesa-7" data-tipo="local" data-estado="cancelado"></button>
+      </div>
+    </section>
+
+    <!-- Example 2: Tipos -->
+    <section>
+      <h2>🍽️ Ejemplo 2: Tipos de Cuenta</h2>
+      <p>Diferentes tipos de cuenta con gradientes de fondo distintos.</p>
+
+      <div class="grid">
+        <button class="cuenta-button" data-id="local-1" data-tipo="local" data-estado="listo"></button>
+        <button class="cuenta-button" data-id="delivery-1" data-tipo="delivery" data-estado="preparacion"></button>
+        <button class="cuenta-button" data-id="llevar-1" data-tipo="llevar" data-estado="pendiente"></button>
+      </div>
+    </section>
+
+    <!-- Example 3: Interactivo -->
+    <section>
+      <h2>⚡ Ejemplo 3: Componente Interactivo</h2>
+      <p>Haz click en el botón principal para abrir comandero, o en el botón de cobro (💰) para procesar pago.</p>
+
+      <div class="grid">
+        <button class="cuenta-button" id="interactive-component" data-id="mesa-99" data-tipo="local" data-estado="listo"></button>
+      </div>
+
+      <div class="event-log" id="eventLog">
+        <div class="event">
+          <span class="event-time">00:00:00</span>
+          <span class="event-name">READY</span>
+          <span>Componente inicializado</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Example 4: Código -->
+    <section>
+      <h2>💻 Ejemplo 4: Uso del Componente</h2>
+
+      <h3>HTML</h3>
+      <div class="code-block">&lt;button class="cuenta-button" data-id="mesa-1" data-tipo="local" data-estado="listo"&gt;&lt;/button&gt;</div>
+
+      <h3>JavaScript</h3>
+      <div class="code-block">// Obtener el elemento
+const element = document.querySelector('.cuenta-button');
+
+// Inicializar componente
+const cuentaBtn = new CuentaButton(element, {
+  id: 'mesa-1',
+  nombre: 'Mesa 1',
+  tipo: 'local',
+  estado: 'listo',
+  total: 125.50,
+  tiempo: 15,
+  config: {
+    apiBaseUrl: 'http://localhost:3000/api',
+    enableMQTT: true
+  }
+});
+
+// Eventos
+cuentaBtn.on('action-comandero', (data) => {
+  console.log('Abrir comandero:', data);
+});
+
+cuentaBtn.on('action-cobro', (data) => {
+  console.log('Procesar cobro:', data);
+});
+
+cuentaBtn.on('state-change', (data) => {
+  console.log('Estado cambió:', data);
+});
+
+// Actualizar estado
+await cuentaBtn.updateEstado('pagado');
+
+// Actualizar datos
+cuentaBtn.update({
+  total: 150.00,
+  tiempo: 20
+});
+
+// Destruir componente
+cuentaBtn.destroy();</div>
+    </section>
+  </div>
+
+  <!-- Paho MQTT Client (opcional, para MQTT real) -->
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script> -->
+
+  <!-- Component Script -->
+  <script src="../cuenta-button.js"></script>
+
+  <!-- Demo Script -->
+  <script>
+    // Instancias de componentes
+    const components = new Map();
+
+    // Inicializar todos los componentes
+    function initComponents() {
+      document.querySelectorAll('.cuenta-button').forEach((element, index) => {
+        const id = element.getAttribute('data-id') || `cuenta-${index}`;
+        const tipo = element.getAttribute('data-tipo') || 'local';
+        const estado = element.getAttribute('data-estado') || 'pendiente';
+
+        // Nombres según tipo
+        const nombres = {
+          'local': ['Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6', 'Mesa 7'],
+          'delivery': ['Delivery #101', 'Delivery #102', 'Delivery #103'],
+          'llevar': ['Para Llevar #201', 'Para Llevar #202', 'Para Llevar #203']
+        };
+
+        const nombresList = nombres[tipo] || nombres.local;
+        const nombre = nombresList[index % nombresList.length];
+
+        try {
+          const component = new CuentaButton(element, {
+            id,
+            nombre,
+            tipo,
+            estado,
+            total: Math.random() * 200 + 50,
+            tiempo: Math.floor(Math.random() * 60) + 5,
+            config: {
+              apiBaseUrl: 'http://localhost:3000/api',
+              enableMQTT: false // Deshabilitado para demo
+            }
+          });
+
+          components.set(id, component);
+
+          // Event listeners para el componente interactivo
+          if (id === 'mesa-99') {
+            component.on('action-comandero', (data) => {
+              logEvent('action-comandero', `Abrir comandero: ${data.nombre}`);
+            });
+
+            component.on('action-cobro', (data) => {
+              logEvent('action-cobro', `Procesar cobro: $${data.total.toFixed(2)}`);
+            });
+
+            component.on('state-change', (data) => {
+              logEvent('state-change', `${data.from} → ${data.to}`);
+            });
+
+            component.on('long-press', (data) => {
+              logEvent('long-press', `Long press en ${data.id}`);
+            });
+
+            component.on('update', (data) => {
+              logEvent('update', `Datos actualizados`);
+            });
+          }
+        } catch (error) {
+          console.error('Error inicializando componente:', error);
+        }
+      });
+
+      console.log(`✅ ${components.size} componentes inicializados`);
+    }
+
+    // Actualizar componente interactivo
+    function actualizarComponente() {
+      const component = components.get('mesa-99');
+      if (!component) return;
+
+      const estado = document.getElementById('estadoSelect').value;
+      const tipo = document.getElementById('tipoSelect').value;
+      const total = parseFloat(document.getElementById('totalInput').value);
+      const tiempo = parseInt(document.getElementById('tiempoInput').value);
+
+      component.update({ estado, tipo, total, tiempo });
+      logEvent('manual-update', `Estado: ${estado}, Tipo: ${tipo}, Total: $${total}, Tiempo: ${tiempo}min`);
+    }
+
+    // Simular actualización MQTT
+    function simularMQTT() {
+      const component = components.get('mesa-99');
+      if (!component) return;
+
+      const estados = ['pendiente', 'preparacion', 'listo', 'entregado', 'pagado'];
+      const estadoAleatorio = estados[Math.floor(Math.random() * estados.length)];
+
+      component.updateEstado(estadoAleatorio, { skipAPI: true });
+      logEvent('mqtt-simulation', `Actualización MQTT: ${estadoAleatorio}`);
+    }
+
+    // Log de eventos
+    function logEvent(eventName, message) {
+      const eventLog = document.getElementById('eventLog');
+      const now = new Date();
+      const time = now.toLocaleTimeString('es-ES');
+
+      const eventDiv = document.createElement('div');
+      eventDiv.className = 'event';
+      eventDiv.innerHTML = `
+        <span class="event-time">${time}</span>
+        <span class="event-name">${eventName.toUpperCase()}</span>
+        <span>${message}</span>
+      `;
+
+      eventLog.insertBefore(eventDiv, eventLog.firstChild);
+
+      // Limitar a 50 eventos
+      while (eventLog.children.length > 50) {
+        eventLog.removeChild(eventLog.lastChild);
+      }
+    }
+
+    // Limpiar log
+    function clearLog() {
+      const eventLog = document.getElementById('eventLog');
+      eventLog.innerHTML = '<div class="event"><span class="event-time">--:--:--</span><span class="event-name">CLEARED</span><span>Log limpiado</span></div>';
+    }
+
+    // Toggle theme
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+
+      const btn = document.querySelector('.theme-toggle');
+      btn.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+
+      logEvent('theme-change', `Tema cambiado a ${newTheme}`);
+    }
+
+    // Inicializar al cargar
+    document.addEventListener('DOMContentLoaded', () => {
+      initComponents();
+      logEvent('init', 'Todos los componentes inicializados');
+    });
+
+    // Actualizar tiempo cada minuto (simulación)
+    setInterval(() => {
+      components.forEach((component) => {
+        if (component.estado !== 'pagado' && component.estado !== 'cancelado') {
+          component.update({
+            tiempo: component.tiempo + 1
+          }, { skipEmit: true });
+        }
+      });
+    }, 60000); // Cada minuto
+
+    // Demo: cambiar estados automáticamente cada 5 segundos
+    let demoInterval;
+    function startDemo() {
+      const component = components.get('mesa-99');
+      if (!component) return;
+
+      const estados = ['pendiente', 'preparacion', 'listo', 'entregado', 'pagado'];
+      let index = 0;
+
+      demoInterval = setInterval(() => {
+        component.updateEstado(estados[index % estados.length], { skipAPI: true });
+        index++;
+      }, 5000);
+
+      logEvent('demo-start', 'Demo automático iniciado (cada 5s)');
+    }
+
+    // Descomentar para iniciar demo automático
+    // setTimeout(startDemo, 2000);
+  </script>
+</body>
+</html>

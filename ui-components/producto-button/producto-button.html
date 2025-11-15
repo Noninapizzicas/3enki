@@ -1,0 +1,50 @@
+<!-- Producto Button Component Template -->
+<button
+  class="producto-button"
+  data-component="producto-button"
+  data-id=""
+  data-categoria=""
+  data-evento="normal"
+  role="button"
+  tabindex="0"
+  aria-label="Producto"
+>
+  <!-- Marco exterior que cambia según evento -->
+  <div class="producto-button__marco"></div>
+
+  <!-- Área de contenido con gradiente de categoría -->
+  <div class="producto-button__content">
+
+    <!-- Nombre del producto (centro) -->
+    <div class="producto-button__nombre"></div>
+
+    <!-- Precio (bottom-right) -->
+    <div class="producto-button__precio"></div>
+
+  </div>
+
+  <!-- Emojis en esquinas -->
+  <div class="producto-button__corners">
+    <span class="producto-button__emoji producto-button__emoji--top-left"></span>
+    <span class="producto-button__emoji producto-button__emoji--top-right"></span>
+    <span class="producto-button__emoji producto-button__emoji--bottom-left"></span>
+  </div>
+
+  <!-- Touch zones (invisible) -->
+  <div class="producto-button__touch-zone producto-button__touch-zone--left" data-action="variations"></div>
+  <div class="producto-button__touch-zone producto-button__touch-zone--right" data-action="add"></div>
+
+  <!-- Overlay para estados disabled -->
+  <div class="producto-button__overlay"></div>
+
+  <!-- Ripple effect -->
+  <div class="producto-button__ripple"></div>
+
+  <!-- Screen reader info -->
+  <span class="sr-only">
+    <span class="producto-button__sr-nombre"></span>,
+    Precio: <span class="producto-button__sr-precio"></span>,
+    Categoría: <span class="producto-button__sr-categoria"></span>,
+    Estado: <span class="producto-button__sr-evento"></span>
+  </span>
+</button>

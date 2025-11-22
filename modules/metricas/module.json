@@ -1,0 +1,167 @@
+{
+  "name": "metricas",
+  "version": "1.0.0",
+  "description": "Módulo de métricas centralizado - Escucha eventos del sistema y genera métricas en tiempo real",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": ["metricas.snapshot", "metricas.alerta"],
+    "queries": ["metricas.obtener", "metricas.counters", "metricas.gauges"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "metricas.snapshot",
+        "description": "Snapshot periódico de todas las métricas del sistema",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/metricas_snapshot"
+        }
+      },
+      {
+        "event": "metricas.alerta",
+        "description": "Alerta cuando se detecta anomalía en métricas",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/metricas_alerta"
+        }
+      }
+    ],
+
+    "subscribes": [
+      {
+        "event": "*.creado",
+        "description": "Escucha todos los eventos de creación para generar counters",
+        "handler": "onEntityCreated"
+      },
+      {
+        "event": "*.actualizado",
+        "description": "Escucha todos los eventos de actualización",
+        "handler": "onEntityUpdated"
+      },
+      {
+        "event": "*.eliminado",
+        "description": "Escucha todos los eventos de eliminación",
+        "handler": "onEntityDeleted"
+      },
+      {
+        "event": "*.error",
+        "description": "Escucha eventos de error para tracking",
+        "handler": "onError"
+      },
+      {
+        "event": "*.completado",
+        "description": "Escucha eventos de operaciones completadas",
+        "handler": "onOperationCompleted"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetAllMetrics",
+      "description": "Obtener todas las métricas del sistema (counters, gauges, timings)",
+      "response_schema": {
+        "$ref": "./schemas/metrics.json#/definitions/all_metrics_response"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/counters",
+      "handler": "handleGetCounters",
+      "description": "Obtener solo counters (eventos contados)",
+      "response_schema": {
+        "$ref": "./schemas/metrics.json#/definitions/counters_response"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/gauges",
+      "handler": "handleGetGauges",
+      "description": "Obtener solo gauges (valores instantáneos)",
+      "response_schema": {
+        "$ref": "./schemas/metrics.json#/definitions/gauges_response"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/timings",
+      "handler": "handleGetTimings",
+      "description": "Obtener timings de operaciones (últimos 1000)",
+      "query_params": [
+        {
+          "name": "limit",
+          "type": "number",
+          "default": 100,
+          "description": "Número de timings a retornar"
+        }
+      ],
+      "response_schema": {
+        "$ref": "./schemas/metrics.json#/definitions/timings_response"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/eventos",
+      "handler": "handleGetEventMetrics",
+      "description": "Métricas agrupadas por tipo de evento",
+      "response_schema": {
+        "$ref": "./schemas/metrics.json#/definitions/event_metrics_response"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/metrics/reset",
+      "handler": "handleResetMetrics",
+      "description": "Resetear todas las métricas (admin only)",
+      "response_schema": {
+        "$ref": "./schemas/metrics.json#/definitions/reset_response"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo de métricas"
+    }
+  ],
+
+  "ui": {
+    "enabled": true,
+    "title": "Métricas del Sistema",
+    "icon": "📊",
+    "components": ["dashboard-metricas", "metric-card"],
+
+    "views": {
+      "main": {
+        "type": "dashboard",
+        "component": "dashboard-metricas",
+        "config": {
+          "endpoint": "/modules/metricas/metrics",
+          "mqtt_topics": ["metricas.snapshot"],
+          "refresh_interval": 5000,
+          "refresh_on_event": true
+        }
+      }
+    }
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": false,
+      "comment": "Este módulo ES el sistema de métricas, no genera métricas sobre sí mismo para evitar recursión"
+    }
+  },
+
+  "config": {
+    "snapshot_interval_ms": 10000,
+    "max_timings_stored": 1000,
+    "enable_alerts": false
+  }
+}

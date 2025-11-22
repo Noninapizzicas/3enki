@@ -1,0 +1,73 @@
+{
+  "component": "dashboard-metricas",
+  "version": "1.0.0",
+  "description": "Dashboard para visualizar métricas del sistema en tiempo real",
+
+  "config": {
+    "type": "dashboard",
+    "layout": {
+      "type": "grid",
+      "columns": 3,
+      "gap": "16px",
+      "responsive": {
+        "mobile": 1,
+        "tablet": 2,
+        "desktop": 3
+      }
+    }
+  },
+
+  "sections": [
+    {
+      "id": "counters",
+      "title": "Contadores",
+      "component": "metrics-counter-list",
+      "data_source": {
+        "field": "counters",
+        "type": "object"
+      }
+    },
+    {
+      "id": "gauges",
+      "title": "Valores Actuales",
+      "component": "metrics-gauge-list",
+      "data_source": {
+        "field": "gauges",
+        "type": "object"
+      }
+    },
+    {
+      "id": "timings",
+      "title": "Timings Recientes",
+      "component": "metrics-timing-list",
+      "data_source": {
+        "field": "timings",
+        "type": "array"
+      }
+    }
+  ],
+
+  "mqtt": {
+    "enabled": true,
+    "topics": ["metricas.snapshot"],
+    "auto_refresh": true,
+    "update_strategy": "merge"
+  },
+
+  "refresh": {
+    "enabled": true,
+    "interval": 5000,
+    "on_event": true
+  },
+
+  "empty_state": {
+    "icon": "📊",
+    "title": "No hay métricas disponibles",
+    "description": "Las métricas aparecerán cuando el sistema procese eventos"
+  },
+
+  "loading_state": {
+    "type": "spinner",
+    "message": "Cargando métricas..."
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pizzepos.com/schemas/metricas/metrics.json",
+  "title": "Métricas Schema",
+  "description": "Definiciones de esquemas para métricas del sistema",
+
+  "definitions": {
+    "counter": {
+      "type": "object",
+      "required": ["name", "value"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Nombre de la métrica",
+          "examples": ["producto.creado.total", "cuenta.actualizada.total"]
+        },
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Valor del contador"
+        }
+      }
+    },
+
+    "gauge": {
+      "type": "object",
+      "required": ["name", "value", "timestamp"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Nombre de la gauge"
+        },
+        "value": {
+          "type": "number",
+          "description": "Valor actual de la gauge"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "timing": {
+      "type": "object",
+      "required": ["event_type", "duration", "timestamp"],
+      "properties": {
+        "event_type": {
+          "type": "string",
+          "description": "Tipo de evento"
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Duración en milisegundos"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+
+    "all_metrics_response": {
+      "type": "object",
+      "required": ["counters", "gauges", "timings", "timestamp"],
+      "properties": {
+        "counters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Mapa de counters (nombre -> valor)"
+        },
+        "gauges": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Mapa de gauges (nombre -> valor)"
+        },
+        "timings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/timing"
+          },
+          "description": "Array de timings recientes"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "uptime": {
+          "type": "number",
+          "description": "Uptime del módulo en segundos"
+        }
+      }
+    },
+
+    "counters_response": {
+      "type": "object",
+      "required": ["counters", "total", "timestamp"],
+      "properties": {
+        "counters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Número total de counters"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "gauges_response": {
+      "type": "object",
+      "required": ["gauges", "total", "timestamp"],
+      "properties": {
+        "gauges": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Número total de gauges"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "timings_response": {
+      "type": "object",
+      "required": ["timings", "count", "timestamp"],
+      "properties": {
+        "timings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/timing"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "event_metrics_response": {
+      "type": "object",
+      "required": ["eventos", "timestamp"],
+      "properties": {
+        "eventos": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ultimo": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "reset_response": {
+      "type": "object",
+      "required": ["success", "message", "timestamp"],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

@@ -8,6 +8,9 @@
  * @version 1.0.0
  */
 
+const fs = require('fs').promises;
+const path = require('path');
+
 class MetricasModule {
   constructor() {
     this.name = 'metricas';
@@ -22,7 +25,13 @@ class MetricasModule {
     // Configuración
     this.maxTimingsStored = 1000;
     this.snapshotInterval = 10000;    // 10 segundos
+    this.persistInterval = 60000;     // 60 segundos (persistencia JSON)
+    this.dataDir = path.join(process.cwd(), 'data');
+    this.dataFile = path.join(this.dataDir, 'metricas.json');
+
+    // Timers
     this.snapshotTimer = null;
+    this.persistTimer = null;
     this.startTime = Date.now();
 
     // Dependencias (inyectadas en onLoad)
@@ -43,18 +52,25 @@ class MetricasModule {
       version: this.version
     });
 
+    // Cargar métricas persistidas (si existen)
+    await this.loadFromJSON();
+
     // Suscribirse a eventos mediante patrones wildcard
     await this.subscribeToEvents();
 
     // Inicializar gauges del sistema
     this.initializeSystemGauges();
 
-    // Iniciar timer de snapshots periódicos
+    // Iniciar timers
     this.startSnapshotTimer();
+    this.startPersistTimer();
 
     this.logger.info('metricas.loaded', {
       module: this.name,
-      snapshot_interval: this.snapshotInterval
+      snapshot_interval: this.snapshotInterval,
+      persist_interval: this.persistInterval,
+      counters_loaded: this.counters.size,
+      gauges_loaded: this.gauges.size
     });
   }
 
@@ -66,14 +82,27 @@ class MetricasModule {
       timings_total: this.timings.length
     });
 
-    // Limpiar timer
+    // Limpiar timers
     if (this.snapshotTimer) {
       clearInterval(this.snapshotTimer);
       this.snapshotTimer = null;
     }
 
+    if (this.persistTimer) {
+      clearInterval(this.persistTimer);
+      this.persistTimer = null;
+    }
+
+    // Persistir métricas antes de cerrar
+    await this.persistToJSON();
+
     // Publicar último snapshot antes de cerrar
     await this.publishSnapshot();
+
+    this.logger.info('metricas.unloaded', {
+      module: this.name,
+      metrics_persisted: true
+    });
   }
 
   // ==========================================
@@ -557,6 +586,129 @@ class MetricasModule {
         error: error.message,
         stack: error.stack
       });
+    }
+  }
+
+  // ==========================================
+  // Persistencia JSON
+  // ==========================================
+
+  startPersistTimer() {
+    this.persistTimer = setInterval(async () => {
+      await this.persistToJSON();
+    }, this.persistInterval);
+  }
+
+  async loadFromJSON() {
+    try {
+      // Verificar si existe el directorio data/
+      try {
+        await fs.access(this.dataDir);
+      } catch (error) {
+        // Crear directorio si no existe
+        await fs.mkdir(this.dataDir, { recursive: true });
+        this.logger.info('metricas.data_dir.created', {
+          path: this.dataDir
+        });
+      }
+
+      // Intentar cargar archivo
+      try {
+        await fs.access(this.dataFile);
+      } catch (error) {
+        // Archivo no existe - primera ejecución
+        this.logger.info('metricas.load.first_run', {
+          message: 'No hay métricas persistidas, iniciando desde cero'
+        });
+        return;
+      }
+
+      // Leer y parsear archivo
+      const data = await fs.readFile(this.dataFile, 'utf8');
+      const parsed = JSON.parse(data);
+
+      // Validar versión
+      if (parsed.version !== this.version) {
+        this.logger.warn('metricas.load.version_mismatch', {
+          file_version: parsed.version,
+          module_version: this.version,
+          message: 'Cargando métricas de versión diferente'
+        });
+      }
+
+      // Cargar counters
+      if (parsed.counters) {
+        this.counters = new Map(Object.entries(parsed.counters));
+      }
+
+      // Cargar gauges (no se cargan, son valores instantáneos)
+      // this.gauges se inicializa en initializeSystemGauges()
+
+      // Cargar timings (últimos 1000)
+      if (parsed.timings && Array.isArray(parsed.timings)) {
+        this.timings = parsed.timings.slice(-this.maxTimingsStored);
+      }
+
+      // Cargar eventMetrics
+      if (parsed.eventMetrics) {
+        this.eventMetrics = new Map(Object.entries(parsed.eventMetrics));
+      }
+
+      this.logger.info('metricas.loaded_from_json', {
+        counters: this.counters.size,
+        timings: this.timings.length,
+        eventMetrics: this.eventMetrics.size,
+        file: this.dataFile,
+        saved_at: parsed.metadata?.saved_at
+      });
+
+    } catch (error) {
+      this.logger.error('metricas.load.error', {
+        error: error.message,
+        stack: error.stack,
+        file: this.dataFile
+      });
+      // NO relanzar - continuar con métricas vacías
+    }
+  }
+
+  async persistToJSON() {
+    try {
+      // Crear snapshot atómico (no bloquea Maps actuales)
+      const snapshot = {
+        version: this.version,
+        counters: Object.fromEntries(this.counters),
+        gauges: Object.fromEntries(this.gauges),
+        timings: this.timings.slice(-this.maxTimingsStored),
+        eventMetrics: Object.fromEntries(this.eventMetrics),
+        metadata: {
+          saved_at: new Date().toISOString(),
+          module_version: this.version,
+          uptime: (Date.now() - this.startTime) / 1000
+        }
+      };
+
+      // Escribir a archivo temporal
+      const tempFile = `${this.dataFile}.tmp`;
+      await fs.writeFile(tempFile, JSON.stringify(snapshot, null, 2), 'utf8');
+
+      // Rename atómico (evita corrupción)
+      await fs.rename(tempFile, this.dataFile);
+
+      this.logger.debug('metricas.persisted_to_json', {
+        counters: this.counters.size,
+        gauges: this.gauges.size,
+        timings: this.timings.length,
+        file: this.dataFile
+      });
+
+    } catch (error) {
+      this.logger.error('metricas.persist.error', {
+        error: error.message,
+        stack: error.stack,
+        file: this.dataFile
+      });
+      // NO relanzar - no interrumpir ejecución
     }
   }
 }

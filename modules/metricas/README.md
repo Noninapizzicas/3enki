@@ -351,6 +351,102 @@ async handleCreateProducto(req, context) {
 
 ---
 
+## 💾 Persistencia JSON
+
+Las métricas se **persisten automáticamente** en archivo JSON para sobrevivir reinicios del sistema.
+
+### Ubicación del archivo:
+```
+data/metricas.json
+```
+
+### Formato del archivo:
+```json
+{
+  "version": "1.0.0",
+  "counters": {
+    "producto.creado.total": 45,
+    "cuenta.creada.total": 23,
+    "errores.total": 3
+  },
+  "gauges": {
+    "sistema.uptime": 3600.5,
+    "metricas.counters.count": 10
+  },
+  "timings": [
+    {
+      "event_type": "producto.creado",
+      "duration": 125,
+      "timestamp": "2025-01-19T14:30:00Z",
+      "correlation_id": "uuid-123"
+    }
+  ],
+  "eventMetrics": {
+    "producto.creado": {
+      "total": 45,
+      "ultimo": "2025-01-19T14:30:00Z"
+    }
+  },
+  "metadata": {
+    "saved_at": "2025-01-19T15:30:00Z",
+    "module_version": "1.0.0",
+    "uptime": 3600.5
+  }
+}
+```
+
+### Comportamiento:
+
+✅ **Carga al inicio** - `loadFromJSON()` en `onLoad()`
+- Si no existe archivo, inicia con métricas vacías
+- Si existe, carga counters, timings, eventMetrics
+- Gauges NO se cargan (son valores instantáneos)
+
+✅ **Guardado periódico** - Cada 60 segundos
+- Snapshot atómico (no bloquea operaciones en RAM)
+- Escritura a `.tmp` + rename atómico (evita corrupción)
+- Solo logs en caso de error (no interrumpe ejecución)
+
+✅ **Flush en shutdown** - `persistToJSON()` en `onUnload()`
+- Garantiza que métricas se guarden antes de cerrar
+- Máxima pérdida: ~60 segundos de datos
+
+### Configuración de persistencia:
+
+```javascript
+// En index.js constructor()
+this.persistInterval = 60000;  // 60 segundos (configurable)
+this.dataDir = path.join(process.cwd(), 'data');
+this.dataFile = path.join(this.dataDir, 'metricas.json');
+```
+
+### Manejo de errores:
+
+```javascript
+// Si falla la carga
+this.logger.error('metricas.load.error', { ... });
+// → Continúa con métricas vacías
+
+// Si falla el guardado
+this.logger.error('metricas.persist.error', { ... });
+// → No interrumpe ejecución, reintenta en próximo ciclo
+```
+
+### Backup manual:
+
+```bash
+# Copiar archivo de métricas
+cp data/metricas.json data/metricas.backup.json
+
+# Restaurar desde backup
+cp data/metricas.backup.json data/metricas.json
+
+# Ver métricas con jq
+cat data/metricas.json | jq '.counters'
+```
+
+---
+
 ## ⚙️ Configuración
 
 En `module.json`:
@@ -364,6 +460,8 @@ En `module.json`:
   }
 }
 ```
+
+**Nota:** `persist_interval` se configura en `index.js` (60s por defecto).
 
 ---
 

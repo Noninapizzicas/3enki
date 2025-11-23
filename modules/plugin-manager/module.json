@@ -1,43 +1,134 @@
 {
   "name": "plugin-manager",
-  "version": "1.0.0",
-  "description": "Discovers, loads, and manages JSON-based plugins from the plugins/ directory",
+  "version": "2.0.0",
+  "description": "Discovers and manages JSON-based function plugins",
+  "author": "Aichat Team",
   "main": "index.js",
-  "author": "event-core team",
-  "license": "MIT",
-  "provides": [
-    "plugin-discovery",
-    "plugin-loading",
-    "plugin-validation"
-  ],
-  "dependencies": [],
-  "apis": {
-    "get_plugin": {
-      "method": "GET",
-      "path": "/plugin/:name",
-      "description": "Get a specific plugin definition by name"
-    },
-    "list_plugins": {
-      "method": "GET",
-      "path": "/plugins",
-      "description": "List all loaded plugins"
-    },
-    "reload_plugins": {
-      "method": "POST",
-      "path": "/plugins/reload",
-      "description": "Reload all plugins from disk"
-    }
+
+  "provides": {
+    "events": [
+      "plugin.loaded",
+      "plugin.unloaded",
+      "plugin.error",
+      "plugin.reloaded"
+    ],
+    "queries": [
+      "plugin.get.request",
+      "plugin.list.request"
+    ]
   },
+
   "events": {
     "publishes": [
-      "plugin.loaded",
-      "plugin.error"
+      {
+        "event": "plugin.loaded",
+        "description": "Plugin loaded successfully",
+        "schema": { "$ref": "./schemas/events.json#/definitions/plugin_loaded" }
+      },
+      {
+        "event": "plugin.unloaded",
+        "description": "Plugin unloaded",
+        "schema": { "$ref": "./schemas/events.json#/definitions/plugin_unloaded" }
+      },
+      {
+        "event": "plugin.error",
+        "description": "Plugin loading error",
+        "schema": { "$ref": "./schemas/events.json#/definitions/plugin_error" }
+      },
+      {
+        "event": "plugin.reloaded",
+        "description": "All plugins reloaded",
+        "schema": { "$ref": "./schemas/events.json#/definitions/plugin_reloaded" }
+      },
+      {
+        "event": "plugin.get.response",
+        "description": "Response to plugin get request",
+        "schema": { "$ref": "./schemas/events.json#/definitions/plugin_get_response" }
+      },
+      {
+        "event": "plugin.list.response",
+        "description": "Response to plugin list request",
+        "schema": { "$ref": "./schemas/events.json#/definitions/plugin_list_response" }
+      }
     ],
-    "subscribes": []
+    "subscribes": [
+      {
+        "event": "plugin.get.request",
+        "description": "Get plugin definition by name",
+        "handler": "onGetPluginRequest"
+      },
+      {
+        "event": "plugin.list.request",
+        "description": "List all loaded plugins",
+        "handler": "onListPluginsRequest"
+      }
+    ]
   },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/plugins/:name",
+      "handler": "handleGetPlugin",
+      "description": "Get specific plugin definition",
+      "response_schema": { "$ref": "./schemas/plugin.json#/definitions/get_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/plugins",
+      "handler": "handleListPlugins",
+      "description": "List all loaded plugins",
+      "response_schema": { "$ref": "./schemas/plugin.json#/definitions/list_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/plugins/reload",
+      "handler": "handleReloadPlugins",
+      "description": "Reload all plugins from disk (publishes plugin.reloaded)",
+      "response_schema": { "$ref": "./schemas/plugin.json#/definitions/reload_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "plugin.loaded.total",
+        "plugin.error.total",
+        "plugin.reload.total"
+      ],
+      "gauges": [
+        "plugin.count",
+        "plugin.functions.count"
+      ],
+      "timings": [
+        "plugin.discovery.duration",
+        "plugin.load.duration"
+      ]
+    }
+  },
+
   "config": {
-    "plugins_path": "../../plugins",
-    "auto_reload": false,
-    "watch_interval": 5000
+    "pluginsPath": "../../plugins",
+    "autoReload": false,
+    "watchInterval": 5000,
+    "validateSchema": true
   }
 }

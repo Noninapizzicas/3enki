@@ -1,90 +1,175 @@
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
+/**
+ * Módulo Calling Generator
+ * Generates executable JavaScript functions from plugin definitions with HTTP and event-based execution
+ */
+
 const http = require('http');
+const https = require('https');
 const crypto = require('crypto');
 
-class CallingGeneratorModule {
-  constructor(config, { logger, eventBus, metrics, moduleLoader }) {
-    this.logger = logger.child({ module: 'calling-generator' });
-    this.eventBus = eventBus;
-    this.metrics = metrics;
-    this.moduleLoader = moduleLoader;
-    this.config = config;
+class CallingGenerator {
+  constructor() {
+    this.name = 'calling-generator';
+    this.version = '2.0.0';
 
-    // Stores { fullFunctionName: { func: Callable, metadata: Object } }
-    this.generatedFunctions = new Map();
+    // Estado
+    this.generatedFunctions = new Map(); // full_name -> { func, metadata }
+    this.pluginsByName = new Map(); // plugin_name -> plugin_count
+    this.pendingRequests = new Map(); // request_id -> { resolve, reject, timeout }
 
-    this.toolOrchestratorModule = null;
-    this.unsubscribePluginLoaded = null;
+    // Dependencias (inyectadas)
+    this.logger = null;
+    this.metrics = null;
+    this.eventBus = null;
+    this.config = null;
+    this.moduleManager = null;
   }
 
-  async onLoad() {
-    this.logger.info('Calling Generator module loaded');
+  // ==========================================
+  // Lifecycle
+  // ==========================================
 
-    // Get Tool Orchestrator module
-    const toolOrchestratorModule = this.moduleLoader.getModule('tool-orchestrator');
-    this.toolOrchestratorModule = toolOrchestratorModule;
+  async onLoad(core) {
+    this.logger = core.logger;
+    this.metrics = core.metrics;
+    this.eventBus = core.eventBus;
+    this.config = core.config || {};
+    this.moduleManager = core.moduleManager;
 
-    if (!toolOrchestratorModule || !toolOrchestratorModule.instance) {
-      this.logger.warn('Tool Orchestrator not found. Functions will not be registered automatically');
-    }
+    this.logger.info('modulo.loading', { module: this.name });
 
-    // Subscribe to plugin.loaded events
-    this.unsubscribePluginLoaded = this.eventBus.subscribe(
-      'plugin.loaded',
-      this.handlePluginLoaded.bind(this)
-    );
+    // Suscribirse a eventos
+    await this.subscribeToEvents();
 
-    this.logger.info('Subscribed to plugin.loaded events');
+    this.logger.info('modulo.loaded', { module: this.name });
   }
 
   async onUnload() {
-    this.logger.info('Calling Generator module unloading');
+    this.logger.info('modulo.unloading', { module: this.name });
 
-    if (this.unsubscribePluginLoaded) {
-      this.unsubscribePluginLoaded();
-    }
-
-    // Unregister all tools from Tool Orchestrator
-    if (this.toolOrchestratorModule && this.toolOrchestratorModule.instance) {
-      for (const fullFunctionName of this.generatedFunctions.keys()) {
-        if (typeof this.toolOrchestratorModule.instance.unregisterTool === 'function') {
-          this.toolOrchestratorModule.instance.unregisterTool(fullFunctionName);
-        }
-      }
-      this.logger.info(`Unregistered ${this.generatedFunctions.size} functions from Tool Orchestrator`);
+    // Desregistrar funciones del tool-orchestrator si existe
+    if (this.config.registerWithToolOrchestrator) {
+      await this.unregisterAllFunctionsFromToolOrchestrator();
     }
 
     this.generatedFunctions.clear();
+    this.pluginsByName.clear();
   }
 
-  /**
-   * Handles plugin.loaded event
-   * @param {object} event - The plugin.loaded event payload
-   */
-  async handlePluginLoaded(event) {
-    const { name, definition } = event;
+  // ==========================================
+  // Event Subscriptions
+  // ==========================================
 
-    this.logger.info({ pluginName: name }, 'Processing plugin.loaded event');
+  async subscribeToEvents() {
+    // REMOVED: plugin.loaded subscription (stateless - no auto-caching)
+    // await this.eventBus.subscribe('plugin.loaded', this.onPluginLoaded.bind(this));
+
+    await this.eventBus.subscribe('function.get.request', this.onGetFunctionRequest.bind(this));
+    await this.eventBus.subscribe('function.list.request', this.onListFunctionsRequest.bind(this));
+    await this.eventBus.subscribe('function.execute.request', this.onExecuteFunctionRequest.bind(this));
+  }
+
+  async onPluginLoaded(event) {
+    const { name, definition } = event.payload;
+
+    this.logger.info('plugin.loaded.received', {
+      plugin_name: name,
+      correlation_id: event.correlation_id
+    });
 
     if (!definition || !definition.functions) {
-      this.logger.warn({ pluginName: name }, 'Plugin definition missing functions');
+      this.logger.warn('plugin.invalid.no_functions', { plugin_name: name });
       return;
     }
 
-    await this.generatePluginCallingFunctions(definition);
+    await this.generatePluginFunctions(definition, event.correlation_id);
   }
 
-  /**
-   * Generates calling functions for a plugin
-   * @param {object} pluginData - The plugin definition
-   */
-  async generatePluginCallingFunctions(pluginData) {
+  async onGetFunctionRequest(event) {
+    const { request_id, name } = event.payload;
+    const correlationId = event.correlation_id;
+
+    this.logger.info('function.get.request.received', {
+      request_id,
+      name,
+      correlation_id: correlationId
+    });
+
+    const funcData = this.generatedFunctions.get(name);
+
+    await this.eventBus.publish('function.get.response', {
+      request_id,
+      success: !!funcData,
+      function: funcData ? funcData.metadata : undefined,
+      error: funcData ? undefined : `Function not found: ${name}`
+    }, { correlationId });
+  }
+
+  async onListFunctionsRequest(event) {
+    const { request_id } = event.payload;
+    const correlationId = event.correlation_id;
+
+    this.logger.info('function.list.request.received', {
+      request_id,
+      correlation_id: correlationId
+    });
+
+    const functions = Array.from(this.generatedFunctions.values()).map(f => f.metadata);
+
+    await this.eventBus.publish('function.list.response', {
+      request_id,
+      success: true,
+      functions,
+      count: functions.length
+    }, { correlationId });
+  }
+
+  async onExecuteFunctionRequest(event) {
+    const { request_id, name, args } = event.payload;
+    const correlationId = event.correlation_id;
+
+    this.logger.info('function.execute.request.received', {
+      request_id,
+      name,
+      correlation_id: correlationId
+    });
+
     try {
-      if (!pluginData.metadata || !pluginData.metadata.name || !pluginData.functions) {
-        this.logger.error('Invalid plugin definition: missing metadata, name, or functions');
-        return;
+      const result = await this.executeFunction(name, args, correlationId);
+
+      await this.eventBus.publish('function.execute.response', {
+        request_id,
+        success: true,
+        result: result.result,
+        duration: result.duration
+      }, { correlationId });
+
+    } catch (error) {
+      this.logger.error('function.execute.request.error', {
+        request_id,
+        name,
+        error: error.message,
+        correlation_id: correlationId
+      });
+
+      await this.eventBus.publish('function.execute.response', {
+        request_id,
+        success: false,
+        error: error.message
+      }, { correlationId });
+    }
+  }
+
+  // ==========================================
+  // Core Function Generation
+  // ==========================================
+
+  async generatePluginFunctions(pluginData, correlationId) {
+    const startTime = Date.now();
+
+    try {
+      if (!pluginData.metadata || !pluginData.metadata.name) {
+        throw new Error('Invalid plugin: missing metadata.name');
       }
 
       const pluginName = pluginData.metadata.name;
@@ -93,12 +178,18 @@ class CallingGeneratorModule {
 
       let generatedCount = 0;
 
+      this.logger.info('plugin.functions.generating', {
+        plugin_name: pluginName,
+        functions_count: Object.keys(pluginData.functions).length,
+        correlation_id: correlationId
+      });
+
       for (const funcName in pluginData.functions) {
         const funcDef = pluginData.functions[funcName];
-        const fullFunctionName = `${pluginName}.${funcName}`;
+        const fullName = `${pluginName}.${funcName}`;
 
         try {
-          const { func, metadata } = this._createCallingFunction(
+          const { func, metadata } = this.createCallingFunction(
             pluginName,
             funcName,
             funcDef,
@@ -107,60 +198,80 @@ class CallingGeneratorModule {
             pluginData
           );
 
-          this.generatedFunctions.set(fullFunctionName, { func, metadata });
+          this.generatedFunctions.set(fullName, { func, metadata });
           generatedCount++;
 
-          // Register with Tool Orchestrator
-          this.registerWithToolOrchestrator(fullFunctionName, func, metadata);
+          // Registrar con tool-orchestrator si está habilitado
+          if (this.config.registerWithToolOrchestrator) {
+            await this.registerWithToolOrchestrator(fullName, func, metadata, correlationId);
+          }
 
-          this.logger.debug({ fullFunctionName, type: metadata.type }, 'Generated function');
+          // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.generated.total');
+    // → Counter extracted from events
+
+          await this.eventBus.publish('function.generated', {
+            full_name: fullName,
+            plugin_name: pluginName,
+            function_name: funcName,
+            type: metadata.type,
+            generated_at: new Date().toISOString()
+          }, { correlationId });
+
+          this.logger.debug('function.generated', {
+            full_name: fullName,
+            type: metadata.type,
+            correlation_id: correlationId
+          });
 
         } catch (error) {
-          this.logger.error({
-            err: error,
-            pluginName,
-            funcName
-          }, 'Failed to generate function');
-
-          this.eventBus.publish('function.generation.error', {
-            pluginName,
-            funcName,
-            error: error.message
+          this.logger.error('function.generation.error', {
+            plugin_name: pluginName,
+            function_name: funcName,
+            error: error.message,
+            correlation_id: correlationId
           });
+
+          await this.eventBus.publish('function.generation.error', {
+            plugin_name: pluginName,
+            function_name: funcName,
+            error: error.message
+          }, { correlationId });
         }
       }
 
-      this.logger.info({
-        pluginName,
-        generated: generatedCount,
-        total: Object.keys(pluginData.functions).length
-      }, 'Plugin functions generated');
+      this.pluginsByName.set(pluginName, generatedCount);
 
-      this.metrics.increment('functions.generated.total', generatedCount, { plugin: pluginName });
+      const duration = Date.now() - startTime;
+
+      // REMOVED: this.metrics.gauge('function.count', this.generatedFunctions.size);
+      // REMOVED: this.metrics.gauge('function.plugins.count', this.pluginsByName.size);
+      // REMOVED: this.metrics.timing('function.generation.duration', duration);
+
+      this.logger.info('plugin.functions.generated', {
+        plugin_name: pluginName,
+        generated: generatedCount,
+        total: Object.keys(pluginData.functions).length,
+        duration,
+        correlation_id: correlationId
+      });
 
     } catch (error) {
-      this.logger.error({ err: error }, 'Failed to generate plugin functions');
+      this.logger.error('plugin.generation.error', {
+        error: error.message,
+        correlation_id: correlationId
+      });
     }
   }
 
-  /**
-   * Creates a calling function based on the function definition
-   * @param {string} pluginName - Name of the plugin
-   * @param {string} funcName - Name of the function
-   * @param {object} funcDef - Function definition
-   * @param {string} baseUrl - Base URL for HTTP calls
-   * @param {string} authType - Authentication type
-   * @param {object} pluginData - Full plugin data
-   * @returns {object} - { func: Function, metadata: Object }
-   */
-  _createCallingFunction(pluginName, funcName, funcDef, baseUrl, authType, pluginData) {
+  createCallingFunction(pluginName, funcName, funcDef, baseUrl, authType, pluginData) {
     const method = funcDef.method;
     const description = funcDef.description || `${pluginName} ${funcName}`;
     const parameters = funcDef.parameters || {};
 
     const metadata = {
-      pluginName,
-      functionName: funcName,
+      full_name: `${pluginName}.${funcName}`,
+      plugin_name: pluginName,
+      function_name: funcName,
       description,
       parameters,
       method,
@@ -170,19 +281,20 @@ class CallingGeneratorModule {
     // HTTP Function
     if (['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
       metadata.type = 'http';
-      const endpoint = funcDef.endpoint;
+      metadata.endpoint = funcDef.endpoint;
 
-      const func = async (args) => {
-        return this._executeHttpFunction(
+      const func = async (args, correlationId) => {
+        return this.executeHttpFunction(
           pluginName,
           funcName,
           method,
           baseUrl,
-          endpoint,
+          funcDef.endpoint,
           parameters,
           authType,
           pluginData,
-          args
+          args,
+          correlationId
         );
       };
 
@@ -193,13 +305,15 @@ class CallingGeneratorModule {
     if (method === 'local_function') {
       metadata.type = 'local_event';
       const eventTopic = funcDef.event_topic || `${pluginName}.local.${funcName}.request`;
+      metadata.event_topic = eventTopic;
 
-      const func = async (args) => {
-        return this._executeLocalFunction(
+      const func = async (args, correlationId) => {
+        return this.executeLocalFunction(
           pluginName,
           funcName,
           eventTopic,
-          args
+          args,
+          correlationId
         );
       };
 
@@ -207,43 +321,109 @@ class CallingGeneratorModule {
     }
 
     // Unsupported method
-    this.logger.warn({ pluginName, funcName, method }, 'Unsupported method type');
+    this.logger.warn('function.unsupported.method', {
+      plugin_name: pluginName,
+      function_name: funcName,
+      method
+    });
+
     metadata.type = 'unsupported';
 
-    const func = async (args) => {
-      this.metrics.increment('calling_generator.unsupported_call.total', 1, {
-        plugin: pluginName,
-        function: funcName,
-        method
-      });
+    const func = async (args, correlationId) => {
       throw new Error(`Function ${pluginName}.${funcName} uses unsupported method: ${method}`);
     };
 
     return { func, metadata };
   }
 
-  /**
-   * Executes an HTTP function
-   */
-  async _executeHttpFunction(pluginName, funcName, method, baseUrl, endpoint, parameters, authType, pluginData, args) {
-    const fullFunctionName = `${pluginName}.${funcName}`;
+  // ==========================================
+  // Function Execution
+  // ==========================================
 
-    this.logger.debug({ pluginName, funcName, args }, 'Executing HTTP calling function');
-    this.metrics.increment('calling_generator.http_call.total', 1, {
-      plugin: pluginName,
-      function: funcName,
-      method
+  async executeFunction(fullName, args, correlationId) {
+    const startTime = Date.now();
+
+    const funcData = this.generatedFunctions.get(fullName);
+
+    if (!funcData) {
+      throw new Error(`Function not found: ${fullName}`);
+    }
+
+    this.logger.info('function.executing', {
+      full_name: fullName,
+      correlation_id: correlationId
     });
+
+    try {
+      const result = await funcData.func(args, correlationId);
+
+      const duration = Date.now() - startTime;
+
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.executed.total');
+    // → Counter extracted from events
+      // REMOVED: this.metrics.timing('function.execution.duration', duration);
+
+      await this.eventBus.publish('function.executed', {
+        full_name: fullName,
+        duration,
+        has_result: !!result,
+        executed_at: new Date().toISOString()
+      }, { correlationId });
+
+      this.logger.info('function.executed', {
+        full_name: fullName,
+        duration,
+        correlation_id: correlationId
+      });
+
+      return { result, duration };
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.failed.total');
+    // → Counter extracted from events
+
+      await this.eventBus.publish('function.failed', {
+        full_name: fullName,
+        error: error.message,
+        reason: this.categorizeError(error),
+        failed_at: new Date().toISOString()
+      }, { correlationId });
+
+      this.logger.error('function.failed', {
+        full_name: fullName,
+        error: error.message,
+        duration,
+        correlation_id: correlationId
+      });
+
+      throw error;
+    }
+  }
+
+  async executeHttpFunction(pluginName, funcName, method, baseUrl, endpoint, parameters, authType, pluginData, args, correlationId) {
+    const startTime = Date.now();
+    const fullName = `${pluginName}.${funcName}`;
+
+    this.logger.debug('http.function.executing', {
+      full_name: fullName,
+      method,
+      correlation_id: correlationId
+    });
+
+    // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.http_call.total');
+    // → Counter extracted from events
 
     let fullUrl = baseUrl + endpoint;
     const queryParams = new URLSearchParams();
     let requestBody = {};
     const headers = {
-      'User-Agent': 'EventCore/1.0.0',
+      'User-Agent': 'Aichat/2.0.0',
       'Content-Type': 'application/json'
     };
 
-    // Handle URL path parameters and query parameters
+    // Procesar parámetros
     for (const paramName in (parameters.properties || {})) {
       const argValue = args[paramName];
 
@@ -254,7 +434,7 @@ class CallingGeneratorModule {
         continue;
       }
 
-      // Check if parameter is part of the path
+      // Path parameters
       if (fullUrl.includes(`{${paramName}}`)) {
         fullUrl = fullUrl.replace(`{${paramName}}`, encodeURIComponent(argValue));
       } else if (method.toUpperCase() === 'GET') {
@@ -268,17 +448,42 @@ class CallingGeneratorModule {
       fullUrl += `?${queryParams.toString()}`;
     }
 
-    // Handle authentication
-    this._addAuthentication(headers, queryParams, authType, pluginName, pluginData);
+    // Autenticación
+    this.addAuthentication(headers, queryParams, authType, pluginName, pluginData);
 
-    // Make HTTP request
-    return this._makeHttpRequest(fullUrl, method, headers, requestBody, pluginName, funcName);
+    try {
+      const result = await this.makeHttpRequest(fullUrl, method, headers, requestBody, pluginName, funcName);
+
+      const duration = Date.now() - startTime;
+
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.http_call.success');
+    // → Counter extracted from events
+      // REMOVED: this.metrics.timing('function.http_call.duration', duration);
+
+      this.logger.info('http.function.success', {
+        full_name: fullName,
+        status_code: result.status_code,
+        duration,
+        correlation_id: correlationId
+      });
+
+      return result;
+
+    } catch (error) {
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.http_call.error');
+    // → Counter extracted from events
+
+      this.logger.error('http.function.error', {
+        full_name: fullName,
+        error: error.message,
+        correlation_id: correlationId
+      });
+
+      throw error;
+    }
   }
 
-  /**
-   * Adds authentication to the request
-   */
-  _addAuthentication(headers, queryParams, authType, pluginName, pluginData) {
+  addAuthentication(headers, queryParams, authType, pluginName, pluginData) {
     const apiKey = process.env[`${pluginName.toUpperCase()}_API_KEY`];
     const authUser = process.env[`${pluginName.toUpperCase()}_AUTH_USER`];
     const authPass = process.env[`${pluginName.toUpperCase()}_AUTH_PASS`];
@@ -313,15 +518,11 @@ class CallingGeneratorModule {
 
       case 'none':
       default:
-        // No authentication
         break;
     }
   }
 
-  /**
-   * Makes an HTTP request
-   */
-  async _makeHttpRequest(url, method, headers, body, pluginName, funcName) {
+  async makeHttpRequest(url, method, headers, body, pluginName, funcName) {
     return new Promise((resolve, reject) => {
       const urlObj = new URL(url);
       const client = urlObj.protocol === 'https:' ? https : http;
@@ -343,17 +544,12 @@ class CallingGeneratorModule {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const responseData = data ? JSON.parse(data) : {};
-              this.metrics.increment('calling_generator.http_call.success', 1, {
-                plugin: pluginName,
-                function: funcName
-              });
               resolve({
                 success: true,
                 data: responseData,
                 status_code: res.statusCode
               });
             } catch (jsonError) {
-              // Return raw data if not JSON
               resolve({
                 success: true,
                 data: { raw: data },
@@ -362,40 +558,17 @@ class CallingGeneratorModule {
               });
             }
           } else {
-            this.logger.error({
-              statusCode: res.statusCode,
-              response: data
-            }, `HTTP call to ${pluginName}.${funcName} failed`);
-
-            this.metrics.increment('calling_generator.http_call.error', 1, {
-              plugin: pluginName,
-              function: funcName,
-              reason: 'http_error',
-              status: res.statusCode
-            });
-
             reject(new Error(`HTTP ${res.statusCode}: ${data}`));
           }
         });
       });
 
       req.on('error', (error) => {
-        this.logger.error({ err: error }, `Network error during HTTP call to ${pluginName}.${funcName}`);
-        this.metrics.increment('calling_generator.http_call.error', 1, {
-          plugin: pluginName,
-          function: funcName,
-          reason: 'network_error'
-        });
         reject(error);
       });
 
       req.on('timeout', () => {
         req.destroy();
-        this.metrics.increment('calling_generator.http_call.error', 1, {
-          plugin: pluginName,
-          function: funcName,
-          reason: 'timeout'
-        });
         reject(new Error('HTTP request timeout'));
       });
 
@@ -407,17 +580,17 @@ class CallingGeneratorModule {
     });
   }
 
-  /**
-   * Executes a local function via event bus
-   */
-  async _executeLocalFunction(pluginName, funcName, eventTopic, args) {
-    const fullFunctionName = `${pluginName}.${funcName}`;
+  async executeLocalFunction(pluginName, funcName, eventTopic, args, correlationId) {
+    const fullName = `${pluginName}.${funcName}`;
 
-    this.logger.debug({ pluginName, funcName, args, eventTopic }, 'Executing local calling function');
-    this.metrics.increment('calling_generator.local_call.total', 1, {
-      plugin: pluginName,
-      function: funcName
+    this.logger.debug('local.function.executing', {
+      full_name: fullName,
+      event_topic: eventTopic,
+      correlation_id: correlationId
     });
+
+    // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.local_call.total');
+    // → Counter extracted from events
 
     const requestId = crypto.randomUUID();
     const responseTopic = `${eventTopic}.response.${requestId}`;
@@ -425,12 +598,9 @@ class CallingGeneratorModule {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.eventBus.unsubscribe(responseTopic);
-        this.metrics.increment('calling_generator.local_call.error', 1, {
-          plugin: pluginName,
-          function: funcName,
-          reason: 'timeout'
-        });
-        reject(new Error(`Local function call to ${fullFunctionName} timed out`));
+        // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.local_call.error');
+    // → Counter extracted from events
+        reject(new Error(`Local function call to ${fullName} timed out`));
       }, this.config.localFunctionTimeout || 5000);
 
       this.eventBus.subscribe(responseTopic, (responseEvent) => {
@@ -438,18 +608,13 @@ class CallingGeneratorModule {
         this.eventBus.unsubscribe(responseTopic);
 
         if (responseEvent.success) {
-          this.metrics.increment('calling_generator.local_call.success', 1, {
-            plugin: pluginName,
-            function: funcName
-          });
+          // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.local_call.success');
+    // → Counter extracted from events
           resolve(responseEvent);
         } else {
-          this.metrics.increment('calling_generator.local_call.error', 1, {
-            plugin: pluginName,
-            function: funcName,
-            reason: 'module_error'
-          });
-          reject(new Error(responseEvent.error || `Local function ${fullFunctionName} failed`));
+          // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.local_call.error');
+    // → Counter extracted from events
+          reject(new Error(responseEvent.error || `Local function ${fullName} failed`));
         }
       });
 
@@ -461,97 +626,190 @@ class CallingGeneratorModule {
     });
   }
 
-  /**
-   * Registers a function with Tool Orchestrator
-   */
-  registerWithToolOrchestrator(fullFunctionName, func, metadata) {
-    if (!this.toolOrchestratorModule || !this.toolOrchestratorModule.instance) {
-      return;
-    }
+  // ==========================================
+  // Tool Orchestrator Integration
+  // ==========================================
 
-    if (typeof this.toolOrchestratorModule.instance.registerTool === 'function') {
-      this.toolOrchestratorModule.instance.registerTool(
-        metadata.pluginName,
-        metadata.functionName,
-        metadata.parameters,
-        metadata.description,
-        func
-      );
+  async registerWithToolOrchestrator(fullName, func, metadata, correlationId) {
+    try {
+      // Obtener tool-orchestrator vía evento
+      const requestId = `tool_reg_${Date.now()}`;
 
-      this.eventBus.publish('function.generated', {
-        fullFunctionName,
-        metadata
+      // Publicar evento para registrar
+      await this.eventBus.publish('tool.register.request', {
+        module_name: metadata.plugin_name,
+        tool_name: metadata.function_name,
+        description: metadata.description,
+        schema: metadata.parameters,
+        handler: func,
+        request_id: requestId
+      }, { correlationId });
+
+      this.logger.debug('function.registered.tool_orchestrator', {
+        full_name: fullName,
+        correlation_id: correlationId
+      });
+
+    } catch (error) {
+      this.logger.warn('function.register.tool_orchestrator.error', {
+        full_name: fullName,
+        error: error.message,
+        correlation_id: correlationId
       });
     }
   }
 
-  /**
-   * Gets a function by name
-   */
-  getFunction(fullFunctionName) {
-    return this.generatedFunctions.get(fullFunctionName)?.func;
+  async unregisterAllFunctionsFromToolOrchestrator() {
+    for (const fullName of this.generatedFunctions.keys()) {
+      await this.eventBus.publish('tool.unregister.request', {
+        full_name: fullName
+      });
+    }
+
+    this.logger.info('functions.unregistered.tool_orchestrator', {
+      count: this.generatedFunctions.size
+    });
   }
 
-  /**
-   * Gets function metadata
-   */
-  getFunctionMetadata(fullFunctionName) {
-    return this.generatedFunctions.get(fullFunctionName)?.metadata;
+  // ==========================================
+  // Utilities
+  // ==========================================
+
+  categorizeError(error) {
+    const message = error.message.toLowerCase();
+
+    if (message.includes('timeout')) return 'timeout';
+    if (message.includes('http')) return 'http_error';
+    if (message.includes('network')) return 'network_error';
+    if (message.includes('missing required')) return 'validation_error';
+
+    return 'module_error';
   }
 
-  /**
-   * Lists all available functions
-   */
-  listAvailableFunctions() {
-    return Array.from(this.generatedFunctions.keys());
-  }
-
-  // ========================================================================
+  // ==========================================
   // HTTP API Handlers
-  // ========================================================================
+  // ==========================================
 
-  /**
-   * GET /functions - List all generated functions
-   */
-  async handleListFunctions(req, res) {
-    const functions = [];
+  async handleListFunctions(req, context) {
+    const functions = Array.from(this.generatedFunctions.values()).map(f => f.metadata);
 
-    for (const [fullFunctionName, { metadata }] of this.generatedFunctions.entries()) {
-      functions.push({
-        fullFunctionName,
-        plugin: metadata.pluginName,
-        function: metadata.functionName,
-        type: metadata.type,
-        description: metadata.description
-      });
-    }
-
-    res.json({
-      success: true,
-      count: functions.length,
-      functions
-    });
+    return {
+      status: 200,
+      data: {
+        success: true,
+        functions,
+        count: functions.length
+      }
+    };
   }
 
-  /**
-   * GET /function/:name - Get function metadata
-   */
-  async handleGetFunction(req, res) {
-    const functionName = req.params.name;
-    const metadata = this.getFunctionMetadata(functionName);
+  async handleGetFunction(req, context) {
+    const name = context.params.name;
 
-    if (!metadata) {
-      return res.status(404).json({
-        success: false,
-        error: `Function '${functionName}' not found`
-      });
+    this.logger.info('function.get.start', {
+      name,
+      correlation_id: context.correlationId
+    });
+
+    const funcData = this.generatedFunctions.get(name);
+
+    if (!funcData) {
+      return {
+        status: 404,
+        data: {
+          success: false,
+          error: `Function not found: ${name}`
+        }
+      };
     }
 
-    res.json({
-      success: true,
-      metadata
+    return {
+      status: 200,
+      data: {
+        success: true,
+        function: funcData.metadata
+      }
+    };
+  }
+
+  async handleExecuteFunction(req, context) {
+    const startTime = Date.now();
+    const name = context.params.name;
+    const { args } = context.body;
+
+    this.logger.info('function.execute.start', {
+      name,
+      correlation_id: context.correlationId
     });
+
+    try {
+      const result = await this.executeFunction(name, args, context.correlationId);
+
+      this.logger.info('function.executed.http', {
+        name,
+        duration: Date.now() - startTime,
+        correlation_id: context.correlationId
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          result: result.result,
+          duration: result.duration
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('function.execute.error', {
+        name,
+        error: error.message,
+        correlation_id: context.correlationId
+      });
+
+      return {
+        status: 400,
+        data: {
+          success: false,
+          error: error.message
+        }
+      };
+    }
+  }
+
+  async handleHealthCheck(req, context) {
+    return {
+      status: 200,
+      data: {
+        status: 'healthy',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        version: this.version,
+        functions_count: this.generatedFunctions.size,
+        plugins_count: this.pluginsByName.size
+      }
+    };
+  }
+
+  async handleGetMetrics(req, context) {
+    return {
+      status: 200,
+      data: {
+        counters: {
+          'function.generated.total': this.metrics.getCounter('function.generated.total') || 0,
+          'function.executed.total': this.metrics.getCounter('function.executed.total') || 0,
+          'function.failed.total': this.metrics.getCounter('function.failed.total') || 0,
+          'function.http_call.total': this.metrics.getCounter('function.http_call.total') || 0,
+          'function.http_call.success': this.metrics.getCounter('function.http_call.success') || 0,
+          'function.local_call.total': this.metrics.getCounter('function.local_call.total') || 0
+        },
+        gauges: {
+          'function.count': this.generatedFunctions.size,
+          'function.plugins.count': this.pluginsByName.size
+        }
+      }
+    };
   }
 }
 
-module.exports = CallingGeneratorModule;
+module.exports = CallingGenerator;

@@ -114,7 +114,7 @@ class EventBus extends EventEmitter {
               }
 
               if (this.metrics) {
-                this.metrics.increment('events.blocked');
+                // REMOVED: this.metrics.increment('events.blocked');
               }
 
               return;
@@ -131,7 +131,7 @@ class EventBus extends EventEmitter {
           }
 
           if (this.metrics) {
-            this.metrics.increment('events.received');
+            // REMOVED: this.metrics.increment('events.received');
           }
 
         } catch (error) {
@@ -143,7 +143,7 @@ class EventBus extends EventEmitter {
           }
 
           if (this.metrics) {
-            this.metrics.increment('events.receive.failed');
+            // REMOVED: this.metrics.increment('events.receive.failed');
           }
         }
       });
@@ -228,7 +228,7 @@ class EventBus extends EventEmitter {
         }
 
         if (this.metrics) {
-          this.metrics.increment('events.blocked');
+          // REMOVED: this.metrics.increment('events.blocked');
         }
 
         return;
@@ -264,7 +264,7 @@ class EventBus extends EventEmitter {
         }
 
         if (this.metrics) {
-          this.metrics.increment('events.published');
+          // REMOVED: this.metrics.increment('events.published');
         }
 
       } catch (error) {
@@ -276,7 +276,7 @@ class EventBus extends EventEmitter {
         }
 
         if (this.metrics) {
-          this.metrics.increment('events.publish.failed');
+          // REMOVED: this.metrics.increment('events.publish.failed');
         }
 
         throw error;
@@ -301,6 +301,32 @@ class EventBus extends EventEmitter {
       ...options,
       targetCoreId
     });
+  }
+
+  /**
+   * Suscribe a un tipo de evento (alias de on)
+   * Nomenclatura Pub/Sub para MQTT
+   *
+   * @param {string} eventType - Tipo de evento
+   * @param {Function} handler - Manejador del evento
+   * @returns {Function} Función de desuscripción
+   */
+  subscribe(eventType, handler) {
+    this.on(eventType, handler);
+    return () => this.off(eventType, handler);
+  }
+
+  /**
+   * Publica un evento (alias de emit)
+   * Nomenclatura Pub/Sub para MQTT
+   *
+   * @param {string} eventType - Tipo de evento
+   * @param {*} data - Datos del evento
+   * @param {Object} options - Opciones adicionales
+   * @returns {Promise<void>}
+   */
+  async publish(eventType, data, options = {}) {
+    return this.emit(eventType, data, options);
   }
 
   /**

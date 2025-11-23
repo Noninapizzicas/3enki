@@ -1,27 +1,153 @@
 {
   "name": "ui-renderer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "JSON-driven UI component renderer with design system tokens",
-  "apis": {
-    "get_component": {
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "provides": {
+    "events": [
+      "ui.component.loaded",
+      "ui.component.rendered",
+      "ui.tokens.loaded"
+    ],
+    "queries": [
+      "ui.component.get.request",
+      "ui.component.render.request",
+      "ui.tokens.get.request"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "ui.component.loaded",
+        "description": "Component definition loaded",
+        "schema": { "$ref": "./schemas/events.json#/definitions/component_loaded" }
+      },
+      {
+        "event": "ui.component.rendered",
+        "description": "Component rendered with props",
+        "schema": { "$ref": "./schemas/events.json#/definitions/component_rendered" }
+      },
+      {
+        "event": "ui.tokens.loaded",
+        "description": "Design system tokens loaded",
+        "schema": { "$ref": "./schemas/events.json#/definitions/tokens_loaded" }
+      },
+      {
+        "event": "ui.component.get.response",
+        "description": "Response to component get request",
+        "schema": { "$ref": "./schemas/events.json#/definitions/component_get_response" }
+      },
+      {
+        "event": "ui.component.render.response",
+        "description": "Response to component render request",
+        "schema": { "$ref": "./schemas/events.json#/definitions/component_render_response" }
+      },
+      {
+        "event": "ui.tokens.get.response",
+        "description": "Response to tokens get request",
+        "schema": { "$ref": "./schemas/events.json#/definitions/tokens_get_response" }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "ui.component.get.request",
+        "description": "Get component definition by name",
+        "handler": "onGetComponentRequest"
+      },
+      {
+        "event": "ui.component.render.request",
+        "description": "Render component with props",
+        "handler": "onRenderComponentRequest"
+      },
+      {
+        "event": "ui.tokens.get.request",
+        "description": "Get design system tokens",
+        "handler": "onGetTokensRequest"
+      }
+    ]
+  },
+
+  "apis": [
+    {
       "method": "GET",
-      "path": "/component/:name"
+      "path": "/components/:name",
+      "handler": "handleGetComponent",
+      "description": "Get component definition",
+      "response_schema": { "$ref": "./schemas/ui.json#/definitions/component_response" }
     },
-    "list_components": {
+    {
       "method": "GET",
-      "path": "/components"
+      "path": "/components",
+      "handler": "handleListComponents",
+      "description": "List all components",
+      "response_schema": { "$ref": "./schemas/ui.json#/definitions/list_response" }
     },
-    "render_component": {
+    {
       "method": "POST",
-      "path": "/component/:name/render"
+      "path": "/components/:name/render",
+      "handler": "handleRenderComponent",
+      "description": "Render component with props (publishes ui.component.rendered)",
+      "request_schema": { "$ref": "./schemas/ui.json#/definitions/render_request" },
+      "response_schema": { "$ref": "./schemas/ui.json#/definitions/render_response" }
     },
-    "get_tokens": {
+    {
       "method": "GET",
-      "path": "/tokens"
+      "path": "/tokens",
+      "handler": "handleGetTokens",
+      "description": "Get design system tokens"
+    },
+    {
+      "method": "POST",
+      "path": "/components/reload",
+      "handler": "handleReloadComponents",
+      "description": "Reload all components from disk"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ui.component.loaded.total",
+        "ui.component.rendered.total",
+        "ui.component.error.total",
+        "ui.reload.total"
+      ],
+      "gauges": [
+        "ui.component.count",
+        "ui.template.count"
+      ],
+      "timings": [
+        "ui.component.render.duration",
+        "ui.component.load.duration"
+      ]
     }
   },
-  "events": {
-    "publishes": ["ui.component.loaded", "ui.component.rendered"],
-    "subscribes": []
+
+  "config": {
+    "componentsPath": "./ui-components",
+    "tokensPath": "./docs/biblioteca_componentes_ui_v1.json",
+    "autoReload": false,
+    "watchInterval": 5000
   }
 }

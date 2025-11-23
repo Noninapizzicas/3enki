@@ -414,6 +414,13 @@ class HTTPGateway {
       // Ejecutar handler del módulo
       let result;
       try {
+        // Construir objeto de contexto para el handler
+        const handlerContext = {
+          correlationId: requestId,
+          request_id: requestId,
+          timestamp: new Date().toISOString()
+        };
+
         result = await apiData.handler({
           method: req.method,
           path: pathname,
@@ -421,7 +428,7 @@ class HTTPGateway {
           body: context.body,
           headers: req.headers,
           request_id: requestId
-        });
+        }, handlerContext);
       } catch (handlerError) {
         if (this.logger) {
           this.logger.error('gateway.handler.error', {
@@ -812,6 +819,10 @@ class HTTPGateway {
         const moduleName = pathname.replace('/ui/modules/', '');
         request.params.name = moduleName;
         await this.uiGateway.getModuleUI(request, response);
+      } else if (pathname.match(/^\/ui\/[a-z0-9-]+$/i)) {
+        // Dynamic module view: /ui/:moduleName
+        const moduleName = pathname.replace('/ui/', '');
+        await this.uiGateway.renderModuleView(request, response, moduleName);
       } else {
         // Serve static file
         await this.uiGateway.serveStaticFile(request, response);

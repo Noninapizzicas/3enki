@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aichat.com/schemas/ui-renderer/events.json",
+
+  "definitions": {
+    "event_envelope": {
+      "type": "object",
+      "required": ["event_id", "event_type", "correlation_id", "occurred_at", "producer", "schema_version", "payload"],
+      "properties": {
+        "event_id": { "type": "string", "format": "uuid" },
+        "event_type": { "type": "string" },
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "producer": { "type": "string", "const": "ui-renderer" },
+        "schema_version": { "type": "string" },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "component_loaded": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "ui.component.loaded" },
+            "payload": {
+              "type": "object",
+              "required": ["component", "type", "loaded_at"],
+              "properties": {
+                "component": { "type": "string" },
+                "type": { "type": "string" },
+                "has_states": { "type": "boolean" },
+                "loaded_at": { "type": "string", "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "component_rendered": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "ui.component.rendered" },
+            "payload": {
+              "type": "object",
+              "required": ["component", "type", "duration"],
+              "properties": {
+                "component": { "type": "string" },
+                "type": { "type": "string" },
+                "duration": { "type": "integer" },
+                "html_length": { "type": "integer" },
+                "css_length": { "type": "integer" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "tokens_loaded": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "ui.tokens.loaded" },
+            "payload": {
+              "type": "object",
+              "required": ["loaded_at"],
+              "properties": {
+                "source": { "type": "string" },
+                "color_count": { "type": "integer" },
+                "spacing_count": { "type": "integer" },
+                "loaded_at": { "type": "string", "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "component_get_response": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "ui.component.get.response" },
+            "payload": {
+              "type": "object",
+              "required": ["request_id", "success"],
+              "properties": {
+                "request_id": { "type": "string" },
+                "success": { "type": "boolean" },
+                "component": { "type": "object" },
+                "error": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "component_render_response": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "ui.component.render.response" },
+            "payload": {
+              "type": "object",
+              "required": ["request_id", "success"],
+              "properties": {
+                "request_id": { "type": "string" },
+                "success": { "type": "boolean" },
+                "html": { "type": "string" },
+                "css": { "type": "string" },
+                "error": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "tokens_get_response": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "ui.tokens.get.response" },
+            "payload": {
+              "type": "object",
+              "required": ["request_id", "success"],
+              "properties": {
+                "request_id": { "type": "string" },
+                "success": { "type": "boolean" },
+                "tokens": { "type": "object" },
+                "error": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

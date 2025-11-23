@@ -1,8 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
-
 /**
  * Admin Panel Module
  * Web-based UI for managing Event Core system
@@ -361,7 +359,7 @@ class AdminPanelModule {
       await this.refreshPromptsCache();
 
       this.eventBus.publish('admin.action', {
-        action: EVENTS.PROMPT.CREATED,
+        action: 'prompt.created',
         prompt: promptData.name,
         timestamp: new Date().toISOString()
       });
@@ -386,7 +384,7 @@ class AdminPanelModule {
       await this.refreshPromptsCache();
 
       this.eventBus.publish('admin.action', {
-        action: EVENTS.PROMPT.UPDATED,
+        action: 'prompt.updated',
         prompt: name,
         timestamp: new Date().toISOString()
       });

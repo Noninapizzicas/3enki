@@ -2,59 +2,78 @@
   "name": "admin-panel",
   "version": "1.0.0",
   "description": "Web-based admin panel for managing Event Core system",
-  "dependencies": ["ui-renderer"],
-  "apis": {
-    "ui": {
+  "dependencies": [
+    "ui-renderer"
+  ],
+  "apis": [
+    {
       "method": "GET",
-      "path": "/"
+      "path": "/",
+      "handler": "handleUi"
     },
-    "dashboard_data": {
+    {
       "method": "GET",
-      "path": "/api/dashboard"
+      "path": "/api/dashboard",
+      "handler": "handleDashboardData"
     },
-    "list_modules": {
+    {
       "method": "GET",
-      "path": "/api/modules"
+      "path": "/api/modules",
+      "handler": "handleListModules"
     },
-    "list_plugins": {
+    {
       "method": "GET",
-      "path": "/api/plugins"
+      "path": "/api/plugins",
+      "handler": "handleListPlugins"
     },
-    "toggle_plugin": {
+    {
       "method": "POST",
-      "path": "/api/plugins/:name/toggle"
+      "path": "/api/plugins/:name/toggle",
+      "handler": "handleTogglePlugin"
     },
-    "list_agents": {
+    {
       "method": "GET",
-      "path": "/api/agents"
+      "path": "/api/agents",
+      "handler": "handleListAgents"
     },
-    "create_agent": {
+    {
       "method": "POST",
-      "path": "/api/agents"
+      "path": "/api/agents",
+      "handler": "handleCreateAgent"
     },
-    "delete_agent": {
+    {
       "method": "DELETE",
-      "path": "/api/agents/:id"
+      "path": "/api/agents/:id",
+      "handler": "handleDeleteAgent"
     },
-    "list_prompts": {
+    {
       "method": "GET",
-      "path": "/api/prompts"
+      "path": "/api/prompts",
+      "handler": "handleListPrompts"
     },
-    "get_prompt": {
+    {
       "method": "GET",
-      "path": "/api/prompts/:name"
+      "path": "/api/prompts/:name",
+      "handler": "handleGetPrompt"
     },
-    "create_prompt": {
+    {
       "method": "POST",
-      "path": "/api/prompts"
+      "path": "/api/prompts",
+      "handler": "handleCreatePrompt"
     },
-    "update_prompt": {
+    {
       "method": "PUT",
-      "path": "/api/prompts/:name"
+      "path": "/api/prompts/:name",
+      "handler": "handleUpdatePrompt"
     }
-  },
+  ],
   "events": {
-    "publishes": ["admin.action"],
-    "subscribes": ["plugin.loaded", "ui.component.loaded"]
+    "publishes": [
+      "admin.action"
+    ],
+    "subscribes": [
+      "plugin.loaded",
+      "ui.component.loaded"
+    ]
   }
 }

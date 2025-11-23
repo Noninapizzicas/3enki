@@ -23,8 +23,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
-
 class FileWatcherModule {
   constructor() {
     this.core = null;
@@ -294,7 +292,7 @@ class FileWatcherModule {
       }
 
       if (eventType === 'rename') {
-        eventName = exists ? EVENTS.FILE.CREATED : EVENTS.FILE.DELETED;
+        eventName = exists ? 'file.created' : 'file.deleted';
       } else if (eventType === 'change') {
         eventName = 'file.modified';
       }

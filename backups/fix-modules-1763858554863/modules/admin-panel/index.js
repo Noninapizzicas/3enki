@@ -1,17 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
-
 /**
  * Admin Panel Module
  * Web-based UI for managing Event Core system
  * Integrates with plugin-manager, ai-agent-framework, prompt-manager
  */
 class AdminPanelModule {
-  constructor() {
-    this.name = 'admin-panel';
-    this.version = '1.0.0';
+  constructor(config, logger, eventBus, coreConfig) {
+    this.config = config || {};
+    this.logger = logger;
+    this.eventBus = eventBus;
+    this.coreConfig = coreConfig;
 
     this.publicPath = path.join(__dirname, 'public');
 
@@ -23,23 +23,11 @@ class AdminPanelModule {
       modules: []
     };
 
-    // Dependencias (inyectadas en onLoad)
-    this.logger = null;
-    this.eventBus = null;
-    this.config = {};
-    this.coreConfig = {};
+    this.logger.info({ module: 'admin-panel' }, 'Admin Panel Module initialized');
   }
 
-  async onLoad(core) {
-    this.logger = core.logger;
-    this.eventBus = core.eventBus;
-    this.config = core.config || {};
-    this.coreConfig = core.config || {};
-
-    this.logger.info('admin-panel.loading', {
-      module: this.name,
-      version: this.version
-    });
+  async onLoad() {
+    this.logger.info('admin-panel.loading', 'Loading Admin Panel Module');
 
     // Subscribe to events for cache updates
     this.eventBus.subscribe('plugin.loaded', (data) => {
@@ -361,7 +349,7 @@ class AdminPanelModule {
       await this.refreshPromptsCache();
 
       this.eventBus.publish('admin.action', {
-        action: EVENTS.PROMPT.CREATED,
+        action: 'prompt.created',
         prompt: promptData.name,
         timestamp: new Date().toISOString()
       });
@@ -386,7 +374,7 @@ class AdminPanelModule {
       await this.refreshPromptsCache();
 
       this.eventBus.publish('admin.action', {
-        action: EVENTS.PROMPT.UPDATED,
+        action: 'prompt.updated',
         prompt: name,
         timestamp: new Date().toISOString()
       });

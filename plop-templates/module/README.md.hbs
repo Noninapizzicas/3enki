@@ -1,0 +1,171 @@
+# {{icon}} Módulo {{titleCase name}}
+
+**Versión:** 1.0.0
+**Autor:** {{author}}
+**Tipo:** Módulo Event-Core
+
+---
+
+## 📋 Descripción
+
+{{description}}
+
+### Características principales:
+
+✅ **100% Event-Driven** - Comunicación via eventos
+{{#if ui}}✅ **UI Integrada** - Dashboard JSON-driven  {{/if}}
+{{#if persistence}}✅ **Persistencia** - Datos guardados en JSON  {{/if}}
+✅ **APIs REST** - Endpoints HTTP disponibles
+
+---
+
+## 🎯 Funcionalidad
+
+TODO: Describir la funcionalidad principal del módulo.
+
+---
+
+{{#if publishEvents.length}}
+## 📦 Eventos Publicados
+
+{{#each publishEvents}}
+### `{{this}}`
+
+TODO: Describir el evento.
+
+{{/each}}
+{{/if}}
+
+{{#if subscriptions.length}}
+## 📡 Eventos Suscritos
+
+| Patrón | Handler | Descripción |
+|--------|---------|-------------|
+{{#each subscriptions}}
+| `{{this.event}}` | `{{this.handler}}` | TODO: Descripción |
+{{/each}}
+
+{{/if}}
+
+## 🔌 APIs HTTP
+
+{{#each apis}}
+### {{this.method}} `{{this.path}}`
+
+{{this.description}}
+
+**Request:**
+```bash
+{{this.method}} /modules/{{../name}}{{this.path}}
+```
+
+**Response:**
+```json
+{
+  "status": 200,
+  "data": {}
+}
+```
+
+---
+
+{{/each}}
+
+### GET `/health`
+
+Health check del módulo.
+
+---
+
+{{#if ui}}
+## 🎨 UI - Dashboard
+
+### Acceso:
+```
+http://localhost:3000/ui/{{name}}
+```
+
+### Características:
+- ✅ Actualización automática
+- ✅ Responsive
+- ✅ MQTT integrado
+
+---
+
+{{/if}}
+
+## 🧪 Ejemplos de Uso
+
+### Consultar via HTTP
+
+```bash
+# Health check
+curl http://localhost:3000/modules/{{name}}/health
+{{#each apis}}
+
+# {{this.description}}
+curl {{#if (eq this.method "GET")}}-X GET{{else}}-X {{this.method}}{{/if}} http://localhost:3000/modules/{{../name}}{{this.path}}
+{{/each}}
+```
+
+{{#if subscriptions.length}}
+### Suscribirse a eventos (desde otro módulo)
+
+```javascript
+async onLoad(core) {
+  this.eventBus = core.eventBus;
+  {{#each ../publishEvents}}
+  await this.eventBus.subscribe('{{this}}', this.on{{pascalCase this}}.bind(this));
+  {{/each}}
+}
+```
+{{/if}}
+
+---
+
+## ⚙️ Configuración
+
+En `module.json`:
+
+```json
+{
+  "config": {
+    {{#if persistence}}
+    "persist_interval_ms": 60000,
+    {{/if}}
+    "enabled": true
+  }
+}
+```
+
+---
+
+## 🔧 Instalación
+
+El módulo se carga automáticamente si está en `modules/{{name}}/`.
+
+**Verificar carga:**
+```bash
+curl http://localhost:3000/modules/{{name}}/health
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### El módulo no carga
+
+**Verificar:**
+```bash
+# ¿Estructura correcta?
+ls modules/{{name}}/
+
+# ¿module.json válido?
+cat modules/{{name}}/module.json | jq .
+```
+
+---
+
+**Versión:** 1.0.0
+**Última actualización:** {{currentDate}}
+**Licencia:** MIT

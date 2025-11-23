@@ -1,0 +1,93 @@
+{
+  "name": "{{name}}",
+  "version": "1.0.0",
+  "description": "{{description}}",
+  "author": "{{author}}",
+
+  "provides": {
+    "events": [{{#each publishEvents}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}],
+    "queries": []
+  },
+
+  "events": {
+    "publishes": [
+      {{#each publishEvents}}
+      {
+        "event": "{{this}}",
+        "description": "Evento {{this}}",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/{{snakeCase this}}"
+        }
+      }{{#unless @last}},{{/unless}}
+      {{/each}}
+    ],
+
+    "subscribes": [
+      {{#each subscriptions}}
+      {
+        "event": "{{this.event}}",
+        "description": "Escucha evento {{this.event}}",
+        "handler": "{{this.handler}}"
+      }{{#unless @last}},{{/unless}}
+      {{/each}}
+    ]
+  },
+
+  "apis": [
+    {{#each apis}}
+    {
+      "method": "{{this.method}}",
+      "path": "{{this.path}}",
+      "handler": "{{this.handler}}",
+      "description": "{{this.description}}"{{#if this.params}},
+      "params": {{json this.params}}{{/if}}
+    },
+    {{/each}}
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo"
+    }
+  ],
+
+  {{#if ui}}
+  "ui": {
+    "enabled": true,
+    "title": "{{titleCase name}}",
+    "icon": "{{icon}}",
+    "components": ["dashboard-{{name}}"],
+
+    "views": {
+      "main": {
+        "type": "dashboard",
+        "component": "dashboard-{{name}}",
+        "config": {
+          "endpoint": "/modules/{{name}}/data",
+          "mqtt_topics": ["{{name}}.updated"],
+          "refresh_interval": 5000,
+          "refresh_on_event": true
+        }
+      }
+    }
+  },
+  {{/if}}
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true
+    }
+  },
+
+  "config": {
+    {{#if persistence}}
+    "persist_interval_ms": 60000,
+    {{/if}}
+    "enabled": true
+  }
+}

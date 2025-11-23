@@ -16,7 +16,10 @@
     "test:security": "node tests/unit/security-p2p.test.js",
     "test:integration": "node tests/integration/full-stack.test.js",
     "start": "node index.js",
-    "dev": "node index.js --log-level debug"
+    "dev": "node index.js --log-level debug",
+    "plop": "plop",
+    "create-module": "node scripts/create-module.js",
+    "create-module:interactive": "node scripts/create-module.js --interactive"
   },
   "keywords": [
     "event-driven",
@@ -35,5 +38,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "plop": "^4.0.4"
   }
 }

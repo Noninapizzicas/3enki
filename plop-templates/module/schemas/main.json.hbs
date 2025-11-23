@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://event-core.com/schemas/{{name}}/main.json",
+  "title": "{{titleCase name}} Schema",
+  "description": "Definiciones de esquemas para el módulo {{name}}",
+
+  "definitions": {
+    "{{name}}_item": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identificador único"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "success_response": {
+      "type": "object",
+      "required": ["status", "data"],
+      "properties": {
+        "status": {
+          "type": "integer",
+          "enum": [200, 201]
+        },
+        "data": {
+          "type": "object"
+        }
+      }
+    },
+
+    "error_response": {
+      "type": "object",
+      "required": ["status", "data"],
+      "properties": {
+        "status": {
+          "type": "integer",
+          "enum": [400, 404, 500]
+        },
+        "data": {
+          "type": "object",
+          "required": ["error"],
+          "properties": {
+            "error": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+
+    "health_response": {
+      "type": "object",
+      "required": ["status", "module", "version", "uptime", "timestamp"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["healthy", "degraded", "unhealthy"]
+        },
+        "module": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "uptime": {
+          "type": "number",
+          "description": "Uptime en segundos"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

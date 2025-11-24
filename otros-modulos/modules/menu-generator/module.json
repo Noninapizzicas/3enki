@@ -1,0 +1,248 @@
+{
+  "name": "menu-generator",
+  "version": "1.0.0",
+  "description": "Generador de menú desde carta física usando IA - Enfoque generativo",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": ["menu.generado", "menu.validado", "ai.request"],
+    "queries": ["menu.obtener_ultimo"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "ai.request",
+        "description": "Solicitud de procesamiento IA para parsear carta de menú",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/ai_request"
+        }
+      },
+      {
+        "event": "menu.generado",
+        "description": "Menú generado por IA con productos enriquecidos",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/menu_generado"
+        }
+      },
+      {
+        "event": "menu.validado",
+        "description": "Menú validado por operador antes de aplicar",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/menu_validado"
+        }
+      },
+      {
+        "event": "menu.error",
+        "description": "Error en generación o validación de menú",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/menu_error"
+        }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "ai.response",
+        "description": "Respuesta del ai-gateway con menú parseado",
+        "handler": "onAIResponse"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/upload",
+      "handler": "handleUploadMenu",
+      "description": "Subir carta física (imagen/PDF) para generar menú",
+      "request_schema": {
+        "$ref": "./schemas/menu.json#/definitions/upload_request"
+      },
+      "response_schema": {
+        "$ref": "./schemas/menu.json#/definitions/upload_response"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/menus",
+      "handler": "handleListMenus",
+      "description": "Listar menús generados (histórico)"
+    },
+    {
+      "method": "GET",
+      "path": "/menus/:id",
+      "handler": "handleGetMenu",
+      "description": "Obtener menú específico"
+    },
+    {
+      "method": "POST",
+      "path": "/menus/:id/validate",
+      "handler": "handleValidateMenu",
+      "description": "Validar menú generado (publica menu.validado)",
+      "request_schema": {
+        "$ref": "./schemas/menu.json#/definitions/validate_request"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "menu.upload.total",
+        "menu.generado.total",
+        "menu.validado.total",
+        "menu.errors.total"
+      ],
+      "gauges": [
+        "menu.pendientes_validacion.count"
+      ],
+      "timings": [
+        "menu.upload.duration",
+        "menu.generation.duration"
+      ]
+    }
+  },
+
+  "ui": {
+    "enabled": true,
+    "title": "Menu Generator",
+    "icon": "📄",
+    "description": "Genera menús desde cartas físicas usando IA",
+    "access_level": "gerente",
+    "components": [
+      "menu-upload",
+      "grid-menus",
+      "menu-card",
+      "menu-validator"
+    ],
+
+    "views": {
+      "main": {
+        "type": "dashboard",
+        "layout": "single-column",
+
+        "header": {
+          "title": "📄 Menu Generator",
+          "subtitle": "Digitaliza cartas de menú con IA",
+          "actions": [
+            {
+              "type": "button",
+              "label": "Subir Carta",
+              "icon": "📤",
+              "action": "open_upload",
+              "variant": "primary"
+            }
+          ]
+        },
+
+        "sections": [
+          {
+            "id": "upload_section",
+            "type": "component",
+            "component": "menu-upload",
+            "config": {
+              "endpoint": "/modules/menu-generator/upload",
+              "mqtt_topics": ["menu.generado", "menu.error"],
+              "auto_redirect_on_success": true
+            },
+            "show_by_default": false,
+            "toggle_action": "open_upload"
+          },
+          {
+            "id": "menus_grid",
+            "type": "grid",
+            "component": "grid-menus",
+            "config": {
+              "endpoint": "/modules/menu-generator/menus",
+              "mqtt_topics": [
+                "menu.generado",
+                "menu.validado",
+                "menu.error"
+              ],
+              "refresh_on_event": true,
+              "item_component": "menu-card"
+            }
+          }
+        ]
+      },
+
+      "upload": {
+        "type": "fullscreen",
+        "component": "menu-upload",
+        "config": {
+          "endpoint": "/modules/menu-generator/upload",
+          "mqtt_topics": ["menu.generado", "menu.error"],
+          "on_success": {
+            "redirect": "/ui/menu-generator/menus/{{menu_id}}"
+          }
+        }
+      },
+
+      "detail": {
+        "type": "page",
+        "component": "menu-validator",
+        "mode": "readonly",
+        "config": {
+          "endpoint": "/modules/menu-generator/menus/{{id}}",
+          "show_validate_button": true,
+          "on_validate_click": {
+            "navigate": "/ui/menu-generator/validate/{{id}}"
+          }
+        }
+      },
+
+      "validate": {
+        "type": "page",
+        "component": "menu-validator",
+        "mode": "edit",
+        "config": {
+          "endpoint": "/modules/menu-generator/menus/{{id}}",
+          "validate_endpoint": "/modules/menu-generator/menus/{{id}}/validate",
+          "on_success": {
+            "show_toast": {
+              "message": "Menú validado y aplicado correctamente",
+              "type": "success"
+            },
+            "redirect": "/ui/menu-generator/main"
+          }
+        }
+      }
+    },
+
+    "mqtt": {
+      "enabled": true,
+      "topics": [
+        "menu.generado",
+        "menu.validado",
+        "menu.error",
+        "ai.response"
+      ],
+      "auto_refresh": true
+    },
+
+    "permissions": {
+      "view": ["gerente", "admin"],
+      "upload": ["gerente", "admin"],
+      "validate": ["gerente", "admin"],
+      "delete": ["admin"]
+    }
+  }
+}

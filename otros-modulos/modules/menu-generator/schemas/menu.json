@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pizzepos.com/schemas/menu-generator.json",
+  "title": "Menu Generator Schema",
+  "description": "Esquemas de datos para menu-generator",
+
+  "definitions": {
+    "producto_generado": {
+      "type": "object",
+      "required": ["id", "nombre", "categoria", "precio"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^prod_[a-z0-9_]+$",
+          "description": "ID generado para el producto"
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nombre del producto"
+        },
+        "emoji": {
+          "type": "string",
+          "description": "Emoji representativo del producto"
+        },
+        "categoria": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Categoría del producto"
+        },
+        "categoria_emoji": {
+          "type": "string",
+          "description": "Emoji de la categoría"
+        },
+        "descripcion": {
+          "type": "string",
+          "description": "Descripción del producto"
+        },
+        "precio": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Precio base del producto"
+        },
+        "ingredientes_base": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ingrediente"
+          },
+          "description": "Lista de ingredientes del producto"
+        },
+        "alergenos": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["gluten", "lactosa", "huevo", "pescado", "marisco", "frutos_secos", "soja", "apio", "mostaza", "sesamo", "sulfitos", "altramuces"]
+          },
+          "description": "Alérgenos detectados"
+        },
+        "variaciones": {
+          "type": "object",
+          "properties": {
+            "permite_quitar": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "IDs de ingredientes que se pueden quitar"
+            },
+            "permite_anadir": {
+              "type": "boolean",
+              "description": "Permite añadir ingredientes extras"
+            },
+            "extras_sugeridos": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ingrediente_id": {"type": "string"},
+                  "precio_extra": {"type": "number", "minimum": 0}
+                }
+              }
+            }
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "popularidad": {
+              "type": "string",
+              "enum": ["baja", "media", "alta"]
+            },
+            "tiempo_preparacion": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tiempo en minutos"
+            },
+            "vegano": {"type": "boolean"},
+            "vegetariano": {"type": "boolean"}
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ingrediente": {
+      "type": "object",
+      "required": ["id", "nombre"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ing_[a-z0-9_]+$"
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": ["base", "proteina", "vegetal", "condimento", "salsa", "topping"]
+        },
+        "es_alergeno": {
+          "type": "boolean"
+        },
+        "alergenos": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "menu_generado": {
+      "type": "object",
+      "required": ["id", "source", "productos", "categorias", "created_at", "estado"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^menu_[a-z0-9]+$"
+        },
+        "source": {
+          "type": "object",
+          "required": ["tipo", "url"],
+          "properties": {
+            "tipo": {
+              "type": "string",
+              "enum": ["imagen", "pdf", "texto"]
+            },
+            "url": {
+              "type": "string"
+            },
+            "nombre_archivo": {
+              "type": "string"
+            }
+          }
+        },
+        "productos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/producto_generado"
+          },
+          "minItems": 1
+        },
+        "categorias": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "nombre": {"type": "string"},
+              "emoji": {"type": "string"},
+              "orden": {"type": "integer"}
+            }
+          }
+        },
+        "ingredientes_catalogo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ingrediente"
+          }
+        },
+        "estado": {
+          "type": "string",
+          "enum": ["generando", "generado", "validado", "error"]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "validated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "upload_request": {
+      "type": "object",
+      "required": ["file_base64", "file_name"],
+      "properties": {
+        "file_base64": {
+          "type": "string",
+          "description": "Archivo en base64"
+        },
+        "file_name": {
+          "type": "string",
+          "description": "Nombre del archivo"
+        },
+        "file_type": {
+          "type": "string",
+          "enum": ["image/png", "image/jpeg", "application/pdf"]
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "restaurante": {"type": "string"},
+            "fecha_carta": {"type": "string", "format": "date"}
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "upload_response": {
+      "type": "object",
+      "required": ["menu_id", "estado", "message"],
+      "properties": {
+        "menu_id": {"type": "string"},
+        "estado": {"type": "string"},
+        "message": {"type": "string"},
+        "estimated_time": {"type": "integer"}
+      }
+    },
+
+    "validate_request": {
+      "type": "object",
+      "properties": {
+        "correcciones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "producto_id": {"type": "string"},
+              "campo": {"type": "string"},
+              "valor_anterior": {},
+              "valor_nuevo": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

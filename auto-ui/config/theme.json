@@ -1,0 +1,123 @@
+{
+  "name": "event-core-dark",
+  "version": "1.0.0",
+  "description": "Design tokens centralizados para Auto-UI",
+
+  "colors": {
+    "bg": "#0f1216",
+    "bg-card": "#1a1d24",
+    "bg-hover": "#252a33",
+    "bg-input": "#0d0f12",
+    "text": "#ffffff",
+    "text-muted": "#9ca3af",
+    "text-disabled": "#6b7280",
+    "primary": "#3b82f6",
+    "primary-hover": "#2563eb",
+    "success": "#22c55e",
+    "success-hover": "#16a34a",
+    "warning": "#f59e0b",
+    "warning-hover": "#d97706",
+    "danger": "#ef4444",
+    "danger-hover": "#dc2626",
+    "info": "#06b6d4",
+    "border": "#374151",
+    "border-focus": "#3b82f6",
+    "overlay": "rgba(0,0,0,0.7)"
+  },
+
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px",
+    "2xl": "48px"
+  },
+
+  "radius": {
+    "none": "0",
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "full": "9999px"
+  },
+
+  "typography": {
+    "font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    "font-mono": "'JetBrains Mono', 'Fira Code', monospace",
+    "size-xs": "0.75rem",
+    "size-sm": "0.875rem",
+    "size-base": "1rem",
+    "size-lg": "1.25rem",
+    "size-xl": "1.5rem",
+    "size-2xl": "2rem",
+    "weight-normal": "400",
+    "weight-medium": "500",
+    "weight-semibold": "600",
+    "weight-bold": "700",
+    "line-height": "1.5"
+  },
+
+  "shadows": {
+    "none": "none",
+    "sm": "0 1px 2px rgba(0,0,0,0.3)",
+    "md": "0 4px 6px rgba(0,0,0,0.4)",
+    "lg": "0 10px 15px rgba(0,0,0,0.5)",
+    "xl": "0 20px 25px rgba(0,0,0,0.6)"
+  },
+
+  "transitions": {
+    "fast": "150ms ease",
+    "normal": "250ms ease",
+    "slow": "350ms ease"
+  },
+
+  "breakpoints": {
+    "sm": "640px",
+    "md": "768px",
+    "lg": "1024px",
+    "xl": "1280px"
+  },
+
+  "zIndex": {
+    "dropdown": "100",
+    "modal": "200",
+    "toast": "300",
+    "tooltip": "400"
+  },
+
+  "components": {
+    "button": {
+      "padding": "0.5rem 1rem",
+      "padding-sm": "0.25rem 0.5rem",
+      "padding-lg": "0.75rem 1.5rem",
+      "font-weight": "500",
+      "border-radius": "var(--radius-md)"
+    },
+    "input": {
+      "padding": "0.5rem 0.75rem",
+      "border-width": "1px",
+      "border-radius": "var(--radius-md)"
+    },
+    "card": {
+      "padding": "1rem",
+      "border-width": "1px",
+      "border-radius": "var(--radius-lg)"
+    },
+    "table": {
+      "header-bg": "rgba(255,255,255,0.05)",
+      "row-hover": "rgba(255,255,255,0.02)",
+      "cell-padding": "0.75rem 1rem"
+    },
+    "modal": {
+      "backdrop": "rgba(0,0,0,0.7)",
+      "max-width": "500px",
+      "border-radius": "var(--radius-xl)"
+    },
+    "sidebar": {
+      "width": "280px",
+      "width-collapsed": "64px"
+    }
+  }
+}

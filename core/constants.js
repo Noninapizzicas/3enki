@@ -487,6 +487,315 @@ const HELPERS = {
 };
 
 // ============================================
+// AUTO-UI - Sistema de interfaces auto-generadas
+// ============================================
+
+const UI = {
+  // === EVENTOS UI ===
+  EVENTS: {
+    // Renderizado
+    RENDER_REQUEST: 'ui.render.request',
+    RENDER_COMPLETE: 'ui.render.complete',
+    RENDER_ERROR: 'ui.render.error',
+
+    // Componentes
+    COMPONENT_MOUNTED: 'ui.component.mounted',
+    COMPONENT_UPDATED: 'ui.component.updated',
+    COMPONENT_DESTROYED: 'ui.component.destroyed',
+    COMPONENT_ERROR: 'ui.component.error',
+
+    // Interacciones
+    ACTION_TRIGGERED: 'ui.action.triggered',
+    ACTION_COMPLETED: 'ui.action.completed',
+    ACTION_FAILED: 'ui.action.failed',
+
+    // Estado
+    STATE_CHANGED: 'ui.state.changed',
+    THEME_CHANGED: 'ui.theme.changed',
+    VIEW_CHANGED: 'ui.view.changed',
+
+    // Real-time
+    SSE_CONNECTED: 'ui.sse.connected',
+    SSE_DISCONNECTED: 'ui.sse.disconnected',
+    SSE_MESSAGE: 'ui.sse.message',
+    SSE_ERROR: 'ui.sse.error'
+  },
+
+  // === TIPOS DE COMPONENTES ===
+  COMPONENTS: {
+    // Core - Elementos básicos
+    BUTTON: 'button',
+    INPUT: 'input',
+    SELECT: 'select',
+    CHECKBOX: 'checkbox',
+    RADIO: 'radio',
+    TEXTAREA: 'textarea',
+    TOGGLE: 'toggle',
+
+    // Layout - Estructura
+    CARD: 'card',
+    MODAL: 'modal',
+    SIDEBAR: 'sidebar',
+    GRID: 'grid',
+    TABS: 'tabs',
+    ACCORDION: 'accordion',
+    DRAWER: 'drawer',
+    DIVIDER: 'divider',
+
+    // Data - Visualización de datos
+    TABLE: 'table',
+    LIST: 'list',
+    TREE: 'tree',
+    PAGINATION: 'pagination',
+    FILTER: 'filter',
+    SORT: 'sort',
+
+    // Feedback - Retroalimentación
+    TOAST: 'toast',
+    PROGRESS: 'progress',
+    SKELETON: 'skeleton',
+    SPINNER: 'spinner',
+    EMPTY_STATE: 'empty-state',
+    BADGE: 'badge',
+    TOOLTIP: 'tooltip',
+    ALERT: 'alert',
+
+    // Form - Formularios
+    FORM: 'form',
+    FIELD: 'field',
+    LABEL: 'label',
+    ERROR_MESSAGE: 'error-message',
+
+    // Navigation
+    NAV: 'nav',
+    BREADCRUMB: 'breadcrumb',
+    MENU: 'menu',
+    DROPDOWN: 'dropdown'
+  },
+
+  // === INTERACCIONES ===
+  INTERACTIONS: {
+    // Mouse
+    CLICK: 'click',
+    DOUBLE_CLICK: 'dblclick',
+    HOLD: 'hold',
+    HOVER: 'hover',
+    CONTEXT_MENU: 'contextmenu',
+
+    // Touch
+    TAP: 'tap',
+    LONG_PRESS: 'longpress',
+    SWIPE_LEFT: 'swipe-left',
+    SWIPE_RIGHT: 'swipe-right',
+    SWIPE_UP: 'swipe-up',
+    SWIPE_DOWN: 'swipe-down',
+    PINCH: 'pinch',
+
+    // Drag & Drop
+    DRAG_START: 'dragstart',
+    DRAG: 'drag',
+    DRAG_END: 'dragend',
+    DROP: 'drop',
+
+    // Form
+    FOCUS: 'focus',
+    BLUR: 'blur',
+    CHANGE: 'change',
+    INPUT: 'input',
+    SUBMIT: 'submit',
+
+    // Keyboard
+    KEY_DOWN: 'keydown',
+    KEY_UP: 'keyup',
+    KEY_PRESS: 'keypress'
+  },
+
+  // === ACCIONES ===
+  ACTIONS: {
+    // Navegación
+    NAVIGATE: 'navigate',
+    BACK: 'back',
+    FORWARD: 'forward',
+    REFRESH: 'refresh',
+    REDIRECT: 'redirect',
+
+    // CRUD
+    CREATE: 'create',
+    READ: 'read',
+    UPDATE: 'update',
+    DELETE: 'delete',
+    LIST: 'list',
+
+    // UI Modales
+    OPEN_MODAL: 'open-modal',
+    CLOSE_MODAL: 'close-modal',
+    OPEN_DRAWER: 'open-drawer',
+    CLOSE_DRAWER: 'close-drawer',
+
+    // UI Feedback
+    SHOW_TOAST: 'show-toast',
+    SHOW_ALERT: 'show-alert',
+    SHOW_CONFIRM: 'show-confirm',
+    SHOW_LOADING: 'show-loading',
+    HIDE_LOADING: 'hide-loading',
+
+    // UI Toggle
+    TOGGLE: 'toggle',
+    EXPAND: 'expand',
+    COLLAPSE: 'collapse',
+    SHOW: 'show',
+    HIDE: 'hide',
+
+    // Datos
+    FETCH: 'fetch',
+    SUBMIT: 'submit',
+    VALIDATE: 'validate',
+    RESET: 'reset',
+    CLEAR: 'clear',
+
+    // Selección
+    SELECT: 'select',
+    DESELECT: 'deselect',
+    SELECT_ALL: 'select-all',
+    DESELECT_ALL: 'deselect-all',
+
+    // Eventos
+    EMIT: 'emit',
+    SUBSCRIBE: 'subscribe',
+    UNSUBSCRIBE: 'unsubscribe',
+
+    // Clipboard
+    COPY: 'copy',
+    PASTE: 'paste',
+    CUT: 'cut',
+
+    // Export
+    EXPORT_CSV: 'export-csv',
+    EXPORT_JSON: 'export-json',
+    EXPORT_PDF: 'export-pdf',
+    PRINT: 'print'
+  },
+
+  // === TIPOS DE VISTAS ===
+  VIEWS: {
+    LIST: 'list',
+    DETAIL: 'detail',
+    FORM: 'form',
+    DASHBOARD: 'dashboard',
+    KANBAN: 'kanban',
+    CALENDAR: 'calendar',
+    TIMELINE: 'timeline',
+    GRID: 'grid',
+    CHART: 'chart'
+  },
+
+  // === VARIANTES DE COMPONENTES ===
+  VARIANTS: {
+    PRIMARY: 'primary',
+    SECONDARY: 'secondary',
+    SUCCESS: 'success',
+    WARNING: 'warning',
+    DANGER: 'danger',
+    INFO: 'info',
+    GHOST: 'ghost',
+    OUTLINE: 'outline',
+    LINK: 'link'
+  },
+
+  // === TAMAÑOS ===
+  SIZES: {
+    XS: 'xs',
+    SM: 'sm',
+    MD: 'md',
+    LG: 'lg',
+    XL: 'xl',
+    FULL: 'full'
+  },
+
+  // === RUTAS AUTO-UI ===
+  ROUTES: {
+    BASE: '/auto-ui',
+    DASHBOARD: '/auto-ui',
+    MODULE: '/auto-ui/:module',
+    MODULE_VIEW: '/auto-ui/:module/:view',
+    MODULE_ITEM: '/auto-ui/:module/:view/:id',
+    EVENTS_SSE: '/auto-ui/events',
+    THEME: '/auto-ui/theme',
+    COMPONENTS: '/auto-ui/components',
+    FORM: '/auto-ui/:module/form',
+    FORM_EDIT: '/auto-ui/:module/form/:id'
+  },
+
+  // === CONFIGURACIÓN UI ===
+  CONFIG: {
+    // Interacciones
+    HOLD_DURATION: 2000,
+    DOUBLE_CLICK_DELAY: 300,
+    DEBOUNCE_DELAY: 300,
+    THROTTLE_DELAY: 100,
+
+    // Feedback
+    TOAST_DURATION: 3000,
+    TOAST_MAX: 5,
+    LOADING_DELAY: 200,
+
+    // Animaciones
+    ANIMATION_FAST: 150,
+    ANIMATION_NORMAL: 250,
+    ANIMATION_SLOW: 350,
+
+    // SSE
+    SSE_RECONNECT_DELAY: 1000,
+    SSE_MAX_RETRIES: 5,
+
+    // Paginación
+    PAGE_SIZES: [10, 25, 50, 100],
+    DEFAULT_PAGE_SIZE: 25,
+
+    // Validación
+    VALIDATE_ON_BLUR: true,
+    VALIDATE_ON_CHANGE: false,
+    VALIDATE_ON_SUBMIT: true
+  },
+
+  // === HELPERS UI ===
+  HELPERS: {
+    /**
+     * Construye una ruta Auto-UI
+     */
+    buildRoute(module, view = null, id = null) {
+      let route = `/auto-ui/${module}`;
+      if (view) route += `/${view}`;
+      if (id) route += `/${id}`;
+      return route;
+    },
+
+    /**
+     * Construye un evento UI
+     */
+    buildEvent(component, action) {
+      return `ui.${component}.${action}`;
+    },
+
+    /**
+     * Genera ID único para componente
+     */
+    generateComponentId(type) {
+      return `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    },
+
+    /**
+     * Construye data-attributes para interacciones
+     */
+    buildDataAttributes(interactions) {
+      return Object.entries(interactions)
+        .map(([event, config]) => `data-${event}='${JSON.stringify(config)}'`)
+        .join(' ');
+    }
+  }
+};
+
+// ============================================
 // EXPORTS
 // ============================================
 
@@ -496,5 +805,6 @@ module.exports = {
   FIELDS,
   ERRORS,
   CONFIG,
-  HELPERS
+  HELPERS,
+  UI
 };

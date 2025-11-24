@@ -1,0 +1,100 @@
+{
+  "name": "{{name}}",
+  "version": "1.0.0",
+  "type": "{{category}}",
+  "description": "Componente {{name}} para Auto-UI",
+
+  {{#if hasVariants}}
+  "variants": {
+    "primary": {
+      "bg": "var(--primary)",
+      "text": "var(--text)",
+      "border": "var(--primary)"
+    },
+    "secondary": {
+      "bg": "var(--bg-card)",
+      "text": "var(--text)",
+      "border": "var(--border)"
+    },
+    "success": {
+      "bg": "var(--success)",
+      "text": "var(--text)",
+      "border": "var(--success)"
+    },
+    "warning": {
+      "bg": "var(--warning)",
+      "text": "var(--bg)",
+      "border": "var(--warning)"
+    },
+    "danger": {
+      "bg": "var(--danger)",
+      "text": "var(--text)",
+      "border": "var(--danger)"
+    },
+    "ghost": {
+      "bg": "transparent",
+      "text": "var(--primary)",
+      "border": "transparent"
+    }
+  },
+  {{/if}}
+
+  "sizes": {
+    "sm": {
+      "padding": "var(--space-xs) var(--space-sm)",
+      "fontSize": "var(--size-sm)"
+    },
+    "md": {
+      "padding": "var(--space-sm) var(--space-md)",
+      "fontSize": "var(--size-base)"
+    },
+    "lg": {
+      "padding": "var(--space-md) var(--space-lg)",
+      "fontSize": "var(--size-lg)"
+    }
+  },
+
+  "interactions": {
+    {{#each interactions}}
+    "{{this}}": {
+      "enabled": true,
+      {{#if (eq this "hold")}}
+      "duration": 2000,
+      "feedback": "progress-ring"
+      {{else if (eq this "double-click")}}
+      "delay": 300
+      {{else if (eq this "swipe")}}
+      "threshold": 50,
+      "direction": "horizontal"
+      {{else}}
+      "debounce": 0
+      {{/if}}
+    }{{#unless @last}},{{/unless}}
+    {{/each}}
+  },
+
+  "states": {
+    "default": {},
+    "hover": {
+      "transform": "translateY(-1px)",
+      "shadow": "var(--shadow-md)"
+    },
+    "active": {
+      "transform": "translateY(0)",
+      "shadow": "var(--shadow-sm)"
+    },
+    "disabled": {
+      "opacity": 0.5,
+      "cursor": "not-allowed"
+    },
+    "loading": {
+      "cursor": "wait"
+    }
+  },
+
+  "accessibility": {
+    "role": "{{#if (eq category 'core')}}button{{else}}region{{/if}}",
+    "tabIndex": 0,
+    "ariaLabel": "{{name}}"
+  }
+}

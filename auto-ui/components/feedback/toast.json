@@ -1,0 +1,53 @@
+{
+  "name": "toast",
+  "version": "1.0.0",
+  "type": "feedback",
+  "description": "Notificación temporal",
+
+  "variants": {
+    "info": {
+      "bg": "var(--info)",
+      "text": "white",
+      "icon": "info"
+    },
+    "success": {
+      "bg": "var(--success)",
+      "text": "white",
+      "icon": "check"
+    },
+    "warning": {
+      "bg": "var(--warning)",
+      "text": "var(--bg)",
+      "icon": "alert"
+    },
+    "danger": {
+      "bg": "var(--danger)",
+      "text": "white",
+      "icon": "error"
+    }
+  },
+
+  "position": {
+    "vertical": "top",
+    "horizontal": "right"
+  },
+
+  "behavior": {
+    "duration": 3000,
+    "dismissible": true,
+    "pauseOnHover": true,
+    "maxVisible": 5,
+    "stacking": "vertical"
+  },
+
+  "animation": {
+    "enter": "slide-in-right",
+    "exit": "fade-out",
+    "duration": 250
+  },
+
+  "accessibility": {
+    "role": "alert",
+    "ariaLive": "polite"
+  }
+}

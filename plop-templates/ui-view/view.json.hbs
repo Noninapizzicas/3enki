@@ -1,0 +1,271 @@
+{
+  "name": "{{moduleName}}-{{viewType}}",
+  "version": "1.0.0",
+  "module": "{{moduleName}}",
+  "type": "{{viewType}}",
+  "description": "Vista {{viewType}} para el módulo {{moduleName}}",
+
+  "layout": {
+    "type": "standard",
+    "regions": ["header", {{#if (eq viewType "list")}}"filters", {{/if}}"content", "footer"]
+  },
+
+  "header": {
+    "title": "\{{module.ui.title}}",
+    "icon": "\{{module.ui.icon}}",
+    "breadcrumb": true,
+    "actions": [
+      {{#if (eq viewType "list")}}
+      {
+        "type": "button",
+        "variant": "primary",
+        "icon": "+",
+        "label": "Crear",
+        "action": {
+          "type": "navigate",
+          "to": "/auto-ui/{{moduleName}}/form"
+        }
+      },
+      {
+        "type": "button",
+        "variant": "ghost",
+        "icon": "refresh",
+        "label": "Actualizar",
+        "action": {
+          "type": "refresh"
+        }
+      }
+      {{else if (eq viewType "detail")}}
+      {
+        "type": "button",
+        "variant": "primary",
+        "icon": "edit",
+        "label": "Editar",
+        "action": {
+          "type": "navigate",
+          "to": "/auto-ui/{{moduleName}}/form/\{{id}}"
+        }
+      },
+      {
+        "type": "button",
+        "variant": "danger",
+        "icon": "trash",
+        "label": "Eliminar",
+        "interactions": {
+          "hold": {
+            "duration": 2000,
+            "action": {
+              "type": "delete",
+              "confirm": false
+            }
+          },
+          "click": {
+            "action": {
+              "type": "show-confirm",
+              "message": "¿Eliminar este registro?",
+              "onConfirm": {
+                "type": "delete"
+              }
+            }
+          }
+        }
+      }
+      {{else if (eq viewType "form")}}
+      {
+        "type": "button",
+        "variant": "ghost",
+        "label": "Cancelar",
+        "action": {
+          "type": "back"
+        }
+      },
+      {
+        "type": "button",
+        "variant": "primary",
+        "label": "Guardar",
+        "action": {
+          "type": "submit"
+        }
+      }
+      {{/if}}
+    ]
+  },
+
+  {{#if (eq viewType "list")}}
+  "filters": {
+    "enabled": true,
+    "search": {
+      "enabled": true,
+      "placeholder": "Buscar...",
+      "fields": "auto",
+      "debounce": 300
+    },
+    "facets": [],
+    "sort": {
+      "enabled": true,
+      "default": {
+        "field": "created_at",
+        "order": "desc"
+      }
+    }
+  },
+  {{/if}}
+
+  "content": {
+    {{#if (eq viewType "list")}}
+    "type": "table",
+    "columns": "auto",
+    "selectable": true,
+    "row_actions": [
+      {
+        "icon": "eye",
+        "tooltip": "Ver detalle",
+        "action": {
+          "type": "navigate",
+          "to": "/auto-ui/{{moduleName}}/detail/\{{id}}"
+        }
+      },
+      {
+        "icon": "edit",
+        "tooltip": "Editar",
+        "action": {
+          "type": "navigate",
+          "to": "/auto-ui/{{moduleName}}/form/\{{id}}"
+        }
+      },
+      {
+        "icon": "trash",
+        "tooltip": "Eliminar",
+        "variant": "danger",
+        "interactions": {
+          "hold": {
+            "duration": 2000,
+            "feedback": "progress-ring",
+            "action": {
+              "type": "delete",
+              "confirm": false
+            }
+          },
+          "click": {
+            "action": {
+              "type": "show-confirm",
+              "message": "¿Eliminar?"
+            }
+          }
+        }
+      }
+    ],
+    "bulk_actions": [
+      {
+        "label": "Eliminar seleccionados",
+        "action": "delete",
+        "variant": "danger",
+        "confirm": true
+      },
+      {
+        "label": "Exportar CSV",
+        "action": "export-csv"
+      }
+    ],
+    "empty_state": {
+      "icon": "inbox",
+      "title": "Sin registros",
+      "description": "No hay datos para mostrar",
+      "action": {
+        "label": "Crear primero",
+        "to": "/auto-ui/{{moduleName}}/form"
+      }
+    }
+    {{else if (eq viewType "detail")}}
+    "type": "card",
+    "sections": "auto",
+    "layout": "grid",
+    "columns": 2
+    {{else if (eq viewType "form")}}
+    "type": "form",
+    "fields": "auto",
+    "layout": "vertical",
+    "validation": {
+      "on": "blur",
+      "showErrors": true
+    },
+    "submit": {
+      "method": "auto",
+      "endpoint": "auto",
+      "redirect": "/auto-ui/{{moduleName}}/list"
+    }
+    {{else if (eq viewType "dashboard")}}
+    "type": "grid",
+    "columns": 3,
+    "gap": "md",
+    "widgets": [
+      {
+        "type": "metric-card",
+        "title": "Total",
+        "value": "\{{stats.total}}",
+        "span": 1
+      },
+      {
+        "type": "chart",
+        "chartType": "line",
+        "title": "Tendencia",
+        "span": 2
+      },
+      {
+        "type": "table",
+        "title": "Últimos registros",
+        "limit": 5,
+        "span": 3
+      }
+    ]
+    {{/if}}
+  },
+
+  {{#if (eq viewType "list")}}
+  "footer": {
+    "pagination": {
+      "enabled": true,
+      "sizes": [10, 25, 50, 100],
+      "default": 25
+    },
+    "info": "Mostrando \{{from}}-\{{to}} de \{{total}}"
+  },
+  {{/if}}
+
+  {{#if realtime}}
+  "realtime": {
+    "enabled": true,
+    "events": {
+      "{{moduleName}}.created": {
+        "action": "prepend",
+        "target": "content",
+        "toast": {
+          "message": "Nuevo registro creado",
+          "type": "success"
+        }
+      },
+      "{{moduleName}}.updated": {
+        "action": "replace",
+        "target": "row",
+        "toast": {
+          "message": "Registro actualizado",
+          "type": "info"
+        }
+      },
+      "{{moduleName}}.deleted": {
+        "action": "remove",
+        "target": "row",
+        "toast": {
+          "message": "Registro eliminado",
+          "type": "warning"
+        }
+      }
+    }
+  },
+  {{/if}}
+
+  "meta": {
+    "generated_at": "{{currentDate}}",
+    "generator": "plop ui-view"
+  }
+}

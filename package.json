@@ -19,7 +19,11 @@
     "dev": "node index.js --log-level debug",
     "plop": "plop",
     "create-module": "node scripts/create-module.js",
-    "create-module:interactive": "node scripts/create-module.js --interactive"
+    "create-module:interactive": "node scripts/create-module.js --interactive",
+    "ui:validate": "node scripts/auto-ui/validate.js",
+    "ui:component": "plop ui-component",
+    "ui:view": "plop ui-view",
+    "ui:theme": "plop ui-theme"
   },
   "keywords": [
     "event-driven",

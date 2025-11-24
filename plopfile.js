@@ -300,4 +300,191 @@ module.exports = function (plop) {
       return [];
     }
   });
+
+  // ==========================================
+  // Generator: ui-component (Auto-UI)
+  // ==========================================
+  plop.setGenerator('ui-component', {
+    description: 'Crear un componente Auto-UI',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '🎨 Nombre del componente (kebab-case):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+            return 'Usa kebab-case (ej: my-button)';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'list',
+        name: 'category',
+        message: '📁 Categoría:',
+        choices: ['core', 'layout', 'data', 'feedback', 'form', 'navigation', 'custom']
+      },
+      {
+        type: 'checkbox',
+        name: 'interactions',
+        message: '👆 Interacciones:',
+        choices: [
+          { name: 'Click', value: 'click', checked: true },
+          { name: 'Double click', value: 'double-click' },
+          { name: 'Hold (mantener pulsado)', value: 'hold' },
+          { name: 'Swipe (gestos táctiles)', value: 'swipe' },
+          { name: 'Drag & Drop', value: 'drag' }
+        ]
+      },
+      {
+        type: 'confirm',
+        name: 'hasVariants',
+        message: '🎭 ¿Tiene variantes (primary, secondary, danger, etc)?',
+        default: true
+      }
+    ],
+
+    actions: (data) => {
+      const componentPath = `auto-ui/components/${data.category}`;
+      const jsPath = `auto-ui/client/js/components`;
+
+      return [
+        {
+          type: 'add',
+          path: `${componentPath}/{{name}}.json`,
+          templateFile: 'plop-templates/ui-component/component.json.hbs'
+        },
+        {
+          type: 'add',
+          path: `${jsPath}/{{name}}.js`,
+          templateFile: 'plop-templates/ui-component/component.js.hbs'
+        },
+        () => {
+          console.log('\n✅ Componente UI creado exitosamente');
+          console.log('\n📁 Archivos generados:');
+          console.log(`   ├── ${componentPath}/${data.name}.json`);
+          console.log(`   └── ${jsPath}/${data.name}.js`);
+          console.log('\n🚀 Próximos pasos:');
+          console.log(`   1. Personalizar ${data.name}.json con variantes y estados`);
+          console.log(`   2. Ajustar ${data.name}.js con lógica específica`);
+          console.log('   3. Importar el componente en auto-ui/client/js/core.js\n');
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
+  // Generator: ui-view (Auto-UI)
+  // ==========================================
+  plop.setGenerator('ui-view', {
+    description: 'Crear una vista Auto-UI para un módulo',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'moduleName',
+        message: '📦 Nombre del módulo:',
+        validate: (value) => value ? true : 'El nombre es requerido'
+      },
+      {
+        type: 'list',
+        name: 'viewType',
+        message: '📄 Tipo de vista:',
+        choices: [
+          { name: 'Lista (tabla con acciones)', value: 'list' },
+          { name: 'Detalle (vista de un registro)', value: 'detail' },
+          { name: 'Formulario (crear/editar)', value: 'form' },
+          { name: 'Dashboard (métricas y widgets)', value: 'dashboard' },
+          { name: 'Personalizada', value: 'custom' }
+        ]
+      },
+      {
+        type: 'confirm',
+        name: 'realtime',
+        message: '⚡ ¿Actualización en tiempo real (SSE)?',
+        default: true
+      }
+    ],
+
+    actions: (data) => {
+      const viewPath = `modules/${data.moduleName}/views`;
+
+      return [
+        {
+          type: 'add',
+          path: `${viewPath}/{{viewType}}.json`,
+          templateFile: 'plop-templates/ui-view/view.json.hbs'
+        },
+        () => {
+          console.log('\n✅ Vista UI creada exitosamente');
+          console.log('\n📁 Archivo generado:');
+          console.log(`   └── ${viewPath}/${data.viewType}.json`);
+          console.log('\n🚀 Próximos pasos:');
+          console.log('   1. Ajustar columnas/campos en el archivo generado');
+          console.log('   2. Configurar acciones específicas');
+          if (data.realtime) {
+            console.log('   3. Verificar eventos de real-time en module.json');
+          }
+          console.log(`\n🔗 Acceder a la vista: /auto-ui/${data.moduleName}/${data.viewType}\n`);
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
+  // Generator: ui-theme (Auto-UI)
+  // ==========================================
+  plop.setGenerator('ui-theme', {
+    description: 'Crear un nuevo tema Auto-UI',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '🎨 Nombre del tema:',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+            return 'Usa kebab-case (ej: my-theme)';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'list',
+        name: 'base',
+        message: '📋 Basado en:',
+        choices: [
+          { name: 'Oscuro (dark)', value: 'dark' },
+          { name: 'Claro (light)', value: 'light' },
+          { name: 'Alto contraste', value: 'high-contrast' },
+          { name: 'Desde cero', value: 'scratch' }
+        ]
+      }
+    ],
+
+    actions: (data) => {
+      return [
+        {
+          type: 'add',
+          path: `auto-ui/config/themes/{{name}}.json`,
+          templateFile: 'plop-templates/ui-theme/theme.json.hbs'
+        },
+        () => {
+          console.log('\n✅ Tema creado exitosamente');
+          console.log('\n📁 Archivo generado:');
+          console.log(`   └── auto-ui/config/themes/${data.name}.json`);
+          console.log('\n🚀 Para activar el tema:');
+          console.log(`   npm run ui:theme ${data.name}`);
+          console.log('\n   O manualmente:');
+          console.log(`   cp auto-ui/config/themes/${data.name}.json auto-ui/config/theme.json\n`);
+          return '';
+        }
+      ];
+    }
+  });
 };

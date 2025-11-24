@@ -96,9 +96,11 @@ class AutoUI {
 
       // Module routes
       'GET :module': (params) => this.handleModuleList(res, params.module),
+      'GET :module/list': (params) => this.handleModuleList(res, params.module),
       'GET :module/rows': (params) => this.handleModuleRows(res, params.module),
       'GET :module/form': (params) => this.handleModuleForm(res, params.module),
       'GET :module/form/:id': (params) => this.handleModuleForm(res, params.module, params.id),
+      'GET :module/detail/:id': (params) => this.handleModuleDetail(res, params.module, params.id),
 
       // Static JS
       'GET js/core.js': () => this.handleStaticJS(res)
@@ -207,6 +209,36 @@ class AutoUI {
     const html = this.generator.form(module, data);
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
+  }
+
+  /**
+   * Vista detalle de un registro
+   */
+  async handleModuleDetail(res, moduleName, id) {
+    const module = this.loader.getModule(moduleName);
+
+    if (!module) {
+      res.writeHead(404, { 'Content-Type': 'text/html' });
+      res.end(this.generator.page('404', `<div class="empty-state"><div class="empty-state-icon">📦</div><p>Módulo '${moduleName}' no encontrado</p></div>`));
+      return;
+    }
+
+    try {
+      const data = await this.fetchModuleItem(module, id);
+      const html = this.generator.detail(module, data);
+
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+
+      if (this.isHtmxRequest(res.req || {})) {
+        res.end(html);
+      } else {
+        res.end(this.generator.page(`${module.ui?.title || module.name} - Detalle`, html, { sse: true }));
+      }
+    } catch (error) {
+      this.logger.error('[AutoUI] Failed to fetch item:', error);
+      res.writeHead(404, { 'Content-Type': 'text/html' });
+      res.end(this.generator.page('404', `<div class="empty-state"><div class="empty-state-icon">🔍</div><p>Registro no encontrado</p></div>`));
+    }
   }
 
   /**

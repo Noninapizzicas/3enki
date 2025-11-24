@@ -406,7 +406,17 @@ class Generator {
 
     let html = '';
 
-    // Ver/Editar
+    // Ver detalle
+    html += `
+      <button class="btn btn-icon btn-ghost" title="Ver detalle"
+        hx-get="/auto-ui/${module.name}/detail/${row.id}"
+        hx-target=".main"
+        hx-push-url="true">
+        👁️
+      </button>
+    `;
+
+    // Editar
     html += `
       <button class="btn btn-icon btn-ghost" title="Editar"
         hx-get="/auto-ui/${module.name}/form/${row.id}"
@@ -429,6 +439,66 @@ class Generator {
     `;
 
     return html;
+  }
+
+  // ==========================================
+  // Vista Detalle
+  // ==========================================
+
+  /**
+   * Genera vista de detalle para un registro
+   */
+  detail(module, data) {
+    const schema = module.schema || {};
+
+    const fields = Object.entries(schema).map(([name, fieldSchema]) => {
+      const label = fieldSchema.label || this.toLabel(name);
+      const value = data[name];
+      const formattedValue = this.formatCell(value, fieldSchema);
+
+      return `
+        <div class="detail-field">
+          <span class="detail-label">${label}</span>
+          <span class="detail-value">${formattedValue}</span>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="header">
+        <div class="flex items-center gap-md">
+          <button class="btn btn-ghost" onclick="history.back()">← Volver</button>
+          <span style="font-size: 2rem">${module.ui?.icon || '📦'}</span>
+          <h1>${module.ui?.title || module.name} - Detalle</h1>
+        </div>
+        <div class="flex gap-sm">
+          <button class="btn btn-primary" hx-get="/auto-ui/${module.name}/form/${data.id}" hx-target="#modal-container">
+            ✏️ Editar
+          </button>
+          <button class="btn btn-danger"
+            data-hold='{"action":"delete","endpoint":"/modules/${module.name}/${data.id}","duration":2000}'
+            hx-delete="/modules/${module.name}/${data.id}"
+            hx-swap="none"
+            hx-on::after-request="if(event.detail.successful) { history.back(); }"
+            hx-confirm="¿Eliminar este registro?">
+            🗑️ Eliminar
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="detail-grid">
+          ${fields}
+        </div>
+      </div>
+
+      <style>
+        .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md); }
+        .detail-field { display: flex; flex-direction: column; gap: var(--space-xs); }
+        .detail-label { font-size: var(--size-sm); color: var(--text-muted); font-weight: 500; }
+        .detail-value { font-size: var(--size-base); }
+      </style>
+    `;
   }
 
   // ==========================================

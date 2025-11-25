@@ -492,11 +492,23 @@ class HTTPGateway {
       }
 
       // Ejecutar hook afterResponse
-      let responseContext = {
-        request_id: requestId,
-        status: 200,
-        data: result
-      };
+      // Si el result tiene status/headers/body, usarlos directamente
+      let responseContext;
+      if (result && typeof result === 'object' && result.status !== undefined) {
+        responseContext = {
+          request_id: requestId,
+          status: result.status,
+          data: result.data,
+          body: result.body,
+          headers: result.headers
+        };
+      } else {
+        responseContext = {
+          request_id: requestId,
+          status: 200,
+          data: result
+        };
+      }
 
       if (this.hooks) {
         responseContext = await this.hooks.execute('afterResponse', responseContext);
@@ -516,7 +528,20 @@ class HTTPGateway {
       }
 
       // Enviar respuesta
-      await this.sendResponse(res, responseContext.status, responseContext.data, req);
+      // Si hay body + headers, es una respuesta HTML/custom
+      if (responseContext.body !== undefined && responseContext.headers) {
+        // Aplicar headers custom
+        for (const [key, value] of Object.entries(responseContext.headers)) {
+          res.setHeader(key, value);
+        }
+
+        // Enviar body directamente
+        const contentType = responseContext.headers['Content-Type'] || 'text/html';
+        await this._sendCompressedResponse(res, responseContext.status, responseContext.body, contentType, req);
+      } else {
+        // Respuesta JSON normal
+        await this.sendResponse(res, responseContext.status, responseContext.data, req);
+      }
 
       // Metrics
       if (this.metrics) {

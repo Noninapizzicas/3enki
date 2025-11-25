@@ -1,0 +1,153 @@
+{
+  "name": "tree",
+  "category": "data",
+  "description": "Vista de árbol jerárquica con nodos expandibles",
+  "version": "2.0.0",
+
+  "variants": {
+    "default": {
+      "description": "Árbol estándar",
+      "className": "tree"
+    },
+    "compact": {
+      "description": "Árbol compacto",
+      "className": "tree tree-compact"
+    },
+    "bordered": {
+      "description": "Árbol con bordes",
+      "className": "tree tree-bordered"
+    }
+  },
+
+  "props": {
+    "data": {
+      "type": "array",
+      "required": true,
+      "description": "Datos jerárquicos del árbol"
+    },
+    "expandAll": {
+      "type": "boolean",
+      "default": false,
+      "description": "Expandir todos los nodos inicialmente"
+    },
+    "showIcons": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar iconos en los nodos"
+    },
+    "selectable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Permitir selección de nodos"
+    },
+    "multiSelect": {
+      "type": "boolean",
+      "default": false,
+      "description": "Permitir selección múltiple"
+    },
+    "draggable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Permitir arrastrar nodos"
+    },
+    "checkboxes": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mostrar checkboxes en nodos"
+    }
+  },
+
+  "nodeStructure": {
+    "id": {
+      "type": "string",
+      "required": true,
+      "description": "ID único del nodo"
+    },
+    "label": {
+      "type": "string",
+      "required": true,
+      "description": "Texto del nodo"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icono del nodo"
+    },
+    "children": {
+      "type": "array",
+      "description": "Nodos hijos"
+    },
+    "expanded": {
+      "type": "boolean",
+      "default": false,
+      "description": "Estado inicial del nodo"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Nodo deshabilitado"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Datos adicionales del nodo"
+    }
+  },
+
+  "features": {
+    "lazyLoading": {
+      "enabled": false,
+      "loadChildren": "function"
+    },
+    "search": {
+      "enabled": true,
+      "highlightMatches": true
+    },
+    "dragAndDrop": {
+      "enabled": false,
+      "allowCrossLevel": true
+    }
+  },
+
+  "interactions": {
+    "nodeClick": {
+      "enabled": true,
+      "action": "toggle"
+    },
+    "nodeDoubleClick": {
+      "enabled": false,
+      "action": "custom"
+    },
+    "nodeRightClick": {
+      "enabled": false,
+      "action": "contextMenu"
+    }
+  },
+
+  "accessibility": {
+    "role": "tree",
+    "nodeRole": "treeitem",
+    "keyboardNavigation": true,
+    "ariaExpanded": true
+  },
+
+  "example": {
+    "widget": "tree",
+    "variant": "default",
+    "props": {
+      "data": [
+        {
+          "id": "1",
+          "label": "Carpeta raíz",
+          "icon": "📁",
+          "expanded": true,
+          "children": [
+            {"id": "1-1", "label": "Subcarpeta 1", "icon": "📁", "children": []},
+            {"id": "1-2", "label": "Archivo.txt", "icon": "📄"}
+          ]
+        }
+      ],
+      "showIcons": true,
+      "selectable": true,
+      "checkboxes": false
+    }
+  }
+}

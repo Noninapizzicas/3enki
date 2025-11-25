@@ -1,0 +1,191 @@
+{
+  "name": "navbar",
+  "category": "navigation",
+  "description": "Barra de navegación responsive con menús y acciones",
+  "version": "2.0.0",
+
+  "variants": {
+    "default": {
+      "description": "Navbar estándar",
+      "className": "navbar"
+    },
+    "fixed": {
+      "description": "Navbar fija en la parte superior",
+      "className": "navbar navbar-fixed"
+    },
+    "transparent": {
+      "description": "Navbar transparente",
+      "className": "navbar navbar-transparent"
+    },
+    "minimal": {
+      "description": "Navbar minimalista",
+      "className": "navbar navbar-minimal"
+    }
+  },
+
+  "positions": {
+    "top": {
+      "description": "Fija arriba",
+      "className": "navbar-top"
+    },
+    "bottom": {
+      "description": "Fija abajo",
+      "className": "navbar-bottom"
+    },
+    "static": {
+      "description": "Estática (no fija)",
+      "className": "navbar-static"
+    }
+  },
+
+  "props": {
+    "brand": {
+      "type": "object",
+      "description": "Información de la marca",
+      "properties": {
+        "logo": "string",
+        "text": "string",
+        "url": "string"
+      }
+    },
+    "items": {
+      "type": "array",
+      "description": "Items del menú",
+      "items": {
+        "label": "string",
+        "icon": "string",
+        "url": "string",
+        "active": "boolean",
+        "badge": "object",
+        "children": "array"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "Acciones en el navbar (botones, búsqueda, etc.)",
+      "items": {
+        "type": "button|search|dropdown|avatar",
+        "config": "object"
+      }
+    },
+    "sticky": {
+      "type": "boolean",
+      "default": false,
+      "description": "Navbar sticky (se fija al hacer scroll)"
+    },
+    "collapsible": {
+      "type": "boolean",
+      "default": true,
+      "description": "Colapsar en mobile"
+    },
+    "collapseBreakpoint": {
+      "type": "string",
+      "default": "md",
+      "enum": ["sm", "md", "lg"],
+      "description": "Breakpoint para colapsar"
+    }
+  },
+
+  "structure": {
+    "sections": {
+      "left": "Logo/Brand + Main navigation",
+      "center": "Additional navigation (optional)",
+      "right": "Actions + User menu"
+    }
+  },
+
+  "features": {
+    "responsive": {
+      "enabled": true,
+      "hamburgerMenu": true,
+      "mobileDrawer": true
+    },
+    "search": {
+      "enabled": false,
+      "placeholder": "Buscar...",
+      "endpoint": "/api/search",
+      "shortcut": "Ctrl+K"
+    },
+    "dropdowns": {
+      "enabled": true,
+      "hoverDelay": 200,
+      "closeOnClick": true
+    },
+    "scrollBehavior": {
+      "hideOnScroll": false,
+      "shrinkOnScroll": false,
+      "shadowOnScroll": true
+    }
+  },
+
+  "accessibility": {
+    "role": "navigation",
+    "ariaLabel": "Main navigation",
+    "keyboardNavigation": true
+  },
+
+  "example": {
+    "component": "navbar",
+    "variant": "fixed",
+    "position": "top",
+    "props": {
+      "brand": {
+        "logo": "🚀",
+        "text": "Auto-UI",
+        "url": "/"
+      },
+      "items": [
+        {
+          "label": "Dashboard",
+          "icon": "📊",
+          "url": "/dashboard",
+          "active": true
+        },
+        {
+          "label": "Proyectos",
+          "icon": "📁",
+          "url": "/projects",
+          "badge": {"text": "3", "variant": "primary"}
+        },
+        {
+          "label": "Más",
+          "icon": "⋯",
+          "children": [
+            {"label": "Configuración", "url": "/settings"},
+            {"label": "Ayuda", "url": "/help"}
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "type": "search",
+          "config": {
+            "placeholder": "Buscar...",
+            "shortcut": "⌘K"
+          }
+        },
+        {
+          "type": "button",
+          "config": {
+            "label": "Nuevo",
+            "icon": "➕",
+            "variant": "primary"
+          }
+        },
+        {
+          "type": "avatar",
+          "config": {
+            "image": "👤",
+            "name": "Usuario",
+            "menu": [
+              {"label": "Perfil", "url": "/profile"},
+              {"label": "Cerrar sesión", "url": "/logout"}
+            ]
+          }
+        }
+      ],
+      "sticky": true,
+      "collapsible": true
+    }
+  }
+}

@@ -1,0 +1,209 @@
+{
+  "name": "skeleton",
+  "category": "feedback",
+  "description": "Skeleton loaders para estados de carga",
+  "version": "2.0.0",
+
+  "variants": {
+    "text": {
+      "description": "Línea de texto",
+      "className": "skeleton skeleton-text",
+      "height": "1em"
+    },
+    "title": {
+      "description": "Título",
+      "className": "skeleton skeleton-title",
+      "height": "2em"
+    },
+    "paragraph": {
+      "description": "Párrafo (múltiples líneas)",
+      "className": "skeleton skeleton-paragraph"
+    },
+    "avatar": {
+      "description": "Avatar circular",
+      "className": "skeleton skeleton-avatar",
+      "shape": "circle"
+    },
+    "image": {
+      "description": "Imagen rectangular",
+      "className": "skeleton skeleton-image",
+      "aspectRatio": "16/9"
+    },
+    "button": {
+      "description": "Botón",
+      "className": "skeleton skeleton-button",
+      "height": "40px",
+      "borderRadius": "6px"
+    },
+    "card": {
+      "description": "Tarjeta completa",
+      "className": "skeleton skeleton-card"
+    }
+  },
+
+  "sizes": {
+    "xs": {
+      "description": "Extra pequeño",
+      "className": "skeleton-xs"
+    },
+    "sm": {
+      "description": "Pequeño",
+      "className": "skeleton-sm"
+    },
+    "md": {
+      "description": "Mediano (default)",
+      "className": ""
+    },
+    "lg": {
+      "description": "Grande",
+      "className": "skeleton-lg"
+    },
+    "xl": {
+      "description": "Extra grande",
+      "className": "skeleton-xl"
+    }
+  },
+
+  "props": {
+    "width": {
+      "type": "string",
+      "description": "Ancho del skeleton",
+      "example": "200px, 50%, 100%"
+    },
+    "height": {
+      "type": "string",
+      "description": "Alto del skeleton",
+      "example": "20px, 2em"
+    },
+    "borderRadius": {
+      "type": "string",
+      "description": "Border radius",
+      "example": "4px, 50%"
+    },
+    "count": {
+      "type": "number",
+      "default": 1,
+      "description": "Número de elementos (para texto/párrafo)"
+    },
+    "spacing": {
+      "type": "string",
+      "default": "8px",
+      "description": "Espaciado entre elementos"
+    },
+    "animated": {
+      "type": "boolean",
+      "default": true,
+      "description": "Animar efecto shimmer"
+    },
+    "aspectRatio": {
+      "type": "string",
+      "description": "Aspect ratio (para imágenes)",
+      "example": "16/9, 4/3, 1/1"
+    }
+  },
+
+  "animations": {
+    "wave": {
+      "description": "Ola de izquierda a derecha",
+      "className": "skeleton-wave"
+    },
+    "pulse": {
+      "description": "Pulsación de opacidad",
+      "className": "skeleton-pulse"
+    },
+    "shimmer": {
+      "description": "Efecto shimmer (default)",
+      "className": "skeleton-shimmer"
+    },
+    "none": {
+      "description": "Sin animación",
+      "className": "skeleton-static"
+    }
+  },
+
+  "presets": {
+    "post": {
+      "description": "Preset para post de blog/red social",
+      "structure": [
+        {"type": "avatar", "size": "md"},
+        {"type": "title"},
+        {"type": "paragraph", "lines": 3},
+        {"type": "image"}
+      ]
+    },
+    "userCard": {
+      "description": "Preset para tarjeta de usuario",
+      "structure": [
+        {"type": "avatar", "size": "lg"},
+        {"type": "title"},
+        {"type": "text", "width": "60%"},
+        {"type": "button"}
+      ]
+    },
+    "table": {
+      "description": "Preset para tabla",
+      "structure": [
+        {"type": "text", "count": 5, "height": "40px"}
+      ]
+    },
+    "form": {
+      "description": "Preset para formulario",
+      "structure": [
+        {"type": "text", "width": "30%"},
+        {"type": "button", "width": "100%", "height": "40px"}
+      ]
+    }
+  },
+
+  "accessibility": {
+    "ariaLabel": "Cargando contenido",
+    "ariaBusy": true,
+    "ariaLive": "polite"
+  },
+
+  "example": {
+    "component": "skeleton",
+    "variant": "text",
+    "props": {
+      "width": "100%",
+      "count": 3,
+      "animated": true
+    }
+  },
+
+  "avatarExample": {
+    "component": "skeleton",
+    "variant": "avatar",
+    "size": "lg",
+    "props": {
+      "width": "80px",
+      "height": "80px",
+      "borderRadius": "50%"
+    }
+  },
+
+  "cardExample": {
+    "component": "skeleton",
+    "variant": "card",
+    "props": {
+      "structure": [
+        {"type": "image", "height": "200px", "aspectRatio": "16/9"},
+        {"type": "title", "width": "80%"},
+        {"type": "paragraph", "lines": 3},
+        {"type": "button", "width": "120px"}
+      ]
+    }
+  },
+
+  "listExample": {
+    "component": "skeleton-list",
+    "props": {
+      "count": 5,
+      "itemStructure": [
+        {"type": "avatar", "size": "md"},
+        {"type": "text", "width": "70%"},
+        {"type": "text", "width": "40%"}
+      ]
+    }
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "name": "progress",
+  "category": "feedback",
+  "description": "Barra de progreso para mostrar el avance de una operación",
+  "version": "2.0.0",
+
+  "variants": {
+    "bar": {
+      "description": "Barra de progreso horizontal",
+      "className": "progress progress-bar"
+    },
+    "circle": {
+      "description": "Progreso circular",
+      "className": "progress progress-circle"
+    },
+    "ring": {
+      "description": "Anillo de progreso",
+      "className": "progress progress-ring"
+    },
+    "line": {
+      "description": "Línea delgada de progreso",
+      "className": "progress progress-line"
+    }
+  },
+
+  "sizes": {
+    "xs": {
+      "description": "Extra pequeño",
+      "className": "progress-xs",
+      "height": "2px"
+    },
+    "sm": {
+      "description": "Pequeño",
+      "className": "progress-sm",
+      "height": "4px"
+    },
+    "md": {
+      "description": "Mediano (default)",
+      "className": "",
+      "height": "8px"
+    },
+    "lg": {
+      "description": "Grande",
+      "className": "progress-lg",
+      "height": "12px"
+    },
+    "xl": {
+      "description": "Extra grande",
+      "className": "progress-xl",
+      "height": "16px"
+    }
+  },
+
+  "props": {
+    "value": {
+      "type": "number",
+      "required": true,
+      "description": "Valor del progreso (0-100)",
+      "min": 0,
+      "max": 100
+    },
+    "max": {
+      "type": "number",
+      "default": 100,
+      "description": "Valor máximo"
+    },
+    "label": {
+      "type": "string",
+      "description": "Etiqueta descriptiva"
+    },
+    "showValue": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mostrar valor numérico"
+    },
+    "valueFormat": {
+      "type": "string",
+      "enum": ["percentage", "fraction", "custom"],
+      "default": "percentage",
+      "description": "Formato del valor mostrado"
+    },
+    "color": {
+      "type": "string",
+      "enum": ["primary", "success", "warning", "danger", "info"],
+      "default": "primary",
+      "description": "Color de la barra"
+    },
+    "striped": {
+      "type": "boolean",
+      "default": false,
+      "description": "Estilo rayado"
+    },
+    "animated": {
+      "type": "boolean",
+      "default": false,
+      "description": "Animar el progreso"
+    },
+    "indeterminate": {
+      "type": "boolean",
+      "default": false,
+      "description": "Modo indeterminado (sin valor específico)"
+    },
+    "buffer": {
+      "type": "number",
+      "description": "Valor de buffer (para doble barra)"
+    }
+  },
+
+  "states": {
+    "idle": {
+      "description": "Sin iniciar",
+      "value": 0
+    },
+    "inProgress": {
+      "description": "En progreso",
+      "animated": true
+    },
+    "completed": {
+      "description": "Completado",
+      "value": 100,
+      "color": "success"
+    },
+    "error": {
+      "description": "Error",
+      "color": "danger"
+    }
+  },
+
+  "features": {
+    "segments": {
+      "enabled": false,
+      "items": [
+        {"value": 33, "color": "success"},
+        {"value": 66, "color": "warning"}
+      ]
+    },
+    "gradient": {
+      "enabled": false,
+      "colors": ["#primary", "#primary-dark"]
+    },
+    "pulse": {
+      "enabled": false,
+      "duration": 1000
+    },
+    "completion": {
+      "callback": "function",
+      "showCheck": true,
+      "duration": 500
+    }
+  },
+
+  "accessibility": {
+    "role": "progressbar",
+    "ariaValueMin": 0,
+    "ariaValueMax": 100,
+    "ariaValueNow": true,
+    "ariaLabel": true
+  },
+
+  "example": {
+    "component": "progress",
+    "variant": "bar",
+    "size": "md",
+    "props": {
+      "value": 65,
+      "label": "Subiendo archivo...",
+      "showValue": true,
+      "color": "primary",
+      "animated": true
+    }
+  },
+
+  "circleExample": {
+    "component": "progress",
+    "variant": "circle",
+    "props": {
+      "value": 75,
+      "showValue": true,
+      "label": "Progreso del curso",
+      "color": "success",
+      "size": 120
+    }
+  },
+
+  "indeterminateExample": {
+    "component": "progress",
+    "variant": "line",
+    "size": "xs",
+    "props": {
+      "indeterminate": true,
+      "color": "primary",
+      "label": "Cargando..."
+    }
+  },
+
+  "multiSegmentExample": {
+    "component": "progress",
+    "variant": "bar",
+    "props": {
+      "features": {
+        "segments": {
+          "enabled": true,
+          "items": [
+            {"value": 30, "color": "success", "label": "Completado"},
+            {"value": 20, "color": "warning", "label": "En progreso"},
+            {"value": 10, "color": "danger", "label": "Pendiente"}
+          ]
+        }
+      }
+    }
+  }
+}

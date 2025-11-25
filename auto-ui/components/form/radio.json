@@ -1,0 +1,182 @@
+{
+  "name": "radio",
+  "category": "form",
+  "description": "Radio button para selección única",
+  "version": "2.0.0",
+
+  "variants": {
+    "default": {
+      "description": "Radio estándar",
+      "className": "form-radio"
+    },
+    "button": {
+      "description": "Estilo botón",
+      "className": "form-radio form-radio-button"
+    },
+    "card": {
+      "description": "Estilo tarjeta",
+      "className": "form-radio form-radio-card"
+    }
+  },
+
+  "sizes": {
+    "sm": {
+      "description": "Radio pequeño",
+      "className": "form-radio-sm"
+    },
+    "md": {
+      "description": "Radio mediano (default)",
+      "className": ""
+    },
+    "lg": {
+      "description": "Radio grande",
+      "className": "form-radio-lg"
+    }
+  },
+
+  "props": {
+    "label": {
+      "type": "string",
+      "description": "Etiqueta del radio"
+    },
+    "name": {
+      "type": "string",
+      "required": true,
+      "description": "Nombre del grupo"
+    },
+    "value": {
+      "type": "string|number",
+      "required": true,
+      "description": "Valor del radio"
+    },
+    "checked": {
+      "type": "boolean",
+      "default": false,
+      "description": "Estado checked"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Radio deshabilitado"
+    },
+    "required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Campo requerido"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripción adicional"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icono del radio"
+    }
+  },
+
+  "group": {
+    "description": "Grupo de radio buttons",
+    "props": {
+      "label": {
+        "type": "string",
+        "description": "Etiqueta del grupo"
+      },
+      "name": {
+        "type": "string",
+        "required": true,
+        "description": "Nombre del grupo"
+      },
+      "options": {
+        "type": "array",
+        "required": true,
+        "description": "Opciones del grupo",
+        "items": {
+          "value": "string|number",
+          "label": "string",
+          "description": "string",
+          "icon": "string",
+          "disabled": "boolean"
+        }
+      },
+      "value": {
+        "type": "string|number",
+        "description": "Valor seleccionado"
+      },
+      "inline": {
+        "type": "boolean",
+        "default": false,
+        "description": "Mostrar inline (horizontal)"
+      },
+      "required": {
+        "type": "boolean",
+        "default": false,
+        "description": "Grupo requerido"
+      },
+      "helpText": {
+        "type": "string",
+        "description": "Texto de ayuda"
+      },
+      "errorText": {
+        "type": "string",
+        "description": "Mensaje de error"
+      }
+    }
+  },
+
+  "states": {
+    "unchecked": {
+      "description": "No seleccionado",
+      "icon": "○"
+    },
+    "checked": {
+      "description": "Seleccionado",
+      "icon": "◉",
+      "className": "checked"
+    },
+    "disabled": {
+      "description": "Deshabilitado",
+      "className": "disabled"
+    }
+  },
+
+  "accessibility": {
+    "role": "radio",
+    "groupRole": "radiogroup",
+    "ariaChecked": true,
+    "ariaLabel": true,
+    "ariaDescribedBy": true
+  },
+
+  "example": {
+    "component": "radio-group",
+    "variant": "button",
+    "size": "md",
+    "props": {
+      "label": "Método de pago",
+      "name": "payment_method",
+      "options": [
+        {
+          "value": "card",
+          "label": "Tarjeta",
+          "description": "Visa, Mastercard, Amex",
+          "icon": "💳"
+        },
+        {
+          "value": "paypal",
+          "label": "PayPal",
+          "description": "Pago rápido y seguro",
+          "icon": "🅿️"
+        },
+        {
+          "value": "transfer",
+          "label": "Transferencia",
+          "description": "Transferencia bancaria",
+          "icon": "🏦"
+        }
+      ],
+      "value": "card",
+      "inline": false,
+      "required": true
+    }
+  }
+}

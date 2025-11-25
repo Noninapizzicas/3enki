@@ -176,42 +176,54 @@ class AdminPanelModule {
   /**
    * HTTP API: Serve UI
    */
-  async ui(req, res) {
+  async handleUi(req, context) {
     const indexPath = path.join(this.publicPath, 'index.html');
 
     if (!fs.existsSync(indexPath)) {
-      return res.status(404).send('Admin Panel UI not found');
+      return {
+        status: 404,
+        body: 'Admin Panel UI not found'
+      };
     }
 
     const html = fs.readFileSync(indexPath, 'utf-8');
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
+
+    return {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html'
+      },
+      body: html
+    };
   }
 
   /**
    * HTTP API: Get dashboard data
    */
-  async getDashboardData(req, res) {
+  async handleDashboardData(req, context) {
     await this.refreshAllCaches();
 
-    res.json({
-      summary: {
-        total_modules: this.cache.modules.length,
-        total_plugins: this.cache.plugins.length,
-        active_agents: this.cache.agents.filter(a => a.status === 'active').length,
-        total_prompts: this.cache.prompts.length
-      },
-      modules: this.cache.modules,
-      plugins: this.cache.plugins,
-      agents: this.cache.agents,
-      prompts: this.cache.prompts
-    });
+    return {
+      status: 200,
+      data: {
+        summary: {
+          total_modules: this.cache.modules.length,
+          total_plugins: this.cache.plugins.length,
+          active_agents: this.cache.agents.filter(a => a.status === 'active').length,
+          total_prompts: this.cache.prompts.length
+        },
+        modules: this.cache.modules,
+        plugins: this.cache.plugins,
+        agents: this.cache.agents,
+        prompts: this.cache.prompts
+      }
+    };
   }
 
   /**
    * HTTP API: List modules
    */
-  async listModules(req, res) {
+  async handleListModules(req, res) {
     await this.refreshModulesCache();
     res.json({
       modules: this.cache.modules,
@@ -222,7 +234,7 @@ class AdminPanelModule {
   /**
    * HTTP API: List plugins
    */
-  async listPlugins(req, res) {
+  async handleListPlugins(req, res) {
     await this.refreshPluginsCache();
     res.json({
       plugins: this.cache.plugins,
@@ -233,7 +245,7 @@ class AdminPanelModule {
   /**
    * HTTP API: Toggle plugin (enable/disable)
    */
-  async togglePlugin(req, res) {
+  async handleTogglePlugin(req, res) {
     const { name } = req.params;
 
     try {
@@ -257,7 +269,7 @@ class AdminPanelModule {
   /**
    * HTTP API: List agents
    */
-  async listAgents(req, res) {
+  async handleListAgents(req, res) {
     await this.refreshAgentsCache();
     res.json({
       agents: this.cache.agents,
@@ -268,7 +280,7 @@ class AdminPanelModule {
   /**
    * HTTP API: Create agent
    */
-  async createAgent(req, res) {
+  async handleCreateAgent(req, res) {
     const agentData = req.body;
 
     try {
@@ -300,7 +312,7 @@ class AdminPanelModule {
   /**
    * HTTP API: Delete agent
    */
-  async deleteAgent(req, res) {
+  async handleDeleteAgent(req, res) {
     const { id } = req.params;
 
     try {
@@ -326,7 +338,7 @@ class AdminPanelModule {
   /**
    * HTTP API: List prompts
    */
-  async listPrompts(req, res) {
+  async handleListPrompts(req, res) {
     await this.refreshPromptsCache();
     res.json({
       prompts: this.cache.prompts,
@@ -337,7 +349,7 @@ class AdminPanelModule {
   /**
    * HTTP API: Get single prompt
    */
-  async getPrompt(req, res) {
+  async handleGetPrompt(req, res) {
     const { name } = req.params;
 
     try {
@@ -351,7 +363,7 @@ class AdminPanelModule {
   /**
    * HTTP API: Create prompt
    */
-  async createPrompt(req, res) {
+  async handleCreatePrompt(req, res) {
     const promptData = req.body;
 
     try {
@@ -375,7 +387,7 @@ class AdminPanelModule {
   /**
    * HTTP API: Update prompt
    */
-  async updatePrompt(req, res) {
+  async handleUpdatePrompt(req, res) {
     const { name } = req.params;
     const promptData = req.body;
 

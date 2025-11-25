@@ -1,0 +1,127 @@
+{
+  "name": "breadcrumb",
+  "category": "navigation",
+  "description": "Migas de pan para navegación jerárquica",
+  "version": "2.0.0",
+
+  "variants": {
+    "default": {
+      "description": "Breadcrumb estándar",
+      "className": "breadcrumb"
+    },
+    "slash": {
+      "description": "Separador tipo slash (/)",
+      "className": "breadcrumb breadcrumb-slash",
+      "separator": "/"
+    },
+    "chevron": {
+      "description": "Separador tipo chevron (>)",
+      "className": "breadcrumb breadcrumb-chevron",
+      "separator": "›"
+    },
+    "dot": {
+      "description": "Separador tipo punto (·)",
+      "className": "breadcrumb breadcrumb-dot",
+      "separator": "·"
+    }
+  },
+
+  "props": {
+    "items": {
+      "type": "array",
+      "required": true,
+      "description": "Items del breadcrumb",
+      "items": {
+        "label": "string",
+        "icon": "string",
+        "url": "string",
+        "active": "boolean"
+      }
+    },
+    "separator": {
+      "type": "string",
+      "default": "›",
+      "description": "Separador personalizado"
+    },
+    "showHome": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar item de inicio"
+    },
+    "homeIcon": {
+      "type": "string",
+      "default": "🏠",
+      "description": "Icono de inicio"
+    },
+    "homeUrl": {
+      "type": "string",
+      "default": "/",
+      "description": "URL de inicio"
+    },
+    "maxItems": {
+      "type": "number",
+      "description": "Máximo de items a mostrar"
+    },
+    "collapsible": {
+      "type": "boolean",
+      "default": false,
+      "description": "Colapsar items intermedios si hay muchos"
+    }
+  },
+
+  "features": {
+    "responsive": {
+      "enabled": true,
+      "hideOnMobile": false,
+      "collapseOnMobile": true
+    },
+    "truncation": {
+      "enabled": false,
+      "maxLength": 30,
+      "position": "middle"
+    },
+    "dropdown": {
+      "enabled": false,
+      "showCollapsedItems": true
+    }
+  },
+
+  "accessibility": {
+    "role": "navigation",
+    "ariaLabel": "Breadcrumb",
+    "currentPageAria": true
+  },
+
+  "example": {
+    "component": "breadcrumb",
+    "variant": "chevron",
+    "props": {
+      "items": [
+        {"label": "Inicio", "icon": "🏠", "url": "/"},
+        {"label": "Proyectos", "url": "/projects"},
+        {"label": "Mi Proyecto", "url": "/projects/123"},
+        {"label": "Configuración", "active": true}
+      ],
+      "showHome": true,
+      "collapsible": true,
+      "maxItems": 4
+    }
+  },
+
+  "responsiveExample": {
+    "component": "breadcrumb",
+    "variant": "default",
+    "props": {
+      "items": [
+        {"label": "Nivel 1", "url": "/level1"},
+        {"label": "Nivel 2", "url": "/level1/level2"},
+        {"label": "Nivel 3", "url": "/level1/level2/level3"},
+        {"label": "Nivel 4", "url": "/level1/level2/level3/level4"},
+        {"label": "Nivel 5", "active": true}
+      ],
+      "collapsible": true,
+      "maxItems": 3
+    },
+    "note": "En este ejemplo, los items intermedios se colapsan en un dropdown (...)"
+  }
+}

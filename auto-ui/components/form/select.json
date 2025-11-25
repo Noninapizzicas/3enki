@@ -1,0 +1,166 @@
+{
+  "name": "select",
+  "category": "form",
+  "description": "Selector desplegable con búsqueda y selección múltiple",
+  "version": "2.0.0",
+
+  "variants": {
+    "default": {
+      "description": "Select nativo",
+      "className": "form-select"
+    },
+    "custom": {
+      "description": "Select customizado con estilos mejorados",
+      "className": "form-select form-select-custom"
+    },
+    "searchable": {
+      "description": "Select con búsqueda",
+      "className": "form-select form-select-searchable"
+    }
+  },
+
+  "sizes": {
+    "sm": {
+      "description": "Select pequeño",
+      "className": "form-select-sm"
+    },
+    "md": {
+      "description": "Select mediano (default)",
+      "className": ""
+    },
+    "lg": {
+      "description": "Select grande",
+      "className": "form-select-lg"
+    }
+  },
+
+  "props": {
+    "label": {
+      "type": "string",
+      "description": "Etiqueta del campo"
+    },
+    "name": {
+      "type": "string",
+      "required": true,
+      "description": "Nombre del campo"
+    },
+    "options": {
+      "type": "array",
+      "required": true,
+      "description": "Opciones del select",
+      "items": {
+        "value": "string|number",
+        "label": "string",
+        "icon": "string",
+        "disabled": "boolean",
+        "group": "string"
+      }
+    },
+    "value": {
+      "type": "string|number|array",
+      "description": "Valor seleccionado"
+    },
+    "multiple": {
+      "type": "boolean",
+      "default": false,
+      "description": "Permitir selección múltiple"
+    },
+    "searchable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Habilitar búsqueda"
+    },
+    "clearable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mostrar botón para limpiar"
+    },
+    "placeholder": {
+      "type": "string",
+      "default": "Seleccionar...",
+      "description": "Texto de placeholder"
+    },
+    "required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Campo requerido"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Campo deshabilitado"
+    },
+    "groupBy": {
+      "type": "string",
+      "description": "Agrupar opciones por campo"
+    },
+    "helpText": {
+      "type": "string",
+      "description": "Texto de ayuda"
+    },
+    "errorText": {
+      "type": "string",
+      "description": "Mensaje de error"
+    },
+    "maxSelections": {
+      "type": "number",
+      "description": "Máximo de selecciones (multiple)"
+    }
+  },
+
+  "features": {
+    "virtualScroll": {
+      "enabled": true,
+      "threshold": 100,
+      "description": "Virtualización para muchas opciones"
+    },
+    "remoteSearch": {
+      "enabled": false,
+      "endpoint": "/api/{module}/search",
+      "debounce": 300
+    },
+    "lazyLoading": {
+      "enabled": false,
+      "loadMore": "function"
+    },
+    "tags": {
+      "enabled": false,
+      "allowCreate": true,
+      "description": "Crear nuevas opciones"
+    }
+  },
+
+  "states": {
+    "default": "Estado normal",
+    "focus": "Select enfocado",
+    "error": "Select con error",
+    "disabled": "Select deshabilitado",
+    "loading": "Cargando opciones"
+  },
+
+  "accessibility": {
+    "role": "combobox",
+    "ariaExpanded": true,
+    "ariaControls": true,
+    "ariaActiveDescendant": true
+  },
+
+  "example": {
+    "component": "select",
+    "variant": "searchable",
+    "size": "md",
+    "props": {
+      "label": "País",
+      "name": "country",
+      "options": [
+        {"value": "mx", "label": "México", "icon": "🇲🇽"},
+        {"value": "us", "label": "Estados Unidos", "icon": "🇺🇸"},
+        {"value": "es", "label": "España", "icon": "🇪🇸"}
+      ],
+      "searchable": true,
+      "clearable": true,
+      "required": true,
+      "helpText": "Selecciona tu país de residencia"
+    }
+  }
+}

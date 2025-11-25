@@ -1,0 +1,151 @@
+{
+  "name": "table",
+  "category": "data",
+  "description": "Tabla de datos con soporte para ordenamiento, filtrado y paginación",
+  "version": "2.0.0",
+
+  "variants": {
+    "default": {
+      "description": "Tabla básica con bordes",
+      "className": "table"
+    },
+    "striped": {
+      "description": "Filas con color alternado",
+      "className": "table table-striped"
+    },
+    "bordered": {
+      "description": "Tabla con todos los bordes",
+      "className": "table table-bordered"
+    },
+    "hover": {
+      "description": "Efecto hover en filas",
+      "className": "table table-hover"
+    },
+    "compact": {
+      "description": "Tabla compacta con menos padding",
+      "className": "table table-compact"
+    }
+  },
+
+  "props": {
+    "columns": {
+      "type": "array",
+      "required": true,
+      "description": "Definición de columnas",
+      "items": {
+        "key": "string",
+        "label": "string",
+        "sortable": "boolean",
+        "width": "string",
+        "align": "string",
+        "format": "function"
+      }
+    },
+    "data": {
+      "type": "array",
+      "required": true,
+      "description": "Datos de la tabla"
+    },
+    "sortable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Habilitar ordenamiento"
+    },
+    "filterable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Habilitar filtrado"
+    },
+    "paginated": {
+      "type": "boolean",
+      "default": false,
+      "description": "Habilitar paginación"
+    },
+    "pageSize": {
+      "type": "number",
+      "default": 10,
+      "description": "Filas por página"
+    },
+    "selectable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Habilitar selección de filas"
+    },
+    "actions": {
+      "type": "array",
+      "description": "Acciones por fila",
+      "items": {
+        "label": "string",
+        "icon": "string",
+        "action": "string",
+        "variant": "string"
+      }
+    }
+  },
+
+  "features": {
+    "sorting": {
+      "enabled": true,
+      "mode": "client",
+      "serverEndpoint": "/api/{module}/sort"
+    },
+    "filtering": {
+      "enabled": true,
+      "mode": "client",
+      "serverEndpoint": "/api/{module}/filter"
+    },
+    "pagination": {
+      "enabled": true,
+      "mode": "client",
+      "serverEndpoint": "/api/{module}/paginate"
+    },
+    "selection": {
+      "mode": "single",
+      "multiSelect": false,
+      "selectAllEnabled": true
+    }
+  },
+
+  "interactions": {
+    "rowClick": {
+      "enabled": true,
+      "action": "select"
+    },
+    "rowDoubleClick": {
+      "enabled": false,
+      "action": "edit"
+    },
+    "columnHeaderClick": {
+      "enabled": true,
+      "action": "sort"
+    }
+  },
+
+  "accessibility": {
+    "role": "table",
+    "ariaLabel": "Data table",
+    "keyboardNavigation": true
+  },
+
+  "example": {
+    "widget": "table",
+    "variant": "striped",
+    "props": {
+      "columns": [
+        {"key": "id", "label": "ID", "sortable": true, "width": "80px"},
+        {"key": "name", "label": "Nombre", "sortable": true},
+        {"key": "status", "label": "Estado", "sortable": true},
+        {"key": "created", "label": "Creado", "sortable": true, "format": "date"}
+      ],
+      "data": "@data.items",
+      "sortable": true,
+      "filterable": true,
+      "paginated": true,
+      "pageSize": 20,
+      "actions": [
+        {"label": "Editar", "icon": "✏️", "action": "edit", "variant": "primary"},
+        {"label": "Eliminar", "icon": "🗑️", "action": "delete", "variant": "danger"}
+      ]
+    }
+  }
+}

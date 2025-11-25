@@ -1,0 +1,142 @@
+{
+  "name": "tasks",
+  "version": "2.0.0",
+  "description": "Simple task management module showcasing basic CRUD with Auto-UI v2",
+
+  "ui": {
+    "enabled": true,
+    "version": "2.0",
+    "title": "Task Manager",
+    "icon": "✓",
+    "description": "Manage your tasks efficiently",
+
+    "views": {
+      "main": {
+        "type": "dashboard",
+        "layout": "single",
+
+        "header": {
+          "component": "page-header",
+          "props": {
+            "title": "✓ Task Manager",
+            "subtitle": "Track and manage your tasks",
+            "actions": [
+              {
+                "label": "New Task",
+                "icon": "➕",
+                "variant": "primary",
+                "hxGet": "/auto-ui/tasks/form",
+                "hxTarget": "#modal-container"
+              }
+            ]
+          }
+        },
+
+        "sections": [
+          {
+            "widget": "table-advanced",
+            "config": {
+              "dataSource": "@api:/modules/tasks/items",
+              "columns": [
+                { "key": "title", "label": "Title", "sortable": true },
+                { "key": "status", "label": "Status", "type": "enum" },
+                { "key": "priority", "label": "Priority", "type": "enum" },
+                { "key": "dueDate", "label": "Due Date", "format": "date" }
+              ],
+              "sortable": true,
+              "filterable": true,
+              "pagination": true,
+              "pageSize": 10
+            }
+          }
+        ]
+      },
+
+      "create": {
+        "type": "form",
+        "mode": "create",
+        "schema": "@context.module.schema"
+      },
+
+      "edit": {
+        "type": "form",
+        "mode": "edit",
+        "schema": "@context.module.schema"
+      },
+
+      "detail": {
+        "type": "detail",
+        "schema": "@context.module.schema"
+      }
+    }
+  },
+
+  "schema": {
+    "id": {
+      "type": "string",
+      "label": "ID",
+      "format": "hidden"
+    },
+    "title": {
+      "type": "string",
+      "label": "Task Title",
+      "required": true,
+      "minLength": 3,
+      "maxLength": 100,
+      "placeholder": "Enter task title..."
+    },
+    "description": {
+      "type": "text",
+      "label": "Description",
+      "multiline": true,
+      "maxLength": 500
+    },
+    "status": {
+      "type": "enum",
+      "label": "Status",
+      "enum": ["pending", "in_progress", "done"],
+      "required": true,
+      "default": "pending"
+    },
+    "priority": {
+      "type": "enum",
+      "label": "Priority",
+      "enum": ["low", "medium", "high"],
+      "required": true,
+      "default": "medium"
+    },
+    "dueDate": {
+      "type": "date",
+      "label": "Due Date",
+      "format": "date"
+    }
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/items",
+      "handler": "handleList"
+    },
+    {
+      "method": "GET",
+      "path": "/items/:id",
+      "handler": "handleGet"
+    },
+    {
+      "method": "POST",
+      "path": "/items",
+      "handler": "handleCreate"
+    },
+    {
+      "method": "PUT",
+      "path": "/items/:id",
+      "handler": "handleUpdate"
+    },
+    {
+      "method": "DELETE",
+      "path": "/items/:id",
+      "handler": "handleDelete"
+    }
+  ]
+}

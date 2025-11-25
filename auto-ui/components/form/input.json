@@ -1,0 +1,204 @@
+{
+  "name": "input",
+  "category": "form",
+  "description": "Campo de entrada de texto con validación y estados",
+  "version": "2.0.0",
+
+  "variants": {
+    "text": {
+      "description": "Input de texto",
+      "type": "text",
+      "className": "form-input"
+    },
+    "email": {
+      "description": "Input de email con validación",
+      "type": "email",
+      "className": "form-input"
+    },
+    "password": {
+      "description": "Input de contraseña",
+      "type": "password",
+      "className": "form-input"
+    },
+    "number": {
+      "description": "Input numérico",
+      "type": "number",
+      "className": "form-input"
+    },
+    "tel": {
+      "description": "Input de teléfono",
+      "type": "tel",
+      "className": "form-input"
+    },
+    "url": {
+      "description": "Input de URL",
+      "type": "url",
+      "className": "form-input"
+    },
+    "search": {
+      "description": "Input de búsqueda",
+      "type": "search",
+      "className": "form-input form-input-search"
+    },
+    "date": {
+      "description": "Selector de fecha",
+      "type": "date",
+      "className": "form-input"
+    },
+    "time": {
+      "description": "Selector de hora",
+      "type": "time",
+      "className": "form-input"
+    },
+    "datetime-local": {
+      "description": "Selector de fecha y hora",
+      "type": "datetime-local",
+      "className": "form-input"
+    }
+  },
+
+  "sizes": {
+    "sm": {
+      "description": "Input pequeño",
+      "className": "form-input-sm"
+    },
+    "md": {
+      "description": "Input mediano (default)",
+      "className": ""
+    },
+    "lg": {
+      "description": "Input grande",
+      "className": "form-input-lg"
+    }
+  },
+
+  "props": {
+    "label": {
+      "type": "string",
+      "description": "Etiqueta del campo"
+    },
+    "placeholder": {
+      "type": "string",
+      "description": "Texto de placeholder"
+    },
+    "value": {
+      "type": "string",
+      "description": "Valor del input"
+    },
+    "name": {
+      "type": "string",
+      "required": true,
+      "description": "Nombre del campo"
+    },
+    "required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Campo requerido"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Campo deshabilitado"
+    },
+    "readonly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Campo de solo lectura"
+    },
+    "autocomplete": {
+      "type": "string",
+      "description": "Atributo autocomplete"
+    },
+    "pattern": {
+      "type": "string",
+      "description": "Patrón de validación regex"
+    },
+    "minLength": {
+      "type": "number",
+      "description": "Longitud mínima"
+    },
+    "maxLength": {
+      "type": "number",
+      "description": "Longitud máxima"
+    },
+    "min": {
+      "type": "number",
+      "description": "Valor mínimo (numérico)"
+    },
+    "max": {
+      "type": "number",
+      "description": "Valor máximo (numérico)"
+    },
+    "step": {
+      "type": "number",
+      "description": "Incremento (numérico)"
+    },
+    "helpText": {
+      "type": "string",
+      "description": "Texto de ayuda"
+    },
+    "errorText": {
+      "type": "string",
+      "description": "Mensaje de error"
+    },
+    "prefixIcon": {
+      "type": "string",
+      "description": "Icono al inicio"
+    },
+    "suffixIcon": {
+      "type": "string",
+      "description": "Icono al final"
+    }
+  },
+
+  "states": {
+    "default": {
+      "description": "Estado normal"
+    },
+    "focus": {
+      "description": "Input enfocado",
+      "className": "focus"
+    },
+    "error": {
+      "description": "Input con error",
+      "className": "error"
+    },
+    "disabled": {
+      "description": "Input deshabilitado",
+      "className": "disabled"
+    },
+    "readonly": {
+      "description": "Input de solo lectura",
+      "className": "readonly"
+    }
+  },
+
+  "validation": {
+    "validateOnBlur": true,
+    "validateOnInput": false,
+    "showErrorIcon": true,
+    "showSuccessIcon": false
+  },
+
+  "accessibility": {
+    "ariaLabel": true,
+    "ariaDescribedBy": true,
+    "ariaInvalid": true,
+    "ariaRequired": true
+  },
+
+  "example": {
+    "component": "input",
+    "variant": "email",
+    "size": "md",
+    "props": {
+      "label": "Correo electrónico",
+      "name": "email",
+      "placeholder": "tu@email.com",
+      "required": true,
+      "autocomplete": "email",
+      "helpText": "Usaremos este correo para contactarte",
+      "prefixIcon": "📧"
+    }
+  }
+}

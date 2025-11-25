@@ -491,7 +491,7 @@ class CredentialManagerModule {
     });
 
     try {
-      const { level, provider } = context.query;
+      const { level, provider } = context.query || {};
       const masked = [];
 
       for (const [key, value] of this.credentials.entries()) {

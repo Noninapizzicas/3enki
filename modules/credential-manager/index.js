@@ -39,7 +39,11 @@ class CredentialManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
+
+    // Load module config from module.json
+    const moduleJsonPath = path.join(__dirname, 'module.json');
+    const moduleJson = JSON.parse(await fs.readFile(moduleJsonPath, 'utf-8'));
+    this.config = moduleJson.config || {};
 
     this.logger.info('module.loading', {
       module: this.name,
@@ -149,7 +153,9 @@ class CredentialManagerModule {
         duration
       });
 
-      this.metrics.timing('credential.save.duration', duration);
+      if (this.metrics && typeof this.metrics.timing === 'function') {
+        this.metrics.timing('credential.save.duration', duration);
+      }
     } catch (error) {
       this.logger.error('env.file.save.error', {
         path: this.envFilePath,
@@ -228,7 +234,9 @@ class CredentialManagerModule {
       });
 
       const duration = Date.now() - startTime;
-      this.metrics.timing('credential.resolve.duration', duration);
+      if (this.metrics && typeof this.metrics.timing === 'function') {
+        this.metrics.timing('credential.resolve.duration', duration);
+      }
 
       if (result.found) {
         this.metrics.increment('credential.resolved.total');
@@ -301,7 +309,7 @@ class CredentialManagerModule {
     });
 
     try {
-      const { provider, level, identifier, api_key } = context.body;
+      const { provider, level, identifier, api_key } = req.body || {};
 
       // Validate
       const validation = this.validateLevel(level, identifier);
@@ -387,7 +395,7 @@ class CredentialManagerModule {
 
   async handleResolveCredential(req, context) {
     const startTime = Date.now();
-    const { provider, clientId, projectId, customId } = context.query;
+    const { provider, clientId, projectId, customId } = req.query || {};
 
     this.logger.info('credential.resolve.start', {
       provider,
@@ -409,7 +417,9 @@ class CredentialManagerModule {
       });
 
       const duration = Date.now() - startTime;
-      this.metrics.timing('credential.resolve.duration', duration);
+      if (this.metrics && typeof this.metrics.timing === 'function') {
+        this.metrics.timing('credential.resolve.duration', duration);
+      }
 
       if (result.found) {
         this.metrics.increment('credential.resolved.total');
@@ -491,7 +501,7 @@ class CredentialManagerModule {
     });
 
     try {
-      const { level, provider } = context.query;
+      const { level, provider } = req.query || {};
       const masked = [];
 
       for (const [key, value] of this.credentials.entries()) {
@@ -544,8 +554,8 @@ class CredentialManagerModule {
   }
 
   async handleUpdateCredential(req, context) {
-    const { key } = context.params;
-    const { api_key } = context.body;
+    const { key } = req.params || {};
+    const { api_key } = req.body || {};
 
     this.logger.info('credential.update.start', {
       key,
@@ -611,7 +621,7 @@ class CredentialManagerModule {
   }
 
   async handleDeleteCredential(req, context) {
-    const { key } = context.params;
+    const { key } = req.params || {};
 
     this.logger.info('credential.delete.start', {
       key,

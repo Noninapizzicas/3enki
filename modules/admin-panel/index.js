@@ -31,6 +31,7 @@ class AdminPanelModule {
   }
 
   async onLoad(core) {
+    this.core = core;
     this.logger = core.logger;
     this.eventBus = core.eventBus;
     this.config = core.config || {};
@@ -125,8 +126,29 @@ class AdminPanelModule {
    */
   async refreshModulesCache() {
     try {
-      const response = await this.httpRequest('GET', '/core/modules');
-      this.cache.modules = response.modules || [];
+      const modulesPath = path.join(process.cwd(), 'modules');
+      const moduleDirs = fs.readdirSync(modulesPath, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+
+      this.cache.modules = [];
+      for (const moduleName of moduleDirs) {
+        try {
+          const moduleJsonPath = path.join(modulesPath, moduleName, 'module.json');
+          if (fs.existsSync(moduleJsonPath)) {
+            const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
+            this.cache.modules.push({
+              name: moduleJson.name,
+              version: moduleJson.version,
+              description: moduleJson.description,
+              ui: moduleJson.ui || null,
+              hasAutoUI: !!(moduleJson.ui && moduleJson.ui.enabled)
+            });
+          }
+        } catch (err) {
+          this.logger.warn({ module: moduleName, error: err.message }, 'Failed to load module metadata');
+        }
+      }
     } catch (error) {
       this.logger.warn({ error: error.message }, 'Failed to refresh modules cache');
       this.cache.modules = [];
@@ -223,23 +245,29 @@ class AdminPanelModule {
   /**
    * HTTP API: List modules
    */
-  async handleListModules(req, res) {
+  async handleListModules(req, context) {
     await this.refreshModulesCache();
-    res.json({
-      modules: this.cache.modules,
-      count: this.cache.modules.length
-    });
+    return {
+      status: 200,
+      data: {
+        modules: this.cache.modules,
+        count: this.cache.modules.length
+      }
+    };
   }
 
   /**
    * HTTP API: List plugins
    */
-  async handleListPlugins(req, res) {
+  async handleListPlugins(req, context) {
     await this.refreshPluginsCache();
-    res.json({
-      plugins: this.cache.plugins,
-      count: this.cache.plugins.length
-    });
+    return {
+      status: 200,
+      data: {
+        plugins: this.cache.plugins,
+        count: this.cache.plugins.length
+      }
+    };
   }
 
   /**
@@ -269,12 +297,15 @@ class AdminPanelModule {
   /**
    * HTTP API: List agents
    */
-  async handleListAgents(req, res) {
+  async handleListAgents(req, context) {
     await this.refreshAgentsCache();
-    res.json({
-      agents: this.cache.agents,
-      count: this.cache.agents.length
-    });
+    return {
+      status: 200,
+      data: {
+        agents: this.cache.agents,
+        count: this.cache.agents.length
+      }
+    };
   }
 
   /**
@@ -338,12 +369,15 @@ class AdminPanelModule {
   /**
    * HTTP API: List prompts
    */
-  async handleListPrompts(req, res) {
+  async handleListPrompts(req, context) {
     await this.refreshPromptsCache();
-    res.json({
-      prompts: this.cache.prompts,
-      count: this.cache.prompts.length
-    });
+    return {
+      status: 200,
+      data: {
+        prompts: this.cache.prompts,
+        count: this.cache.prompts.length
+      }
+    };
   }
 
   /**

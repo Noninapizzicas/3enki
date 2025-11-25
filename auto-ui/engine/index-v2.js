@@ -5,8 +5,11 @@
  */
 
 const { UI } = require('../../core/constants');
+const path = require('path');
+const fs = require('fs');
 const Loader = require('./loader');
 const Generator = require('./generator');
+const GeneratorV2 = require('./generator-v2');
 const Bridge = require('./bridge');
 
 // New v2 systems
@@ -39,7 +42,8 @@ class AutoUIv2 {
       logger: this.logger
     });
 
-    this.generator = new Generator({
+    // Legacy generator for backward compatibility
+    this.generatorLegacy = new Generator({
       loader: this.loader,
       logger: this.logger
     });
@@ -52,6 +56,14 @@ class AutoUIv2 {
 
     // Initialize new v2 systems
     this.initializeV2Systems();
+
+    // V2 Generator with ComponentSystem integration
+    this.generator = new GeneratorV2({
+      loader: this.loader,
+      componentSystem: this.componentSystem,
+      widgetFactory: this.widgetFactory,
+      logger: this.logger
+    });
 
     // State
     this.initialized = false;
@@ -461,9 +473,27 @@ class AutoUIv2 {
   }
 
   handleStaticJS(res) {
-    const js = this.getClientJS();
-    res.writeHead(200, { 'Content-Type': 'application/javascript' });
-    res.end(js);
+    try {
+      const clientPath = path.join(__dirname, '..', 'client', 'core.js');
+
+      if (fs.existsSync(clientPath)) {
+        const js = fs.readFileSync(clientPath, 'utf-8');
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript',
+          'Cache-Control': 'public, max-age=3600'
+        });
+        res.end(js);
+      } else {
+        // Fallback to inline JS
+        const js = this.getClientJS();
+        res.writeHead(200, { 'Content-Type': 'application/javascript' });
+        res.end(js);
+      }
+    } catch (error) {
+      this.logger.error('[AutoUI v2] Failed to serve client JS:', error);
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('// Error loading client scripts');
+    }
   }
 
   // ==========================================
@@ -591,10 +621,18 @@ class AutoUIv2 {
   }
 
   getClientJS() {
-    // Reuse legacy client JS for now
-    return this.generator.constructor.prototype.getClientJS?.call(this) || `
-      window.AutoUI = window.AutoUI || {};
-      console.log('[AutoUI v2] Client loaded');
+    // Inline fallback JS if file doesn't exist
+    return `
+      window.AutoUI = window.AutoUI || {
+        version: '2.0.0',
+        showToast: function(msg, type) {
+          console.log('[Toast]', type, msg);
+        },
+        executeAction: function(action, params) {
+          console.log('[Action]', action, params);
+        }
+      };
+      console.log('[AutoUI v${this.version}] Client loaded (inline fallback)');
     `;
   }
 

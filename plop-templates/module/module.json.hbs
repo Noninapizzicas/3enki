@@ -62,80 +62,85 @@
     "views": {
       "main": {
         "type": "dashboard",
-        "layout": "two-column",
+        "permissions": ["admin", "user"],
+
+        "layout": {
+          "type": "two-column",
+          "config": {
+            "leftWidth": "65%",
+            "rightWidth": "35%",
+            "gap": "var(--space-lg)"
+          }
+        },
 
         "header": {
           "title": "{{icon}} {{titleCase name}}",
           "subtitle": "{{description}}"
         },
 
-        "columns": [
+        "sections": [
           {
-            "width": "65%",
-            "sections": [
-              {
-                "id": "stats",
-                "type": "widget-group",
-                "layout": "horizontal",
-                "widgets": [
-                  {
-                    "type": "stat-card",
-                    "title": "Total",
-                    "value": "@data.stats.total",
-                    "icon": "📊",
-                    "color": "primary",
-                    "endpoint": "/modules/{{name}}/data",
-                    "mqtt_topics": ["{{name}}.updated"]
-                  },
-                  {
-                    "type": "stat-card",
-                    "title": "Status",
-                    "value": "Active",
-                    "icon": "✓",
-                    "color": "success"
-                  }
-                ]
-              },
-              {
-                "id": "main_content",
-                "type": "card",
-                "title": "Data",
-                "content": {
-                  "type": "table-advanced",
+            "id": "stats",
+            "widget": "widget-group",
+            "config": {
+              "layout": "horizontal",
+              "widgets": [
+                {
+                  "type": "stat-card",
+                  "title": "Total",
+                  "value": "@data.stats.total",
+                  "icon": "📊",
+                  "color": "primary",
                   "endpoint": "/modules/{{name}}/data",
-                  "mqtt_topics": ["{{name}}.updated"],
-                  "refresh_on_event": true,
-                  "columns": "auto",
-                  "pagination": true,
-                  "search": true
+                  "mqtt_topics": ["{{name}}.updated"]
+                },
+                {
+                  "type": "stat-card",
+                  "title": "Status",
+                  "value": "Active",
+                  "icon": "✓",
+                  "color": "success"
                 }
-              }
-            ]
+              ]
+            }
           },
           {
-            "width": "35%",
-            "sections": [
-              {
-                "id": "info_panel",
-                "type": "card",
-                "title": "ℹ️ Information",
-                "content": {
-                  "type": "info",
-                  "items": [
-                    {
-                      "label": "Version",
-                      "value": "1.0.0",
-                      "icon": "🏷️"
-                    },
-                    {
-                      "label": "Status",
-                      "value": "Active",
-                      "color": "#22c55e"
-                    }
-                  ]
-                }
+            "id": "main_content",
+            "widget": "card",
+            "config": {
+              "title": "Data",
+              "content": {
+                "type": "table-advanced",
+                "endpoint": "/modules/{{name}}/data",
+                "mqtt_topics": ["{{name}}.updated"],
+                "refresh_on_event": true,
+                "columns": "auto",
+                "pagination": true,
+                "search": true
               }
-            ]
+            }
+          },
+          {
+            "id": "info_panel",
+            "widget": "card",
+            "config": {
+              "title": "ℹ️ Information",
+              "content": {
+                "type": "info",
+                "items": [
+                  {
+                    "label": "Version",
+                    "value": "1.0.0",
+                    "icon": "🏷️"
+                  },
+                  {
+                    "label": "Status",
+                    "value": "Active",
+                    "color": "#22c55e"
+                  }
+                ]
+              }
+            }
           }
         ]
       }

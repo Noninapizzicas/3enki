@@ -247,23 +247,55 @@ function validateView(filePath) {
       warnings.push('Using legacy template syntax (\\{{}}), prefer @data references in v2');
     }
 
-    // v2: Check for layout in dashboard views
+    // v2: STRICT layout validation
     if (view.type === 'dashboard') {
       if (!view.layout) {
-        warnings.push('Dashboard missing "layout" definition (recommended in v2)');
+        errors.push('[v2] Dashboard MUST have "layout" definition');
       } else {
-        const validLayouts = ['two-column', 'three-column', 'grid', 'tabs', 'flex', 'sidebar'];
-        if (view.layout.type && !validLayouts.includes(view.layout.type)) {
-          warnings.push(`Unknown layout type: ${view.layout.type}`);
+        // v2 STRICT: layout must be object with type and config
+        if (typeof view.layout === 'string') {
+          errors.push(`[v2] Layout MUST be object {type, config}, not string. Found: "${view.layout}"`);
+        } else if (!view.layout.type) {
+          errors.push('[v2] Layout object missing required "type" property');
+        } else if (!view.layout.config) {
+          errors.push('[v2] Layout object missing required "config" property');
+        } else {
+          const validLayouts = ['two-column', 'three-column', 'grid', 'tabs', 'flex', 'sidebar'];
+          if (!validLayouts.includes(view.layout.type)) {
+            warnings.push(`Unknown layout type: ${view.layout.type}`);
+          }
+
+          // Check for required config properties based on layout type
+          if (view.layout.type === 'two-column') {
+            if (!view.layout.config.leftWidth || !view.layout.config.rightWidth) {
+              errors.push('[v2] two-column layout.config MUST have leftWidth and rightWidth');
+            }
+          }
         }
       }
 
-      // Check for sections with column assignment
-      if (view.sections) {
-        const hasColumnAssignment = view.sections.some(s => s.column);
-        if (!hasColumnAssignment && view.layout?.type?.includes('column')) {
-          warnings.push('Layout uses columns but sections missing "column" assignment');
+      // v2 STRICT: Check for "widget" vs "type" in sections
+      if (view.sections && Array.isArray(view.sections)) {
+        for (const section of view.sections) {
+          if (section.type && !section.widget) {
+            errors.push(`[v2] Section "${section.id}" MUST use "widget" property, not "type"`);
+          }
+
+          // v2: Deprecated "column" property
+          if (section.column) {
+            warnings.push(`[v2] Section "${section.id}" uses deprecated "column" property`);
+          }
+
+          // v2: Props should be in "config"
+          if (section.widget && (section.title || section.label) && !section.config) {
+            warnings.push(`[v2] Section "${section.id}" props should be wrapped in "config" object`);
+          }
         }
+      }
+
+      // v2: Check for permissions
+      if (!view.permissions) {
+        warnings.push('[v2] View missing "permissions" array (recommended in v2)');
       }
     }
 

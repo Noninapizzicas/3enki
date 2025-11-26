@@ -85,6 +85,9 @@ class Composer {
   async composeDashboard(viewDef, context) {
     const sections = [];
 
+    // v2 Standard Validation (Warnings only, not errors)
+    this.validateV2Standard(viewDef);
+
     // Header
     if (viewDef.header) {
       const headerHtml = await this.composeSection(viewDef.header, context);
@@ -155,6 +158,53 @@ class Composer {
     }
 
     return grouped;
+  }
+
+  /**
+   * Valida que la vista siga el estándar Auto-UI v2.0
+   * Emite warnings pero no bloquea el renderizado
+   */
+  validateV2Standard(viewDef) {
+    const warnings = [];
+
+    // Check layout structure
+    if (typeof viewDef.layout === 'string') {
+      warnings.push(`[v2] Layout should be object {type, config}, not string. Found: "${viewDef.layout}"`);
+    } else if (viewDef.layout && !viewDef.layout.config) {
+      warnings.push('[v2] Layout object missing "config" property with leftWidth/rightWidth');
+    }
+
+    // Check permissions
+    if (!viewDef.permissions) {
+      warnings.push('[v2] View missing "permissions" array');
+    }
+
+    // Check sections for v2 compliance
+    if (viewDef.sections && Array.isArray(viewDef.sections)) {
+      for (const section of viewDef.sections) {
+        // Check for "type" vs "widget"
+        if (section.type && !section.widget) {
+          warnings.push(`[v2] Section "${section.id}" uses "type" instead of "widget"`);
+        }
+
+        // Check for column property (v1 style)
+        if (section.column) {
+          warnings.push(`[v2] Section "${section.id}" has "column" property (deprecated, use flat sections array)`);
+        }
+
+        // Check for props wrapped in config
+        if (section.widget && (section.title || section.label) && !section.config) {
+          warnings.push(`[v2] Section "${section.id}" has flat props, should wrap in "config"`);
+        }
+      }
+    }
+
+    // Log warnings
+    if (warnings.length > 0) {
+      this.logger.warn('[Composer] Auto-UI v2.0 Standard Compliance Warnings:');
+      warnings.forEach(w => this.logger.warn('  ' + w));
+      this.logger.warn('[Composer] See docs/AUTO_UI_CONTEXT.md for v2 standard');
+    }
   }
 
   /**

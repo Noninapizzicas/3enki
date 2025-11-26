@@ -8,7 +8,6 @@ const { UI } = require('../../core/constants');
 const path = require('path');
 const fs = require('fs');
 const Loader = require('./loader');
-const Generator = require('./generator');
 const GeneratorV2 = require('./generator-v2');
 const Bridge = require('./bridge');
 
@@ -36,15 +35,9 @@ class AutoUIv2 {
       ...options.config
     };
 
-    // Initialize legacy systems (for backward compatibility)
+    // Initialize core systems
     this.loader = new Loader({
       modulesPath: this.modulesPath,
-      logger: this.logger
-    });
-
-    // Legacy generator for backward compatibility
-    this.generatorLegacy = new Generator({
-      loader: this.loader,
       logger: this.logger
     });
 
@@ -365,7 +358,7 @@ class AutoUIv2 {
         res.end(html);
 
       } else {
-        // Fallback to legacy list view
+        // Fallback to simple list view (no v2 view definition)
         return this.handleModuleList(res, moduleName, context);
       }
 
@@ -382,7 +375,7 @@ class AutoUIv2 {
       return this.sendError(res, 404, `Module '${moduleName}' not found`);
     }
 
-    // Use legacy generator for now
+    // Generate list view using GeneratorV2
     const content = this.generator.list(module);
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(this.generator.page(module.ui?.title || module.name, content, { sse: true }));
@@ -463,7 +456,7 @@ class AutoUIv2 {
         res.end(html);
 
       } else {
-        // Fallback to legacy detail
+        // Fallback to simple detail view (no v2 view definition)
         const html = this.generator.detail(module, data);
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(this.generator.page(

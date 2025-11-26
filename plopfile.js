@@ -377,65 +377,6 @@ module.exports = function (plop) {
   });
 
   // ==========================================
-  // Generator: ui-view (Auto-UI)
-  // ==========================================
-  plop.setGenerator('ui-view', {
-    description: 'Crear una vista Auto-UI para un módulo',
-
-    prompts: [
-      {
-        type: 'input',
-        name: 'moduleName',
-        message: '📦 Nombre del módulo:',
-        validate: (value) => value ? true : 'El nombre es requerido'
-      },
-      {
-        type: 'list',
-        name: 'viewType',
-        message: '📄 Tipo de vista:',
-        choices: [
-          { name: 'Lista (tabla con acciones)', value: 'list' },
-          { name: 'Detalle (vista de un registro)', value: 'detail' },
-          { name: 'Formulario (crear/editar)', value: 'form' },
-          { name: 'Dashboard (métricas y widgets)', value: 'dashboard' },
-          { name: 'Personalizada', value: 'custom' }
-        ]
-      },
-      {
-        type: 'confirm',
-        name: 'realtime',
-        message: '⚡ ¿Actualización en tiempo real (SSE)?',
-        default: true
-      }
-    ],
-
-    actions: (data) => {
-      const viewPath = `modules/${data.moduleName}/views`;
-
-      return [
-        {
-          type: 'add',
-          path: `${viewPath}/{{viewType}}.json`,
-          templateFile: 'plop-templates/ui-view/view.json.hbs'
-        },
-        () => {
-          console.log('\n✅ Vista UI creada exitosamente');
-          console.log('\n📁 Archivo generado:');
-          console.log(`   └── ${viewPath}/${data.viewType}.json`);
-          console.log('\n🚀 Próximos pasos:');
-          console.log('   1. Ajustar columnas/campos en el archivo generado');
-          console.log('   2. Configurar acciones específicas');
-          if (data.realtime) {
-            console.log('   3. Verificar eventos de real-time en module.json');
-          }
-          console.log(`\n🔗 Acceder a la vista: /auto-ui/${data.moduleName}/${data.viewType}\n`);
-          return '';
-        }
-      ];
-    }
-  });
-
-  // ==========================================
   // Generator: ui-theme (Auto-UI)
   // ==========================================
   plop.setGenerator('ui-theme', {

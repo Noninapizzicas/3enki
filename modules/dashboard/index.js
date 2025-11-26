@@ -137,60 +137,8 @@ class DashboardModule {
     }
   }
 
-  /**
-   * Serve Dashboard UI or static files
-   */
-  async serveDashboardUI(req) {
-    const requestPath = req.path || '/';
-
-    // Handle CSS
-    if (requestPath.includes('/css/')) {
-      return this.serveStaticFile(req, 'css');
-    }
-
-    // Handle JS
-    if (requestPath.includes('/js/')) {
-      return this.serveStaticFile(req, 'javascript');
-    }
-
-    // Serve main HTML
-    const htmlPath = path.join(__dirname, 'public', 'index.html');
-
-    try {
-      const html = fs.readFileSync(htmlPath, 'utf-8');
-      return {
-        _responseType: 'html',
-        content: html
-      };
-    } catch (error) {
-      return {
-        _responseType: 'html',
-        content: '<html><body><h1>Dashboard UI not found</h1></body></html>'
-      };
-    }
-  }
-
-  /**
-   * Serve static files (CSS, JS)
-   */
-  async serveStaticFile(req, type) {
-    const requestPath = req.path || '/';
-    const fileName = path.basename(requestPath);
-    const filePath = path.join(__dirname, 'public', type === 'css' ? 'css' : 'js', fileName);
-
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return {
-        _responseType: type,
-        content
-      };
-    } catch (error) {
-      return {
-        error: 'File not found',
-        path: requestPath
-      };
-    }
-  }
+  // UI rendering is now handled by Auto-UI v2
+  // Static HTML serving removed - dashboard is now JSON-driven
 
   /**
    * Get list of active cores
@@ -371,13 +319,6 @@ class DashboardModule {
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
-  }
-
-  /**
-   * API Handler: Dashboard UI (called by ModuleLoader)
-   */
-  async handleUi(req) {
-    return this.serveDashboardUI(req);
   }
 
   /**

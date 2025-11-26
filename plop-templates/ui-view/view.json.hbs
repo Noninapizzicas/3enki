@@ -195,26 +195,31 @@
       "redirect": "/auto-ui/{{moduleName}}/list"
     }
     {{else if (eq viewType "dashboard")}}
-    "type": "grid",
+    "type": "widget-group",
+    "layout": "grid",
     "columns": 3,
     "gap": "md",
     "widgets": [
       {
-        "type": "metric-card",
+        "type": "stat-card",
         "title": "Total",
-        "value": "\{{stats.total}}",
+        "value": "@data.stats.total",
+        "icon": "📊",
+        "color": "primary",
         "span": 1
       },
       {
         "type": "chart",
         "chartType": "line",
         "title": "Tendencia",
+        "data": "@data.trend",
         "span": 2
       },
       {
-        "type": "table",
+        "type": "table-advanced",
         "title": "Últimos registros",
-        "limit": 5,
+        "endpoint": "/modules/{{moduleName}}/data?limit=5",
+        "columns": "auto",
         "span": 3
       }
     ]

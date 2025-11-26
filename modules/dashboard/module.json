@@ -1,16 +1,10 @@
 {
   "name": "dashboard",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Observability Dashboard - Web UI para monitorear todos los cores",
   "author": "Event Core Team",
   "provides": {
     "apis": [
-      {
-        "name": "ui",
-        "method": "GET",
-        "path": "/",
-        "description": "Dashboard web interface"
-      },
       {
         "name": "cores",
         "method": "GET",
@@ -51,5 +45,159 @@
   ],
   "requires": {
     "core": ">=0.5.0"
+  },
+  "ui": {
+    "enabled": true,
+    "version": "2.0",
+    "title": "Dashboard",
+    "icon": "⚡",
+    "description": "Observability Dashboard - Monitor all cores in real-time",
+    "views": {
+      "main": {
+        "type": "dashboard",
+        "layout": {
+          "type": "two-column",
+          "left_width": "65%"
+        },
+        "sections": [
+          {
+            "id": "header",
+            "type": "header",
+            "title": "⚡ Event Core Dashboard",
+            "subtitle": "Real-time monitoring of all cores"
+          },
+          {
+            "id": "stats",
+            "column": "left",
+            "type": "widget-group",
+            "layout": "horizontal",
+            "widgets": [
+              {
+                "type": "stat-card",
+                "title": "Active Cores",
+                "value": "@data.cores.total",
+                "icon": "🖥️",
+                "color": "primary",
+                "endpoint": "/modules/dashboard/api/cores",
+                "mqtt_topic": "core/+/heartbeat"
+              },
+              {
+                "type": "stat-card",
+                "title": "Status",
+                "value": "Connected",
+                "icon": "✓",
+                "color": "success"
+              }
+            ]
+          },
+          {
+            "id": "cores_section",
+            "column": "left",
+            "type": "card",
+            "title": "🖥️ Active Cores",
+            "actions": [
+              {
+                "type": "button",
+                "label": "Refresh",
+                "icon": "↻",
+                "action": "refresh"
+              }
+            ],
+            "content": {
+              "type": "grid",
+              "endpoint": "/modules/dashboard/api/cores",
+              "data_path": "cores",
+              "mqtt_topic": "core/+/heartbeat",
+              "refresh_on_event": true,
+              "item_template": {
+                "type": "card",
+                "title": "@item.id",
+                "subtitle": "@item.host:@item.port",
+                "badge": {
+                  "text": "@item.version",
+                  "color": "info"
+                },
+                "status_indicator": {
+                  "field": "is_alive",
+                  "true_color": "success",
+                  "false_color": "danger"
+                },
+                "fields": [
+                  {
+                    "label": "Uptime",
+                    "value": "@compute.formatDuration(@item.uptime_ms)"
+                  },
+                  {
+                    "label": "Modules",
+                    "value": "@compute.count(@item.modules)"
+                  },
+                  {
+                    "label": "Heartbeats",
+                    "value": "@item.heartbeat_count"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "logs_section",
+            "column": "left",
+            "type": "card",
+            "title": "📝 Real-time Logs",
+            "actions": [
+              {
+                "type": "checkbox",
+                "label": "Auto-scroll",
+                "checked": true,
+                "action": "toggle_autoscroll"
+              },
+              {
+                "type": "button",
+                "label": "Clear",
+                "action": "clear_logs"
+              }
+            ],
+            "content": {
+              "type": "log-viewer",
+              "sse_endpoint": "/modules/dashboard/api/logs/stream",
+              "max_lines": 100,
+              "auto_scroll": true,
+              "format": "json"
+            }
+          },
+          {
+            "id": "events_section",
+            "column": "right",
+            "type": "card",
+            "title": "📡 Event Stream",
+            "collapsible": true,
+            "actions": [
+              {
+                "type": "button",
+                "label": "Clear",
+                "action": "clear_events"
+              }
+            ],
+            "content": {
+              "type": "event-stream",
+              "sse_endpoint": "/modules/dashboard/api/events/stream",
+              "max_items": 50,
+              "format": "compact"
+            }
+          },
+          {
+            "id": "metrics_section",
+            "column": "right",
+            "type": "card",
+            "title": "📊 Metrics",
+            "content": {
+              "type": "metrics-display",
+              "endpoint": "/modules/dashboard/api/metrics",
+              "refresh_interval": 5000
+            }
+          }
+        ]
+      }
+    }
   }
 }

@@ -93,9 +93,29 @@ class Composer {
 
     // Body con layout
     if (viewDef.layout) {
+      // Handle layout as string or object
+      let layoutName = viewDef.layout;
+      let layoutConfig = { ...viewDef };
+
+      // If layout is an object with 'type', extract the type as layout name
+      if (typeof viewDef.layout === 'object' && viewDef.layout.type) {
+        layoutName = viewDef.layout.type;
+        // Merge layout properties into config
+        layoutConfig = { ...viewDef, ...viewDef.layout };
+      }
+
+      // If sections have 'column' property, group them by column
+      if (viewDef.sections && Array.isArray(viewDef.sections)) {
+        const grouped = this.groupSectionsByColumn(viewDef.sections);
+        if (grouped.left || grouped.right) {
+          layoutConfig.left = grouped.left;
+          layoutConfig.right = grouped.right;
+        }
+      }
+
       const layoutHtml = await this.layoutEngine?.render(
-        viewDef.layout,
-        viewDef,
+        layoutName,
+        layoutConfig,
         context
       );
       sections.push(`<div class="view-body">${layoutHtml}</div>`);
@@ -115,6 +135,26 @@ class Composer {
         ${sections.join('\n')}
       </div>
     `;
+  }
+
+  /**
+   * Agrupa secciones por columna (para dashboard con sections que tienen column property)
+   */
+  groupSectionsByColumn(sections) {
+    const grouped = {
+      left: [],
+      right: [],
+      center: []
+    };
+
+    for (const section of sections) {
+      const column = section.column || 'left';
+      if (grouped[column]) {
+        grouped[column].push(section);
+      }
+    }
+
+    return grouped;
   }
 
   /**

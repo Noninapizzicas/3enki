@@ -94,7 +94,7 @@
       "type": "date",
       "label": "Date of Birth",
       "required": true,
-      "max": "@compute:formatDate(Date.now())"
+      "max": "@compute.formatDate(Date.now())"
     },
 
     "age": {

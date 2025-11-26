@@ -120,7 +120,7 @@ const AutoUI = require('../../auto-ui/engine');
                 "widget": "stat-card",
                 "config": {
                   "label": "Total Items",
-                  "value": "@compute:count(data.items)",
+                  "value": "@compute.count(data.items)",
                   "icon": "📊",
                   "color": "var(--primary)"
                 }
@@ -180,7 +180,7 @@ const AutoUI = require('../../auto-ui/engine');
   "value": "@data.user.name",           // From context data
   "value": "@metrics.total",            // From metrics
   "value": "@env.API_URL",              // Environment variable
-  "value": "@compute:sum(items.price)", // Computed value
+  "value": "@compute.sum(items.price)", // Computed value
   "value": "@api:/modules/foo/count"    // API call
 }
 ```
@@ -197,7 +197,7 @@ const AutoUI = require('../../auto-ui/engine');
             "widget": "stat-card",
             "config": {
               "label": "Revenue",
-              "value": "@compute:sum(sales.amount)",
+              "value": "@compute.sum(sales.amount)",
               "change": "+12.5",
               "trend": "up",
               "icon": "💰"
@@ -207,7 +207,7 @@ const AutoUI = require('../../auto-ui/engine');
             "widget": "progress-bar",
             "config": {
               "label": "Completion",
-              "value": "@compute:percent(completed, total)",
+              "value": "@compute.percent(completed, total)",
               "max": 100,
               "color": "var(--success)"
             }

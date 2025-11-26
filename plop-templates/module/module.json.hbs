@@ -62,76 +62,80 @@
     "views": {
       "main": {
         "type": "dashboard",
-        "layout": {
-          "type": "two-column",
-          "left_width": "65%"
+        "layout": "two-column",
+
+        "header": {
+          "title": "{{icon}} {{titleCase name}}",
+          "subtitle": "{{description}}"
         },
-        "sections": [
+
+        "columns": [
           {
-            "id": "header",
-            "type": "header",
-            "title": "{{icon}} {{titleCase name}}",
-            "subtitle": "{{description}}"
-          },
-          {
-            "id": "stats",
-            "column": "left",
-            "type": "widget-group",
-            "layout": "horizontal",
-            "widgets": [
+            "width": "65%",
+            "sections": [
               {
-                "type": "stat-card",
-                "title": "Total",
-                "value": "@data.stats.total",
-                "icon": "📊",
-                "color": "primary",
-                "endpoint": "/modules/{{name}}/data",
-                "mqtt_topic": "{{name}}.updated"
+                "id": "stats",
+                "type": "widget-group",
+                "layout": "horizontal",
+                "widgets": [
+                  {
+                    "type": "stat-card",
+                    "title": "Total",
+                    "value": "@data.stats.total",
+                    "icon": "📊",
+                    "color": "primary",
+                    "endpoint": "/modules/{{name}}/data",
+                    "mqtt_topics": ["{{name}}.updated"]
+                  },
+                  {
+                    "type": "stat-card",
+                    "title": "Status",
+                    "value": "Active",
+                    "icon": "✓",
+                    "color": "success"
+                  }
+                ]
               },
               {
-                "type": "stat-card",
-                "title": "Status",
-                "value": "Active",
-                "icon": "✓",
-                "color": "success"
+                "id": "main_content",
+                "type": "card",
+                "title": "Data",
+                "content": {
+                  "type": "table-advanced",
+                  "endpoint": "/modules/{{name}}/data",
+                  "mqtt_topics": ["{{name}}.updated"],
+                  "refresh_on_event": true,
+                  "columns": "auto",
+                  "pagination": true,
+                  "search": true
+                }
               }
             ]
           },
           {
-            "id": "main_content",
-            "column": "left",
-            "type": "card",
-            "title": "Data",
-            "content": {
-              "type": "table-advanced",
-              "endpoint": "/modules/{{name}}/data",
-              "mqtt_topic": "{{name}}.updated",
-              "refresh_on_event": true,
-              "columns": "auto",
-              "pagination": true,
-              "search": true
-            }
-          },
-          {
-            "id": "info_panel",
-            "column": "right",
-            "type": "card",
-            "title": "ℹ️ Information",
-            "content": {
-              "type": "info",
-              "items": [
-                {
-                  "label": "Version",
-                  "value": "1.0.0",
-                  "icon": "🏷️"
-                },
-                {
-                  "label": "Status",
-                  "value": "Active",
-                  "color": "#22c55e"
+            "width": "35%",
+            "sections": [
+              {
+                "id": "info_panel",
+                "type": "card",
+                "title": "ℹ️ Information",
+                "content": {
+                  "type": "info",
+                  "items": [
+                    {
+                      "label": "Version",
+                      "value": "1.0.0",
+                      "icon": "🏷️"
+                    },
+                    {
+                      "label": "Status",
+                      "value": "Active",
+                      "color": "#22c55e"
+                    }
+                  ]
                 }
-              ]
-            }
+              }
+            ]
           }
         ]
       }

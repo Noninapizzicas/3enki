@@ -73,69 +73,71 @@
           }
         },
 
-        "header": {
-          "title": "{{icon}} {{titleCase name}}",
-          "subtitle": "{{description}}"
-        },
-
         "sections": [
           {
             "id": "stats",
-            "widget": "widget-group",
+            "widget": "stat-card",
             "config": {
-              "layout": "horizontal",
-              "widgets": [
-                {
-                  "type": "stat-card",
-                  "title": "Total",
-                  "value": "@data.stats.total",
-                  "icon": "📊",
-                  "color": "primary",
-                  "endpoint": "/modules/{{name}}/data",
-                  "mqtt_topics": ["{{name}}.updated"]
-                },
-                {
-                  "type": "stat-card",
-                  "title": "Status",
-                  "value": "Active",
-                  "icon": "✓",
-                  "color": "success"
-                }
-              ]
+              "label": "Total",
+              "value": "@compute.count(@data.items)",
+              "icon": "📊",
+              "color": "primary",
+              "trend": "+12%",
+              "trendDirection": "up"
             }
           },
           {
-            "id": "main_content",
-            "widget": "card",
+            "id": "stats_status",
+            "widget": "stat-card",
             "config": {
-              "title": "Data",
-              "content": {
-                "type": "table-advanced",
-                "endpoint": "/modules/{{name}}/data",
-                "mqtt_topics": ["{{name}}.updated"],
-                "refresh_on_event": true,
-                "columns": "auto",
-                "pagination": true,
-                "search": true
-              }
+              "label": "Estado",
+              "value": "Activo",
+              "icon": "✓",
+              "color": "success"
+            }
+          },
+          {
+            "id": "main_table",
+            "widget": "table-advanced",
+            "config": {
+              "dataSource": "@data.items",
+              "columns": "auto",
+              "sortable": true,
+              "filterable": true,
+              "paginated": true,
+              "actions": [
+                {
+                  "label": "Editar",
+                  "icon": "✏️",
+                  "action": "edit",
+                  "permissions": ["admin"]
+                },
+                {
+                  "label": "Eliminar",
+                  "icon": "🗑️",
+                  "action": "delete",
+                  "permissions": ["admin"],
+                  "confirm": true
+                }
+              ]
             }
           },
           {
             "id": "info_panel",
             "widget": "card",
             "config": {
-              "title": "ℹ️ Information",
+              "title": "ℹ️ Información",
               "content": {
                 "type": "info",
                 "items": [
                   {
-                    "label": "Version",
+                    "label": "Versión",
                     "value": "1.0.0",
                     "icon": "🏷️"
                   },
                   {
-                    "label": "Status",
-                    "value": "Active",
+                    "label": "Estado",
+                    "value": "Activo",
                     "color": "#22c55e"
                   }
                 ]
@@ -143,10 +145,53 @@
             }
           }
         ]
+      },
+
+      "create": {
+        "type": "form",
+        "permissions": ["admin"],
+        "config": {
+          "title": "Crear {{titleCase name}}",
+          "endpoint": "/modules/{{name}}/items",
+          "method": "POST",
+          "validation": true,
+          "fields": "auto"
+        }
       }
+    },
+
+    "mqtt": {
+      "enabled": true,
+      "topics": [
+        "{{name}}.created",
+        "{{name}}.updated",
+        "{{name}}.deleted"
+      ],
+      "auto_refresh": true
     }
   },
   {{/if}}
+
+  "schema": {
+    "id": {
+      "type": "string",
+      "label": "ID",
+      "format": "hidden"
+    },
+    "name": {
+      "type": "string",
+      "label": "Nombre",
+      "required": true,
+      "minLength": 3,
+      "maxLength": 100
+    },
+    "status": {
+      "type": "enum",
+      "label": "Estado",
+      "enum": ["active", "inactive"],
+      "default": "active"
+    }
+  },
 
   "observability": {
     "logging": {

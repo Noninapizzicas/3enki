@@ -129,7 +129,7 @@ class HTTPGateway {
     this.autoUI = null;
     if (this.moduleLoader) {
       try {
-        const AutoUI = require('../../auto-ui/engine');
+        const AutoUI = require('../../auto-ui/engine/index-v2');
         this.autoUI = new AutoUI({
           modulesPath: this.moduleLoader.modulesPath,
           eventBus: this.eventBus,

@@ -32,52 +32,116 @@ const results = {
 // ==========================================
 
 /**
- * Valida un componente
+ * Valida un componente Auto-UI v2
  */
 function validateComponent(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const component = JSON.parse(content);
     const errors = [];
+    const warnings = [];
 
-    // Required fields
+    // Required fields for v2
     if (!component.name) {
       errors.push('Missing required field: name');
     }
-    if (!component.type) {
-      errors.push('Missing required field: type');
+
+    // v2: Check version
+    if (component.version) {
+      const version = parseFloat(component.version);
+      if (version < 2.0) {
+        warnings.push(`Component uses old version ${component.version}, should be 2.0.0+`);
+      }
     }
 
-    // Validate type is known
-    const validTypes = Object.values(UI.COMPONENTS);
-    if (component.type && !validTypes.includes(component.type) && !['core', 'layout', 'data', 'feedback', 'form', 'navigation'].includes(component.type)) {
-      errors.push(`Unknown component type: ${component.type}`);
+    // v2: Should have _category instead of type
+    if (!component._category && !component.type) {
+      errors.push('Missing required field: _category (or legacy type)');
+    }
+    if (component.type && !component._category) {
+      warnings.push('Using legacy "type" field, should use "_category" in v2');
+    }
+
+    // Validate category is known
+    const validCategories = ['core', 'layout', 'data', 'feedback', 'form', 'navigation', 'custom'];
+    const category = component._category || component.type;
+    if (category && !validCategories.includes(category)) {
+      warnings.push(`Unknown component category: ${category}`);
+    }
+
+    // v2: Validate props definition
+    if (component.props) {
+      // Good - has props definition
+      for (const [propName, propDef] of Object.entries(component.props)) {
+        if (!propDef.type) {
+          errors.push(`Property "${propName}" missing type definition`);
+        }
+      }
+    } else {
+      warnings.push('Component missing "props" definition (recommended in v2)');
     }
 
     // Validate interactions
     if (component.interactions) {
       const validInteractions = Object.values(UI.INTERACTIONS);
       for (const interaction of Object.keys(component.interactions)) {
-        if (!validInteractions.includes(interaction) && !['row-click', 'row-dblclick', 'header-click', 'select'].includes(interaction)) {
-          errors.push(`Unknown interaction: ${interaction}`);
+        if (!validInteractions.includes(interaction) && !['row-click', 'row-dblclick', 'header-click', 'select', 'drag', 'swipe'].includes(interaction)) {
+          warnings.push(`Unknown interaction: ${interaction}`);
         }
       }
     }
 
     // Validate variants
     if (component.variants) {
-      const validVariants = Object.values(UI.VARIANTS);
-      for (const variant of Object.keys(component.variants)) {
-        if (!validVariants.includes(variant) && !['default', 'elevated', 'outlined', 'interactive'].includes(variant)) {
-          // Warning only, custom variants are allowed
+      const validVariants = ['primary', 'secondary', 'success', 'warning', 'danger', 'ghost', 'outline', 'default'];
+      for (const [variantName, variantDef] of Object.entries(component.variants)) {
+        if (!validVariants.includes(variantName)) {
+          warnings.push(`Custom variant: ${variantName}`);
+        }
+        // v2: Check for hover states
+        if (variantName !== 'default' && !variantDef.hover) {
+          warnings.push(`Variant "${variantName}" missing hover state (recommended in v2)`);
         }
       }
     }
 
+    // v2: Validate states
+    if (component.states) {
+      const recommendedStates = ['default', 'hover', 'active', 'focus', 'disabled', 'loading'];
+      const missingStates = recommendedStates.filter(s => !component.states[s]);
+      if (missingStates.length > 0) {
+        warnings.push(`Missing recommended states: ${missingStates.join(', ')}`);
+      }
+    } else {
+      warnings.push('Component missing "states" definition (recommended in v2)');
+    }
+
+    // v2: Check for accessibility
+    if (!component.accessibility) {
+      warnings.push('Component missing "accessibility" definition (recommended in v2)');
+    } else {
+      if (!component.accessibility.role) {
+        warnings.push('Accessibility missing "role"');
+      }
+      if (!component.accessibility.keyboard) {
+        warnings.push('Accessibility missing "keyboard" bindings (recommended in v2)');
+      }
+    }
+
+    // v2: Check for animations
+    if (!component.animations && category === 'feedback') {
+      warnings.push('Feedback component missing "animations" (recommended)');
+    }
+
     if (errors.length > 0) {
       results.components.invalid++;
-      results.components.errors.push({ file: filePath, errors });
+      results.components.errors.push({ file: filePath, errors, warnings });
       return false;
+    }
+
+    if (warnings.length > 0) {
+      results.components.warnings = results.components.warnings || [];
+      results.components.warnings.push({ file: filePath, warnings });
     }
 
     results.components.valid++;
@@ -143,13 +207,14 @@ function validateTheme(filePath) {
 }
 
 /**
- * Valida una vista
+ * Valida una vista Auto-UI v2
  */
 function validateView(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const view = JSON.parse(content);
     const errors = [];
+    const warnings = [];
 
     // Required fields
     if (!view.name) {
@@ -161,8 +226,45 @@ function validateView(filePath) {
 
     // Validate view type
     const validTypes = Object.values(UI.VIEWS);
-    if (view.type && !validTypes.includes(view.type) && !['custom'].includes(view.type)) {
+    if (view.type && !validTypes.includes(view.type) && !['custom', 'widget-group'].includes(view.type)) {
       errors.push(`Unknown view type: ${view.type}`);
+    }
+
+    // v2: Check for deprecated widget names
+    const contentStr = JSON.stringify(view);
+    if (contentStr.includes('"metric-card"')) {
+      warnings.push('Using deprecated "metric-card", should use "stat-card" in v2');
+    }
+    if (contentStr.includes('"type":"table"') && !contentStr.includes('table-advanced')) {
+      warnings.push('Using basic "table", consider using "table-advanced" for v2 features');
+    }
+
+    // v2: Validate @data references format
+    const dataRefs = contentStr.match(/@data\.[a-zA-Z0-9_.]+/g);
+    if (dataRefs) {
+      // Good - uses v2 data binding
+    } else if (contentStr.includes('\\{{')) {
+      warnings.push('Using legacy template syntax (\\{{}}), prefer @data references in v2');
+    }
+
+    // v2: Check for layout in dashboard views
+    if (view.type === 'dashboard') {
+      if (!view.layout) {
+        warnings.push('Dashboard missing "layout" definition (recommended in v2)');
+      } else {
+        const validLayouts = ['two-column', 'three-column', 'grid', 'tabs', 'flex', 'sidebar'];
+        if (view.layout.type && !validLayouts.includes(view.layout.type)) {
+          warnings.push(`Unknown layout type: ${view.layout.type}`);
+        }
+      }
+
+      // Check for sections with column assignment
+      if (view.sections) {
+        const hasColumnAssignment = view.sections.some(s => s.column);
+        if (!hasColumnAssignment && view.layout?.type?.includes('column')) {
+          warnings.push('Layout uses columns but sections missing "column" assignment');
+        }
+      }
     }
 
     // Validate actions
@@ -171,16 +273,28 @@ function validateView(filePath) {
         if (action.action?.type) {
           const validActions = Object.values(UI.ACTIONS);
           if (!validActions.includes(action.action.type)) {
-            errors.push(`Unknown action type: ${action.action.type}`);
+            warnings.push(`Unknown action type: ${action.action.type}`);
           }
         }
       }
     }
 
+    // v2: Check for realtime/MQTT integration
+    if (view.realtime || contentStr.includes('mqtt_topic')) {
+      // Good - has realtime support
+    } else if (view.type === 'dashboard' || view.type === 'list') {
+      warnings.push('Dashboard/list view missing realtime updates (consider adding mqtt_topic)');
+    }
+
     if (errors.length > 0) {
       results.views.invalid++;
-      results.views.errors.push({ file: filePath, errors });
+      results.views.errors.push({ file: filePath, errors, warnings });
       return false;
+    }
+
+    if (warnings.length > 0) {
+      results.views.warnings = results.views.warnings || [];
+      results.views.warnings.push({ file: filePath, warnings });
     }
 
     results.views.valid++;
@@ -268,12 +382,17 @@ function scan() {
 
   const totalValid = results.components.valid + results.themes.valid + results.views.valid;
   const totalInvalid = results.components.invalid + results.themes.invalid + results.views.invalid;
+  const totalWarnings = (results.components.warnings?.length || 0) + (results.views.warnings?.length || 0);
 
   console.log(`   Components: ${results.components.valid} valid, ${results.components.invalid} invalid`);
   console.log(`   Themes:     ${results.themes.valid} valid, ${results.themes.invalid} invalid`);
   console.log(`   Views:      ${results.views.valid} valid, ${results.views.invalid} invalid`);
   console.log(`   ─────────────────────`);
   console.log(`   Total:      ${totalValid} valid, ${totalInvalid} invalid\n`);
+
+  if (totalWarnings > 0) {
+    console.log(`⚠️  ${totalWarnings} warnings found (Auto-UI v2 recommendations)\n`);
+  }
 
   // Show errors
   if (totalInvalid > 0) {
@@ -285,10 +404,15 @@ function scan() {
       ...results.views.errors
     ];
 
-    for (const { file, errors } of allErrors) {
+    for (const { file, errors, warnings } of allErrors) {
       console.log(`   ${path.relative(process.cwd(), file)}:`);
       for (const error of errors) {
-        console.log(`      - ${error}`);
+        console.log(`      ❌ ${error}`);
+      }
+      if (warnings) {
+        for (const warning of warnings) {
+          console.log(`      ⚠️  ${warning}`);
+        }
       }
       console.log('');
     }
@@ -296,7 +420,28 @@ function scan() {
     process.exit(1);
   }
 
+  // Show warnings (non-fatal)
+  if (totalWarnings > 0) {
+    console.log('⚠️  Warnings:\n');
+
+    const allWarnings = [
+      ...(results.components.warnings || []),
+      ...(results.views.warnings || [])
+    ];
+
+    for (const { file, warnings } of allWarnings) {
+      console.log(`   ${path.relative(process.cwd(), file)}:`);
+      for (const warning of warnings) {
+        console.log(`      ⚠️  ${warning}`);
+      }
+      console.log('');
+    }
+  }
+
   console.log('✅ All validations passed!\n');
+  if (totalWarnings > 0) {
+    console.log(`💡 Consider addressing ${totalWarnings} warnings for full Auto-UI v2 compatibility\n`);
+  }
   process.exit(0);
 }
 

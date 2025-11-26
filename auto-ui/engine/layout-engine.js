@@ -189,18 +189,38 @@ class LayoutEngine {
     // Two Column
     this.register('two-column', {
       render: async (config, context, engine) => {
-        const leftWidth = config.leftWidth || config.columns?.[0]?.width || '50%';
-        const rightWidth = config.rightWidth || config.columns?.[1]?.width || '50%';
+        // Support multiple layout structures:
+        // 1. config.left / config.right (original)
+        // 2. config.left_column / config.right_column (credential-manager style)
+        // 3. config.columns[0] / config.columns[1] (generic columns array)
 
-        const leftContent = await engine.renderSections(
-          config.left || config.columns?.[0]?.sections || [],
-          context
-        );
+        // Extract left sections
+        const leftSections = config.left
+          || config.left_column?.sections
+          || config.columns?.[0]?.sections
+          || [];
 
-        const rightContent = await engine.renderSections(
-          config.right || config.columns?.[1]?.sections || [],
-          context
-        );
+        // Extract right sections
+        const rightSections = config.right
+          || config.right_column?.sections
+          || config.columns?.[1]?.sections
+          || [];
+
+        // Extract widths
+        const leftWidth = config.leftWidth
+          || config.left_width
+          || config.left_column?.width
+          || config.columns?.[0]?.width
+          || '50%';
+
+        const rightWidth = config.rightWidth
+          || config.right_width
+          || config.right_column?.width
+          || config.columns?.[1]?.width
+          || '50%';
+
+        const leftContent = await engine.renderSections(leftSections, context);
+        const rightContent = await engine.renderSections(rightSections, context);
 
         return `
           <div class="layout layout-two-column">

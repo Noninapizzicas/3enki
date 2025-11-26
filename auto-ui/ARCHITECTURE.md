@@ -121,7 +121,7 @@ Component {
 "value": "@data.user.name"           // Data binding
 "value": "@metrics.total"            // Metrics reference
 "value": "@env.API_URL"              // Environment vars
-"value": "@compute:sum(items.price)" // Computed values
+"value": "@compute.sum(items.price)" // Computed values
 "value": "@i18n.messages.welcome"    // Internationalization
 ```
 

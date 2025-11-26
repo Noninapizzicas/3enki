@@ -5,7 +5,7 @@
  * - @data.user.name
  * - @metrics.total
  * - @env.API_URL
- * - @compute:sum(items.price)
+ * - @compute.sum(items.price)
  * - @i18n.messages.welcome
  */
 
@@ -167,13 +167,13 @@ class Resolver {
    * Parsea una referencia
    * Ejemplos:
    *   @data.user.name → { type: 'data', path: 'user.name' }
-   *   @compute:sum(items.price) → { type: 'compute', fn: 'sum', args: ['items.price'] }
+   *   @compute.sum(items.price) → { type: 'compute', fn: 'sum', args: ['items.price'] }
    */
   parseReference(ref) {
     // Remove @
     const str = ref.slice(1);
 
-    // Check for compute function: @compute:sum(...)
+    // Check for compute function: @compute.sum(...)
     const computeMatch = str.match(/^(\w+):(\w+)\((.*?)\)$/);
     if (computeMatch) {
       return {

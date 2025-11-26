@@ -161,6 +161,13 @@ class AutoUIv2 {
       // TODO: Integrate with metrics system
       return 0;
     });
+
+    // Context source - Access context variables
+    this.resolver.registerDataSource('context', async (path, context) => {
+      // Path format: module.schema, user.permissions, etc.
+      const parts = path.split('.');
+      return this.getNestedValue(context, parts);
+    });
   }
 
   // ==========================================

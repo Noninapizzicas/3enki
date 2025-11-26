@@ -39,7 +39,7 @@
                     "widget": "stat-card",
                     "config": {
                       "label": "Total Users",
-                      "value": "@compute:count(data.users)",
+                      "value": "@compute.count(data.users)",
                       "change": "+12.5",
                       "trend": "up",
                       "icon": "👥",
@@ -50,7 +50,7 @@
                     "widget": "stat-card",
                     "config": {
                       "label": "Revenue",
-                      "value": "@compute:sum(data.sales.amount)",
+                      "value": "@compute.sum(data.sales.amount)",
                       "change": "+8.2",
                       "trend": "up",
                       "icon": "💰",
@@ -61,7 +61,7 @@
                     "widget": "stat-card",
                     "config": {
                       "label": "Conversion Rate",
-                      "value": "@compute:percent(data.conversions, data.visits)",
+                      "value": "@compute.percent(data.conversions, data.visits)",
                       "change": "-2.1",
                       "trend": "down",
                       "icon": "📈",

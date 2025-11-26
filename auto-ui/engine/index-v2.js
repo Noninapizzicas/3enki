@@ -187,7 +187,10 @@ class AutoUIv2 {
       await this.bridge.subscribeToMQTT();
     }
 
-    // Load components from modules
+    // Load global components from /auto-ui/components/ (auto-discovery)
+    await this.loadGlobalComponents();
+
+    // Load module-specific components
     await this.loadModuleComponents();
 
     this.initialized = true;
@@ -215,6 +218,31 @@ class AutoUIv2 {
         }
       }
     }
+  }
+
+  /**
+   * Carga componentes globales desde /auto-ui/components/
+   * Auto-discovery: detecta y registra automáticamente todos los .json
+   */
+  async loadGlobalComponents() {
+    const components = this.loader.listComponents();
+
+    let registered = 0;
+    for (const componentSummary of components) {
+      try {
+        const componentDef = this.loader.getComponent(componentSummary.name);
+        if (componentDef) {
+          this.componentSystem.register(componentDef.name, componentDef);
+          registered++;
+          this.logger.info(`[AutoUI v2] Registered global component: ${componentDef.name} (${componentDef._category})`);
+        }
+      } catch (error) {
+        this.logger.error(`[AutoUI v2] Failed to register component ${componentSummary.name}:`, error.message);
+      }
+    }
+
+    this.logger.info(`[AutoUI v2] Loaded ${registered} global components from /auto-ui/components/`);
+    return registered;
   }
 
   // ==========================================

@@ -662,6 +662,45 @@ class HTTPGateway {
   }
 
   /**
+   * Maneja /cache/stats endpoint
+   *
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   */
+  async handleCacheStats(req, res) {
+    const stats = this.cache.getStats();
+
+    await this.sendResponse(res, 200, {
+      cache: stats,
+      compression: this.compression.getStats(),
+      timestamp: new Date().toISOString()
+    }, req);
+  }
+
+  /**
+   * Maneja /cache/clear endpoint
+   *
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   */
+  async handleCacheClear(req, res) {
+    const sizeBefore = this.cache.cache.size();
+    this.cache.clear();
+
+    if (this.logger) {
+      this.logger.info('gateway.cache.cleared', {
+        entries_cleared: sizeBefore
+      });
+    }
+
+    await this.sendResponse(res, 200, {
+      success: true,
+      entries_cleared: sizeBefore,
+      timestamp: new Date().toISOString()
+    }, req);
+  }
+
+  /**
    * Parse request body
    *
    * @param {http.IncomingMessage} req - HTTP request

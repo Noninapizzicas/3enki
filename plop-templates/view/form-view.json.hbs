@@ -1,0 +1,311 @@
+{
+  "name": "{{name}}-form",
+  "version": "2.0.0",
+  "type": "form",
+  "description": "Form view for creating/editing {{name}}",
+  "author": "{{author}}",
+  "generated_at": "{{currentDate}}",
+
+  "permissions": {
+    "create": ["admin"],
+    "edit": {
+      "or": [
+        "admin",
+        {"custom": "isOwner"}
+      ]
+    }
+  },
+
+  "config": {
+    "title": "{{#if isEdit}}Editar{{else}}Crear{{/if}} {{titleCase name}}",
+    "icon": "{{icon}}",
+    "endpoint": "/modules/{{name}}/items{{#if isEdit}}/:id{{/if}}",
+    "method": "{{#if isEdit}}PUT{{else}}POST{{/if}}",
+    "validation": true,
+    "showRequiredIndicator": true,
+    "submitLabel": "{{#if isEdit}}Actualizar{{else}}Crear{{/if}}",
+    "cancelLabel": "Cancelar",
+    "cancelAction": "back",
+    "successMessage": "{{titleCase name}} {{#if isEdit}}actualizado{{else}}creado{{/if}} correctamente",
+    "errorMessage": "Error al {{#if isEdit}}actualizar{{else}}crear{{/if}} {{name}}",
+    "autoSave": false,
+    "resetOnSuccess": true
+  },
+
+  "layout": {
+    "type": "form",
+    "config": {
+      "maxWidth": "800px",
+      "sections": true,
+      "stickyFooter": true
+    }
+  },
+
+  "sections": [
+    {
+      "id": "basic_info",
+      "title": "Información Básica",
+      "icon": "📝",
+      "collapsible": false,
+      "fields": [
+        {
+          "name": "name",
+          "component": "input",
+          "variant": "text",
+          "props": {
+            "label": "Nombre",
+            "placeholder": "Ingrese el nombre",
+            "required": true,
+            "minLength": 3,
+            "maxLength": 100,
+            "helpText": "Nombre descriptivo (mínimo 3 caracteres)",
+            "prefixIcon": "📛",
+            "autocomplete": "off"
+          },
+          "validation": {
+            "required": true,
+            "minLength": 3,
+            "maxLength": 100,
+            "pattern": "^[a-zA-Z0-9\\s\\-_]+$",
+            "messages": {
+              "required": "El nombre es requerido",
+              "minLength": "El nombre debe tener al menos 3 caracteres",
+              "maxLength": "El nombre no puede exceder 100 caracteres",
+              "pattern": "El nombre solo puede contener letras, números, espacios, guiones y guiones bajos"
+            }
+          }
+        },
+        {
+          "name": "description",
+          "component": "textarea",
+          "variant": "autosize",
+          "props": {
+            "label": "Descripción",
+            "placeholder": "Descripción detallada...",
+            "required": false,
+            "minRows": 3,
+            "maxRows": 10,
+            "maxLength": 500,
+            "showCounter": true,
+            "helpText": "Descripción opcional (máximo 500 caracteres)"
+          },
+          "validation": {
+            "maxLength": 500
+          }
+        },
+        {
+          "name": "status",
+          "component": "select",
+          "variant": "default",
+          "props": {
+            "label": "Estado",
+            "required": true,
+            "options": [
+              {"value": "active", "label": "Activo", "icon": "✓", "color": "var(--success)"},
+              {"value": "pending", "label": "Pendiente", "icon": "⏳", "color": "var(--warning)"},
+              {"value": "inactive", "label": "Inactivo", "icon": "⏸", "color": "var(--muted)"}
+            ],
+            "default": "active",
+            "clearable": false,
+            "searchable": false
+          },
+          "validation": {
+            "required": true,
+            "enum": ["active", "pending", "inactive"]
+          }
+        },
+        {
+          "name": "priority",
+          "component": "radio-group",
+          "variant": "button",
+          "props": {
+            "label": "Prioridad",
+            "required": true,
+            "layout": "inline",
+            "options": [
+              {"value": "low", "label": "Baja", "icon": "🟢"},
+              {"value": "medium", "label": "Media", "icon": "🟡"},
+              {"value": "high", "label": "Alta", "icon": "🔴"}
+            ],
+            "default": "medium"
+          },
+          "validation": {
+            "required": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "additional_info",
+      "title": "Información Adicional",
+      "icon": "➕",
+      "collapsible": true,
+      "collapsed": false,
+      "fields": [
+        {
+          "name": "tags",
+          "component": "select",
+          "variant": "searchable",
+          "props": {
+            "label": "Etiquetas",
+            "required": false,
+            "multiple": true,
+            "searchable": true,
+            "clearable": true,
+            "creatable": true,
+            "options": [
+              {"value": "important", "label": "Importante", "icon": "⭐"},
+              {"value": "urgent", "label": "Urgente", "icon": "🔥"},
+              {"value": "archived", "label": "Archivado", "icon": "📦"}
+            ],
+            "placeholder": "Seleccione o cree etiquetas",
+            "helpText": "Puede crear nuevas etiquetas escribiendo y presionando Enter"
+          }
+        },
+        {
+          "name": "category",
+          "component": "select",
+          "variant": "default",
+          "props": {
+            "label": "Categoría",
+            "required": false,
+            "options": [
+              {"value": "general", "label": "General"},
+              {"value": "technical", "label": "Técnico"},
+              {"value": "administrative", "label": "Administrativo"}
+            ],
+            "clearable": true,
+            "searchable": true
+          }
+        },
+        {
+          "name": "dueDate",
+          "component": "input",
+          "variant": "date",
+          "props": {
+            "label": "Fecha de Vencimiento",
+            "required": false,
+            "min": "@env.TODAY",
+            "helpText": "Fecha límite para completar"
+          },
+          "validation": {
+            "min": "@env.TODAY",
+            "messages": {
+              "min": "La fecha debe ser hoy o posterior"
+            }
+          }
+        },
+        {
+          "name": "assignedTo",
+          "component": "select",
+          "variant": "searchable",
+          "props": {
+            "label": "Asignado a",
+            "required": false,
+            "searchable": true,
+            "clearable": true,
+            "options": "@data.users",
+            "optionLabel": "name",
+            "optionValue": "id",
+            "placeholder": "Seleccione un usuario",
+            "helpText": "Usuario responsable"
+          }
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "Configuración",
+      "icon": "⚙️",
+      "collapsible": true,
+      "collapsed": true,
+      "permissions": ["admin"],
+      "fields": [
+        {
+          "name": "notifications",
+          "component": "checkbox",
+          "variant": "switch",
+          "props": {
+            "label": "Habilitar notificaciones",
+            "helpText": "Recibir notificaciones sobre cambios"
+          }
+        },
+        {
+          "name": "public",
+          "component": "checkbox",
+          "variant": "switch",
+          "props": {
+            "label": "Público",
+            "helpText": "Visible para todos los usuarios"
+          }
+        },
+        {
+          "name": "archived",
+          "component": "checkbox",
+          "variant": "default",
+          "props": {
+            "label": "Archivar",
+            "helpText": "Mover a archivados"
+          }
+        }
+      ]
+    },
+    {
+      "id": "attachments",
+      "title": "Archivos Adjuntos",
+      "icon": "📎",
+      "collapsible": true,
+      "collapsed": true,
+      "fields": [
+        {
+          "name": "files",
+          "component": "file-upload",
+          "variant": "dropzone",
+          "props": {
+            "label": "Archivos",
+            "accept": ".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png",
+            "multiple": true,
+            "maxFiles": 5,
+            "maxSize": 10485760,
+            "helpText": "Máximo 5 archivos, 10MB cada uno. Formatos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG",
+            "showPreview": true,
+            "autoUpload": false
+          },
+          "validation": {
+            "maxFiles": 5,
+            "maxSize": 10485760,
+            "accept": [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png"]
+          }
+        }
+      ]
+    }
+  ],
+
+  "footer": {
+    "actions": [
+      {
+        "label": "Cancelar",
+        "action": "back",
+        "variant": "secondary"
+      },
+      {
+        "label": "{{#if isEdit}}Actualizar{{else}}Crear{{/if}}",
+        "action": "submit",
+        "variant": "primary",
+        "icon": "💾"
+      }
+    ]
+  },
+
+  "validation": {
+    "mode": "blur",
+    "showErrors": true,
+    "scrollToError": true
+  },
+
+  "mqtt": {
+    "enabled": true,
+    "publishOnSuccess": true,
+    "topic": "{{name}}.{{#if isEdit}}updated{{else}}created{{/if}}"
+  }
+}

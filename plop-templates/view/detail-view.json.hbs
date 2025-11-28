@@ -1,0 +1,353 @@
+{
+  "name": "{{name}}-detail",
+  "version": "2.0.0",
+  "type": "detail",
+  "description": "Detail view for {{name}} items",
+  "author": "{{author}}",
+  "generated_at": "{{currentDate}}",
+
+  "permissions": ["admin", "user"],
+
+  "layout": {
+    "type": "two-column",
+    "config": {
+      "leftWidth": "70%",
+      "rightWidth": "30%",
+      "gap": "var(--space-lg)"
+    }
+  },
+
+  "header": {
+    "title": "{{titleCase name}} - @data.item.name",
+    "icon": "{{icon}}",
+    "breadcrumbs": [
+      {"label": "Inicio", "url": "/auto-ui"},
+      {"label": "{{titleCase name}}", "url": "/auto-ui/{{name}}"},
+      {"label": "@data.item.name", "active": true}
+    ],
+    "actions": [
+      {
+        "label": "Editar",
+        "icon": "✏️",
+        "action": "navigate",
+        "target": "/auto-ui/{{name}}/form/@data.item.id",
+        "variant": "primary",
+        "permissions": ["admin"]
+      },
+      {
+        "label": "Eliminar",
+        "icon": "🗑️",
+        "action": "delete",
+        "endpoint": "/modules/{{name}}/items/@data.item.id",
+        "variant": "danger",
+        "permissions": ["admin"],
+        "confirm": {
+          "title": "Confirmar eliminación",
+          "message": "¿Estás seguro de eliminar este elemento? Esta acción no se puede deshacer.",
+          "confirmText": "Eliminar",
+          "cancelText": "Cancelar"
+        },
+        "successAction": "navigate",
+        "successTarget": "/auto-ui/{{name}}"
+      },
+      {
+        "label": "Volver",
+        "icon": "◀",
+        "action": "back",
+        "variant": "secondary"
+      }
+    ]
+  },
+
+  "sections": [
+    {
+      "id": "main_info",
+      "column": "left",
+      "widget": "card",
+      "config": {
+        "title": "Información Principal",
+        "icon": "📋",
+        "variant": "elevated",
+        "content": {
+          "type": "detail",
+          "fields": [
+            {
+              "label": "ID",
+              "value": "@data.item.id",
+              "icon": "🔑",
+              "format": "code"
+            },
+            {
+              "label": "Nombre",
+              "value": "@data.item.name",
+              "icon": "📛",
+              "format": "text",
+              "copyable": true
+            },
+            {
+              "label": "Descripción",
+              "value": "@data.item.description",
+              "icon": "📝",
+              "format": "text",
+              "emptyText": "Sin descripción"
+            },
+            {
+              "label": "Estado",
+              "value": "@data.item.status",
+              "icon": "🎯",
+              "format": "badge",
+              "badgeColors": {
+                "active": "var(--success)",
+                "pending": "var(--warning)",
+                "inactive": "var(--muted)"
+              }
+            },
+            {
+              "label": "Prioridad",
+              "value": "@data.item.priority",
+              "icon": "🔥",
+              "format": "badge",
+              "badgeColors": {
+                "low": "var(--success)",
+                "medium": "var(--warning)",
+                "high": "var(--danger)"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "additional_info",
+      "column": "left",
+      "widget": "card",
+      "config": {
+        "title": "Información Adicional",
+        "icon": "➕",
+        "variant": "outlined",
+        "collapsible": true,
+        "content": {
+          "type": "detail",
+          "fields": [
+            {
+              "label": "Categoría",
+              "value": "@data.item.category",
+              "icon": "📂",
+              "format": "text",
+              "emptyText": "Sin categoría"
+            },
+            {
+              "label": "Etiquetas",
+              "value": "@data.item.tags",
+              "icon": "🏷️",
+              "format": "tags",
+              "emptyText": "Sin etiquetas"
+            },
+            {
+              "label": "Fecha de Vencimiento",
+              "value": "@data.item.dueDate",
+              "icon": "📅",
+              "format": "date",
+              "emptyText": "Sin fecha límite"
+            },
+            {
+              "label": "Asignado a",
+              "value": "@data.item.assignedTo.name",
+              "icon": "👤",
+              "format": "text",
+              "emptyText": "Sin asignar"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "timestamps",
+      "column": "left",
+      "widget": "card",
+      "config": {
+        "title": "Registro",
+        "icon": "🕐",
+        "variant": "default",
+        "content": {
+          "type": "detail",
+          "fields": [
+            {
+              "label": "Creado",
+              "value": "@data.item.createdAt",
+              "icon": "➕",
+              "format": "datetime"
+            },
+            {
+              "label": "Creado por",
+              "value": "@data.item.createdBy.name",
+              "icon": "👤",
+              "format": "text",
+              "emptyText": "Desconocido"
+            },
+            {
+              "label": "Última actualización",
+              "value": "@data.item.updatedAt",
+              "icon": "🔄",
+              "format": "datetime"
+            },
+            {
+              "label": "Actualizado por",
+              "value": "@data.item.updatedBy.name",
+              "icon": "👤",
+              "format": "text",
+              "emptyText": "Desconocido"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "stats",
+      "column": "right",
+      "widget": "stat-card",
+      "config": {
+        "label": "Días activo",
+        "value": "@compute.daysSince(@data.item.createdAt)",
+        "icon": "📆",
+        "color": "primary"
+      }
+    },
+    {
+      "id": "status_card",
+      "column": "right",
+      "widget": "card",
+      "config": {
+        "title": "Estado del Item",
+        "icon": "ℹ️",
+        "variant": "default",
+        "content": {
+          "type": "info",
+          "items": [
+            {
+              "label": "Estado",
+              "value": "@data.item.status",
+              "color": "@compute.statusColor(@data.item.status)"
+            },
+            {
+              "label": "Prioridad",
+              "value": "@data.item.priority",
+              "color": "@compute.priorityColor(@data.item.priority)"
+            },
+            {
+              "label": "Progreso",
+              "value": "@data.item.progress",
+              "format": "percentage"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "activity",
+      "column": "right",
+      "widget": "activity-feed",
+      "config": {
+        "title": "Actividad Reciente",
+        "maxItems": 5,
+        "showTimestamp": true,
+        "showAvatar": false,
+        "activities": "@data.item.activities",
+        "emptyMessage": "Sin actividad registrada",
+        "dateFormat": "relative"
+      }
+    },
+    {
+      "id": "actions_card",
+      "column": "right",
+      "widget": "card",
+      "config": {
+        "title": "Acciones Rápidas",
+        "icon": "⚡",
+        "variant": "outlined",
+        "content": {
+          "type": "actions",
+          "actions": [
+            {
+              "label": "Duplicar",
+              "icon": "📋",
+              "action": "custom",
+              "handler": "duplicateItem",
+              "params": {"id": "@data.item.id"},
+              "permissions": ["admin"]
+            },
+            {
+              "label": "Exportar",
+              "icon": "📤",
+              "action": "custom",
+              "handler": "exportItem",
+              "params": {"id": "@data.item.id", "format": "json"}
+            },
+            {
+              "label": "Compartir",
+              "icon": "🔗",
+              "action": "custom",
+              "handler": "shareItem",
+              "params": {"id": "@data.item.id"}
+            },
+            {
+              "label": "Archivar",
+              "icon": "📦",
+              "action": "custom",
+              "handler": "archiveItem",
+              "params": {"id": "@data.item.id"},
+              "permissions": ["admin"],
+              "confirm": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "metadata",
+      "column": "right",
+      "widget": "card",
+      "config": {
+        "title": "Metadatos",
+        "icon": "🔍",
+        "variant": "default",
+        "collapsible": true,
+        "collapsed": true,
+        "content": {
+          "type": "detail",
+          "fields": [
+            {
+              "label": "Versión",
+              "value": "2.0.0",
+              "format": "text"
+            },
+            {
+              "label": "Tipo",
+              "value": "{{name}}",
+              "format": "text"
+            },
+            {
+              "label": "Público",
+              "value": "@data.item.public",
+              "format": "boolean",
+              "booleanLabels": {
+                "true": "Sí",
+                "false": "No"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "mqtt": {
+    "enabled": true,
+    "subscribeToItem": true,
+    "topics": [
+      "{{name}}.updated.@data.item.id",
+      "{{name}}.deleted.@data.item.id"
+    ],
+    "auto_refresh": true
+  }
+}

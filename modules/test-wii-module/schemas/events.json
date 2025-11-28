@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "item_created": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "status": { "type": "string" },
+            "created_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["id", "name"]
+        }
+      },
+      "required": ["item"]
+    },
+    "item_updated": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "status": { "type": "string" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["id"]
+        }
+      },
+      "required": ["item"]
+    }
+  }
+}

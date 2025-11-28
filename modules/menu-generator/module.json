@@ -295,6 +295,17 @@
                 "text": "### Cómo usar Menu Generator\n\n1. **Subir carta**: Usa el endpoint `/upload` para subir imagen o PDF de tu carta\n2. **IA procesa**: El sistema extrae productos, categorías e ingredientes automáticamente\n3. **Validar**: Revisa y valida el menú generado\n4. **Aplicar**: Una vez validado, el menú se integra al sistema\n\n**Formatos soportados**: PDF, JPG, PNG, WEBP"
               }
             }
+          },
+          {
+            "id": "credentials_panel",
+            "widget": "card",
+            "config": {
+              "title": "🔐 Credenciales de IA",
+              "content": {
+                "type": "markdown",
+                "text": "### Requisitos\n\nPara usar Menu Generator necesitas configurar credenciales de proveedores de IA.\n\n**Proveedores soportados:**\n- 🤖 OpenAI (GPT-4, GPT-3.5)\n- 🔮 DeepSeek\n- 🧠 Anthropic (Claude)\n\n---\n\n**[🔐 Ir a Credential Manager →](/ui/modules/credential-manager)**\n\nConfigura tus API keys antes de generar menús."
+              }
+            }
           }
         ]
       },

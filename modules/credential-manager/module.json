@@ -65,101 +65,125 @@
     "version": "2.0",
     "title": "Credential Manager",
     "icon": "🔐",
-    "description": "Multi-level credential management for AI providers",
-    "access_level": "admin",
-    "components": [
-      "grid-credentials",
-      "credential-card",
-      "form-credential",
-      "credential-tester"
-    ],
+    "description": "Gestión simple de credenciales para proveedores de IA",
 
     "views": {
       "main": {
         "type": "dashboard",
-        "permissions": ["admin"],
+        "permissions": ["admin", "gerente"],
 
         "layout": {
           "type": "two-column",
           "config": {
-            "leftWidth": "65%",
-            "rightWidth": "35%",
+            "leftWidth": "70%",
+            "rightWidth": "30%",
             "gap": "var(--space-lg)"
           }
         },
 
-        "header": {
-          "title": "🔐 Credential Manager",
-          "subtitle": "Gestión de API Keys para Proveedores de IA",
-          "actions": [
-            {
-              "type": "button",
-              "label": "Nueva Credencial",
-              "icon": "➕",
-              "action": "open_form",
-              "variant": "primary"
-            },
-            {
-              "type": "button",
-              "label": "Probar Resolución",
-              "icon": "🔍",
-              "action": "open_tester",
-              "variant": "secondary"
-            }
-          ]
-        },
-
         "sections": [
           {
-            "id": "credentials_grid",
-            "widget": "grid",
+            "id": "stats_total",
+            "widget": "stat-card",
             "config": {
-              "component": "grid-credentials",
-              "endpoint": "/modules/credential-manager/credentials",
-              "mqtt_topics": [
-                "credential.saved",
-                "credential.updated",
-                "credential.deleted"
-              ],
-              "refresh_on_event": true,
-              "item_component": "credential-card"
+              "label": "Total Credenciales",
+              "value": "@compute.count(@data.credentials)",
+              "icon": "🔑",
+              "color": "primary"
             }
           },
           {
-            "id": "info_panel",
-            "widget": "card",
+            "id": "stats_global",
+            "widget": "stat-card",
             "config": {
-              "title": "ℹ️ Información",
-              "content": {
-                "type": "info",
-                "items": [
-                  {
-                    "label": "Total Credenciales",
-                    "value_source": "metrics.credential.count.total",
-                    "icon": "🔑"
-                  },
-                  {
-                    "label": "GLOBAL",
-                    "value_source": "metrics.credential.count.global",
-                    "color": "#2FBF71"
-                  },
-                  {
-                    "label": "PROJECT",
-                    "value_source": "metrics.credential.count.project",
-                    "color": "#1D4ED8"
-                  },
-                  {
-                    "label": "CLIENT",
-                    "value_source": "metrics.credential.count.client",
-                    "color": "#F5B700"
-                  },
-                  {
-                    "label": "CUSTOM",
-                    "value_source": "metrics.credential.count.custom",
-                    "color": "#E63946"
+              "label": "GLOBAL",
+              "value": "@compute.count(@compute.filter(@data.credentials, 'level', 'GLOBAL'))",
+              "icon": "🌐",
+              "color": "success"
+            }
+          },
+          {
+            "id": "stats_project",
+            "widget": "stat-card",
+            "config": {
+              "label": "PROJECT",
+              "value": "@compute.count(@compute.filter(@data.credentials, 'level', 'PROJECT'))",
+              "icon": "📁",
+              "color": "info"
+            }
+          },
+          {
+            "id": "credentials_table",
+            "widget": "table-advanced",
+            "config": {
+              "title": "🔐 Credenciales Configuradas",
+              "dataSource": "@data.credentials",
+              "columns": [
+                {
+                  "key": "key",
+                  "label": "Key",
+                  "type": "text",
+                  "width": "25%"
+                },
+                {
+                  "key": "provider",
+                  "label": "Provider",
+                  "type": "badge",
+                  "width": "20%",
+                  "badgeColors": {
+                    "OPENAI": "primary",
+                    "DEEPSEEK": "info",
+                    "ANTHROPIC": "success",
+                    "OLLAMA": "warning"
                   }
-                ]
-              }
+                },
+                {
+                  "key": "level",
+                  "label": "Level",
+                  "type": "badge",
+                  "width": "15%",
+                  "badgeColors": {
+                    "GLOBAL": "success",
+                    "PROJECT": "info",
+                    "CLIENT": "warning",
+                    "CUSTOM": "danger"
+                  }
+                },
+                {
+                  "key": "api_key_preview",
+                  "label": "Preview",
+                  "type": "text",
+                  "width": "20%"
+                },
+                {
+                  "key": "identifier",
+                  "label": "Identifier",
+                  "type": "text",
+                  "width": "20%"
+                }
+              ],
+              "sortable": true,
+              "filterable": true,
+              "paginated": true,
+              "pageSize": 10,
+              "actions": [
+                {
+                  "label": "Editar",
+                  "icon": "✏️",
+                  "action": "edit",
+                  "permissions": ["admin"],
+                  "endpoint": "/modules/credential-manager/credentials/{{key}}"
+                },
+                {
+                  "label": "Eliminar",
+                  "icon": "🗑️",
+                  "action": "delete",
+                  "permissions": ["admin"],
+                  "endpoint": "/modules/credential-manager/credentials/{{key}}",
+                  "confirm": true,
+                  "confirmMessage": "¿Eliminar credencial {{key}}?"
+                }
+              ]
             }
           },
           {
@@ -168,45 +192,38 @@
             "config": {
               "title": "🔄 Cascada de Resolución",
               "content": {
-                "type": "diagram",
-                "flow": [
-                  {"level": "CUSTOM", "priority": 1, "color": "#E63946"},
-                  {"level": "CLIENT", "priority": 2, "color": "#F5B700"},
-                  {"level": "PROJECT", "priority": 3, "color": "#1D4ED8"},
-                  {"level": "GLOBAL", "priority": 4, "color": "#2FBF71"}
-                ],
-                "description": "El sistema busca credenciales en orden de prioridad"
+                "type": "markdown",
+                "text": "El sistema busca credenciales en orden de prioridad:\n\n1. **CUSTOM** (🔴 Prioridad 1) - Específico personalizado\n2. **CLIENT** (🟡 Prioridad 2) - Por cliente\n3. **PROJECT** (🔵 Prioridad 3) - Por proyecto\n4. **GLOBAL** (🟢 Prioridad 4) - Fallback general"
               }
             }
           },
           {
-            "id": "providers_status",
+            "id": "providers_panel",
             "widget": "card",
             "config": {
-              "title": "📊 Estado de Proveedores",
+              "title": "🤖 Proveedores de IA",
               "content": {
-                "type": "status_list",
-                "endpoint": "/modules/credential-manager/health",
+                "type": "info",
                 "items": [
                   {
-                    "provider": "OPENAI",
-                    "icon": "🤖",
-                    "status_field": "providers.openai.configured"
+                    "label": "OpenAI",
+                    "value": "GPT-4, GPT-3.5",
+                    "icon": "🤖"
                   },
                   {
-                    "provider": "DEEPSEEK",
-                    "icon": "🔮",
-                    "status_field": "providers.deepseek.configured"
+                    "label": "DeepSeek",
+                    "value": "DeepSeek Chat",
+                    "icon": "🔮"
                   },
                   {
-                    "provider": "ANTHROPIC",
-                    "icon": "🧠",
-                    "status_field": "providers.anthropic.configured"
+                    "label": "Anthropic",
+                    "value": "Claude",
+                    "icon": "🧠"
                   },
                   {
-                    "provider": "OLLAMA",
-                    "icon": "🦙",
-                    "status_field": "providers.ollama.configured"
+                    "label": "Ollama",
+                    "value": "Local Models",
+                    "icon": "🦙"
                   }
                 ]
               }
@@ -216,50 +233,57 @@
       },
 
       "create": {
-        "type": "modal",
-        "component": "form-credential",
-        "mode": "create",
+        "type": "form",
+        "permissions": ["admin"],
         "config": {
           "title": "Nueva Credencial",
           "endpoint": "/modules/credential-manager/credentials",
           "method": "POST",
-          "on_success": {
-            "close": true,
-            "refresh_view": "main",
-            "show_toast": {
-              "message": "Credencial guardada correctamente",
-              "type": "success"
+          "validation": true,
+          "fields": [
+            {
+              "name": "provider",
+              "label": "Proveedor",
+              "type": "select",
+              "required": true,
+              "options": [
+                { "value": "OPENAI", "label": "🤖 OpenAI" },
+                { "value": "DEEPSEEK", "label": "🔮 DeepSeek" },
+                { "value": "ANTHROPIC", "label": "🧠 Anthropic" },
+                { "value": "OLLAMA", "label": "🦙 Ollama" }
+              ]
+            },
+            {
+              "name": "level",
+              "label": "Nivel",
+              "type": "select",
+              "required": true,
+              "options": [
+                { "value": "GLOBAL", "label": "🌐 GLOBAL" },
+                { "value": "PROJECT", "label": "📁 PROJECT" },
+                { "value": "CLIENT", "label": "👤 CLIENT" },
+                { "value": "CUSTOM", "label": "⚙️ CUSTOM" }
+              ]
+            },
+            {
+              "name": "identifier",
+              "label": "Identificador (opcional)",
+              "type": "text",
+              "required": false,
+              "placeholder": "proyecto-1 o cliente-xyz"
+            },
+            {
+              "name": "api_key",
+              "label": "API Key",
+              "type": "password",
+              "required": true,
+              "placeholder": "sk-..."
             }
+          ],
+          "onSuccess": {
+            "message": "Credencial guardada correctamente",
+            "redirect": "/ui/modules/credential-manager"
           }
-        }
-      },
-
-      "edit": {
-        "type": "modal",
-        "component": "form-credential",
-        "mode": "edit",
-        "config": {
-          "title": "Editar Credencial",
-          "endpoint": "/modules/credential-manager/credentials/{key}",
-          "method": "PUT",
-          "on_success": {
-            "close": true,
-            "refresh_view": "main",
-            "show_toast": {
-              "message": "Credencial actualizada correctamente",
-              "type": "success"
-            }
-          }
-        }
-      },
-
-      "tester": {
-        "type": "modal",
-        "component": "credential-tester",
-        "config": {
-          "title": "Probar Resolución de Credenciales",
-          "width": "700px",
-          "height": "auto"
         }
       }
     },
@@ -269,18 +293,9 @@
       "topics": [
         "credential.saved",
         "credential.updated",
-        "credential.deleted",
-        "credential.resolved"
+        "credential.deleted"
       ],
       "auto_refresh": true
-    },
-
-    "permissions": {
-      "view": ["admin"],
-      "create": ["admin"],
-      "edit": ["admin"],
-      "delete": ["admin"],
-      "test": ["admin"]
     }
   },
 

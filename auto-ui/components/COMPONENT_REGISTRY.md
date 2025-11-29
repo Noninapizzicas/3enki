@@ -4,7 +4,7 @@
 
 This registry documents all available components in the Auto-UI v2.0 system. Each component is defined as a JSON file with complete specifications including variants, props, features, and examples.
 
-**Total Components: 22**
+**Total Components: 23**
 
 ---
 
@@ -22,7 +22,7 @@ Input and form field components
 ### 🧭 Navigation Components (5)
 Navigation and wayfinding components
 
-### 🎨 Layout Components (1)
+### 🎨 Layout Components (2)
 Layout and container components
 
 ### 💬 Feedback Components (5)
@@ -661,9 +661,134 @@ button.enable();
 
 ---
 
+### 18. FloatingActionBar (`layout/floating-action-bar.json`)
+**Description:** Barra de acciones flotante multifunción - horizontal (bottom/top) o vertical (right/left) para navegación móvil intuitiva
+
+**Positions:**
+- **Horizontal:** `bottom`, `top`, `bottom-sticky`, `top-sticky`
+- **Vertical:** `right`, `left`, `right-sticky`, `left-sticky`
+- **Auto:** Auto-detecta mano dominante del usuario
+
+**Orientations:**
+- `horizontal` - Scroll horizontal de botones (bottom/top)
+- `vertical` - Scroll vertical con grid adaptativo (right/left)
+
+**Grid Modes (vertical):**
+- `auto` - 2×1 para TouchActionButton, 1×1 para CornerInfoButton
+- `single` - 1 botón por fila
+- `double` - 2 botones por fila
+- `triple` - 3 botones por fila
+
+**Variants:**
+- `default` - Con glassmorphism blur
+- `solid` - Fondo sólido
+- `minimal` - Sin fondo
+- `elevated` - Sombra elevada
+
+**Key Features:**
+- ✅ Multifunción - Horizontal o Vertical
+- ✅ Grid adaptativo según tipo de botón
+- ✅ Integración automática con FloatingPanel
+- ✅ Auto-detección mano dominante (diestro/zurdo)
+- ✅ Click → Panel flotante → Mantiene contexto
+- ✅ Swipe para ocultar/mostrar
+- ✅ Auto-hide en scroll
+- ✅ Safe-area support (notch, home indicator)
+- ✅ Feedback háptico
+- ✅ Collapsible
+- ✅ Compatible con TouchActionButton y CornerInfoButton
+- ✅ ARIA compliant
+
+**Example (Horizontal):**
+```json
+{
+  "component": "floating-action-bar",
+  "variant": "default",
+  "position": "bottom",
+  "props": {
+    "buttons": [
+      {"component": "touch-action-button", "emoji": "🏠", "label": "Inicio"},
+      {"component": "touch-action-button", "emoji": "📋", "label": "Tareas"},
+      {"component": "touch-action-button", "emoji": "➕", "label": "Crear"}
+    ],
+    "spacing": "normal",
+    "swipeable": true,
+    "showHandle": true
+  }
+}
+```
+
+**Example (Vertical con Panels):**
+```json
+{
+  "component": "floating-action-bar",
+  "position": "right",
+  "props": {
+    "gridMode": "auto",
+    "openPanelsOnClick": true,
+    "buttons": [
+      {
+        "id": "home",
+        "component": "touch-action-button",
+        "emoji": "🏠",
+        "label": "Inicio"
+      },
+      {
+        "id": "sales",
+        "component": "corner-info-button",
+        "text": "Ventas",
+        "variant": "primary",
+        "size": "sm",
+        "cornerTopLeft": "📊",
+        "cornerTopRight": "📈",
+        "cornerBottomLeft": "💰",
+        "cornerBottomRight": "🎯"
+      }
+    ],
+    "panels": {
+      "home": {
+        "title": "Panel de Inicio",
+        "content": "<p>Contenido...</p>",
+        "size": "medium"
+      },
+      "sales": {
+        "title": "Panel de Ventas",
+        "content": "<p>Dashboard...</p>",
+        "size": "full"
+      }
+    },
+    "width": "80px",
+    "maxHeight": "80vh"
+  }
+}
+```
+
+**Usage (JavaScript):**
+```javascript
+// Crear barra vertical con panels
+const actionBar = document.createElement('div');
+actionBar.setAttribute('data-component', 'floating-action-bar');
+actionBar.setAttribute('data-config', JSON.stringify({
+  position: 'right',
+  gridMode: 'auto',
+  openPanelsOnClick: true,
+  buttons: [...],
+  panels: {...}
+}));
+document.body.appendChild(actionBar);
+
+// Auto-inicialización
+AutoUI.components['floating-action-bar'].initAll();
+
+// Detectar mano dominante y guardar preferencia
+localStorage.setItem('floating-action-bar-handedness', 'left'); // o 'right'
+```
+
+---
+
 ## 💬 Feedback Components
 
-### 18. Toast (`feedback/toast.json`)
+### 19. Toast (`feedback/toast.json`)
 **Description:** Notificaciones temporales no intrusivas
 
 **Variants:**
@@ -686,7 +811,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 19. Alert (`feedback/alert.json`)
+### 20. Alert (`feedback/alert.json`)
 **Description:** Alertas para mostrar mensajes importantes
 
 **Variants:**
@@ -726,7 +851,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 20. Progress (`feedback/progress.json`)
+### 21. Progress (`feedback/progress.json`)
 **Description:** Barra de progreso para mostrar el avance de operaciones
 
 **Variants:**
@@ -764,7 +889,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 21. Skeleton (`feedback/skeleton.json`)
+### 22. Skeleton (`feedback/skeleton.json`)
 **Description:** Skeleton loaders para estados de carga
 
 **Variants:**
@@ -804,7 +929,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 22. Spinner (`feedback/spinner.json`)
+### 23. Spinner (`feedback/spinner.json`)
 **Description:** Indicadores de carga animados
 
 **Variants:**
@@ -967,5 +1092,5 @@ const html = componentSystem.render('button', {
 
 **Version:** 2.0.0
 **Last Updated:** 2025-11-29
-**Total Components:** 22
+**Total Components:** 23
 **Author:** Event Core Team

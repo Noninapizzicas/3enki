@@ -1,8 +1,8 @@
 {
   "name": "floating-action-bar",
   "category": "layout",
-  "description": "Barra de acciones flotante minimalista para móvil, optimizada para contener TouchActionButtons",
-  "version": "2.0.0",
+  "description": "Barra de acciones flotante multifunción - horizontal (bottom/top) o vertical (right/left) para navegación móvil intuitiva",
+  "version": "3.0.0",
   "author": "Event Core Team",
 
   "variants": {
@@ -26,20 +26,49 @@
 
   "positions": {
     "bottom": {
-      "description": "Fija en la parte inferior (default móvil)",
-      "className": "floating-action-bar--bottom"
+      "description": "Horizontal fija inferior (default móvil)",
+      "className": "floating-action-bar--bottom",
+      "orientation": "horizontal"
     },
     "top": {
-      "description": "Fija en la parte superior",
-      "className": "floating-action-bar--top"
+      "description": "Horizontal fija superior",
+      "className": "floating-action-bar--top",
+      "orientation": "horizontal"
+    },
+    "right": {
+      "description": "Vertical lateral derecha (diestros)",
+      "className": "floating-action-bar--right",
+      "orientation": "vertical"
+    },
+    "left": {
+      "description": "Vertical lateral izquierda (zurdos)",
+      "className": "floating-action-bar--left",
+      "orientation": "vertical"
     },
     "bottom-sticky": {
-      "description": "Sticky en la parte inferior (se pega al scroll)",
-      "className": "floating-action-bar--bottom-sticky"
+      "description": "Sticky inferior (se pega al scroll)",
+      "className": "floating-action-bar--bottom-sticky",
+      "orientation": "horizontal"
     },
     "top-sticky": {
-      "description": "Sticky en la parte superior",
-      "className": "floating-action-bar--top-sticky"
+      "description": "Sticky superior",
+      "className": "floating-action-bar--top-sticky",
+      "orientation": "horizontal"
+    },
+    "right-sticky": {
+      "description": "Sticky lateral derecha",
+      "className": "floating-action-bar--right-sticky",
+      "orientation": "vertical"
+    },
+    "left-sticky": {
+      "description": "Sticky lateral izquierda",
+      "className": "floating-action-bar--left-sticky",
+      "orientation": "vertical"
+    },
+    "auto": {
+      "description": "Auto-detecta posición según mano dominante",
+      "className": "floating-action-bar--auto",
+      "orientation": "vertical"
     }
   },
 
@@ -53,10 +82,24 @@
     },
     "position": {
       "type": "enum",
-      "values": ["bottom", "top", "bottom-sticky", "top-sticky"],
+      "values": ["bottom", "top", "right", "left", "bottom-sticky", "top-sticky", "right-sticky", "left-sticky", "auto"],
       "default": "bottom",
       "required": false,
-      "description": "Posición de la barra en la pantalla"
+      "description": "Posición de la barra en la pantalla (horizontal: bottom/top, vertical: right/left)"
+    },
+    "orientation": {
+      "type": "enum",
+      "values": ["horizontal", "vertical", "auto"],
+      "default": "auto",
+      "required": false,
+      "description": "Orientación de la barra (auto detecta según position)"
+    },
+    "gridMode": {
+      "type": "enum",
+      "values": ["auto", "single", "double", "triple"],
+      "default": "auto",
+      "required": false,
+      "description": "Layout de botones - auto: 2x1 para TouchActionButton, 1x1 para CornerInfoButton"
     },
     "buttons": {
       "type": "array",
@@ -120,24 +163,60 @@
       "values": ["slide", "fade", "scale"],
       "default": "slide",
       "description": "Tipo de animación al mostrar/ocultar"
+    },
+    "openPanelsOnClick": {
+      "type": "boolean",
+      "default": false,
+      "description": "Abrir FloatingPanel automáticamente al hacer click en botones (en lugar de navegar)"
+    },
+    "panels": {
+      "type": "object",
+      "default": {},
+      "description": "Configuración de panels asociados a cada botón (key: button id, value: panel config)"
+    },
+    "detectHandedness": {
+      "type": "boolean",
+      "default": false,
+      "description": "Auto-detectar mano dominante del usuario para position='auto'"
+    },
+    "width": {
+      "type": "string",
+      "default": "80px",
+      "description": "Ancho de la barra (solo para orientación vertical)"
+    },
+    "maxHeight": {
+      "type": "string",
+      "default": "80vh",
+      "description": "Altura máxima de la barra (solo para orientación vertical)"
+    },
+    "scrollable": {
+      "type": "boolean",
+      "default": true,
+      "description": "Permitir scroll si hay demasiados botones"
     }
   },
 
   "features": [
+    "Multifunción - Horizontal (bottom/top) o Vertical (right/left)",
     "Optimizada para pantallas táctiles móviles",
-    "Posicionamiento flotante (bottom/top, fixed/sticky)",
+    "Grid adaptativo - 2x1 para TouchActionButton, 1x1 para CornerInfoButton",
+    "Integración automática con FloatingPanel",
+    "Auto-detección de mano dominante (diestro/zurdo)",
+    "Posicionamiento flotante (fixed/sticky)",
     "Backdrop blur para efecto glassmorphism",
-    "Swipe down/up para ocultar/mostrar",
+    "Swipe para ocultar/mostrar",
     "Auto-hide en scroll (opcional)",
-    "Scroll horizontal si hay muchos botones",
+    "Scroll vertical/horizontal según orientación",
     "Handle visual para indicar interactividad",
     "Safe-area support (notch, home indicator iOS)",
     "Feedback háptico en interacciones",
     "Collapsible (expandir/colapsar)",
     "Animaciones suaves (slide, fade, scale)",
+    "Mantiene contexto - No recarga página",
+    "Click → Panel flotante → Tap fuera → Cierra",
     "Responsive (diferentes layouts en desktop)",
     "Minimalista y limpia",
-    "Compatible con TouchActionButton",
+    "Compatible con TouchActionButton y CornerInfoButton",
     "ARIA compliant"
   ],
 
@@ -149,45 +228,160 @@
     "screenReader": true
   },
 
-  "example": {
-    "component": "floating-action-bar",
-    "variant": "default",
-    "position": "bottom",
-    "props": {
-      "buttons": [
-        {
-          "component": "touch-action-button",
-          "emoji": "🏠",
-          "label": "Inicio"
+  "examples": {
+    "horizontal": {
+      "description": "Barra horizontal inferior (clásica)",
+      "component": "floating-action-bar",
+      "variant": "default",
+      "position": "bottom",
+      "props": {
+        "buttons": [
+          {
+            "component": "touch-action-button",
+            "emoji": "🏠",
+            "label": "Inicio"
+          },
+          {
+            "component": "touch-action-button",
+            "emoji": "📋",
+            "label": "Tareas"
+          },
+          {
+            "component": "touch-action-button",
+            "emoji": "➕",
+            "label": "Crear",
+            "variant": "primary"
+          },
+          {
+            "component": "touch-action-button",
+            "emoji": "👤",
+            "label": "Perfil"
+          }
+        ],
+        "spacing": "normal",
+        "autoHide": false,
+        "swipeable": true,
+        "showHandle": true,
+        "backdrop": true,
+        "safe-area": true
+      }
+    },
+    "verticalWithPanels": {
+      "description": "Barra vertical derecha con integración FloatingPanel",
+      "component": "floating-action-bar",
+      "variant": "default",
+      "position": "right",
+      "props": {
+        "gridMode": "auto",
+        "openPanelsOnClick": true,
+        "buttons": [
+          {
+            "id": "home",
+            "component": "touch-action-button",
+            "emoji": "🏠",
+            "label": "Inicio",
+            "size": "md"
+          },
+          {
+            "id": "documents",
+            "component": "touch-action-button",
+            "emoji": "📄",
+            "label": "Docs",
+            "size": "md"
+          },
+          {
+            "id": "sales",
+            "component": "corner-info-button",
+            "text": "Ventas",
+            "variant": "primary",
+            "size": "sm",
+            "cornerTopLeft": "📊",
+            "cornerTopRight": "📈",
+            "cornerBottomLeft": "💰",
+            "cornerBottomRight": "🎯"
+          },
+          {
+            "id": "reports",
+            "component": "corner-info-button",
+            "text": "Reportes",
+            "variant": "success",
+            "size": "sm",
+            "cornerTopLeft": "📋",
+            "cornerTopRight": "✅",
+            "cornerBottomLeft": "📊",
+            "cornerBottomRight": "📈"
+          }
+        ],
+        "panels": {
+          "home": {
+            "title": "Panel de Inicio",
+            "content": "<p>Contenido del panel de inicio...</p>",
+            "size": "medium"
+          },
+          "documents": {
+            "title": "Documentos",
+            "content": "<p>Lista de documentos...</p>",
+            "size": "full"
+          },
+          "sales": {
+            "title": "Panel de Ventas",
+            "content": "<p>Dashboard de ventas...</p>",
+            "size": "full"
+          },
+          "reports": {
+            "title": "Reportes",
+            "content": "<p>Reportes generados...</p>",
+            "size": "medium"
+          }
         },
-        {
-          "component": "touch-action-button",
-          "emoji": "📋",
-          "label": "Tareas"
-        },
-        {
-          "component": "touch-action-button",
-          "emoji": "➕",
-          "label": "Crear",
-          "variant": "primary"
-        },
-        {
-          "component": "touch-action-button",
-          "emoji": "👤",
-          "label": "Perfil"
-        },
-        {
-          "component": "touch-action-button",
-          "emoji": "⚙️",
-          "label": "Config"
-        }
-      ],
-      "spacing": "normal",
-      "autoHide": false,
-      "swipeable": true,
-      "showHandle": true,
-      "backdrop": true,
-      "safe-area": true
+        "width": "80px",
+        "maxHeight": "80vh",
+        "scrollable": true,
+        "spacing": "normal",
+        "swipeable": true,
+        "showHandle": false,
+        "backdrop": false
+      }
+    },
+    "verticalLeftHanded": {
+      "description": "Barra vertical izquierda para zurdos",
+      "component": "floating-action-bar",
+      "variant": "minimal",
+      "position": "left",
+      "props": {
+        "gridMode": "double",
+        "buttons": [
+          {
+            "component": "touch-action-button",
+            "emoji": "🏠"
+          },
+          {
+            "component": "touch-action-button",
+            "emoji": "📊"
+          },
+          {
+            "component": "touch-action-button",
+            "emoji": "📄"
+          },
+          {
+            "component": "touch-action-button",
+            "emoji": "⚙️"
+          }
+        ],
+        "width": "70px",
+        "spacing": "tight"
+      }
+    },
+    "autoHandedness": {
+      "description": "Auto-detecta mano dominante del usuario",
+      "component": "floating-action-bar",
+      "variant": "default",
+      "position": "auto",
+      "props": {
+        "detectHandedness": true,
+        "gridMode": "auto",
+        "buttons": []
+      }
     }
   }
 }

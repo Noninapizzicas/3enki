@@ -1,7 +1,8 @@
 /**
- * FloatingActionBar Component - Mobile-optimized floating action bar
- * Barra flotante minimalista para contener TouchActionButtons
- * @version 2.0.0
+ * FloatingActionBar Component - Multi-function floating action bar
+ * Barra flotante horizontal (bottom/top) o vertical (right/left)
+ * Integración automática con FloatingPanel para navegación móvil intuitiva
+ * @version 3.0.0
  */
 
 (function() {
@@ -17,9 +18,14 @@
     constructor(element) {
       this.element = element;
       this.config = this.parseConfig();
+
+      // Detect orientation from position
+      const orientation = this.detectOrientation(this.config.position);
+
       this.state = {
         variant: this.config.variant || 'default',
         position: this.config.position || 'bottom',
+        orientation: orientation,
         visible: true,
         collapsed: this.config.defaultCollapsed || false,
         scrollY: 0,
@@ -32,9 +38,14 @@
       this.scrollDirection = 'none';
 
       // Touch/swipe tracking
+      this.touchStartX = 0;
       this.touchStartY = 0;
+      this.touchCurrentX = 0;
       this.touchCurrentY = 0;
       this.swipeThreshold = 50;
+
+      // FloatingPanel instances
+      this.panels = {};
 
       this.init();
     }
@@ -45,9 +56,18 @@
     parseConfig() {
       const config = JSON.parse(this.element.dataset.config || '{}');
 
+      let position = this.element.dataset.position || config.position || 'bottom';
+
+      // Auto-detect handedness if position is 'auto'
+      if (position === 'auto') {
+        position = config.detectHandedness ? this.detectHandedness() : 'right';
+      }
+
       return {
         variant: this.element.dataset.variant || config.variant || 'default',
-        position: this.element.dataset.position || config.position || 'bottom',
+        position: position,
+        orientation: config.orientation || 'auto',
+        gridMode: config.gridMode || 'auto',
         buttons: config.buttons || [],
         maxButtons: config.maxButtons || 5,
         spacing: config.spacing || 'normal',
@@ -60,8 +80,37 @@
         collapsible: config.collapsible || false,
         defaultCollapsed: config.defaultCollapsed || false,
         animation: config.animation || 'slide',
+        openPanelsOnClick: config.openPanelsOnClick || false,
+        panels: config.panels || {},
+        detectHandedness: config.detectHandedness || false,
+        width: config.width || '80px',
+        maxHeight: config.maxHeight || '80vh',
+        scrollable: config.scrollable !== undefined ? config.scrollable : true,
         ...config
       };
+    }
+
+    /**
+     * Detect orientation from position
+     */
+    detectOrientation(position) {
+      if (position.includes('right') || position.includes('left')) {
+        return 'vertical';
+      }
+      return 'horizontal';
+    }
+
+    /**
+     * Detect user handedness (right/left handed)
+     */
+    detectHandedness() {
+      // Check localStorage first
+      const stored = localStorage.getItem('floating-action-bar-handedness');
+      if (stored) return stored;
+
+      // Default to right for right-handed users (majority)
+      // Could implement more sophisticated detection based on touch patterns
+      return 'right';
     }
 
     /**
@@ -72,6 +121,11 @@
       this.setupStructure();
       this.setupEventListeners();
       this.render();
+
+      // Initialize FloatingPanels if configured
+      if (this.config.openPanelsOnClick && Object.keys(this.config.panels).length > 0) {
+        this.initializePanels();
+      }
 
       // Initial state
       if (this.state.collapsed) {
@@ -141,34 +195,97 @@
         return;
       }
 
+      // Apply grid mode class based on orientation and gridMode
+      this.applyGridMode();
+
       // Crear botones
       this.config.buttons.forEach((buttonConfig, index) => {
         const buttonWrapper = document.createElement('div');
         buttonWrapper.className = 'floating-action-bar__button-wrapper';
 
+        // Determinar tipo de botón
+        const buttonType = buttonConfig.component || 'touch-action-button';
+        const buttonId = buttonConfig.id || `button-${index}`;
+
         // Si es TouchActionButton
-        if (buttonConfig.component === 'touch-action-button') {
-          const button = document.createElement('button');
+        if (buttonType === 'touch-action-button') {
+          const button = document.createElement('div');
           button.setAttribute('data-component', 'touch-action-button');
           button.setAttribute('data-config', JSON.stringify(buttonConfig));
           button.setAttribute('data-variant', buttonConfig.variant || 'secondary');
           button.setAttribute('data-size', buttonConfig.size || 'md');
+          button.dataset.buttonId = buttonId;
           buttonWrapper.appendChild(button);
-        } else {
+        }
+        // Si es CornerInfoButton
+        else if (buttonType === 'corner-info-button') {
+          const button = document.createElement('div');
+          button.setAttribute('data-component', 'corner-info-button');
+          button.setAttribute('data-config', JSON.stringify(buttonConfig));
+          button.setAttribute('data-variant', buttonConfig.variant || 'primary');
+          button.setAttribute('data-size', buttonConfig.size || 'sm');
+          button.dataset.buttonId = buttonId;
+          buttonWrapper.appendChild(button);
+          buttonWrapper.classList.add('floating-action-bar__button-wrapper--full-width');
+        }
+        else {
           // Botón genérico
           const button = document.createElement('button');
           button.className = 'floating-action-bar__button';
           button.textContent = buttonConfig.label || buttonConfig.emoji || '•';
           button.setAttribute('aria-label', buttonConfig.ariaLabel || buttonConfig.label);
+          button.dataset.buttonId = buttonId;
           buttonWrapper.appendChild(button);
+        }
+
+        // Add click handler for panel integration
+        if (this.config.openPanelsOnClick) {
+          buttonWrapper.addEventListener('click', () => this.handleButtonClick(buttonId));
         }
 
         this.buttonsContainer.appendChild(buttonWrapper);
       });
 
-      // Re-inicializar TouchActionButtons si existe el componente
-      if (window.AutoUI && window.AutoUI.components && window.AutoUI.components['touch-action-button']) {
-        window.AutoUI.components['touch-action-button'].initAll();
+      // Re-inicializar componentes AutoUI
+      if (window.AutoUI && window.AutoUI.components) {
+        if (window.AutoUI.components['touch-action-button']) {
+          window.AutoUI.components['touch-action-button'].initAll();
+        }
+        if (window.AutoUI.components['corner-info-button']) {
+          window.AutoUI.components['corner-info-button'].initAll();
+        }
+      }
+    }
+
+    /**
+     * Apply grid mode based on configuration
+     */
+    applyGridMode() {
+      // Remove existing grid classes
+      this.buttonsContainer.classList.remove(
+        'floating-action-bar__buttons--grid-single',
+        'floating-action-bar__buttons--grid-double',
+        'floating-action-bar__buttons--grid-triple',
+        'floating-action-bar__buttons--grid-auto'
+      );
+
+      // Apply appropriate grid class
+      if (this.state.orientation === 'vertical') {
+        switch (this.config.gridMode) {
+          case 'single':
+            this.buttonsContainer.classList.add('floating-action-bar__buttons--grid-single');
+            break;
+          case 'double':
+            this.buttonsContainer.classList.add('floating-action-bar__buttons--grid-double');
+            break;
+          case 'triple':
+            this.buttonsContainer.classList.add('floating-action-bar__buttons--grid-triple');
+            break;
+          case 'auto':
+          default:
+            this.buttonsContainer.classList.add('floating-action-bar__buttons--grid-auto');
+            break;
+        }
       }
     }
 
@@ -207,7 +324,9 @@
         return;
       }
 
+      this.touchStartX = e.touches[0].clientX;
       this.touchStartY = e.touches[0].clientY;
+      this.touchCurrentX = this.touchStartX;
       this.touchCurrentY = this.touchStartY;
       this.state.isDragging = true;
     }
@@ -218,18 +337,35 @@
     handleTouchMove(e) {
       if (!this.state.isDragging) return;
 
+      this.touchCurrentX = e.touches[0].clientX;
       this.touchCurrentY = e.touches[0].clientY;
-      const deltaY = this.touchCurrentY - this.touchStartY;
 
-      // Prevenir scroll si estamos arrastrando
-      if (Math.abs(deltaY) > 10) {
-        e.preventDefault();
+      if (this.state.orientation === 'horizontal') {
+        const deltaY = this.touchCurrentY - this.touchStartY;
+
+        // Prevenir scroll si estamos arrastrando
+        if (Math.abs(deltaY) > 10) {
+          e.preventDefault();
+        }
+
+        // Visual feedback del drag (vertical)
+        const isBottom = this.state.position.includes('bottom');
+        const translateY = isBottom ? Math.max(0, deltaY) : Math.min(0, deltaY);
+        this.element.style.transform = `translateY(${translateY}px)`;
+      } else {
+        // Vertical orientation - swipe horizontal
+        const deltaX = this.touchCurrentX - this.touchStartX;
+
+        // Prevenir scroll si estamos arrastrando
+        if (Math.abs(deltaX) > 10) {
+          e.preventDefault();
+        }
+
+        // Visual feedback del drag (horizontal)
+        const isRight = this.state.position.includes('right');
+        const translateX = isRight ? Math.max(0, deltaX) : Math.min(0, deltaX);
+        this.element.style.transform = `translateX(${translateX}px)`;
       }
-
-      // Visual feedback del drag
-      const isBottom = this.state.position.includes('bottom');
-      const translateY = isBottom ? Math.max(0, deltaY) : Math.min(0, deltaY);
-      this.element.style.transform = `translateY(${translateY}px)`;
     }
 
     /**
@@ -238,12 +374,19 @@
     handleTouchEnd(e) {
       if (!this.state.isDragging) return;
 
-      const deltaY = this.touchCurrentY - this.touchStartY;
-      const isBottom = this.state.position.includes('bottom');
-
-      // Determinar si el swipe fue suficiente
       const threshold = this.swipeThreshold;
-      const shouldHide = isBottom ? deltaY > threshold : deltaY < -threshold;
+      let shouldHide = false;
+
+      if (this.state.orientation === 'horizontal') {
+        const deltaY = this.touchCurrentY - this.touchStartY;
+        const isBottom = this.state.position.includes('bottom');
+        shouldHide = isBottom ? deltaY > threshold : deltaY < -threshold;
+      } else {
+        // Vertical orientation
+        const deltaX = this.touchCurrentX - this.touchStartX;
+        const isRight = this.state.position.includes('right');
+        shouldHide = isRight ? deltaX > threshold : deltaX < -threshold;
+      }
 
       if (shouldHide) {
         this.hide();
@@ -254,7 +397,9 @@
       }
 
       this.state.isDragging = false;
+      this.touchStartX = 0;
       this.touchStartY = 0;
+      this.touchCurrentX = 0;
       this.touchCurrentY = 0;
     }
 
@@ -430,6 +575,45 @@
     }
 
     /**
+     * Initialize FloatingPanels
+     */
+    initializePanels() {
+      Object.keys(this.config.panels).forEach(buttonId => {
+        const panelConfig = this.config.panels[buttonId];
+
+        // Create panel element
+        const panelElement = document.createElement('div');
+        panelElement.setAttribute('data-component', 'floating-panel');
+        panelElement.setAttribute('data-config', JSON.stringify(panelConfig));
+        panelElement.dataset.buttonId = buttonId;
+        document.body.appendChild(panelElement);
+
+        // Initialize FloatingPanel component if available
+        if (window.AutoUI && window.AutoUI.components && window.AutoUI.components['floating-panel']) {
+          const panelInstance = new window.AutoUI.components['floating-panel'](panelElement, panelConfig);
+          this.panels[buttonId] = panelInstance;
+          panelElement.dataset.initialized = 'true';
+        }
+      });
+    }
+
+    /**
+     * Handle button click (for panel integration)
+     */
+    handleButtonClick(buttonId) {
+      this.vibrate(10);
+
+      // Open associated panel if exists
+      if (this.panels[buttonId]) {
+        this.panels[buttonId].open();
+        this.emitEvent('panel-opened', { buttonId, panel: this.panels[buttonId] });
+      } else {
+        // Emit generic click event
+        this.emitEvent('button-clicked', { buttonId });
+      }
+    }
+
+    /**
      * Vibrate (haptic feedback)
      */
     vibrate(pattern) {
@@ -472,6 +656,9 @@
       // Position
       this.element.classList.add(`floating-action-bar--${this.state.position}`);
 
+      // Orientation
+      this.element.classList.add(`floating-action-bar--${this.state.orientation}`);
+
       // Spacing
       this.element.classList.add(`floating-action-bar--spacing-${this.config.spacing}`);
 
@@ -486,6 +673,17 @@
       // Safe area
       if (this.config.safeArea) {
         this.element.classList.add('floating-action-bar--safe-area');
+      }
+
+      // Scrollable
+      if (this.config.scrollable) {
+        this.element.classList.add('floating-action-bar--scrollable');
+      }
+
+      // Apply custom width/height for vertical orientation
+      if (this.state.orientation === 'vertical') {
+        this.element.style.setProperty('--floating-action-bar-width', this.config.width);
+        this.element.style.setProperty('--floating-action-bar-max-height', this.config.maxHeight);
       }
 
       this.emitEvent('rendered');

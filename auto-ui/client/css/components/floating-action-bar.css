@@ -1,0 +1,440 @@
+/**
+ * FloatingActionBar - Mobile-first floating action bar
+ * Minimalista con glassmorphism effect
+ */
+
+/* ===================================
+   Base Component
+   =================================== */
+
+.floating-action-bar,
+[data-component="floating-action-bar"] {
+  /* Position */
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  /* Sizing */
+  width: 100%;
+  max-width: 100vw;
+
+  /* Visual - Minimalista */
+  background: rgba(26, 29, 36, 0.8); /* --bg-card con alpha */
+  border: 1px solid rgba(55, 65, 81, 0.3); /* --border con alpha */
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+
+  /* Effects */
+  transition: transform var(--transition-normal),
+              opacity var(--transition-normal);
+  user-select: none;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+/* ===================================
+   Positions
+   =================================== */
+
+/* Bottom (default) */
+.floating-action-bar--bottom {
+  bottom: 0;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  border-bottom: none;
+}
+
+/* Top */
+.floating-action-bar--top {
+  top: 0;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+  border-top: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Sticky variants */
+.floating-action-bar--bottom-sticky {
+  position: sticky;
+  bottom: 0;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.floating-action-bar--top-sticky {
+  position: sticky;
+  top: 0;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+/* ===================================
+   Variants
+   =================================== */
+
+/* Default - Con backdrop blur */
+.floating-action-bar--default {
+  background: rgba(26, 29, 36, 0.8);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+/* Solid - Sin blur */
+.floating-action-bar--solid {
+  background: var(--bg-card);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Minimal - Casi transparente */
+.floating-action-bar--minimal {
+  background: rgba(26, 29, 36, 0.5);
+  border: none;
+  box-shadow: none;
+}
+
+/* Elevated - Shadow fuerte */
+.floating-action-bar--elevated {
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ===================================
+   Handle (swipe indicator)
+   =================================== */
+
+.floating-action-bar__handle {
+  /* Layout */
+  width: 40px;
+  height: 4px;
+  margin: var(--space-sm) auto;
+
+  /* Visual */
+  background: var(--border);
+  border-radius: var(--radius-full);
+
+  /* Effects */
+  transition: all var(--transition-fast);
+  cursor: grab;
+}
+
+.floating-action-bar__handle:active {
+  cursor: grabbing;
+  width: 60px;
+  background: var(--primary);
+}
+
+/* Hide handle on top position */
+.floating-action-bar--top .floating-action-bar__handle {
+  order: 10; /* Mover al final */
+}
+
+/* ===================================
+   Buttons Container
+   =================================== */
+
+.floating-action-bar__buttons {
+  /* Layout */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+
+  /* Sizing */
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+
+  /* Scroll horizontal si hay muchos botones */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.floating-action-bar__buttons::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===================================
+   Spacing Variants
+   =================================== */
+
+.floating-action-bar--spacing-tight .floating-action-bar__buttons {
+  gap: var(--space-xs);
+}
+
+.floating-action-bar--spacing-normal .floating-action-bar__buttons {
+  gap: var(--space-sm);
+}
+
+.floating-action-bar--spacing-relaxed .floating-action-bar__buttons {
+  gap: var(--space-md);
+}
+
+/* ===================================
+   Button Wrapper
+   =================================== */
+
+.floating-action-bar__button-wrapper {
+  /* Layout */
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===================================
+   Placeholder (sin botones)
+   =================================== */
+
+.floating-action-bar__placeholder {
+  padding: var(--space-md);
+  color: var(--text-muted);
+  font-size: var(--size-sm);
+  text-align: center;
+}
+
+/* ===================================
+   Collapse Toggle
+   =================================== */
+
+.floating-action-bar__collapse-toggle {
+  /* Layout */
+  position: absolute;
+  right: var(--space-sm);
+
+  /* Sizing */
+  width: 32px;
+  height: 32px;
+  padding: 0;
+
+  /* Visual */
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+
+  /* Typography */
+  font-size: var(--size-sm);
+  line-height: 1;
+
+  /* Effects */
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.floating-action-bar__collapse-toggle:hover {
+  background: var(--primary);
+  color: var(--text);
+}
+
+.floating-action-bar__collapse-toggle:active {
+  transform: scale(0.95);
+}
+
+/* Position toggle based on bar position */
+.floating-action-bar--bottom .floating-action-bar__collapse-toggle {
+  top: var(--space-sm);
+}
+
+.floating-action-bar--top .floating-action-bar__collapse-toggle {
+  bottom: var(--space-sm);
+}
+
+/* ===================================
+   States
+   =================================== */
+
+/* Hidden */
+.floating-action-bar--hidden {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.floating-action-bar--top.floating-action-bar--hidden {
+  transform: translateY(-100%);
+}
+
+/* Collapsed */
+.floating-action-bar--collapsed .floating-action-bar__buttons {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.floating-action-bar--collapsed .floating-action-bar__handle {
+  margin-bottom: var(--space-sm);
+}
+
+/* ===================================
+   Safe Area (iOS notch, home indicator)
+   =================================== */
+
+.floating-action-bar--safe-area.floating-action-bar--bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.floating-action-bar--safe-area.floating-action-bar--top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* ===================================
+   Animations
+   =================================== */
+
+/* Slide animation (default) */
+.floating-action-bar[data-animation="slide"] {
+  transition: transform var(--transition-normal);
+}
+
+/* Fade animation */
+.floating-action-bar[data-animation="fade"] {
+  transition: opacity var(--transition-normal);
+}
+
+.floating-action-bar[data-animation="fade"].floating-action-bar--hidden {
+  transform: none;
+  opacity: 0;
+}
+
+/* Scale animation */
+.floating-action-bar[data-animation="scale"] {
+  transition: transform var(--transition-normal),
+              opacity var(--transition-normal);
+}
+
+.floating-action-bar[data-animation="scale"].floating-action-bar--hidden {
+  transform: scale(0.9);
+  opacity: 0;
+}
+
+/* ===================================
+   Responsive
+   =================================== */
+
+/* Mobile */
+@media (max-width: 768px) {
+  .floating-action-bar {
+    /* Asegurar que ocupe todo el ancho */
+    width: 100%;
+  }
+
+  .floating-action-bar__buttons {
+    /* Permitir scroll horizontal en móvil */
+    justify-content: flex-start;
+  }
+
+  /* Hacer botones más grandes en móvil */
+  .floating-action-bar__button-wrapper button {
+    min-width: 64px;
+  }
+}
+
+/* Tablet */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .floating-action-bar {
+    /* Centrar en tablet */
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 600px;
+    border-radius: var(--radius-lg);
+  }
+
+  .floating-action-bar--hidden {
+    transform: translateX(-50%) translateY(100%);
+  }
+
+  .floating-action-bar--top.floating-action-bar--hidden {
+    transform: translateX(-50%) translateY(-100%);
+  }
+}
+
+/* Desktop */
+@media (min-width: 1025px) {
+  .floating-action-bar {
+    /* En desktop puede ser más pequeña y centrada */
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 500px;
+    border-radius: var(--radius-lg);
+  }
+
+  .floating-action-bar--hidden {
+    transform: translateX(-50%) translateY(100%);
+  }
+
+  .floating-action-bar--top.floating-action-bar--hidden {
+    transform: translateX(-50%) translateY(-100%);
+  }
+
+  /* Botones centrados en desktop */
+  .floating-action-bar__buttons {
+    justify-content: center;
+  }
+}
+
+/* ===================================
+   Accessibility
+   =================================== */
+
+/* High contrast */
+@media (prefers-contrast: high) {
+  .floating-action-bar {
+    border-width: 2px;
+    background: var(--bg-card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .floating-action-bar,
+  .floating-action-bar__handle,
+  .floating-action-bar__collapse-toggle {
+    transition: none;
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .floating-action-bar--default {
+    background: rgba(26, 29, 36, 0.9);
+  }
+
+  .floating-action-bar__handle {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Light mode */
+@media (prefers-color-scheme: light) {
+  .floating-action-bar--default {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .floating-action-bar__handle {
+    background: rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* ===================================
+   Print
+   =================================== */
+
+@media print {
+  .floating-action-bar {
+    display: none;
+  }
+}

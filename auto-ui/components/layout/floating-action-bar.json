@@ -1,0 +1,193 @@
+{
+  "name": "floating-action-bar",
+  "category": "layout",
+  "description": "Barra de acciones flotante minimalista para móvil, optimizada para contener TouchActionButtons",
+  "version": "2.0.0",
+  "author": "Event Core Team",
+
+  "variants": {
+    "default": {
+      "description": "Barra estándar con blur",
+      "className": "floating-action-bar--default"
+    },
+    "solid": {
+      "description": "Barra con fondo sólido",
+      "className": "floating-action-bar--solid"
+    },
+    "minimal": {
+      "description": "Barra minimalista sin fondo",
+      "className": "floating-action-bar--minimal"
+    },
+    "elevated": {
+      "description": "Barra elevada con shadow fuerte",
+      "className": "floating-action-bar--elevated"
+    }
+  },
+
+  "positions": {
+    "bottom": {
+      "description": "Fija en la parte inferior (default móvil)",
+      "className": "floating-action-bar--bottom"
+    },
+    "top": {
+      "description": "Fija en la parte superior",
+      "className": "floating-action-bar--top"
+    },
+    "bottom-sticky": {
+      "description": "Sticky en la parte inferior (se pega al scroll)",
+      "className": "floating-action-bar--bottom-sticky"
+    },
+    "top-sticky": {
+      "description": "Sticky en la parte superior",
+      "className": "floating-action-bar--top-sticky"
+    }
+  },
+
+  "props": {
+    "variant": {
+      "type": "enum",
+      "values": ["default", "solid", "minimal", "elevated"],
+      "default": "default",
+      "required": false,
+      "description": "Variante visual de la barra"
+    },
+    "position": {
+      "type": "enum",
+      "values": ["bottom", "top", "bottom-sticky", "top-sticky"],
+      "default": "bottom",
+      "required": false,
+      "description": "Posición de la barra en la pantalla"
+    },
+    "buttons": {
+      "type": "array",
+      "required": true,
+      "description": "Array de botones a mostrar en la barra",
+      "default": []
+    },
+    "maxButtons": {
+      "type": "number",
+      "default": 5,
+      "description": "Número máximo de botones visibles (el resto en scroll horizontal)"
+    },
+    "spacing": {
+      "type": "enum",
+      "values": ["tight", "normal", "relaxed"],
+      "default": "normal",
+      "description": "Espaciado entre botones"
+    },
+    "autoHide": {
+      "type": "boolean",
+      "default": false,
+      "description": "Auto-ocultar al hacer scroll down, mostrar en scroll up"
+    },
+    "swipeable": {
+      "type": "boolean",
+      "default": true,
+      "description": "Permitir swipe down para ocultar (móvil)"
+    },
+    "showHandle": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar handle (línea) para indicar que es arrastrable"
+    },
+    "backdrop": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar backdrop blur detrás de la barra"
+    },
+    "safe-area": {
+      "type": "boolean",
+      "default": true,
+      "description": "Respetar safe-area de dispositivos (notch, home indicator)"
+    },
+    "hapticFeedback": {
+      "type": "boolean",
+      "default": true,
+      "description": "Vibración al interactuar con la barra"
+    },
+    "collapsible": {
+      "type": "boolean",
+      "default": false,
+      "description": "Permitir colapsar/expandir la barra"
+    },
+    "defaultCollapsed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Estado inicial colapsado"
+    },
+    "animation": {
+      "type": "enum",
+      "values": ["slide", "fade", "scale"],
+      "default": "slide",
+      "description": "Tipo de animación al mostrar/ocultar"
+    }
+  },
+
+  "features": [
+    "Optimizada para pantallas táctiles móviles",
+    "Posicionamiento flotante (bottom/top, fixed/sticky)",
+    "Backdrop blur para efecto glassmorphism",
+    "Swipe down/up para ocultar/mostrar",
+    "Auto-hide en scroll (opcional)",
+    "Scroll horizontal si hay muchos botones",
+    "Handle visual para indicar interactividad",
+    "Safe-area support (notch, home indicator iOS)",
+    "Feedback háptico en interacciones",
+    "Collapsible (expandir/colapsar)",
+    "Animaciones suaves (slide, fade, scale)",
+    "Responsive (diferentes layouts en desktop)",
+    "Minimalista y limpia",
+    "Compatible con TouchActionButton",
+    "ARIA compliant"
+  ],
+
+  "accessibility": {
+    "role": "toolbar",
+    "ariaLabel": true,
+    "keyboard": true,
+    "focusable": true,
+    "screenReader": true
+  },
+
+  "example": {
+    "component": "floating-action-bar",
+    "variant": "default",
+    "position": "bottom",
+    "props": {
+      "buttons": [
+        {
+          "component": "touch-action-button",
+          "emoji": "🏠",
+          "label": "Inicio"
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "📋",
+          "label": "Tareas"
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "➕",
+          "label": "Crear",
+          "variant": "primary"
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "👤",
+          "label": "Perfil"
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "⚙️",
+          "label": "Config"
+        }
+      ],
+      "spacing": "normal",
+      "autoHide": false,
+      "swipeable": true,
+      "showHandle": true,
+      "backdrop": true,
+      "safe-area": true
+    }
+  }
+}

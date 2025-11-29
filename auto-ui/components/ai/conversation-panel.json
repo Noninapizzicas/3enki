@@ -1,0 +1,308 @@
+{
+  "name": "conversation-panel",
+  "category": "ai",
+  "description": "Panel de conversación completo con soporte para chat AI, markdown, streaming, attachments y voice",
+  "version": "1.0.0",
+  "author": "Event Core Team",
+
+  "variants": {
+    "ai-chat": {
+      "description": "Chat completo con IA y todas las features",
+      "className": "conversation-panel--ai-chat",
+      "enableMarkdown": true,
+      "enableAttachments": true,
+      "enableVoice": true,
+      "showTypingIndicator": true,
+      "aiProvider": "deepseek"
+    },
+    "notes": {
+      "description": "Solo notas sin respuesta de IA",
+      "className": "conversation-panel--notes",
+      "enableMarkdown": true,
+      "enableAttachments": false,
+      "enableVoice": false,
+      "showTypingIndicator": false
+    },
+    "support": {
+      "description": "Chat de soporte bidireccional",
+      "className": "conversation-panel--support",
+      "enableMarkdown": false,
+      "enableAttachments": true,
+      "enableVoice": false,
+      "showTypingIndicator": true
+    },
+    "instructions": {
+      "description": "Instrucciones paso a paso",
+      "className": "conversation-panel--instructions",
+      "enableMarkdown": true,
+      "enableAttachments": false,
+      "enableVoice": false,
+      "showTypingIndicator": false,
+      "readOnly": true
+    }
+  },
+
+  "sizes": {
+    "sm": {
+      "description": "Pequeño - 300px altura",
+      "height": "300px",
+      "className": "conversation-panel--sm"
+    },
+    "md": {
+      "description": "Mediano - 500px altura (por defecto)",
+      "height": "500px",
+      "className": "conversation-panel--md"
+    },
+    "lg": {
+      "description": "Grande - 700px altura",
+      "height": "700px",
+      "className": "conversation-panel--lg"
+    },
+    "fullscreen": {
+      "description": "Pantalla completa",
+      "height": "100vh",
+      "className": "conversation-panel--fullscreen"
+    }
+  },
+
+  "props": {
+    "variant": {
+      "type": "enum",
+      "values": ["ai-chat", "notes", "support", "instructions"],
+      "default": "ai-chat",
+      "required": false,
+      "description": "Tipo de panel de conversación"
+    },
+    "size": {
+      "type": "enum",
+      "values": ["sm", "md", "lg", "fullscreen"],
+      "default": "md",
+      "required": false,
+      "description": "Altura del panel"
+    },
+    "conversationId": {
+      "type": "string",
+      "required": true,
+      "description": "ID de la conversación"
+    },
+    "endpoint": {
+      "type": "string",
+      "required": true,
+      "description": "Endpoint para cargar/enviar mensajes (ej: /modules/chat-api/conversations/{id}/messages)"
+    },
+    "streamingEndpoint": {
+      "type": "string",
+      "required": false,
+      "description": "Endpoint SSE para streaming de respuestas (opcional)"
+    },
+    "messageRoles": {
+      "type": "array",
+      "default": ["user", "assistant", "system"],
+      "description": "Roles de mensajes soportados"
+    },
+    "enableMarkdown": {
+      "type": "boolean",
+      "default": true,
+      "description": "Renderizar mensajes con markdown (bold, italic, code, lists)"
+    },
+    "enableAttachments": {
+      "type": "boolean",
+      "default": false,
+      "description": "Permitir adjuntar archivos en mensajes"
+    },
+    "enableVoice": {
+      "type": "boolean",
+      "default": false,
+      "description": "Habilitar input de voz (Web Speech API)"
+    },
+    "placeholder": {
+      "type": "string",
+      "default": "Escribe un mensaje...",
+      "description": "Placeholder del input de mensajes"
+    },
+    "sendIcon": {
+      "type": "string",
+      "default": "🚀",
+      "description": "Emoji o icono del botón enviar"
+    },
+    "aiProvider": {
+      "type": "enum",
+      "values": ["deepseek", "openai", "claude", "ollama", "auto"],
+      "default": "deepseek",
+      "description": "Proveedor de IA para respuestas"
+    },
+    "showTypingIndicator": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar indicador 'IA está escribiendo...'"
+    },
+    "maxMessageLength": {
+      "type": "number",
+      "default": 4000,
+      "description": "Longitud máxima de mensaje en caracteres"
+    },
+    "autoScroll": {
+      "type": "boolean",
+      "default": true,
+      "description": "Auto-scroll al final cuando llegan nuevos mensajes"
+    },
+    "showTimestamps": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar timestamps en mensajes"
+    },
+    "showAvatars": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar avatares por rol (👤 user, 🤖 assistant)"
+    },
+    "enableCommands": {
+      "type": "boolean",
+      "default": true,
+      "description": "Habilitar comandos especiales (/help, /clear, /export)"
+    },
+    "readOnly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Modo solo lectura (sin input)"
+    },
+    "loadOnInit": {
+      "type": "boolean",
+      "default": true,
+      "description": "Cargar mensajes al inicializar"
+    },
+    "mqttEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Suscribirse a eventos MQTT para actualizaciones en tiempo real"
+    },
+    "mqttTopics": {
+      "type": "array",
+      "default": ["chat.message.sent", "chat.message.ai.received"],
+      "description": "Topics MQTT para escuchar"
+    },
+    "onMessageSent": {
+      "type": "function",
+      "description": "Callback cuando se envía un mensaje"
+    },
+    "onMessageReceived": {
+      "type": "function",
+      "description": "Callback cuando se recibe un mensaje"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Deshabilitar input de mensajes"
+    },
+    "ariaLabel": {
+      "type": "string",
+      "default": "Panel de conversación",
+      "description": "Label para accesibilidad"
+    }
+  },
+
+  "features": [
+    "Lista de mensajes con scroll automático",
+    "Renderizado markdown (bold, italic, code blocks, lists, links)",
+    "Streaming SSE de respuestas AI en tiempo real",
+    "Typing indicator animado ('IA está escribiendo...')",
+    "Avatares por rol (user 👤 / assistant 🤖 / system ⚙️)",
+    "Timestamps relativos (hace 2 min, hace 1 hora)",
+    "Adjuntar archivos inline (si habilitado)",
+    "Input de voz con Web Speech API (si habilitado)",
+    "Comandos especiales: /help, /clear, /export",
+    "Soporte MQTT para actualizaciones en tiempo real",
+    "Auto-scroll inteligente (solo si ya estás al final)",
+    "Copy to clipboard para mensajes",
+    "Regenerate response para mensajes AI",
+    "Editar mensajes de usuario",
+    "Contador de caracteres en input",
+    "Accesible con keyboard navigation",
+    "Responsive y mobile-first"
+  ],
+
+  "commands": {
+    "/help": "Muestra ayuda de comandos disponibles",
+    "/clear": "Limpia todos los mensajes de la conversación",
+    "/export": "Exporta la conversación en formato markdown",
+    "/regenerate": "Regenera la última respuesta de IA",
+    "/model <provider>": "Cambia el modelo de IA (deepseek, openai, claude, ollama)"
+  },
+
+  "accessibility": {
+    "role": "log",
+    "ariaLabel": true,
+    "ariaLive": "polite",
+    "keyboard": true,
+    "focusable": true,
+    "screenReader": true
+  },
+
+  "events": {
+    "messageLoaded": "Disparado cuando se cargan mensajes del endpoint",
+    "messageSent": "Disparado cuando el usuario envía un mensaje",
+    "messageReceived": "Disparado cuando se recibe un mensaje (MQTT o HTTP)",
+    "aiTypingStart": "Disparado cuando IA empieza a escribir",
+    "aiTypingEnd": "Disparado cuando IA termina de escribir",
+    "streamingStart": "Disparado al iniciar streaming SSE",
+    "streamingChunk": "Disparado por cada chunk de streaming",
+    "streamingEnd": "Disparado al finalizar streaming",
+    "commandExecuted": "Disparado cuando se ejecuta un comando (/help, /clear, etc.)",
+    "attachmentAdded": "Disparado cuando se adjunta un archivo",
+    "voiceRecordStart": "Disparado al iniciar grabación de voz",
+    "voiceRecordEnd": "Disparado al terminar grabación de voz",
+    "error": "Disparado cuando ocurre un error"
+  },
+
+  "example": {
+    "component": "conversation-panel",
+    "variant": "ai-chat",
+    "size": "lg",
+    "props": {
+      "conversationId": "conv_menu_gen_123",
+      "endpoint": "/modules/chat-api/conversations/conv_menu_gen_123/messages",
+      "streamingEndpoint": "/modules/chat-api/conversations/conv_menu_gen_123/stream",
+      "enableMarkdown": true,
+      "enableAttachments": true,
+      "enableVoice": false,
+      "placeholder": "Pregunta sobre el menú generado...",
+      "sendIcon": "🚀",
+      "aiProvider": "deepseek",
+      "showTypingIndicator": true,
+      "maxMessageLength": 4000,
+      "showTimestamps": true,
+      "showAvatars": true,
+      "enableCommands": true,
+      "mqttEnabled": true,
+      "mqttTopics": [
+        "chat.message.sent",
+        "chat.message.ai.received",
+        "menu.generado"
+      ]
+    }
+  },
+
+  "useCases": [
+    "Menu-generator: Conversar sobre menú mientras se genera",
+    "AiChat-UI: Chat multi-proyecto con IA",
+    "Comandero: Ayuda contextual para camareros",
+    "Admin: Soporte técnico interno",
+    "Cocina: Notas e instrucciones especiales",
+    "Cuentas-telefono: Historial de llamadas y conversaciones"
+  ],
+
+  "integrations": {
+    "modules": [
+      "chat-api - Envío/recepción de mensajes",
+      "ai-gateway - Generación de respuestas AI",
+      "prompt-manager - Uso de prompts predefinidos",
+      "storage-manager - Almacenamiento de attachments"
+    ],
+    "events": [
+      "chat.message.sent - Publicado al enviar mensaje",
+      "chat.message.ai.received - Recibido cuando IA responde",
+      "message.sent - Eventos genéricos de mensajería",
+      "message.received - Eventos genéricos de mensajería"
+    ]
+  }
+}

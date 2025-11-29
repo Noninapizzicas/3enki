@@ -1,0 +1,318 @@
+{
+  "name": "ai-control-bar",
+  "category": "ai",
+  "description": "Barra de controles para configurar parámetros de IA: provider, modelo, temperature, prompts, credenciales",
+  "version": "1.0.0",
+  "author": "Event Core Team",
+
+  "variants": {
+    "full": {
+      "description": "Todos los controles visibles",
+      "className": "ai-control-bar--full",
+      "showProvider": true,
+      "showModel": true,
+      "showTemperature": true,
+      "showMaxTokens": true,
+      "showPrompts": true,
+      "showCredentials": true
+    },
+    "compact": {
+      "description": "Solo provider y modelo",
+      "className": "ai-control-bar--compact",
+      "showProvider": true,
+      "showModel": true,
+      "showTemperature": false,
+      "showMaxTokens": false,
+      "showPrompts": false,
+      "showCredentials": false
+    },
+    "minimal": {
+      "description": "Solo botón de configuración",
+      "className": "ai-control-bar--minimal",
+      "showProvider": false,
+      "showModel": false,
+      "showTemperature": false,
+      "showMaxTokens": false,
+      "showPrompts": false,
+      "showCredentials": false,
+      "showSettingsButton": true
+    }
+  },
+
+  "positions": {
+    "bottom": {
+      "description": "Barra horizontal inferior",
+      "orientation": "horizontal",
+      "className": "ai-control-bar--bottom"
+    },
+    "top": {
+      "description": "Barra horizontal superior",
+      "orientation": "horizontal",
+      "className": "ai-control-bar--top"
+    },
+    "right": {
+      "description": "Barra vertical derecha",
+      "orientation": "vertical",
+      "className": "ai-control-bar--right"
+    },
+    "left": {
+      "description": "Barra vertical izquierda",
+      "orientation": "vertical",
+      "className": "ai-control-bar--left"
+    },
+    "floating": {
+      "description": "Flotante posicionable",
+      "orientation": "horizontal",
+      "className": "ai-control-bar--floating"
+    }
+  },
+
+  "props": {
+    "variant": {
+      "type": "enum",
+      "values": ["full", "compact", "minimal"],
+      "default": "full",
+      "required": false,
+      "description": "Nivel de detalle de controles mostrados"
+    },
+    "position": {
+      "type": "enum",
+      "values": ["bottom", "top", "right", "left", "floating"],
+      "default": "bottom",
+      "required": false,
+      "description": "Posición de la barra en la pantalla"
+    },
+    "showProvider": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar selector de provider (DeepSeek, OpenAI, Claude, Ollama)"
+    },
+    "showModel": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar selector de modelo específico"
+    },
+    "showTemperature": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar slider de temperature (0-2)"
+    },
+    "showMaxTokens": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar input de max_tokens"
+    },
+    "showPrompts": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar selector de prompts guardados"
+    },
+    "showCredentials": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar indicador de credenciales"
+    },
+    "showSettingsButton": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mostrar botón para abrir panel de configuración avanzada"
+    },
+    "providers": {
+      "type": "array",
+      "default": ["deepseek", "openai", "claude", "ollama"],
+      "description": "Proveedores disponibles"
+    },
+    "defaultProvider": {
+      "type": "enum",
+      "values": ["deepseek", "openai", "claude", "ollama", "auto"],
+      "default": "deepseek",
+      "description": "Provider seleccionado por defecto"
+    },
+    "defaultModel": {
+      "type": "string",
+      "default": "",
+      "description": "Modelo específico por defecto (vacío = default del provider)"
+    },
+    "defaultTemperature": {
+      "type": "number",
+      "default": 0.7,
+      "description": "Temperature por defecto (0-2)"
+    },
+    "defaultMaxTokens": {
+      "type": "number",
+      "default": 1000,
+      "description": "Max tokens por defecto"
+    },
+    "promptsEndpoint": {
+      "type": "string",
+      "default": "/modules/prompt-manager/prompts",
+      "description": "Endpoint para cargar prompts"
+    },
+    "credentialsEndpoint": {
+      "type": "string",
+      "default": "/modules/credential-manager/credentials",
+      "description": "Endpoint para verificar credenciales"
+    },
+    "collapsible": {
+      "type": "boolean",
+      "default": true,
+      "description": "Permitir colapsar/expandir la barra"
+    },
+    "collapsed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Iniciar colapsada"
+    },
+    "sticky": {
+      "type": "boolean",
+      "default": true,
+      "description": "Fijar la barra (position: sticky)"
+    },
+    "onChange": {
+      "type": "function",
+      "description": "Callback cuando cambia cualquier parámetro"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Deshabilitar todos los controles"
+    },
+    "ariaLabel": {
+      "type": "string",
+      "default": "Controles de configuración de IA",
+      "description": "Label para accesibilidad"
+    }
+  },
+
+  "features": [
+    "Selector visual de providers con iconos (🔥 DeepSeek, 🟢 OpenAI, 🟣 Claude, 🦙 Ollama)",
+    "Selector de modelos específicos por provider",
+    "Slider interactivo de temperature con preview de valor",
+    "Input numérico de max_tokens con validación",
+    "Integración con PromptSelector para prompts guardados",
+    "Integración con CredentialIndicator para verificar API keys",
+    "Botón de configuración avanzada que abre panel expandible",
+    "Estados visuales para cada control (activo, hover, disabled)",
+    "Colapsar/expandir con animación smooth",
+    "Persistencia de configuración en localStorage",
+    "Responsive y adaptable a mobile/tablet/desktop",
+    "Orientaciones horizontal y vertical",
+    "Position sticky para siempre visible",
+    "Cambios en tiempo real sin recargar",
+    "Accesible con keyboard navigation"
+  ],
+
+  "controls": {
+    "provider": {
+      "type": "select",
+      "icon": "🤖",
+      "label": "Provider",
+      "options": {
+        "deepseek": { "label": "DeepSeek", "icon": "🔥", "color": "#FF6B6B" },
+        "openai": { "label": "OpenAI", "icon": "🟢", "color": "#10A37F" },
+        "claude": { "label": "Claude", "icon": "🟣", "color": "#7C3AED" },
+        "ollama": { "label": "Ollama", "icon": "🦙", "color": "#FF8C00" },
+        "auto": { "label": "Auto", "icon": "⚡", "color": "#3B82F6" }
+      }
+    },
+    "model": {
+      "type": "select",
+      "icon": "🎯",
+      "label": "Modelo",
+      "dependsOn": "provider"
+    },
+    "temperature": {
+      "type": "range",
+      "icon": "🌡️",
+      "label": "Temperature",
+      "min": 0,
+      "max": 2,
+      "step": 0.1,
+      "showValue": true
+    },
+    "maxTokens": {
+      "type": "number",
+      "icon": "📊",
+      "label": "Max Tokens",
+      "min": 1,
+      "max": 100000,
+      "step": 100
+    },
+    "prompts": {
+      "type": "button",
+      "icon": "📝",
+      "label": "Prompts",
+      "action": "openPromptSelector"
+    },
+    "credentials": {
+      "type": "indicator",
+      "icon": "🔑",
+      "label": "Credenciales",
+      "action": "openCredentialsPanel"
+    }
+  },
+
+  "accessibility": {
+    "role": "toolbar",
+    "ariaLabel": true,
+    "keyboard": true,
+    "focusable": true,
+    "screenReader": true
+  },
+
+  "events": {
+    "providerChanged": "Disparado cuando cambia el provider",
+    "modelChanged": "Disparado cuando cambia el modelo",
+    "temperatureChanged": "Disparado cuando cambia la temperature",
+    "maxTokensChanged": "Disparado cuando cambian los max_tokens",
+    "promptSelected": "Disparado cuando se selecciona un prompt",
+    "credentialsClicked": "Disparado cuando se hace click en credenciales",
+    "settingsOpened": "Disparado cuando se abre panel de configuración",
+    "collapsed": "Disparado cuando se colapsa la barra",
+    "expanded": "Disparado cuando se expande la barra",
+    "configChanged": "Disparado cuando cambia cualquier configuración"
+  },
+
+  "example": {
+    "component": "ai-control-bar",
+    "variant": "full",
+    "position": "bottom",
+    "props": {
+      "showProvider": true,
+      "showModel": true,
+      "showTemperature": true,
+      "showMaxTokens": true,
+      "showPrompts": true,
+      "showCredentials": true,
+      "providers": ["deepseek", "openai", "claude", "ollama"],
+      "defaultProvider": "deepseek",
+      "defaultTemperature": 0.7,
+      "defaultMaxTokens": 1000,
+      "promptsEndpoint": "/modules/prompt-manager/prompts",
+      "credentialsEndpoint": "/modules/credential-manager/credentials",
+      "collapsible": true,
+      "collapsed": false,
+      "sticky": true
+    }
+  },
+
+  "useCases": [
+    "Menu-generator: Ajustar parámetros de generación de menús",
+    "AiChat-UI: Control completo de configuración de chat",
+    "Productos: Configurar generación de descripciones",
+    "Comandero: Ayuda contextual con configuración rápida",
+    "Admin: Panel de control de IA para todo el sistema"
+  ],
+
+  "integrations": {
+    "modules": [
+      "ai-gateway - Envío de parámetros a proveedores",
+      "prompt-manager - Carga de prompts guardados",
+      "credential-manager - Verificación de API keys"
+    ],
+    "components": [
+      "prompt-selector - Selector de prompts",
+      "credential-indicator - Indicador de credenciales"
+    ]
+  }
+}

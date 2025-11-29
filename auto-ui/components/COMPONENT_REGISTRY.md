@@ -4,7 +4,7 @@
 
 This registry documents all available components in the Auto-UI v2.0 system. Each component is defined as a JSON file with complete specifications including variants, props, features, and examples.
 
-**Total Components: 23**
+**Total Components: 29**
 
 ---
 
@@ -25,8 +25,14 @@ Navigation and wayfinding components
 ### 🎨 Layout Components (2)
 Layout and container components
 
-### 💬 Feedback Components (5)
+### 💬 Feedback Components (7)
 User feedback and loading states
+
+### 🤖 AI Components (3)
+AI integration and configuration components
+
+### 📁 Input Components (1)
+Advanced file input and upload components
 
 ---
 
@@ -972,6 +978,315 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
+## 🤖 AI Components
+
+### 24. ConversationPanel (`ai/conversation-panel.json`)
+**Description:** Panel de conversación completo con soporte para chat AI, markdown, streaming, attachments y voice
+
+**Variants:**
+- `ai-chat` - Chat completo con IA y todas las features
+- `notes` - Solo notas sin respuesta de IA
+- `support` - Chat de soporte bidireccional
+- `instructions` - Instrucciones paso a paso (read-only)
+
+**Sizes:** `sm` (300px), `md` (500px), `lg` (700px), `fullscreen`
+
+**Key Features:**
+- ✅ Lista de mensajes con scroll automático
+- ✅ Renderizado markdown (bold, italic, code blocks, lists, links)
+- ✅ Streaming SSE de respuestas AI en tiempo real
+- ✅ Typing indicator animado ('IA está escribiendo...')
+- ✅ Avatares por rol (user 👤 / assistant 🤖 / system ⚙️)
+- ✅ Timestamps relativos (hace 2 min, hace 1 hora)
+- ✅ Adjuntar archivos inline (si habilitado)
+- ✅ Input de voz con Web Speech API (si habilitado)
+- ✅ Comandos especiales: /help, /clear, /export, /regenerate, /model
+- ✅ Soporte MQTT para actualizaciones en tiempo real
+- ✅ Auto-scroll inteligente (solo si ya estás al final)
+- ✅ Copy to clipboard para mensajes
+- ✅ Regenerate response para mensajes AI
+- ✅ Editar mensajes de usuario
+- ✅ Contador de caracteres en input
+- ✅ Accesible con keyboard navigation
+- ✅ Responsive y mobile-first
+
+**Example:**
+```json
+{
+  "component": "conversation-panel",
+  "variant": "ai-chat",
+  "size": "lg",
+  "props": {
+    "conversationId": "conv_menu_gen_123",
+    "endpoint": "/modules/chat-api/conversations/conv_menu_gen_123/messages",
+    "streamingEndpoint": "/modules/chat-api/conversations/conv_menu_gen_123/stream",
+    "enableMarkdown": true,
+    "enableAttachments": true,
+    "placeholder": "Pregunta sobre el menú generado...",
+    "aiProvider": "deepseek",
+    "showTypingIndicator": true,
+    "mqttEnabled": true
+  }
+}
+```
+
+**Use Cases:**
+- Menu-generator: Conversar sobre menú mientras se genera
+- AiChat-UI: Chat multi-proyecto con IA
+- Comandero: Ayuda contextual para camareros
+- Admin: Soporte técnico interno
+
+---
+
+### 25. AIControlBar (`ai/ai-control-bar.json`)
+**Description:** Barra de controles para configurar parámetros de IA: provider, modelo, temperature, prompts, credenciales
+
+**Variants:**
+- `full` - Todos los controles visibles
+- `compact` - Solo provider y modelo
+- `minimal` - Solo botón de configuración
+
+**Positions:** `bottom`, `top`, `right`, `left`, `floating`
+
+**Key Features:**
+- ✅ Selector visual de providers con iconos (🔥 DeepSeek, 🟢 OpenAI, 🟣 Claude, 🦙 Ollama)
+- ✅ Selector de modelos específicos por provider
+- ✅ Slider interactivo de temperature con preview de valor
+- ✅ Input numérico de max_tokens con validación
+- ✅ Integración con PromptSelector para prompts guardados
+- ✅ Integración con CredentialIndicator para verificar API keys
+- ✅ Botón de configuración avanzada que abre panel expandible
+- ✅ Estados visuales para cada control (activo, hover, disabled)
+- ✅ Colapsar/expandir con animación smooth
+- ✅ Persistencia de configuración en localStorage
+- ✅ Responsive y adaptable a mobile/tablet/desktop
+- ✅ Orientaciones horizontal y vertical
+- ✅ Position sticky para siempre visible
+- ✅ Cambios en tiempo real sin recargar
+- ✅ Accesible con keyboard navigation
+
+**Example:**
+```json
+{
+  "component": "ai-control-bar",
+  "variant": "full",
+  "position": "bottom",
+  "props": {
+    "providers": ["deepseek", "openai", "claude", "ollama"],
+    "defaultProvider": "deepseek",
+    "defaultTemperature": 0.7,
+    "defaultMaxTokens": 1000,
+    "showPrompts": true,
+    "showCredentials": true,
+    "collapsible": true,
+    "sticky": true
+  }
+}
+```
+
+**Use Cases:**
+- Menu-generator: Ajustar parámetros de generación de menús
+- AiChat-UI: Control completo de configuración de chat
+- Productos: Configurar generación de descripciones
+
+---
+
+### 26. PromptSelector (`ai/prompt-selector.json`)
+**Description:** Selector de prompts guardados con búsqueda, categorías, versioning y CRUD completo
+
+**Variants:**
+- `panel` - Panel completo con todas las features
+- `dropdown` - Dropdown compacto
+- `modal` - Modal fullscreen
+
+**Key Features:**
+- ✅ Lista de prompts por categoría
+- ✅ Búsqueda y filtrado
+- ✅ Preview de prompt con variables
+- ✅ Versionado de prompts (v1.0, v1.1, etc.)
+- ✅ Crear/editar/eliminar prompts
+- ✅ Reemplazo de variables {{var}}
+- ✅ Scope: global/project/user
+- ✅ Favoritos
+- ✅ Historial de uso
+
+**Example:**
+```json
+{
+  "component": "prompt-selector",
+  "variant": "panel",
+  "props": {
+    "endpoint": "/modules/prompt-manager/prompts",
+    "scope": "all",
+    "categories": ["menu", "product", "support", "general"],
+    "showVersioning": true,
+    "enableCreate": true,
+    "searchEnabled": true
+  }
+}
+```
+
+**Use Cases:**
+- AiChat-UI: Seleccionar prompts pre-configurados
+- Menu-generator: Prompts específicos para parsing de menús
+- Admin: Gestión de prompts del sistema
+
+---
+
+## 📁 Input Components
+
+### 27. FileDropZone (`input/file-drop-zone.json`)
+**Description:** Zona de carga de archivos genérica con drag & drop, camera capture, clipboard paste y preview
+
+**Variants:**
+- `image-only` - Solo imágenes con crop opcional
+- `document` - Documentos (PDF, Word, Excel)
+- `media` - Imágenes y videos
+- `any` - Cualquier tipo de archivo
+
+**Sizes:** `sm` (200px), `md` (300px), `lg` (400px), `fullscreen`
+
+**Key Features:**
+- ✅ Drag & drop de archivos con feedback visual
+- ✅ Click para abrir selector de archivos nativo
+- ✅ Captura desde cámara (mobile) con elección frontal/trasera
+- ✅ Paste desde clipboard (Ctrl+V o Cmd+V)
+- ✅ Preview de archivos con thumbnails
+- ✅ Validación de tipo MIME y tamaño
+- ✅ Progress bar durante upload
+- ✅ Soporte múltiples archivos con conteo
+- ✅ Compresión opcional de imágenes
+- ✅ Crop opcional de imágenes (variant image-only)
+- ✅ Estados visuales: idle, dragging, uploading, success, error
+- ✅ Accesible con keyboard navigation
+- ✅ Responsive y mobile-first
+- ✅ Integración con cualquier endpoint backend
+
+**Example:**
+```json
+{
+  "component": "file-drop-zone",
+  "variant": "image-only",
+  "size": "md",
+  "props": {
+    "maxFiles": 5,
+    "maxFileSize": 5242880,
+    "captureMode": "environment",
+    "showPreview": true,
+    "enableCrop": true,
+    "compressionEnabled": true,
+    "endpoint": "/modules/menu-generator/upload",
+    "dropMessage": "Sube fotos de la carta de menú",
+    "icon": "📸"
+  }
+}
+```
+
+**Use Cases:**
+- Menu-generator: Subir fotos de cartas de menú
+- Productos: Subir imágenes de productos
+- Chat: Adjuntar archivos en conversaciones
+- Admin: Subir documentos, logos, facturas
+
+---
+
+## 💬 Feedback Components (Updated)
+
+### 28. ResultPreviewCard (`feedback/result-preview-card.json`)
+**Description:** Card de preview de resultados con estados, acciones y renderizado adaptativo (JSON, tabla, cards, lista)
+
+**Variants:**
+- `menu-preview` - Preview de menú generado por IA
+- `product-preview` - Preview de producto
+- `order-summary` - Resumen de pedido
+- `payment-summary` - Resumen de cobro
+- `generic` - Preview genérico
+
+**States:** `pending` (⏳), `processing` (⚙️), `completed` (✅), `error` (❌)
+
+**Key Features:**
+- ✅ Renderizado adaptativo según tipo de datos
+- ✅ Estados visuales con iconos y colores
+- ✅ Animación de spinner en estado 'processing'
+- ✅ Expand/collapse de detalles
+- ✅ Acciones contextuales configurables
+- ✅ Highlights de cambios/diferencias
+- ✅ Vista JSON con syntax highlighting
+- ✅ Vista tabla con columnas configurables
+- ✅ Vista cards con layout flexible
+- ✅ Vista lista con items expandibles
+- ✅ Scroll interno con max-height
+- ✅ Responsive y mobile-optimized
+
+**Example:**
+```json
+{
+  "component": "result-preview-card",
+  "variant": "menu-preview",
+  "props": {
+    "status": "completed",
+    "dataFormat": "cards",
+    "endpoint": "/modules/menu-generator/menus/123",
+    "title": "Menú Generado",
+    "actions": [
+      {"label": "Validar", "icon": "✅", "action": "validate"},
+      {"label": "Editar", "icon": "✏️", "action": "edit"}
+    ],
+    "expandable": true
+  }
+}
+```
+
+---
+
+### 29. CredentialIndicator (`feedback/credential-indicator.json`)
+**Description:** Indicador visual de estado de credenciales con niveles (GLOBAL/PROJECT/CLIENT/CUSTOM) y quick actions
+
+**Variants:**
+- `badge` - Badge compacto con icono y estado
+- `detailed` - Vista detallada con nivel y botones
+- `inline` - Inline para formularios
+
+**States:** `ok` (🔑 verde), `warning` (⚠️ amarillo), `error` (❌ rojo), `loading` (⏳ azul)
+
+**Levels:**
+- `CUSTOM` (prioridad 1) - Credencial específica para esta sesión
+- `CLIENT` (prioridad 2) - Credencial del cliente actual
+- `PROJECT` (prioridad 3) - Credencial del proyecto
+- `GLOBAL` (prioridad 4) - Credencial global del sistema
+
+**Key Features:**
+- ✅ Indicador visual de estado (verde/amarillo/rojo)
+- ✅ Muestra nivel de credencial (CUSTOM/CLIENT/PROJECT/GLOBAL)
+- ✅ Tooltip con información detallada
+- ✅ Click para gestionar credenciales
+- ✅ Quick add si falta credencial
+- ✅ Auto-verificación periódica
+- ✅ Valores enmascarados (***)
+- ✅ Integración con credential-manager
+
+**Example:**
+```json
+{
+  "component": "credential-indicator",
+  "variant": "detailed",
+  "props": {
+    "provider": "deepseek",
+    "showLevel": true,
+    "showStatus": true,
+    "enableQuickAdd": true,
+    "checkOnInit": true
+  }
+}
+```
+
+**Use Cases:**
+- AI-control-bar: Verificar credenciales antes de usar provider
+- Menu-generator: Verificar API keys antes de generar
+- Admin-panel: Gestión de credenciales
+
+---
+
 ## 🔧 Usage Guidelines
 
 ### Loading Components
@@ -1090,7 +1405,12 @@ const html = componentSystem.render('button', {
 
 ---
 
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Last Updated:** 2025-11-29
-**Total Components:** 23
+**Total Components:** 29
 **Author:** Event Core Team
+
+**Latest Additions (v2.1.0):**
+- 🤖 AI Components: ConversationPanel, AIControlBar, PromptSelector
+- 📁 Input Components: FileDropZone
+- 💬 Feedback Components: ResultPreviewCard, CredentialIndicator

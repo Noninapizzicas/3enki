@@ -1,0 +1,180 @@
+{
+  "name": "result-preview-card",
+  "category": "feedback",
+  "description": "Card de preview de resultados con estados, acciones y renderizado adaptativo (JSON, tabla, cards, lista)",
+  "version": "1.0.0",
+  "author": "Event Core Team",
+
+  "variants": {
+    "menu-preview": {
+      "description": "Preview de menú generado por IA",
+      "className": "result-preview-card--menu",
+      "icon": "📋",
+      "defaultFormat": "cards"
+    },
+    "product-preview": {
+      "description": "Preview de producto",
+      "className": "result-preview-card--product",
+      "icon": "📦",
+      "defaultFormat": "table"
+    },
+    "order-summary": {
+      "description": "Resumen de pedido",
+      "className": "result-preview-card--order",
+      "icon": "🛒",
+      "defaultFormat": "list"
+    },
+    "payment-summary": {
+      "description": "Resumen de cobro",
+      "className": "result-preview-card--payment",
+      "icon": "💰",
+      "defaultFormat": "table"
+    },
+    "generic": {
+      "description": "Preview genérico",
+      "className": "result-preview-card--generic",
+      "icon": "📄",
+      "defaultFormat": "json"
+    }
+  },
+
+  "states": {
+    "pending": {
+      "description": "Pendiente de procesamiento",
+      "className": "result-preview-card--pending",
+      "icon": "⏳",
+      "color": "#f59e0b"
+    },
+    "processing": {
+      "description": "Procesando",
+      "className": "result-preview-card--processing",
+      "icon": "⚙️",
+      "color": "#3b82f6",
+      "animated": true
+    },
+    "completed": {
+      "description": "Completado",
+      "className": "result-preview-card--completed",
+      "icon": "✅",
+      "color": "#10b981"
+    },
+    "error": {
+      "description": "Error",
+      "className": "result-preview-card--error",
+      "icon": "❌",
+      "color": "#ef4444"
+    }
+  },
+
+  "props": {
+    "variant": {
+      "type": "enum",
+      "values": ["menu-preview", "product-preview", "order-summary", "payment-summary", "generic"],
+      "default": "generic",
+      "description": "Tipo de preview"
+    },
+    "status": {
+      "type": "enum",
+      "values": ["pending", "processing", "completed", "error"],
+      "default": "pending",
+      "description": "Estado actual"
+    },
+    "dataFormat": {
+      "type": "enum",
+      "values": ["json", "table", "cards", "list"],
+      "default": "json",
+      "description": "Formato de renderizado de datos"
+    },
+    "data": {
+      "type": "object",
+      "required": false,
+      "description": "Datos a mostrar en el preview"
+    },
+    "endpoint": {
+      "type": "string",
+      "required": false,
+      "description": "Endpoint para cargar datos (ej: /modules/menu-generator/menus/{id})"
+    },
+    "title": {
+      "type": "string",
+      "default": "Preview",
+      "description": "Título del card"
+    },
+    "showActions": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar botones de acción"
+    },
+    "actions": {
+      "type": "array",
+      "default": [],
+      "description": "Array de acciones disponibles [{label, icon, action}]"
+    },
+    "expandable": {
+      "type": "boolean",
+      "default": true,
+      "description": "Permitir expandir/colapsar detalles"
+    },
+    "expanded": {
+      "type": "boolean",
+      "default": false,
+      "description": "Iniciar expandido"
+    },
+    "highlightChanges": {
+      "type": "boolean",
+      "default": false,
+      "description": "Destacar cambios/diferencias"
+    },
+    "maxHeight": {
+      "type": "string",
+      "default": "500px",
+      "description": "Altura máxima del card"
+    },
+    "loadOnInit": {
+      "type": "boolean",
+      "default": true,
+      "description": "Cargar datos al inicializar"
+    }
+  },
+
+  "features": [
+    "Renderizado adaptativo según tipo de datos",
+    "Estados visuales con iconos y colores",
+    "Animación de spinner en estado 'processing'",
+    "Expand/collapse de detalles",
+    "Acciones contextuales configurables",
+    "Highlights de cambios/diferencias",
+    "Vista JSON con syntax highlighting",
+    "Vista tabla con columnas configurables",
+    "Vista cards con layout flexible",
+    "Vista lista con items expandibles",
+    "Scroll interno con max-height",
+    "Responsive y mobile-optimized"
+  ],
+
+  "example": {
+    "component": "result-preview-card",
+    "variant": "menu-preview",
+    "props": {
+      "status": "completed",
+      "dataFormat": "cards",
+      "endpoint": "/modules/menu-generator/menus/123",
+      "title": "Menú Generado",
+      "showActions": true,
+      "actions": [
+        {"label": "Validar", "icon": "✅", "action": "validate"},
+        {"label": "Editar", "icon": "✏️", "action": "edit"},
+        {"label": "Eliminar", "icon": "🗑️", "action": "delete"}
+      ],
+      "expandable": true,
+      "expanded": false
+    }
+  },
+
+  "useCases": [
+    "Menu-generator: Preview de menú generado",
+    "Productos: Preview antes de crear producto",
+    "Pedidos: Resumen de pedido antes de enviar",
+    "Cobros: Resumen de cobro antes de procesar"
+  ]
+}

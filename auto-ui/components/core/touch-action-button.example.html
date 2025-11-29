@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>TouchActionButton - Ejemplo</title>
+  <link rel="stylesheet" href="../../client/css/components/touch-action-button.css">
+  <style>
+    :root {
+      /* Colors */
+      --bg: #0f1216;
+      --bg-card: #1a1d24;
+      --bg-hover: #262932;
+      --text: #ffffff;
+      --text-muted: #9ca3af;
+      --text-dark: #1a1d24;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --border: #374151;
+
+      /* Spacing */
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+
+      /* Radius */
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+
+      /* Typography */
+      --font: system-ui, -apple-system, sans-serif;
+      --size-sm: 0.875rem;
+      --size-base: 1rem;
+      --size-lg: 1.125rem;
+      --weight-medium: 500;
+
+      /* Shadows */
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+
+      /* Transitions */
+      --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      padding: var(--space-xl);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .demo-section {
+      margin-bottom: var(--space-xl);
+      padding: var(--space-lg);
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+    }
+
+    .demo-section h2 {
+      margin-top: 0;
+      color: var(--primary);
+      font-size: var(--size-lg);
+    }
+
+    .demo-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-md);
+      margin-top: var(--space-md);
+    }
+
+    .demo-info {
+      margin-top: var(--space-md);
+      padding: var(--space-sm);
+      background: var(--bg-hover);
+      border-radius: var(--radius-md);
+      font-size: var(--size-sm);
+      color: var(--text-muted);
+    }
+
+    .demo-events {
+      margin-top: var(--space-md);
+      padding: var(--space-md);
+      background: var(--bg);
+      border-radius: var(--radius-md);
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: var(--size-sm);
+    }
+
+    .event-log {
+      padding: var(--space-xs);
+      border-left: 2px solid var(--primary);
+      margin-bottom: var(--space-xs);
+    }
+  </style>
+</head>
+<body>
+  <h1>📱 TouchActionButton - Demo</h1>
+
+  <!-- Ejemplo básico -->
+  <div class="demo-section">
+    <h2>Ejemplo Básico</h2>
+    <div class="demo-info">
+      👆 <strong>Tap:</strong> Ver documento<br>
+      👆👆 <strong>Doble tap:</strong> Crear documento<br>
+      ⏱️ <strong>Hold 3s:</strong> Editar documento
+    </div>
+
+    <div class="demo-buttons">
+      <button
+        data-component="touch-action-button"
+        data-config='{
+          "emoji": "📄",
+          "label": "Documento",
+          "variant": "primary",
+          "size": "md",
+          "primaryAction": {
+            "type": "navigate",
+            "target": "/documents/123",
+            "emoji": "👁",
+            "label": "Ver"
+          },
+          "secondaryAction": {
+            "type": "navigate",
+            "target": "/documents/create",
+            "emoji": "➕",
+            "label": "Crear"
+          },
+          "tertiaryAction": {
+            "type": "navigate",
+            "target": "/documents/123/edit",
+            "emoji": "✏️",
+            "label": "Editar",
+            "holdDuration": 3000
+          },
+          "showTooltip": true,
+          "hapticFeedback": true
+        }'>
+      </button>
+    </div>
+  </div>
+
+  <!-- Variantes -->
+  <div class="demo-section">
+    <h2>Variantes</h2>
+    <div class="demo-buttons">
+      <button
+        data-component="touch-action-button"
+        data-variant="primary"
+        data-config='{"emoji": "🔵", "label": "Primary"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-variant="secondary"
+        data-config='{"emoji": "⚪", "label": "Secondary"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-variant="success"
+        data-config='{"emoji": "✅", "label": "Success"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-variant="warning"
+        data-config='{"emoji": "⚠️", "label": "Warning"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-variant="danger"
+        data-config='{"emoji": "❌", "label": "Danger"}'>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tamaños -->
+  <div class="demo-section">
+    <h2>Tamaños</h2>
+    <div class="demo-buttons">
+      <button
+        data-component="touch-action-button"
+        data-size="sm"
+        data-config='{"emoji": "📦", "label": "Small"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-size="md"
+        data-config='{"emoji": "📦", "label": "Medium"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-size="lg"
+        data-config='{"emoji": "📦", "label": "Large"}'>
+      </button>
+    </div>
+  </div>
+
+  <!-- Solo emoji -->
+  <div class="demo-section">
+    <h2>Solo Emoji (sin label)</h2>
+    <div class="demo-buttons">
+      <button
+        data-component="touch-action-button"
+        data-config='{"emoji": "🏠"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-config='{"emoji": "⚙️"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-config='{"emoji": "👤"}'>
+      </button>
+
+      <button
+        data-component="touch-action-button"
+        data-config='{"emoji": "🔔"}'>
+      </button>
+    </div>
+  </div>
+
+  <!-- Casos de uso real -->
+  <div class="demo-section">
+    <h2>Casos de Uso Real</h2>
+    <div class="demo-info">
+      Ejemplos de cómo usar el botón en diferentes contextos
+    </div>
+
+    <h3 style="font-size: var(--size-base); margin-top: var(--space-md);">Lista de Tareas</h3>
+    <div class="demo-buttons">
+      <button
+        data-component="touch-action-button"
+        data-config='{
+          "emoji": "📋",
+          "label": "Tarea #1",
+          "primaryAction": {"emoji": "👁", "label": "Ver"},
+          "secondaryAction": {"emoji": "📋", "label": "Duplicar"},
+          "tertiaryAction": {"emoji": "✏️", "label": "Editar"}
+        }'>
+      </button>
+    </div>
+
+    <h3 style="font-size: var(--size-base); margin-top: var(--space-md);">Usuarios</h3>
+    <div class="demo-buttons">
+      <button
+        data-component="touch-action-button"
+        data-config='{
+          "emoji": "👤",
+          "label": "Juan Pérez",
+          "primaryAction": {"emoji": "👁", "label": "Ver perfil"},
+          "secondaryAction": {"emoji": "➕", "label": "Agregar amigo"},
+          "tertiaryAction": {"emoji": "✏️", "label": "Editar"}
+        }'>
+      </button>
+    </div>
+
+    <h3 style="font-size: var(--size-base); margin-top: var(--space-md);">Productos</h3>
+    <div class="demo-buttons">
+      <button
+        data-component="touch-action-button"
+        data-config='{
+          "emoji": "📦",
+          "label": "Producto X",
+          "variant": "success",
+          "primaryAction": {"emoji": "👁", "label": "Ver detalles"},
+          "secondaryAction": {"emoji": "🛒", "label": "Añadir al carrito"},
+          "tertiaryAction": {"emoji": "✏️", "label": "Editar"}
+        }'>
+      </button>
+    </div>
+  </div>
+
+  <!-- Event log -->
+  <div class="demo-section">
+    <h2>Log de Eventos</h2>
+    <div class="demo-info">
+      Los eventos capturados aparecerán aquí
+    </div>
+    <div id="eventLog" class="demo-events">
+      <div style="color: var(--text-muted);">Esperando eventos...</div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../../client/js/components/touch-action-button.js"></script>
+  <script>
+    // Mock AutoUI.executeAction for demo
+    window.AutoUI = window.AutoUI || {};
+    window.AutoUI.executeAction = function(type, config, element) {
+      console.log('Action executed:', type, config);
+
+      // Log event
+      const eventLog = document.getElementById('eventLog');
+      const log = document.createElement('div');
+      log.className = 'event-log';
+      log.innerHTML = `
+        <strong>${new Date().toLocaleTimeString()}</strong><br>
+        Type: ${type}<br>
+        Label: ${config.label || 'N/A'}<br>
+        Emoji: ${config.emoji || 'N/A'}
+      `;
+      eventLog.prepend(log);
+
+      // Show toast notification
+      alert(`✅ Acción: ${config.label || type}\n${config.emoji || ''}`);
+    };
+
+    // Listen to all touch-action-button events
+    document.addEventListener('touch-action-button:primary-action', (e) => {
+      console.log('Primary action:', e.detail);
+    });
+
+    document.addEventListener('touch-action-button:secondary-action', (e) => {
+      console.log('Secondary action:', e.detail);
+    });
+
+    document.addEventListener('touch-action-button:tertiary-action', (e) => {
+      console.log('Tertiary action:', e.detail);
+    });
+  </script>
+</body>
+</html>

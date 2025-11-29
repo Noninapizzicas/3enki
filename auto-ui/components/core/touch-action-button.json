@@ -1,0 +1,196 @@
+{
+  "name": "touch-action-button",
+  "category": "core",
+  "description": "Botón multi-acción optimizado para móvil con tap, double-tap y hold (3s)",
+  "version": "2.0.0",
+  "author": "Event Core Team",
+
+  "variants": {
+    "primary": {
+      "description": "Botón principal",
+      "className": "touch-action-button--primary"
+    },
+    "secondary": {
+      "description": "Botón secundario",
+      "className": "touch-action-button--secondary"
+    },
+    "success": {
+      "description": "Botón de éxito",
+      "className": "touch-action-button--success"
+    },
+    "warning": {
+      "description": "Botón de advertencia",
+      "className": "touch-action-button--warning"
+    },
+    "danger": {
+      "description": "Botón de peligro",
+      "className": "touch-action-button--danger"
+    }
+  },
+
+  "sizes": {
+    "sm": {
+      "description": "Pequeño - 48px altura (mobile touch-friendly mínimo)",
+      "className": "touch-action-button--sm"
+    },
+    "md": {
+      "description": "Mediano - 56px altura (recomendado mobile)",
+      "className": "touch-action-button--md"
+    },
+    "lg": {
+      "description": "Grande - 64px altura (botones principales)",
+      "className": "touch-action-button--lg"
+    }
+  },
+
+  "props": {
+    "variant": {
+      "type": "enum",
+      "values": ["primary", "secondary", "success", "warning", "danger"],
+      "default": "primary",
+      "required": false,
+      "description": "Variante visual del botón"
+    },
+    "size": {
+      "type": "enum",
+      "values": ["sm", "md", "lg"],
+      "default": "md",
+      "required": false,
+      "description": "Tamaño del botón (optimizado para touch)"
+    },
+    "primaryAction": {
+      "type": "object",
+      "required": true,
+      "description": "Acción principal (tap simple)",
+      "default": {
+        "type": "navigate",
+        "target": "/detail/:id",
+        "emoji": "👁",
+        "label": "Ver"
+      }
+    },
+    "secondaryAction": {
+      "type": "object",
+      "required": false,
+      "description": "Acción secundaria (double-tap)",
+      "default": {
+        "type": "navigate",
+        "target": "/create",
+        "emoji": "➕",
+        "label": "Crear"
+      }
+    },
+    "tertiaryAction": {
+      "type": "object",
+      "required": false,
+      "description": "Acción terciaria (hold 3s)",
+      "default": {
+        "type": "navigate",
+        "target": "/edit/:id",
+        "emoji": "✏️",
+        "label": "Editar",
+        "holdDuration": 3000
+      }
+    },
+    "emoji": {
+      "type": "string",
+      "required": true,
+      "description": "Emoji principal del botón",
+      "default": "🔵"
+    },
+    "label": {
+      "type": "string",
+      "required": false,
+      "description": "Texto del botón (opcional)"
+    },
+    "showTooltip": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar tooltip con gestos disponibles"
+    },
+    "tooltipPosition": {
+      "type": "enum",
+      "values": ["top", "bottom", "left", "right"],
+      "default": "top",
+      "description": "Posición del tooltip"
+    },
+    "hapticFeedback": {
+      "type": "boolean",
+      "default": true,
+      "description": "Vibración háptica al interactuar (si el dispositivo lo soporta)"
+    },
+    "showProgressRing": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar anillo de progreso durante hold"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "required": false,
+      "description": "Deshabilitar el botón"
+    },
+    "ariaLabel": {
+      "type": "string",
+      "required": false,
+      "description": "Label para accesibilidad"
+    }
+  },
+
+  "features": [
+    "Optimizado para pantallas táctiles móviles",
+    "Tres gestos: tap, double-tap, hold (3 segundos)",
+    "Feedback háptico (vibración) si el dispositivo lo soporta",
+    "Progress ring visual durante hold",
+    "Tooltip informativo con gestos disponibles",
+    "Emojis grandes y expresivos",
+    "Forma rectangular con bordes redondeados",
+    "Tamaños touch-friendly (mínimo 48px)",
+    "Ripple effect en tap",
+    "Animación de cambio de emoji en double-tap",
+    "Desktop compatible (click, double-click, menú contextual)",
+    "Totalmente configurable",
+    "ARIA compliant"
+  ],
+
+  "accessibility": {
+    "role": "button",
+    "ariaLabel": true,
+    "keyboard": true,
+    "focusable": true,
+    "screenReader": true,
+    "minTouchTarget": "48px"
+  },
+
+  "example": {
+    "component": "touch-action-button",
+    "variant": "primary",
+    "size": "md",
+    "props": {
+      "emoji": "📄",
+      "label": "Documento",
+      "primaryAction": {
+        "type": "navigate",
+        "target": "/documents/123",
+        "emoji": "👁",
+        "label": "Ver documento"
+      },
+      "secondaryAction": {
+        "type": "navigate",
+        "target": "/documents/create",
+        "emoji": "➕",
+        "label": "Crear documento"
+      },
+      "tertiaryAction": {
+        "type": "navigate",
+        "target": "/documents/123/edit",
+        "emoji": "✏️",
+        "label": "Editar documento",
+        "holdDuration": 3000
+      },
+      "showTooltip": true,
+      "hapticFeedback": true,
+      "showProgressRing": true
+    }
+  }
+}

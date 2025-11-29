@@ -377,6 +377,77 @@ module.exports = function (plop) {
   });
 
   // ==========================================
+  // Generator: ui-view (Auto-UI)
+  // ==========================================
+  plop.setGenerator('ui-view', {
+    description: 'Crear una vista Auto-UI para un módulo',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '📦 Nombre del módulo:',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+            return 'Usa kebab-case (ej: my-module)';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'list',
+        name: 'viewType',
+        message: '🎨 Tipo de vista:',
+        choices: [
+          { name: 'Dashboard con dos columnas', value: 'dashboard-two-column' },
+          { name: 'Dashboard con tabs', value: 'dashboard-tabs' },
+          { name: 'Formulario (crear/editar)', value: 'form-view' },
+          { name: 'Vista de detalle', value: 'detail-view' }
+        ]
+      },
+      {
+        type: 'input',
+        name: 'icon',
+        message: '🔸 Icono (emoji):',
+        default: '📋'
+      },
+      {
+        type: 'input',
+        name: 'author',
+        message: '👤 Autor:',
+        default: 'Event Core Team'
+      }
+    ],
+
+    actions: (data) => {
+      const modulePath = `modules/${data.name}/views`;
+      const templateFile = `plop-templates/view/${data.viewType}.json.hbs`;
+
+      return [
+        {
+          type: 'add',
+          path: `${modulePath}/${data.viewType}.json`,
+          templateFile: templateFile
+        },
+        () => {
+          console.log('\n✅ Vista creada exitosamente');
+          console.log('\n📁 Archivo generado:');
+          console.log(`   └── ${modulePath}/${data.viewType}.json`);
+          console.log('\n🚀 Próximos pasos:');
+          console.log('   1. Revisar y personalizar la vista generada');
+          console.log('   2. Integrar en module.json del módulo:');
+          console.log('      "views": {');
+          console.log(`        "main": { ... configuración desde ${data.viewType}.json ... }`);
+          console.log('      }');
+          console.log('   3. Reiniciar el servidor para ver los cambios\n');
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
   // Generator: ui-theme (Auto-UI)
   // ==========================================
   plop.setGenerator('ui-theme', {

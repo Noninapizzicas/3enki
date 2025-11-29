@@ -1,0 +1,243 @@
+{
+  "name": "{{name}}",
+  "version": "2.0.0",
+  "type": "dashboard",
+  "description": "Dashboard with two-column layout for {{name}}",
+  "author": "{{author}}",
+  "generated_at": "{{currentDate}}",
+
+  "permissions": ["admin", "user"],
+
+  "layout": {
+    "type": "two-column",
+    "config": {
+      "leftWidth": "65%",
+      "rightWidth": "35%",
+      "gap": "var(--space-lg)"
+    }
+  },
+
+  "header": {
+    "title": "{{titleCase name}} Dashboard",
+    "icon": "{{icon}}",
+    "actions": [
+      {
+        "label": "Crear Nuevo",
+        "icon": "➕",
+        "action": "navigate",
+        "target": "/auto-ui/{{name}}/form",
+        "variant": "primary",
+        "permissions": ["admin"]
+      },
+      {
+        "label": "Actualizar",
+        "icon": "🔄",
+        "action": "refresh",
+        "variant": "secondary"
+      }
+    ]
+  },
+
+  "sections": [
+    {
+      "id": "stat_total",
+      "column": "left",
+      "widget": "stat-card",
+      "config": {
+        "label": "Total",
+        "value": "@compute.count(@data.items)",
+        "icon": "📊",
+        "color": "primary",
+        "trend": "@compute.percentage(@data.thisMonth, @data.lastMonth)",
+        "trendDirection": "up"
+      }
+    },
+    {
+      "id": "stat_active",
+      "column": "left",
+      "widget": "stat-card",
+      "config": {
+        "label": "Activos",
+        "value": "@compute.count(@data.items, 'status', 'active')",
+        "icon": "✓",
+        "color": "success",
+        "trend": "+12%",
+        "trendDirection": "up"
+      }
+    },
+    {
+      "id": "stat_pending",
+      "column": "left",
+      "widget": "stat-card",
+      "config": {
+        "label": "Pendientes",
+        "value": "@compute.count(@data.items, 'status', 'pending')",
+        "icon": "⏳",
+        "color": "warning"
+      }
+    },
+    {
+      "id": "stat_inactive",
+      "column": "left",
+      "widget": "stat-card",
+      "config": {
+        "label": "Inactivos",
+        "value": "@compute.count(@data.items, 'status', 'inactive')",
+        "icon": "⏸",
+        "color": "muted"
+      }
+    },
+    {
+      "id": "main_table",
+      "column": "left",
+      "widget": "table-advanced",
+      "config": {
+        "title": "Lista de {{titleCase name}}",
+        "dataSource": "@data.items",
+        "columns": [
+          {
+            "key": "id",
+            "label": "ID",
+            "sortable": true,
+            "width": "80px"
+          },
+          {
+            "key": "name",
+            "label": "Nombre",
+            "sortable": true,
+            "searchable": true
+          },
+          {
+            "key": "status",
+            "label": "Estado",
+            "sortable": true,
+            "filterable": true,
+            "format": "badge"
+          },
+          {
+            "key": "createdAt",
+            "label": "Creado",
+            "sortable": true,
+            "format": "date"
+          }
+        ],
+        "sortable": true,
+        "filterable": true,
+        "searchable": true,
+        "paginated": true,
+        "pageSize": 10,
+        "rowSelection": false,
+        "actions": [
+          {
+            "label": "Ver",
+            "icon": "👁",
+            "action": "navigate",
+            "target": "/auto-ui/{{name}}/detail/:id",
+            "permissions": ["admin", "user"]
+          },
+          {
+            "label": "Editar",
+            "icon": "✏️",
+            "action": "navigate",
+            "target": "/auto-ui/{{name}}/form/:id",
+            "permissions": ["admin"]
+          },
+          {
+            "label": "Eliminar",
+            "icon": "🗑️",
+            "action": "delete",
+            "endpoint": "/modules/{{name}}/items/:id",
+            "permissions": ["admin"],
+            "confirm": {
+              "title": "Confirmar eliminación",
+              "message": "¿Estás seguro de eliminar este elemento?",
+              "confirmText": "Eliminar",
+              "cancelText": "Cancelar"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "chart_overview",
+      "column": "right",
+      "widget": "chart",
+      "config": {
+        "title": "Resumen",
+        "type": "pie",
+        "data": {
+          "labels": ["Activos", "Pendientes", "Inactivos"],
+          "datasets": [{
+            "data": [
+              "@compute.count(@data.items, 'status', 'active')",
+              "@compute.count(@data.items, 'status', 'pending')",
+              "@compute.count(@data.items, 'status', 'inactive')"
+            ],
+            "backgroundColor": ["var(--success)", "var(--warning)", "var(--muted)"]
+          }]
+        },
+        "options": {
+          "responsive": true,
+          "maintainAspectRatio": true,
+          "legend": {
+            "display": true,
+            "position": "bottom"
+          }
+        }
+      }
+    },
+    {
+      "id": "activity_feed",
+      "column": "right",
+      "widget": "activity-feed",
+      "config": {
+        "title": "Actividad Reciente",
+        "maxItems": 10,
+        "showTimestamp": true,
+        "showAvatar": true,
+        "activities": "@data.recentActivity",
+        "emptyMessage": "No hay actividad reciente",
+        "dateFormat": "relative"
+      }
+    },
+    {
+      "id": "info_card",
+      "column": "right",
+      "widget": "card",
+      "config": {
+        "title": "ℹ️ Información",
+        "variant": "outlined",
+        "content": {
+          "type": "info",
+          "items": [
+            {
+              "label": "Versión",
+              "value": "2.0.0",
+              "icon": "🏷️"
+            },
+            {
+              "label": "Estado del Sistema",
+              "value": "Operacional",
+              "color": "var(--success)"
+            },
+            {
+              "label": "Última Actualización",
+              "value": "@env.LAST_SYNC",
+              "format": "date"
+            }
+          ]
+        }
+      }
+    }
+  ],
+
+  "mqtt": {
+    "enabled": true,
+    "topics": [
+      "{{name}}.created",
+      "{{name}}.updated",
+      "{{name}}.deleted"
+    ],
+    "auto_refresh": true
+  }
+}

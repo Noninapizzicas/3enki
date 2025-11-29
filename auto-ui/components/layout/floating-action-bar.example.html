@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>FloatingActionBar - Ejemplo</title>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../../client/css/components/touch-action-button.css">
+  <link rel="stylesheet" href="../../client/css/components/floating-action-bar.css">
+
+  <style>
+    :root {
+      /* Colors */
+      --bg: #0f1216;
+      --bg-card: #1a1d24;
+      --bg-hover: #262932;
+      --text: #ffffff;
+      --text-muted: #9ca3af;
+      --text-dark: #1a1d24;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --border: #374151;
+
+      /* Spacing */
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --space-2xl: 48px;
+
+      /* Radius */
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-full: 9999px;
+
+      /* Typography */
+      --font: system-ui, -apple-system, sans-serif;
+      --size-sm: 0.875rem;
+      --size-base: 1rem;
+      --size-lg: 1.125rem;
+      --weight-medium: 500;
+      --weight-semibold: 600;
+
+      /* Shadows */
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+
+      /* Transitions */
+      --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      padding-bottom: 120px; /* Space for floating bar */
+      min-height: 200vh; /* Force scrolling */
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: var(--space-xl) var(--space-md);
+    }
+
+    h1 {
+      color: var(--primary);
+      margin-bottom: var(--space-lg);
+      font-size: 2rem;
+    }
+
+    h2 {
+      color: var(--text);
+      margin: var(--space-xl) 0 var(--space-md);
+      font-size: 1.5rem;
+    }
+
+    .demo-section {
+      margin-bottom: var(--space-2xl);
+      padding: var(--space-lg);
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+    }
+
+    .demo-info {
+      padding: var(--space-md);
+      background: var(--bg-hover);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-md);
+      font-size: var(--size-sm);
+      line-height: 1.6;
+    }
+
+    .demo-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+      margin-top: var(--space-md);
+    }
+
+    .demo-button {
+      padding: var(--space-sm) var(--space-md);
+      background: var(--primary);
+      color: var(--text);
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: var(--size-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .demo-button:hover {
+      background: var(--primary-hover);
+    }
+
+    .demo-button:active {
+      transform: scale(0.95);
+    }
+
+    .demo-button--secondary {
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+    }
+
+    .content-block {
+      padding: var(--space-lg);
+      margin: var(--space-md) 0;
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      border-left: 4px solid var(--primary);
+    }
+
+    .event-log {
+      max-height: 200px;
+      overflow-y: auto;
+      padding: var(--space-md);
+      background: var(--bg);
+      border-radius: var(--radius-md);
+      font-family: monospace;
+      font-size: var(--size-sm);
+    }
+
+    .log-entry {
+      padding: var(--space-xs);
+      border-left: 2px solid var(--success);
+      margin-bottom: var(--space-xs);
+      color: var(--text-muted);
+    }
+
+    .scroll-indicator {
+      text-align: center;
+      padding: var(--space-2xl);
+      color: var(--text-muted);
+      font-size: var(--size-lg);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📱 FloatingActionBar - Demo</h1>
+
+    <!-- Intro -->
+    <div class="demo-section">
+      <div class="demo-info">
+        <strong>🎯 Barra flotante minimalista para móvil</strong><br><br>
+        ✅ <strong>Swipe down:</strong> Ocultar barra (arrastra el handle)<br>
+        ✅ <strong>Scroll:</strong> Auto-hide activado (scroll down = oculta, scroll up = muestra)<br>
+        ✅ <strong>Glassmorphism:</strong> Fondo con blur<br>
+        ✅ <strong>TouchActionButtons:</strong> Botones multi-acción integrados<br>
+      </div>
+    </div>
+
+    <!-- Controles -->
+    <div class="demo-section">
+      <h2>🎮 Controles</h2>
+      <div class="demo-controls">
+        <button class="demo-button" onclick="toggleBar()">
+          Toggle Visibilidad
+        </button>
+        <button class="demo-button demo-button--secondary" onclick="toggleCollapse()">
+          Toggle Collapse
+        </button>
+        <button class="demo-button demo-button--secondary" onclick="addButton()">
+          Agregar Botón
+        </button>
+        <button class="demo-button demo-button--secondary" onclick="removeButton()">
+          Quitar Botón
+        </button>
+      </div>
+    </div>
+
+    <!-- Características -->
+    <div class="demo-section">
+      <h2>✨ Características</h2>
+      <div class="content-block">
+        <h3 style="margin-bottom: var(--space-sm);">Gestos Móvil</h3>
+        <ul style="margin-left: var(--space-lg); line-height: 1.8;">
+          <li>Swipe down en el handle para ocultar</li>
+          <li>Auto-hide cuando haces scroll down</li>
+          <li>Auto-show cuando haces scroll up</li>
+          <li>Vibración háptica en interacciones</li>
+        </ul>
+      </div>
+
+      <div class="content-block">
+        <h3 style="margin-bottom: var(--space-sm);">Visual</h3>
+        <ul style="margin-left: var(--space-lg); line-height: 1.8;">
+          <li>Glassmorphism con backdrop blur</li>
+          <li>Bordes redondeados superiores</li>
+          <li>Shadow suave</li>
+          <li>Animaciones fluidas</li>
+          <li>Safe-area support (iOS notch)</li>
+        </ul>
+      </div>
+
+      <div class="content-block">
+        <h3 style="margin-bottom: var(--space-sm);">Botones</h3>
+        <ul style="margin-left: var(--space-lg); line-height: 1.8;">
+          <li>Scroll horizontal si hay muchos</li>
+          <li>Integración con TouchActionButton</li>
+          <li>Spacing configurable</li>
+          <li>Add/remove dinámico</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="demo-section">
+      <h2>📋 Event Log</h2>
+      <div id="eventLog" class="event-log">
+        <div class="log-entry">Esperando eventos...</div>
+      </div>
+    </div>
+
+    <!-- Scroll Content -->
+    <div class="scroll-indicator">
+      ⬇️ Scroll para probar auto-hide ⬇️
+    </div>
+
+    <div class="content-block">
+      <h3>Contenido de ejemplo</h3>
+      <p style="line-height: 1.6; color: var(--text-muted);">
+        Este es contenido de relleno para permitir el scroll.
+        La barra flotante se ocultará cuando hagas scroll hacia abajo
+        y se mostrará cuando hagas scroll hacia arriba.
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h3>Más contenido</h3>
+      <p style="line-height: 1.6; color: var(--text-muted);">
+        Continúa haciendo scroll para ver el comportamiento automático.
+        También puedes arrastrar el handle (la línea gris) hacia abajo
+        para ocultar la barra manualmente.
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h3>Último bloque</h3>
+      <p style="line-height: 1.6; color: var(--text-muted);">
+        La barra es completamente responsive y funciona tanto en móvil
+        como en desktop. En desktop se centra y es más estrecha.
+      </p>
+    </div>
+
+    <div class="scroll-indicator">
+      ⬆️ Scroll up para mostrar la barra ⬆️
+    </div>
+  </div>
+
+  <!-- Floating Action Bar -->
+  <div
+    data-component="floating-action-bar"
+    data-config='{
+      "variant": "default",
+      "position": "bottom",
+      "buttons": [
+        {
+          "component": "touch-action-button",
+          "emoji": "🏠",
+          "label": "Inicio",
+          "variant": "secondary",
+          "size": "md",
+          "primaryAction": {
+            "emoji": "👁",
+            "label": "Ver inicio"
+          },
+          "secondaryAction": {
+            "emoji": "➕",
+            "label": "Crear nuevo"
+          },
+          "tertiaryAction": {
+            "emoji": "⚙️",
+            "label": "Configurar"
+          }
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "📋",
+          "label": "Tareas",
+          "variant": "secondary",
+          "size": "md"
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "➕",
+          "variant": "primary",
+          "size": "lg"
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "👤",
+          "label": "Perfil",
+          "variant": "secondary",
+          "size": "md"
+        },
+        {
+          "component": "touch-action-button",
+          "emoji": "⚙️",
+          "label": "Config",
+          "variant": "secondary",
+          "size": "md"
+        }
+      ],
+      "spacing": "normal",
+      "autoHide": true,
+      "swipeable": true,
+      "showHandle": true,
+      "backdrop": true,
+      "safeArea": true,
+      "hapticFeedback": true,
+      "collapsible": false,
+      "animation": "slide"
+    }'>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../../client/js/components/touch-action-button.js"></script>
+  <script src="../../client/js/components/floating-action-bar.js"></script>
+
+  <script>
+    // Mock AutoUI.executeAction
+    window.AutoUI = window.AutoUI || {};
+    window.AutoUI.executeAction = function(type, config, element) {
+      console.log('Action:', type, config);
+      logEvent(`Action: ${config.label || type} ${config.emoji || ''}`);
+    };
+
+    // Get bar instance
+    let bar = null;
+    setTimeout(() => {
+      const barElement = document.querySelector('[data-component="floating-action-bar"]');
+      if (barElement) {
+        // Get instance (stored in dataset)
+        bar = window.AutoUI.components['floating-action-bar'];
+      }
+    }, 100);
+
+    // Toggle visibility
+    function toggleBar() {
+      const barElement = document.querySelector('[data-component="floating-action-bar"]');
+      if (barElement.classList.contains('floating-action-bar--hidden')) {
+        logEvent('Mostrando barra');
+      } else {
+        logEvent('Ocultando barra');
+      }
+      barElement.classList.toggle('floating-action-bar--hidden');
+    }
+
+    // Toggle collapse
+    function toggleCollapse() {
+      const barElement = document.querySelector('[data-component="floating-action-bar"]');
+      barElement.classList.toggle('floating-action-bar--collapsed');
+      logEvent('Toggle collapse');
+    }
+
+    // Add button
+    let buttonCounter = 6;
+    function addButton() {
+      const barElement = document.querySelector('[data-component="floating-action-bar"]');
+      const buttonsContainer = barElement.querySelector('.floating-action-bar__buttons');
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'floating-action-bar__button-wrapper';
+
+      const button = document.createElement('button');
+      button.setAttribute('data-component', 'touch-action-button');
+      button.setAttribute('data-config', JSON.stringify({
+        emoji: ['🎯', '🎨', '🎵', '🎮', '📸'][buttonCounter % 5],
+        label: `Btn ${buttonCounter}`,
+        variant: 'secondary',
+        size: 'md'
+      }));
+
+      wrapper.appendChild(button);
+      buttonsContainer.appendChild(wrapper);
+
+      // Re-init TouchActionButtons
+      if (window.AutoUI.components['touch-action-button']) {
+        window.AutoUI.components['touch-action-button'].initAll();
+      }
+
+      buttonCounter++;
+      logEvent(`Botón agregado (total: ${buttonCounter})`);
+    }
+
+    // Remove button
+    function removeButton() {
+      const barElement = document.querySelector('[data-component="floating-action-bar"]');
+      const buttonsContainer = barElement.querySelector('.floating-action-bar__buttons');
+      const buttons = buttonsContainer.querySelectorAll('.floating-action-bar__button-wrapper');
+
+      if (buttons.length > 0) {
+        buttons[buttons.length - 1].remove();
+        buttonCounter--;
+        logEvent(`Botón eliminado (total: ${buttonCounter - 1})`);
+      }
+    }
+
+    // Event logging
+    function logEvent(message) {
+      const log = document.getElementById('eventLog');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong> - ${message}`;
+      log.prepend(entry);
+
+      // Limit log entries
+      const entries = log.querySelectorAll('.log-entry');
+      if (entries.length > 20) {
+        entries[entries.length - 1].remove();
+      }
+    }
+
+    // Listen to all events
+    document.addEventListener('floating-action-bar:show', () => {
+      logEvent('✅ Barra mostrada');
+    });
+
+    document.addEventListener('floating-action-bar:hide', () => {
+      logEvent('❌ Barra ocultada');
+    });
+
+    document.addEventListener('floating-action-bar:collapse', () => {
+      logEvent('📦 Barra colapsada');
+    });
+
+    document.addEventListener('floating-action-bar:expand', () => {
+      logEvent('📂 Barra expandida');
+    });
+
+    // Initial log
+    logEvent('FloatingActionBar inicializada');
+  </script>
+</body>
+</html>

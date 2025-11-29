@@ -4,7 +4,7 @@
 
 This registry documents all available components in the Auto-UI v2.0 system. Each component is defined as a JSON file with complete specifications including variants, props, features, and examples.
 
-**Total Components: 21**
+**Total Components: 22**
 
 ---
 
@@ -19,7 +19,7 @@ Components for displaying and organizing data
 ### 📝 Form Components (6)
 Input and form field components
 
-### 🧭 Navigation Components (4)
+### 🧭 Navigation Components (5)
 Navigation and wayfinding components
 
 ### 🎨 Layout Components (1)
@@ -555,9 +555,83 @@ User feedback and loading states
 
 ---
 
+### 16. Corner Info Button (`navigation/corner-info-button.json`)
+**Description:** Botón cuadrado informativo con emojis en las 4 esquinas, marco de 4mm y colores variables
+
+**Variants:**
+- `primary` - Estilo principal (azul)
+- `secondary` - Estilo secundario (gris)
+- `success` - Éxito (verde)
+- `warning` - Advertencia (amarillo)
+- `danger` - Peligro (rojo)
+- `info` - Informativo (cyan)
+- `custom` - Colores personalizados
+
+**Sizes:** `sm` (120x120px), `md` (160x160px), `lg` (200x200px), `xl` (240x240px)
+
+**Key Features:**
+- ✅ Texto central grande y legible
+- ✅ 4 emojis personalizables en las esquinas
+- ✅ Marco de 4mm de grosor configurable
+- ✅ Colores de borde y fondo personalizables
+- ✅ Efecto hover con escala y sombra
+- ✅ Efecto ripple al hacer click
+- ✅ Vibración háptica en dispositivos móviles
+- ✅ Funciona como botón o enlace
+- ✅ Responsive y optimizado para touch
+- ✅ ARIA compliant
+
+**Example:**
+```json
+{
+  "component": "corner-info-button",
+  "variant": "primary",
+  "size": "md",
+  "props": {
+    "text": "Panel de Ventas",
+    "cornerTopLeft": "📊",
+    "cornerTopRight": "📈",
+    "cornerBottomLeft": "💰",
+    "cornerBottomRight": "🎯",
+    "href": "/dashboard/sales",
+    "hoverEffect": true,
+    "rippleEffect": true,
+    "hapticFeedback": true,
+    "ariaLabel": "Acceder al panel de ventas"
+  }
+}
+```
+
+**Usage (JavaScript):**
+```javascript
+// Crear programáticamente
+const button = AutoUI.components['corner-info-button'].create({
+  text: 'Documentos',
+  variant: 'success',
+  size: 'lg',
+  cornerTopLeft: '📄',
+  cornerTopRight: '📋',
+  cornerBottomLeft: '✅',
+  cornerBottomRight: '📝',
+  href: '/documents'
+});
+
+// Actualizar texto
+button.setText('Mis Documentos');
+
+// Actualizar esquina
+button.setCorner('top-left', '🎉');
+
+// Deshabilitar/habilitar
+button.disable();
+button.enable();
+```
+
+---
+
 ## 🎨 Layout Components
 
-### 16. Card (`layout/card.json`)
+### 17. Card (`layout/card.json`)
 **Description:** Tarjeta para agrupar contenido relacionado
 
 **Variants:**
@@ -589,7 +663,7 @@ User feedback and loading states
 
 ## 💬 Feedback Components
 
-### 17. Toast (`feedback/toast.json`)
+### 18. Toast (`feedback/toast.json`)
 **Description:** Notificaciones temporales no intrusivas
 
 **Variants:**
@@ -612,7 +686,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 18. Alert (`feedback/alert.json`)
+### 19. Alert (`feedback/alert.json`)
 **Description:** Alertas para mostrar mensajes importantes
 
 **Variants:**
@@ -652,7 +726,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 19. Progress (`feedback/progress.json`)
+### 20. Progress (`feedback/progress.json`)
 **Description:** Barra de progreso para mostrar el avance de operaciones
 
 **Variants:**
@@ -690,7 +764,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 20. Skeleton (`feedback/skeleton.json`)
+### 21. Skeleton (`feedback/skeleton.json`)
 **Description:** Skeleton loaders para estados de carga
 
 **Variants:**
@@ -730,7 +804,7 @@ AutoUI.showToast('Guardado correctamente', 'success');
 
 ---
 
-### 21. Spinner (`feedback/spinner.json`)
+### 22. Spinner (`feedback/spinner.json`)
 **Description:** Indicadores de carga animados
 
 **Variants:**
@@ -892,6 +966,6 @@ const html = componentSystem.render('button', {
 ---
 
 **Version:** 2.0.0
-**Last Updated:** 2025-11-25
-**Total Components:** 21
+**Last Updated:** 2025-11-29
+**Total Components:** 22
 **Author:** Event Core Team

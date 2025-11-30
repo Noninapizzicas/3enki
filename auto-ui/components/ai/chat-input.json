@@ -1,0 +1,366 @@
+{
+  "name": "chat-input",
+  "category": "ai",
+  "description": "Input de chat optimizado para móvil con barras de acciones configurables (superior e inferior)",
+  "version": "1.0.0",
+  "author": "Event Core Team",
+
+  "variants": {
+    "default": {
+      "description": "Input estándar con ambas barras",
+      "className": "chat-input--default"
+    },
+    "compact": {
+      "description": "Solo input y botón enviar, sin barras",
+      "className": "chat-input--compact"
+    },
+    "minimal": {
+      "description": "Input inline minimalista",
+      "className": "chat-input--minimal"
+    },
+    "floating": {
+      "description": "Flotante sobre el contenido",
+      "className": "chat-input--floating"
+    }
+  },
+
+  "sizes": {
+    "sm": {
+      "description": "Compacto - altura mínima",
+      "inputHeight": "40px",
+      "buttonSize": "36px",
+      "className": "chat-input--sm"
+    },
+    "md": {
+      "description": "Estándar",
+      "inputHeight": "56px",
+      "buttonSize": "48px",
+      "className": "chat-input--md"
+    },
+    "lg": {
+      "description": "Grande - más área de escritura",
+      "inputHeight": "80px",
+      "buttonSize": "56px",
+      "className": "chat-input--lg"
+    }
+  },
+
+  "props": {
+    "variant": {
+      "type": "enum",
+      "values": ["default", "compact", "minimal", "floating"],
+      "default": "default",
+      "description": "Variante visual del componente"
+    },
+    "size": {
+      "type": "enum",
+      "values": ["sm", "md", "lg"],
+      "default": "md",
+      "description": "Tamaño del componente"
+    },
+    "placeholder": {
+      "type": "string",
+      "default": "Escribe tu mensaje...",
+      "description": "Placeholder del input"
+    },
+    "multiline": {
+      "type": "boolean",
+      "default": true,
+      "description": "Permitir múltiples líneas (textarea vs input)"
+    },
+    "maxRows": {
+      "type": "number",
+      "default": 5,
+      "description": "Máximo de filas en modo multiline (auto-expand)"
+    },
+    "maxLength": {
+      "type": "number",
+      "default": 4000,
+      "description": "Máximo de caracteres"
+    },
+    "showCharCount": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mostrar contador de caracteres"
+    },
+    "showTokenCount": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mostrar estimación de tokens"
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Deshabilitar input"
+    },
+    "loading": {
+      "type": "boolean",
+      "default": false,
+      "description": "Estado de carga (esperando respuesta AI)"
+    },
+    "sendButton": {
+      "type": "object",
+      "default": {
+        "emoji": "🚀",
+        "label": "Enviar",
+        "position": "right",
+        "holdAction": null
+      },
+      "description": "Configuración del botón de enviar"
+    },
+    "topBar": {
+      "type": "object",
+      "default": {
+        "enabled": true,
+        "collapsible": true,
+        "collapsed": false,
+        "buttons": []
+      },
+      "description": "Configuración de la barra superior"
+    },
+    "bottomBar": {
+      "type": "object",
+      "default": {
+        "enabled": true,
+        "collapsible": true,
+        "collapsed": false,
+        "buttons": []
+      },
+      "description": "Configuración de la barra inferior"
+    },
+    "submitOnEnter": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enviar con Enter (Shift+Enter para nueva línea)"
+    },
+    "clearOnSubmit": {
+      "type": "boolean",
+      "default": true,
+      "description": "Limpiar input después de enviar"
+    },
+    "focusOnMount": {
+      "type": "boolean",
+      "default": false,
+      "description": "Auto-focus al montar el componente"
+    },
+    "hapticFeedback": {
+      "type": "boolean",
+      "default": true,
+      "description": "Vibración al interactuar"
+    },
+    "endpoint": {
+      "type": "string",
+      "required": false,
+      "description": "Endpoint para enviar mensajes"
+    },
+    "streaming": {
+      "type": "boolean",
+      "default": true,
+      "description": "Usar streaming SSE para respuestas"
+    }
+  },
+
+  "buttonSchema": {
+    "description": "Schema para botones en las barras",
+    "properties": {
+      "id": {
+        "type": "string",
+        "required": true,
+        "description": "Identificador único del botón"
+      },
+      "emoji": {
+        "type": "string",
+        "required": true,
+        "description": "Emoji del botón"
+      },
+      "label": {
+        "type": "string",
+        "description": "Label/tooltip del botón"
+      },
+      "action": {
+        "type": "enum",
+        "values": ["emit", "navigate", "toggle", "custom", "open-panel"],
+        "default": "emit",
+        "description": "Tipo de acción"
+      },
+      "event": {
+        "type": "string",
+        "description": "Evento a emitir (si action=emit)"
+      },
+      "handler": {
+        "type": "string",
+        "description": "Handler personalizado (si action=custom)"
+      },
+      "panel": {
+        "type": "object",
+        "description": "Config del panel a abrir (si action=open-panel)"
+      },
+      "active": {
+        "type": "boolean",
+        "default": false,
+        "description": "Estado activo/seleccionado"
+      },
+      "disabled": {
+        "type": "boolean",
+        "default": false,
+        "description": "Botón deshabilitado"
+      },
+      "badge": {
+        "type": "string|number",
+        "description": "Badge/contador sobre el botón"
+      },
+      "variant": {
+        "type": "enum",
+        "values": ["default", "primary", "success", "warning", "danger"],
+        "default": "default"
+      }
+    }
+  },
+
+  "states": {
+    "idle": {
+      "description": "Estado normal, listo para escribir",
+      "className": "chat-input--idle"
+    },
+    "typing": {
+      "description": "Usuario escribiendo",
+      "className": "chat-input--typing"
+    },
+    "loading": {
+      "description": "Esperando respuesta de AI",
+      "className": "chat-input--loading"
+    },
+    "disabled": {
+      "description": "Input deshabilitado",
+      "className": "chat-input--disabled"
+    },
+    "error": {
+      "description": "Error al enviar",
+      "className": "chat-input--error"
+    }
+  },
+
+  "events": {
+    "submit": "Disparado al enviar mensaje",
+    "change": "Disparado al cambiar el texto",
+    "focus": "Disparado al hacer focus",
+    "blur": "Disparado al perder focus",
+    "button-click": "Disparado al hacer click en botón de barra",
+    "clear": "Disparado al limpiar el input",
+    "cancel": "Disparado al cancelar envío (durante loading)"
+  },
+
+  "features": [
+    "Input multiline con auto-expand",
+    "Botón de enviar configurable (emoji, posición, hold action)",
+    "Barra superior configurable con emoji buttons",
+    "Barra inferior configurable con emoji buttons",
+    "Barras colapsables para más espacio",
+    "Contador de caracteres/tokens opcional",
+    "Submit con Enter (Shift+Enter para nueva línea)",
+    "Estado loading con opción de cancelar",
+    "Integración con FloatingPanel para acciones complejas",
+    "Streaming SSE para respuestas AI",
+    "Haptic feedback en móvil",
+    "Responsive y mobile-first",
+    "Accesible con keyboard navigation",
+    "Auto-focus configurable"
+  ],
+
+  "accessibility": {
+    "role": "form",
+    "ariaLabel": "Chat input",
+    "keyboard": true,
+    "focusable": true,
+    "screenReader": true,
+    "announcements": {
+      "messageSent": "Mensaje enviado",
+      "loading": "Esperando respuesta",
+      "error": "Error al enviar mensaje"
+    }
+  },
+
+  "examples": {
+    "simpleChat": {
+      "description": "Chat simple sin barras",
+      "component": "chat-input",
+      "variant": "compact",
+      "props": {
+        "placeholder": "Escribe tu mensaje...",
+        "topBar": { "enabled": false },
+        "bottomBar": { "enabled": false },
+        "endpoint": "/api/chat"
+      }
+    },
+    "aiChatFull": {
+      "description": "Chat AI completo con todas las opciones",
+      "component": "chat-input",
+      "variant": "default",
+      "size": "md",
+      "props": {
+        "placeholder": "Pregunta lo que quieras...",
+        "showTokenCount": true,
+        "streaming": true,
+        "topBar": {
+          "enabled": true,
+          "collapsible": true,
+          "buttons": [
+            { "id": "provider", "emoji": "🤖", "label": "Cambiar AI", "action": "open-panel" },
+            { "id": "model", "emoji": "🎯", "label": "Modelo", "action": "open-panel" },
+            { "id": "prompts", "emoji": "📝", "label": "Prompts", "action": "open-panel" },
+            { "id": "settings", "emoji": "⚙️", "label": "Config", "action": "open-panel" }
+          ]
+        },
+        "bottomBar": {
+          "enabled": true,
+          "collapsible": true,
+          "buttons": [
+            { "id": "attach", "emoji": "📎", "label": "Adjuntar", "action": "emit", "event": "attach" },
+            { "id": "voice", "emoji": "🎤", "label": "Voz", "action": "emit", "event": "voice-input" },
+            { "id": "camera", "emoji": "📷", "label": "Cámara", "action": "emit", "event": "camera" },
+            { "id": "clear", "emoji": "🗑️", "label": "Limpiar", "action": "emit", "event": "clear-chat" }
+          ]
+        },
+        "sendButton": {
+          "emoji": "🚀",
+          "position": "right",
+          "holdAction": { "emoji": "⚡", "label": "Envío rápido", "event": "quick-send" }
+        }
+      }
+    },
+    "menuGenerator": {
+      "description": "Para generador de menús",
+      "component": "chat-input",
+      "variant": "default",
+      "props": {
+        "placeholder": "Describe el menú que quieres generar...",
+        "topBar": {
+          "enabled": true,
+          "buttons": [
+            { "id": "template", "emoji": "📋", "label": "Plantilla", "action": "open-panel" },
+            { "id": "style", "emoji": "🎨", "label": "Estilo", "action": "open-panel" }
+          ]
+        },
+        "bottomBar": {
+          "enabled": true,
+          "buttons": [
+            { "id": "upload", "emoji": "📷", "label": "Subir carta", "action": "emit", "event": "upload-menu" },
+            { "id": "examples", "emoji": "💡", "label": "Ejemplos", "action": "open-panel" }
+          ]
+        }
+      }
+    }
+  },
+
+  "styling": {
+    "css": {
+      "container": "display: flex; flex-direction: column; gap: var(--space-xs);",
+      "topBar": "display: flex; gap: var(--space-xs); padding: var(--space-xs); border-bottom: 1px solid var(--border);",
+      "inputWrapper": "display: flex; gap: var(--space-sm); align-items: flex-end; padding: var(--space-sm);",
+      "textarea": "flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-sm); font-size: var(--size-base); background: var(--bg-input); color: var(--text);",
+      "sendButton": "min-width: 48px; height: 48px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;",
+      "bottomBar": "display: flex; gap: var(--space-xs); padding: var(--space-xs); border-top: 1px solid var(--border);",
+      "barButton": "min-width: 40px; height: 40px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; background: var(--bg-card); border: 1px solid var(--border);"
+    }
+  }
+}

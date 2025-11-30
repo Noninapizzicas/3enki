@@ -1,0 +1,167 @@
+# Blueprint: Gestión de Tareas
+# Generar: npx plop from-blueprint → tareas
+
+name: tareas
+description: Gestión de tareas con estados y prioridades
+version: 1.0.0
+author: Event Core Team
+icon: "✅"
+
+entity:
+  name: tarea
+  plural: tareas
+  titleField: titulo
+  descriptionField: descripcion
+
+fields:
+  - name: titulo
+    type: string
+    label: Título
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 200
+    ui:
+      inputType: text
+      placeholder: ¿Qué necesitas hacer?
+
+  - name: descripcion
+    type: string
+    label: Descripción
+    required: false
+    validation:
+      maxLength: 2000
+    ui:
+      inputType: textarea
+      placeholder: Detalles adicionales...
+
+  - name: estado
+    type: string
+    label: Estado
+    required: true
+    default: pendiente
+    validation:
+      enum: [pendiente, en_progreso, completada, cancelada]
+    ui:
+      inputType: select
+      options:
+        - value: pendiente
+          label: "⏳ Pendiente"
+        - value: en_progreso
+          label: "🔄 En Progreso"
+        - value: completada
+          label: "✅ Completada"
+        - value: cancelada
+          label: "❌ Cancelada"
+
+  - name: prioridad
+    type: string
+    label: Prioridad
+    required: true
+    default: media
+    validation:
+      enum: [baja, media, alta, urgente]
+    ui:
+      inputType: select
+      options:
+        - value: baja
+          label: "🟢 Baja"
+        - value: media
+          label: "🟡 Media"
+        - value: alta
+          label: "🟠 Alta"
+        - value: urgente
+          label: "🔴 Urgente"
+
+  - name: fecha_limite
+    type: date
+    label: Fecha Límite
+    required: false
+    ui:
+      inputType: date
+      helpText: Fecha límite para completar la tarea
+
+  - name: etiquetas
+    type: array
+    label: Etiquetas
+    required: false
+    default: []
+    ui:
+      inputType: text
+      placeholder: Etiquetas separadas por coma
+
+events:
+  publish:
+    - name: tarea.creada
+      description: Nueva tarea creada
+      payload:
+        - field: tarea_id
+          type: string
+        - field: titulo
+          type: string
+        - field: prioridad
+          type: string
+
+    - name: tarea.actualizada
+      description: Tarea modificada
+      payload:
+        - field: tarea_id
+          type: string
+        - field: cambios
+          type: object
+
+    - name: tarea.completada
+      description: Tarea marcada como completada
+      payload:
+        - field: tarea_id
+          type: string
+        - field: titulo
+          type: string
+
+    - name: tarea.eliminada
+      description: Tarea eliminada
+      payload:
+        - field: tarea_id
+          type: string
+
+  subscribe: []
+
+apis:
+  - method: POST
+    path: /tareas/:id/completar
+    handler: handleCompletarTarea
+    description: Marcar tarea como completada
+
+  - method: POST
+    path: /tareas/:id/reabrir
+    handler: handleReabrirTarea
+    description: Reabrir tarea completada
+
+ui:
+  enabled: true
+  layout: list
+  features:
+    - create
+    - edit
+    - delete
+    - search
+    - filter
+    - sort
+  colors:
+    - value: pendiente
+      label: Pendiente
+      class: bg-gray-100 border-gray-300
+    - value: en_progreso
+      label: En Progreso
+      class: bg-blue-100 border-blue-300
+    - value: completada
+      label: Completada
+      class: bg-green-100 border-green-300
+    - value: cancelada
+      label: Cancelada
+      class: bg-red-100 border-red-300
+
+config:
+  persistence: false
+  metrics: true
+  realtime: true

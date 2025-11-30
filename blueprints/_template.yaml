@@ -1,0 +1,108 @@
+# Blueprint Template - Copia este archivo para crear un nuevo módulo
+# Archivo: blueprints/mi-modulo.yaml
+# Generar: npx plop from-blueprint
+
+# ============================================================================
+# METADATA
+# ============================================================================
+name: mi-modulo
+description: Descripción de mi módulo
+version: 1.0.0
+author: Event Core Team
+icon: "📦"
+
+# ============================================================================
+# ENTIDAD PRINCIPAL
+# ============================================================================
+entity:
+  name: item
+  plural: items
+  titleField: nombre
+  descriptionField: descripcion
+
+# ============================================================================
+# CAMPOS
+# ============================================================================
+fields:
+  - name: nombre
+    type: string
+    label: Nombre
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 100
+    ui:
+      inputType: text
+      placeholder: Ingresa el nombre
+
+  - name: descripcion
+    type: string
+    label: Descripción
+    required: false
+    validation:
+      maxLength: 500
+    ui:
+      inputType: textarea
+      placeholder: Descripción opcional
+
+  - name: activo
+    type: boolean
+    label: Activo
+    required: false
+    default: true
+    ui:
+      inputType: checkbox
+
+# ============================================================================
+# EVENTOS
+# ============================================================================
+events:
+  publish:
+    - name: item.creado
+      description: Cuando se crea un nuevo item
+      payload:
+        - field: item_id
+          type: string
+        - field: nombre
+          type: string
+
+    - name: item.actualizado
+      description: Cuando se actualiza un item
+      payload:
+        - field: item_id
+          type: string
+        - field: cambios
+          type: object
+
+    - name: item.eliminado
+      description: Cuando se elimina un item
+      payload:
+        - field: item_id
+          type: string
+
+  subscribe: []
+
+# ============================================================================
+# APIs (adicionales a CRUD automático)
+# ============================================================================
+apis: []
+
+# ============================================================================
+# UI
+# ============================================================================
+ui:
+  enabled: true
+  layout: grid
+  features:
+    - create
+    - edit
+    - delete
+    - search
+
+# ============================================================================
+# CONFIGURACIÓN
+# ============================================================================
+config:
+  persistence: false
+  metrics: true
+  realtime: true

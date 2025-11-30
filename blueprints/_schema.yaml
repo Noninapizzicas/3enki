@@ -1,0 +1,98 @@
+# Blueprint Schema - Definición de módulos Event-Core + Svelte UI
+#
+# Este archivo documenta la estructura de un blueprint.
+# Los blueprints permiten definir completamente un módulo antes de generarlo.
+#
+# Uso:
+#   1. Copiar _template.yaml → mi-modulo.yaml
+#   2. Completar la especificación
+#   3. Ejecutar: npx plop from-blueprint
+#   4. Seleccionar el blueprint
+#
+# ============================================================================
+
+# Metadata del módulo (requerido)
+name: string              # kebab-case, ej: "gestion-tareas"
+description: string       # Descripción breve
+version: string           # Semver, ej: "1.0.0"
+author: string            # Nombre del autor/equipo
+icon: string              # Emoji, ej: "📋"
+
+# Entidad principal (requerido)
+entity:
+  name: string            # Singular, ej: "tarea"
+  plural: string          # Plural, ej: "tareas"
+  titleField: string      # Campo para mostrar como título
+  descriptionField: string # Campo para mostrar como descripción (opcional)
+
+# Campos de la entidad (requerido, al menos 1)
+fields:
+  - name: string          # Nombre del campo (snake_case)
+    type: string          # Tipo: string, number, boolean, date, array, object
+    label: string         # Etiqueta para UI
+    required: boolean     # ¿Es requerido?
+    default: any          # Valor por defecto (opcional)
+    validation:           # Reglas de validación (opcional)
+      minLength: number
+      maxLength: number
+      min: number
+      max: number
+      pattern: string     # Regex
+      enum: array         # Valores permitidos
+    ui:                   # Configuración de UI (opcional)
+      inputType: string   # text, textarea, number, select, checkbox, radio, date, color
+      placeholder: string
+      helpText: string
+      options: array      # Para select/radio: [{value, label}]
+
+# Eventos publicados (opcional)
+events:
+  publish:
+    - name: string        # ej: "tarea.creada"
+      description: string
+      payload:            # Campos del payload
+        - field: string
+          type: string
+
+  subscribe:              # Eventos a los que se suscribe (opcional)
+    - name: string
+      handler: string     # Nombre del handler
+
+# APIs HTTP (opcional, se generan automáticas para CRUD)
+apis:
+  - method: string        # GET, POST, PUT, PATCH, DELETE
+    path: string          # ej: "/tareas/:id/completar"
+    handler: string       # Nombre del handler
+    description: string
+    auth: boolean         # ¿Requiere autenticación?
+
+# Configuración de UI (opcional)
+ui:
+  enabled: boolean        # ¿Generar página Svelte?
+  layout: string          # grid, list, table, kanban
+  features:
+    - create              # Modal de creación
+    - edit                # Modal de edición
+    - delete              # Botón eliminar
+    - search              # Barra de búsqueda
+    - filter              # Filtros
+    - sort                # Ordenamiento
+    - pagination          # Paginación
+    - export              # Exportar datos
+  colors:                 # Colores para cards (opcional)
+    - value: string
+      label: string
+      class: string
+
+# Relaciones con otros módulos (opcional)
+relations:
+  - module: string        # Nombre del módulo relacionado
+    type: string          # hasOne, hasMany, belongsTo
+    field: string         # Campo de referencia
+
+# Configuración adicional (opcional)
+config:
+  persistence: boolean    # ¿Guardar en JSON?
+  caching: boolean        # ¿Cachear datos?
+  metrics: boolean        # ¿Métricas detalladas?
+  realtime: boolean       # ¿Actualización en tiempo real?

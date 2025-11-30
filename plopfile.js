@@ -844,4 +844,134 @@ module.exports = function (plop) {
       ];
     }
   });
+
+  // ==========================================
+  // Generator: from-blueprint
+  // ==========================================
+  plop.setGenerator('from-blueprint', {
+    description: 'Generar módulo completo desde un archivo blueprint YAML',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'blueprintPath',
+        message: '📋 Ruta al blueprint (ej: blueprints/tareas.yaml):',
+        default: 'blueprints/',
+        validate: (value) => value ? true : 'La ruta es requerida'
+      }
+    ],
+
+    actions: (data) => {
+      const fs = require('fs');
+      const path = require('path');
+      const yaml = require('yaml');
+
+      // Leer y parsear blueprint
+      let blueprint;
+      try {
+        const fullPath = path.resolve(data.blueprintPath);
+        const content = fs.readFileSync(fullPath, 'utf8');
+        blueprint = yaml.parse(content);
+      } catch (err) {
+        console.error(`\n❌ Error leyendo blueprint: ${err.message}`);
+        console.log('\n💡 Asegúrate de:');
+        console.log('   1. La ruta es correcta (ej: blueprints/tareas.yaml)');
+        console.log('   2. El archivo YAML es válido');
+        console.log('   3. Tienes instalado el paquete yaml: npm install yaml\n');
+        return [];
+      }
+
+      // Validar campos requeridos
+      if (!blueprint.name || !blueprint.entity || !blueprint.fields) {
+        console.error('\n❌ Blueprint inválido. Campos requeridos: name, entity, fields');
+        return [];
+      }
+
+      // Transferir datos del blueprint
+      data.name = blueprint.name;
+      data.description = blueprint.description || 'Módulo Event-Core';
+      data.author = blueprint.author || 'Event Core Team';
+      data.icon = blueprint.icon || '📦';
+      data.entityName = blueprint.entity.name;
+      data.pluralName = blueprint.entity.plural || blueprint.entity.name + 's';
+      data.titleField = blueprint.entity.titleField;
+      data.descriptionField = blueprint.entity.descriptionField || '';
+
+      // Procesar campos
+      data.fields = blueprint.fields.map(f => ({
+        name: f.name,
+        type: f.type || 'string',
+        label: f.label || f.name,
+        placeholder: f.ui?.placeholder || `Ingresa ${f.label || f.name}`,
+        inputType: f.ui?.inputType || (f.type === 'number' ? 'number' : 'text'),
+        required: f.required || false,
+        default: f.default,
+        options: f.ui?.options
+      }));
+      data.hasForm = data.fields.length > 0;
+
+      // Procesar eventos
+      data.publishEvents = (blueprint.events?.publish || []).map(e => e.name);
+
+      // Procesar APIs
+      const entity = data.entityName.charAt(0).toUpperCase() + data.entityName.slice(1);
+      data.apis = [
+        { method: 'GET', path: `/${data.pluralName}`, handler: `handleList${entity}s`, description: 'Listar todos' },
+        { method: 'GET', path: `/${data.pluralName}/:id`, handler: `handleGet${entity}`, description: 'Obtener por ID' },
+        { method: 'POST', path: `/${data.pluralName}`, handler: `handleCreate${entity}`, description: 'Crear nuevo' },
+        { method: 'PATCH', path: `/${data.pluralName}/:id`, handler: `handleUpdate${entity}`, description: 'Actualizar' },
+        { method: 'DELETE', path: `/${data.pluralName}/:id`, handler: `handleDelete${entity}`, description: 'Eliminar' },
+        { method: 'GET', path: '/health', handler: 'handleHealthCheck', description: 'Health check' },
+        ...(blueprint.apis || [])
+      ];
+
+      // Suscripciones
+      data.subscriptions = (blueprint.events?.subscribe || []).map(s => ({
+        event: s.name,
+        handler: s.handler || 'on' + s.name.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')
+      }));
+      data.hasSubscriptions = data.subscriptions.length > 0;
+
+      // Config
+      data.persistence = blueprint.config?.persistence || false;
+      data.ui = blueprint.ui?.enabled !== false;
+      data.layout = blueprint.ui?.layout || 'grid';
+      data.features = blueprint.ui?.features || ['create', 'edit', 'delete'];
+      data.colors = blueprint.ui?.colors || [];
+
+      const modulePath = `modules/${data.name}`;
+      const frontendPath = `frontend/src/routes/${data.name}`;
+
+      console.log(`\n📋 Blueprint: ${data.blueprintPath}`);
+      console.log(`📦 Módulo: ${data.name}`);
+      console.log(`📝 Entidad: ${data.entityName} (${data.pluralName})`);
+      console.log(`🔧 Campos: ${data.fields.map(f => f.name).join(', ')}`);
+      console.log(`📤 Eventos: ${data.publishEvents.join(', ') || 'ninguno'}`);
+
+      return [
+        { type: 'add', path: `${modulePath}/index.js`, templateFile: 'plop-templates/module/index.js.hbs' },
+        { type: 'add', path: `${modulePath}/module.json`, templateFile: 'plop-templates/module/module.json.hbs' },
+        { type: 'add', path: `${modulePath}/README.md`, templateFile: 'plop-templates/module/README.md.hbs' },
+        { type: 'add', path: `${modulePath}/schemas/events.json`, templateFile: 'plop-templates/module/schemas/events.json.hbs' },
+        { type: 'add', path: `${modulePath}/schemas/${data.name}.json`, templateFile: 'plop-templates/module/schemas/main.json.hbs' },
+        ...(data.ui ? [{ type: 'add', path: `${frontendPath}/+page.svelte`, templateFile: 'plop-templates/full-module/page.svelte.hbs' }] : []),
+        // Copiar blueprint al módulo
+        {
+          type: 'add',
+          path: `${modulePath}/blueprint.yaml`,
+          template: require('fs').readFileSync(require('path').resolve(data.blueprintPath), 'utf8')
+        },
+        () => {
+          console.log('\n✅ Módulo generado desde blueprint');
+          console.log(`\n📁 Backend: ${modulePath}/`);
+          if (data.ui) console.log(`🎨 Frontend: ${frontendPath}/+page.svelte`);
+          console.log('\n🚀 Próximos pasos:');
+          console.log(`   1. Agregar "${data.name}" a config.json → modules.enabled`);
+          console.log('   2. Personalizar la lógica en index.js');
+          console.log('   3. Reiniciar Event-Core\n');
+          return '';
+        }
+      ];
+    }
+  });
 };

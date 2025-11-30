@@ -389,6 +389,165 @@ module.exports = function (plop) {
   });
 
   // ==========================================
+  // Generator: svelte-component
+  // ==========================================
+  plop.setGenerator('svelte-component', {
+    description: 'Crear un componente Svelte reutilizable',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '🎨 Nombre del componente (PascalCase, ej: ColorPicker):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[A-Z][a-zA-Z0-9]*$/.test(value)) {
+            return 'Usa PascalCase (ej: ColorPicker, DateInput)';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'list',
+        name: 'category',
+        message: '📁 Categoría:',
+        choices: [
+          { name: 'ui - Componentes básicos (Button, Input...)', value: 'ui' },
+          { name: 'data - Visualización de datos (Table, Grid...)', value: 'data' },
+          { name: 'feedback - Notificaciones y modales', value: 'feedback' },
+          { name: 'layout - Estructura de página', value: 'layout' },
+          { name: 'navigation - Navegación', value: 'navigation' },
+          { name: 'input - Inputs especializados', value: 'input' },
+          { name: 'ai - Componentes IA', value: 'ai' }
+        ]
+      },
+      {
+        type: 'input',
+        name: 'propsRaw',
+        message: '🔧 Props (nombre:tipo=default, separados por coma, ej: label:string,size:string=md):',
+        default: ''
+      },
+      {
+        type: 'confirm',
+        name: 'hasVariants',
+        message: '🎭 ¿Tiene variantes visuales (primary, secondary...)?',
+        default: false
+      },
+      {
+        type: 'input',
+        name: 'variantsRaw',
+        message: '🎨 Variantes (nombre:clases, ej: primary:bg-primary text-white,danger:bg-danger):',
+        default: 'primary:bg-primary text-white,secondary:bg-bg-card text-text',
+        when: (answers) => answers.hasVariants
+      },
+      {
+        type: 'confirm',
+        name: 'hasEvents',
+        message: '📤 ¿Emite eventos personalizados?',
+        default: false
+      },
+      {
+        type: 'input',
+        name: 'eventsRaw',
+        message: '⚡ Eventos (nombre:payload, ej: change:string,select:{ id: string }):',
+        default: 'click:MouseEvent',
+        when: (answers) => answers.hasEvents
+      },
+      {
+        type: 'confirm',
+        name: 'hasSlots',
+        message: '🔲 ¿Tiene slots adicionales (además del default)?',
+        default: false
+      },
+      {
+        type: 'input',
+        name: 'slotsRaw',
+        message: '📦 Slots (nombres separados por coma, ej: header,footer,icon):',
+        default: 'header,footer',
+        when: (answers) => answers.hasSlots
+      },
+      {
+        type: 'input',
+        name: 'baseClasses',
+        message: '🎨 Clases CSS base (Tailwind):',
+        default: 'rounded-lg border border-border p-4'
+      }
+    ],
+
+    actions: (data) => {
+      // Procesar props
+      data.props = data.propsRaw
+        ? data.propsRaw.split(',').map(p => {
+            const match = p.trim().match(/^(\w+):(\w+)(?:=(.+))?$/);
+            if (match) {
+              return {
+                name: match[1],
+                type: match[2],
+                default: match[3] ? (match[2] === 'string' ? `'${match[3]}'` : match[3]) : null
+              };
+            }
+            return null;
+          }).filter(Boolean)
+        : [];
+
+      // Procesar variantes
+      data.variants = data.variantsRaw
+        ? data.variantsRaw.split(',').map(v => {
+            const [name, classes] = v.trim().split(':');
+            return { name: name.trim(), classes: classes?.trim() || '' };
+          })
+        : [];
+
+      // Procesar eventos
+      data.events = data.eventsRaw
+        ? data.eventsRaw.split(',').map(e => {
+            const [name, payload] = e.trim().split(':');
+            return { name: name.trim(), payload: payload?.trim() || 'void' };
+          })
+        : [];
+
+      // Procesar slots
+      data.slots = [{ name: 'default' }];
+      if (data.slotsRaw) {
+        data.slotsRaw.split(',').forEach(s => {
+          data.slots.push({ name: s.trim() });
+        });
+      }
+
+      const componentPath = `frontend/src/lib/components/${data.category}`;
+
+      return [
+        {
+          type: 'add',
+          path: `${componentPath}/{{name}}.svelte`,
+          templateFile: 'plop-templates/svelte-component/component.svelte.hbs'
+        },
+        // Agregar export al index.ts
+        {
+          type: 'append',
+          path: `${componentPath}/index.ts`,
+          template: "export { default as {{name}} } from './{{name}}.svelte';\n"
+        },
+        () => {
+          console.log('\n✅ Componente Svelte creado exitosamente');
+          console.log('\n📁 Archivos modificados:');
+          console.log(`   ├── ${componentPath}/${data.name}.svelte`);
+          console.log(`   └── ${componentPath}/index.ts (export añadido)`);
+          console.log('\n📦 Uso:');
+          console.log(`   import { ${data.name} } from '$components/${data.category}';`);
+          console.log(`   // o`);
+          console.log(`   import { ${data.name} } from '$components';`);
+          console.log('\n🚀 Próximos pasos:');
+          console.log(`   1. Editar ${data.name}.svelte con la lógica específica`);
+          console.log('   2. Añadir estilos y comportamiento');
+          console.log('   3. Probar en una página de ejemplo\n');
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
   // Generator: ui-view (Auto-UI)
   // ==========================================
   plop.setGenerator('ui-view', {

@@ -1,0 +1,263 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { Header } from '$components/layout';
+  import { Card, Button, Badge{{#if hasForm}}, Input, Textarea{{/if}} } from '$components/ui';
+  import { Modal, Spinner } from '$components/feedback';
+  import { subscribe, events } from '$stores/mqtt';
+  import { toast } from '$stores/toast';
+  import config from '$lib/config';
+
+  // Types
+  interface {{pascalCase name}} {
+    id: string;
+    {{#each fields}}
+    {{name}}: {{type}};
+    {{/each}}
+    created_at: string;
+    updated_at: string | null;
+  }
+
+  // State
+  let items: {{pascalCase name}}[] = [];
+  let loading = true;
+  let error: string | null = null;
+
+  // Modal state
+  let modalOpen = false;
+  let editingItem: {{pascalCase name}} | null = null;
+  let formData: Partial<{{pascalCase name}}> = {};
+  let saving = false;
+
+  // API
+  const apiBase = `${config.apiUrl}/modules/{{name}}`;
+
+  async function fetchItems() {
+    loading = true;
+    error = null;
+    try {
+      const res = await fetch(`${apiBase}/{{pluralName}}`);
+      if (!res.ok) throw new Error('Error al cargar datos');
+      const data = await res.json();
+      items = data.{{pluralName}} || data.items || [];
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error desconocido';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function createItem() {
+    saving = true;
+    try {
+      const res = await fetch(`${apiBase}/{{pluralName}}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.errors?.join(', ') || 'Error al crear');
+      }
+      closeModal();
+      toast.success('Elemento creado');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function updateItem() {
+    if (!editingItem) return;
+    saving = true;
+    try {
+      const res = await fetch(`${apiBase}/{{pluralName}}/${editingItem.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.errors?.join(', ') || 'Error al actualizar');
+      }
+      closeModal();
+      toast.success('Elemento actualizado');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function deleteItem(item: {{pascalCase name}}) {
+    if (!confirm('¿Eliminar este elemento?')) return;
+    try {
+      const res = await fetch(`${apiBase}/{{pluralName}}/${item.id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Error al eliminar');
+      toast.success('Elemento eliminado');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    }
+  }
+
+  // Modal
+  function openCreateModal() {
+    editingItem = null;
+    formData = { {{#each fields}}{{name}}: {{#if default}}{{default}}{{else}}{{#eq type 'string'}}''{{else}}{{#eq type 'number'}}0{{else}}{{#eq type 'boolean'}}false{{else}}null{{/eq}}{{/eq}}{{/eq}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}} };
+    modalOpen = true;
+  }
+
+  function openEditModal(item: {{pascalCase name}}) {
+    editingItem = item;
+    formData = { {{#each fields}}{{name}}: item.{{name}}{{#unless @last}}, {{/unless}}{{/each}} };
+    modalOpen = true;
+  }
+
+  function closeModal() {
+    modalOpen = false;
+    editingItem = null;
+  }
+
+  function handleSubmit() {
+    if (editingItem) {
+      updateItem();
+    } else {
+      createItem();
+    }
+  }
+
+  // Real-time updates via MQTT
+  $: {
+    const lastEvent = $events[$events.length - 1];
+    if (lastEvent && lastEvent.type.startsWith('{{name}}.')) {
+      fetchItems();
+    }
+  }
+
+  onMount(() => {
+    fetchItems();
+    subscribe([`core/+/events/{{name}}/#`]);
+  });
+
+  function formatDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleDateString('es', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+</script>
+
+<svelte:head>
+  <title>{{titleCase name}} - Event-Core</title>
+</svelte:head>
+
+<Header title="{{titleCase name}}" subtitle="{{description}}" />
+
+<div class="p-6">
+  <!-- Actions Bar -->
+  <div class="flex items-center justify-between mb-6">
+    <Badge variant="primary">{items.length} elementos</Badge>
+    <Button variant="primary" on:click={openCreateModal}>
+      + Nuevo
+    </Button>
+  </div>
+
+  <!-- Content -->
+  {#if loading}
+    <div class="flex items-center justify-center py-12">
+      <Spinner size="lg" />
+    </div>
+  {:else if error}
+    <Card class="text-center py-8">
+      <p class="text-danger mb-4">{error}</p>
+      <Button variant="secondary" on:click={fetchItems}>Reintentar</Button>
+    </Card>
+  {:else if items.length === 0}
+    <Card class="text-center py-12">
+      <span class="text-4xl mb-4 block">{{icon}}</span>
+      <p class="text-text-muted mb-4">No hay elementos todavía</p>
+      <Button variant="primary" on:click={openCreateModal}>Crear primero</Button>
+    </Card>
+  {:else}
+    <!-- Items Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {#each items as item (item.id)}
+        <Card
+          hover
+          class="cursor-pointer"
+          on:click={() => openEditModal(item)}
+        >
+          <div class="flex justify-between items-start mb-2">
+            <h3 class="font-semibold truncate">{{#if titleField}}{item.{{titleField}}}{{else}}{item.id}{{/if}}</h3>
+            <button
+              class="text-danger hover:bg-danger hover:bg-opacity-10 p-1 rounded"
+              on:click|stopPropagation={() => deleteItem(item)}
+              title="Eliminar"
+            >
+              🗑️
+            </button>
+          </div>
+          {{#if descriptionField}}
+          <p class="text-sm text-text-muted line-clamp-2 mb-2">
+            {item.{{descriptionField}} || 'Sin descripción'}
+          </p>
+          {{/if}}
+          <p class="text-xs text-text-muted">
+            {formatDate(item.created_at)}
+          </p>
+        </Card>
+      {/each}
+    </div>
+  {/if}
+</div>
+
+<!-- Create/Edit Modal -->
+<Modal
+  bind:open={modalOpen}
+  title={editingItem ? 'Editar' : 'Nuevo'}
+  size="md"
+  on:close={closeModal}
+>
+  <form on:submit|preventDefault={handleSubmit} class="space-y-4">
+    {{#each fields}}
+    {{#eq inputType 'textarea'}}
+    <Textarea
+      label="{{label}}"
+      bind:value={formData.{{name}}}
+      placeholder="{{placeholder}}"
+      rows={4}
+    />
+    {{else}}
+    <Input
+      label="{{label}}"
+      type="{{inputType}}"
+      bind:value={formData.{{name}}}
+      placeholder="{{placeholder}}"
+      {{#if required}}required{{/if}}
+    />
+    {{/eq}}
+    {{/each}}
+  </form>
+
+  <svelte:fragment slot="footer">
+    <Button variant="ghost" on:click={closeModal} disabled={saving}>
+      Cancelar
+    </Button>
+    <Button variant="primary" on:click={handleSubmit} loading={saving}>
+      {editingItem ? 'Guardar' : 'Crear'}
+    </Button>
+  </svelte:fragment>
+</Modal>
+
+<style>
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>

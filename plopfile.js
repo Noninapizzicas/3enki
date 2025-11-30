@@ -27,6 +27,18 @@ module.exports = function (plop) {
 
   plop.setHelper('eq', (a, b) => a === b);
 
+  // Helper: pascalCase (MiModulo)
+  plop.setHelper('pascalCase', (text) => {
+    if (!text) return '';
+    return text.split(/[-_]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+  });
+
+  // Helper: titleCase (Mi Modulo)
+  plop.setHelper('titleCase', (text) => {
+    if (!text) return '';
+    return text.split(/[-_]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  });
+
   // ==========================================
   // Generator: module
   // ==========================================
@@ -655,6 +667,125 @@ module.exports = function (plop) {
           console.log('   2. Ajustar campos de estilo según necesidades');
           console.log('   3. Configurar endpoints del módulo backend');
           console.log(`   4. Acceder: /auto-ui/${data.name}\n`);
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
+  // Generator: full-module (Backend + Frontend Svelte)
+  // ==========================================
+  plop.setGenerator('full-module', {
+    description: 'Crear módulo completo: Backend Event-Core + Frontend Svelte',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '📦 Nombre del módulo (kebab-case):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) return 'Usa kebab-case (ej: mi-modulo)';
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'description',
+        message: '📝 Descripción:',
+        default: 'Módulo Event-Core con UI Svelte'
+      },
+      {
+        type: 'input',
+        name: 'icon',
+        message: '🔸 Icono (emoji):',
+        default: '📦'
+      },
+      {
+        type: 'input',
+        name: 'author',
+        message: '👤 Autor:',
+        default: 'Event Core Team'
+      },
+      {
+        type: 'input',
+        name: 'entityName',
+        message: '📋 Nombre de la entidad (singular, ej: tarea):',
+        default: (answers) => answers.name.replace(/-/g, '_')
+      },
+      {
+        type: 'input',
+        name: 'fieldsRaw',
+        message: '🔧 Campos (nombre:tipo separados por coma, ej: titulo:string,cantidad:number):',
+        default: 'nombre:string,descripcion:string'
+      },
+      {
+        type: 'input',
+        name: 'titleField',
+        message: '🏷️ Campo para título en cards:',
+        default: 'nombre'
+      },
+      {
+        type: 'input',
+        name: 'descriptionField',
+        message: '📄 Campo para descripción en cards (vacío si no aplica):',
+        default: 'descripcion'
+      }
+    ],
+
+    actions: (data) => {
+      // Procesar campos
+      data.fields = data.fieldsRaw
+        ? data.fieldsRaw.split(',').map(f => {
+            const [name, type = 'string'] = f.trim().split(':');
+            return {
+              name: name.trim(),
+              type: type.trim(),
+              label: name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' '),
+              placeholder: `Ingresa ${name.replace(/_/g, ' ')}`,
+              inputType: type === 'number' ? 'number' : (name.includes('descripcion') || name.includes('contenido') ? 'textarea' : 'text'),
+              required: name === data.titleField
+            };
+          }).filter(f => f.name)
+        : [];
+
+      data.hasForm = data.fields.length > 0;
+      data.pluralName = data.entityName + 's';
+      data.publishEvents = [`${data.entityName}.creado`, `${data.entityName}.actualizado`, `${data.entityName}.eliminado`];
+      const entity = data.entityName.charAt(0).toUpperCase() + data.entityName.slice(1);
+      data.apis = [
+        { method: 'GET', path: `/${data.pluralName}`, handler: `handleList${entity}s`, description: 'Listar todos' },
+        { method: 'GET', path: `/${data.pluralName}/:id`, handler: `handleGet${entity}`, description: 'Obtener por ID' },
+        { method: 'POST', path: `/${data.pluralName}`, handler: `handleCreate${entity}`, description: 'Crear nuevo' },
+        { method: 'PATCH', path: `/${data.pluralName}/:id`, handler: `handleUpdate${entity}`, description: 'Actualizar' },
+        { method: 'DELETE', path: `/${data.pluralName}/:id`, handler: `handleDelete${entity}`, description: 'Eliminar' },
+        { method: 'GET', path: '/health', handler: 'handleHealthCheck', description: 'Health check' }
+      ];
+      data.subscriptions = [];
+      data.hasSubscriptions = false;
+      data.persistence = false;
+      data.ui = true;
+
+      const modulePath = `modules/${data.name}`;
+      const frontendPath = `frontend/src/routes/${data.name}`;
+
+      return [
+        { type: 'add', path: `${modulePath}/index.js`, templateFile: 'plop-templates/module/index.js.hbs' },
+        { type: 'add', path: `${modulePath}/module.json`, templateFile: 'plop-templates/module/module.json.hbs' },
+        { type: 'add', path: `${modulePath}/README.md`, templateFile: 'plop-templates/module/README.md.hbs' },
+        { type: 'add', path: `${modulePath}/schemas/events.json`, templateFile: 'plop-templates/module/schemas/events.json.hbs' },
+        { type: 'add', path: `${modulePath}/schemas/${data.name}.json`, templateFile: 'plop-templates/module/schemas/main.json.hbs' },
+        { type: 'add', path: `${frontendPath}/+page.svelte`, templateFile: 'plop-templates/full-module/page.svelte.hbs' },
+        () => {
+          console.log('\n✅ Módulo completo creado');
+          console.log(`\n📁 Backend: ${modulePath}/`);
+          console.log(`🎨 Frontend: ${frontendPath}/+page.svelte`);
+          console.log('\n🚀 Próximos pasos:');
+          console.log(`   1. Agregar "${data.name}" a config.json → modules.enabled`);
+          console.log('   2. Reiniciar Event-Core: npm start');
+          console.log('   3. Frontend: cd frontend && npm run dev');
+          console.log(`   4. Acceder: http://localhost:5173/${data.name}\n`);
           return '';
         }
       ];

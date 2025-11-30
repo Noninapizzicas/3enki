@@ -448,6 +448,220 @@ module.exports = function (plop) {
   });
 
   // ==========================================
+  // Generator: ai-workspace (Auto-UI)
+  // ==========================================
+  plop.setGenerator('ai-workspace', {
+    description: 'Crear una vista AI Workspace (chat + prompts + upload + preview)',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '📦 Nombre del módulo (kebab-case):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+            return 'Usa kebab-case (ej: menu-generator)';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'description',
+        message: '📝 Descripción:',
+        default: 'Vista AI Workspace con chat, prompts y generación'
+      },
+      {
+        type: 'input',
+        name: 'icon',
+        message: '🔸 Icono (emoji):',
+        default: '🤖'
+      },
+      {
+        type: 'input',
+        name: 'author',
+        message: '👤 Autor:',
+        default: 'Event Core Team'
+      },
+      {
+        type: 'input',
+        name: 'placeholder',
+        message: '💬 Placeholder del chat:',
+        default: 'Escribe tu mensaje...'
+      },
+      {
+        type: 'list',
+        name: 'defaultProvider',
+        message: '🤖 Proveedor AI por defecto:',
+        choices: ['deepseek', 'openai', 'claude', 'ollama'],
+        default: 'deepseek'
+      },
+      {
+        type: 'confirm',
+        name: 'enableFileUpload',
+        message: '📷 ¿Habilitar subida de archivos?',
+        default: true
+      },
+      {
+        type: 'list',
+        name: 'uploadVariant',
+        message: '📁 Tipo de archivos:',
+        choices: [
+          { name: 'Solo imágenes', value: 'image-only' },
+          { name: 'Documentos (PDF, Word)', value: 'document' },
+          { name: 'Media (imágenes y videos)', value: 'media' },
+          { name: 'Cualquier archivo', value: 'any' }
+        ],
+        default: 'image-only',
+        when: (answers) => answers.enableFileUpload
+      },
+      {
+        type: 'input',
+        name: 'uploadLabel',
+        message: '📷 Etiqueta botón upload:',
+        default: 'Subir archivo',
+        when: (answers) => answers.enableFileUpload
+      },
+      {
+        type: 'confirm',
+        name: 'enableVoice',
+        message: '🎤 ¿Habilitar entrada de voz?',
+        default: false
+      },
+      {
+        type: 'input',
+        name: 'resultTitle',
+        message: '📋 Título del resultado:',
+        default: 'Resultado Generado'
+      },
+      {
+        type: 'list',
+        name: 'resultVariant',
+        message: '📊 Tipo de preview:',
+        choices: [
+          { name: 'Preview de menú', value: 'menu-preview' },
+          { name: 'Preview de producto', value: 'product-preview' },
+          { name: 'Resumen de pedido', value: 'order-summary' },
+          { name: 'Genérico', value: 'generic' }
+        ],
+        default: 'generic'
+      },
+      {
+        type: 'list',
+        name: 'resultFormat',
+        message: '📑 Formato de datos:',
+        choices: ['cards', 'table', 'list', 'json'],
+        default: 'cards'
+      }
+    ],
+
+    actions: (data) => {
+      // Configurar valores por defecto
+      data.currentDate = new Date().toISOString().split('T')[0];
+      data.enableAttachments = data.enableFileUpload;
+      data.uploadMaxFiles = 5;
+      data.uploadEnableCrop = data.uploadVariant === 'image-only';
+      data.uploadTitle = data.uploadLabel ? `📷 ${data.uploadLabel}` : '📷 Subir Archivo';
+      data.uploadDropMessage = `Arrastra archivos aquí o haz click para seleccionar`;
+      data.uploadType = 'uploaded-file';
+      data.uploadActionLabel = 'Analizar';
+      data.editorType = 'generic-editor';
+
+      // Prompt categories
+      data.promptCategories = ['general', data.name.split('-')[0]];
+
+      // Example prompts
+      data.examplePrompts = [
+        {
+          emoji: '💡',
+          title: 'Ejemplo básico',
+          prompt: `Genera un ejemplo básico para ${data.name}`
+        },
+        {
+          emoji: '✨',
+          title: 'Ejemplo avanzado',
+          prompt: `Genera un ejemplo avanzado con opciones detalladas para ${data.name}`
+        }
+      ];
+
+      // Style fields
+      data.styleFields = [
+        {
+          name: 'outputFormat',
+          component: 'select',
+          props: {
+            label: 'Formato de salida',
+            options: [
+              { value: 'detailed', label: 'Detallado' },
+              { value: 'compact', label: 'Compacto' },
+              { value: 'minimal', label: 'Mínimo' }
+            ],
+            default: 'detailed'
+          }
+        },
+        {
+          name: 'language',
+          component: 'select',
+          props: {
+            label: 'Idioma',
+            options: [
+              { value: 'es', label: '🇪🇸 Español' },
+              { value: 'en', label: '🇬🇧 English' }
+            ],
+            default: 'es'
+          }
+        }
+      ];
+
+      // Default style config
+      data.defaultStyleConfig = {
+        outputFormat: 'detailed',
+        language: 'es'
+      };
+
+      // Editor features
+      data.editorFeatures = {
+        edit: true,
+        delete: true,
+        reorder: true
+      };
+
+      const viewPath = `auto-ui/views`;
+
+      return [
+        {
+          type: 'add',
+          path: `${viewPath}/{{name}}.json`,
+          templateFile: 'plop-templates/view/ai-workspace.json.hbs'
+        },
+        () => {
+          console.log('\n✅ AI Workspace creado exitosamente');
+          console.log('\n📁 Archivo generado:');
+          console.log(`   └── ${viewPath}/${data.name}.json`);
+          console.log('\n🎯 Componentes integrados:');
+          console.log('   ├── conversation-panel (chat AI)');
+          console.log('   ├── chat-input (con barras configurables)');
+          console.log('   ├── result-preview-card');
+          console.log('   ├── floating-panel (9 paneles)');
+          console.log('   ├── ai-control-bar');
+          console.log('   ├── prompt-selector');
+          console.log('   ├── credential-indicator');
+          if (data.enableFileUpload) {
+            console.log('   └── file-drop-zone');
+          }
+          console.log('\n🚀 Próximos pasos:');
+          console.log(`   1. Personalizar prompts de ejemplo en ${data.name}.json`);
+          console.log('   2. Ajustar campos de estilo según necesidades');
+          console.log('   3. Configurar endpoints del módulo backend');
+          console.log(`   4. Acceder: /auto-ui/${data.name}\n`);
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
   // Generator: ui-theme (Auto-UI)
   // ==========================================
   plop.setGenerator('ui-theme', {

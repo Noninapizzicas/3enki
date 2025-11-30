@@ -121,7 +121,7 @@
         style="min-height: 24px; max-height: 200px"
         on:input={handleInput}
         on:keydown={handleKeydown}
-      />
+      ></textarea>
     </div>
 
     <Button

@@ -64,11 +64,10 @@
   {#each nodes as node (node.id)}
     <li>
       <div
-        class="flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors"
+        class="flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors {isSelected(node) ? 'bg-primary bg-opacity-10' : ''}"
         class:hover:bg-bg-hover={!node.disabled}
         class:cursor-pointer={!node.disabled}
         class:opacity-50={node.disabled}
-        class:bg-primary/10={isSelected(node)}
         role="treeitem"
         aria-expanded={hasChildren(node) ? isExpanded(node) : undefined}
         tabindex={node.disabled ? -1 : 0}
@@ -86,7 +85,7 @@
             ▶
           </button>
         {:else}
-          <span class="w-4" />
+          <span class="w-4"></span>
         {/if}
 
         <!-- Checkbox for selection -->

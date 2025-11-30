@@ -85,7 +85,8 @@
     class="border-2 border-dashed rounded-lg p-6 text-center transition-colors"
     class:border-border={!dragOver}
     class:border-primary={dragOver}
-    class:bg-primary/5={dragOver}
+    class:bg-primary={dragOver}
+    class:bg-opacity-5={dragOver}
     class:opacity-50={disabled}
     class:cursor-not-allowed={disabled}
     on:drop={handleDrop}

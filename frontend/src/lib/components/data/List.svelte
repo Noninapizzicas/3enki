@@ -45,10 +45,9 @@
 >
   {#each items as item, index (item.id ?? index)}
     <li
-      class="px-4 py-3 transition-colors"
+      class="px-4 py-3 transition-colors {isSelected(item) ? 'bg-primary bg-opacity-10' : ''}"
       class:hover:bg-bg-hover={hoverable}
       class:cursor-pointer={selectable || hoverable}
-      class:bg-primary/10={isSelected(item)}
       role={selectable ? 'button' : undefined}
       tabindex={selectable ? 0 : undefined}
       on:click={() => handleClick(item)}

@@ -20,8 +20,11 @@
     handler: string;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type DataRow = Record<string, any>;
+
   export let columns: Column[] = [];
-  export let data: Record<string, unknown>[] = [];
+  export let data: DataRow[] = [];
   export let endpoint = '';
   export let mqttTopics: string[] = [];
   export let loading = false;
@@ -157,7 +160,7 @@
 
 <div class="overflow-x-auto rounded-lg border border-border">
   <table class="w-full">
-    <thead class="bg-white/5">
+    <thead class="bg-white bg-opacity-5">
       <tr>
         {#if selectable}
           <th class="w-12 px-4 py-3">
@@ -244,13 +247,11 @@
                 <div class="flex items-center justify-end gap-2">
                   {#each actions as action}
                     <button
-                      class="px-2 py-1 text-sm rounded transition-colors"
-                      class:text-primary={action.variant === 'primary' || !action.variant}
-                      class:hover:bg-primary/10={action.variant === 'primary' || !action.variant}
-                      class:text-danger={action.variant === 'danger'}
-                      class:hover:bg-danger/10={action.variant === 'danger'}
-                      class:text-text-muted={action.variant === 'ghost'}
-                      class:hover:bg-bg-hover={action.variant === 'ghost'}
+                      class="px-2 py-1 text-sm rounded transition-colors {
+                        action.variant === 'danger' ? 'text-danger hover:bg-danger hover:bg-opacity-10' :
+                        action.variant === 'ghost' ? 'text-text-muted hover:bg-bg-hover' :
+                        'text-primary hover:bg-primary hover:bg-opacity-10'
+                      }"
                       on:click={() => handleAction(action.handler, row)}
                     >
                       {#if action.icon}

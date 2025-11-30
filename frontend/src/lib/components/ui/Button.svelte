@@ -10,6 +10,11 @@
   export let href: string | undefined = undefined;
   export let holdEnabled = false;
   export let holdDuration = 2000;
+  export let title: string | undefined = undefined;
+  let ariaLabel: string | undefined = undefined;
+  export { ariaLabel as 'aria-label' };
+  let className = '';
+  export { className as class };
 
   const dispatch = createEventDispatcher<{
     click: MouseEvent;
@@ -54,7 +59,7 @@
     warning: 'bg-warning hover:bg-warning-hover text-bg border-warning',
     danger: 'bg-danger hover:bg-danger-hover text-white border-danger',
     ghost: 'bg-transparent hover:bg-bg-hover text-primary border-transparent',
-    outline: 'bg-transparent hover:bg-primary/10 text-primary border-primary'
+    outline: 'bg-transparent hover:bg-primary hover:bg-opacity-10 text-primary border-primary'
   };
 
   // Size classes
@@ -69,7 +74,8 @@
     variantClasses[variant],
     sizeClasses[size],
     disabled && 'opacity-50 cursor-not-allowed',
-    loading && 'cursor-wait'
+    loading && 'cursor-wait',
+    className
   ].filter(Boolean).join(' ');
 </script>
 
@@ -77,6 +83,8 @@
   <a
     {href}
     class={classes}
+    {title}
+    aria-label={ariaLabel}
     on:mousedown={startHold}
     on:mouseup={endHold}
     on:mouseleave={endHold}
@@ -92,9 +100,9 @@
     <slot />
     {#if holdProgress > 0}
       <div
-        class="absolute inset-0 bg-white/20 rounded-md transition-all"
+        class="absolute inset-0 bg-white bg-opacity-20 rounded-md transition-all"
         style="width: {holdProgress}%"
-      />
+      ></div>
     {/if}
   </a>
 {:else}
@@ -104,6 +112,8 @@
     class={classes}
     class:relative={holdEnabled}
     class:overflow-hidden={holdEnabled}
+    {title}
+    aria-label={ariaLabel}
     on:click={handleClick}
     on:mousedown={startHold}
     on:mouseup={endHold}
@@ -120,9 +130,9 @@
     <slot />
     {#if holdProgress > 0}
       <div
-        class="absolute inset-0 bg-white/20 rounded-md"
+        class="absolute inset-0 bg-white bg-opacity-20 rounded-md"
         style="width: {holdProgress}%"
-      />
+      ></div>
     {/if}
   </button>
 {/if}

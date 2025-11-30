@@ -49,7 +49,7 @@
         class="w-2 h-2 rounded-full"
         class:bg-success={$mqttState.connected}
         class:bg-danger={!$mqttState.connected}
-      />
+      ></div>
       {#if !collapsed}
         <span class="text-sm text-text-muted">
           {$mqttState.connected ? 'Conectado' : 'Desconectado'}

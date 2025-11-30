@@ -39,8 +39,8 @@
     error: 'danger' as const
   };
 
-  function handleModelChange(e: CustomEvent<string>) {
-    selectedModel = e.detail;
+  function handleModelChange(e: CustomEvent<string | number>) {
+    selectedModel = String(e.detail);
     dispatch('modelChange', selectedModel);
   }
 </script>

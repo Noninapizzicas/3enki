@@ -123,7 +123,7 @@
         <div class="flex-1 max-w-[80%]">
           <div class="inline-block px-4 py-2 rounded-lg bg-bg-card border border-border">
             <p class="whitespace-pre-wrap break-words">{streamingContent}</p>
-            <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />
+            <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-1"></span>
           </div>
         </div>
       </div>

@@ -14,14 +14,21 @@
   let error = '';
   let apiData: Record<string, unknown>[] = [];
 
-  $: moduleName = $page.params.module;
-  $: moduleEvents = filterEvents(moduleName);
+  $: moduleName = $page.params.module ?? '';
+  $: moduleEvents = filterEvents(moduleName || '.*');
 
   onMount(async () => {
-    await loadModuleData();
+    if (moduleName) {
+      await loadModuleData();
+    }
   });
 
   async function loadModuleData() {
+    if (!moduleName) {
+      error = 'Nombre de módulo no especificado';
+      return;
+    }
+
     loading = true;
     error = '';
 
@@ -50,6 +57,7 @@
   }
 
   async function handleApiCall(api: { method: string; path: string; name: string }) {
+    if (!moduleName) return;
     try {
       const result = await callModuleApi(moduleName, api.path, { method: api.method });
       toast.success(`API ${api.name} ejecutada correctamente`);

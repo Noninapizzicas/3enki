@@ -53,11 +53,12 @@
 {#if open}
   <!-- Overlay -->
   {#if overlay}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div
-      class="fixed inset-0 bg-black/50 z-modal"
+      class="fixed inset-0 bg-black bg-opacity-50 z-modal"
       on:click={handleClose}
       transition:fly={{ duration: 150 }}
-    />
+    ></div>
   {/if}
 
   <!-- Panel -->
@@ -75,7 +76,7 @@
         {#if title}
           <h2 class="font-semibold">{title}</h2>
         {:else}
-          <div />
+          <div></div>
         {/if}
         {#if closable}
           <button

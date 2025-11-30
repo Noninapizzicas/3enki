@@ -23,7 +23,7 @@
         class:animate-pulse={animated}
         class:rounded={variant === 'text'}
         style="height: {computedHeight}; width: {i === lines - 1 ? '80%' : '100%'}"
-      />
+      ></div>
     {/each}
   </div>
 {:else}
@@ -34,5 +34,5 @@
     class:rounded-lg={variant === 'rounded'}
     class:rounded={variant === 'text'}
     style="width: {variant === 'circular' ? computedHeight : width}; height: {computedHeight}"
-  />
+  ></div>
 {/if}

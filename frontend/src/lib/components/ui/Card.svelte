@@ -3,6 +3,8 @@
   export let subtitle = '';
   export let padding: 'none' | 'sm' | 'md' | 'lg' = 'md';
   export let hover = false;
+  let className = '';
+  export { className as class };
 
   const paddingClasses = {
     none: 'p-0',
@@ -13,7 +15,7 @@
 </script>
 
 <div
-  class="bg-bg-card border border-border rounded-lg {paddingClasses[padding]}"
+  class="bg-bg-card border border-border rounded-lg {paddingClasses[padding]} {className}"
   class:hover:bg-bg-hover={hover}
   class:transition-colors={hover}
   class:cursor-pointer={hover}

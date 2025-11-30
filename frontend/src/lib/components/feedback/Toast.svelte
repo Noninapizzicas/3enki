@@ -9,10 +9,10 @@
   };
 
   const colors: Record<ToastType, string> = {
-    success: 'bg-success/10 border-success text-success',
-    warning: 'bg-warning/10 border-warning text-warning',
-    danger: 'bg-danger/10 border-danger text-danger',
-    info: 'bg-info/10 border-info text-info'
+    success: 'bg-success bg-opacity-10 border-success text-success',
+    warning: 'bg-warning bg-opacity-10 border-warning text-warning',
+    danger: 'bg-danger bg-opacity-10 border-danger text-danger',
+    info: 'bg-info bg-opacity-10 border-info text-info'
   };
 </script>
 

@@ -55,12 +55,11 @@
       role="tab"
       aria-selected={activeTab === tab.id}
       aria-disabled={tab.disabled}
-      class="flex items-center gap-2 font-medium transition-colors {classes.tab}"
+      class="flex items-center gap-2 font-medium transition-colors {classes.tab} {activeTab === tab.id ? classes.active : classes.inactive}"
       class:flex-1={fullWidth}
       class:opacity-50={tab.disabled}
       class:cursor-not-allowed={tab.disabled}
       class:cursor-pointer={!tab.disabled}
-      class={activeTab === tab.id ? classes.active : classes.inactive}
       disabled={tab.disabled}
       on:click={() => selectTab(tab)}
     >
@@ -69,7 +68,7 @@
       {/if}
       <span>{tab.label}</span>
       {#if tab.badge !== undefined}
-        <span class="px-1.5 py-0.5 text-xs rounded-full bg-primary/20 text-primary">
+        <span class="px-1.5 py-0.5 text-xs rounded-full bg-primary bg-opacity-20 text-primary">
           {tab.badge}
         </span>
       {/if}
@@ -78,7 +77,5 @@
 </div>
 
 <div class="mt-4" role="tabpanel">
-  <slot name={activeTab}>
-    <slot />
-  </slot>
+  <slot {activeTab} />
 </div>

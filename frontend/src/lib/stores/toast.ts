@@ -2,7 +2,7 @@ import { writable, derived } from 'svelte/store';
 
 export type ToastType = 'success' | 'warning' | 'danger' | 'info';
 
-export interface Toast {
+export interface ToastData {
   id: string;
   type: ToastType;
   message: string;
@@ -11,7 +11,7 @@ export interface Toast {
 }
 
 // Store
-const toasts = writable<Toast[]>([]);
+const toasts = writable<ToastData[]>([]);
 
 // Derived
 export const toastList = derived(toasts, ($toasts) => $toasts);
@@ -26,7 +26,7 @@ export function showToast(
 ) {
   const { duration = 5000, dismissible = true } = options;
 
-  const toast: Toast = {
+  const toastItem: ToastData = {
     id: `toast_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     type,
     message,
@@ -34,16 +34,16 @@ export function showToast(
     dismissible
   };
 
-  toasts.update(t => [...t, toast]);
+  toasts.update(t => [...t, toastItem]);
 
   // Auto dismiss
   if (duration > 0) {
     setTimeout(() => {
-      dismissToast(toast.id);
+      dismissToast(toastItem.id);
     }, duration);
   }
 
-  return toast.id;
+  return toastItem.id;
 }
 
 /**

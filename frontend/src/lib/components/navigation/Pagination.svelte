@@ -65,7 +65,7 @@
       Mostrando {startItem} - {endItem} de {totalItems}
     </p>
   {:else}
-    <div />
+    <div></div>
   {/if}
 
   <nav class="flex items-center gap-1" aria-label="Pagination">

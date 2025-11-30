@@ -43,13 +43,14 @@
 {#if open}
   <!-- Backdrop -->
   <div
-    class="fixed inset-0 z-modal bg-black/70 flex items-center justify-center p-4 animate-fade-in"
+    class="fixed inset-0 z-modal bg-black bg-opacity-70 flex items-center justify-center p-4 animate-fade-in"
     on:click={handleBackdropClick}
     role="dialog"
     aria-modal="true"
     aria-labelledby={title ? 'modal-title' : undefined}
   >
     <!-- Modal -->
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div
       class="bg-bg-card border border-border rounded-xl w-full {sizeClasses[size]} animate-slide-in"
       on:click|stopPropagation
@@ -60,7 +61,7 @@
           {#if title}
             <h2 id="modal-title" class="text-lg font-semibold">{title}</h2>
           {:else}
-            <div />
+            <div></div>
           {/if}
           {#if closable}
             <button

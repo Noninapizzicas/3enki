@@ -77,12 +77,11 @@
             {#each categoryPrompts as prompt (prompt.id)}
               <button
                 type="button"
-                class="text-left p-3 rounded-lg border transition-all"
-                class:border-primary={selectedPrompt?.id === prompt.id}
-                class:bg-primary/5={selectedPrompt?.id === prompt.id}
-                class:border-border={selectedPrompt?.id !== prompt.id}
-                class:hover:border-primary/50={selectedPrompt?.id !== prompt.id}
-                class:hover:bg-bg-hover={selectedPrompt?.id !== prompt.id}
+                class="text-left p-3 rounded-lg border transition-all {
+                  selectedPrompt?.id === prompt.id
+                    ? 'border-primary bg-primary bg-opacity-5'
+                    : 'border-border hover:border-primary hover:border-opacity-50 hover:bg-bg-hover'
+                }"
                 on:click={() => selectPrompt(prompt)}
               >
                 <div class="flex items-start gap-3">

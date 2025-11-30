@@ -42,14 +42,9 @@
     aria-valuemax={max}
   >
     <div
-      class="h-full rounded-full transition-all duration-300 {variantClasses[variant]}"
+      class="h-full rounded-full transition-all duration-300 {variantClasses[variant]} {striped ? 'bg-gradient-to-r from-transparent via-white to-transparent bg-opacity-20' : ''}"
       class:animate-pulse={animated}
-      class:bg-gradient-to-r={striped}
-      class:from-transparent={striped}
-      class:via-white/20={striped}
-      class:to-transparent={striped}
-      class:bg-[length:20px_100%]={striped}
-      style="width: {percentage}%"
-    />
+      style="width: {percentage}%; {striped ? 'background-size: 20px 100%' : ''}"
+    ></div>
   </div>
 </div>

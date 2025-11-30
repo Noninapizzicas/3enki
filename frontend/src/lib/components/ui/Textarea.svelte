@@ -62,7 +62,7 @@
     on:change={() => dispatch('change', value)}
     on:focus={(e) => dispatch('focus', e)}
     on:blur={(e) => dispatch('blur', e)}
-  />
+  ></textarea>
 
   <div class="flex items-center justify-between">
     {#if error}
@@ -70,7 +70,7 @@
     {:else if hint}
       <p class="text-sm text-text-muted">{hint}</p>
     {:else}
-      <span />
+      <span></span>
     {/if}
 
     {#if maxlength}

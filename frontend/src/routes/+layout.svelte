@@ -4,16 +4,17 @@
   import { loadModules } from '$stores/modules';
   import { Sidebar } from '$components/layout';
   import { Toast } from '$components/feedback';
+  import config from '$lib/config';
   import '../app.css';
 
   let sidebarCollapsed = false;
 
   onMount(() => {
-    // Connect to MQTT broker
-    connect('ws://localhost:1883', 'core-a');
+    // Connect to MQTT broker using config
+    connect(config.mqttUrl, config.coreId);
 
-    // Load modules
-    loadModules();
+    // Load modules from API
+    loadModules(config.apiUrl);
 
     return () => {
       disconnect();

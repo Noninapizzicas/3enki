@@ -533,7 +533,7 @@
                   <p class="text-sm text-text-muted">Sin conversaciones</p>
                 </Card>
               {:else}
-                <div class="space-y-2 max-h-[400px] overflow-y-auto">
+                <div class="space-y-2 max-h-[200px] md:max-h-[400px] overflow-y-auto">
                   {#each conversations as conv (conv.id)}
                     <button
                       class="w-full text-left p-3 rounded-lg border transition-colors"
@@ -560,7 +560,7 @@
             </div>
 
             <!-- Chat Area -->
-            <div class="lg:col-span-3 flex flex-col bg-bg-card border border-border rounded-lg overflow-hidden" style="height: 500px;">
+            <div class="lg:col-span-3 flex flex-col bg-bg-card border border-border rounded-lg overflow-hidden h-[60vh] md:h-[500px]">
               {#if currentConversation}
                 <div class="flex-1 overflow-hidden">
                   <ConversationPanel
@@ -640,10 +640,10 @@
 >
   {#if selectedMenu && menuDetail}
     <div class="space-y-4">
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
         <div>
           <span class="text-sm text-text-muted">ID</span>
-          <p class="font-mono">{selectedMenu.id}</p>
+          <p class="font-mono text-sm truncate">{selectedMenu.id}</p>
         </div>
         <div>
           <span class="text-sm text-text-muted">Estado</span>

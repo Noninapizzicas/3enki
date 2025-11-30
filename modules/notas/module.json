@@ -1,0 +1,109 @@
+{
+  "name": "notas",
+  "version": "1.0.0",
+  "description": "Módulo de notas rápidas con eventos en tiempo real",
+  "author": "Event-Core Team",
+
+  "provides": {
+    "events": ["nota.creada", "nota.actualizada", "nota.eliminada"],
+    "queries": ["nota.obtener", "nota.listar"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "nota.creada",
+        "description": "Cuando se crea una nueva nota",
+        "schema": { "$ref": "./schemas/events.json#/definitions/nota_creada" }
+      },
+      {
+        "event": "nota.actualizada",
+        "description": "Cuando se actualiza una nota existente",
+        "schema": { "$ref": "./schemas/events.json#/definitions/nota_actualizada" }
+      },
+      {
+        "event": "nota.eliminada",
+        "description": "Cuando se elimina una nota",
+        "schema": { "$ref": "./schemas/events.json#/definitions/nota_eliminada" }
+      }
+    ],
+    "subscribes": []
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/notas",
+      "handler": "handleListNotas",
+      "description": "Listar todas las notas",
+      "query_params": [
+        { "name": "color", "type": "string", "description": "Filtrar por color" },
+        { "name": "pinned", "type": "boolean", "description": "Filtrar notas fijadas" }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/notas/:id",
+      "handler": "handleGetNota",
+      "description": "Obtener una nota por ID"
+    },
+    {
+      "method": "POST",
+      "path": "/notas",
+      "handler": "handleCreateNota",
+      "description": "Crear nueva nota (publica evento nota.creada)",
+      "request_schema": { "$ref": "./schemas/nota.json#/definitions/create_request" }
+    },
+    {
+      "method": "PATCH",
+      "path": "/notas/:id",
+      "handler": "handleUpdateNota",
+      "description": "Actualizar nota (publica evento nota.actualizada)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/notas/:id",
+      "handler": "handleDeleteNota",
+      "description": "Eliminar nota (publica evento nota.eliminada)"
+    },
+    {
+      "method": "POST",
+      "path": "/notas/:id/pin",
+      "handler": "handleTogglePin",
+      "description": "Fijar/desfijar nota"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo"
+    }
+  ],
+
+  "ui": {
+    "enabled": true,
+    "title": "Notas",
+    "icon": "📝",
+    "description": "Gestión de notas rápidas"
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": ["nota.creada.total", "nota.actualizada.total", "nota.eliminada.total"],
+      "gauges": ["nota.activas.count", "nota.pinned.count"],
+      "timings": ["nota.create.duration", "nota.update.duration"]
+    }
+  }
+}

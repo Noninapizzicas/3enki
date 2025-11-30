@@ -1833,7 +1833,7 @@ class GeneratorV2 {
                 console.log('[SSE] Event:', event);
 
                 // Trigger htmx event
-                if (event.type) {
+                if (event.type && typeof htmx !== 'undefined') {
                   htmx.trigger('body', event.type, event.data);
                 }
 

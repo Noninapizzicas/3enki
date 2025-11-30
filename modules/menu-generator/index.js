@@ -8,16 +8,87 @@ const { v4: uuidv4 } = require('uuid');
 class MenuGeneratorModule {
   constructor() {
     this.name = 'menu-generator';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
-    // Estado
-    this.menus = new Map(); // menu_id -> menu_data
+    // ==========================================
+    // Estado Principal
+    // ==========================================
+    this.menus = new Map();           // menu_id -> menu_data
     this.pendingRequests = new Map(); // request_id -> menu_id
 
-    // Dependencias (inyectadas)
+    // ==========================================
+    // Estado para Chat/Conversaciones (AI Workspace)
+    // ==========================================
+    this.conversations = new Map();   // conversation_id -> conversation_data
+    this.messages = new Map();        // conversation_id -> [messages]
+    this.streamingClients = new Map(); // client_id -> response object (SSE)
+
+    // ==========================================
+    // Plantillas y Configuración
+    // ==========================================
+    this.templates = this._initializeTemplates();
+
+    // ==========================================
+    // Dependencias (inyectadas por core)
+    // ==========================================
     this.logger = null;
     this.metrics = null;
     this.eventBus = null;
+    this.aiGateway = null;
+  }
+
+  /**
+   * Inicializa plantillas predefinidas para generación de menús
+   * @private
+   */
+  _initializeTemplates() {
+    return [
+      {
+        id: 'tpl_restaurante_italiano',
+        name: 'Restaurante Italiano',
+        emoji: '🍝',
+        description: 'Plantilla para restaurantes de comida italiana',
+        categories: ['Antipasti', 'Primi Piatti', 'Secondi', 'Pizze', 'Dolci', 'Bevande'],
+        promptHint: 'Incluye pasta, pizza, entrantes italianos y postres tradicionales',
+        style: { language: 'es', includeAllergens: true, includePrices: true }
+      },
+      {
+        id: 'tpl_restaurante_japones',
+        name: 'Restaurante Japonés',
+        emoji: '🍣',
+        description: 'Plantilla para restaurantes de comida japonesa',
+        categories: ['Entrantes', 'Sushi', 'Sashimi', 'Ramen', 'Tempura', 'Postres', 'Bebidas'],
+        promptHint: 'Incluye sushi, ramen, tempura y platos tradicionales japoneses',
+        style: { language: 'es', includeAllergens: true, includePrices: true }
+      },
+      {
+        id: 'tpl_cafeteria',
+        name: 'Cafetería',
+        emoji: '☕',
+        description: 'Plantilla para cafeterías y brunch',
+        categories: ['Desayunos', 'Brunch', 'Sándwiches', 'Ensaladas', 'Tartas', 'Cafés', 'Bebidas'],
+        promptHint: 'Incluye opciones de desayuno, brunch, sándwiches y bebidas calientes',
+        style: { language: 'es', includeAllergens: true, includePrices: true }
+      },
+      {
+        id: 'tpl_bar_tapas',
+        name: 'Bar de Tapas',
+        emoji: '🍻',
+        description: 'Plantilla para bares de tapas españoles',
+        categories: ['Tapas Frías', 'Tapas Calientes', 'Raciones', 'Montaditos', 'Postres', 'Vinos', 'Cervezas'],
+        promptHint: 'Incluye tapas tradicionales españolas, raciones y bebidas',
+        style: { language: 'es', includeAllergens: true, includePrices: true }
+      },
+      {
+        id: 'tpl_comida_rapida',
+        name: 'Comida Rápida',
+        emoji: '🍔',
+        description: 'Plantilla para restaurantes de comida rápida',
+        categories: ['Hamburguesas', 'Perritos', 'Patatas', 'Combos', 'Bebidas', 'Postres'],
+        promptHint: 'Incluye hamburguesas, combos y opciones de fast food',
+        style: { language: 'es', includeAllergens: true, includePrices: true }
+      }
+    ];
   }
 
   // ==========================================
@@ -341,14 +412,855 @@ class MenuGeneratorModule {
           'menu.upload.total': this.metrics.getCounter('menu.upload.total') || 0,
           'menu.generado.total': this.metrics.getCounter('menu.generado.total') || 0,
           'menu.validado.total': this.metrics.getCounter('menu.validado.total') || 0,
-          'menu.errors.total': this.metrics.getCounter('menu.errors.total') || 0
+          'menu.errors.total': this.metrics.getCounter('menu.errors.total') || 0,
+          'conversation.created.total': this.metrics.getCounter('conversation.created.total') || 0,
+          'message.sent.total': this.metrics.getCounter('message.sent.total') || 0
         },
         gauges: {
           'menu.pendientes_validacion.count': Array.from(this.menus.values()).filter(m => m.estado === 'generado').length,
-          'menu.total.count': this.menus.size
+          'menu.total.count': this.menus.size,
+          'conversation.active.count': this.conversations.size,
+          'streaming.clients.count': this.streamingClients.size
         }
       }
     };
+  }
+
+  // ==========================================
+  // CONVERSATION APIs (AI Workspace)
+  // ==========================================
+
+  /**
+   * GET /conversations - Lista todas las conversaciones
+   * @param {Object} req - Request object
+   * @returns {Object} Lista de conversaciones
+   */
+  async handleListConversations(req) {
+    const { limit = 20, offset = 0, status } = req.query || {};
+
+    let conversations = Array.from(this.conversations.values())
+      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+    // Filtrar por estado si se especifica
+    if (status) {
+      conversations = conversations.filter(c => c.status === status);
+    }
+
+    // Paginación
+    const total = conversations.length;
+    const paginated = conversations.slice(Number(offset), Number(offset) + Number(limit));
+
+    this.logger.info('conversations.list', {
+      total,
+      returned: paginated.length,
+      correlation_id: req.correlationId
+    });
+
+    return {
+      status: 200,
+      data: {
+        conversations: paginated.map(c => ({
+          id: c.id,
+          title: c.title,
+          status: c.status,
+          messagesCount: (this.messages.get(c.id) || []).length,
+          menuId: c.menuId,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt
+        })),
+        pagination: {
+          total,
+          limit: Number(limit),
+          offset: Number(offset),
+          hasMore: Number(offset) + Number(limit) < total
+        }
+      }
+    };
+  }
+
+  /**
+   * POST /conversations - Crea una nueva conversación
+   * @param {Object} req - Request con body { title?, templateId?, aiConfig? }
+   * @returns {Object} Conversación creada
+   */
+  async handleCreateConversation(req) {
+    const { title, templateId, aiConfig, styleConfig } = req.body || {};
+
+    const conversationId = `conv_${Date.now()}_${uuidv4().slice(0, 8)}`;
+    const now = new Date().toISOString();
+
+    // Obtener plantilla si se especifica
+    const template = templateId ? this.templates.find(t => t.id === templateId) : null;
+
+    const conversation = {
+      id: conversationId,
+      title: title || `Conversación ${this.conversations.size + 1}`,
+      status: 'active',
+      templateId: templateId || null,
+      templateName: template?.name || null,
+      menuId: null,
+      aiConfig: {
+        provider: aiConfig?.provider || 'deepseek',
+        model: aiConfig?.model || '',
+        temperature: aiConfig?.temperature ?? 0.7,
+        maxTokens: aiConfig?.maxTokens || 2000
+      },
+      styleConfig: styleConfig || {
+        menuType: 'restaurant',
+        language: 'es',
+        includeDescriptions: true,
+        includeAllergens: true,
+        includePrices: true
+      },
+      metadata: {
+        userAgent: req.headers?.['user-agent'] || 'unknown',
+        createdBy: req.userId || 'anonymous'
+      },
+      createdAt: now,
+      updatedAt: now
+    };
+
+    this.conversations.set(conversationId, conversation);
+    this.messages.set(conversationId, []);
+
+    // Métricas
+    this.metrics.increment('conversation.created.total');
+
+    // Publicar evento
+    await this.eventBus.publish('menu-generator.conversation.created', {
+      conversationId,
+      title: conversation.title,
+      templateId
+    }, { correlationId: req.correlationId });
+
+    this.logger.info('conversation.created', {
+      conversationId,
+      templateId,
+      correlation_id: req.correlationId
+    });
+
+    return {
+      status: 201,
+      data: conversation
+    };
+  }
+
+  /**
+   * GET /conversations/:id - Obtiene una conversación específica
+   * @param {Object} req - Request con params.id
+   * @returns {Object} Conversación con mensajes
+   */
+  async handleGetConversation(req) {
+    const { id } = req.params;
+
+    const conversation = this.conversations.get(id);
+    if (!conversation) {
+      return {
+        status: 404,
+        data: { error: 'Conversación no encontrada', code: 'CONVERSATION_NOT_FOUND' }
+      };
+    }
+
+    const messages = this.messages.get(id) || [];
+
+    return {
+      status: 200,
+      data: {
+        ...conversation,
+        messages,
+        menu: conversation.menuId ? this.menus.get(conversation.menuId) : null
+      }
+    };
+  }
+
+  /**
+   * DELETE /conversations/:id - Elimina una conversación
+   * @param {Object} req - Request con params.id
+   * @returns {Object} Confirmación
+   */
+  async handleDeleteConversation(req) {
+    const { id } = req.params;
+
+    if (!this.conversations.has(id)) {
+      return {
+        status: 404,
+        data: { error: 'Conversación no encontrada', code: 'CONVERSATION_NOT_FOUND' }
+      };
+    }
+
+    this.conversations.delete(id);
+    this.messages.delete(id);
+
+    this.logger.info('conversation.deleted', {
+      conversationId: id,
+      correlation_id: req.correlationId
+    });
+
+    return {
+      status: 200,
+      data: { message: 'Conversación eliminada correctamente', conversationId: id }
+    };
+  }
+
+  // ==========================================
+  // MESSAGES APIs
+  // ==========================================
+
+  /**
+   * GET /conversations/:id/messages - Obtiene mensajes de una conversación
+   * @param {Object} req - Request con params.id y query { limit, before }
+   * @returns {Object} Lista de mensajes
+   */
+  async handleGetMessages(req) {
+    const { id } = req.params;
+    const { limit = 50, before } = req.query || {};
+
+    if (!this.conversations.has(id)) {
+      return {
+        status: 404,
+        data: { error: 'Conversación no encontrada', code: 'CONVERSATION_NOT_FOUND' }
+      };
+    }
+
+    let messages = this.messages.get(id) || [];
+
+    // Filtrar mensajes antes de cierta fecha si se especifica
+    if (before) {
+      messages = messages.filter(m => new Date(m.timestamp) < new Date(before));
+    }
+
+    // Limitar resultados
+    const limited = messages.slice(-Number(limit));
+
+    return {
+      status: 200,
+      data: {
+        conversationId: id,
+        messages: limited,
+        total: messages.length,
+        hasMore: messages.length > Number(limit)
+      }
+    };
+  }
+
+  /**
+   * POST /conversations/:id/messages - Envía un mensaje y obtiene respuesta de IA
+   * @param {Object} req - Request con body { content, role?, attachments? }
+   * @returns {Object} Mensaje del usuario y respuesta de IA
+   */
+  async handleSendMessage(req) {
+    const { id } = req.params;
+    const { content, role = 'user', attachments = [] } = req.body || {};
+
+    // Validaciones
+    if (!this.conversations.has(id)) {
+      return {
+        status: 404,
+        data: { error: 'Conversación no encontrada', code: 'CONVERSATION_NOT_FOUND' }
+      };
+    }
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return {
+        status: 400,
+        data: { error: 'El contenido del mensaje es requerido', code: 'INVALID_CONTENT' }
+      };
+    }
+
+    if (content.length > 4000) {
+      return {
+        status: 400,
+        data: { error: 'El mensaje excede el límite de 4000 caracteres', code: 'CONTENT_TOO_LONG' }
+      };
+    }
+
+    const conversation = this.conversations.get(id);
+    const conversationMessages = this.messages.get(id) || [];
+    const now = new Date().toISOString();
+
+    // Crear mensaje del usuario
+    const userMessage = {
+      id: `msg_${Date.now()}_${uuidv4().slice(0, 8)}`,
+      role: 'user',
+      content: content.trim(),
+      attachments,
+      timestamp: now,
+      status: 'sent'
+    };
+
+    conversationMessages.push(userMessage);
+    this.messages.set(id, conversationMessages);
+
+    // Métricas
+    this.metrics.increment('message.sent.total');
+
+    // Publicar evento de mensaje enviado
+    await this.eventBus.publish('menu-generator.message.sent', {
+      conversationId: id,
+      messageId: userMessage.id,
+      role: 'user'
+    }, { correlationId: req.correlationId });
+
+    this.logger.info('message.sent', {
+      conversationId: id,
+      messageId: userMessage.id,
+      contentLength: content.length,
+      attachmentsCount: attachments.length,
+      correlation_id: req.correlationId
+    });
+
+    // Generar respuesta de IA
+    try {
+      const aiResponse = await this._generateAIResponse(conversation, conversationMessages, req.correlationId);
+
+      // Crear mensaje de respuesta
+      const assistantMessage = {
+        id: `msg_${Date.now()}_${uuidv4().slice(0, 8)}`,
+        role: 'assistant',
+        content: aiResponse.content,
+        timestamp: new Date().toISOString(),
+        status: 'received',
+        metadata: {
+          provider: conversation.aiConfig.provider,
+          model: aiResponse.model,
+          tokensUsed: aiResponse.tokensUsed,
+          processingTime: aiResponse.processingTime
+        }
+      };
+
+      conversationMessages.push(assistantMessage);
+      this.messages.set(id, conversationMessages);
+
+      // Actualizar conversación
+      conversation.updatedAt = new Date().toISOString();
+      this.conversations.set(id, conversation);
+
+      // Verificar si la respuesta contiene un menú generado
+      if (aiResponse.menuGenerated && aiResponse.menuData) {
+        const menuId = await this._saveGeneratedMenu(aiResponse.menuData, id);
+        conversation.menuId = menuId;
+        this.conversations.set(id, conversation);
+      }
+
+      // Publicar evento de mensaje recibido
+      await this.eventBus.publish('menu-generator.message.received', {
+        conversationId: id,
+        messageId: assistantMessage.id,
+        role: 'assistant'
+      }, { correlationId: req.correlationId });
+
+      return {
+        status: 200,
+        data: {
+          userMessage,
+          assistantMessage,
+          menuGenerated: aiResponse.menuGenerated || false,
+          menuId: conversation.menuId
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('message.ai_response_error', {
+        conversationId: id,
+        error: error.message,
+        correlation_id: req.correlationId
+      });
+
+      // Crear mensaje de error
+      const errorMessage = {
+        id: `msg_${Date.now()}_${uuidv4().slice(0, 8)}`,
+        role: 'system',
+        content: `Error al procesar: ${error.message}`,
+        timestamp: new Date().toISOString(),
+        status: 'error',
+        metadata: { errorType: error.code || 'AI_ERROR' }
+      };
+
+      conversationMessages.push(errorMessage);
+      this.messages.set(id, conversationMessages);
+
+      return {
+        status: 200,
+        data: {
+          userMessage,
+          assistantMessage: errorMessage,
+          error: true
+        }
+      };
+    }
+  }
+
+  // ==========================================
+  // STREAMING API (SSE)
+  // ==========================================
+
+  /**
+   * GET /stream - Endpoint SSE para streaming de respuestas
+   * @param {Object} req - Request con query { conversationId }
+   * @param {Object} res - Response object para SSE
+   */
+  async handleStream(req, res) {
+    const { conversationId } = req.query || {};
+
+    if (!conversationId || !this.conversations.has(conversationId)) {
+      return {
+        status: 400,
+        data: { error: 'conversationId válido es requerido', code: 'INVALID_CONVERSATION' }
+      };
+    }
+
+    // Configurar SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const clientId = `client_${Date.now()}_${uuidv4().slice(0, 8)}`;
+    this.streamingClients.set(clientId, { res, conversationId });
+
+    this.logger.info('stream.client_connected', {
+      clientId,
+      conversationId,
+      correlation_id: req.correlationId
+    });
+
+    // Enviar evento de conexión
+    res.write(`event: connected\ndata: ${JSON.stringify({ clientId, conversationId })}\n\n`);
+
+    // Heartbeat para mantener conexión
+    const heartbeat = setInterval(() => {
+      if (this.streamingClients.has(clientId)) {
+        res.write(`event: heartbeat\ndata: ${JSON.stringify({ timestamp: Date.now() })}\n\n`);
+      }
+    }, 30000);
+
+    // Cleanup al desconectar
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      this.streamingClients.delete(clientId);
+      this.logger.info('stream.client_disconnected', { clientId, conversationId });
+    });
+
+    // No retornar respuesta estándar (SSE maneja su propio ciclo de vida)
+    return null;
+  }
+
+  /**
+   * Envía un evento SSE a clientes conectados de una conversación
+   * @private
+   */
+  _broadcastToConversation(conversationId, event, data) {
+    for (const [clientId, client] of this.streamingClients.entries()) {
+      if (client.conversationId === conversationId) {
+        try {
+          client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        } catch (error) {
+          this.logger.warn('stream.broadcast_error', { clientId, error: error.message });
+          this.streamingClients.delete(clientId);
+        }
+      }
+    }
+  }
+
+  // ==========================================
+  // TEMPLATES API
+  // ==========================================
+
+  /**
+   * GET /templates - Lista plantillas disponibles
+   * @param {Object} req - Request object
+   * @returns {Object} Lista de plantillas
+   */
+  async handleGetTemplates(req) {
+    return {
+      status: 200,
+      data: {
+        templates: this.templates,
+        total: this.templates.length
+      }
+    };
+  }
+
+  /**
+   * GET /templates/:id - Obtiene una plantilla específica
+   * @param {Object} req - Request con params.id
+   * @returns {Object} Plantilla
+   */
+  async handleGetTemplate(req) {
+    const { id } = req.params;
+    const template = this.templates.find(t => t.id === id);
+
+    if (!template) {
+      return {
+        status: 404,
+        data: { error: 'Plantilla no encontrada', code: 'TEMPLATE_NOT_FOUND' }
+      };
+    }
+
+    return {
+      status: 200,
+      data: template
+    };
+  }
+
+  // ==========================================
+  // HISTORY API
+  // ==========================================
+
+  /**
+   * GET /history - Historial de menús generados con conversaciones
+   * @param {Object} req - Request con query { limit, offset, status }
+   * @returns {Object} Historial paginado
+   */
+  async handleGetHistory(req) {
+    const { limit = 10, offset = 0, status } = req.query || {};
+
+    // Combinar menús con info de conversaciones
+    let history = Array.from(this.menus.values())
+      .map(menu => {
+        // Buscar conversación asociada
+        const conversation = Array.from(this.conversations.values())
+          .find(c => c.menuId === menu.id);
+
+        return {
+          id: menu.id,
+          type: 'menu',
+          estado: menu.estado,
+          title: conversation?.title || `Menú ${menu.id.slice(-8)}`,
+          productosCount: menu.productos?.length || 0,
+          categoriasCount: menu.categorias?.length || 0,
+          conversationId: conversation?.id || null,
+          source: menu.source,
+          createdAt: menu.created_at,
+          validatedAt: menu.validated_at,
+          metadata: {
+            templateUsed: conversation?.templateName || null,
+            aiProvider: conversation?.aiConfig?.provider || 'unknown'
+          }
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Filtrar por estado
+    if (status) {
+      history = history.filter(h => h.estado === status);
+    }
+
+    // Paginación
+    const total = history.length;
+    const paginated = history.slice(Number(offset), Number(offset) + Number(limit));
+
+    return {
+      status: 200,
+      data: {
+        history: paginated,
+        pagination: {
+          total,
+          limit: Number(limit),
+          offset: Number(offset),
+          hasMore: Number(offset) + Number(limit) < total
+        }
+      }
+    };
+  }
+
+  // ==========================================
+  // EXPORT API
+  // ==========================================
+
+  /**
+   * POST /menus/:id/export - Exporta un menú en formato específico
+   * @param {Object} req - Request con params.id y body { format }
+   * @returns {Object} Datos exportados
+   */
+  async handleExportMenu(req) {
+    const { id } = req.params;
+    const { format = 'json' } = req.body || {};
+
+    const menu = this.menus.get(id);
+    if (!menu) {
+      return {
+        status: 404,
+        data: { error: 'Menú no encontrado', code: 'MENU_NOT_FOUND' }
+      };
+    }
+
+    let exportData;
+    let contentType;
+    let filename;
+
+    switch (format.toLowerCase()) {
+      case 'json':
+        exportData = JSON.stringify(menu, null, 2);
+        contentType = 'application/json';
+        filename = `menu_${id}.json`;
+        break;
+
+      case 'csv':
+        exportData = this._menuToCSV(menu);
+        contentType = 'text/csv';
+        filename = `menu_${id}.csv`;
+        break;
+
+      case 'markdown':
+      case 'md':
+        exportData = this._menuToMarkdown(menu);
+        contentType = 'text/markdown';
+        filename = `menu_${id}.md`;
+        break;
+
+      default:
+        return {
+          status: 400,
+          data: { error: `Formato '${format}' no soportado. Use: json, csv, markdown`, code: 'INVALID_FORMAT' }
+        };
+    }
+
+    // Publicar evento
+    await this.eventBus.publish('menu-generator.menu.exported', {
+      menuId: id,
+      format,
+      timestamp: new Date().toISOString()
+    }, { correlationId: req.correlationId });
+
+    this.logger.info('menu.exported', {
+      menuId: id,
+      format,
+      correlation_id: req.correlationId
+    });
+
+    return {
+      status: 200,
+      data: {
+        menuId: id,
+        format,
+        filename,
+        contentType,
+        content: exportData,
+        exportedAt: new Date().toISOString()
+      }
+    };
+  }
+
+  // ==========================================
+  // AI RESPONSE GENERATION (Private)
+  // ==========================================
+
+  /**
+   * Genera respuesta de IA para una conversación
+   * @private
+   */
+  async _generateAIResponse(conversation, messages, correlationId) {
+    const startTime = Date.now();
+
+    // Construir contexto del chat
+    const systemPrompt = this._buildSystemPrompt(conversation);
+    const chatHistory = messages.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
+
+    // Simular respuesta de IA (en producción, llamar a ai-gateway)
+    // TODO: Integrar con módulo ai-gateway real
+    const mockResponse = await this._mockAIResponse(conversation, chatHistory);
+
+    return {
+      content: mockResponse.content,
+      model: conversation.aiConfig.model || 'deepseek-chat',
+      tokensUsed: mockResponse.tokensUsed || 150,
+      processingTime: Date.now() - startTime,
+      menuGenerated: mockResponse.menuGenerated || false,
+      menuData: mockResponse.menuData || null
+    };
+  }
+
+  /**
+   * Construye el prompt del sistema según configuración
+   * @private
+   */
+  _buildSystemPrompt(conversation) {
+    const template = conversation.templateId
+      ? this.templates.find(t => t.id === conversation.templateId)
+      : null;
+
+    let prompt = `Eres un asistente especializado en generación de menús para restaurantes.
+Tu objetivo es ayudar a crear menús profesionales y bien estructurados.
+
+Configuración actual:
+- Tipo de establecimiento: ${conversation.styleConfig?.menuType || 'restaurante'}
+- Idioma: ${conversation.styleConfig?.language || 'español'}
+- Incluir descripciones: ${conversation.styleConfig?.includeDescriptions ? 'sí' : 'no'}
+- Incluir alérgenos: ${conversation.styleConfig?.includeAllergens ? 'sí' : 'no'}
+- Incluir precios: ${conversation.styleConfig?.includePrices ? 'sí' : 'no'}
+`;
+
+    if (template) {
+      prompt += `
+Plantilla seleccionada: ${template.name}
+Categorías sugeridas: ${template.categories.join(', ')}
+Nota: ${template.promptHint}
+`;
+    }
+
+    return prompt;
+  }
+
+  /**
+   * Mock de respuesta de IA para desarrollo
+   * @private
+   */
+  async _mockAIResponse(conversation, chatHistory) {
+    // Simular delay de procesamiento
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+
+    const lastUserMessage = chatHistory.filter(m => m.role === 'user').pop();
+    const userContent = lastUserMessage?.content?.toLowerCase() || '';
+
+    // Detectar intención de generar menú
+    const wantsMenu = userContent.includes('genera') ||
+                      userContent.includes('crea') ||
+                      userContent.includes('menú') ||
+                      userContent.includes('carta');
+
+    if (wantsMenu && chatHistory.length >= 2) {
+      // Generar menú de ejemplo
+      const menuData = this._generateSampleMenu(conversation);
+      return {
+        content: `¡Perfecto! He generado un menú basado en tus indicaciones. Incluye ${menuData.productos.length} productos en ${menuData.categorias.length} categorías.\n\nPuedes ver el resultado en el panel de preview. ¿Te gustaría hacer algún ajuste?`,
+        tokensUsed: 250,
+        menuGenerated: true,
+        menuData
+      };
+    }
+
+    // Respuesta conversacional normal
+    const responses = [
+      '¡Entendido! ¿Qué tipo de cocina te gustaría para tu menú? Puedo ayudarte con italiana, japonesa, mexicana, española o cualquier otra.',
+      'Perfecto. Para crear el mejor menú posible, cuéntame: ¿cuántas categorías aproximadamente necesitas y qué rango de precios manejas?',
+      '¡Genial! Con esa información puedo ayudarte. ¿Prefieres descripciones detalladas de cada plato o algo más conciso?',
+      'Muy bien. ¿Hay algún plato estrella o especialidad de la casa que quieras destacar en el menú?'
+    ];
+
+    return {
+      content: responses[Math.floor(Math.random() * responses.length)],
+      tokensUsed: 50
+    };
+  }
+
+  /**
+   * Genera un menú de ejemplo
+   * @private
+   */
+  _generateSampleMenu(conversation) {
+    const template = conversation.templateId
+      ? this.templates.find(t => t.id === conversation.templateId)
+      : this.templates[0];
+
+    return {
+      productos: [
+        { id: 'prod_1', nombre: 'Ensalada César', emoji: '🥗', categoria: 'Entrantes', precio: 8.50, descripcion: 'Lechuga romana, parmesano, croutons y aderezo César' },
+        { id: 'prod_2', nombre: 'Sopa del día', emoji: '🍲', categoria: 'Entrantes', precio: 6.00, descripcion: 'Consultar con el personal' },
+        { id: 'prod_3', nombre: 'Spaghetti Carbonara', emoji: '🍝', categoria: 'Principales', precio: 12.00, descripcion: 'Pasta fresca con huevo, panceta y pecorino' },
+        { id: 'prod_4', nombre: 'Pizza Margherita', emoji: '🍕', categoria: 'Principales', precio: 10.00, descripcion: 'Tomate, mozzarella fresca y albahaca' },
+        { id: 'prod_5', nombre: 'Tiramisú', emoji: '🍰', categoria: 'Postres', precio: 5.50, descripcion: 'Postre italiano con mascarpone y café' }
+      ],
+      categorias: [
+        { id: 'cat_1', nombre: 'Entrantes', emoji: '🥗', orden: 1 },
+        { id: 'cat_2', nombre: 'Principales', emoji: '🍽️', orden: 2 },
+        { id: 'cat_3', nombre: 'Postres', emoji: '🍰', orden: 3 }
+      ],
+      ingredientes_catalogo: []
+    };
+  }
+
+  /**
+   * Guarda un menú generado
+   * @private
+   */
+  async _saveGeneratedMenu(menuData, conversationId) {
+    const menuId = `menu_${Date.now()}`;
+
+    const menu = {
+      id: menuId,
+      source: {
+        tipo: 'ai_generated',
+        conversationId,
+        uploaded_at: new Date().toISOString()
+      },
+      estado: 'generado',
+      productos: menuData.productos || [],
+      categorias: menuData.categorias || [],
+      ingredientes_catalogo: menuData.ingredientes_catalogo || [],
+      created_at: new Date().toISOString()
+    };
+
+    this.menus.set(menuId, menu);
+
+    // Métricas y eventos
+    this.metrics.increment('menu.generado.total');
+    await this.eventBus.publish('menu-generator.menu.created', {
+      menuId,
+      conversationId,
+      productosCount: menu.productos.length
+    });
+
+    return menuId;
+  }
+
+  // ==========================================
+  // EXPORT HELPERS (Private)
+  // ==========================================
+
+  /**
+   * Convierte menú a formato CSV
+   * @private
+   */
+  _menuToCSV(menu) {
+    const headers = ['ID', 'Nombre', 'Categoría', 'Precio', 'Descripción', 'Alérgenos'];
+    const rows = [headers.join(',')];
+
+    for (const producto of menu.productos || []) {
+      const row = [
+        producto.id,
+        `"${producto.nombre}"`,
+        `"${producto.categoria}"`,
+        producto.precio || '',
+        `"${(producto.descripcion || '').replace(/"/g, '""')}"`,
+        `"${(producto.alergenos || []).join(', ')}"`
+      ];
+      rows.push(row.join(','));
+    }
+
+    return rows.join('\n');
+  }
+
+  /**
+   * Convierte menú a formato Markdown
+   * @private
+   */
+  _menuToMarkdown(menu) {
+    let md = `# Menú\n\n`;
+    md += `> Generado el ${new Date().toLocaleDateString('es-ES')}\n\n`;
+
+    // Agrupar por categoría
+    const categorias = menu.categorias || [];
+    const productos = menu.productos || [];
+
+    for (const cat of categorias.sort((a, b) => (a.orden || 0) - (b.orden || 0))) {
+      md += `## ${cat.emoji || ''} ${cat.nombre}\n\n`;
+
+      const productosCategoria = productos.filter(p => p.categoria === cat.nombre);
+      for (const prod of productosCategoria) {
+        md += `### ${prod.emoji || '🍽️'} ${prod.nombre}`;
+        if (prod.precio) md += ` - €${prod.precio.toFixed(2)}`;
+        md += '\n';
+        if (prod.descripcion) md += `${prod.descripcion}\n`;
+        if (prod.alergenos?.length) md += `*Alérgenos: ${prod.alergenos.join(', ')}*\n`;
+        md += '\n';
+      }
+    }
+
+    return md;
   }
 
   // ==========================================

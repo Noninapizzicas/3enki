@@ -1,12 +1,20 @@
 {
   "name": "menu-generator",
-  "version": "1.0.0",
-  "description": "Generador de menú desde carta física usando IA - Enfoque generativo",
-  "author": "Pizzepos Team",
+  "version": "2.0.0",
+  "description": "Generador de menú con IA - Soporta chat conversacional, templates, streaming y export",
+  "author": "Event Core Team",
 
   "provides": {
-    "events": ["menu.generado", "menu.validado", "ai.request"],
-    "queries": ["menu.obtener_ultimo"]
+    "events": [
+      "menu.generado",
+      "menu.validado",
+      "menu-generator.conversation.created",
+      "menu-generator.message.sent",
+      "menu-generator.message.received",
+      "menu-generator.menu.created",
+      "menu-generator.menu.exported"
+    ],
+    "queries": ["menu.obtener_ultimo", "conversations.list", "templates.list"]
   },
 
   "events": {
@@ -14,30 +22,42 @@
       {
         "event": "ai.request",
         "description": "Solicitud de procesamiento IA para parsear carta de menú",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/ai_request"
-        }
+        "schema": { "$ref": "./schemas/events.json#/definitions/ai_request" }
       },
       {
         "event": "menu.generado",
         "description": "Menú generado por IA con productos enriquecidos",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/menu_generado"
-        }
+        "schema": { "$ref": "./schemas/events.json#/definitions/menu_generado" }
       },
       {
         "event": "menu.validado",
         "description": "Menú validado por operador antes de aplicar",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/menu_validado"
-        }
+        "schema": { "$ref": "./schemas/events.json#/definitions/menu_validado" }
       },
       {
         "event": "menu.error",
         "description": "Error en generación o validación de menú",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/menu_error"
-        }
+        "schema": { "$ref": "./schemas/events.json#/definitions/menu_error" }
+      },
+      {
+        "event": "menu-generator.conversation.created",
+        "description": "Nueva conversación de chat creada"
+      },
+      {
+        "event": "menu-generator.message.sent",
+        "description": "Mensaje de usuario enviado"
+      },
+      {
+        "event": "menu-generator.message.received",
+        "description": "Respuesta de IA recibida"
+      },
+      {
+        "event": "menu-generator.menu.created",
+        "description": "Menú creado desde conversación"
+      },
+      {
+        "event": "menu-generator.menu.exported",
+        "description": "Menú exportado a formato externo"
       }
     ],
     "subscribes": [
@@ -51,22 +71,22 @@
 
   "apis": [
     {
+      "group": "Menús",
+      "description": "CRUD de menús generados"
+    },
+    {
       "method": "POST",
       "path": "/upload",
       "handler": "handleUploadMenu",
       "description": "Subir carta física (imagen/PDF) para generar menú",
-      "request_schema": {
-        "$ref": "./schemas/menu.json#/definitions/upload_request"
-      },
-      "response_schema": {
-        "$ref": "./schemas/menu.json#/definitions/upload_response"
-      }
+      "request_schema": { "$ref": "./schemas/menu.json#/definitions/upload_request" },
+      "response_schema": { "$ref": "./schemas/menu.json#/definitions/upload_response" }
     },
     {
       "method": "GET",
       "path": "/menus",
       "handler": "handleListMenus",
-      "description": "Listar menús generados (histórico)"
+      "description": "Listar menús generados"
     },
     {
       "method": "GET",
@@ -78,10 +98,112 @@
       "method": "POST",
       "path": "/menus/:id/validate",
       "handler": "handleValidateMenu",
-      "description": "Validar menú generado (publica menu.validado)",
-      "request_schema": {
-        "$ref": "./schemas/menu.json#/definitions/validate_request"
-      }
+      "description": "Validar menú generado",
+      "request_schema": { "$ref": "./schemas/menu.json#/definitions/validate_request" }
+    },
+    {
+      "method": "POST",
+      "path": "/menus/:id/export",
+      "handler": "handleExportMenu",
+      "description": "Exportar menú (JSON, CSV, Markdown)",
+      "request_schema": { "$ref": "./schemas/menu.json#/definitions/export_request" }
+    },
+
+    {
+      "group": "Conversaciones",
+      "description": "API de chat conversacional con IA"
+    },
+    {
+      "method": "GET",
+      "path": "/conversations",
+      "handler": "handleListConversations",
+      "description": "Listar conversaciones",
+      "query_params": ["limit", "offset", "status"]
+    },
+    {
+      "method": "POST",
+      "path": "/conversations",
+      "handler": "handleCreateConversation",
+      "description": "Crear nueva conversación",
+      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/create_request" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id",
+      "handler": "handleGetConversation",
+      "description": "Obtener conversación con mensajes"
+    },
+    {
+      "method": "DELETE",
+      "path": "/conversations/:id",
+      "handler": "handleDeleteConversation",
+      "description": "Eliminar conversación"
+    },
+
+    {
+      "group": "Mensajes",
+      "description": "Mensajes dentro de conversaciones"
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id/messages",
+      "handler": "handleGetMessages",
+      "description": "Obtener mensajes de una conversación",
+      "query_params": ["limit", "before"]
+    },
+    {
+      "method": "POST",
+      "path": "/conversations/:id/messages",
+      "handler": "handleSendMessage",
+      "description": "Enviar mensaje y obtener respuesta de IA",
+      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/message_request" }
+    },
+
+    {
+      "group": "Streaming",
+      "description": "Server-Sent Events para respuestas en tiempo real"
+    },
+    {
+      "method": "GET",
+      "path": "/stream",
+      "handler": "handleStream",
+      "description": "Endpoint SSE para streaming de respuestas",
+      "query_params": ["conversationId"],
+      "sse": true
+    },
+
+    {
+      "group": "Templates",
+      "description": "Plantillas predefinidas para menús"
+    },
+    {
+      "method": "GET",
+      "path": "/templates",
+      "handler": "handleGetTemplates",
+      "description": "Listar plantillas disponibles"
+    },
+    {
+      "method": "GET",
+      "path": "/templates/:id",
+      "handler": "handleGetTemplate",
+      "description": "Obtener plantilla específica"
+    },
+
+    {
+      "group": "Historial",
+      "description": "Historial de menús y conversaciones"
+    },
+    {
+      "method": "GET",
+      "path": "/history",
+      "handler": "handleGetHistory",
+      "description": "Historial de menús generados",
+      "query_params": ["limit", "offset", "status"]
+    },
+
+    {
+      "group": "Sistema",
+      "description": "Health check y métricas"
     },
     {
       "method": "GET",

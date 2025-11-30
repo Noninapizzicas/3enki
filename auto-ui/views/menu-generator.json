@@ -39,6 +39,24 @@
         "backTarget": "/auto-ui",
         "actions": [
           {
+            "id": "credentials",
+            "component": "credential-indicator",
+            "props": {
+              "variant": "badge",
+              "provider": "@state.aiConfig.provider",
+              "showLevel": true,
+              "showStatus": true,
+              "enableQuickAdd": true,
+              "endpoint": "/modules/credential-manager/credentials"
+            },
+            "action": "open-panel",
+            "panel": {
+              "id": "credentials-panel",
+              "size": "medium",
+              "title": "Gestionar Credenciales"
+            }
+          },
+          {
             "id": "new-chat",
             "emoji": "➕",
             "label": "Nueva conversación",
@@ -629,6 +647,147 @@
         "pageSize": 10,
         "emptyMessage": "No hay menús en el historial"
       }
+    },
+
+    "credentials-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "medium",
+      "props": {
+        "title": "🔑 Gestionar Credenciales",
+        "showHandle": true,
+        "showCloseButton": true,
+        "draggable": true,
+        "swipeToClose": true,
+        "backdropClose": true
+      },
+      "content": {
+        "type": "stack",
+        "direction": "vertical",
+        "gap": "16px",
+        "sections": [
+          {
+            "id": "current-status",
+            "component": "credential-indicator",
+            "props": {
+              "variant": "detailed",
+              "provider": "@state.aiConfig.provider",
+              "showLevel": true,
+              "showStatus": true,
+              "enableQuickAdd": true,
+              "endpoint": "/modules/credential-manager/credentials",
+              "checkOnInit": true
+            }
+          },
+          {
+            "id": "providers-list",
+            "type": "list",
+            "title": "Credenciales por Proveedor",
+            "items": [
+              {
+                "provider": "deepseek",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "deepseek",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              },
+              {
+                "provider": "openai",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "openai",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              },
+              {
+                "provider": "claude",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "claude",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              },
+              {
+                "provider": "ollama",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "ollama",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "add-credential-form",
+            "type": "form",
+            "title": "Añadir Credencial",
+            "collapsed": true,
+            "fields": [
+              {
+                "name": "provider",
+                "component": "select",
+                "props": {
+                  "label": "Proveedor",
+                  "options": [
+                    {"value": "deepseek", "label": "🔥 DeepSeek"},
+                    {"value": "openai", "label": "🟢 OpenAI"},
+                    {"value": "claude", "label": "🟣 Claude"},
+                    {"value": "ollama", "label": "🦙 Ollama"}
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "level",
+                "component": "select",
+                "props": {
+                  "label": "Nivel",
+                  "options": [
+                    {"value": "CUSTOM", "label": "🟣 Custom (solo esta sesión)"},
+                    {"value": "CLIENT", "label": "🔵 Cliente"},
+                    {"value": "PROJECT", "label": "🟢 Proyecto"},
+                    {"value": "GLOBAL", "label": "⚪ Global"}
+                  ],
+                  "default": "PROJECT"
+                }
+              },
+              {
+                "name": "apiKey",
+                "component": "input",
+                "props": {
+                  "label": "API Key",
+                  "type": "password",
+                  "placeholder": "sk-...",
+                  "required": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actions": [
+        {
+          "label": "Cerrar",
+          "variant": "secondary",
+          "action": "close"
+        },
+        {
+          "label": "Guardar Credencial",
+          "variant": "primary",
+          "icon": "💾",
+          "action": "emit",
+          "event": "menu-generator.save-credential"
+        }
+      ]
     }
   },
 
@@ -694,7 +853,9 @@
       "menu-generator.apply-style",
       "menu-generator.analyze-images",
       "menu-generator.save-menu",
-      "menu-generator.quick-generate"
+      "menu-generator.quick-generate",
+      "menu-generator.save-credential",
+      "credential-manager.credential.updated"
     ],
     "publish": [
       "menu-generator.conversation.created",

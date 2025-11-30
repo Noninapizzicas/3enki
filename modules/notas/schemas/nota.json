@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://event-core.local/schemas/nota.json",
+
+  "definitions": {
+    "nota": {
+      "type": "object",
+      "required": ["id", "titulo", "contenido", "color", "pinned", "created_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^nota_[a-z0-9]+$",
+          "description": "ID único de la nota"
+        },
+        "titulo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Título de la nota"
+        },
+        "contenido": {
+          "type": "string",
+          "maxLength": 5000,
+          "description": "Contenido de la nota"
+        },
+        "color": {
+          "type": "string",
+          "enum": ["yellow", "green", "blue", "pink", "purple", "orange"],
+          "default": "yellow",
+          "description": "Color de la nota"
+        },
+        "pinned": {
+          "type": "boolean",
+          "default": false,
+          "description": "Si la nota está fijada"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fecha de creación"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fecha de última actualización"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "create_request": {
+      "type": "object",
+      "required": ["titulo"],
+      "properties": {
+        "titulo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "contenido": {
+          "type": "string",
+          "maxLength": 5000,
+          "default": ""
+        },
+        "color": {
+          "type": "string",
+          "enum": ["yellow", "green", "blue", "pink", "purple", "orange"],
+          "default": "yellow"
+        },
+        "pinned": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "update_request": {
+      "type": "object",
+      "properties": {
+        "titulo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "contenido": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "color": {
+          "type": "string",
+          "enum": ["yellow", "green", "blue", "pink", "purple", "orange"]
+        },
+        "pinned": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

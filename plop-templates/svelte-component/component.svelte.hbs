@@ -1,0 +1,47 @@
+<script lang="ts">
+{{#if hasEvents}}
+  import { createEventDispatcher } from 'svelte';
+{{/if}}
+
+{{#each props}}
+  export let {{name}}{{#if type}}: {{type}}{{/if}}{{#if default}} = {{{default}}}{{/if}};
+{{/each}}
+{{#unless props}}
+  // Define your props here
+  // export let myProp: string;
+{{/unless}}
+  let className = '';
+  export { className as class };
+{{#if hasEvents}}
+
+  const dispatch = createEventDispatcher<{
+{{#each events}}
+    {{name}}: {{#if payload}}{{payload}}{{else}}void{{/if}};
+{{/each}}
+  }>();
+{{/if}}
+{{#if hasVariants}}
+
+  const variantClasses: Record<string, string> = {
+{{#each variants}}
+    {{name}}: '{{classes}}',
+{{/each}}
+  };
+{{/if}}
+</script>
+
+<div class="{{baseClasses}} {className}"{{#if hasVariants}} class:dynamic={variantClasses[variant]}{{/if}}>
+{{#if hasSlots}}
+{{#each slots}}
+  {{#if (eq name 'default')}}
+  <slot />
+  {{else}}
+  {#if $$slots.{{name}}}
+    <slot name="{{name}}" />
+  {/if}
+  {{/if}}
+{{/each}}
+{{else}}
+  <slot />
+{{/if}}
+</div>

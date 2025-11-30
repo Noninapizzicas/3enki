@@ -1,0 +1,797 @@
+{
+  "name": "{{name}}",
+  "version": "2.0.0",
+  "type": "ai-workspace",
+  "description": "{{description}}",
+  "author": "{{author}}",
+  "generated_at": "{{currentDate}}",
+
+  "permissions": ["admin", "user"],
+
+  "config": {
+    "title": "{{titleCase name}}",
+    "icon": "{{icon}}",
+    "layout": "mobile-first",
+    "fullscreen": true,
+    "preventScroll": true
+  },
+
+  "layout": {
+    "type": "stack",
+    "direction": "vertical",
+    "config": {
+      "height": "100vh",
+      "overflow": "hidden"
+    }
+  },
+
+  "sections": [
+    {
+      "id": "header",
+      "type": "fixed",
+      "position": "top",
+      "height": "auto",
+      "component": "header-bar",
+      "props": {
+        "title": "{{icon}} {{titleCase name}}",
+        "showBack": true,
+        "backAction": "navigate",
+        "backTarget": "/auto-ui",
+        "actions": [
+          {
+            "id": "credentials",
+            "component": "credential-indicator",
+            "props": {
+              "variant": "badge",
+              "provider": "@state.aiConfig.provider",
+              "showLevel": true,
+              "showStatus": true,
+              "enableQuickAdd": true,
+              "endpoint": "/modules/credential-manager/credentials"
+            },
+            "action": "open-panel",
+            "panel": {
+              "id": "credentials-panel",
+              "size": "medium",
+              "title": "Gestionar Credenciales"
+            }
+          },
+          {
+            "id": "new-chat",
+            "emoji": "➕",
+            "label": "Nueva conversación",
+            "action": "emit",
+            "event": "{{name}}.new-conversation"
+          },
+          {
+            "id": "history",
+            "emoji": "📜",
+            "label": "Historial",
+            "action": "open-panel",
+            "panel": {
+              "id": "history-panel",
+              "size": "medium",
+              "title": "Historial"
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "main-content",
+      "type": "flex",
+      "flex": 1,
+      "overflow": "hidden",
+      "sections": [
+        {
+          "id": "chat-area",
+          "type": "flex",
+          "flex": 1,
+          "direction": "column",
+          "overflow": "hidden",
+
+          "sections": [
+            {
+              "id": "conversation",
+              "type": "flex",
+              "flex": 1,
+              "overflow": "auto",
+              "component": "conversation-panel",
+              "props": {
+                "variant": "ai-chat",
+                "size": "fullscreen",
+                "conversationId": "@state.currentConversationId",
+                "endpoint": "/modules/{{name}}/conversations/@state.currentConversationId/messages",
+                "streamingEndpoint": "/modules/{{name}}/stream",
+                "enableMarkdown": true,
+                "enableAttachments": {{#if enableAttachments}}true{{else}}false{{/if}},
+                "enableVoice": {{#if enableVoice}}true{{else}}false{{/if}},
+                "placeholder": "{{placeholder}}",
+                "sendIcon": "🚀",
+                "aiProvider": "{{defaultProvider}}",
+                "showTypingIndicator": true,
+                "maxMessageLength": 4000,
+                "showTimestamps": true,
+                "showAvatars": true,
+                "enableCommands": true,
+                "mqttEnabled": true,
+                "mqttTopics": [
+                  "{{name}}.message.sent",
+                  "{{name}}.message.received",
+                  "{{name}}.result.generated",
+                  "{{name}}.result.updated"
+                ]
+              }
+            },
+
+            {
+              "id": "result-preview",
+              "type": "conditional",
+              "condition": "@state.hasGeneratedResult",
+              "collapsible": true,
+              "collapsed": false,
+              "maxHeight": "40vh",
+              "component": "result-preview-card",
+              "props": {
+                "variant": "{{resultVariant}}",
+                "status": "@state.resultStatus",
+                "dataFormat": "{{resultFormat}}",
+                "endpoint": "/modules/{{name}}/results/@state.currentResultId",
+                "title": "{{resultTitle}}",
+                "showActions": true,
+                "actions": [
+                  {
+                    "id": "validate",
+                    "label": "Validar",
+                    "icon": "✅",
+                    "action": "emit",
+                    "event": "{{name}}.validate-result"
+                  },
+                  {
+                    "id": "edit",
+                    "label": "Editar",
+                    "icon": "✏️",
+                    "action": "open-panel",
+                    "panel": {
+                      "id": "edit-result-panel",
+                      "size": "full",
+                      "title": "Editar {{resultTitle}}"
+                    }
+                  },
+                  {
+                    "id": "export",
+                    "label": "Exportar",
+                    "icon": "📤",
+                    "action": "emit",
+                    "event": "{{name}}.export-result"
+                  },
+                  {
+                    "id": "regenerate",
+                    "label": "Regenerar",
+                    "icon": "🔄",
+                    "action": "emit",
+                    "event": "{{name}}.regenerate-result"
+                  }
+                ],
+                "expandable": true,
+                "expanded": false,
+                "highlightChanges": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "input-area",
+      "type": "fixed",
+      "position": "bottom",
+      "component": "chat-input",
+      "props": {
+        "variant": "default",
+        "size": "md",
+        "placeholder": "{{placeholder}}",
+        "multiline": true,
+        "maxRows": 5,
+        "maxLength": 4000,
+        "showCharCount": false,
+        "showTokenCount": true,
+        "streaming": true,
+        "endpoint": "/modules/{{name}}/conversations/@state.currentConversationId/messages",
+        "hapticFeedback": true,
+        "submitOnEnter": true,
+        "clearOnSubmit": true,
+
+        "topBar": {
+          "enabled": true,
+          "collapsible": true,
+          "collapsed": false,
+          "buttons": [
+            {
+              "id": "ai-provider",
+              "emoji": "🤖",
+              "label": "Proveedor AI",
+              "action": "open-panel",
+              "panel": {
+                "id": "ai-settings-panel",
+                "size": "small",
+                "title": "Configuración AI"
+              }
+            },
+            {
+              "id": "prompts",
+              "emoji": "📝",
+              "label": "Prompts",
+              "action": "open-panel",
+              "panel": {
+                "id": "prompts-panel",
+                "size": "medium",
+                "title": "Prompts Guardados"
+              }
+            },
+            {
+              "id": "templates",
+              "emoji": "📋",
+              "label": "Plantillas",
+              "action": "open-panel",
+              "panel": {
+                "id": "templates-panel",
+                "size": "medium",
+                "title": "Plantillas"
+              }
+            },
+            {
+              "id": "style",
+              "emoji": "🎨",
+              "label": "Estilo",
+              "action": "open-panel",
+              "panel": {
+                "id": "style-panel",
+                "size": "small",
+                "title": "Opciones de Estilo"
+              }
+            }
+          ]
+        },
+
+        "bottomBar": {
+          "enabled": true,
+          "collapsible": true,
+          "collapsed": false,
+          "buttons": [
+            {{#if enableFileUpload}}
+            {
+              "id": "upload-image",
+              "emoji": "📷",
+              "label": "{{uploadLabel}}",
+              "action": "open-panel",
+              "panel": {
+                "id": "upload-panel",
+                "size": "medium",
+                "title": "{{uploadTitle}}"
+              }
+            },
+            {{/if}}
+            {
+              "id": "attach-file",
+              "emoji": "📎",
+              "label": "Adjuntar",
+              "action": "emit",
+              "event": "{{name}}.attach-file"
+            },
+            {{#if enableVoice}}
+            {
+              "id": "voice",
+              "emoji": "🎤",
+              "label": "Voz",
+              "action": "emit",
+              "event": "{{name}}.voice-input"
+            },
+            {{/if}}
+            {
+              "id": "examples",
+              "emoji": "💡",
+              "label": "Ejemplos",
+              "action": "open-panel",
+              "panel": {
+                "id": "examples-panel",
+                "size": "medium",
+                "title": "Ejemplos de Prompts"
+              }
+            }
+          ]
+        },
+
+        "sendButton": {
+          "emoji": "🚀",
+          "label": "Generar",
+          "position": "right",
+          "holdAction": {
+            "emoji": "⚡",
+            "label": "Generación rápida",
+            "event": "{{name}}.quick-generate"
+          }
+        }
+      }
+    }
+  ],
+
+  "panels": {
+    "ai-settings-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "small",
+      "props": {
+        "title": "⚙️ Configuración AI",
+        "showHandle": true,
+        "showCloseButton": true,
+        "draggable": true,
+        "swipeToClose": true,
+        "backdropClose": true,
+        "backdrop": true,
+        "backdropBlur": true
+      },
+      "content": {
+        "component": "ai-control-bar",
+        "props": {
+          "variant": "full",
+          "position": "floating",
+          "showProvider": true,
+          "showModel": true,
+          "showTemperature": true,
+          "showMaxTokens": true,
+          "showPrompts": false,
+          "showCredentials": true,
+          "providers": ["deepseek", "openai", "claude", "ollama"],
+          "defaultProvider": "{{defaultProvider}}",
+          "defaultTemperature": 0.7,
+          "defaultMaxTokens": 2000,
+          "collapsible": false
+        }
+      }
+    },
+
+    "prompts-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "medium",
+      "props": {
+        "title": "📝 Prompts Guardados",
+        "showHandle": true,
+        "showCloseButton": true,
+        "draggable": true,
+        "swipeToClose": true,
+        "backdropClose": true
+      },
+      "content": {
+        "component": "prompt-selector",
+        "props": {
+          "variant": "panel",
+          "endpoint": "/modules/prompt-manager/prompts",
+          "scope": "all",
+          "categories": {{json promptCategories}},
+          "showVersioning": true,
+          "enableCreate": true,
+          "enableEdit": true,
+          "showPreview": true,
+          "searchEnabled": true
+        }
+      },
+      "actions": [
+        {
+          "label": "Cancelar",
+          "variant": "secondary",
+          "action": "close"
+        },
+        {
+          "label": "Usar Prompt",
+          "variant": "primary",
+          "action": "emit",
+          "event": "{{name}}.use-prompt"
+        }
+      ]
+    },
+
+    "templates-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "medium",
+      "props": {
+        "title": "📋 Plantillas",
+        "showHandle": true,
+        "showCloseButton": true,
+        "draggable": true,
+        "swipeToClose": true
+      },
+      "content": {
+        "type": "list",
+        "dataSource": "@api:/modules/{{name}}/templates",
+        "template": "template-card",
+        "emptyMessage": "No hay plantillas disponibles"
+      },
+      "actions": [
+        {
+          "label": "Cerrar",
+          "variant": "secondary",
+          "action": "close"
+        }
+      ]
+    },
+
+    "style-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "small",
+      "props": {
+        "title": "🎨 Opciones de Estilo",
+        "showHandle": true,
+        "showCloseButton": true
+      },
+      "content": {
+        "type": "form",
+        "fields": {{json styleFields}}
+      },
+      "actions": [
+        {
+          "label": "Aplicar",
+          "variant": "primary",
+          "action": "emit",
+          "event": "{{name}}.apply-style"
+        }
+      ]
+    },
+
+    {{#if enableFileUpload}}
+    "upload-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "medium",
+      "props": {
+        "title": "{{uploadTitle}}",
+        "showHandle": true,
+        "showCloseButton": true,
+        "draggable": true,
+        "swipeToClose": true
+      },
+      "content": {
+        "component": "file-drop-zone",
+        "props": {
+          "variant": "{{uploadVariant}}",
+          "size": "md",
+          "maxFiles": {{uploadMaxFiles}},
+          "maxFileSize": 10485760,
+          "captureMode": "environment",
+          "showPreview": true,
+          "enablePaste": true,
+          "enableCrop": {{#if uploadEnableCrop}}true{{else}}false{{/if}},
+          "compressionEnabled": true,
+          "compressionQuality": 0.8,
+          "endpoint": "/modules/{{name}}/upload",
+          "uploadOnSelect": false,
+          "dropMessage": "{{uploadDropMessage}}",
+          "icon": "{{icon}}",
+          "metadata": {
+            "module": "{{name}}",
+            "type": "{{uploadType}}"
+          }
+        }
+      },
+      "actions": [
+        {
+          "label": "Cancelar",
+          "variant": "secondary",
+          "action": "close"
+        },
+        {
+          "label": "{{uploadActionLabel}}",
+          "variant": "primary",
+          "icon": "🔍",
+          "action": "emit",
+          "event": "{{name}}.analyze-files"
+        }
+      ]
+    },
+    {{/if}}
+
+    "examples-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "medium",
+      "props": {
+        "title": "💡 Ejemplos de Prompts",
+        "showHandle": true,
+        "showCloseButton": true
+      },
+      "content": {
+        "type": "list",
+        "items": {{json examplePrompts}},
+        "template": "example-prompt-card",
+        "onItemClick": "useExample"
+      }
+    },
+
+    "edit-result-panel": {
+      "component": "floating-panel",
+      "variant": "fullscreen",
+      "size": "full",
+      "props": {
+        "title": "✏️ Editar {{resultTitle}}",
+        "showHandle": false,
+        "showCloseButton": true,
+        "draggable": false,
+        "swipeToClose": false
+      },
+      "content": {
+        "type": "{{editorType}}",
+        "dataSource": "@state.currentResult",
+        "features": {{json editorFeatures}}
+      },
+      "actions": [
+        {
+          "label": "Cancelar",
+          "variant": "secondary",
+          "action": "close"
+        },
+        {
+          "label": "Guardar Cambios",
+          "variant": "primary",
+          "icon": "💾",
+          "action": "emit",
+          "event": "{{name}}.save-result"
+        }
+      ]
+    },
+
+    "history-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "medium",
+      "props": {
+        "title": "📜 Historial",
+        "showHandle": true,
+        "showCloseButton": true
+      },
+      "content": {
+        "type": "list",
+        "dataSource": "@api:/modules/{{name}}/history",
+        "template": "history-card",
+        "pagination": true,
+        "pageSize": 10,
+        "emptyMessage": "No hay elementos en el historial"
+      }
+    },
+
+    "credentials-panel": {
+      "component": "floating-panel",
+      "variant": "default",
+      "size": "medium",
+      "props": {
+        "title": "🔑 Gestionar Credenciales",
+        "showHandle": true,
+        "showCloseButton": true,
+        "draggable": true,
+        "swipeToClose": true,
+        "backdropClose": true
+      },
+      "content": {
+        "type": "stack",
+        "direction": "vertical",
+        "gap": "16px",
+        "sections": [
+          {
+            "id": "current-status",
+            "component": "credential-indicator",
+            "props": {
+              "variant": "detailed",
+              "provider": "@state.aiConfig.provider",
+              "showLevel": true,
+              "showStatus": true,
+              "enableQuickAdd": true,
+              "endpoint": "/modules/credential-manager/credentials",
+              "checkOnInit": true
+            }
+          },
+          {
+            "id": "providers-list",
+            "type": "list",
+            "title": "Credenciales por Proveedor",
+            "items": [
+              {
+                "provider": "deepseek",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "deepseek",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              },
+              {
+                "provider": "openai",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "openai",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              },
+              {
+                "provider": "claude",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "claude",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              },
+              {
+                "provider": "ollama",
+                "component": "credential-indicator",
+                "props": {
+                  "variant": "inline",
+                  "provider": "ollama",
+                  "showLevel": true,
+                  "enableQuickAdd": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "add-credential-form",
+            "type": "form",
+            "title": "Añadir Credencial",
+            "collapsed": true,
+            "fields": [
+              {
+                "name": "provider",
+                "component": "select",
+                "props": {
+                  "label": "Proveedor",
+                  "options": [
+                    {"value": "deepseek", "label": "🔥 DeepSeek"},
+                    {"value": "openai", "label": "🟢 OpenAI"},
+                    {"value": "claude", "label": "🟣 Claude"},
+                    {"value": "ollama", "label": "🦙 Ollama"}
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "level",
+                "component": "select",
+                "props": {
+                  "label": "Nivel",
+                  "options": [
+                    {"value": "CUSTOM", "label": "🟣 Custom (solo esta sesión)"},
+                    {"value": "CLIENT", "label": "🔵 Cliente"},
+                    {"value": "PROJECT", "label": "🟢 Proyecto"},
+                    {"value": "GLOBAL", "label": "⚪ Global"}
+                  ],
+                  "default": "PROJECT"
+                }
+              },
+              {
+                "name": "apiKey",
+                "component": "input",
+                "props": {
+                  "label": "API Key",
+                  "type": "password",
+                  "placeholder": "sk-...",
+                  "required": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actions": [
+        {
+          "label": "Cerrar",
+          "variant": "secondary",
+          "action": "close"
+        },
+        {
+          "label": "Guardar Credencial",
+          "variant": "primary",
+          "icon": "💾",
+          "action": "emit",
+          "event": "{{name}}.save-credential"
+        }
+      ]
+    }
+  },
+
+  "state": {
+    "currentConversationId": {
+      "type": "string",
+      "default": null,
+      "persist": true
+    },
+    "currentResultId": {
+      "type": "string",
+      "default": null
+    },
+    "hasGeneratedResult": {
+      "type": "boolean",
+      "default": false
+    },
+    "resultStatus": {
+      "type": "enum",
+      "values": ["pending", "processing", "completed", "error"],
+      "default": "pending"
+    },
+    "currentResult": {
+      "type": "object",
+      "default": null
+    },
+    "aiConfig": {
+      "type": "object",
+      "default": {
+        "provider": "{{defaultProvider}}",
+        "model": "",
+        "temperature": 0.7,
+        "maxTokens": 2000
+      },
+      "persist": true
+    },
+    "styleConfig": {
+      "type": "object",
+      "default": {{json defaultStyleConfig}},
+      "persist": true
+    }
+  },
+
+  "events": {
+    "subscribe": [
+      "{{name}}.new-conversation",
+      "{{name}}.message.sent",
+      "{{name}}.message.received",
+      "{{name}}.result.generated",
+      "{{name}}.result.updated",
+      "{{name}}.validate-result",
+      "{{name}}.export-result",
+      "{{name}}.regenerate-result",
+      "{{name}}.attach-file",
+      "{{name}}.voice-input",
+      "{{name}}.use-prompt",
+      "{{name}}.apply-style",
+      "{{name}}.analyze-files",
+      "{{name}}.save-result",
+      "{{name}}.quick-generate",
+      "{{name}}.save-credential",
+      "credential-manager.credential.updated"
+    ],
+    "publish": [
+      "{{name}}.conversation.created",
+      "{{name}}.result.created",
+      "{{name}}.result.saved",
+      "{{name}}.result.exported"
+    ]
+  },
+
+  "mqtt": {
+    "enabled": true,
+    "topics": [
+      "{{name}}.+",
+      "ai-gateway.response.{{name}}"
+    ],
+    "auto_refresh": true
+  },
+
+  "accessibility": {
+    "role": "application",
+    "ariaLabel": "{{description}}",
+    "keyboard": true,
+    "focusable": true,
+    "screenReader": true,
+    "announcements": {
+      "generating": "Generando, por favor espere...",
+      "generated": "Generado correctamente",
+      "error": "Error al generar"
+    }
+  }
+}

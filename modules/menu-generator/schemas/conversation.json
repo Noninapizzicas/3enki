@@ -1,0 +1,389 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "menu-generator/conversation",
+  "title": "Menu Generator - Conversation Schemas",
+  "description": "Schemas para conversaciones y mensajes del AI Workspace",
+
+  "definitions": {
+    "conversation": {
+      "type": "object",
+      "description": "Conversación de chat con IA para generación de menús",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID único de la conversación",
+          "pattern": "^conv_[0-9]+_[a-z0-9]+$",
+          "example": "conv_1701234567890_abc12345"
+        },
+        "title": {
+          "type": "string",
+          "description": "Título de la conversación",
+          "minLength": 1,
+          "maxLength": 200,
+          "example": "Menú restaurante italiano"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "completed", "archived"],
+          "default": "active",
+          "description": "Estado de la conversación"
+        },
+        "templateId": {
+          "type": ["string", "null"],
+          "description": "ID de plantilla seleccionada",
+          "example": "tpl_restaurante_italiano"
+        },
+        "templateName": {
+          "type": ["string", "null"],
+          "description": "Nombre de la plantilla"
+        },
+        "menuId": {
+          "type": ["string", "null"],
+          "description": "ID del menú generado (si existe)"
+        },
+        "aiConfig": {
+          "$ref": "#/definitions/ai_config"
+        },
+        "styleConfig": {
+          "$ref": "#/definitions/style_config"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "userAgent": { "type": "string" },
+            "createdBy": { "type": "string" }
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "status", "createdAt", "updatedAt"]
+    },
+
+    "ai_config": {
+      "type": "object",
+      "description": "Configuración de IA para la conversación",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["deepseek", "openai", "claude", "ollama"],
+          "default": "deepseek",
+          "description": "Proveedor de IA"
+        },
+        "model": {
+          "type": "string",
+          "description": "Modelo específico (vacío = default del provider)",
+          "example": "deepseek-chat"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0.7,
+          "description": "Temperature para generación"
+        },
+        "maxTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 2000,
+          "description": "Máximo de tokens en respuesta"
+        }
+      },
+      "default": {
+        "provider": "deepseek",
+        "model": "",
+        "temperature": 0.7,
+        "maxTokens": 2000
+      }
+    },
+
+    "style_config": {
+      "type": "object",
+      "description": "Configuración de estilo para el menú",
+      "properties": {
+        "menuType": {
+          "type": "string",
+          "enum": ["restaurant", "cafe", "bar", "fast-food", "fine-dining"],
+          "default": "restaurant",
+          "description": "Tipo de establecimiento"
+        },
+        "language": {
+          "type": "string",
+          "enum": ["es", "en", "ca", "eu"],
+          "default": "es",
+          "description": "Idioma del menú"
+        },
+        "includeDescriptions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Incluir descripciones de platos"
+        },
+        "includeAllergens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Incluir información de alérgenos"
+        },
+        "includePrices": {
+          "type": "boolean",
+          "default": true,
+          "description": "Incluir precios"
+        }
+      },
+      "default": {
+        "menuType": "restaurant",
+        "language": "es",
+        "includeDescriptions": true,
+        "includeAllergens": true,
+        "includePrices": true
+      }
+    },
+
+    "message": {
+      "type": "object",
+      "description": "Mensaje en una conversación",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID único del mensaje",
+          "pattern": "^msg_[0-9]+_[a-z0-9]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "assistant", "system"],
+          "description": "Rol del mensaje"
+        },
+        "content": {
+          "type": "string",
+          "description": "Contenido del mensaje",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/attachment"
+          },
+          "default": [],
+          "description": "Archivos adjuntos"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["sending", "sent", "received", "error"],
+          "description": "Estado del mensaje"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string" },
+            "model": { "type": "string" },
+            "tokensUsed": { "type": "integer" },
+            "processingTime": { "type": "integer" },
+            "errorType": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "role", "content", "timestamp", "status"]
+    },
+
+    "attachment": {
+      "type": "object",
+      "description": "Archivo adjunto en un mensaje",
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["image", "document", "file"],
+          "description": "Tipo de archivo"
+        },
+        "name": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "size": { "type": "integer" },
+        "url": { "type": "string", "format": "uri" }
+      },
+      "required": ["id", "type", "name"]
+    },
+
+    "create_request": {
+      "type": "object",
+      "description": "Request para crear conversación",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Título de la conversación (opcional)",
+          "maxLength": 200
+        },
+        "templateId": {
+          "type": "string",
+          "description": "ID de plantilla a usar (opcional)"
+        },
+        "aiConfig": {
+          "$ref": "#/definitions/ai_config"
+        },
+        "styleConfig": {
+          "$ref": "#/definitions/style_config"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "message_request": {
+      "type": "object",
+      "description": "Request para enviar mensaje",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "Contenido del mensaje",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user"],
+          "default": "user",
+          "description": "Rol del mensaje (siempre user para requests)"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/attachment"
+          },
+          "maxItems": 10,
+          "default": []
+        }
+      },
+      "required": ["content"],
+      "additionalProperties": false
+    },
+
+    "message_response": {
+      "type": "object",
+      "description": "Response de envío de mensaje",
+      "properties": {
+        "userMessage": {
+          "$ref": "#/definitions/message"
+        },
+        "assistantMessage": {
+          "$ref": "#/definitions/message"
+        },
+        "menuGenerated": {
+          "type": "boolean",
+          "description": "Si se generó un menú"
+        },
+        "menuId": {
+          "type": ["string", "null"],
+          "description": "ID del menú generado"
+        },
+        "error": {
+          "type": "boolean",
+          "description": "Si ocurrió un error"
+        }
+      },
+      "required": ["userMessage", "assistantMessage"]
+    },
+
+    "list_conversations_response": {
+      "type": "object",
+      "description": "Response de listar conversaciones",
+      "properties": {
+        "conversations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "status": { "type": "string" },
+              "messagesCount": { "type": "integer" },
+              "menuId": { "type": ["string", "null"] },
+              "createdAt": { "type": "string", "format": "date-time" },
+              "updatedAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "pagination": {
+          "$ref": "#/definitions/pagination"
+        }
+      }
+    },
+
+    "pagination": {
+      "type": "object",
+      "description": "Información de paginación",
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "limit": { "type": "integer", "minimum": 1 },
+        "offset": { "type": "integer", "minimum": 0 },
+        "hasMore": { "type": "boolean" }
+      },
+      "required": ["total", "limit", "offset", "hasMore"]
+    },
+
+    "template": {
+      "type": "object",
+      "description": "Plantilla predefinida para menús",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^tpl_[a-z_]+$"
+        },
+        "name": { "type": "string" },
+        "emoji": { "type": "string" },
+        "description": { "type": "string" },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "promptHint": { "type": "string" },
+        "style": {
+          "$ref": "#/definitions/style_config"
+        }
+      },
+      "required": ["id", "name", "categories"]
+    },
+
+    "history_item": {
+      "type": "object",
+      "description": "Item de historial",
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["menu", "conversation"]
+        },
+        "estado": { "type": "string" },
+        "title": { "type": "string" },
+        "productosCount": { "type": "integer" },
+        "categoriasCount": { "type": "integer" },
+        "conversationId": { "type": ["string", "null"] },
+        "source": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "validatedAt": { "type": ["string", "null"], "format": "date-time" },
+        "metadata": { "type": "object" }
+      }
+    },
+
+    "sse_event": {
+      "type": "object",
+      "description": "Evento SSE",
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["connected", "heartbeat", "message", "typing", "menu_generated", "error"]
+        },
+        "data": { "type": "object" }
+      },
+      "required": ["event", "data"]
+    }
+  }
+}

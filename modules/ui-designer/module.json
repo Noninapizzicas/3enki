@@ -1,0 +1,211 @@
+{
+  "name": "ui-designer",
+  "version": "1.0.0",
+  "description": "Diseñador visual de interfaces para módulos Event-Core",
+  "author": "Event Core Team",
+
+  "provides": {
+    "events": [
+      "ui-designer.template.created",
+      "ui-designer.template.updated",
+      "ui-designer.template.deleted",
+      "ui-designer.export.yaml",
+      "ui-designer.export.svelte",
+      "ui-designer.export.json"
+    ],
+    "queries": []
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "ui-designer.template.created",
+        "description": "Nuevo template de UI creado",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "template_id": { "type": "string" },
+            "name": { "type": "string" },
+            "type": { "type": "string" }
+          }
+        }
+      },
+      {
+        "event": "ui-designer.template.updated",
+        "description": "Template actualizado",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "template_id": { "type": "string" },
+            "changes": { "type": "object" }
+          }
+        }
+      },
+      {
+        "event": "ui-designer.template.deleted",
+        "description": "Template eliminado",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "template_id": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        }
+      },
+      {
+        "event": "ui-designer.export.yaml",
+        "description": "Template exportado como YAML"
+      },
+      {
+        "event": "ui-designer.export.svelte",
+        "description": "Template exportado como código Svelte"
+      },
+      {
+        "event": "ui-designer.export.json",
+        "description": "Template exportado como JSON"
+      }
+    ],
+    "subscribes": []
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/templates",
+      "handler": "handleListTemplates",
+      "description": "Listar todos los templates"
+    },
+    {
+      "method": "POST",
+      "path": "/templates",
+      "handler": "handleCreateTemplate",
+      "description": "Crear nuevo template"
+    },
+    {
+      "method": "GET",
+      "path": "/templates/:id",
+      "handler": "handleGetTemplate",
+      "description": "Obtener template por ID"
+    },
+    {
+      "method": "PUT",
+      "path": "/templates/:id",
+      "handler": "handleUpdateTemplate",
+      "description": "Actualizar template"
+    },
+    {
+      "method": "DELETE",
+      "path": "/templates/:id",
+      "handler": "handleDeleteTemplate",
+      "description": "Eliminar template"
+    },
+    {
+      "method": "POST",
+      "path": "/templates/:id/duplicate",
+      "handler": "handleDuplicateTemplate",
+      "description": "Duplicar template"
+    },
+    {
+      "method": "GET",
+      "path": "/components",
+      "handler": "handleListComponents",
+      "description": "Listar componentes disponibles"
+    },
+    {
+      "method": "GET",
+      "path": "/components/:name",
+      "handler": "handleGetComponentSchema",
+      "description": "Obtener schema de componente"
+    },
+    {
+      "method": "POST",
+      "path": "/export/yaml",
+      "handler": "handleExportYaml",
+      "description": "Exportar template como YAML blueprint"
+    },
+    {
+      "method": "POST",
+      "path": "/export/svelte",
+      "handler": "handleExportSvelte",
+      "description": "Exportar template como código Svelte"
+    },
+    {
+      "method": "POST",
+      "path": "/export/json",
+      "handler": "handleExportJson",
+      "description": "Exportar como JSON para module.json"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo"
+    }
+  ],
+
+  "ui": {
+    "enabled": true,
+    "version": "2.0",
+    "title": "UI Designer",
+    "icon": "🎨",
+    "description": "Diseñador visual de interfaces",
+    "route": "/ui-designer",
+    "menu": {
+      "label": "UI Designer",
+      "icon": "🎨",
+      "order": 5
+    }
+  },
+
+  "schema": {
+    "template": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "minLength": 3,
+          "maxLength": 50
+        },
+        "display_name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "icon": { "type": "string", "maxLength": 4 },
+        "type": {
+          "type": "string",
+          "enum": ["view", "modal", "form", "dashboard", "component", "page"]
+        },
+        "category": {
+          "type": "string",
+          "enum": ["general", "admin", "data", "analytics", "settings", "ai", "custom"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "published", "archived"]
+        },
+        "layout": { "type": "object" },
+        "components": { "type": "array" },
+        "theme": { "type": "object" },
+        "permissions": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true
+    }
+  },
+
+  "config": {
+    "enabled": true,
+    "autosave": true,
+    "autosave_interval_ms": 30000
+  }
+}

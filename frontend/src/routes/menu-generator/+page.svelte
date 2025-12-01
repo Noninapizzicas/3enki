@@ -43,11 +43,22 @@
     masked_value: string;
   }
 
+  interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: Date;
+    provider?: string;
+    model?: string;
+    loading?: boolean;
+  }
+
   // State
   let menus: Menu[] = [];
   let conversations: Conversation[] = [];
   let templates: Template[] = [];
   let credentials: Credential[] = [];
+  let chatMessages: ChatMessage[] = [];
   let loading = true;
   let chatLoading = false;
 
@@ -62,6 +73,7 @@
   // API
   const apiBase = `${config.apiUrl}/modules/menu-generator`;
   const credentialsApi = `${config.apiUrl}/modules/credential-manager`;
+  const aiGatewayApi = `${config.apiUrl}/modules/ai-gateway`;
 
   // ===========================================
   // Button Configuration
@@ -95,10 +107,11 @@
     {
       id: 'conversations',
       emoji: '💬',
-      label: 'Conv',
+      label: 'Chat',
       badge: 0,
-      primaryAction: { type: 'panel' as const, panelId: 'conversations', label: 'Ver conversaciones' },
-      secondaryAction: { type: 'panel' as const, panelId: 'conversation-new', label: 'Nueva conversación' }
+      primaryAction: { type: 'panel' as const, panelId: 'chat', label: 'Ver chat actual' },
+      secondaryAction: { type: 'panel' as const, panelId: 'conversations', label: 'Historial de chats' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'conversation-new', label: 'Nueva conversación' }
     },
     {
       id: 'files',
@@ -190,7 +203,8 @@
     'credential-add': { title: 'Nueva Credencial', size: 'md' as const },
     'credential-edit': { title: 'Editar Credencial', size: 'md' as const },
     'settings': { title: 'Configuración', size: 'full' as const },
-    'help': { title: 'Ayuda', size: 'md' as const }
+    'help': { title: 'Ayuda', size: 'md' as const },
+    'chat': { title: 'Chat con IA', size: 'lg' as const }
   };
 
   // ===========================================
@@ -352,10 +366,96 @@
     console.log('Button action:', buttonId, actionType, action);
   }
 
-  function handleChatSubmit(e: CustomEvent) {
+  async function handleChatSubmit(e: CustomEvent) {
     const { message } = e.detail;
-    toast.info(`Chat: ${message}`);
-    // TODO: Implement chat with AI
+
+    if (!message.trim()) return;
+
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: message,
+      timestamp: new Date()
+    };
+    chatMessages = [...chatMessages, userMessage];
+
+    // Add loading placeholder for assistant
+    const assistantId = `msg-${Date.now() + 1}`;
+    const loadingMessage: ChatMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      loading: true
+    };
+    chatMessages = [...chatMessages, loadingMessage];
+
+    chatLoading = true;
+
+    try {
+      // Build messages for AI context
+      const aiMessages = [
+        {
+          role: 'system',
+          content: 'Eres un asistente experto en generación de menús para restaurantes. Ayudas a crear, organizar y optimizar menús gastronómicos. Responde de forma concisa y útil.'
+        },
+        // Include recent conversation context
+        ...chatMessages
+          .filter(m => !m.loading)
+          .slice(-10) // Last 10 messages for context
+          .map(m => ({ role: m.role, content: m.content }))
+      ];
+
+      const res = await fetch(`${aiGatewayApi}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: aiMessages,
+          provider: 'auto', // Use automatic provider fallback
+          max_tokens: 1000,
+          temperature: 0.7
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      // Update the loading message with actual response
+      chatMessages = chatMessages.map(m =>
+        m.id === assistantId
+          ? {
+              ...m,
+              content: data.content || data.message || 'Sin respuesta',
+              loading: false,
+              provider: data.provider,
+              model: data.model
+            }
+          : m
+      );
+
+    } catch (err) {
+      console.error('Chat error:', err);
+
+      // Update loading message to show error
+      chatMessages = chatMessages.map(m =>
+        m.id === assistantId
+          ? {
+              ...m,
+              content: `❌ Error: ${err instanceof Error ? err.message : 'No se pudo conectar con la IA'}`,
+              loading: false
+            }
+          : m
+      );
+
+      toast.error('Error al enviar mensaje');
+    } finally {
+      chatLoading = false;
+    }
   }
 
   function handlePanelOpen(e: CustomEvent) {
@@ -385,7 +485,7 @@
   // Update badges
   $: {
     const convButton = topButtons.find(b => b.id === 'conversations');
-    if (convButton) convButton.badge = conversations.length;
+    if (convButton) convButton.badge = chatMessages.filter(m => !m.loading).length;
 
     const templatesButton = bottomButtons.find(b => b.id === 'templates');
     if (templatesButton) templatesButton.badge = templates.length;
@@ -702,6 +802,55 @@
         {/if}
       </div>
 
+    <!-- Chat Panel -->
+    {:else if panelId === 'chat'}
+      <div class="chat-panel">
+        {#if chatMessages.length === 0}
+          <div class="text-center text-text-muted py-8">
+            <p class="text-2xl mb-2">💬</p>
+            <p>No hay mensajes aún</p>
+            <p class="text-xs mt-1">Usa el chat de abajo para empezar</p>
+          </div>
+        {:else}
+          <div class="chat-messages space-y-3">
+            {#each chatMessages as msg (msg.id)}
+              <div class="chat-message chat-message--{msg.role}" class:chat-message--loading={msg.loading}>
+                <div class="chat-message__bubble">
+                  {#if msg.loading}
+                    <div class="flex items-center gap-2">
+                      <span class="animate-pulse">●</span>
+                      <span class="animate-pulse delay-100">●</span>
+                      <span class="animate-pulse delay-200">●</span>
+                    </div>
+                  {:else}
+                    <p class="whitespace-pre-wrap">{msg.content}</p>
+                    {#if msg.provider}
+                      <p class="text-xs text-text-muted mt-1 opacity-60">{msg.provider} • {msg.model}</p>
+                    {/if}
+                  {/if}
+                </div>
+                <span class="chat-message__time text-xs text-text-muted">
+                  {msg.timestamp.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if chatMessages.length > 0}
+          <div class="mt-4 pt-3 border-t border-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              class="w-full"
+              on:click={() => { chatMessages = []; toast.info('Chat limpiado'); }}
+            >
+              🗑️ Limpiar chat
+            </Button>
+          </div>
+        {/if}
+      </div>
+
     <!-- Help Panel -->
     {:else if panelId === 'help'}
       <div class="space-y-4 text-sm">
@@ -746,5 +895,77 @@
     color: var(--color-text-muted);
     margin-top: 0.25rem;
     text-transform: uppercase;
+  }
+
+  /* Chat panel styles */
+  .chat-panel {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .chat-message {
+    display: flex;
+    flex-direction: column;
+    max-width: 85%;
+  }
+
+  .chat-message--user {
+    align-self: flex-end;
+    align-items: flex-end;
+  }
+
+  .chat-message--assistant {
+    align-self: flex-start;
+    align-items: flex-start;
+  }
+
+  .chat-message__bubble {
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
+    word-break: break-word;
+  }
+
+  .chat-message--user .chat-message__bubble {
+    background: var(--color-primary);
+    color: white;
+    border-bottom-right-radius: 0.25rem;
+  }
+
+  .chat-message--assistant .chat-message__bubble {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+    border-bottom-left-radius: 0.25rem;
+  }
+
+  .chat-message--loading .chat-message__bubble {
+    background: var(--color-bg-card);
+  }
+
+  .chat-message__time {
+    margin-top: 0.25rem;
+    font-size: 0.625rem;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  .animate-pulse {
+    animation: pulse 1s infinite;
+  }
+
+  .delay-100 {
+    animation-delay: 0.1s;
+  }
+
+  .delay-200 {
+    animation-delay: 0.2s;
   }
 </style>

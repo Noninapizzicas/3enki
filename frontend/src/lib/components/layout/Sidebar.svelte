@@ -9,8 +9,10 @@
   const navItems = [
     { href: '/', label: 'Dashboard', icon: '📊' },
     { href: '/modules', label: 'Módulos', icon: '📦' },
-    { href: '/events', label: 'Eventos', icon: '⚡' },
-    { href: '/settings', label: 'Configuración', icon: '⚙️' }
+    { href: '/credenciales', label: 'Credenciales', icon: '🔐' },
+    { href: '/menu-generator', label: 'Menu Generator', icon: '📄' },
+    { href: '/notas', label: 'Notas', icon: '📝' },
+    { href: '/events', label: 'Eventos', icon: '⚡' }
   ];
 
   function toggleCollapse() {

@@ -790,7 +790,7 @@
             placeholder="sk-..."
           />
         </div>
-        <Button variant="primary" class="w-full">💾 Guardar</Button>
+        <Button type="submit" variant="primary" class="w-full">💾 Guardar</Button>
       </form>
 
     <!-- Credential Edit Panel -->
@@ -821,7 +821,7 @@
             placeholder="sk-... (nuevo valor)"
           />
         </div>
-        <Button variant="primary" class="w-full">💾 Actualizar</Button>
+        <Button type="submit" variant="primary" class="w-full">💾 Actualizar</Button>
         <Button variant="danger" class="w-full" on:click={() => deleteCredential(selectedCredential)}>🗑️ Eliminar</Button>
       </form>
 

@@ -95,6 +95,7 @@
       }
       closeModal();
       toast.success('Credencial guardada correctamente');
+      await fetchCredentials(); // Refresh list
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -106,7 +107,7 @@
     if (!editingCredential) return;
     saving = true;
     try {
-      const res = await fetch(`${apiBase}/credentials/${editingCredential.key}`, {
+      const res = await fetch(`${apiBase}/credentials/${encodeURIComponent(editingCredential.key)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: formData.api_key })
@@ -117,6 +118,7 @@
       }
       closeModal();
       toast.success('Credencial actualizada');
+      await fetchCredentials(); // Refresh list
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -127,11 +129,12 @@
   async function deleteCredential(cred: Credential) {
     if (!confirm(`¿Eliminar credencial ${cred.key}?`)) return;
     try {
-      const res = await fetch(`${apiBase}/credentials/${cred.key}`, {
+      const res = await fetch(`${apiBase}/credentials/${encodeURIComponent(cred.key)}`, {
         method: 'DELETE'
       });
       if (!res.ok) throw new Error('Error al eliminar');
       toast.success('Credencial eliminada');
+      await fetchCredentials(); // Refresh list
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     }

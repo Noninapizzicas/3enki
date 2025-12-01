@@ -189,6 +189,55 @@ Prompts especializados para desarrollo:
 - generador_contratos
 - curador_documentacion
 
+### 7. SISTEMA DE CONSTANTES
+
+Sistema centralizado para evitar errores de typos en eventos y rutas.
+
+#### Flujo de trabajo
+```
+module.json (fuente) → generate-constants → constants.js (generado)
+```
+
+#### Estructura module.json
+```json
+{
+  "name": "mi-modulo",
+  "events": {
+    "publishes": [
+      { "event": "mi-modulo.creado", "description": "..." }
+    ],
+    "subscribes": [
+      { "event": "otro.evento", "handler": "onOtroEvento" }
+    ]
+  }
+}
+```
+
+#### Uso de constantes
+```javascript
+const { EVENTS } = require('../../core/constants');
+
+// En vez de strings hardcodeados:
+// ❌ eventBus.publish('tool.call.success', data);
+
+// Usar constantes:
+// ✅ eventBus.publish(EVENTS.TOOL.CALL_SUCCESS, data);
+```
+
+#### Validación en EventBus
+```javascript
+// Activar validación (detecta typos en desarrollo)
+const eventBus = new EventBus({
+  validateEvents: true,      // Warn si evento no registrado
+  strictValidation: false    // true = lanza error
+});
+```
+
+#### Regenerar constantes
+```bash
+npm run generate:constants   # Después de modificar module.json
+```
+
 ---
 
 ## Comandos Útiles
@@ -199,6 +248,7 @@ npm start              # Iniciar core
 npm run dev            # Modo desarrollo
 npm test               # Tests unitarios
 npm run test:integration
+npm run generate:constants  # Regenerar constantes desde module.json
 ```
 
 ### Generadores Plop
@@ -250,7 +300,8 @@ docker-compose logs -f
 - Frontend usa SvelteKit nativo
 - Blueprints son útiles para scaffolding rápido
 - Plugins no requieren código (solo JSON)
+- **constants.js es auto-generado** - NO editar manualmente
 
 ---
 
-*Última actualización: 2024-12-01*
+*Última actualización: 2025-12-01*

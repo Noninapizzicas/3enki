@@ -31,6 +31,15 @@ const { EventEmitter } = require('events');
 const EventEnvelope = require('./envelope');
 const { topics } = require('../mqtt');
 
+// Cargar constantes para validación (opcional)
+let HELPERS = null;
+try {
+  const constants = require('../constants');
+  HELPERS = constants.HELPERS;
+} catch (e) {
+  // constants.js no existe aún o error de carga - validación deshabilitada
+}
+
 class EventBus extends EventEmitter {
   /**
    * @param {Object} options - Opciones
@@ -40,6 +49,8 @@ class EventBus extends EventEmitter {
    * @param {Object} options.logger - Logger instance
    * @param {Object} options.metrics - Metrics instance
    * @param {Object} options.tracer - Tracer instance
+   * @param {boolean} options.validateEvents - Validar eventos contra constants.js (default: false)
+   * @param {boolean} options.strictValidation - Lanzar error si evento inválido (default: false)
    */
   constructor(options = {}) {
     super();
@@ -50,6 +61,11 @@ class EventBus extends EventEmitter {
     this.logger = options.logger || null;
     this.metrics = options.metrics || null;
     this.tracer = options.tracer || null;
+
+    // Validación de eventos
+    this.validateEvents = options.validateEvents || false;
+    this.strictValidation = options.strictValidation || false;
+    this.unknownEvents = new Set(); // Track eventos no registrados
 
     // Suscribirse a eventos de otros cores si MQTT está disponible
     if (this.mqtt) {
@@ -181,6 +197,51 @@ class EventBus extends EventEmitter {
   }
 
   /**
+   * Valida que un evento esté registrado en constants.js
+   *
+   * @param {string} eventType - Nombre del evento
+   * @returns {boolean} true si es válido o validación deshabilitada
+   */
+  validateEvent(eventType) {
+    // Si validación deshabilitada o HELPERS no cargado, permitir todo
+    if (!this.validateEvents || !HELPERS) {
+      return true;
+    }
+
+    const isValid = HELPERS.isValidEvent(eventType);
+
+    if (!isValid) {
+      // Registrar evento desconocido (solo una vez)
+      if (!this.unknownEvents.has(eventType)) {
+        this.unknownEvents.add(eventType);
+
+        if (this.logger) {
+          this.logger.warn('event.unknown', {
+            event_type: eventType,
+            hint: 'Agregar a module.json y ejecutar npm run generate:constants'
+          });
+        }
+      }
+
+      // En modo estricto, lanzar error
+      if (this.strictValidation) {
+        throw new Error(`Evento no registrado: ${eventType}. Agregar a module.json y ejecutar npm run generate:constants`);
+      }
+    }
+
+    return isValid;
+  }
+
+  /**
+   * Obtiene eventos no registrados detectados
+   *
+   * @returns {string[]} Lista de eventos desconocidos
+   */
+  getUnknownEvents() {
+    return Array.from(this.unknownEvents);
+  }
+
+  /**
    * Emite un evento (local + MQTT si está configurado)
    *
    * @param {string} eventType - Tipo de evento (ej: 'user.created')
@@ -200,6 +261,8 @@ class EventBus extends EventEmitter {
    * await bus.emit('user.created', { id: 123 }, { targetCoreId: 'core-b' });
    */
   async emit(eventType, data, options = {}) {
+    // Validar evento si está habilitado
+    this.validateEvent(eventType);
     // Crear envelope
     const envelope = EventEnvelope.create(eventType, data, {
       coreId: this.coreId,
@@ -387,7 +450,12 @@ class EventBus extends EventEmitter {
         acc[eventType] = this.listenerCount(eventType);
         return acc;
       }, {}),
-      mqtt_connected: this.mqtt ? this.mqtt.isConnected : false
+      mqtt_connected: this.mqtt ? this.mqtt.isConnected : false,
+      validation: {
+        enabled: this.validateEvents,
+        strict: this.strictValidation,
+        unknown_events: this.getUnknownEvents()
+      }
     };
   }
 }

@@ -20,10 +20,7 @@
     "plop": "plop",
     "create-module": "node scripts/create-module.js",
     "create-module:interactive": "node scripts/create-module.js --interactive",
-    "ui:validate": "node scripts/auto-ui/validate.js",
-    "ui:component": "plop ui-component",
-    "ui:view": "plop ui-view",
-    "ui:theme": "plop ui-theme"
+    "generate:constants": "node scripts/generate-constants.js"
   },
   "keywords": [
     "event-driven",

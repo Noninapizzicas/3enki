@@ -115,6 +115,7 @@ export async function loadModule(name: string, baseUrl: string = '') {
 
 /**
  * Call module API endpoint
+ * Routes are: /modules/{moduleName}/{path}
  */
 export async function callModuleApi<T = unknown>(
   moduleName: string,
@@ -122,7 +123,9 @@ export async function callModuleApi<T = unknown>(
   options: RequestInit = {},
   baseUrl: string = ''
 ): Promise<T> {
-  const url = `${baseUrl}/modules/${moduleName}/api${path.startsWith('/') ? path : `/${path}`}`;
+  // Backend routes are: /modules/{moduleName}/{path} (no /api prefix)
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const url = `${baseUrl}/modules/${moduleName}${normalizedPath}`;
 
   const response = await fetch(url, {
     ...options,

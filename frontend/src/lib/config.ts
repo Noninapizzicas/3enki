@@ -28,10 +28,11 @@ export const config = {
 } as const;
 
 // API endpoints helper
+// Backend routes are: /modules/{moduleName}/{path} (no /api prefix)
 export const api = {
   modules: `${config.apiUrl}/modules`,
   module: (name: string) => `${config.apiUrl}/modules/${name}`,
-  moduleApi: (name: string, path: string) => `${config.apiUrl}/modules/${name}/api${path.startsWith('/') ? path : `/${path}`}`,
+  moduleApi: (name: string, path: string) => `${config.apiUrl}/modules/${name}${path.startsWith('/') ? path : `/${path}`}`,
   health: `${config.apiUrl}/health`,
   metrics: `${config.apiUrl}/metrics`
 } as const;

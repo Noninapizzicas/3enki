@@ -202,15 +202,68 @@ class ModuleRegistry {
 
   /**
    * Busca un handler de API por path y método
+   * Soporta rutas con parámetros dinámicos (e.g., /menus/:id)
    *
    * @param {string} path - Path de la API
    * @param {string} method - Método HTTP
-   * @returns {Object|null} API data o null
+   * @returns {Object|null} API data con params extraídos o null
    */
   findAPI(path, method) {
+    // First try exact match
     const apiKey = `${method}:${path}`;
-    const apiData = this.apiIndex.get(apiKey);
-    return apiData || null;
+    const exactMatch = this.apiIndex.get(apiKey);
+    if (exactMatch) {
+      return { ...exactMatch, params: {} };
+    }
+
+    // Try pattern matching for routes with parameters
+    for (const [key, apiData] of this.apiIndex.entries()) {
+      if (!key.startsWith(`${method}:`)) continue;
+
+      const registeredPath = key.slice(method.length + 1);
+      const params = this.matchPath(registeredPath, path);
+
+      if (params !== null) {
+        return { ...apiData, params };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Matches a registered path pattern against an actual path
+   * Extracts route parameters
+   *
+   * @param {string} pattern - Registered path (e.g., /modules/menu-generator/menus/:id)
+   * @param {string} path - Actual request path (e.g., /modules/menu-generator/menus/123)
+   * @returns {Object|null} Extracted params or null if no match
+   */
+  matchPath(pattern, path) {
+    const patternParts = pattern.split('/').filter(Boolean);
+    const pathParts = path.split('/').filter(Boolean);
+
+    if (patternParts.length !== pathParts.length) {
+      return null;
+    }
+
+    const params = {};
+
+    for (let i = 0; i < patternParts.length; i++) {
+      const patternPart = patternParts[i];
+      const pathPart = pathParts[i];
+
+      if (patternPart.startsWith(':')) {
+        // This is a parameter
+        const paramName = patternPart.slice(1);
+        params[paramName] = pathPart;
+      } else if (patternPart !== pathPart) {
+        // Static parts must match exactly
+        return null;
+      }
+    }
+
+    return params;
   }
 
   /**

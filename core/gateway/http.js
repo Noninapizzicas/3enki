@@ -317,6 +317,18 @@ class HTTPGateway {
         return;
       }
 
+      // Blueprints API
+      if (pathname === '/blueprints' && req.method === 'GET') {
+        await this.handleListBlueprints(req, res);
+        return;
+      }
+
+      if (pathname.startsWith('/blueprints/') && req.method === 'GET') {
+        const blueprintName = pathname.replace('/blueprints/', '');
+        await this.handleGetBlueprint(req, res, blueprintName);
+        return;
+      }
+
       // Parse body si es POST/PUT/PATCH
       let body = null;
       if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
@@ -452,7 +464,8 @@ class HTTPGateway {
           query,
           body: context.body,
           headers: req.headers,
-          request_id: requestId
+          request_id: requestId,
+          params: apiData.params || {} // Include route params (e.g., :id extracted from path)
         }, handlerContext);
       } catch (handlerError) {
         if (this.logger) {
@@ -698,6 +711,105 @@ class HTTPGateway {
       entries_cleared: sizeBefore,
       timestamp: new Date().toISOString()
     }, req);
+  }
+
+  /**
+   * Maneja /blueprints endpoint - Lista todos los blueprints
+   *
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   */
+  async handleListBlueprints(req, res) {
+    const fs = require('fs');
+    const path = require('path');
+    const yaml = require('js-yaml');
+
+    const blueprintsPath = path.join(process.cwd(), 'blueprints');
+    const blueprints = [];
+
+    try {
+      if (fs.existsSync(blueprintsPath)) {
+        const files = fs.readdirSync(blueprintsPath);
+
+        for (const file of files) {
+          if (file.endsWith('.yaml') && !file.startsWith('_')) {
+            const filePath = path.join(blueprintsPath, file);
+            const content = fs.readFileSync(filePath, 'utf8');
+            const data = yaml.load(content);
+
+            blueprints.push({
+              name: file.replace('.yaml', ''),
+              filename: file,
+              metadata: {
+                name: data.name,
+                description: data.description,
+                version: data.version,
+                author: data.author,
+                icon: data.icon
+              },
+              entity: data.entity,
+              fieldsCount: data.fields?.length || 0,
+              eventsCount: (data.events?.publish?.length || 0) + (data.events?.subscribe?.length || 0),
+              apisCount: data.apis?.length || 0,
+              ui: data.ui
+            });
+          }
+        }
+      }
+
+      await this.sendResponse(res, 200, {
+        blueprints,
+        total: blueprints.length,
+        path: blueprintsPath,
+        timestamp: new Date().toISOString()
+      }, req);
+
+    } catch (error) {
+      this.sendError(res, 500, 'Error reading blueprints', {
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Maneja /blueprints/:name endpoint - Obtiene un blueprint específico
+   *
+   * @param {http.IncomingMessage} req - HTTP request
+   * @param {http.ServerResponse} res - HTTP response
+   * @param {string} blueprintName - Nombre del blueprint
+   */
+  async handleGetBlueprint(req, res, blueprintName) {
+    const fs = require('fs');
+    const path = require('path');
+    const yaml = require('js-yaml');
+
+    const blueprintsPath = path.join(process.cwd(), 'blueprints');
+    const filePath = path.join(blueprintsPath, `${blueprintName}.yaml`);
+
+    try {
+      if (!fs.existsSync(filePath)) {
+        this.sendError(res, 404, 'Blueprint not found', {
+          name: blueprintName
+        });
+        return;
+      }
+
+      const content = fs.readFileSync(filePath, 'utf8');
+      const data = yaml.load(content);
+
+      await this.sendResponse(res, 200, {
+        name: blueprintName,
+        filename: `${blueprintName}.yaml`,
+        content: data,
+        raw: content,
+        timestamp: new Date().toISOString()
+      }, req);
+
+    } catch (error) {
+      this.sendError(res, 500, 'Error reading blueprint', {
+        error: error.message
+      });
+    }
   }
 
   /**

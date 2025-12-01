@@ -1,0 +1,1007 @@
+# ============================================================================
+# Blueprint: UI Designer - Interface Builder Module
+# ============================================================================
+# Módulo para diseñar visualmente todas las interfaces de Event-Core:
+# vistas, modales, formularios, dashboards y componentes.
+#
+# Generar: npx plop from-blueprint → ui-designer
+# ============================================================================
+
+name: ui-designer
+description: Diseñador visual de interfaces para módulos Event-Core. Permite crear vistas, modales, formularios y dashboards con drag & drop.
+version: 1.0.0
+author: Event Core Team
+icon: "🎨"
+
+# ============================================================================
+# ENTIDAD PRINCIPAL: Template de UI
+# ============================================================================
+entity:
+  name: template
+  plural: templates
+  titleField: name
+  descriptionField: description
+
+# ============================================================================
+# CAMPOS DEL TEMPLATE
+# ============================================================================
+fields:
+  # --- Identificación ---
+  - name: name
+    type: string
+    label: Nombre
+    required: true
+    validation:
+      minLength: 3
+      maxLength: 50
+      pattern: "^[a-z][a-z0-9-]*$"
+    ui:
+      inputType: text
+      placeholder: mi-vista-dashboard
+      helpText: Nombre único en kebab-case
+
+  - name: display_name
+    type: string
+    label: Nombre para mostrar
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 100
+    ui:
+      inputType: text
+      placeholder: Mi Vista Dashboard
+
+  - name: description
+    type: string
+    label: Descripción
+    required: false
+    validation:
+      maxLength: 500
+    ui:
+      inputType: textarea
+      placeholder: Descripción del propósito de esta vista...
+      rows: 3
+
+  - name: icon
+    type: string
+    label: Icono
+    required: false
+    default: "📄"
+    validation:
+      maxLength: 4
+    ui:
+      inputType: text
+      placeholder: Emoji
+      helpText: Un emoji representativo
+
+  # --- Tipo y Categoría ---
+  - name: type
+    type: string
+    label: Tipo de Template
+    required: true
+    default: view
+    validation:
+      enum: [view, modal, form, dashboard, component, page]
+    ui:
+      inputType: select
+      options:
+        - value: view
+          label: "📋 Vista - Layout general"
+        - value: modal
+          label: "🪟 Modal - Ventana emergente"
+        - value: form
+          label: "📝 Formulario - Entrada de datos"
+        - value: dashboard
+          label: "📊 Dashboard - Panel de control"
+        - value: component
+          label: "🧩 Componente - Widget reutilizable"
+        - value: page
+          label: "📄 Página - Ruta completa"
+
+  - name: category
+    type: string
+    label: Categoría
+    required: false
+    default: general
+    validation:
+      enum: [general, admin, data, analytics, settings, ai, custom]
+    ui:
+      inputType: select
+      options:
+        - value: general
+          label: General
+        - value: admin
+          label: Administración
+        - value: data
+          label: Gestión de Datos
+        - value: analytics
+          label: Analíticas
+        - value: settings
+          label: Configuración
+        - value: ai
+          label: IA/Chat
+        - value: custom
+          label: Personalizado
+
+  # --- Layout ---
+  - name: layout
+    type: object
+    label: Configuración de Layout
+    required: true
+    default:
+      type: single-column
+      gap: md
+    ui:
+      inputType: object
+      helpText: Define la estructura visual principal
+
+  - name: layout_type
+    type: string
+    label: Tipo de Layout
+    required: true
+    default: single-column
+    validation:
+      enum: [single-column, two-column, three-column, grid, tabs, sidebar, split, kanban]
+    ui:
+      inputType: select
+      options:
+        - value: single-column
+          label: "▐ Una Columna"
+        - value: two-column
+          label: "▐▐ Dos Columnas"
+        - value: three-column
+          label: "▐▐▐ Tres Columnas"
+        - value: grid
+          label: "⊞ Grid Responsive"
+        - value: tabs
+          label: "☰ Tabs/Pestañas"
+        - value: sidebar
+          label: "▌▐ Sidebar + Content"
+        - value: split
+          label: "◧ Split View"
+        - value: kanban
+          label: "▥ Kanban Board"
+
+  # --- Componentes ---
+  - name: components
+    type: array
+    label: Componentes
+    required: true
+    default: []
+    ui:
+      inputType: component-list
+      helpText: Lista de componentes que conforman el template
+
+  # --- Configuración de Componente Individual ---
+  # (Esto es el schema de cada item en components[])
+  - name: component_schema
+    type: object
+    label: Schema de Componente
+    required: false
+    ui:
+      inputType: hidden
+    schema:
+      id:
+        type: string
+        label: ID único
+        required: true
+      component:
+        type: string
+        label: Tipo de componente
+        required: true
+        enum:
+          # Layout
+          - header
+          - sidebar
+          - footer
+          - section
+          - card
+          - panel
+          # Data
+          - table
+          - list
+          - grid
+          - tree
+          - stat-card
+          - chart
+          - event-stream
+          # Form
+          - form
+          - input
+          - textarea
+          - select
+          - checkbox
+          - radio
+          - file-upload
+          - date-picker
+          # Feedback
+          - modal
+          - alert
+          - toast
+          - spinner
+          - progress
+          - skeleton
+          # Navigation
+          - tabs
+          - breadcrumb
+          - pagination
+          - menu
+          # Actions
+          - button
+          - button-group
+          - dropdown
+          # AI
+          - chat-input
+          - conversation-panel
+          - prompt-selector
+          # Custom
+          - custom
+          - slot
+      props:
+        type: object
+        label: Propiedades del componente
+      position:
+        type: object
+        label: Posición en layout
+        schema:
+          section:
+            type: string
+            enum: [header, main, sidebar, footer, left, right, center]
+          order:
+            type: number
+          colspan:
+            type: number
+          rowspan:
+            type: number
+      bindings:
+        type: object
+        label: Data bindings
+        schema:
+          dataSource:
+            type: string
+            description: "@data.items, @api.endpoint, @store.value"
+          compute:
+            type: string
+            description: "@compute.count(@data.items)"
+      events:
+        type: array
+        label: Event handlers
+      conditions:
+        type: object
+        label: Condiciones de visibilidad
+      permissions:
+        type: array
+        label: Permisos requeridos
+
+  # --- Estado y Metadata ---
+  - name: status
+    type: string
+    label: Estado
+    required: true
+    default: draft
+    validation:
+      enum: [draft, published, archived]
+    ui:
+      inputType: select
+      options:
+        - value: draft
+          label: "📝 Borrador"
+        - value: published
+          label: "✅ Publicado"
+        - value: archived
+          label: "📦 Archivado"
+
+  - name: target_module
+    type: string
+    label: Módulo Destino
+    required: false
+    validation:
+      maxLength: 50
+    ui:
+      inputType: text
+      placeholder: nombre-del-modulo
+      helpText: Módulo donde se usará este template
+
+  - name: tags
+    type: array
+    label: Etiquetas
+    required: false
+    default: []
+    ui:
+      inputType: tags
+      placeholder: Agregar etiqueta...
+
+  # --- Configuración Avanzada ---
+  - name: theme
+    type: object
+    label: Tema/Estilos
+    required: false
+    default: {}
+    ui:
+      inputType: object
+      helpText: Personalización de colores y estilos
+
+  - name: responsive
+    type: object
+    label: Configuración Responsive
+    required: false
+    default:
+      mobile: true
+      tablet: true
+      desktop: true
+    ui:
+      inputType: object
+
+  - name: permissions
+    type: array
+    label: Permisos
+    required: false
+    default: ["user"]
+    ui:
+      inputType: checkbox-group
+      options:
+        - value: admin
+          label: Administrador
+        - value: user
+          label: Usuario
+        - value: guest
+          label: Invitado
+
+  - name: mqtt_topics
+    type: array
+    label: Topics MQTT
+    required: false
+    default: []
+    ui:
+      inputType: tags
+      helpText: Topics para actualizaciones en tiempo real
+
+  # --- Metadata del Sistema ---
+  - name: version
+    type: string
+    label: Versión
+    required: false
+    default: "1.0.0"
+    ui:
+      inputType: text
+
+  - name: created_by
+    type: string
+    label: Creado por
+    required: false
+    ui:
+      inputType: text
+      readonly: true
+
+  - name: export_history
+    type: array
+    label: Historial de Exports
+    required: false
+    default: []
+    ui:
+      inputType: hidden
+
+# ============================================================================
+# EVENTOS
+# ============================================================================
+events:
+  publish:
+    # --- Ciclo de vida del template ---
+    - name: ui-designer.template.created
+      description: Nuevo template de UI creado
+      payload:
+        - field: template_id
+          type: string
+        - field: name
+          type: string
+        - field: type
+          type: string
+        - field: created_by
+          type: string
+
+    - name: ui-designer.template.updated
+      description: Template actualizado
+      payload:
+        - field: template_id
+          type: string
+        - field: changes
+          type: object
+        - field: version
+          type: string
+
+    - name: ui-designer.template.deleted
+      description: Template eliminado
+      payload:
+        - field: template_id
+          type: string
+        - field: name
+          type: string
+
+    - name: ui-designer.template.published
+      description: Template publicado y disponible para usar
+      payload:
+        - field: template_id
+          type: string
+        - field: name
+          type: string
+        - field: target_module
+          type: string
+
+    # --- Componentes ---
+    - name: ui-designer.component.added
+      description: Componente agregado al canvas
+      payload:
+        - field: template_id
+          type: string
+        - field: component_id
+          type: string
+        - field: component_type
+          type: string
+
+    - name: ui-designer.component.updated
+      description: Propiedades de componente actualizadas
+      payload:
+        - field: template_id
+          type: string
+        - field: component_id
+          type: string
+        - field: changes
+          type: object
+
+    - name: ui-designer.component.removed
+      description: Componente eliminado del canvas
+      payload:
+        - field: template_id
+          type: string
+        - field: component_id
+          type: string
+
+    # --- Export ---
+    - name: ui-designer.export.yaml
+      description: Template exportado como YAML blueprint
+      payload:
+        - field: template_id
+          type: string
+        - field: output_path
+          type: string
+
+    - name: ui-designer.export.svelte
+      description: Template exportado como código Svelte
+      payload:
+        - field: template_id
+          type: string
+        - field: output_path
+          type: string
+        - field: components_count
+          type: number
+
+    - name: ui-designer.export.json
+      description: Template exportado como JSON (module.json ui section)
+      payload:
+        - field: template_id
+          type: string
+        - field: target_module
+          type: string
+
+  subscribe:
+    # --- Integración con otros módulos ---
+    - name: module.registered
+      handler: onModuleRegistered
+      description: Detectar nuevos módulos para ofrecer templates
+
+    - name: blueprint.created
+      handler: onBlueprintCreated
+      description: Sincronizar con blueprints creados
+
+    - name: plugin.loaded
+      handler: onPluginLoaded
+      description: Detectar plugins con UI
+
+# ============================================================================
+# APIs
+# ============================================================================
+apis:
+  # --- CRUD Templates ---
+  - method: GET
+    path: /templates
+    handler: handleListTemplates
+    description: Listar todos los templates con filtros
+    params:
+      type: string
+      category: string
+      status: string
+      search: string
+      page: number
+      limit: number
+
+  - method: POST
+    path: /templates
+    handler: handleCreateTemplate
+    description: Crear nuevo template
+
+  - method: GET
+    path: /templates/:id
+    handler: handleGetTemplate
+    description: Obtener template por ID
+
+  - method: PUT
+    path: /templates/:id
+    handler: handleUpdateTemplate
+    description: Actualizar template completo
+
+  - method: PATCH
+    path: /templates/:id
+    handler: handlePatchTemplate
+    description: Actualizar parcialmente un template
+
+  - method: DELETE
+    path: /templates/:id
+    handler: handleDeleteTemplate
+    description: Eliminar template
+
+  # --- Acciones especiales ---
+  - method: POST
+    path: /templates/:id/duplicate
+    handler: handleDuplicateTemplate
+    description: Duplicar un template existente
+
+  - method: POST
+    path: /templates/:id/publish
+    handler: handlePublishTemplate
+    description: Publicar template (draft → published)
+
+  - method: POST
+    path: /templates/:id/archive
+    handler: handleArchiveTemplate
+    description: Archivar template
+
+  # --- Componentes ---
+  - method: GET
+    path: /components
+    handler: handleListComponents
+    description: Listar componentes disponibles con sus schemas
+
+  - method: GET
+    path: /components/:name
+    handler: handleGetComponentSchema
+    description: Obtener schema detallado de un componente
+
+  - method: GET
+    path: /components/:name/examples
+    handler: handleGetComponentExamples
+    description: Obtener ejemplos de uso del componente
+
+  # --- Export ---
+  - method: POST
+    path: /export/yaml
+    handler: handleExportYaml
+    description: Exportar template como YAML blueprint
+
+  - method: POST
+    path: /export/svelte
+    handler: handleExportSvelte
+    description: Exportar template como código Svelte
+
+  - method: POST
+    path: /export/json
+    handler: handleExportJson
+    description: Exportar como JSON para module.json
+
+  - method: POST
+    path: /export/module
+    handler: handleExportToModule
+    description: Aplicar template directamente a un módulo existente
+
+  # --- Preview ---
+  - method: POST
+    path: /preview
+    handler: handleGeneratePreview
+    description: Generar preview HTML del template
+
+  - method: GET
+    path: /preview/:id
+    handler: handleGetPreview
+    description: Obtener preview guardado
+
+  # --- Library ---
+  - method: GET
+    path: /library
+    handler: handleGetLibrary
+    description: Obtener templates de la librería pública
+
+  - method: POST
+    path: /library/import
+    handler: handleImportFromLibrary
+    description: Importar template desde librería
+
+  # --- Layouts predefinidos ---
+  - method: GET
+    path: /layouts
+    handler: handleListLayouts
+    description: Listar layouts predefinidos
+
+  - method: GET
+    path: /layouts/:type
+    handler: handleGetLayout
+    description: Obtener configuración de layout específico
+
+# ============================================================================
+# UI DEL MÓDULO
+# ============================================================================
+ui:
+  enabled: true
+  layout: sidebar
+  features:
+    - create
+    - edit
+    - delete
+    - search
+    - filter
+    - sort
+    - export
+    - duplicate
+    - preview
+  colors:
+    - value: draft
+      label: Borrador
+      class: bg-yellow-100 border-yellow-300 text-yellow-800
+    - value: published
+      label: Publicado
+      class: bg-green-100 border-green-300 text-green-800
+    - value: archived
+      label: Archivado
+      class: bg-gray-100 border-gray-300 text-gray-600
+
+  # Vistas específicas del designer
+  views:
+    # --- Lista de Templates ---
+    list:
+      layout: grid
+      columns: 3
+      card:
+        title: "@data.display_name"
+        subtitle: "@data.description"
+        icon: "@data.icon"
+        badge: "@data.type"
+        status: "@data.status"
+        footer:
+          - "@compute.count(@data.components) componentes"
+          - "@data.updated_at | date"
+
+    # --- Editor Principal (Canvas) ---
+    editor:
+      layout: three-panel
+      panels:
+        left:
+          title: Componentes
+          width: 250px
+          collapsible: true
+          content:
+            - component: component-palette
+              props:
+                categories:
+                  - name: Layout
+                    icon: "📐"
+                    items: [header, sidebar, footer, section, card, panel]
+                  - name: Datos
+                    icon: "📊"
+                    items: [table, list, grid, tree, stat-card, chart, event-stream]
+                  - name: Formulario
+                    icon: "📝"
+                    items: [form, input, textarea, select, checkbox, radio, file-upload]
+                  - name: Feedback
+                    icon: "💬"
+                    items: [modal, alert, toast, spinner, progress]
+                  - name: Navegación
+                    icon: "🧭"
+                    items: [tabs, breadcrumb, pagination, menu]
+                  - name: Acciones
+                    icon: "⚡"
+                    items: [button, button-group, dropdown]
+                  - name: IA
+                    icon: "🤖"
+                    items: [chat-input, conversation-panel, prompt-selector]
+
+        center:
+          title: Canvas
+          content:
+            - component: design-canvas
+              props:
+                showGrid: true
+                snapToGrid: true
+                gridSize: 8
+                zoom: 100
+                showOutlines: true
+
+        right:
+          title: Propiedades
+          width: 300px
+          collapsible: true
+          content:
+            - component: property-panel
+              props:
+                sections:
+                  - id: general
+                    title: General
+                    fields: [id, component, label]
+                  - id: appearance
+                    title: Apariencia
+                    fields: [variant, size, color, icon]
+                  - id: data
+                    title: Datos
+                    fields: [dataSource, compute, bindings]
+                  - id: layout
+                    title: Layout
+                    fields: [position, colspan, rowspan, margin, padding]
+                  - id: events
+                    title: Eventos
+                    fields: [onClick, onChange, onLoad]
+                  - id: advanced
+                    title: Avanzado
+                    fields: [conditions, permissions, custom_css]
+
+    # --- Preview Mode ---
+    preview:
+      layout: single
+      toolbar:
+        - component: device-selector
+          props:
+            devices: [mobile, tablet, desktop]
+        - component: theme-toggle
+        - component: refresh-button
+      content:
+        - component: preview-frame
+          props:
+            responsive: true
+            showDevTools: false
+
+# ============================================================================
+# RELACIONES
+# ============================================================================
+relations:
+  - module: blueprint-manager
+    type: exports
+    field: blueprint_id
+    description: Puede exportar como blueprint
+
+  - module: admin-panel
+    type: provides
+    field: template_id
+    description: Proporciona templates para admin
+
+  - module: plugin-manager
+    type: extends
+    field: plugin_id
+    description: Los plugins pueden registrar componentes
+
+# ============================================================================
+# CONFIGURACIÓN
+# ============================================================================
+config:
+  persistence: true
+  caching: true
+  metrics: true
+  realtime: true
+
+  # Configuración específica del designer
+  designer:
+    # Auto-guardado
+    autosave: true
+    autosave_interval_ms: 30000
+
+    # Historial de cambios
+    history_enabled: true
+    max_history_steps: 50
+
+    # Preview
+    preview_debounce_ms: 500
+
+    # Componentes custom
+    allow_custom_components: true
+    custom_components_path: "components/custom"
+
+    # Export
+    export_formats: [yaml, svelte, json, html]
+    default_export_path: "exports"
+
+    # Validación
+    validate_on_save: true
+    validate_bindings: true
+
+    # Colaboración (futuro)
+    collaborative_editing: false
+
+# ============================================================================
+# COMPONENT REGISTRY (Referencia de componentes disponibles)
+# ============================================================================
+component_registry:
+  # Documentación de cada componente para el designer
+
+  # --- Layout ---
+  header:
+    label: Header
+    icon: "📌"
+    category: layout
+    description: Encabezado con título y acciones
+    props:
+      title: { type: string, required: true }
+      subtitle: { type: string }
+      actions: { type: array }
+      sticky: { type: boolean, default: false }
+
+  card:
+    label: Card
+    icon: "🃏"
+    category: layout
+    description: Contenedor con título y contenido
+    props:
+      title: { type: string }
+      subtitle: { type: string }
+      footer: { type: string }
+      variant: { type: string, enum: [default, outlined, elevated] }
+      hover: { type: boolean }
+      clickable: { type: boolean }
+
+  # --- Data ---
+  table:
+    label: Tabla
+    icon: "📋"
+    category: data
+    description: Tabla de datos con ordenamiento y filtros
+    props:
+      dataSource: { type: string, required: true }
+      columns: { type: array, required: true }
+      sortable: { type: boolean, default: true }
+      filterable: { type: boolean, default: true }
+      paginated: { type: boolean, default: true }
+      pageSize: { type: number, default: 10 }
+      selectable: { type: boolean }
+      actions: { type: array }
+
+  stat-card:
+    label: Stat Card
+    icon: "📊"
+    category: data
+    description: Tarjeta de estadística con valor y tendencia
+    props:
+      label: { type: string, required: true }
+      value: { type: string, required: true }
+      icon: { type: string }
+      color: { type: string, enum: [primary, success, warning, danger] }
+      trend: { type: string }
+      trendDirection: { type: string, enum: [up, down, neutral] }
+
+  # --- Form ---
+  form:
+    label: Formulario
+    icon: "📝"
+    category: form
+    description: Contenedor de formulario con validación
+    props:
+      action: { type: string }
+      method: { type: string, enum: [GET, POST, PUT, PATCH] }
+      validation: { type: boolean, default: true }
+      submitLabel: { type: string, default: "Guardar" }
+      cancelLabel: { type: string, default: "Cancelar" }
+
+  input:
+    label: Input
+    icon: "✏️"
+    category: form
+    description: Campo de texto
+    props:
+      name: { type: string, required: true }
+      label: { type: string }
+      type: { type: string, enum: [text, email, password, number, tel, url], default: text }
+      placeholder: { type: string }
+      required: { type: boolean }
+      disabled: { type: boolean }
+      validation: { type: object }
+
+  select:
+    label: Select
+    icon: "📜"
+    category: form
+    description: Selector desplegable
+    props:
+      name: { type: string, required: true }
+      label: { type: string }
+      options: { type: array, required: true }
+      multiple: { type: boolean }
+      searchable: { type: boolean }
+      placeholder: { type: string }
+
+  # --- Feedback ---
+  modal:
+    label: Modal
+    icon: "🪟"
+    category: feedback
+    description: Ventana modal
+    props:
+      title: { type: string }
+      size: { type: string, enum: [sm, md, lg, xl, full], default: md }
+      closable: { type: boolean, default: true }
+      backdrop: { type: boolean, default: true }
+
+  alert:
+    label: Alert
+    icon: "⚠️"
+    category: feedback
+    description: Mensaje de alerta
+    props:
+      variant: { type: string, enum: [info, success, warning, danger], default: info }
+      title: { type: string }
+      message: { type: string, required: true }
+      dismissible: { type: boolean }
+
+  # --- Navigation ---
+  tabs:
+    label: Tabs
+    icon: "☰"
+    category: navigation
+    description: Navegación por pestañas
+    props:
+      items: { type: array, required: true }
+      activeTab: { type: string }
+      variant: { type: string, enum: [default, pills, underline] }
+
+  # --- Actions ---
+  button:
+    label: Botón
+    icon: "🔘"
+    category: action
+    description: Botón de acción
+    props:
+      label: { type: string, required: true }
+      variant: { type: string, enum: [primary, secondary, danger, ghost, link], default: primary }
+      size: { type: string, enum: [sm, md, lg], default: md }
+      icon: { type: string }
+      iconPosition: { type: string, enum: [left, right], default: left }
+      loading: { type: boolean }
+      disabled: { type: boolean }
+      action: { type: string }
+
+# ============================================================================
+# TEMPLATES PREDEFINIDOS
+# ============================================================================
+predefined_templates:
+  - name: dashboard-basic
+    display_name: Dashboard Básico
+    description: Dashboard con stats y tabla
+    type: dashboard
+    components:
+      - { id: header, component: header, position: { section: header } }
+      - { id: stat1, component: stat-card, position: { section: main, order: 1 } }
+      - { id: stat2, component: stat-card, position: { section: main, order: 2 } }
+      - { id: table, component: table, position: { section: main, order: 3, colspan: 2 } }
+
+  - name: crud-form
+    display_name: Formulario CRUD
+    description: Formulario para crear/editar entidades
+    type: form
+    components:
+      - { id: form, component: form }
+      - { id: name, component: input, props: { name: name, label: Nombre, required: true } }
+      - { id: desc, component: textarea, props: { name: description, label: Descripción } }
+      - { id: status, component: select, props: { name: status, label: Estado } }
+
+  - name: modal-confirm
+    display_name: Modal de Confirmación
+    description: Modal para confirmar acciones
+    type: modal
+    components:
+      - { id: modal, component: modal, props: { size: sm, title: Confirmar } }
+      - { id: message, component: alert, props: { variant: warning } }
+      - { id: cancel, component: button, props: { label: Cancelar, variant: ghost } }
+      - { id: confirm, component: button, props: { label: Confirmar, variant: danger } }
+
+  - name: list-with-filters
+    display_name: Lista con Filtros
+    description: Lista de items con búsqueda y filtros
+    type: view
+    components:
+      - { id: header, component: header }
+      - { id: search, component: input, props: { placeholder: Buscar... } }
+      - { id: filters, component: select, props: { label: Filtrar por } }
+      - { id: list, component: list }
+      - { id: pagination, component: pagination }

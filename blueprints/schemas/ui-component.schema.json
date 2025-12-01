@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://event-core.dev/schemas/ui-component.schema.json",
+  "title": "UI Component Schema",
+  "description": "Schema para definir componentes en el UI Designer de Event-Core",
+  "type": "object",
+  "required": ["id", "component"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identificador único del componente en el template",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "component": {
+      "type": "string",
+      "description": "Tipo de componente",
+      "enum": [
+        "header", "sidebar", "footer", "section", "card", "panel",
+        "table", "list", "grid", "tree", "stat-card", "chart", "event-stream",
+        "form", "input", "textarea", "select", "checkbox", "radio", "file-upload", "date-picker",
+        "modal", "alert", "toast", "spinner", "progress", "skeleton",
+        "tabs", "breadcrumb", "pagination", "menu",
+        "button", "button-group", "dropdown",
+        "chat-input", "conversation-panel", "prompt-selector",
+        "custom", "slot"
+      ]
+    },
+    "label": {
+      "type": "string",
+      "description": "Etiqueta visible para el componente",
+      "maxLength": 100
+    },
+    "props": {
+      "type": "object",
+      "description": "Propiedades específicas del componente",
+      "additionalProperties": true
+    },
+    "position": {
+      "type": "object",
+      "description": "Posición del componente en el layout",
+      "properties": {
+        "section": {
+          "type": "string",
+          "enum": ["header", "main", "sidebar", "footer", "left", "right", "center", "top", "bottom"],
+          "default": "main"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Orden dentro de la sección"
+        },
+        "colspan": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "default": 1,
+          "description": "Columnas que ocupa (en grid)"
+        },
+        "rowspan": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "default": 1,
+          "description": "Filas que ocupa (en grid)"
+        },
+        "x": {
+          "type": "integer",
+          "description": "Posición X (para canvas libre)"
+        },
+        "y": {
+          "type": "integer",
+          "description": "Posición Y (para canvas libre)"
+        },
+        "width": {
+          "type": ["string", "integer"],
+          "description": "Ancho del componente"
+        },
+        "height": {
+          "type": ["string", "integer"],
+          "description": "Alto del componente"
+        }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "description": "Data bindings para valores dinámicos",
+      "properties": {
+        "dataSource": {
+          "type": "string",
+          "description": "Fuente de datos (@data.items, @api.endpoint, @store.value)",
+          "pattern": "^@(data|api|store|props|context)\\."
+        },
+        "compute": {
+          "type": "string",
+          "description": "Valor computado (@compute.count(@data.items))",
+          "pattern": "^@compute\\."
+        },
+        "value": {
+          "type": "string",
+          "description": "Binding de valor"
+        },
+        "visible": {
+          "type": "string",
+          "description": "Condición de visibilidad"
+        },
+        "disabled": {
+          "type": "string",
+          "description": "Condición de deshabilitado"
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "description": "Event handlers del componente",
+      "items": {
+        "type": "object",
+        "required": ["event", "action"],
+        "properties": {
+          "event": {
+            "type": "string",
+            "description": "Nombre del evento (click, change, submit, etc.)",
+            "enum": ["click", "change", "submit", "focus", "blur", "hover", "load", "unload", "keypress", "custom"]
+          },
+          "action": {
+            "type": "string",
+            "description": "Acción a ejecutar",
+            "enum": ["navigate", "api-call", "emit-event", "set-state", "open-modal", "close-modal", "custom"]
+          },
+          "params": {
+            "type": "object",
+            "description": "Parámetros de la acción"
+          }
+        }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "description": "Condiciones de renderizado",
+      "properties": {
+        "if": {
+          "type": "string",
+          "description": "Condición para mostrar el componente"
+        },
+        "unless": {
+          "type": "string",
+          "description": "Condición para ocultar el componente"
+        },
+        "switch": {
+          "type": "object",
+          "description": "Renderizado condicional múltiple"
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "description": "Permisos requeridos para ver el componente",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation": {
+      "type": "object",
+      "description": "Reglas de validación (para componentes de formulario)",
+      "properties": {
+        "required": { "type": "boolean" },
+        "minLength": { "type": "integer" },
+        "maxLength": { "type": "integer" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "pattern": { "type": "string" },
+        "email": { "type": "boolean" },
+        "url": { "type": "boolean" },
+        "custom": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "style": {
+      "type": "object",
+      "description": "Estilos CSS inline",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "class": {
+      "type": ["string", "array"],
+      "description": "Clases CSS adicionales"
+    },
+    "children": {
+      "type": "array",
+      "description": "Componentes hijos (para contenedores)",
+      "items": {
+        "$ref": "#"
+      }
+    },
+    "slots": {
+      "type": "object",
+      "description": "Slots nombrados para contenido",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

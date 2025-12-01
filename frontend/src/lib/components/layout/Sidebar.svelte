@@ -12,6 +12,7 @@
   // Navigation items
   const navItems = [
     { href: '/', label: 'Dashboard', icon: '📊' },
+    { href: '/workspace', label: 'Workspace', icon: '🖥️' },
     { href: '/modules', label: 'Módulos', icon: '📦' },
     { href: '/blueprints', label: 'Blueprints', icon: '🏗️' },
     { href: '/credenciales', label: 'Credenciales', icon: '🔐' },

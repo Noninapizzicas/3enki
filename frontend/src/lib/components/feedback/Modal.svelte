@@ -57,7 +57,7 @@
     >
       <!-- Header -->
       {#if title || closable}
-        <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div class="flex items-center justify-between px-4 md:px-6 py-4 border-b border-border">
           {#if title}
             <h2 id="modal-title" class="text-lg font-semibold">{title}</h2>
           {:else}
@@ -76,13 +76,13 @@
       {/if}
 
       <!-- Body -->
-      <div class="px-6 py-4">
+      <div class="px-4 md:px-6 py-4 max-h-[60vh] overflow-y-auto">
         <slot />
       </div>
 
       <!-- Footer -->
       {#if $$slots.footer}
-        <div class="px-6 py-4 border-t border-border flex justify-end gap-2">
+        <div class="px-4 md:px-6 py-4 border-t border-border flex flex-wrap justify-end gap-2">
           <slot name="footer" />
         </div>
       {/if}

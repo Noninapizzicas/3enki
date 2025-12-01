@@ -125,25 +125,6 @@ class HTTPGateway {
       this.uiGateway = new UIGateway(options.core);
     }
 
-    // Auto-UI integration (schema-driven UI generation)
-    this.autoUI = null;
-    if (this.moduleLoader) {
-      try {
-        const AutoUI = require('../../auto-ui/engine/index-v2');
-        this.autoUI = new AutoUI({
-          modulesPath: this.moduleLoader.modulesPath,
-          eventBus: this.eventBus,
-          logger: this.logger
-        });
-      } catch (error) {
-        if (this.logger) {
-          this.logger.warn('gateway.autoui.init_failed', {
-            error: error.message
-          });
-        }
-      }
-    }
-
     /**
      * Estadísticas del gateway
      */
@@ -308,12 +289,6 @@ class HTTPGateway {
       // UI routes - delegate to UI Gateway
       if (this.uiGateway && pathname.startsWith('/ui')) {
         await this.handleUIRoute(req, res, pathname, query);
-        return;
-      }
-
-      // Auto-UI routes - schema-driven UI generation
-      if (this.autoUI && pathname.startsWith('/auto-ui')) {
-        await this.handleAutoUIRoute(req, res);
         return;
       }
 
@@ -1043,34 +1018,6 @@ class HTTPGateway {
   }
 
   /**
-   * Maneja rutas de Auto-UI - delega al motor Auto-UI
-   *
-   * @param {http.IncomingMessage} req - HTTP request
-   * @param {http.ServerResponse} res - HTTP response
-   */
-  async handleAutoUIRoute(req, res) {
-    try {
-      // Attach request to response for SSE handling
-      res.req = req;
-
-      // Delegate to Auto-UI engine
-      await this.autoUI.handle(req, res);
-
-    } catch (error) {
-      if (this.logger) {
-        this.logger.error('gateway.autoui.error', {
-          path: req.url,
-          error: error.message
-        }, error);
-      }
-
-      this.sendError(res, 500, 'Auto-UI error', {
-        error: error.message
-      });
-    }
-  }
-
-  /**
    * Obtiene estadísticas del gateway
    *
    * @returns {Object} Estadísticas
@@ -1079,8 +1026,7 @@ class HTTPGateway {
     return {
       ...this.stats,
       uptime: this.stats.started_at ? Date.now() - this.stats.started_at : 0,
-      is_running: this.isRunning,
-      autoui: this.autoUI ? this.autoUI.getStats() : null
+      is_running: this.isRunning
     };
   }
 }

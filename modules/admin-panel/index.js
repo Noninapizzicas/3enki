@@ -48,10 +48,6 @@ class AdminPanelModule {
       this.refreshPluginsCache();
     });
 
-    this.eventBus.subscribe('ui.component.loaded', (data) => {
-      this.logger.debug('admin-panel.ui.component.loaded', data);
-    });
-
     // Initial cache load
     await this.refreshAllCaches();
 

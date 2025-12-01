@@ -10,13 +10,13 @@
   const dispatch = createEventDispatcher();
 
   // Navigation items
+  // Credenciales se gestiona desde el botón lateral en MobileWorkspaceLayout
   const navItems = [
     { href: '/', label: 'Dashboard', icon: '📊' },
-    { href: '/workspace', label: 'Workspace', icon: '🖥️' },
+    { href: '/menu-generator', label: 'Menu Generator', icon: '📄' },
+    { href: '/workspace', label: 'Workspace Demo', icon: '🖥️' },
     { href: '/modules', label: 'Módulos', icon: '📦' },
     { href: '/blueprints', label: 'Blueprints', icon: '🏗️' },
-    { href: '/credenciales', label: 'Credenciales', icon: '🔐' },
-    { href: '/menu-generator', label: 'Menu Generator', icon: '📄' },
     { href: '/notas', label: 'Notas', icon: '📝' },
     { href: '/events', label: 'Eventos', icon: '⚡' }
   ];

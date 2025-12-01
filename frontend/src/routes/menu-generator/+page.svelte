@@ -36,11 +36,19 @@
   }
 
   interface Credential {
-    id: string;
-    name: string;
+    key: string;
     provider: string;
-    level: 'global' | 'project' | 'client';
-    masked_value: string;
+    level: 'GLOBAL' | 'PROJECT' | 'CLIENT' | 'CUSTOM';
+    identifier: string | null;
+    api_key_preview: string;
+  }
+
+  // Form state for credentials
+  interface CredentialForm {
+    provider: string;
+    level: string;
+    identifier: string;
+    api_key: string;
   }
 
   interface ChatMessage {
@@ -66,6 +74,15 @@
   let currentPanel = '';
   let selectedMenu: Menu | null = null;
   let selectedCredential: Credential | null = null;
+
+  // Credential form state
+  let credentialForm: CredentialForm = {
+    provider: 'DEEPSEEK',
+    level: 'GLOBAL',
+    identifier: '',
+    api_key: ''
+  };
+  let editApiKey = '';
 
   // Upload
   let uploadFiles: { file: File; id: string; progress: number; status: string }[] = [];
@@ -343,10 +360,91 @@
     }
   }
 
-  async function deleteCredential(cred: Credential) {
-    if (!confirm(`¿Eliminar credencial ${cred.name}?`)) return;
+  async function saveCredential() {
+    if (!credentialForm.api_key.trim()) {
+      toast.error('La API Key es requerida');
+      return;
+    }
+
+    // Validate identifier for non-GLOBAL levels
+    if (credentialForm.level !== 'GLOBAL' && !credentialForm.identifier.trim()) {
+      toast.error(`El nivel ${credentialForm.level} requiere un identificador`);
+      return;
+    }
+
     try {
-      const res = await fetch(`${credentialsApi}/credentials/${cred.id}`, {
+      const res = await fetch(`${credentialsApi}/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: credentialForm.provider,
+          level: credentialForm.level,
+          identifier: credentialForm.level === 'GLOBAL' ? null : credentialForm.identifier,
+          api_key: credentialForm.api_key
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al guardar');
+      }
+
+      toast.success('Credencial guardada');
+
+      // Reset form
+      credentialForm = {
+        provider: 'DEEPSEEK',
+        level: 'GLOBAL',
+        identifier: '',
+        api_key: ''
+      };
+
+      // Close panel and refresh
+      currentPanel = '';
+      await fetchCredentials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error guardando credencial');
+    }
+  }
+
+  async function updateCredential() {
+    if (!selectedCredential) return;
+
+    if (!editApiKey.trim()) {
+      toast.error('La API Key es requerida');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${credentialsApi}/credentials/${encodeURIComponent(selectedCredential.key)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: editApiKey
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al actualizar');
+      }
+
+      toast.success('Credencial actualizada');
+
+      // Reset and close
+      editApiKey = '';
+      selectedCredential = null;
+      currentPanel = '';
+      await fetchCredentials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error actualizando credencial');
+    }
+  }
+
+  async function deleteCredential(cred: Credential) {
+    if (!confirm(`¿Eliminar credencial ${cred.key}?`)) return;
+    try {
+      const res = await fetch(`${credentialsApi}/credentials/${encodeURIComponent(cred.key)}`, {
         method: 'DELETE'
       });
       if (!res.ok) throw new Error('Error');
@@ -626,13 +724,20 @@
         {#if credentials.length === 0}
           <p class="text-center text-text-muted py-4">No hay credenciales</p>
         {:else}
-          {#each credentials as cred (cred.id)}
+          {#each credentials as cred (cred.key)}
             <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg">
               <div class="flex items-center gap-3">
-                <span class="text-xl">🔑</span>
+                <span class="text-xl">
+                  {#if cred.provider === 'DEEPSEEK'}🔮
+                  {:else if cred.provider === 'OPENAI'}🤖
+                  {:else if cred.provider === 'ANTHROPIC'}🧠
+                  {:else if cred.provider === 'OLLAMA'}🦙
+                  {:else}🔑{/if}
+                </span>
                 <div>
-                  <p class="font-medium">{cred.name}</p>
-                  <p class="text-xs text-text-muted">{cred.provider} • {cred.level}</p>
+                  <p class="font-medium text-sm">{cred.provider}</p>
+                  <p class="text-xs text-text-muted">{cred.level}{cred.identifier ? ` • ${cred.identifier}` : ''}</p>
+                  <p class="text-xs font-mono text-text-muted">{cred.api_key_preview}</p>
                 </div>
               </div>
               <div class="flex gap-1">
@@ -646,52 +751,78 @@
 
     <!-- Credential Add Panel -->
     {:else if panelId === 'credential-add'}
-      <form class="space-y-4" on:submit|preventDefault={() => toast.info('TODO: Guardar credencial')}>
-        <div>
-          <label class="block text-sm font-medium mb-1">Nombre</label>
-          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg" placeholder="OpenAI API Key" />
-        </div>
+      <form class="space-y-4" on:submit|preventDefault={saveCredential}>
         <div>
           <label class="block text-sm font-medium mb-1">Proveedor</label>
-          <select class="w-full p-2 bg-bg-input border border-border rounded-lg">
-            <option>OpenAI</option>
-            <option>Anthropic</option>
-            <option>Google</option>
-            <option>Otro</option>
+          <select bind:value={credentialForm.provider} class="w-full p-2 bg-bg-input border border-border rounded-lg">
+            <option value="DEEPSEEK">🔮 DeepSeek</option>
+            <option value="OPENAI">🤖 OpenAI</option>
+            <option value="ANTHROPIC">🧠 Anthropic</option>
+            <option value="OLLAMA">🦙 Ollama</option>
           </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">API Key</label>
-          <input type="password" class="w-full p-2 bg-bg-input border border-border rounded-lg" placeholder="sk-..." />
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Nivel</label>
-          <select class="w-full p-2 bg-bg-input border border-border rounded-lg">
-            <option value="global">Global</option>
-            <option value="project">Proyecto</option>
-            <option value="client">Cliente</option>
+          <select bind:value={credentialForm.level} class="w-full p-2 bg-bg-input border border-border rounded-lg">
+            <option value="GLOBAL">🌐 Global (sin identificador)</option>
+            <option value="PROJECT">📁 Proyecto</option>
+            <option value="CLIENT">👤 Cliente</option>
+            <option value="CUSTOM">⚙️ Custom</option>
           </select>
         </div>
-        <Button variant="primary" class="w-full">Guardar</Button>
+        {#if credentialForm.level !== 'GLOBAL'}
+          <div>
+            <label class="block text-sm font-medium mb-1">Identificador</label>
+            <input
+              type="text"
+              bind:value={credentialForm.identifier}
+              class="w-full p-2 bg-bg-input border border-border rounded-lg"
+              placeholder="proyecto-1 o cliente-xyz"
+            />
+          </div>
+        {/if}
+        <div>
+          <label class="block text-sm font-medium mb-1">API Key</label>
+          <input
+            type="password"
+            bind:value={credentialForm.api_key}
+            class="w-full p-2 bg-bg-input border border-border rounded-lg"
+            placeholder="sk-..."
+          />
+        </div>
+        <Button variant="primary" class="w-full">💾 Guardar</Button>
       </form>
 
     <!-- Credential Edit Panel -->
     {:else if panelId === 'credential-edit' && selectedCredential}
-      <form class="space-y-4" on:submit|preventDefault={() => toast.info('TODO: Actualizar credencial')}>
+      <form class="space-y-4" on:submit|preventDefault={updateCredential}>
         <div>
-          <label class="block text-sm font-medium mb-1">Nombre</label>
-          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg" value={selectedCredential.name} />
+          <label class="block text-sm font-medium mb-1">Key</label>
+          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.key} disabled />
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Proveedor</label>
-          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg" value={selectedCredential.provider} disabled />
+          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.provider} disabled />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Nueva API Key (dejar vacío para mantener)</label>
-          <input type="password" class="w-full p-2 bg-bg-input border border-border rounded-lg" placeholder="sk-..." />
+          <label class="block text-sm font-medium mb-1">Nivel</label>
+          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.level} disabled />
         </div>
-        <Button variant="primary" class="w-full">Actualizar</Button>
-        <Button variant="danger" class="w-full" on:click={() => deleteCredential(selectedCredential)}>Eliminar</Button>
+        <div>
+          <label class="block text-sm font-medium mb-1">Valor actual</label>
+          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.api_key_preview} disabled />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Nueva API Key</label>
+          <input
+            type="password"
+            bind:value={editApiKey}
+            class="w-full p-2 bg-bg-input border border-border rounded-lg"
+            placeholder="sk-... (nuevo valor)"
+          />
+        </div>
+        <Button variant="primary" class="w-full">💾 Actualizar</Button>
+        <Button variant="danger" class="w-full" on:click={() => deleteCredential(selectedCredential)}>🗑️ Eliminar</Button>
       </form>
 
     <!-- Menus Panel -->

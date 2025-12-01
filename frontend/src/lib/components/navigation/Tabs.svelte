@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
 
   type Tab = {
     id: string;
@@ -13,6 +13,18 @@
   export let activeTab: string = tabs[0]?.id ?? '';
   export let variant: 'default' | 'pills' | 'underline' = 'default';
   export let fullWidth = false;
+  export let mobileIconsOnly = true; // Show only icons on mobile if available
+
+  let isMobile = false;
+
+  onMount(() => {
+    const checkMobile = () => {
+      isMobile = window.innerWidth < 640;
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  });
 
   const dispatch = createEventDispatcher<{
     change: string;
@@ -27,46 +39,52 @@
   const variantClasses = {
     default: {
       container: 'border-b border-border',
-      tab: 'px-4 py-2 -mb-px border-b-2 border-transparent',
+      tab: 'px-3 sm:px-4 py-2 -mb-px border-b-2 border-transparent',
       active: 'border-primary text-primary',
       inactive: 'text-text-muted hover:text-text hover:border-border'
     },
     pills: {
       container: 'bg-bg-card p-1 rounded-lg',
-      tab: 'px-4 py-2 rounded-md',
+      tab: 'px-3 sm:px-4 py-2 rounded-md',
       active: 'bg-primary text-white',
       inactive: 'text-text-muted hover:text-text hover:bg-bg-hover'
     },
     underline: {
       container: '',
-      tab: 'px-4 py-2 border-b-2 border-transparent',
+      tab: 'px-3 sm:px-4 py-2 border-b-2 border-transparent',
       active: 'border-primary text-primary',
       inactive: 'text-text-muted hover:text-text'
     }
   };
 
   $: classes = variantClasses[variant];
+  $: showLabels = !isMobile || !mobileIconsOnly;
 </script>
 
-<div class="flex {classes.container}" class:w-full={fullWidth} role="tablist">
+<div class="flex overflow-x-auto scrollbar-hide {classes.container}" class:w-full={fullWidth} role="tablist">
   {#each tabs as tab (tab.id)}
     <button
       type="button"
       role="tab"
       aria-selected={activeTab === tab.id}
       aria-disabled={tab.disabled}
-      class="flex items-center gap-2 font-medium transition-colors {classes.tab} {activeTab === tab.id ? classes.active : classes.inactive}"
+      aria-label={tab.label}
+      title={tab.label}
+      class="flex items-center justify-center gap-1.5 sm:gap-2 font-medium transition-colors whitespace-nowrap {classes.tab} {activeTab === tab.id ? classes.active : classes.inactive}"
       class:flex-1={fullWidth}
       class:opacity-50={tab.disabled}
       class:cursor-not-allowed={tab.disabled}
       class:cursor-pointer={!tab.disabled}
+      class:min-w-[48px]={isMobile && tab.icon}
       disabled={tab.disabled}
       on:click={() => selectTab(tab)}
     >
       {#if tab.icon}
-        <span>{tab.icon}</span>
+        <span class="text-base sm:text-sm">{tab.icon}</span>
       {/if}
-      <span>{tab.label}</span>
+      {#if showLabels || !tab.icon}
+        <span class="text-sm">{tab.label}</span>
+      {/if}
       {#if tab.badge !== undefined}
         <span class="px-1.5 py-0.5 text-xs rounded-full bg-primary bg-opacity-20 text-primary">
           {tab.badge}
@@ -79,3 +97,14 @@
 <div class="mt-4" role="tabpanel">
   <slot {activeTab} />
 </div>
+
+<style>
+  /* Hide scrollbar but allow scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+</style>

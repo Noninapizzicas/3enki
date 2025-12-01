@@ -107,6 +107,11 @@ export default {
         'sidebar': '280px',
         'sidebar-collapsed': '64px',
         'modal': '500px'
+      },
+      // Márgenes para el sidebar
+      margin: {
+        'sidebar': '280px',
+        'sidebar-collapsed': '64px'
       }
     }
   },

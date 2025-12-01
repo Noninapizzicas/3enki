@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 # Configuration
 BROKER_HOST="${BROKER_HOST:-localhost}"
 BROKER_PORT="${BROKER_PORT:-1883}"
+BROKER_WS_PORT="${BROKER_WS_PORT:-9001}"
 CORE_PORT="${CORE_PORT:-3000}"
 TIMEOUT="${TIMEOUT:-5}"
 
@@ -81,6 +82,7 @@ if ping -c 5 -W $TIMEOUT "$BROKER_HOST" > /tmp/ping_result 2>&1; then
 fi
 
 run_test "TCP connection to broker:$BROKER_PORT" "timeout $TIMEOUT nc -zv $BROKER_HOST $BROKER_PORT 2>&1"
+run_test "WebSocket connection to broker:$BROKER_WS_PORT (browsers)" "timeout $TIMEOUT nc -zv $BROKER_HOST $BROKER_WS_PORT 2>&1"
 
 echo ""
 
@@ -173,8 +175,9 @@ else
     echo ""
     echo "Common solutions:"
     echo "  - Ensure MQTT broker is running: sudo systemctl start mosquitto"
-    echo "  - Check firewall: sudo ufw allow 1883/tcp"
+    echo "  - Check firewall: sudo ufw allow 1883/tcp && sudo ufw allow 9001/tcp"
     echo "  - Verify broker address: export BROKER_HOST=192.168.1.12"
     echo "  - Start Event Core: node index.js"
+    echo "  - WebSocket port 9001 is required for browser connections"
     exit 1
 fi

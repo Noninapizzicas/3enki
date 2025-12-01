@@ -55,7 +55,8 @@ echo -e "${BLUE}[2/6] MQTT Broker Configuration${NC}"
 echo ""
 
 prompt BROKER_URL "Enter MQTT Broker URL (e.g., mqtt://192.168.1.12:1883)" "mqtt://localhost:1883"
-prompt BROKER_PORT "Enter Embedded Broker Port (fallback)" "1883"
+prompt BROKER_PORT "Enter Embedded Broker TCP Port (fallback)" "1883"
+prompt BROKER_WS_PORT "Enter Embedded Broker WebSocket Port (for browsers)" "9001"
 
 echo ""
 echo -e "${BLUE}[3/6] Logging Configuration${NC}"
@@ -104,6 +105,7 @@ EVENT_CORE_PORT=$CORE_PORT
 # MQTT Broker
 EVENT_CORE_BROKER_URL=$BROKER_URL
 EVENT_CORE_BROKER_PORT=$BROKER_PORT
+EVENT_CORE_BROKER_WS_PORT=$BROKER_WS_PORT
 EVENT_CORE_BROKER_TIMEOUT=5000
 
 # Logging
@@ -180,6 +182,7 @@ echo "Configuration Summary:"
 echo "  Core ID:       $CORE_ID"
 echo "  HTTP Port:     $CORE_PORT"
 echo "  MQTT Broker:   $BROKER_URL"
+echo "  MQTT WS Port:  $BROKER_WS_PORT (for browsers)"
 echo "  Log Level:     $LOG_LEVEL"
 echo ""
 

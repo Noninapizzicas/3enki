@@ -16,12 +16,14 @@
  */
 
 const net = require('net');
+const http = require('http');
 const { EventEmitter } = require('events');
 
 class EmbeddedBroker extends EventEmitter {
   /**
    * @param {Object} options - Opciones de configuración
-   * @param {number} options.port - Puerto del broker (default: 1883)
+   * @param {number} options.port - Puerto del broker TCP (default: 1883)
+   * @param {number} options.wsPort - Puerto WebSocket (default: 9001)
    * @param {string} options.host - Host del broker (default: '0.0.0.0')
    * @param {Object} options.logger - Logger instance (opcional)
    * @param {Object} options.metrics - Metrics instance (opcional)
@@ -30,12 +32,15 @@ class EmbeddedBroker extends EventEmitter {
     super();
 
     this.port = options.port || 1883;
+    this.wsPort = options.wsPort || 9001;
     this.host = options.host || '0.0.0.0';
     this.logger = options.logger || null;
     this.metrics = options.metrics || null;
 
     this.aedes = null;
     this.server = null;
+    this.wsServer = null;
+    this.httpServer = null;
     this.isRunning = false;
 
     // Estadísticas
@@ -91,16 +96,20 @@ class EmbeddedBroker extends EventEmitter {
         });
       });
 
+      // Crear servidor WebSocket para navegadores
+      await this.startWebSocketServer();
+
       this.isRunning = true;
 
       if (this.logger) {
         this.logger.info('broker.started', {
           port: this.port,
+          wsPort: this.wsPort,
           host: this.host
         });
       }
 
-      this.emit('started', { port: this.port, host: this.host });
+      this.emit('started', { port: this.port, wsPort: this.wsPort, host: this.host });
 
     } catch (error) {
       if (this.logger) {
@@ -248,6 +257,53 @@ class EmbeddedBroker extends EventEmitter {
   }
 
   /**
+   * Inicia servidor WebSocket para conexiones desde navegadores
+   */
+  async startWebSocketServer() {
+    try {
+      const ws = require('ws');
+
+      this.httpServer = http.createServer();
+      this.wsServer = new ws.Server({ server: this.httpServer });
+
+      this.wsServer.on('connection', (socket) => {
+        const stream = ws.createWebSocketStream(socket);
+        this.aedes.handle(stream);
+      });
+
+      await new Promise((resolve, reject) => {
+        this.httpServer.listen(this.wsPort, this.host, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+
+        this.httpServer.on('error', (err) => {
+          if (err.code === 'EADDRINUSE') {
+            reject(new Error(`WebSocket port ${this.wsPort} already in use`));
+          } else {
+            reject(err);
+          }
+        });
+      });
+
+      if (this.logger) {
+        this.logger.info('broker.websocket.started', {
+          port: this.wsPort,
+          host: this.host
+        });
+      }
+    } catch (error) {
+      if (this.logger) {
+        this.logger.warn('broker.websocket.failed', {
+          port: this.wsPort,
+          error: error.message
+        });
+      }
+      // No fallar si WebSocket no arranca, TCP sigue funcionando
+    }
+  }
+
+  /**
    * Detiene el broker MQTT
    *
    * @returns {Promise<void>}
@@ -277,6 +333,13 @@ class EmbeddedBroker extends EventEmitter {
           else resolve();
         });
       });
+
+      // Cerrar servidor WebSocket si existe
+      if (this.httpServer) {
+        await new Promise((resolve) => {
+          this.httpServer.close(() => resolve());
+        });
+      }
 
       this.isRunning = false;
 

@@ -1,0 +1,298 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://event-core.dev/schemas/ui-template.schema.json",
+  "title": "UI Template Schema",
+  "description": "Schema para templates del UI Designer de Event-Core",
+  "type": "object",
+  "required": ["name", "type", "layout", "components"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "ID único del template (auto-generado)",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Nombre único del template (kebab-case)",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 3,
+      "maxLength": 50
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Nombre para mostrar",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripción del template",
+      "maxLength": 500
+    },
+    "icon": {
+      "type": "string",
+      "description": "Emoji representativo",
+      "maxLength": 4,
+      "default": "📄"
+    },
+    "version": {
+      "type": "string",
+      "description": "Versión del template",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "default": "1.0.0"
+    },
+    "type": {
+      "type": "string",
+      "description": "Tipo de template",
+      "enum": ["view", "modal", "form", "dashboard", "component", "page"]
+    },
+    "category": {
+      "type": "string",
+      "description": "Categoría del template",
+      "enum": ["general", "admin", "data", "analytics", "settings", "ai", "custom"],
+      "default": "general"
+    },
+    "status": {
+      "type": "string",
+      "description": "Estado del template",
+      "enum": ["draft", "published", "archived"],
+      "default": "draft"
+    },
+    "layout": {
+      "type": "object",
+      "description": "Configuración del layout",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Tipo de layout",
+          "enum": ["single-column", "two-column", "three-column", "grid", "tabs", "sidebar", "split", "kanban"],
+          "default": "single-column"
+        },
+        "config": {
+          "type": "object",
+          "description": "Configuración específica del layout",
+          "properties": {
+            "gap": {
+              "type": "string",
+              "enum": ["none", "sm", "md", "lg", "xl"],
+              "default": "md"
+            },
+            "padding": {
+              "type": "string",
+              "enum": ["none", "sm", "md", "lg", "xl"],
+              "default": "md"
+            },
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12,
+              "default": 1
+            },
+            "leftWidth": {
+              "type": "string",
+              "description": "Ancho de columna izquierda (two-column)"
+            },
+            "rightWidth": {
+              "type": "string",
+              "description": "Ancho de columna derecha (two-column)"
+            },
+            "sidebarWidth": {
+              "type": "string",
+              "description": "Ancho del sidebar",
+              "default": "250px"
+            },
+            "sidebarPosition": {
+              "type": "string",
+              "enum": ["left", "right"],
+              "default": "left"
+            },
+            "collapsible": {
+              "type": "boolean",
+              "description": "Si las secciones son colapsables"
+            }
+          }
+        },
+        "sections": {
+          "type": "array",
+          "description": "Definición de secciones del layout",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "collapsible": { "type": "boolean" },
+              "defaultCollapsed": { "type": "boolean" },
+              "minHeight": { "type": "string" },
+              "maxHeight": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "description": "Lista de componentes del template",
+      "items": {
+        "$ref": "ui-component.schema.json"
+      }
+    },
+    "data": {
+      "type": "object",
+      "description": "Configuración de datos",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "description": "Fuentes de datos",
+          "items": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": ["api", "store", "static", "computed"]
+              },
+              "endpoint": { "type": "string" },
+              "method": { "type": "string", "enum": ["GET", "POST"] },
+              "params": { "type": "object" },
+              "refresh": { "type": "integer", "description": "Intervalo de refresco en ms" },
+              "transform": { "type": "string" }
+            }
+          }
+        },
+        "state": {
+          "type": "object",
+          "description": "Estado inicial",
+          "additionalProperties": true
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "Acciones disponibles en el template",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["api-call", "navigate", "emit-event", "set-state", "open-modal", "custom"]
+          },
+          "config": { "type": "object" },
+          "permissions": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "description": "Personalización de tema",
+      "properties": {
+        "extends": {
+          "type": "string",
+          "description": "Tema base",
+          "enum": ["default", "dark", "light"]
+        },
+        "colors": {
+          "type": "object",
+          "properties": {
+            "primary": { "type": "string" },
+            "secondary": { "type": "string" },
+            "success": { "type": "string" },
+            "warning": { "type": "string" },
+            "danger": { "type": "string" },
+            "background": { "type": "string" },
+            "surface": { "type": "string" },
+            "text": { "type": "string" }
+          }
+        },
+        "typography": {
+          "type": "object",
+          "properties": {
+            "fontFamily": { "type": "string" },
+            "fontSize": { "type": "object" }
+          }
+        },
+        "spacing": {
+          "type": "object"
+        },
+        "borderRadius": {
+          "type": "string"
+        }
+      }
+    },
+    "responsive": {
+      "type": "object",
+      "description": "Configuración responsive",
+      "properties": {
+        "mobile": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "breakpoint": { "type": "string", "default": "640px" },
+            "layout": { "type": "string" }
+          }
+        },
+        "tablet": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "breakpoint": { "type": "string", "default": "768px" },
+            "layout": { "type": "string" }
+          }
+        },
+        "desktop": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "breakpoint": { "type": "string", "default": "1024px" }
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "description": "Permisos requeridos para acceder al template",
+      "items": {
+        "type": "string"
+      },
+      "default": ["user"]
+    },
+    "mqtt": {
+      "type": "object",
+      "description": "Configuración MQTT para tiempo real",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "topics": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "autoRefresh": { "type": "boolean", "default": true }
+      }
+    },
+    "target_module": {
+      "type": "string",
+      "description": "Módulo destino para este template"
+    },
+    "tags": {
+      "type": "array",
+      "description": "Etiquetas para categorización",
+      "items": { "type": "string" }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Metadata del sistema",
+      "properties": {
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "created_by": { "type": "string" },
+        "export_count": { "type": "integer", "default": 0 },
+        "last_exported": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

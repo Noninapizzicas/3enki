@@ -518,7 +518,7 @@
       <main class="flex-1 flex overflow-hidden">
         <!-- Canvas (editor mode or split mode) -->
         {#if viewMode === 'canvas' || viewMode === 'split'}
-          <div class="flex-1 overflow-auto p-6 bg-bg-secondary" class:w-1/2={viewMode === 'split'}>
+          <div class="flex-1 overflow-auto p-6 bg-bg-secondary {viewMode === 'split' ? 'w-1/2' : ''}">
             <div
               class="min-h-full bg-bg-primary rounded-lg border-2 border-dashed transition-colors p-4"
               class:border-primary={isDragging}
@@ -609,10 +609,7 @@
         <!-- Preview Panel (preview mode or split mode) -->
         {#if viewMode === 'preview' || viewMode === 'split'}
           <div
-            class="flex-1 overflow-auto bg-bg-secondary flex items-start justify-center p-6"
-            class:w-1/2={viewMode === 'split'}
-            class:border-l={viewMode === 'split'}
-            class:border-border={viewMode === 'split'}
+            class="flex-1 overflow-auto bg-bg-secondary flex items-start justify-center p-6 {viewMode === 'split' ? 'w-1/2 border-l border-border' : ''}"
           >
             <div
               class="bg-bg-primary rounded-lg shadow-lg overflow-hidden transition-all duration-300"

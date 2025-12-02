@@ -1,0 +1,592 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "tipo": "scratch-blocks-system",
+    "descripcion": "Sistema de bloques tipo Scratch para diseño de UI - Devuelve JSON"
+  },
+
+  "config": {
+    "output_format": "json",
+    "snap_to_grid": true,
+    "grid_size": 8,
+    "zoom_levels": [0.5, 0.75, 1, 1.25, 1.5, 2]
+  },
+
+  "categorias_bloques": {
+    "pantalla":    {"color": "#9333EA", "icono": "📱"},
+    "layout":      {"color": "#3B82F6", "icono": "📐"},
+    "contenedor":  {"color": "#06B6D4", "icono": "📦"},
+    "componente":  {"color": "#22C55E", "icono": "🧩"},
+    "modulo":      {"color": "#F59E0B", "icono": "⚡"},
+    "evento":      {"color": "#EF4444", "icono": "📡"},
+    "accion":      {"color": "#EC4899", "icono": "▶️"},
+    "datos":       {"color": "#8B5CF6", "icono": "💾"},
+    "condicion":   {"color": "#F97316", "icono": "❓"}
+  },
+
+  "bloques": {
+
+    "pantalla": [
+      {
+        "id": "screen",
+        "nombre": "Pantalla",
+        "forma": "hat",
+        "conexiones": {"abajo": true},
+        "acepta_hijos": true,
+        "props": {
+          "id": {"tipo": "string", "requerido": true},
+          "nombre": {"tipo": "string", "requerido": true},
+          "tipo": {"tipo": "enum", "opciones": ["mobile", "tablet", "desktop"]},
+          "orientacion": {"tipo": "enum", "opciones": ["portrait", "landscape"]}
+        }
+      }
+    ],
+
+    "layout": [
+      {
+        "id": "layout-fullscreen",
+        "nombre": "Layout Fullscreen",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true
+      },
+      {
+        "id": "layout-sidebar",
+        "nombre": "Layout con Sidebar",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "slots": ["sidebar", "content"],
+        "props": {
+          "sidebar_posicion": {"tipo": "enum", "opciones": ["left", "right"]},
+          "sidebar_ancho": {"tipo": "string", "default": "80px"}
+        }
+      },
+      {
+        "id": "layout-three-panel",
+        "nombre": "Layout 3 Paneles",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "slots": ["header", "topbar", "sidebar", "content", "bottom"]
+      },
+      {
+        "id": "layout-two-column",
+        "nombre": "Layout 2 Columnas",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "slots": ["left", "right"],
+        "props": {
+          "left_width": {"tipo": "string", "default": "65%"},
+          "right_width": {"tipo": "string", "default": "35%"}
+        }
+      }
+    ],
+
+    "contenedor": [
+      {
+        "id": "floating-sidebar",
+        "nombre": "Floating Sidebar",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "acepta_tipos": ["emoji-button", "boton"],
+        "props": {
+          "posicion": {"tipo": "enum", "opciones": ["left", "right"]},
+          "colapsable": {"tipo": "boolean", "default": true},
+          "draggable": {"tipo": "boolean", "default": true}
+        }
+      },
+      {
+        "id": "floating-topbar",
+        "nombre": "Floating Topbar",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "acepta_tipos": ["emoji-button", "boton", "grupo-botones"],
+        "props": {
+          "alineacion": {"tipo": "enum", "opciones": ["left", "center", "right"]},
+          "sticky": {"tipo": "boolean", "default": true}
+        }
+      },
+      {
+        "id": "floating-input-bar",
+        "nombre": "Floating Input Bar",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "acepta_tipos": ["emoji-button", "voice-input"],
+        "props": {
+          "posicion": {"tipo": "enum", "opciones": ["top", "bottom"]},
+          "placeholder": {"tipo": "string"}
+        }
+      },
+      {
+        "id": "overlay-panel",
+        "nombre": "Overlay Panel",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "props": {
+          "tamano": {"tipo": "enum", "opciones": ["small", "medium", "large"]},
+          "cerrar_click_fuera": {"tipo": "boolean", "default": true}
+        }
+      },
+      {
+        "id": "card",
+        "nombre": "Card",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "props": {
+          "titulo": {"tipo": "string"},
+          "variante": {"tipo": "enum", "opciones": ["default", "highlighted", "error"]}
+        }
+      },
+      {
+        "id": "grid",
+        "nombre": "Grid",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "props": {
+          "columnas_mobile": {"tipo": "number", "default": 2},
+          "columnas_tablet": {"tipo": "number", "default": 3},
+          "columnas_desktop": {"tipo": "number", "default": 4},
+          "gap": {"tipo": "string", "default": "12px"}
+        }
+      },
+      {
+        "id": "grupo-botones",
+        "nombre": "Grupo de Botones",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "acepta_tipos": ["emoji-button", "boton"],
+        "props": {
+          "separador": {"tipo": "boolean", "default": true}
+        }
+      }
+    ],
+
+    "componente": [
+      {
+        "id": "emoji-button",
+        "nombre": "Emoji Button",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "props": {
+          "emoji": {"tipo": "emoji", "requerido": true},
+          "tooltip": {"tipo": "string"}
+        },
+        "slots_evento": ["on_click", "on_double_click", "on_long_press"]
+      },
+      {
+        "id": "boton",
+        "nombre": "Boton",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "props": {
+          "texto": {"tipo": "string"},
+          "icono": {"tipo": "emoji"},
+          "variante": {"tipo": "enum", "opciones": ["primary", "secondary", "ghost", "danger"]},
+          "tamano": {"tipo": "enum", "opciones": ["sm", "md", "lg"]}
+        },
+        "slots_evento": ["on_click"]
+      },
+      {
+        "id": "input-texto",
+        "nombre": "Input Texto",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "props": {
+          "placeholder": {"tipo": "string"},
+          "tipo": {"tipo": "enum", "opciones": ["text", "password", "email", "number"]}
+        },
+        "slots_evento": ["on_change", "on_submit"]
+      },
+      {
+        "id": "voice-input",
+        "nombre": "Voice Input",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "props": {
+          "idioma": {"tipo": "enum", "opciones": ["es-ES", "en-US", "pt-BR"]},
+          "continuo": {"tipo": "boolean", "default": false}
+        },
+        "slots_evento": ["on_result", "on_error"]
+      },
+      {
+        "id": "tabla",
+        "nombre": "Tabla",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "props": {
+          "columnas": {"tipo": "array"},
+          "ordenable": {"tipo": "boolean", "default": true},
+          "filtrable": {"tipo": "boolean", "default": true},
+          "paginado": {"tipo": "boolean", "default": true}
+        },
+        "slots_evento": ["on_row_click", "on_action"]
+      },
+      {
+        "id": "stat-card",
+        "nombre": "Stat Card",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "props": {
+          "label": {"tipo": "string"},
+          "valor": {"tipo": "binding"},
+          "icono": {"tipo": "emoji"},
+          "color": {"tipo": "enum", "opciones": ["primary", "success", "warning", "danger", "info"]}
+        }
+      },
+      {
+        "id": "lista-items",
+        "nombre": "Lista Items",
+        "forma": "statement",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "props": {
+          "item_component": {"tipo": "string"}
+        },
+        "slots_evento": ["on_item_click", "on_item_action"]
+      }
+    ],
+
+    "modulo": [
+      {"id": "mod-ai-gateway", "nombre": "AI Gateway", "icono": "🤖", "modulo_ref": "ai-gateway"},
+      {"id": "mod-menu-generator", "nombre": "Menu Generator", "icono": "📄", "modulo_ref": "menu-generator"},
+      {"id": "mod-metricas", "nombre": "Metricas", "icono": "📊", "modulo_ref": "metricas"},
+      {"id": "mod-credential-manager", "nombre": "Credentials", "icono": "🔐", "modulo_ref": "credential-manager"},
+      {"id": "mod-notas", "nombre": "Notas", "icono": "📝", "modulo_ref": "notas"},
+      {"id": "mod-ui-designer", "nombre": "UI Designer", "icono": "🎨", "modulo_ref": "ui-designer"},
+      {"id": "mod-productos", "nombre": "Productos", "icono": "📦", "modulo_ref": "productos"},
+      {"id": "mod-pedidos", "nombre": "Pedidos", "icono": "📋", "modulo_ref": "pedidos"},
+      {"id": "mod-cuentas", "nombre": "Cuentas", "icono": "📋", "modulo_ref": "cuentas"},
+      {"id": "mod-cobros", "nombre": "Cobros", "icono": "💰", "modulo_ref": "cobros"},
+      {"id": "mod-categorias", "nombre": "Categorias", "icono": "📁", "modulo_ref": "categorias"},
+      {"id": "mod-ingredientes", "nombre": "Ingredientes", "icono": "🥬", "modulo_ref": "ingredientes"},
+      {"id": "mod-comandero", "nombre": "Comandero", "icono": "📝", "modulo_ref": "comandero"},
+      {"id": "mod-cocina", "nombre": "Cocina", "icono": "👨‍🍳", "modulo_ref": "cocina"},
+      {"id": "mod-cuentas-mesa", "nombre": "Mesas", "icono": "🪑", "modulo_ref": "cuentas-mesa"},
+      {"id": "mod-cuentas-llevar", "nombre": "Para Llevar", "icono": "🥡", "modulo_ref": "cuentas-llevar"},
+      {"id": "mod-cuentas-telefono", "nombre": "Telefono", "icono": "📞", "modulo_ref": "cuentas-telefono"}
+    ],
+
+    "evento": {
+      "_forma_comun": {"forma": "hat", "conexiones": {"abajo": true}},
+      "escucha": [
+        {"id": "on-cuenta-creada", "evento": "cuenta.creada", "descripcion": "Cuando se crea cuenta"},
+        {"id": "on-cuenta-actualizada", "evento": "cuenta.actualizada", "descripcion": "Cuando cuenta cambia"},
+        {"id": "on-cuenta-eliminada", "evento": "cuenta.eliminada", "descripcion": "Cuando se elimina cuenta"},
+        {"id": "on-pedido-creado", "evento": "pedido.creado", "descripcion": "Cuando se crea pedido"},
+        {"id": "on-pedido-item-agregado", "evento": "pedido.item_agregado", "descripcion": "Item agregado"},
+        {"id": "on-pedido-item-eliminado", "evento": "pedido.item_eliminado", "descripcion": "Item eliminado"},
+        {"id": "on-pedido-enviado-cocina", "evento": "pedido.enviado_cocina", "descripcion": "Enviado a cocina"},
+        {"id": "on-pedido-completado", "evento": "pedido.completado", "descripcion": "Pedido completado"},
+        {"id": "on-cobro-completado", "evento": "cobro.completado", "descripcion": "Cobro realizado"},
+        {"id": "on-cobro-fallido", "evento": "cobro.fallido", "descripcion": "Cobro fallo"},
+        {"id": "on-cocina-item-preparado", "evento": "cocina.item_preparado", "descripcion": "Item preparado"},
+        {"id": "on-cocina-pedido-listo", "evento": "cocina.pedido_listo", "descripcion": "Pedido listo"},
+        {"id": "on-producto-creado", "evento": "producto.creado", "descripcion": "Producto creado"},
+        {"id": "on-menu-generado", "evento": "menu.generado", "descripcion": "Menu IA generado"},
+        {"id": "on-menu-validado", "evento": "menu.validado", "descripcion": "Menu validado"},
+        {"id": "on-nota-creada", "evento": "nota.creada", "descripcion": "Nota creada"},
+        {"id": "on-credential-saved", "evento": "credential.saved", "descripcion": "Credencial guardada"},
+        {"id": "on-cualquier-evento", "evento": "*", "descripcion": "Cualquier evento", "props": {"patron": {"tipo": "string"}}}
+      ],
+      "emite": [
+        {"id": "emit-evento", "nombre": "Emitir Evento", "forma": "statement", "conexiones": {"arriba": true, "abajo": true}, "props": {"evento": {"tipo": "string"}, "payload": {"tipo": "object"}}}
+      ]
+    },
+
+    "accion": {
+      "_forma_comun": {"forma": "statement", "conexiones": {"arriba": true, "abajo": true}},
+      "navegacion": [
+        {"id": "navegar", "nombre": "Navegar a", "props": {"url": {"tipo": "string"}}},
+        {"id": "navegar-modulo", "nombre": "Abrir Modulo", "props": {"modulo": {"tipo": "modulo_ref"}}},
+        {"id": "volver", "nombre": "Volver Atras"},
+        {"id": "cerrar-overlay", "nombre": "Cerrar Overlay"}
+      ],
+      "api": [
+        {"id": "api-get", "nombre": "GET", "props": {"endpoint": {"tipo": "string"}, "guardar_en": {"tipo": "variable"}}},
+        {"id": "api-post", "nombre": "POST", "props": {"endpoint": {"tipo": "string"}, "body": {"tipo": "object"}, "guardar_en": {"tipo": "variable"}}},
+        {"id": "api-patch", "nombre": "PATCH", "props": {"endpoint": {"tipo": "string"}, "body": {"tipo": "object"}}},
+        {"id": "api-delete", "nombre": "DELETE", "props": {"endpoint": {"tipo": "string"}}}
+      ],
+      "modulo_especifico": [
+        {"id": "crear-cuenta", "nombre": "Crear Cuenta", "modulo": "cuentas", "props": {"tipo": {"tipo": "enum", "opciones": ["local", "delivery", "llevar"]}}},
+        {"id": "agregar-item-pedido", "nombre": "Agregar Item", "modulo": "pedidos", "props": {"producto_id": {"tipo": "string"}, "cantidad": {"tipo": "number"}}},
+        {"id": "enviar-cocina", "nombre": "Enviar a Cocina", "modulo": "comandero"},
+        {"id": "iniciar-cobro", "nombre": "Iniciar Cobro", "modulo": "cobros", "props": {"metodo": {"tipo": "enum", "opciones": ["efectivo", "tarjeta", "bizum", "mixto", "qr"]}}},
+        {"id": "marcar-item-preparado", "nombre": "Item Preparado", "modulo": "cocina"},
+        {"id": "abrir-mesa", "nombre": "Abrir Mesa", "modulo": "cuentas-mesa", "props": {"numero": {"tipo": "number"}}},
+        {"id": "crear-nota", "nombre": "Crear Nota", "modulo": "notas", "props": {"contenido": {"tipo": "string"}, "color": {"tipo": "string"}}}
+      ],
+      "ui": [
+        {"id": "mostrar-toast", "nombre": "Mostrar Toast", "props": {"mensaje": {"tipo": "string"}, "tipo": {"tipo": "enum", "opciones": ["success", "error", "warning", "info"]}}},
+        {"id": "abrir-modal", "nombre": "Abrir Modal", "props": {"contenido": {"tipo": "bloque"}}},
+        {"id": "refrescar", "nombre": "Refrescar Vista"},
+        {"id": "scroll-to", "nombre": "Scroll a", "props": {"target": {"tipo": "string"}}},
+        {"id": "reproducir-sonido", "nombre": "Reproducir Sonido", "props": {"sonido": {"tipo": "enum", "opciones": ["notification", "success", "error", "sent"]}}}
+      ],
+      "datos": [
+        {"id": "set-variable", "nombre": "Guardar en Variable", "props": {"nombre": {"tipo": "string"}, "valor": {"tipo": "any"}}},
+        {"id": "get-variable", "nombre": "Leer Variable", "props": {"nombre": {"tipo": "string"}}, "forma": "reporter"},
+        {"id": "filtrar", "nombre": "Filtrar Lista", "props": {"lista": {"tipo": "variable"}, "campo": {"tipo": "string"}, "valor": {"tipo": "any"}}},
+        {"id": "ordenar", "nombre": "Ordenar Lista", "props": {"lista": {"tipo": "variable"}, "campo": {"tipo": "string"}, "direccion": {"tipo": "enum", "opciones": ["asc", "desc"]}}}
+      ]
+    },
+
+    "condicion": [
+      {
+        "id": "si",
+        "nombre": "Si",
+        "forma": "c-block",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "slots": ["condicion", "entonces"]
+      },
+      {
+        "id": "si-sino",
+        "nombre": "Si / Sino",
+        "forma": "c-block",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "slots": ["condicion", "entonces", "sino"]
+      },
+      {
+        "id": "repetir",
+        "nombre": "Repetir por cada",
+        "forma": "c-block",
+        "conexiones": {"arriba": true, "abajo": true},
+        "acepta_hijos": true,
+        "props": {"lista": {"tipo": "variable"}, "item": {"tipo": "string"}}
+      },
+      {
+        "id": "comparar",
+        "nombre": "Comparar",
+        "forma": "reporter",
+        "props": {"izq": {"tipo": "any"}, "operador": {"tipo": "enum", "opciones": ["==", "!=", ">", "<", ">=", "<=", "contains"]}, "der": {"tipo": "any"}}
+      },
+      {
+        "id": "y",
+        "nombre": "Y",
+        "forma": "reporter",
+        "props": {"a": {"tipo": "boolean"}, "b": {"tipo": "boolean"}}
+      },
+      {
+        "id": "o",
+        "nombre": "O",
+        "forma": "reporter",
+        "props": {"a": {"tipo": "boolean"}, "b": {"tipo": "boolean"}}
+      },
+      {
+        "id": "no",
+        "nombre": "No",
+        "forma": "reporter",
+        "props": {"valor": {"tipo": "boolean"}}
+      }
+    ],
+
+    "datos": [
+      {
+        "id": "endpoint-productos",
+        "nombre": "Lista Productos",
+        "forma": "reporter",
+        "endpoint": "/modules/productos/productos"
+      },
+      {
+        "id": "endpoint-categorias",
+        "nombre": "Lista Categorias",
+        "forma": "reporter",
+        "endpoint": "/modules/categorias/categorias"
+      },
+      {
+        "id": "endpoint-cuentas",
+        "nombre": "Lista Cuentas",
+        "forma": "reporter",
+        "endpoint": "/modules/cuentas/cuentas"
+      },
+      {
+        "id": "endpoint-pedidos",
+        "nombre": "Lista Pedidos",
+        "forma": "reporter",
+        "endpoint": "/modules/pedidos/pedidos"
+      },
+      {
+        "id": "endpoint-metricas",
+        "nombre": "Metricas",
+        "forma": "reporter",
+        "endpoint": "/modules/metricas/metrics"
+      },
+      {
+        "id": "dato-evento",
+        "nombre": "Datos del Evento",
+        "forma": "reporter",
+        "descripcion": "Payload del evento que disparo este bloque"
+      },
+      {
+        "id": "dato-usuario",
+        "nombre": "Usuario Actual",
+        "forma": "reporter"
+      },
+      {
+        "id": "dato-cuenta-actual",
+        "nombre": "Cuenta Actual",
+        "forma": "reporter"
+      },
+      {
+        "id": "dato-pedido-actual",
+        "nombre": "Pedido Actual",
+        "forma": "reporter"
+      }
+    ]
+  },
+
+  "formas_bloque": {
+    "hat": {
+      "descripcion": "Bloque inicial (cabeza redondeada arriba)",
+      "conexion_arriba": false,
+      "conexion_abajo": true,
+      "ejemplo": "Cuando recibo evento X"
+    },
+    "statement": {
+      "descripcion": "Bloque de accion (conecta arriba y abajo)",
+      "conexion_arriba": true,
+      "conexion_abajo": true,
+      "ejemplo": "Navegar a /ruta"
+    },
+    "reporter": {
+      "descripcion": "Bloque que devuelve valor (ovalado, se inserta en props)",
+      "conexion_arriba": false,
+      "conexion_abajo": false,
+      "retorna_valor": true,
+      "ejemplo": "Lista de productos"
+    },
+    "boolean": {
+      "descripcion": "Bloque que devuelve true/false (hexagonal)",
+      "conexion_arriba": false,
+      "conexion_abajo": false,
+      "retorna_valor": true,
+      "ejemplo": "X > 5"
+    },
+    "c-block": {
+      "descripcion": "Bloque contenedor con hueco (C-shape)",
+      "conexion_arriba": true,
+      "conexion_abajo": true,
+      "acepta_hijos": true,
+      "ejemplo": "Si X entonces { ... }"
+    }
+  },
+
+  "ejemplo_output": {
+    "_descripcion": "Ejemplo de JSON generado al guardar un diseño",
+    "pantalla": {
+      "id": "comandero-mobile",
+      "nombre": "Comandero",
+      "tipo": "mobile",
+      "layout": {
+        "tipo": "layout-three-panel",
+        "slots": {
+          "header": {
+            "componente": "comandero-header",
+            "bindings": {"cuenta_id": "@params.cuenta_id"}
+          },
+          "topbar": {
+            "componente": "floating-topbar",
+            "props": {"alineacion": "left"},
+            "hijos": [
+              {"tipo": "lista-items", "endpoint": "@datos.categorias", "item_component": "categoria-button"}
+            ]
+          },
+          "sidebar": {
+            "componente": "floating-sidebar",
+            "props": {"posicion": "right"},
+            "hijos": [
+              {
+                "tipo": "emoji-button",
+                "props": {"emoji": "🪑", "tooltip": "Nueva mesa"},
+                "eventos": {
+                  "on_click": [
+                    {"accion": "crear-cuenta", "props": {"tipo": "local"}},
+                    {"accion": "navegar", "props": {"url": "/comandero?cuenta_id={new_id}"}}
+                  ]
+                }
+              },
+              {
+                "tipo": "emoji-button",
+                "props": {"emoji": "🚗", "tooltip": "Delivery"},
+                "eventos": {
+                  "on_click": [
+                    {"accion": "crear-cuenta", "props": {"tipo": "delivery"}}
+                  ]
+                }
+              },
+              {
+                "tipo": "emoji-button",
+                "props": {"emoji": "👨‍🍳", "tooltip": "Enviar cocina"},
+                "eventos": {
+                  "on_click": [
+                    {"accion": "enviar-cocina"},
+                    {"accion": "mostrar-toast", "props": {"mensaje": "Enviado a cocina", "tipo": "success"}}
+                  ]
+                }
+              },
+              {
+                "tipo": "emoji-button",
+                "props": {"emoji": "💰", "tooltip": "Cobrar"},
+                "eventos": {
+                  "on_click": [
+                    {"accion": "scroll-to", "props": {"target": "#panel-cobros"}}
+                  ]
+                }
+              }
+            ]
+          },
+          "content": {
+            "componente": "grid",
+            "props": {"columnas_mobile": 2, "gap": "12px"},
+            "datos": {"endpoint": "@datos.productos", "filtro": "@state.categoria_seleccionada"},
+            "item_component": "producto-button",
+            "eventos": {
+              "on_item_click": [
+                {"accion": "agregar-item-pedido", "props": {"producto_id": "@item.id", "cantidad": 1}},
+                {"accion": "reproducir-sonido", "props": {"sonido": "notification"}}
+              ]
+            }
+          },
+          "bottom": {
+            "componente": "overlay-panel",
+            "props": {"tamano": "large"},
+            "hijos": [
+              {"tipo": "lista-items", "datos": "@state.pedido.items", "item_component": "pedido-item-editable"},
+              {"tipo": "stat-card", "props": {"label": "Total", "valor": "@state.pedido.total", "icono": "💰"}}
+            ]
+          }
+        }
+      },
+      "eventos_globales": [
+        {
+          "escucha": "pedido.item_agregado",
+          "acciones": [
+            {"accion": "refrescar"}
+          ]
+        },
+        {
+          "escucha": "pedido.item_eliminado",
+          "acciones": [
+            {"accion": "refrescar"}
+          ]
+        }
+      ],
+      "datos_iniciales": {
+        "categorias": {"endpoint": "/modules/categorias/categorias"},
+        "productos": {"endpoint": "/modules/productos/productos"},
+        "cuenta": {"endpoint": "/modules/cuentas/cuentas/@params.cuenta_id"}
+      }
+    }
+  }
+}

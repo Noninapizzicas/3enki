@@ -1,0 +1,189 @@
+{
+  "name": "scratch-designer",
+  "version": "1.0.0",
+  "description": "Diseñador visual tipo Scratch - Bloques arrastrables que generan JSON",
+  "author": "Event Core Team",
+
+  "provides": {
+    "events": [
+      "scratch.design.created",
+      "scratch.design.updated",
+      "scratch.design.deleted",
+      "scratch.design.exported"
+    ],
+    "queries": []
+  },
+
+  "events": {
+    "publishes": [
+      {"event": "scratch.design.created", "description": "Nuevo diseño creado"},
+      {"event": "scratch.design.updated", "description": "Diseño actualizado"},
+      {"event": "scratch.design.deleted", "description": "Diseño eliminado"},
+      {"event": "scratch.design.exported", "description": "Diseño exportado a JSON"}
+    ],
+    "subscribes": []
+  },
+
+  "apis": [
+    {
+      "group": "Paleta de Bloques",
+      "description": "Obtener bloques disponibles del sistema"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/all",
+      "handler": "handleGetAllBlocks",
+      "description": "Obtener todos los bloques disponibles organizados por categoria"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/modules",
+      "handler": "handleGetModuleBlocks",
+      "description": "Bloques de modulos del sistema"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/events",
+      "handler": "handleGetEventBlocks",
+      "description": "Bloques de eventos (publish/subscribe)"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/actions",
+      "handler": "handleGetActionBlocks",
+      "description": "Bloques de acciones (APIs, navegacion, UI)"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/components",
+      "handler": "handleGetComponentBlocks",
+      "description": "Bloques de componentes UI"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/containers",
+      "handler": "handleGetContainerBlocks",
+      "description": "Bloques contenedores (layouts, panels)"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/data",
+      "handler": "handleGetDataBlocks",
+      "description": "Bloques de datos (endpoints, variables)"
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/conditions",
+      "handler": "handleGetConditionBlocks",
+      "description": "Bloques de logica (if, loops, comparaciones)"
+    },
+
+    {
+      "group": "Diseños",
+      "description": "CRUD de diseños"
+    },
+    {
+      "method": "GET",
+      "path": "/designs",
+      "handler": "handleListDesigns",
+      "description": "Listar todos los diseños guardados"
+    },
+    {
+      "method": "POST",
+      "path": "/designs",
+      "handler": "handleCreateDesign",
+      "description": "Crear nuevo diseño"
+    },
+    {
+      "method": "GET",
+      "path": "/designs/:id",
+      "handler": "handleGetDesign",
+      "description": "Obtener diseño por ID"
+    },
+    {
+      "method": "PUT",
+      "path": "/designs/:id",
+      "handler": "handleUpdateDesign",
+      "description": "Actualizar diseño"
+    },
+    {
+      "method": "DELETE",
+      "path": "/designs/:id",
+      "handler": "handleDeleteDesign",
+      "description": "Eliminar diseño"
+    },
+    {
+      "method": "POST",
+      "path": "/designs/:id/duplicate",
+      "handler": "handleDuplicateDesign",
+      "description": "Duplicar diseño existente"
+    },
+
+    {
+      "group": "Validacion",
+      "description": "Validar conexiones y estructura"
+    },
+    {
+      "method": "POST",
+      "path": "/validate/connection",
+      "handler": "handleValidateConnection",
+      "description": "Validar si dos bloques pueden conectarse"
+    },
+    {
+      "method": "POST",
+      "path": "/validate/design",
+      "handler": "handleValidateDesign",
+      "description": "Validar diseño completo"
+    },
+
+    {
+      "group": "Export",
+      "description": "Exportar diseños"
+    },
+    {
+      "method": "POST",
+      "path": "/export/json",
+      "handler": "handleExportJSON",
+      "description": "Exportar diseño como JSON para ui-renderer"
+    },
+    {
+      "method": "POST",
+      "path": "/export/module-ui",
+      "handler": "handleExportModuleUI",
+      "description": "Exportar como seccion UI de module.json"
+    },
+
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    }
+  ],
+
+  "ui": {
+    "enabled": true,
+    "version": "2.0",
+    "title": "Scratch Designer",
+    "icon": "🧩",
+    "description": "Diseñador visual de interfaces con bloques",
+    "route": "/scratch-designer",
+    "menu": {
+      "label": "Scratch Designer",
+      "icon": "🧩",
+      "order": 4
+    }
+  },
+
+  "config": {
+    "autosave": true,
+    "autosave_interval_ms": 30000,
+    "max_designs": 100,
+    "inventory_path": "../../INVENTARIO-SISTEMA.json"
+  },
+
+  "observability": {
+    "logging": {"level": "info", "structured": true},
+    "metrics": {"enabled": true}
+  }
+}

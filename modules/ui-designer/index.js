@@ -196,6 +196,146 @@ class UiDesignerModule {
         category: 'action',
         description: 'Grupo de botones',
         defaultProps: { buttons: [] }
+      },
+      dropdown: {
+        label: 'Dropdown',
+        icon: '📋',
+        category: 'action',
+        description: 'Menú desplegable',
+        defaultProps: { label: 'Opciones', items: [] }
+      },
+
+      // Additional Layout
+      sidebar: {
+        label: 'Sidebar',
+        icon: '📑',
+        category: 'layout',
+        description: 'Barra lateral de navegación',
+        defaultProps: { title: 'Sidebar', items: [] }
+      },
+      footer: {
+        label: 'Footer',
+        icon: '🔻',
+        category: 'layout',
+        description: 'Pie de página',
+        defaultProps: { text: '© 2024 Event-Core' }
+      },
+      panel: {
+        label: 'Panel',
+        icon: '🗂️',
+        category: 'layout',
+        description: 'Panel con cabecera',
+        defaultProps: { title: '', content: '' }
+      },
+
+      // Additional Data
+      tree: {
+        label: 'Tree',
+        icon: '🌳',
+        category: 'data',
+        description: 'Vista de árbol jerárquico',
+        defaultProps: { items: [] }
+      },
+      chart: {
+        label: 'Chart',
+        icon: '📈',
+        category: 'data',
+        description: 'Gráfico de datos',
+        defaultProps: { title: 'Gráfico', type: 'bar', data: [60, 80, 45, 90, 70] }
+      },
+      'event-stream': {
+        label: 'Event Stream',
+        icon: '📡',
+        category: 'data',
+        description: 'Flujo de eventos en tiempo real',
+        defaultProps: { title: 'Eventos', events: [] }
+      },
+
+      // Additional Form
+      'file-upload': {
+        label: 'File Upload',
+        icon: '📁',
+        category: 'form',
+        description: 'Carga de archivos',
+        defaultProps: { label: '', placeholder: 'Arrastra archivos aquí' }
+      },
+      'date-picker': {
+        label: 'Date Picker',
+        icon: '📅',
+        category: 'form',
+        description: 'Selector de fecha',
+        defaultProps: { label: '', value: '' }
+      },
+
+      // Additional Feedback
+      toast: {
+        label: 'Toast',
+        icon: '🔔',
+        category: 'feedback',
+        description: 'Notificación emergente',
+        defaultProps: { title: '', message: '', icon: 'ℹ️' }
+      },
+      progress: {
+        label: 'Progress',
+        icon: '📊',
+        category: 'feedback',
+        description: 'Barra de progreso',
+        defaultProps: { label: '', value: 50 }
+      },
+      skeleton: {
+        label: 'Skeleton',
+        icon: '💀',
+        category: 'feedback',
+        description: 'Placeholder de carga',
+        defaultProps: { avatar: false }
+      },
+
+      // Additional Navigation
+      menu: {
+        label: 'Menu',
+        icon: '☰',
+        category: 'navigation',
+        description: 'Menú de navegación',
+        defaultProps: { items: [] }
+      },
+
+      // AI Components
+      'chat-input': {
+        label: 'Chat Input',
+        icon: '💬',
+        category: 'ai',
+        description: 'Campo de entrada para chat',
+        defaultProps: { placeholder: 'Escribe un mensaje...', sendLabel: '➤' }
+      },
+      'conversation-panel': {
+        label: 'Conversation Panel',
+        icon: '🗨️',
+        category: 'ai',
+        description: 'Panel de conversación',
+        defaultProps: { title: 'Conversación', welcomeMessage: '¡Hola! ¿En qué puedo ayudarte?' }
+      },
+      'prompt-selector': {
+        label: 'Prompt Selector',
+        icon: '📝',
+        category: 'ai',
+        description: 'Selector de prompts',
+        defaultProps: { label: 'Seleccionar Prompt', prompts: [] }
+      },
+
+      // Custom/Extensibility
+      custom: {
+        label: 'Custom',
+        icon: '🧩',
+        category: 'custom',
+        description: 'Componente personalizado',
+        defaultProps: { description: '' }
+      },
+      slot: {
+        label: 'Slot',
+        icon: '📥',
+        category: 'custom',
+        description: 'Área para contenido dinámico',
+        defaultProps: { name: 'default' }
       }
     };
   }
@@ -495,7 +635,7 @@ class UiDesignerModule {
         data: {
           components,
           grouped,
-          categories: ['layout', 'data', 'form', 'feedback', 'navigation', 'action']
+          categories: ['layout', 'data', 'form', 'feedback', 'navigation', 'action', 'ai', 'custom']
         }
       };
     } catch (error) {

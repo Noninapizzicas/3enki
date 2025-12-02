@@ -297,7 +297,9 @@
     form: '📝',
     feedback: '💬',
     navigation: '🧭',
-    action: '⚡'
+    action: '⚡',
+    ai: '🤖',
+    custom: '🧩'
   };
 
   onMount(() => {

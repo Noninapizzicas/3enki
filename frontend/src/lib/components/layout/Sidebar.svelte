@@ -13,6 +13,7 @@
   // Credenciales se gestiona desde el botón lateral en MobileWorkspaceLayout
   const navItems = [
     { href: '/', label: 'Dashboard', icon: '📊' },
+    { href: '/ui-designer', label: 'UI Designer', icon: '🎨' },
     { href: '/menu-generator', label: 'Menu Generator', icon: '📄' },
     { href: '/workspace', label: 'Workspace Demo', icon: '🖥️' },
     { href: '/modules', label: 'Módulos', icon: '📦' },

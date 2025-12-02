@@ -75,61 +75,62 @@
 
 <div class="h-full flex flex-col bg-bg-primary border-l border-border overflow-hidden">
   {#if !block}
-    <!-- No selection -->
-    <div class="flex-1 flex flex-col items-center justify-center text-text-muted p-4">
-      <span class="text-4xl mb-3">👆</span>
-      <p class="text-sm text-center">
-        Selecciona un bloque para ver sus propiedades
+    <!-- No selection - mobile friendly -->
+    <div class="flex-1 flex flex-col items-center justify-center text-text-muted p-6 md:p-4">
+      <span class="text-5xl md:text-4xl mb-4 md:mb-3">👆</span>
+      <p class="text-base md:text-sm text-center max-w-xs">
+        <span class="hidden md:inline">Selecciona un bloque para ver sus propiedades</span>
+        <span class="md:hidden">Toca un bloque en el <strong>Canvas</strong> para editar sus propiedades</span>
       </p>
     </div>
   {:else}
-    <!-- Block info header -->
-    <div class="p-3 border-b border-border" style="background-color: {color}20">
-      <div class="flex items-center gap-2">
+    <!-- Block info header - mobile optimized -->
+    <div class="p-4 md:p-3 border-b border-border" style="background-color: {color}20">
+      <div class="flex items-center gap-3 md:gap-2">
         <span
-          class="w-4 h-4 rounded"
+          class="w-5 h-5 md:w-4 md:h-4 rounded flex-shrink-0"
           style="background-color: {color}"
         ></span>
-        <span class="text-lg">{block.icono || '📦'}</span>
+        <span class="text-2xl md:text-lg">{block.icono || '📦'}</span>
         <div class="flex-1 min-w-0">
-          <div class="font-medium text-sm truncate">{block.nombre}</div>
-          <div class="text-xs text-text-muted">{block.categoria} • {block.tipo}</div>
+          <div class="font-medium text-base md:text-sm truncate">{block.nombre}</div>
+          <div class="text-sm md:text-xs text-text-muted">{block.categoria} • {block.tipo}</div>
         </div>
       </div>
       {#if block.descripcion}
-        <p class="text-xs text-text-muted mt-2">{block.descripcion}</p>
+        <p class="text-sm md:text-xs text-text-muted mt-3 md:mt-2">{block.descripcion}</p>
       {/if}
     </div>
 
     <!-- Properties -->
-    <div class="flex-1 overflow-y-auto">
-      <!-- Props section -->
+    <div class="flex-1 overflow-y-auto overscroll-contain">
+      <!-- Props section - mobile optimized -->
       {#if block.props && Object.keys(block.props).length > 0}
-        <div class="p-3 border-b border-border">
-          <h4 class="text-xs font-medium text-text-muted uppercase mb-3">Propiedades</h4>
-          <div class="space-y-3">
+        <div class="p-4 md:p-3 border-b border-border">
+          <h4 class="text-sm md:text-xs font-medium text-text-muted uppercase mb-4 md:mb-3">Propiedades</h4>
+          <div class="space-y-4 md:space-y-3">
             {#each Object.entries(block.props) as [key, value]}
               {@const inputType = getInputType(key, value)}
               <div>
-                <label class="block text-xs font-medium mb-1 capitalize">
+                <label class="block text-sm md:text-xs font-medium mb-2 md:mb-1 capitalize">
                   {key.replace(/_/g, ' ')}
                 </label>
 
                 {#if inputType === 'checkbox'}
-                  <label class="flex items-center gap-2 cursor-pointer">
+                  <label class="flex items-center gap-3 cursor-pointer py-2 md:py-0">
                     <input
                       type="checkbox"
                       checked={value}
                       on:change={(e) => updateProp(key, e.currentTarget.checked)}
-                      class="rounded border-border"
+                      class="w-5 h-5 md:w-4 md:h-4 rounded border-border"
                     />
-                    <span class="text-sm">{value ? 'Sí' : 'No'}</span>
+                    <span class="text-base md:text-sm">{value ? 'Sí' : 'No'}</span>
                   </label>
                 {:else if inputType === 'select'}
                   <select
                     value={value}
                     on:change={(e) => updateProp(key, e.currentTarget.value)}
-                    class="w-full px-2 py-1.5 text-sm bg-bg-input border border-border rounded"
+                    class="w-full px-3 py-3 md:px-2 md:py-1.5 text-base md:text-sm bg-bg-input border border-border rounded-lg md:rounded"
                   >
                     {#each getSelectOptions(key) as opt}
                       <option value={opt}>{opt}</option>
@@ -140,7 +141,7 @@
                     type="number"
                     value={value}
                     on:input={(e) => updateProp(key, Number(e.currentTarget.value))}
-                    class="w-full px-2 py-1.5 text-sm bg-bg-input border border-border rounded"
+                    class="w-full px-3 py-3 md:px-2 md:py-1.5 text-base md:text-sm bg-bg-input border border-border rounded-lg md:rounded"
                   />
                 {:else if inputType === 'emoji'}
                   <input
@@ -148,14 +149,14 @@
                     value={value}
                     maxlength="4"
                     on:input={(e) => updateProp(key, e.currentTarget.value)}
-                    class="w-16 px-2 py-1.5 text-sm text-center bg-bg-input border border-border rounded"
+                    class="w-20 md:w-16 px-3 py-3 md:px-2 md:py-1.5 text-xl md:text-sm text-center bg-bg-input border border-border rounded-lg md:rounded"
                   />
                 {:else}
                   <input
                     type="text"
                     value={value || ''}
                     on:input={(e) => updateProp(key, e.currentTarget.value)}
-                    class="w-full px-2 py-1.5 text-sm bg-bg-input border border-border rounded"
+                    class="w-full px-3 py-3 md:px-2 md:py-1.5 text-base md:text-sm bg-bg-input border border-border rounded-lg md:rounded"
                     placeholder="..."
                   />
                 {/if}
@@ -165,30 +166,30 @@
         </div>
       {/if}
 
-      <!-- Event handlers section -->
+      <!-- Event handlers section - mobile optimized -->
       {#if block.categoria === 'componente' || block.categoria === 'contenedor'}
-        <div class="p-3 border-b border-border">
-          <h4 class="text-xs font-medium text-text-muted uppercase mb-3">Eventos</h4>
-          <div class="space-y-2">
+        <div class="p-4 md:p-3 border-b border-border">
+          <h4 class="text-sm md:text-xs font-medium text-text-muted uppercase mb-4 md:mb-3">Eventos</h4>
+          <div class="space-y-3 md:space-y-2">
             {#each eventSlots.slice(0, 3) as slot}
-              <div class="p-2 bg-bg-secondary rounded border border-border">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-xs font-medium">{slot.replace('on_', '').replace('_', ' ')}</span>
+              <div class="p-3 md:p-2 bg-bg-secondary rounded-lg md:rounded border border-border">
+                <div class="flex items-center justify-between mb-2 md:mb-1">
+                  <span class="text-sm md:text-xs font-medium capitalize">{slot.replace('on_', '').replace('_', ' ')}</span>
                   <button
-                    class="text-xs text-primary hover:underline"
+                    class="px-3 py-1.5 md:px-2 md:py-0 text-sm md:text-xs text-primary bg-primary/10 md:bg-transparent rounded-lg md:rounded hover:bg-primary/20 md:hover:underline"
                     on:click={() => addEventHandler(slot)}
                   >
-                    + Añadir acción
+                    + Añadir
                   </button>
                 </div>
 
                 {#if block.eventos?.[slot]}
-                  <div class="space-y-1 mt-2">
+                  <div class="space-y-2 md:space-y-1 mt-2">
                     {#each block.eventos[slot] as action, i}
-                      <div class="flex items-center gap-1 px-2 py-1 bg-pink-500/20 rounded text-xs">
+                      <div class="flex items-center gap-2 md:gap-1 px-3 py-2 md:px-2 md:py-1 bg-pink-500/20 rounded-lg md:rounded text-sm md:text-xs">
                         <span class="flex-1 truncate">{action.nombre || action.tipo}</span>
                         <button
-                          class="text-red-500 hover:text-red-700"
+                          class="w-8 h-8 md:w-auto md:h-auto flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-500/10 rounded-lg md:rounded"
                           on:click={() => removeEventHandler(slot, i)}
                         >
                           ×
@@ -197,7 +198,7 @@
                     {/each}
                   </div>
                 {:else}
-                  <p class="text-xs text-text-muted">Sin acciones</p>
+                  <p class="text-sm md:text-xs text-text-muted">Sin acciones</p>
                 {/if}
               </div>
             {/each}
@@ -205,10 +206,10 @@
         </div>
       {/if}
 
-      <!-- Add new prop -->
-      <div class="p-3">
+      <!-- Add new prop - mobile optimized -->
+      <div class="p-4 md:p-3">
         <button
-          class="w-full py-2 text-sm text-center border border-dashed border-border rounded hover:border-primary hover:text-primary transition-colors"
+          class="w-full py-4 md:py-2 text-base md:text-sm text-center border-2 md:border border-dashed border-border rounded-xl md:rounded hover:border-primary hover:text-primary active:bg-primary/5 transition-colors"
           on:click={() => {
             const propName = prompt('Nombre de la propiedad:');
             if (propName) updateProp(propName, '');
@@ -219,9 +220,11 @@
       </div>
     </div>
 
-    <!-- Block ID footer -->
-    <div class="p-2 border-t border-border text-xs text-text-muted">
-      ID: <code class="bg-bg-secondary px-1 rounded">{block.id}</code>
+    <!-- Block ID footer - mobile friendly -->
+    <div class="p-3 md:p-2 border-t border-border text-sm md:text-xs text-text-muted bg-bg-secondary/50">
+      <span class="md:hidden">Bloque: </span>
+      <span class="hidden md:inline">ID: </span>
+      <code class="bg-bg-primary px-2 py-0.5 md:px-1 rounded text-xs break-all">{block.id}</code>
     </div>
   {/if}
 </div>

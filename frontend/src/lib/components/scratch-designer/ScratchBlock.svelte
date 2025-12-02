@@ -52,14 +52,14 @@
 <div
   class="scratch-block relative select-none transition-all duration-150
     {colors.bg} {colors.border} {colors.text}
-    {isHat ? 'rounded-t-2xl' : 'rounded-lg'}
-    {isReporter ? 'rounded-full px-4' : 'px-3'}
+    {isHat ? 'rounded-t-2xl' : 'rounded-xl md:rounded-lg'}
+    {isReporter ? 'rounded-full px-4' : 'px-4 md:px-3'}
     {isCBlock ? 'pb-1' : ''}
-    {compact ? 'py-1.5 text-xs' : 'py-2 text-sm'}
-    {selected ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-800 scale-105' : ''}
+    {compact ? 'py-2.5 md:py-1.5 text-sm md:text-xs' : 'py-3 md:py-2 text-base md:text-sm'}
+    {selected ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-800 scale-[1.02] md:scale-105' : ''}
     {draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}
-    {inPalette ? 'hover:scale-105 hover:shadow-lg' : 'hover:brightness-110'}
-    border-2 shadow-md"
+    {inPalette ? 'hover:scale-[1.02] md:hover:scale-105 hover:shadow-lg active:scale-100 active:brightness-95' : 'hover:brightness-110 active:brightness-95'}
+    border-2 shadow-md touch-manipulation"
   draggable={draggable}
   on:dragstart={handleDragStart}
   on:click={handleClick}
@@ -72,22 +72,27 @@
     <div class="absolute -top-2 left-4 w-8 h-3 {colors.bg} rounded-t-lg"></div>
   {/if}
 
-  <!-- Contenido del bloque -->
-  <div class="flex items-center gap-2 {compact ? 'min-h-[24px]' : 'min-h-[32px]'}">
+  <!-- Contenido del bloque - mobile optimized -->
+  <div class="flex items-center gap-3 md:gap-2 {compact ? 'min-h-[32px] md:min-h-[24px]' : 'min-h-[40px] md:min-h-[32px]'}">
     {#if block.icono}
-      <span class="{compact ? 'text-base' : 'text-lg'}">{block.icono}</span>
+      <span class="{compact ? 'text-xl md:text-base' : 'text-2xl md:text-lg'}">{block.icono}</span>
     {/if}
-    <span class="font-medium truncate">{block.nombre}</span>
+    <span class="font-medium truncate flex-1">{block.nombre}</span>
 
-    <!-- Props inline (para bloques en canvas) -->
+    <!-- Props inline (para bloques en canvas) - hidden on mobile in palette -->
     {#if !inPalette && block.props}
       {#each Object.entries(block.props).slice(0, 2) as [key, value]}
         {#if value && typeof value === 'string' && value.length < 20}
-          <span class="px-2 py-0.5 bg-white/20 rounded text-xs truncate max-w-[100px]">
+          <span class="hidden md:inline px-2 py-0.5 bg-white/20 rounded text-xs truncate max-w-[100px]">
             {value}
           </span>
         {/if}
       {/each}
+    {/if}
+
+    <!-- Mobile tap indicator in palette -->
+    {#if inPalette}
+      <span class="md:hidden text-white/60 text-sm">+</span>
     {/if}
   </div>
 
@@ -114,5 +119,14 @@
   .scratch-block {
     min-width: 120px;
     max-width: 100%;
+    /* Better touch feedback */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Mobile: slightly larger min-width for better touch */
+  @media (max-width: 767px) {
+    .scratch-block {
+      min-width: 140px;
+    }
   }
 </style>

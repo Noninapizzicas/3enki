@@ -106,6 +106,42 @@
       "description": "Duplicar template"
     },
     {
+      "method": "POST",
+      "path": "/templates/:id/publish",
+      "handler": "handlePublishTemplate",
+      "description": "Publicar template (draft → published)"
+    },
+    {
+      "method": "POST",
+      "path": "/templates/:id/archive",
+      "handler": "handleArchiveTemplate",
+      "description": "Archivar template"
+    },
+    {
+      "method": "GET",
+      "path": "/layouts",
+      "handler": "handleListLayouts",
+      "description": "Listar layouts disponibles"
+    },
+    {
+      "method": "GET",
+      "path": "/layouts/:type",
+      "handler": "handleGetLayout",
+      "description": "Obtener configuración de layout"
+    },
+    {
+      "method": "GET",
+      "path": "/predefined",
+      "handler": "handleGetPredefinedTemplates",
+      "description": "Obtener templates predefinidos"
+    },
+    {
+      "method": "POST",
+      "path": "/predefined/create",
+      "handler": "handleCreateFromPredefined",
+      "description": "Crear template desde predefinido"
+    },
+    {
       "method": "GET",
       "path": "/components",
       "handler": "handleListComponents",

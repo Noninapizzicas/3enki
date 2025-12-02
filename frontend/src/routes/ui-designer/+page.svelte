@@ -44,6 +44,12 @@
   };
   let creating = false;
 
+  // Predefined templates modal
+  let predefinedModalOpen = false;
+  let predefinedTemplates: any[] = [];
+  let loadingPredefined = false;
+  let selectedPredefined: string | null = null;
+
   // API
   const apiBase = `${config.apiUrl}/modules/ui-designer`;
 
@@ -141,6 +147,57 @@
     createModalOpen = true;
   }
 
+  async function openPredefinedModal() {
+    predefinedModalOpen = true;
+    selectedPredefined = null;
+    await fetchPredefinedTemplates();
+  }
+
+  async function fetchPredefinedTemplates() {
+    loadingPredefined = true;
+    try {
+      const res = await fetch(`${apiBase}/predefined`);
+      if (!res.ok) throw new Error('Error al cargar plantillas');
+      const data = await res.json();
+      predefinedTemplates = data.templates || [];
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+      predefinedTemplates = [];
+    } finally {
+      loadingPredefined = false;
+    }
+  }
+
+  async function createFromPredefined() {
+    if (!selectedPredefined) {
+      toast.error('Selecciona una plantilla');
+      return;
+    }
+
+    creating = true;
+    try {
+      const res = await fetch(`${apiBase}/predefined/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_name: selectedPredefined })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error al crear template');
+      }
+
+      const data = await res.json();
+      toast.success('Template creado desde plantilla');
+      predefinedModalOpen = false;
+      goto(`/ui-designer/${data.template.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      creating = false;
+    }
+  }
+
   function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString('es', {
       day: 'numeric',
@@ -229,9 +286,14 @@
         <option value="archived">Archivado</option>
       </Select>
     </div>
-    <Button variant="primary" on:click={openCreateModal}>
-      + Nuevo Template
-    </Button>
+    <div class="flex gap-2">
+      <Button variant="ghost" on:click={openPredefinedModal}>
+        📋 Desde Plantilla
+      </Button>
+      <Button variant="primary" on:click={openCreateModal}>
+        + Nuevo Template
+      </Button>
+    </div>
   </div>
 
   <!-- Content -->
@@ -396,6 +458,63 @@
     </Button>
     <Button variant="primary" on:click={createTemplate} loading={creating}>
       Crear y Editar
+    </Button>
+  </svelte:fragment>
+</Modal>
+
+<!-- Predefined Templates Modal -->
+<Modal
+  bind:open={predefinedModalOpen}
+  title="Crear desde Plantilla"
+  size="lg"
+>
+  {#if loadingPredefined}
+    <div class="flex justify-center py-8">
+      <Spinner size="md" />
+    </div>
+  {:else if predefinedTemplates.length === 0}
+    <Alert variant="info" title="Sin plantillas">
+      No hay plantillas predefinidas disponibles.
+    </Alert>
+  {:else}
+    <div class="grid grid-cols-2 gap-4">
+      {#each predefinedTemplates as pt}
+        <button
+          type="button"
+          class="p-4 border rounded-lg text-left transition-all hover:border-primary"
+          class:border-primary={selectedPredefined === pt.name}
+          class:ring-2={selectedPredefined === pt.name}
+          class:ring-primary={selectedPredefined === pt.name}
+          class:border-border={selectedPredefined !== pt.name}
+          on:click={() => selectedPredefined = pt.name}
+        >
+          <div class="flex items-center gap-3 mb-2">
+            <span class="text-2xl">{pt.icon}</span>
+            <div>
+              <h4 class="font-medium">{pt.display_name}</h4>
+              <Badge variant="default" size="sm">{pt.type}</Badge>
+            </div>
+          </div>
+          <p class="text-sm text-text-muted">{pt.description}</p>
+          <p class="text-xs text-text-muted mt-2">
+            🧩 {pt.components?.length || 0} componentes
+          </p>
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <svelte:fragment slot="footer">
+    <Button variant="ghost" on:click={() => predefinedModalOpen = false} disabled={creating}>
+      Cancelar
+    </Button>
+    <Button
+      variant="primary"
+      on:click={createFromPredefined}
+      loading={creating}
+      disabled={!selectedPredefined}
+    >
+      Crear desde Plantilla
     </Button>
   </svelte:fragment>
 </Modal>

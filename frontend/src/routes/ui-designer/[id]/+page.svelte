@@ -148,6 +148,51 @@
     }
   }
 
+  // Publish template
+  async function publishTemplate() {
+    if (!template) return;
+
+    try {
+      const res = await fetch(`${apiBase}/templates/${templateId}/publish`, {
+        method: 'POST'
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error al publicar');
+      }
+
+      const data = await res.json();
+      template = data.template;
+      toast.success('Template publicado');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    }
+  }
+
+  // Archive template
+  async function archiveTemplate() {
+    if (!template) return;
+    if (!confirm('¿Archivar este template?')) return;
+
+    try {
+      const res = await fetch(`${apiBase}/templates/${templateId}/archive`, {
+        method: 'POST'
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error al archivar');
+      }
+
+      const data = await res.json();
+      template = data.template;
+      toast.success('Template archivado');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    }
+  }
+
   // Auto-save and update preview
   function scheduleAutoSave() {
     hasChanges = true;
@@ -297,7 +342,9 @@
     form: '📝',
     feedback: '💬',
     navigation: '🧭',
-    action: '⚡'
+    action: '⚡',
+    ai: '🤖',
+    custom: '🧩'
   };
 
   onMount(() => {
@@ -415,6 +462,15 @@
         <Button variant="ghost" size="sm" on:click={() => { exportModalOpen = true; exportTemplate(); }}>
           📤 Exportar
         </Button>
+        {#if template.status === 'draft'}
+          <Button variant="success" size="sm" on:click={publishTemplate}>
+            ✅ Publicar
+          </Button>
+        {:else if template.status === 'published'}
+          <Button variant="ghost" size="sm" on:click={archiveTemplate}>
+            📦 Archivar
+          </Button>
+        {/if}
         <Button variant="primary" size="sm" on:click={saveTemplate} loading={saving}>
           💾 Guardar
         </Button>

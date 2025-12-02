@@ -5,8 +5,8 @@
 
 // Environment variables (PUBLIC_ prefix required for SvelteKit)
 export const config = {
-  // Event-Core API endpoint
-  apiUrl: import.meta.env.PUBLIC_API_URL || 'http://localhost:3001',
+  // Event-Core API endpoint - empty string uses Vite proxy in dev
+  apiUrl: import.meta.env.PUBLIC_API_URL || '',
 
   // MQTT WebSocket URL (browsers need WebSocket, not TCP)
   mqttUrl: import.meta.env.PUBLIC_MQTT_URL || 'ws://localhost:9001',

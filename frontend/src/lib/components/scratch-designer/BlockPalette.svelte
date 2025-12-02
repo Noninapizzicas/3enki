@@ -252,19 +252,29 @@
 </script>
 
 <div class="h-full flex flex-col bg-bg-primary border-r border-border">
-  <!-- Header -->
-  <div class="p-3 border-b border-border">
-    <h3 class="font-medium text-sm mb-2">Bloques</h3>
-    <input
-      type="text"
-      bind:value={searchQuery}
-      placeholder="Buscar bloques..."
-      class="w-full px-3 py-1.5 text-sm bg-bg-input border border-border rounded-lg"
-    />
+  <!-- Header - mobile optimized -->
+  <div class="p-3 md:p-3 border-b border-border">
+    <h3 class="font-medium text-sm mb-2 hidden md:block">Bloques</h3>
+    <div class="relative">
+      <input
+        type="text"
+        bind:value={searchQuery}
+        placeholder="Buscar bloques..."
+        class="w-full px-3 py-2.5 md:py-1.5 text-base md:text-sm bg-bg-input border border-border rounded-lg pr-10"
+      />
+      {#if searchQuery}
+        <button
+          class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-primary"
+          on:click={() => searchQuery = ''}
+        >
+          ✕
+        </button>
+      {/if}
+    </div>
   </div>
 
   <!-- Categories -->
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto overscroll-contain">
     {#if loading}
       <div class="p-4 text-center text-text-muted">
         <span class="animate-spin inline-block">⏳</span>
@@ -273,31 +283,31 @@
     {:else}
       {#each filteredCategories as category (category.id)}
         <div class="border-b border-border">
-          <!-- Category header -->
+          <!-- Category header - larger touch target on mobile -->
           <button
-            class="w-full px-3 py-2 flex items-center gap-2 hover:bg-bg-hover transition-colors text-left"
+            class="w-full px-3 py-3 md:py-2 flex items-center gap-2 hover:bg-bg-hover active:bg-bg-hover transition-colors text-left"
             on:click={() => toggleCategory(category.id)}
           >
             <span
-              class="w-3 h-3 rounded-sm"
+              class="w-4 h-4 md:w-3 md:h-3 rounded-sm flex-shrink-0"
               style="background-color: {category.color}"
             ></span>
-            <span>{category.icono}</span>
-            <span class="flex-1 font-medium text-sm">{category.nombre}</span>
-            <span class="text-xs text-text-muted">{category.bloques.length}</span>
-            <span class="text-xs transition-transform {expandedCategory === category.id ? 'rotate-90' : ''}">
+            <span class="text-lg md:text-base">{category.icono}</span>
+            <span class="flex-1 font-medium text-base md:text-sm">{category.nombre}</span>
+            <span class="px-2 py-0.5 bg-bg-secondary rounded-full text-xs text-text-muted">{category.bloques.length}</span>
+            <span class="text-sm md:text-xs transition-transform {expandedCategory === category.id ? 'rotate-90' : ''}">
               ▶
             </span>
           </button>
 
-          <!-- Blocks -->
+          <!-- Blocks - larger on mobile -->
           {#if expandedCategory === category.id || searchQuery}
-            <div class="px-2 pb-2 space-y-1">
+            <div class="px-2 pb-3 md:pb-2 space-y-2 md:space-y-1">
               {#each category.bloques as block (block.id)}
                 <ScratchBlock
                   {block}
                   inPalette={true}
-                  compact={true}
+                  compact={false}
                   on:dragstart={handleBlockDragStart}
                   on:click={handleBlockClick}
                 />
@@ -309,8 +319,9 @@
     {/if}
   </div>
 
-  <!-- Footer stats -->
-  <div class="p-2 border-t border-border text-xs text-text-muted text-center">
-    {categories.reduce((sum, c) => sum + c.bloques.length, 0)} bloques disponibles
+  <!-- Footer stats - mobile hint -->
+  <div class="p-3 md:p-2 border-t border-border text-xs text-text-muted text-center bg-bg-secondary/50">
+    <div class="md:hidden mb-1 text-primary font-medium">Toca un bloque para añadirlo</div>
+    <div>{categories.reduce((sum, c) => sum + c.bloques.length, 0)} bloques disponibles</div>
   </div>
 </div>

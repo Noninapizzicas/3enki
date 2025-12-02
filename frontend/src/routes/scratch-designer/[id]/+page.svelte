@@ -51,6 +51,16 @@
   let exportModalOpen = false;
   let exportedJSON = '';
 
+  // Mobile navigation - tabs: 'palette' | 'canvas' | 'props'
+  type MobileTab = 'palette' | 'canvas' | 'props';
+  let mobileTab: MobileTab = 'canvas';
+  let isMobile = false;
+
+  // Detect mobile viewport
+  function checkMobile() {
+    isMobile = window.innerWidth < 768;
+  }
+
   const apiBase = `${config.apiUrl}/modules/scratch-designer`;
   $: designId = $page.params.id;
 
@@ -203,11 +213,43 @@
   // Selected block
   $: selectedBlock = design?.bloques.find(b => b.id === selectedBlockId) || null;
 
-  onMount(fetchDesign);
+  // Auto-switch to props when block selected on mobile
+  $: if (isMobile && selectedBlockId && mobileTab === 'canvas') {
+    // Small delay to let user see the selection
+    setTimeout(() => {
+      if (selectedBlockId) mobileTab = 'props';
+    }, 300);
+  }
+
+  onMount(() => {
+    fetchDesign();
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+  });
 
   onDestroy(() => {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', checkMobile);
+    }
   });
+
+  // Mobile: add block from palette and switch to canvas
+  function addBlockFromPalette(block: Block) {
+    if (!design) return;
+    const newBlock = {
+      ...block,
+      id: `${block.id}_${Date.now()}`,
+      props: { ...block.props }
+    };
+    design.bloques = [...design.bloques, newBlock];
+    selectedBlockId = newBlock.id;
+    scheduleAutoSave();
+    if (isMobile) {
+      mobileTab = 'canvas';
+      toast.success(`${block.icono || '🧩'} ${block.nombre} añadido`);
+    }
+  }
 </script>
 
 <svelte:head>
@@ -229,8 +271,30 @@
   </div>
 {:else if design}
   <div class="h-screen flex flex-col bg-bg-secondary">
-    <!-- Header -->
-    <header class="bg-bg-primary border-b border-border px-4 py-2 flex items-center gap-4 flex-shrink-0">
+    <!-- Mobile Header (compact) -->
+    <header class="md:hidden bg-bg-primary border-b border-border px-3 py-2 flex items-center gap-2 flex-shrink-0">
+      <Button variant="ghost" size="sm" on:click={() => goto('/scratch-designer')}>
+        ←
+      </Button>
+      <span class="text-lg">{design.icono}</span>
+      <span class="font-medium text-sm flex-1 truncate">{design.nombre}</span>
+      {#if hasChanges}
+        <span class="w-2 h-2 rounded-full bg-warning animate-pulse"></span>
+      {/if}
+      <Button variant="primary" size="sm" on:click={saveDesign} loading={saving}>
+        💾
+      </Button>
+      <button
+        class="p-2 hover:bg-bg-hover rounded-lg"
+        on:click={exportDesign}
+        title="Exportar"
+      >
+        📤
+      </button>
+    </header>
+
+    <!-- Desktop Header (full) -->
+    <header class="hidden md:flex bg-bg-primary border-b border-border px-4 py-2 items-center gap-4 flex-shrink-0">
       <Button variant="ghost" size="sm" on:click={() => goto('/scratch-designer')}>
         ← Volver
       </Button>
@@ -249,12 +313,10 @@
         {/if}
       </div>
 
-      <!-- Stats -->
-      <div class="hidden md:flex items-center gap-4 text-sm text-text-muted">
+      <div class="flex items-center gap-4 text-sm text-text-muted">
         <span>🧩 {design.bloques.length} bloques</span>
       </div>
 
-      <!-- Actions -->
       <div class="flex items-center gap-2">
         <Button
           variant="ghost"
@@ -273,37 +335,22 @@
       </div>
     </header>
 
-    <!-- Main editor -->
-    <div class="flex-1 flex overflow-hidden">
-      <!-- Left: Block Palette -->
+    <!-- Main editor area -->
+    <div class="flex-1 flex overflow-hidden relative">
+      <!-- Desktop: 3-column layout -->
       <aside class="w-64 flex-shrink-0 hidden md:block">
         <BlockPalette
           on:dragstart
-          on:select={(e) => {
-            // Al hacer click en paleta, añadir directamente
-            if (!design) return;
-            const block = e.detail;
-            const newBlock = {
-              ...block,
-              id: `${block.id}_${Date.now()}`,
-              props: { ...block.props }
-            };
-            design.bloques = [...design.bloques, newBlock];
-            selectedBlockId = newBlock.id;
-            scheduleAutoSave();
-          }}
+          on:select={(e) => addBlockFromPalette(e.detail)}
         />
       </aside>
 
-      <!-- Center: Canvas or JSON -->
-      <main class="flex-1 overflow-hidden">
+      <main class="flex-1 overflow-hidden hidden md:block">
         {#if showJSON}
-          <!-- JSON View -->
           <div class="h-full p-4 overflow-auto">
             <pre class="bg-bg-primary p-4 rounded-lg text-sm font-mono overflow-auto h-full border border-border">{JSON.stringify(design, null, 2)}</pre>
           </div>
         {:else}
-          <!-- Canvas -->
           <BlockCanvas
             blocks={design.bloques}
             {selectedBlockId}
@@ -315,7 +362,6 @@
         {/if}
       </main>
 
-      <!-- Right: Property Panel -->
       <aside class="w-72 flex-shrink-0 hidden lg:block">
         <PropertyPanel
           block={selectedBlock}
@@ -324,18 +370,89 @@
           on:remove-event={handleRemoveEvent}
         />
       </aside>
-    </div>
 
-    <!-- Mobile: Selected block info -->
-    {#if selectedBlock}
-      <div class="lg:hidden border-t border-border bg-bg-primary p-2 flex items-center gap-2">
-        <span>{selectedBlock.icono}</span>
-        <span class="font-medium text-sm flex-1 truncate">{selectedBlock.nombre}</span>
-        <Button variant="ghost" size="sm" on:click={() => selectedBlockId = null}>
-          Cerrar
-        </Button>
+      <!-- Mobile: Tab-based views (full screen each) -->
+      <div class="md:hidden flex-1 flex flex-col overflow-hidden">
+        <!-- Mobile Tab Content -->
+        <div class="flex-1 overflow-hidden">
+          {#if mobileTab === 'palette'}
+            <BlockPalette
+              on:dragstart
+              on:select={(e) => addBlockFromPalette(e.detail)}
+            />
+          {:else if mobileTab === 'canvas'}
+            {#if showJSON}
+              <div class="h-full p-3 overflow-auto">
+                <pre class="bg-bg-primary p-3 rounded-lg text-xs font-mono overflow-auto h-full border border-border">{JSON.stringify(design, null, 2)}</pre>
+              </div>
+            {:else}
+              <BlockCanvas
+                blocks={design.bloques}
+                {selectedBlockId}
+                on:drop={handleBlockDrop}
+                on:select={handleBlockSelect}
+                on:delete={handleBlockDelete}
+                on:move={handleBlockMove}
+              />
+            {/if}
+          {:else if mobileTab === 'props'}
+            <PropertyPanel
+              block={selectedBlock}
+              on:update={handlePropUpdate}
+              on:add-event={handleAddEvent}
+              on:remove-event={handleRemoveEvent}
+            />
+          {/if}
+        </div>
+
+        <!-- Mobile Bottom Navigation -->
+        <nav class="bg-bg-primary border-t border-border flex-shrink-0 safe-area-bottom">
+          <div class="flex">
+            <button
+              class="flex-1 py-3 flex flex-col items-center gap-1 transition-colors
+                {mobileTab === 'palette' ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-text-primary'}"
+              on:click={() => mobileTab = 'palette'}
+            >
+              <span class="text-xl">🧩</span>
+              <span class="text-xs font-medium">Bloques</span>
+            </button>
+            <button
+              class="flex-1 py-3 flex flex-col items-center gap-1 transition-colors relative
+                {mobileTab === 'canvas' ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-text-primary'}"
+              on:click={() => mobileTab = 'canvas'}
+            >
+              <span class="text-xl">📱</span>
+              <span class="text-xs font-medium">Canvas</span>
+              {#if design.bloques.length > 0}
+                <span class="absolute top-2 right-1/4 w-5 h-5 bg-primary text-white text-xs rounded-full flex items-center justify-center">
+                  {design.bloques.length}
+                </span>
+              {/if}
+            </button>
+            <button
+              class="flex-1 py-3 flex flex-col items-center gap-1 transition-colors relative
+                {mobileTab === 'props' ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-text-primary'}"
+              on:click={() => mobileTab = 'props'}
+              disabled={!selectedBlock}
+            >
+              <span class="text-xl">{selectedBlock ? '⚙️' : '👆'}</span>
+              <span class="text-xs font-medium">Props</span>
+              {#if selectedBlock}
+                <span class="absolute top-1 right-1/4 w-2 h-2 bg-success rounded-full"></span>
+              {/if}
+            </button>
+            <button
+              class="flex-1 py-3 flex flex-col items-center gap-1 transition-colors
+                {showJSON ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-text-primary'}"
+              on:click={() => { showJSON = !showJSON; mobileTab = 'canvas'; }}
+            >
+              <span class="text-xl">{showJSON ? '🎨' : '📄'}</span>
+              <span class="text-xs font-medium">{showJSON ? 'Visual' : 'JSON'}</span>
+            </button>
+          </div>
+        </nav>
       </div>
-    {/if}
+    </div>
   </div>
 {/if}
 

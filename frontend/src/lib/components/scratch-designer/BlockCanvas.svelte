@@ -71,7 +71,7 @@
 
 <div
   bind:this={canvasEl}
-  class="h-full overflow-auto p-6 bg-bg-secondary transition-colors"
+  class="h-full overflow-auto p-4 md:p-6 bg-bg-secondary transition-colors overscroll-contain"
   class:bg-primary/5={isDragOver}
   on:dragover={handleDragOver}
   on:dragleave={handleDragLeave}
@@ -80,24 +80,25 @@
   aria-label="Canvas de bloques"
 >
   {#if blocks.length === 0}
-    <!-- Empty state -->
-    <div class="h-full flex flex-col items-center justify-center text-text-muted">
+    <!-- Empty state - mobile optimized -->
+    <div class="h-full flex flex-col items-center justify-center text-text-muted px-4">
       <div class="text-center">
-        <span class="text-6xl block mb-4">🧩</span>
-        <h3 class="text-lg font-medium mb-2">Arrastra bloques aquí</h3>
-        <p class="text-sm max-w-xs">
-          Selecciona bloques de la paleta izquierda y arrástralos para construir tu pantalla
+        <span class="text-5xl md:text-6xl block mb-4">🧩</span>
+        <h3 class="text-lg font-medium mb-2">Tu diseño está vacío</h3>
+        <p class="text-sm max-w-xs mx-auto">
+          <span class="hidden md:inline">Arrastra bloques desde la paleta izquierda</span>
+          <span class="md:hidden">Ve a <strong>Bloques</strong> y toca para añadir componentes</span>
         </p>
       </div>
 
       <!-- Drop zone visual -->
-      <div class="mt-8 w-64 h-32 border-2 border-dashed border-border rounded-lg flex items-center justify-center {isDragOver ? 'border-primary bg-primary/10' : ''}">
+      <div class="mt-6 md:mt-8 w-full max-w-xs h-28 md:h-32 border-2 border-dashed border-border rounded-xl flex items-center justify-center {isDragOver ? 'border-primary bg-primary/10' : ''}">
         <span class="text-sm">{isDragOver ? 'Suelta aquí' : 'Zona de diseño'}</span>
       </div>
     </div>
   {:else}
-    <!-- Blocks list -->
-    <div class="space-y-2 max-w-2xl mx-auto">
+    <!-- Blocks list - mobile optimized -->
+    <div class="space-y-3 md:space-y-2 max-w-2xl mx-auto pb-4">
       {#each blocks as block, index (block.id)}
         <div class="group relative">
           <!-- Block -->
@@ -109,40 +110,47 @@
             on:dragstart={handleBlockDragStart}
           />
 
-          <!-- Actions overlay -->
-          <div class="absolute top-1 right-1 hidden group-hover:flex gap-1 z-10">
+          <!-- Actions - always visible on mobile, hover on desktop -->
+          <div class="absolute top-1 right-1 flex gap-1 z-10 md:hidden md:group-hover:flex
+            {selectedBlockId === block.id ? 'flex' : 'hidden md:group-hover:flex'}">
             <button
-              class="w-6 h-6 flex items-center justify-center bg-white/90 rounded shadow text-xs hover:bg-white"
-              on:click={() => moveBlock(block.id, 'up')}
+              class="w-8 h-8 md:w-6 md:h-6 flex items-center justify-center bg-white/95 rounded-lg md:rounded shadow-lg text-sm md:text-xs hover:bg-white active:scale-95 transition-transform disabled:opacity-40"
+              on:click|stopPropagation={() => moveBlock(block.id, 'up')}
               disabled={index === 0}
               title="Mover arriba"
             >
               ↑
             </button>
             <button
-              class="w-6 h-6 flex items-center justify-center bg-white/90 rounded shadow text-xs hover:bg-white"
-              on:click={() => moveBlock(block.id, 'down')}
+              class="w-8 h-8 md:w-6 md:h-6 flex items-center justify-center bg-white/95 rounded-lg md:rounded shadow-lg text-sm md:text-xs hover:bg-white active:scale-95 transition-transform disabled:opacity-40"
+              on:click|stopPropagation={() => moveBlock(block.id, 'down')}
               disabled={index === blocks.length - 1}
               title="Mover abajo"
             >
               ↓
             </button>
             <button
-              class="w-6 h-6 flex items-center justify-center bg-red-500 text-white rounded shadow text-xs hover:bg-red-600"
-              on:click={() => deleteBlock(block.id)}
+              class="w-8 h-8 md:w-6 md:h-6 flex items-center justify-center bg-red-500 text-white rounded-lg md:rounded shadow-lg text-sm md:text-xs hover:bg-red-600 active:scale-95 transition-transform"
+              on:click|stopPropagation={() => deleteBlock(block.id)}
               title="Eliminar"
             >
               ×
             </button>
           </div>
+
+          <!-- Selection indicator mobile -->
+          {#if selectedBlockId === block.id}
+            <div class="md:hidden absolute -left-1 top-0 bottom-0 w-1 bg-primary rounded-full"></div>
+          {/if}
         </div>
       {/each}
 
       <!-- Add more hint -->
       <div
-        class="py-4 border-2 border-dashed border-border rounded-lg text-center text-text-muted text-sm transition-colors {isDragOver ? 'border-primary bg-primary/10' : ''}"
+        class="py-6 md:py-4 border-2 border-dashed border-border rounded-xl md:rounded-lg text-center text-text-muted text-sm transition-colors {isDragOver ? 'border-primary bg-primary/10' : ''}"
       >
-        {isDragOver ? 'Suelta para añadir' : 'Arrastra más bloques aquí'}
+        <span class="hidden md:inline">{isDragOver ? 'Suelta para añadir' : 'Arrastra más bloques aquí'}</span>
+        <span class="md:hidden">{blocks.length} bloque{blocks.length !== 1 ? 's' : ''} en tu diseño</span>
       </div>
     </div>
   {/if}

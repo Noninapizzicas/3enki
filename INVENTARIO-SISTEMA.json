@@ -1,0 +1,788 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "generado": "2025-12-02",
+    "descripcion": "Inventario completo del sistema Event-Core para composicion de pantallas (puzzle)",
+    "uso": "Usar este archivo para visualizar modulos disponibles, eventos, acciones y componentes UI"
+  },
+
+  "modulos": {
+    "_descripcion": "Lista completa de modulos organizados por ubicacion",
+
+    "principales": {
+      "_ubicacion": "modules/",
+      "modulos": [
+        {
+          "id": "ai-gateway",
+          "nombre": "AI Gateway",
+          "icono": "🤖",
+          "descripcion": "Gateway unificado para LLMs (DeepSeek, Claude, OpenAI, Ollama)",
+          "version": "1.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "menu-generator",
+          "nombre": "Menu Generator",
+          "icono": "📄",
+          "descripcion": "Generador de menu con IA - Chat conversacional, templates, streaming",
+          "version": "2.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "metricas",
+          "nombre": "Metricas",
+          "icono": "📊",
+          "descripcion": "Metricas centralizadas del sistema en tiempo real",
+          "version": "1.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "plugin-manager",
+          "nombre": "Plugin Manager",
+          "icono": "🔌",
+          "descripcion": "Descubre y gestiona plugins JSON",
+          "version": "2.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "dashboard",
+          "nombre": "Dashboard",
+          "icono": "⚡",
+          "descripcion": "Panel de observabilidad - Monitor de cores en tiempo real",
+          "version": "2.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "admin-panel",
+          "nombre": "Admin Panel",
+          "icono": "⚙️",
+          "descripcion": "Panel de administracion del sistema",
+          "version": "1.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "calling-generator",
+          "nombre": "Calling Generator",
+          "icono": "⚡",
+          "descripcion": "Genera funciones JavaScript ejecutables desde plugins",
+          "version": "2.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "tool-orchestrator",
+          "nombre": "Tool Orchestrator",
+          "icono": "🔧",
+          "descripcion": "Orquesta llamadas entre agentes AI y herramientas",
+          "version": "2.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "credential-manager",
+          "nombre": "Credential Manager",
+          "icono": "🔐",
+          "descripcion": "Gestion de credenciales multinivel (GLOBAL/PROJECT/CLIENT/CUSTOM)",
+          "version": "2.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "notas",
+          "nombre": "Notas",
+          "icono": "📝",
+          "descripcion": "Notas rapidas con eventos en tiempo real",
+          "version": "1.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "ai-agent-framework",
+          "nombre": "AI Agent Framework",
+          "icono": "🤖",
+          "descripcion": "Framework para agentes IA event-driven",
+          "version": "1.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "prompt-manager",
+          "nombre": "Prompt Manager",
+          "icono": "💬",
+          "descripcion": "Gestion de prompts con versionado y analytics",
+          "version": "1.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "ui-designer",
+          "nombre": "UI Designer",
+          "icono": "🎨",
+          "descripcion": "Disenador visual de interfaces para modulos",
+          "version": "1.0.0",
+          "tiene_ui": true
+        }
+      ]
+    },
+
+    "negocio_restaurante": {
+      "_ubicacion": "otros-modulos/modules/",
+      "modulos": [
+        {
+          "id": "productos",
+          "nombre": "Productos",
+          "icono": "📦",
+          "descripcion": "Catalogo de productos actualizado desde menus IA",
+          "version": "2.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "pedidos",
+          "nombre": "Pedidos",
+          "icono": "📋",
+          "descripcion": "Gestion completa de pedidos event-driven",
+          "version": "1.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "cuentas",
+          "nombre": "Cuentas",
+          "icono": "📋",
+          "descripcion": "Gestion de cuentas (mesas, delivery, para llevar)",
+          "version": "2.0.0",
+          "tiene_ui": true,
+          "es_pantalla_principal": true
+        },
+        {
+          "id": "cobros",
+          "nombre": "Cobros",
+          "icono": "💰",
+          "descripcion": "Sistema de cobros - 7 metodos de pago",
+          "version": "1.1.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "categorias",
+          "nombre": "Categorias",
+          "icono": "📁",
+          "descripcion": "Catalogo de categorias de productos",
+          "version": "1.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "ingredientes",
+          "nombre": "Ingredientes",
+          "icono": "🥬",
+          "descripcion": "Catalogo de ingredientes y alergenos",
+          "version": "1.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "variaciones",
+          "nombre": "Variaciones",
+          "icono": "🔀",
+          "descripcion": "Gestion de variaciones (quitar/anadir ingredientes)",
+          "version": "1.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "comandero",
+          "nombre": "Comandero",
+          "icono": "📝",
+          "descripcion": "Gestion de pedidos - Anadir productos a cuentas",
+          "version": "1.0.0",
+          "tiene_ui": true
+        },
+        {
+          "id": "cocina",
+          "nombre": "Cocina",
+          "icono": "👨‍🍳",
+          "descripcion": "Display de cocina en tiempo real",
+          "version": "1.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "cuentas-mesa",
+          "nombre": "Cuentas Mesa",
+          "icono": "🪑",
+          "descripcion": "Logica especifica de servicio en mesa",
+          "version": "1.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "cuentas-llevar",
+          "nombre": "Cuentas Llevar",
+          "icono": "🥡",
+          "descripcion": "Sistema de tickets y display de numeros",
+          "version": "1.0.0",
+          "tiene_ui": false
+        },
+        {
+          "id": "cuentas-telefono",
+          "nombre": "Cuentas Telefono",
+          "icono": "📞",
+          "descripcion": "Pedidos telefonicos con Caller ID y WhatsApp",
+          "version": "1.0.0",
+          "tiene_ui": false
+        }
+      ]
+    },
+
+    "duplicados": {
+      "_descripcion": "Modulos que existen en ambas ubicaciones (modules/ y otros-modulos/)",
+      "lista": [
+        {
+          "id": "ai-gateway",
+          "en_modules": true,
+          "en_otros_modulos": true,
+          "nota": "Version principal en modules/, version restaurante en otros-modulos/"
+        },
+        {
+          "id": "menu-generator",
+          "en_modules": true,
+          "en_otros_modulos": true,
+          "nota": "Version principal en modules/, version restaurante en otros-modulos/"
+        },
+        {
+          "id": "credential-manager",
+          "en_modules": true,
+          "en_otros_modulos": true,
+          "nota": "Version principal en modules/, version restaurante en otros-modulos/"
+        }
+      ]
+    }
+  },
+
+  "eventos": {
+    "_descripcion": "Eventos publicados y suscritos por cada modulo",
+
+    "ai-gateway": {
+      "publica": [],
+      "suscribe": ["ai.request.created"]
+    },
+
+    "menu-generator": {
+      "publica": [
+        "ai.request",
+        "menu.generado",
+        "menu.validado",
+        "menu.error",
+        "menu-generator.conversation.created",
+        "menu-generator.message.sent",
+        "menu-generator.message.received",
+        "menu-generator.menu.created",
+        "menu-generator.menu.exported"
+      ],
+      "suscribe": ["ai.response"]
+    },
+
+    "metricas": {
+      "publica": ["metricas.snapshot", "metricas.alerta"],
+      "suscribe": ["*.creado", "*.actualizado", "*.eliminado", "*.error", "*.completado"]
+    },
+
+    "plugin-manager": {
+      "publica": ["plugin.loaded", "plugin.unloaded", "plugin.error", "plugin.reloaded"],
+      "suscribe": ["plugin.get.request", "plugin.list.request"]
+    },
+
+    "dashboard": {
+      "publica": [],
+      "suscribe": ["core/+/logs/#", "core/+/events/#", "core/+/metrics/#"]
+    },
+
+    "admin-panel": {
+      "publica": ["admin.action"],
+      "suscribe": ["plugin.loaded", "ui.component.loaded"]
+    },
+
+    "calling-generator": {
+      "publica": ["function.generated", "function.executed", "function.failed", "function.generation.error"],
+      "suscribe": ["plugin.loaded", "function.get.request", "function.list.request", "function.execute.request"]
+    },
+
+    "tool-orchestrator": {
+      "publica": ["tool.registered", "tool.unregistered", "tool.call.response", "tool.call.success", "tool.call.failed"],
+      "suscribe": ["tool.call.request", "tool.list.request", "tool.get.request"]
+    },
+
+    "credential-manager": {
+      "publica": ["credential.saved", "credential.updated", "credential.deleted", "credential.resolved", "credential.resolve.failed"],
+      "suscribe": ["credential.resolve.request"]
+    },
+
+    "notas": {
+      "publica": ["nota.creada", "nota.actualizada", "nota.eliminada"],
+      "suscribe": []
+    },
+
+    "ai-agent-framework": {
+      "publica": [],
+      "suscribe": ["agent.*.created", "agent.*.completed", "agent.*.failed"]
+    },
+
+    "prompt-manager": {
+      "publica": [],
+      "suscribe": ["ai.completion.completed", "ai.request.started"]
+    },
+
+    "ui-designer": {
+      "publica": [
+        "ui-designer.template.created",
+        "ui-designer.template.updated",
+        "ui-designer.template.deleted",
+        "ui-designer.export.yaml",
+        "ui-designer.export.svelte",
+        "ui-designer.export.json"
+      ],
+      "suscribe": []
+    },
+
+    "productos": {
+      "publica": ["producto.creado", "producto.actualizado", "producto.eliminado", "catalogo.actualizado"],
+      "suscribe": ["menu.generado", "menu.validado"]
+    },
+
+    "pedidos": {
+      "publica": [
+        "pedido.creado",
+        "pedido.item_agregado",
+        "pedido.item_actualizado",
+        "pedido.item_eliminado",
+        "pedido.enviado_cocina",
+        "pedido.completado",
+        "pedido.cancelado"
+      ],
+      "suscribe": ["variacion.validada", "variacion.rechazada", "cuenta.creada"]
+    },
+
+    "cuentas": {
+      "publica": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
+      "suscribe": ["pedido.item_agregado", "pedido.item_eliminado", "cobro.procesado"]
+    },
+
+    "cobros": {
+      "publica": ["cobro.iniciado", "cobro.completado", "cobro.fallido", "cobro.reembolsado"],
+      "suscribe": ["pedido.completado", "cuenta.creada"]
+    },
+
+    "categorias": {
+      "publica": ["categoria.creada", "categoria.actualizada", "categoria.orden_actualizado"],
+      "suscribe": ["menu.generado"]
+    },
+
+    "ingredientes": {
+      "publica": ["ingrediente.creado", "ingrediente.actualizado"],
+      "suscribe": ["menu.generado", "producto.creado"]
+    },
+
+    "variaciones": {
+      "publica": ["variacion.validada", "variacion.rechazada"],
+      "suscribe": ["producto.creado", "pedido.item_agregado"]
+    },
+
+    "comandero": {
+      "publica": ["pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina"],
+      "suscribe": ["cuenta.actualizada"]
+    },
+
+    "cocina": {
+      "publica": ["cocina.item_preparado", "cocina.pedido_listo"],
+      "suscribe": ["pedido.enviado_cocina", "pedido.item_agregado", "pedido.cancelado"]
+    },
+
+    "cuentas-mesa": {
+      "publica": ["mesa.abierta", "mesa.camarero_asignado", "mesa.cerrada", "cuenta.creada", "cuenta.cerrada"],
+      "suscribe": ["pedido.creado", "cobro.completado"]
+    },
+
+    "cuentas-llevar": {
+      "publica": ["llevar.ticket_creado", "llevar.ticket_listo", "llevar.ticket_entregado", "cuenta.creada", "cuenta.cerrada"],
+      "suscribe": ["cocina.pedido_listo", "cobro.completado"]
+    },
+
+    "cuentas-telefono": {
+      "publica": ["telefono.llamada_detectada", "telefono.contacto_identificado", "telefono.pedido_creado", "telefono.listo_para_recoger", "cuenta.creada", "cuenta.cerrada"],
+      "suscribe": ["cocina.pedido_listo", "cobro.completado"]
+    }
+  },
+
+  "acciones": {
+    "_descripcion": "APIs/Acciones disponibles por modulo (metodo, path, descripcion)",
+
+    "ai-gateway": [
+      {"metodo": "POST", "path": "/chat", "descripcion": "Chat completion con proveedor"},
+      {"metodo": "POST", "path": "/chat/stream", "descripcion": "Chat con streaming SSE"},
+      {"metodo": "GET", "path": "/providers", "descripcion": "Listar proveedores disponibles"},
+      {"metodo": "GET", "path": "/models", "descripcion": "Listar modelos por proveedor"},
+      {"metodo": "GET", "path": "/usage", "descripcion": "Estadisticas de uso y costos"},
+      {"metodo": "POST", "path": "/providers/test", "descripcion": "Probar conectividad"}
+    ],
+
+    "menu-generator": [
+      {"metodo": "POST", "path": "/upload", "descripcion": "Subir carta para generar menu"},
+      {"metodo": "GET", "path": "/menus", "descripcion": "Listar menus"},
+      {"metodo": "GET", "path": "/menus/:id", "descripcion": "Obtener menu"},
+      {"metodo": "POST", "path": "/menus/:id/validate", "descripcion": "Validar menu"},
+      {"metodo": "POST", "path": "/menus/:id/export", "descripcion": "Exportar menu"},
+      {"metodo": "GET", "path": "/conversations", "descripcion": "Listar conversaciones"},
+      {"metodo": "POST", "path": "/conversations", "descripcion": "Nueva conversacion"},
+      {"metodo": "POST", "path": "/conversations/:id/messages", "descripcion": "Enviar mensaje"},
+      {"metodo": "GET", "path": "/stream", "descripcion": "SSE streaming"}
+    ],
+
+    "metricas": [
+      {"metodo": "GET", "path": "/metrics", "descripcion": "Todas las metricas"},
+      {"metodo": "GET", "path": "/metrics/counters", "descripcion": "Solo counters"},
+      {"metodo": "GET", "path": "/metrics/gauges", "descripcion": "Solo gauges"},
+      {"metodo": "GET", "path": "/metrics/timings", "descripcion": "Timings de operaciones"},
+      {"metodo": "DELETE", "path": "/metrics/reset", "descripcion": "Resetear metricas"}
+    ],
+
+    "credential-manager": [
+      {"metodo": "POST", "path": "/credentials", "descripcion": "Guardar credencial"},
+      {"metodo": "GET", "path": "/credentials", "descripcion": "Listar credenciales"},
+      {"metodo": "GET", "path": "/credentials/resolve", "descripcion": "Resolver credencial por cascada"},
+      {"metodo": "PUT", "path": "/credentials/:key", "descripcion": "Actualizar credencial"},
+      {"metodo": "DELETE", "path": "/credentials/:key", "descripcion": "Eliminar credencial"}
+    ],
+
+    "notas": [
+      {"metodo": "GET", "path": "/notas", "descripcion": "Listar notas"},
+      {"metodo": "POST", "path": "/notas", "descripcion": "Crear nota"},
+      {"metodo": "PATCH", "path": "/notas/:id", "descripcion": "Actualizar nota"},
+      {"metodo": "DELETE", "path": "/notas/:id", "descripcion": "Eliminar nota"},
+      {"metodo": "POST", "path": "/notas/:id/pin", "descripcion": "Fijar/desfijar nota"}
+    ],
+
+    "productos": [
+      {"metodo": "GET", "path": "/productos", "descripcion": "Listar productos"},
+      {"metodo": "GET", "path": "/productos/:id", "descripcion": "Obtener producto"},
+      {"metodo": "GET", "path": "/productos/search", "descripcion": "Buscar productos"},
+      {"metodo": "PATCH", "path": "/productos/:id", "descripcion": "Actualizar producto"},
+      {"metodo": "DELETE", "path": "/productos/:id", "descripcion": "Eliminar producto"}
+    ],
+
+    "pedidos": [
+      {"metodo": "POST", "path": "/pedidos", "descripcion": "Crear pedido"},
+      {"metodo": "GET", "path": "/pedidos", "descripcion": "Listar pedidos"},
+      {"metodo": "GET", "path": "/pedidos/:id", "descripcion": "Obtener pedido"},
+      {"metodo": "POST", "path": "/pedidos/:id/items", "descripcion": "Agregar item"},
+      {"metodo": "DELETE", "path": "/pedidos/:id/items/:item_id", "descripcion": "Eliminar item"},
+      {"metodo": "POST", "path": "/pedidos/:id/enviar-cocina", "descripcion": "Enviar a cocina"},
+      {"metodo": "POST", "path": "/pedidos/:id/completar", "descripcion": "Completar pedido"},
+      {"metodo": "POST", "path": "/pedidos/:id/cancelar", "descripcion": "Cancelar pedido"}
+    ],
+
+    "cuentas": [
+      {"metodo": "POST", "path": "/cuentas", "descripcion": "Crear cuenta"},
+      {"metodo": "GET", "path": "/cuentas", "descripcion": "Listar cuentas"},
+      {"metodo": "GET", "path": "/cuentas/:id", "descripcion": "Obtener cuenta"},
+      {"metodo": "DELETE", "path": "/cuentas/:id", "descripcion": "Eliminar cuenta"}
+    ],
+
+    "cobros": [
+      {"metodo": "POST", "path": "/cobros", "descripcion": "Iniciar cobro"},
+      {"metodo": "GET", "path": "/cobros", "descripcion": "Listar cobros"},
+      {"metodo": "POST", "path": "/cobros/:id/confirmar", "descripcion": "Confirmar cobro"},
+      {"metodo": "POST", "path": "/cobros/:id/reembolsar", "descripcion": "Reembolsar cobro"},
+      {"metodo": "GET", "path": "/metodos-pago", "descripcion": "Metodos de pago disponibles"}
+    ],
+
+    "comandero": [
+      {"metodo": "GET", "path": "/pedido/:cuenta_id", "descripcion": "Obtener pedido de cuenta"},
+      {"metodo": "POST", "path": "/pedido/:cuenta_id/items", "descripcion": "Anadir item"},
+      {"metodo": "DELETE", "path": "/pedido/:cuenta_id/items/:item_id", "descripcion": "Eliminar item"},
+      {"metodo": "POST", "path": "/pedido/:cuenta_id/enviar", "descripcion": "Enviar a cocina"}
+    ],
+
+    "cocina": [
+      {"metodo": "GET", "path": "/cocina/activos", "descripcion": "Pedidos activos"},
+      {"metodo": "POST", "path": "/cocina/items/:item_id/preparar", "descripcion": "Marcar item preparado"},
+      {"metodo": "POST", "path": "/cocina/pedidos/:pedido_id/listo", "descripcion": "Pedido listo"},
+      {"metodo": "GET", "path": "/cocina/stream", "descripcion": "SSE actualizaciones"}
+    ]
+  },
+
+  "componentes_ui": {
+    "_descripcion": "Componentes UI disponibles para composicion de pantallas",
+
+    "propios": {
+      "_descripcion": "Componentes de diseno propio (ui-components/)",
+      "contenedores": [
+        {
+          "id": "floating-sidebar",
+          "nombre": "Floating Sidebar",
+          "tipo": "contenedor",
+          "descripcion": "Barra vertical lateral flotante para botones",
+          "posicion": ["left", "right"],
+          "draggable": true,
+          "collapsible": true,
+          "acepta": ["emoji-action-button"]
+        },
+        {
+          "id": "floating-topbar",
+          "nombre": "Floating Topbar",
+          "tipo": "contenedor",
+          "descripcion": "Barra superior flotante horizontal",
+          "posicion": "top",
+          "soporta_grupos": true,
+          "soporta_separadores": true,
+          "draggable": true,
+          "acepta": ["emoji-action-button"]
+        },
+        {
+          "id": "floating-input-bar",
+          "nombre": "Floating Input Bar",
+          "tipo": "contenedor",
+          "descripcion": "Barra de entrada de texto flotante (20mm alto)",
+          "posicion": "bottom",
+          "acepta": ["emoji-action-button", "voice-input"]
+        },
+        {
+          "id": "overlay-panel",
+          "nombre": "Overlay Panel",
+          "tipo": "contenedor",
+          "descripcion": "Panel superpuesto semi-transparente con scroll",
+          "tamanos": ["small", "medium", "large", "custom"],
+          "acepta": ["cualquier_contenido"]
+        }
+      ],
+      "interactivos": [
+        {
+          "id": "emoji-action-button",
+          "nombre": "Emoji Action Button",
+          "tipo": "boton",
+          "tamano_mm": "10x10",
+          "tamano_px": "38x38",
+          "interacciones": ["single_click", "double_click", "long_press"],
+          "descripcion": "Boton compacto con emoji - 3 tipos de interaccion"
+        },
+        {
+          "id": "voice-input",
+          "nombre": "Voice Input",
+          "tipo": "input",
+          "descripcion": "Input de texto con reconocimiento de voz (Speech-to-Text)",
+          "caracteristicas": ["speech_recognition", "waveform_animation", "multi_idioma"]
+        }
+      ],
+      "basicos": [
+        {
+          "id": "button",
+          "nombre": "Action Button",
+          "tipo": "boton",
+          "estados": ["success", "error", "pending", "info", "default"],
+          "tamano_minimo": "56x56px"
+        },
+        {
+          "id": "card",
+          "nombre": "Info Card",
+          "tipo": "contenedor",
+          "variantes": ["default", "highlighted", "error"],
+          "secciones": ["header", "body", "footer"]
+        },
+        {
+          "id": "form",
+          "nombre": "Form",
+          "tipo": "contenedor",
+          "descripcion": "Formulario con validacion"
+        },
+        {
+          "id": "table",
+          "nombre": "Table",
+          "tipo": "datos",
+          "descripcion": "Tabla de datos con ordenacion y filtros"
+        },
+        {
+          "id": "metric-card",
+          "nombre": "Metric Card",
+          "tipo": "datos",
+          "descripcion": "Tarjeta para mostrar metricas"
+        },
+        {
+          "id": "dashboard-metricas",
+          "nombre": "Dashboard Metricas",
+          "tipo": "dashboard",
+          "descripcion": "Dashboard completo de metricas"
+        }
+      ],
+      "especializados": [
+        {
+          "id": "sidebar-button",
+          "nombre": "Sidebar Button",
+          "tipo": "boton",
+          "descripcion": "Boton para sidebar"
+        },
+        {
+          "id": "producto-button",
+          "nombre": "Producto Button",
+          "tipo": "boton",
+          "descripcion": "Boton para seleccionar producto"
+        },
+        {
+          "id": "cuenta-button",
+          "nombre": "Cuenta Button",
+          "tipo": "boton",
+          "descripcion": "Boton para tipo de cuenta (mesa/llevar/delivery)"
+        }
+      ]
+    },
+
+    "estandar_svelte": {
+      "_descripcion": "Componentes Svelte estandar (frontend/src/lib/components/)",
+      "navegacion": [
+        {"id": "Breadcrumb", "ruta": "navigation/Breadcrumb.svelte"},
+        {"id": "Pagination", "ruta": "navigation/Pagination.svelte"},
+        {"id": "Tabs", "ruta": "navigation/Tabs.svelte"}
+      ],
+      "input": [
+        {"id": "FileDropZone", "ruta": "input/FileDropZone.svelte"}
+      ],
+      "feedback": [
+        {"id": "Alert", "ruta": "feedback/Alert.svelte"},
+        {"id": "Skeleton", "ruta": "feedback/Skeleton.svelte"},
+        {"id": "Spinner", "ruta": "feedback/Spinner.svelte"},
+        {"id": "Progress", "ruta": "feedback/Progress.svelte"},
+        {"id": "FloatingPanel", "ruta": "feedback/FloatingPanel.svelte"},
+        {"id": "Toast", "ruta": "feedback/Toast.svelte"},
+        {"id": "Modal", "ruta": "feedback/Modal.svelte"}
+      ],
+      "layout": [
+        {"id": "Header", "ruta": "layout/Header.svelte"},
+        {"id": "Sidebar", "ruta": "layout/Sidebar.svelte"},
+        {"id": "MobileWorkspaceLayout", "ruta": "layout/MobileWorkspaceLayout.svelte"}
+      ],
+      "ui": [
+        {"id": "Select", "ruta": "ui/Select.svelte"},
+        {"id": "Radio", "ruta": "ui/Radio.svelte"},
+        {"id": "Button", "ruta": "ui/Button.svelte"},
+        {"id": "Badge", "ruta": "ui/Badge.svelte"},
+        {"id": "Checkbox", "ruta": "ui/Checkbox.svelte"},
+        {"id": "FileUpload", "ruta": "ui/FileUpload.svelte"},
+        {"id": "Input", "ruta": "ui/Input.svelte"},
+        {"id": "Textarea", "ruta": "ui/Textarea.svelte"},
+        {"id": "Card", "ruta": "ui/Card.svelte"}
+      ],
+      "datos": [
+        {"id": "StatCard", "ruta": "data/StatCard.svelte"},
+        {"id": "EventStream", "ruta": "data/EventStream.svelte"},
+        {"id": "Grid", "ruta": "data/Grid.svelte"},
+        {"id": "Tree", "ruta": "data/Tree.svelte"},
+        {"id": "List", "ruta": "data/List.svelte"},
+        {"id": "Table", "ruta": "data/Table.svelte"}
+      ],
+      "ai": [
+        {"id": "ChatInput", "ruta": "ai/ChatInput.svelte"},
+        {"id": "ConversationPanel", "ruta": "ai/ConversationPanel.svelte"},
+        {"id": "PromptSelector", "ruta": "ai/PromptSelector.svelte"},
+        {"id": "AIControlBar", "ruta": "ai/AIControlBar.svelte"}
+      ],
+      "ui-designer": [
+        {"id": "ComponentRenderer", "ruta": "ui-designer/ComponentRenderer.svelte"}
+      ]
+    }
+  },
+
+  "puzzle": {
+    "_descripcion": "Esquema para composicion de pantallas como puzzle",
+    "_uso": "Define una pantalla especificando layout, componentes, modulos referenciados y flujo de eventos",
+
+    "esquema_pantalla": {
+      "id": "string - identificador unico",
+      "nombre": "string - nombre descriptivo",
+      "tipo": "mobile | tablet | desktop",
+      "layout": {
+        "tipo": "fullscreen | sidebar_content | three-panel | two-column",
+        "config": {}
+      },
+      "componentes": [
+        {
+          "tipo": "floating-sidebar | floating-topbar | overlay-panel | etc",
+          "posicion": "left | right | top | bottom",
+          "items": [
+            {
+              "componente": "emoji-action-button",
+              "emoji": "🏠",
+              "acciones": {
+                "single_click": {
+                  "tipo": "navigate | api-call | open-module | emit-event",
+                  "destino": "string"
+                },
+                "double_click": {},
+                "long_press": {}
+              },
+              "modulo_referenciado": "id_modulo"
+            }
+          ]
+        }
+      ],
+      "eventos_escucha": ["lista de eventos mqtt a escuchar"],
+      "eventos_emite": ["lista de eventos que puede emitir"],
+      "flujo": {
+        "on_load": ["acciones al cargar"],
+        "on_event": {"evento": "accion"}
+      }
+    },
+
+    "ejemplos": [
+      {
+        "id": "pantalla-comandero",
+        "nombre": "Comandero - Toma de pedidos",
+        "tipo": "mobile",
+        "layout": {
+          "tipo": "three-panel",
+          "header": "comandero-header",
+          "topbar": "categorias horizontal",
+          "sidebar": "acciones derecha",
+          "content": "grid productos",
+          "panel_bottom": "edicion pedido y cobro"
+        },
+        "sidebar_items": [
+          {"emoji": "🪑", "modulo": "cuentas-mesa", "accion": "crear cuenta mesa"},
+          {"emoji": "🚗", "modulo": "cuentas", "accion": "crear cuenta delivery"},
+          {"emoji": "🥡", "modulo": "cuentas-llevar", "accion": "crear cuenta llevar"},
+          {"emoji": "👨‍🍳", "modulo": "comandero", "accion": "enviar a cocina"},
+          {"emoji": "💰", "modulo": "cobros", "accion": "abrir cobro"},
+          {"emoji": "↩️", "modulo": "cuentas", "accion": "volver a cuentas"}
+        ],
+        "eventos_escucha": [
+          "pedido.item_agregado",
+          "pedido.item_eliminado",
+          "cuenta.actualizada"
+        ],
+        "eventos_emite": [
+          "pedido.item_agregado",
+          "pedido.enviado_cocina"
+        ]
+      },
+      {
+        "id": "pantalla-cuentas",
+        "nombre": "Cuentas Activas",
+        "tipo": "mobile",
+        "layout": {
+          "tipo": "sidebar_content",
+          "sidebar_position": "right"
+        },
+        "sidebar_items": [
+          {"emoji": "🪑", "modulo": "cuentas-mesa", "accion": "nueva cuenta mesa"},
+          {"emoji": "🚗", "modulo": "cuentas", "accion": "nueva cuenta delivery"},
+          {"emoji": "🥡", "modulo": "cuentas-llevar", "accion": "nueva cuenta llevar"},
+          {"emoji": "🔄", "accion": "refrescar"}
+        ],
+        "eventos_escucha": [
+          "cuenta.creada",
+          "cuenta.actualizada",
+          "cuenta.eliminada",
+          "cuenta.estado_cambiado"
+        ]
+      }
+    ]
+  },
+
+  "metodos_pago": {
+    "_descripcion": "Metodos de pago disponibles en cobros",
+    "lista": [
+      {"id": "efectivo", "icono": "💵", "nombre": "Efectivo", "requiere_confirmacion": true},
+      {"id": "tarjeta", "icono": "💳", "nombre": "Tarjeta", "requiere_confirmacion": false},
+      {"id": "bizum", "icono": "📱", "nombre": "Bizum", "requiere_confirmacion": false},
+      {"id": "transferencia", "icono": "🏦", "nombre": "Transferencia", "enabled": false},
+      {"id": "mixto", "icono": "🔀", "nombre": "Pago Mixto", "requiere_desglose": true},
+      {"id": "link_pago", "icono": "🔗", "nombre": "Link de Pago", "expiracion_horas": 24},
+      {"id": "qr", "icono": "📲", "nombre": "Codigo QR", "expiracion_minutos": 30}
+    ]
+  }
+}

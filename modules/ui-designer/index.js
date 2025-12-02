@@ -667,6 +667,236 @@ class UiDesignerModule {
   }
 
   // ==========================================
+  // HTTP API Handlers - Actions
+  // ==========================================
+
+  async handlePublishTemplate(req, context) {
+    try {
+      const { id } = req.params;
+      const template = this.templates.get(id);
+
+      if (!template) {
+        return { status: 404, data: { error: 'Template no encontrado' } };
+      }
+
+      if (template.status === 'published') {
+        return { status: 400, data: { error: 'El template ya está publicado' } };
+      }
+
+      template.status = 'published';
+      template.published_at = new Date().toISOString();
+      template.updated_at = new Date().toISOString();
+      this.templates.set(id, template);
+      await this.persistToJSON();
+
+      if (this.eventBus) {
+        await this.eventBus.publish('ui-designer.template.published', {
+          template_id: id,
+          name: template.name,
+          target_module: template.target_module
+        });
+      }
+
+      this.logger.info('ui-designer.template.published', { template_id: id, name: template.name });
+      return { status: 200, data: { template } };
+    } catch (error) {
+      this.logger.error('ui-designer.publish.error', { error: error.message });
+      return { status: 500, data: { error: 'Error al publicar template' } };
+    }
+  }
+
+  async handleArchiveTemplate(req, context) {
+    try {
+      const { id } = req.params;
+      const template = this.templates.get(id);
+
+      if (!template) {
+        return { status: 404, data: { error: 'Template no encontrado' } };
+      }
+
+      if (template.status === 'archived') {
+        return { status: 400, data: { error: 'El template ya está archivado' } };
+      }
+
+      template.status = 'archived';
+      template.archived_at = new Date().toISOString();
+      template.updated_at = new Date().toISOString();
+      this.templates.set(id, template);
+      await this.persistToJSON();
+
+      this.logger.info('ui-designer.template.archived', { template_id: id, name: template.name });
+      return { status: 200, data: { template } };
+    } catch (error) {
+      this.logger.error('ui-designer.archive.error', { error: error.message });
+      return { status: 500, data: { error: 'Error al archivar template' } };
+    }
+  }
+
+  // ==========================================
+  // HTTP API Handlers - Layouts
+  // ==========================================
+
+  async handleListLayouts(req, context) {
+    try {
+      const layouts = [
+        { type: 'single-column', label: 'Una Columna', icon: '▐', description: 'Layout de una sola columna', config: { gap: 'md', maxWidth: '4xl' } },
+        { type: 'two-column', label: 'Dos Columnas', icon: '▐▐', description: 'Dos columnas iguales', config: { gap: 'md', ratio: '1:1' } },
+        { type: 'three-column', label: 'Tres Columnas', icon: '▐▐▐', description: 'Tres columnas iguales', config: { gap: 'md' } },
+        { type: 'grid', label: 'Grid Responsive', icon: '⊞', description: 'Grid adaptable', config: { columns: 3, gap: 'md' } },
+        { type: 'tabs', label: 'Tabs/Pestañas', icon: '☰', description: 'Contenido en pestañas', config: { variant: 'default' } },
+        { type: 'sidebar', label: 'Sidebar + Content', icon: '▌▐', description: 'Barra lateral + contenido', config: { sidebarWidth: '250px', position: 'left' } },
+        { type: 'split', label: 'Split View', icon: '◧', description: 'Vista dividida', config: { ratio: '1:1', resizable: true } },
+        { type: 'kanban', label: 'Kanban Board', icon: '▥', description: 'Tablero Kanban', config: { columns: ['Todo', 'In Progress', 'Done'] } }
+      ];
+
+      return { status: 200, data: { layouts } };
+    } catch (error) {
+      this.logger.error('ui-designer.layouts.error', { error: error.message });
+      return { status: 500, data: { error: 'Error al listar layouts' } };
+    }
+  }
+
+  async handleGetLayout(req, context) {
+    try {
+      const { type } = req.params;
+      const layoutsRes = await this.handleListLayouts(req, context);
+      const layout = layoutsRes.data.layouts.find(l => l.type === type);
+
+      if (!layout) {
+        return { status: 404, data: { error: 'Layout no encontrado' } };
+      }
+
+      return { status: 200, data: { layout } };
+    } catch (error) {
+      this.logger.error('ui-designer.layout.error', { error: error.message });
+      return { status: 500, data: { error: 'Error al obtener layout' } };
+    }
+  }
+
+  // ==========================================
+  // HTTP API Handlers - Predefined Templates
+  // ==========================================
+
+  async handleGetPredefinedTemplates(req, context) {
+    try {
+      const templates = [
+        {
+          name: 'dashboard-basic',
+          display_name: 'Dashboard Básico',
+          description: 'Dashboard con stats y tabla',
+          icon: '📊',
+          type: 'dashboard',
+          category: 'analytics',
+          layout: { type: 'single-column', config: { gap: 'md' } },
+          components: [
+            { id: 'header', component: 'header', props: { title: 'Dashboard', subtitle: 'Resumen general' }, position: { section: 'header', order: 0 } },
+            { id: 'stat1', component: 'stat-card', props: { label: 'Total', value: '0', icon: '📊', color: 'primary' }, position: { section: 'main', order: 0 } },
+            { id: 'stat2', component: 'stat-card', props: { label: 'Activos', value: '0', icon: '✅', color: 'success' }, position: { section: 'main', order: 1 } },
+            { id: 'table', component: 'table', props: { columns: [], sortable: true, paginated: true }, position: { section: 'main', order: 2 } }
+          ]
+        },
+        {
+          name: 'crud-form',
+          display_name: 'Formulario CRUD',
+          description: 'Formulario crear/editar',
+          icon: '📝',
+          type: 'form',
+          category: 'data',
+          layout: { type: 'single-column', config: { gap: 'md', maxWidth: 'lg' } },
+          components: [
+            { id: 'header', component: 'header', props: { title: 'Nuevo Registro' }, position: { section: 'header', order: 0 } },
+            { id: 'form', component: 'form', props: { submitLabel: 'Guardar' }, position: { section: 'main', order: 0 } },
+            { id: 'name', component: 'input', props: { label: 'Nombre', required: true }, position: { section: 'main', order: 1 } },
+            { id: 'desc', component: 'textarea', props: { label: 'Descripción', rows: 4 }, position: { section: 'main', order: 2 } }
+          ]
+        },
+        {
+          name: 'ai-chat',
+          display_name: 'Chat con IA',
+          description: 'Interfaz de chat IA',
+          icon: '🤖',
+          type: 'view',
+          category: 'ai',
+          layout: { type: 'single-column', config: { gap: 'md' } },
+          components: [
+            { id: 'header', component: 'header', props: { title: 'Asistente IA' }, position: { section: 'header', order: 0 } },
+            { id: 'conversation', component: 'conversation-panel', props: { title: 'Chat' }, position: { section: 'main', order: 0 } },
+            { id: 'input', component: 'chat-input', props: { placeholder: 'Escribe tu mensaje...' }, position: { section: 'footer', order: 0 } }
+          ]
+        },
+        {
+          name: 'list-with-filters',
+          display_name: 'Lista con Filtros',
+          description: 'Lista con búsqueda y filtros',
+          icon: '📋',
+          type: 'view',
+          category: 'data',
+          layout: { type: 'single-column', config: { gap: 'md' } },
+          components: [
+            { id: 'header', component: 'header', props: { title: 'Lista' }, position: { section: 'header', order: 0 } },
+            { id: 'search', component: 'input', props: { placeholder: 'Buscar...' }, position: { section: 'main', order: 0 } },
+            { id: 'list', component: 'list', props: { items: [] }, position: { section: 'main', order: 1 } },
+            { id: 'pagination', component: 'pagination', props: { total: 0, perPage: 10 }, position: { section: 'main', order: 2 } }
+          ]
+        }
+      ];
+
+      return { status: 200, data: { templates } };
+    } catch (error) {
+      this.logger.error('ui-designer.predefined.error', { error: error.message });
+      return { status: 500, data: { error: 'Error al obtener templates predefinidos' } };
+    }
+  }
+
+  async handleCreateFromPredefined(req, context) {
+    try {
+      const { template_name, custom_name } = req.body || {};
+
+      if (!template_name) {
+        return { status: 400, data: { error: 'template_name requerido' } };
+      }
+
+      const predefinedRes = await this.handleGetPredefinedTemplates(req, context);
+      const predefined = predefinedRes.data.templates.find(t => t.name === template_name);
+
+      if (!predefined) {
+        return { status: 404, data: { error: 'Template predefinido no encontrado' } };
+      }
+
+      const now = new Date().toISOString();
+      const newName = custom_name || `${predefined.name}-${Date.now()}`;
+
+      const template = {
+        id: this.generateId(),
+        name: newName,
+        display_name: custom_name ? custom_name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : predefined.display_name,
+        description: predefined.description,
+        icon: predefined.icon,
+        type: predefined.type,
+        category: predefined.category,
+        status: 'draft',
+        layout: JSON.parse(JSON.stringify(predefined.layout)),
+        components: JSON.parse(JSON.stringify(predefined.components)).map(c => ({ ...c, id: `${c.id}_${Date.now()}` })),
+        theme: {},
+        permissions: ['user'],
+        tags: ['predefined'],
+        version: '1.0.0',
+        created_at: now,
+        updated_at: now
+      };
+
+      this.templates.set(template.id, template);
+      await this.persistToJSON();
+
+      this.logger.info('ui-designer.template.created_from_predefined', { template_id: template.id, predefined: template_name });
+      return { status: 201, data: { template } };
+    } catch (error) {
+      this.logger.error('ui-designer.create_from_predefined.error', { error: error.message });
+      return { status: 500, data: { error: 'Error al crear desde predefinido' } };
+    }
+  }
+
+  // ==========================================
   // HTTP API Handlers - Export
   // ==========================================
 

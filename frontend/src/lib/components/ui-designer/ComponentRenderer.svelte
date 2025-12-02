@@ -1,13 +1,8 @@
 <script lang="ts">
   /**
    * ComponentRenderer - Renderiza dinámicamente componentes del UI Designer
-   * Mapea los componentes del template a componentes Svelte reales
+   * Usa HTML/CSS puro para evitar problemas de props incompatibles
    */
-  import { Card, Button, Badge, Input, Select, Textarea, Checkbox, Radio } from '$components/ui';
-  import { Alert, Spinner, Modal } from '$components/feedback';
-  import { Header } from '$components/layout';
-  import { StatCard, Table, List, Grid } from '$components/data';
-  import { Tabs, Breadcrumb, Pagination } from '$components/navigation';
 
   export let component: {
     id: string;
@@ -24,13 +19,15 @@
 </script>
 
 {#if componentType === 'header'}
-  <Header
-    title={props.title || 'Título'}
-    subtitle={props.subtitle || ''}
-  />
+  <header class="border-b border-border pb-4 mb-4">
+    <h1 class="text-xl font-semibold">{props.title || 'Título'}</h1>
+    {#if props.subtitle}
+      <p class="text-text-muted text-sm mt-1">{props.subtitle}</p>
+    {/if}
+  </header>
 
 {:else if componentType === 'card'}
-  <Card class={props.class || ''}>
+  <div class="bg-bg-card border border-border rounded-lg p-4 {props.class || ''}">
     {#if props.title}
       <h3 class="font-medium mb-2">{props.title}</h3>
     {/if}
@@ -39,7 +36,7 @@
     {:else}
       <p class="text-text-muted text-sm">Contenido de la card...</p>
     {/if}
-  </Card>
+  </div>
 
 {:else if componentType === 'section'}
   <section class="border border-border rounded-lg p-4 {props.class || ''}">
@@ -52,13 +49,20 @@
   </section>
 
 {:else if componentType === 'stat-card'}
-  <StatCard
-    label={props.label || 'Estadística'}
-    value={props.value || '0'}
-    icon={props.icon || '📊'}
-    trend={props.trend || ''}
-    color={props.color || 'primary'}
-  />
+  <div class="bg-bg-card border border-border rounded-lg p-4">
+    <div class="flex items-start justify-between">
+      <div>
+        <p class="text-sm text-text-muted">{props.label || 'Estadística'}</p>
+        <p class="text-2xl font-semibold mt-1">{props.value || '0'}</p>
+        {#if props.trend}
+          <p class="text-sm mt-2 text-success">{props.trend}</p>
+        {/if}
+      </div>
+      {#if props.icon}
+        <span class="text-2xl">{props.icon}</span>
+      {/if}
+    </div>
+  </div>
 
 {:else if componentType === 'table'}
   <div class="border border-border rounded-lg overflow-hidden">
@@ -73,7 +77,7 @@
       <tbody>
         {#each Array(props.rows || 3) as _, i}
           <tr class="border-t border-border">
-            {#each (props.columns || ['Columna 1', 'Columna 2', 'Columna 3']) as col, j}
+            {#each (props.columns || ['Columna 1', 'Columna 2', 'Columna 3']) as _, j}
               <td class="px-4 py-3 text-sm">Dato {i + 1}-{j + 1}</td>
             {/each}
           </tr>
@@ -108,11 +112,15 @@
   </div>
 
 {:else if componentType === 'form'}
-  <form class="space-y-4 p-4 border border-border rounded-lg">
+  <form class="space-y-4 p-4 border border-border rounded-lg" on:submit|preventDefault>
     <p class="text-sm text-text-muted mb-4">Formulario: {props.title || 'Sin título'}</p>
     <div class="flex gap-2 justify-end pt-4 border-t border-border">
-      <Button variant="ghost">{props.cancelLabel || 'Cancelar'}</Button>
-      <Button variant="primary">{props.submitLabel || 'Guardar'}</Button>
+      <button type="button" class="px-4 py-2 rounded-lg border border-border hover:bg-bg-hover transition-colors">
+        {props.cancelLabel || 'Cancelar'}
+      </button>
+      <button type="submit" class="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors">
+        {props.submitLabel || 'Guardar'}
+      </button>
     </div>
   </form>
 
@@ -121,11 +129,12 @@
     {#if props.label}
       <label class="block text-sm font-medium mb-1">{props.label}</label>
     {/if}
-    <Input
+    <input
       type={props.type || 'text'}
       placeholder={props.placeholder || ''}
       disabled={isPreview}
       value={props.value || ''}
+      class="w-full px-3 py-2 bg-bg-input border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50"
     />
     {#if props.helpText}
       <p class="text-xs text-text-muted mt-1">{props.helpText}</p>
@@ -137,12 +146,12 @@
     {#if props.label}
       <label class="block text-sm font-medium mb-1">{props.label}</label>
     {/if}
-    <Textarea
+    <textarea
       placeholder={props.placeholder || ''}
       rows={props.rows || 4}
       disabled={isPreview}
-      value={props.value || ''}
-    />
+      class="w-full px-3 py-2 bg-bg-input border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50"
+    >{props.value || ''}</textarea>
   </div>
 
 {:else if componentType === 'select'}
@@ -150,17 +159,25 @@
     {#if props.label}
       <label class="block text-sm font-medium mb-1">{props.label}</label>
     {/if}
-    <Select disabled={isPreview}>
+    <select
+      disabled={isPreview}
+      class="w-full px-3 py-2 bg-bg-input border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50"
+    >
       <option value="">{props.placeholder || 'Seleccionar...'}</option>
       {#each (props.options || [{value: '1', label: 'Opción 1'}, {value: '2', label: 'Opción 2'}]) as opt}
         <option value={opt.value}>{opt.label}</option>
       {/each}
-    </Select>
+    </select>
   </div>
 
 {:else if componentType === 'checkbox'}
-  <label class="flex items-center gap-2">
-    <Checkbox checked={props.checked || false} disabled={isPreview} />
+  <label class="flex items-center gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={props.checked || false}
+      disabled={isPreview}
+      class="w-4 h-4 rounded border-border"
+    />
     <span>{props.label || 'Checkbox'}</span>
   </label>
 
@@ -171,8 +188,8 @@
     {/if}
     <div class="space-y-2">
       {#each (props.options || [{value: '1', label: 'Opción 1'}, {value: '2', label: 'Opción 2'}]) as opt}
-        <label class="flex items-center gap-2">
-          <input type="radio" name={component.id} value={opt.value} disabled={isPreview} />
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name={component.id} value={opt.value} disabled={isPreview} class="w-4 h-4" />
           <span>{opt.label}</span>
         </label>
       {/each}
@@ -180,49 +197,67 @@
   </div>
 
 {:else if componentType === 'button'}
-  <Button
-    variant={props.variant || 'primary'}
-    size={props.size || 'md'}
+  <button
     disabled={isPreview}
+    class="px-4 py-2 rounded-lg transition-colors disabled:opacity-50
+      {props.variant === 'primary' ? 'bg-primary text-white hover:bg-primary/90' : ''}
+      {props.variant === 'secondary' ? 'bg-bg-secondary border border-border hover:bg-bg-hover' : ''}
+      {props.variant === 'danger' ? 'bg-danger text-white hover:bg-danger/90' : ''}
+      {props.variant === 'ghost' ? 'hover:bg-bg-hover' : ''}
+      {!props.variant || props.variant === 'default' ? 'bg-primary text-white hover:bg-primary/90' : ''}
+    "
   >
     {#if props.icon}
-      <span>{props.icon}</span>
+      <span class="mr-1">{props.icon}</span>
     {/if}
     {props.label || 'Botón'}
-  </Button>
+  </button>
 
 {:else if componentType === 'button-group'}
   <div class="flex gap-2">
     {#each (props.buttons || [{label: 'Btn 1'}, {label: 'Btn 2'}]) as btn}
-      <Button variant={btn.variant || 'secondary'} size="sm" disabled={isPreview}>
+      <button
+        disabled={isPreview}
+        class="px-3 py-1.5 text-sm rounded-lg bg-bg-secondary border border-border hover:bg-bg-hover disabled:opacity-50"
+      >
         {btn.label}
-      </Button>
+      </button>
     {/each}
   </div>
 
 {:else if componentType === 'alert'}
-  <Alert
-    variant={props.variant || 'info'}
-    title={props.title || ''}
-  >
-    {props.message || 'Mensaje de alerta'}
-  </Alert>
+  <div class="p-4 rounded-lg border
+    {props.variant === 'info' ? 'bg-blue-50 border-blue-200 text-blue-800' : ''}
+    {props.variant === 'success' ? 'bg-green-50 border-green-200 text-green-800' : ''}
+    {props.variant === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : ''}
+    {props.variant === 'danger' ? 'bg-red-50 border-red-200 text-red-800' : ''}
+    {!props.variant ? 'bg-blue-50 border-blue-200 text-blue-800' : ''}
+  ">
+    {#if props.title}
+      <h4 class="font-medium mb-1">{props.title}</h4>
+    {/if}
+    <p class="text-sm">{props.message || 'Mensaje de alerta'}</p>
+  </div>
 
 {:else if componentType === 'spinner'}
   <div class="flex items-center justify-center p-4">
-    <Spinner size={props.size || 'md'} />
+    <div class="animate-spin rounded-full border-2 border-primary border-t-transparent
+      {props.size === 'sm' ? 'w-4 h-4' : ''}
+      {props.size === 'md' || !props.size ? 'w-8 h-8' : ''}
+      {props.size === 'lg' ? 'w-12 h-12' : ''}
+    "></div>
   </div>
 
 {:else if componentType === 'modal'}
   <div class="border-2 border-dashed border-border rounded-lg p-4 bg-bg-secondary">
     <div class="flex items-center justify-between mb-3">
       <h3 class="font-medium">{props.title || 'Modal'}</h3>
-      <span class="text-text-muted">✕</span>
+      <span class="text-text-muted cursor-pointer">✕</span>
     </div>
     <p class="text-sm text-text-muted">Contenido del modal...</p>
     <div class="flex gap-2 justify-end mt-4 pt-3 border-t border-border">
-      <Button variant="ghost" size="sm">Cancelar</Button>
-      <Button variant="primary" size="sm">Aceptar</Button>
+      <button class="px-3 py-1.5 text-sm rounded-lg hover:bg-bg-hover">Cancelar</button>
+      <button class="px-3 py-1.5 text-sm rounded-lg bg-primary text-white">Aceptar</button>
     </div>
   </div>
 
@@ -231,11 +266,9 @@
     <div class="flex border-b border-border">
       {#each (props.items || [{id: '1', label: 'Tab 1'}, {id: '2', label: 'Tab 2'}]) as tab, i}
         <button
-          class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-          class:border-primary={i === 0}
-          class:text-primary={i === 0}
-          class:border-transparent={i !== 0}
-          class:text-text-muted={i !== 0}
+          class="px-4 py-2 text-sm font-medium border-b-2 transition-colors
+            {i === 0 ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text'}
+          "
         >
           {tab.label}
         </button>
@@ -252,32 +285,33 @@
       {#if i > 0}
         <span class="text-text-muted">/</span>
       {/if}
-      <span class:text-text-muted={i < (props.items?.length || 3) - 1}>
+      <span class="{i < (props.items?.length || 3) - 1 ? 'text-text-muted hover:text-text cursor-pointer' : ''}">
         {item.label}
       </span>
     {/each}
   </nav>
 
 {:else if componentType === 'pagination'}
-  <div class="flex items-center justify-center gap-2">
-    <Button variant="ghost" size="sm" disabled={isPreview}>←</Button>
+  <div class="flex items-center justify-center gap-1">
+    <button disabled={isPreview} class="px-3 py-1.5 text-sm rounded-lg hover:bg-bg-hover disabled:opacity-50">←</button>
     {#each Array(Math.min(props.pages || 5, 5)) as _, i}
-      <Button
-        variant={i === 0 ? 'primary' : 'ghost'}
-        size="sm"
+      <button
         disabled={isPreview}
+        class="px-3 py-1.5 text-sm rounded-lg disabled:opacity-50
+          {i === 0 ? 'bg-primary text-white' : 'hover:bg-bg-hover'}
+        "
       >
         {i + 1}
-      </Button>
+      </button>
     {/each}
-    <Button variant="ghost" size="sm" disabled={isPreview}>→</Button>
+    <button disabled={isPreview} class="px-3 py-1.5 text-sm rounded-lg hover:bg-bg-hover disabled:opacity-50">→</button>
   </div>
 
 {:else}
   <!-- Componente desconocido -->
-  <div class="border border-dashed border-warning rounded-lg p-4 bg-warning/10">
-    <p class="text-sm text-warning">
-      ⚠️ Componente no reconocido: <code>{componentType}</code>
+  <div class="border border-dashed border-yellow-500 rounded-lg p-4 bg-yellow-50">
+    <p class="text-sm text-yellow-700">
+      ⚠️ Componente no reconocido: <code class="bg-yellow-100 px-1 rounded">{componentType}</code>
     </p>
   </div>
 {/if}

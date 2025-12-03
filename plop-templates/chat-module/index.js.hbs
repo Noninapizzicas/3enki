@@ -1,0 +1,280 @@
+/**
+ * Módulo: {{name}}
+ * {{description}}
+ *
+ * Generado con: npx plop chat-module
+ * Fecha: {{currentDate}}
+ *
+ * @author {{author}}
+ */
+
+class {{pascalCase name}}Module {
+  constructor() {
+    this.name = '{{name}}';
+    this.version = '1.0.0';
+
+    // Storage
+    this.conversations = new Map();
+    this.messageCounter = 0;
+
+    // Dependencies
+    this.logger = null;
+    this.eventBus = null;
+    this.aiGateway = null;
+  }
+
+  // ==========================================
+  // Lifecycle
+  // ==========================================
+
+  async onLoad(core) {
+    this.logger = core.logger;
+    this.eventBus = core.eventBus;
+
+    // Inject AI Gateway if available
+    if (core.modules && core.modules['ai-gateway']) {
+      this.aiGateway = core.modules['ai-gateway'];
+      this.logger.info('{{name}}.ai_gateway_injected');
+    }
+
+    this.logger.info('modulo.loading', { module: this.name });
+
+    // Subscribe to events
+    await this.subscribeToEvents();
+
+    this.logger.info('modulo.loaded', { module: this.name });
+  }
+
+  async onUnload() {
+    this.logger.info('modulo.unloading', { module: this.name });
+  }
+
+  // ==========================================
+  // Event Subscriptions
+  // ==========================================
+
+  async subscribeToEvents() {
+    await this.eventBus.subscribe('ai.completion.completed', this.onAICompletionCompleted.bind(this));
+  }
+
+  async onAICompletionCompleted(event) {
+    const { prompt_id, provider, model, tokens_used, metadata } = event.payload || {};
+
+    this.logger.info('{{name}}.ai_response', {
+      prompt_id,
+      provider,
+      model,
+      tokens_used,
+      correlation_id: event.correlation_id
+    });
+  }
+
+  // ==========================================
+  // API Handlers
+  // ==========================================
+
+  /**
+   * List all conversations
+   */
+  async handleListConversations(req, context) {
+    try {
+      const conversations = Array.from(this.conversations.values());
+
+      return {
+        status: 200,
+        data: {
+          conversations: conversations.map(c => ({
+            id: c.id,
+            title: c.title,
+            status: c.status,
+            created_at: c.created_at,
+            messages_count: c.messages.length
+          })),
+          total: conversations.length
+        }
+      };
+    } catch (error) {
+      this.logger.error('{{name}}.list.error', { error: error.message });
+      return { status: 500, data: { error: 'LIST_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * Create new conversation
+   */
+  async handleCreateConversation(req, context) {
+    try {
+      const { title } = req.body || {};
+
+      const conversation = {
+        id: `conv_${Date.now()}`,
+        title: title || 'Nueva conversación',
+        status: 'active',
+        created_at: new Date().toISOString(),
+        messages: [],
+        aiConfig: {
+          provider: 'auto',
+          model: 'deepseek-chat',
+          temperature: 0.7,
+          maxTokens: 1000
+        }
+      };
+
+      this.conversations.set(conversation.id, conversation);
+
+      await this.eventBus.publish('{{name}}.chat.started', {
+        conversation_id: conversation.id,
+        title: conversation.title
+      }, { correlationId: context.correlationId });
+
+      return { status: 201, data: conversation };
+    } catch (error) {
+      this.logger.error('{{name}}.create.error', { error: error.message });
+      return { status: 500, data: { error: 'CREATE_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * Get conversation by ID
+   */
+  async handleGetConversation(req, context) {
+    try {
+      const { id } = req.params || context.params || {};
+      const conversation = this.conversations.get(id);
+
+      if (!conversation) {
+        return { status: 404, data: { error: 'NOT_FOUND', message: 'Conversation not found' } };
+      }
+
+      return { status: 200, data: conversation };
+    } catch (error) {
+      this.logger.error('{{name}}.get.error', { error: error.message });
+      return { status: 500, data: { error: 'GET_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * Send message to conversation
+   */
+  async handleSendMessage(req, context) {
+    try {
+      const { id } = req.params || context.params || {};
+      const { content, role = 'user' } = req.body || {};
+
+      const conversation = this.conversations.get(id);
+      if (!conversation) {
+        return { status: 404, data: { error: 'NOT_FOUND', message: 'Conversation not found' } };
+      }
+
+      // Add user message
+      const userMessage = {
+        id: `msg_${++this.messageCounter}`,
+        role,
+        content,
+        timestamp: new Date().toISOString()
+      };
+      conversation.messages.push(userMessage);
+
+      // Generate AI response
+      const aiResponse = await this._generateAIResponse(conversation, context.correlationId);
+
+      // Add assistant message
+      const assistantMessage = {
+        id: `msg_${++this.messageCounter}`,
+        role: 'assistant',
+        content: aiResponse.content,
+        timestamp: new Date().toISOString(),
+        provider: aiResponse.provider,
+        model: aiResponse.model
+      };
+      conversation.messages.push(assistantMessage);
+
+      await this.eventBus.publish('{{name}}.chat.message', {
+        conversation_id: id,
+        user_message: userMessage,
+        assistant_message: assistantMessage
+      }, { correlationId: context.correlationId });
+
+      return {
+        status: 200,
+        data: {
+          user_message: userMessage,
+          assistant_message: assistantMessage
+        }
+      };
+    } catch (error) {
+      this.logger.error('{{name}}.message.error', { error: error.message });
+      return { status: 500, data: { error: 'MESSAGE_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * Health check
+   */
+  async handleHealthCheck(req, context) {
+    return {
+      status: 200,
+      data: {
+        status: 'healthy',
+        module: this.name,
+        version: this.version,
+        conversations: this.conversations.size,
+        ai_gateway: !!this.aiGateway
+      }
+    };
+  }
+
+  // ==========================================
+  // Private Methods
+  // ==========================================
+
+  async _generateAIResponse(conversation, correlationId) {
+    const messages = conversation.messages.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
+
+    try {
+      if (this.aiGateway) {
+        const result = await this.aiGateway.handleChatCompletion({
+          body: {
+            messages: [
+              { role: 'system', content: 'Eres un asistente útil.' },
+              ...messages
+            ],
+            provider: conversation.aiConfig.provider || 'auto',
+            model: conversation.aiConfig.model,
+            temperature: conversation.aiConfig.temperature,
+            max_tokens: conversation.aiConfig.maxTokens
+          }
+        }, { correlationId });
+
+        if (result.status !== 200) {
+          throw new Error(result.data?.message || 'AI Gateway error');
+        }
+
+        return {
+          content: result.data.content,
+          provider: result.data.provider,
+          model: result.data.model
+        };
+      }
+
+      // Fallback response if AI Gateway not available
+      return {
+        content: 'El servicio de IA no está disponible en este momento.',
+        provider: 'fallback',
+        model: 'none'
+      };
+    } catch (error) {
+      this.logger.error('{{name}}.ai.error', { error: error.message, correlationId });
+      return {
+        content: `Error: ${error.message}`,
+        provider: 'error',
+        model: 'none'
+      };
+    }
+  }
+}
+
+module.exports = {{pascalCase name}}Module;

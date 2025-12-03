@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://event-core.local/schemas/scratch-designer/design.json",
+
+  "definitions": {
+    "design": {
+      "type": "object",
+      "required": ["id", "nombre", "tipo", "bloques", "created_at", "updated_at"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "nombre": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "tipo": { "type": "string", "enum": ["mobile", "tablet", "desktop"] },
+        "icono": { "type": "string", "maxLength": 4 },
+        "bloques": { "type": "array", "items": { "$ref": "#/definitions/bloque" } },
+        "conexiones": { "type": "array", "items": { "$ref": "#/definitions/conexion" } },
+        "variables": { "type": "array", "items": { "$ref": "#/definitions/variable" } },
+        "eventos_globales": { "type": "array" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+
+    "bloque": {
+      "type": "object",
+      "required": ["id", "tipo", "categoria"],
+      "properties": {
+        "id": { "type": "string" },
+        "tipo": { "type": "string" },
+        "categoria": {
+          "type": "string",
+          "enum": ["pantalla", "layout", "contenedor", "componente", "modulo", "evento", "accion", "condicion", "datos"]
+        },
+        "props": { "type": "object" },
+        "hijos": { "type": "array", "items": { "$ref": "#/definitions/bloque" } },
+        "eventos": { "type": "object" },
+        "posicion": { "$ref": "#/definitions/posicion" }
+      },
+      "additionalProperties": false
+    },
+
+    "conexion": {
+      "type": "object",
+      "required": ["origen_id", "destino_id", "tipo"],
+      "properties": {
+        "origen_id": { "type": "string" },
+        "destino_id": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["abajo", "hijo", "slot"] },
+        "slot_name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "variable": {
+      "type": "object",
+      "required": ["nombre", "tipo"],
+      "properties": {
+        "nombre": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["string", "number", "boolean", "array", "object"] },
+        "valor_inicial": {}
+      },
+      "additionalProperties": false
+    },
+
+    "posicion": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+
+    "create_request": {
+      "type": "object",
+      "required": ["nombre"],
+      "properties": {
+        "nombre": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "tipo": { "type": "string", "enum": ["mobile", "tablet", "desktop"], "default": "mobile" },
+        "icono": { "type": "string", "maxLength": 4, "default": "📱" }
+      },
+      "additionalProperties": false
+    },
+
+    "update_request": {
+      "type": "object",
+      "properties": {
+        "nombre": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "bloques": { "type": "array", "items": { "$ref": "#/definitions/bloque" } },
+        "conexiones": { "type": "array", "items": { "$ref": "#/definitions/conexion" } },
+        "variables": { "type": "array", "items": { "$ref": "#/definitions/variable" } },
+        "eventos_globales": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+
+    "export_request": {
+      "type": "object",
+      "required": ["design_id"],
+      "properties": {
+        "design_id": { "type": "string", "format": "uuid" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

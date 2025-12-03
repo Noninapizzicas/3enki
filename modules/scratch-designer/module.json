@@ -1,6 +1,6 @@
 {
   "name": "scratch-designer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Diseñador visual tipo Scratch - Bloques arrastrables que generan JSON",
   "author": "Event Core Team",
 
@@ -16,10 +16,26 @@
 
   "events": {
     "publishes": [
-      {"event": "scratch.design.created", "description": "Nuevo diseño creado"},
-      {"event": "scratch.design.updated", "description": "Diseño actualizado"},
-      {"event": "scratch.design.deleted", "description": "Diseño eliminado"},
-      {"event": "scratch.design.exported", "description": "Diseño exportado a JSON"}
+      {
+        "event": "scratch.design.created",
+        "description": "Nuevo diseño creado",
+        "schema": { "$ref": "./schemas/events.json#/definitions/design_created" }
+      },
+      {
+        "event": "scratch.design.updated",
+        "description": "Diseño actualizado",
+        "schema": { "$ref": "./schemas/events.json#/definitions/design_updated" }
+      },
+      {
+        "event": "scratch.design.deleted",
+        "description": "Diseño eliminado",
+        "schema": { "$ref": "./schemas/events.json#/definitions/design_deleted" }
+      },
+      {
+        "event": "scratch.design.exported",
+        "description": "Diseño exportado a JSON",
+        "schema": { "$ref": "./schemas/events.json#/definitions/design_exported" }
+      }
     ],
     "subscribes": []
   },
@@ -92,7 +108,8 @@
       "method": "POST",
       "path": "/designs",
       "handler": "handleCreateDesign",
-      "description": "Crear nuevo diseño"
+      "description": "Crear nuevo diseño (publica scratch.design.created)",
+      "request_schema": { "$ref": "./schemas/design.json#/definitions/create_request" }
     },
     {
       "method": "GET",
@@ -104,13 +121,14 @@
       "method": "PUT",
       "path": "/designs/:id",
       "handler": "handleUpdateDesign",
-      "description": "Actualizar diseño"
+      "description": "Actualizar diseño (publica scratch.design.updated)",
+      "request_schema": { "$ref": "./schemas/design.json#/definitions/update_request" }
     },
     {
       "method": "DELETE",
       "path": "/designs/:id",
       "handler": "handleDeleteDesign",
-      "description": "Eliminar diseño"
+      "description": "Eliminar diseño (publica scratch.design.deleted)"
     },
     {
       "method": "POST",
@@ -144,20 +162,32 @@
       "method": "POST",
       "path": "/export/json",
       "handler": "handleExportJSON",
-      "description": "Exportar diseño como JSON para ui-renderer"
+      "description": "Exportar diseño como JSON para ui-renderer (publica scratch.design.exported)",
+      "request_schema": { "$ref": "./schemas/design.json#/definitions/export_request" }
     },
     {
       "method": "POST",
       "path": "/export/module-ui",
       "handler": "handleExportModuleUI",
-      "description": "Exportar como seccion UI de module.json"
+      "description": "Exportar como seccion UI de module.json",
+      "request_schema": { "$ref": "./schemas/design.json#/definitions/export_request" }
     },
 
+    {
+      "group": "Observability",
+      "description": "Health y metricas"
+    },
     {
       "method": "GET",
       "path": "/health",
       "handler": "handleHealthCheck",
-      "description": "Health check"
+      "description": "Health check del modulo"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Metricas del modulo"
     }
   ],
 
@@ -183,7 +213,28 @@
   },
 
   "observability": {
-    "logging": {"level": "info", "structured": true},
-    "metrics": {"enabled": true}
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "design.created.total",
+        "design.exported.total",
+        "api.calls.total",
+        "errors.total"
+      ],
+      "gauges": [
+        "designs.active.count",
+        "blocks.categories.count"
+      ],
+      "timings": [
+        "design.created.duration",
+        "design.updated.duration",
+        "design.exported.duration"
+      ]
+    }
   }
 }

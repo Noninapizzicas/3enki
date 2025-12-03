@@ -7,7 +7,7 @@
   import Spinner from '$components/feedback/Spinner.svelte';
 
   // Types
-  type ActionType = 'navigate' | 'panel' | 'emit' | 'function';
+  type ActionType = 'navigate' | 'panel' | 'emit' | 'function' | 'action';
 
   type ButtonAction = {
     type: ActionType;
@@ -16,17 +16,22 @@
     label: string;
     panelId?: string;
     holdDuration?: number;
+    action?: string;
+    toast?: string;
   };
 
   type ActionButton = {
     id: string;
     emoji: string;
     label?: string;
-    variant?: 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
+    variant?: 'primary' | 'secondary' | 'success' | 'warning' | 'danger' | 'info';
     primaryAction: ButtonAction;
     secondaryAction?: ButtonAction;
     tertiaryAction?: ButtonAction;
     badge?: string | number;
+    badgeColor?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
+    displayValue?: string;
+    indicator?: boolean;
   };
 
   type PanelConfig = {
@@ -39,12 +44,15 @@
   export let topButtons: ActionButton[] = [];
   export let bottomButtons: ActionButton[] = [];
   export let sideButtons: ActionButton[] = [];
+  export let chatTopButtons: ActionButton[] = [];    // Sub-barra chat superior
+  export let chatBottomButtons: ActionButton[] = []; // Sub-barra chat inferior
   export let panels: Record<string, PanelConfig> = {};
   export let showChat = true;
   export let chatPlaceholder = 'Escribe un mensaje...';
   export let chatLoading = false;
   export let showSideBar = true;
   export let sideBarPosition: 'left' | 'right' = 'right';
+  export let showChatBars = true; // Mostrar sub-barras del chat
 
   const dispatch = createEventDispatcher<{
     buttonAction: { buttonId: string; actionType: 'primary' | 'secondary' | 'tertiary'; action: ButtonAction };
@@ -347,9 +355,10 @@
       </div>
     {/if}
 
-    <!-- Chat Input -->
+    <!-- Chat Area with Sub-bars (Sandwich Layout) -->
     {#if showChat}
-      <div class="mobile-workspace__chat" class:mobile-workspace__chat--expanded={chatExpanded}>
+      <div class="mobile-workspace__chat-area" class:mobile-workspace__chat-area--expanded={chatExpanded}>
+        <!-- Chat Toggle Handle -->
         <button
           class="mobile-workspace__chat-toggle"
           on:click={toggleChatExpanded}
@@ -357,11 +366,93 @@
         >
           <span class="mobile-workspace__chat-handle"></span>
         </button>
-        <ChatInput
-          placeholder={chatPlaceholder}
-          loading={chatLoading}
-          on:submit={handleChatSubmit}
-        />
+
+        <!-- Sub-barra Chat Superior (prepara el mensaje) -->
+        {#if showChatBars && chatTopButtons.length > 0}
+          <div class="mobile-workspace__chat-bar mobile-workspace__chat-bar--top">
+            {#each chatTopButtons as button (button.id)}
+              <button
+                class="mobile-workspace__chat-button mobile-workspace__chat-button--{button.variant || 'default'}"
+                class:mobile-workspace__chat-button--active={button.indicator}
+                class:mobile-workspace__chat-button--holding={buttonStates[button.id]?.holding}
+                on:touchstart={(e) => handleTouchStart(button, e)}
+                on:touchend={(e) => handleTouchEnd(button, e)}
+                on:touchcancel={() => handleTouchCancel(button)}
+                aria-label={button.label || button.emoji}
+              >
+                <span class="mobile-workspace__chat-button-emoji">{button.emoji}</span>
+                {#if button.displayValue}
+                  <span class="mobile-workspace__chat-button-value">{button.displayValue}</span>
+                {:else if button.label}
+                  <span class="mobile-workspace__chat-button-label">{button.label}</span>
+                {/if}
+                {#if button.badge}
+                  <span class="mobile-workspace__chat-button-badge mobile-workspace__chat-button-badge--{button.badgeColor || 'danger'}">{button.badge}</span>
+                {/if}
+                {#if buttonStates[button.id]?.holding && buttonStates[button.id]?.holdProgress > 0}
+                  <svg class="mobile-workspace__progress-ring mobile-workspace__progress-ring--small" viewBox="0 0 36 36">
+                    <circle
+                      cx="18" cy="18" r="16"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-dasharray="100"
+                      stroke-dashoffset={100 - (buttonStates[button.id]?.holdProgress || 0)}
+                      transform="rotate(-90 18 18)"
+                    />
+                  </svg>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Input de Chat -->
+        <div class="mobile-workspace__chat-input">
+          <ChatInput
+            placeholder={chatPlaceholder}
+            loading={chatLoading}
+            on:submit={handleChatSubmit}
+          />
+        </div>
+
+        <!-- Sub-barra Chat Inferior (complementa el mensaje) -->
+        {#if showChatBars && chatBottomButtons.length > 0}
+          <div class="mobile-workspace__chat-bar mobile-workspace__chat-bar--bottom">
+            {#each chatBottomButtons as button (button.id)}
+              <button
+                class="mobile-workspace__chat-button mobile-workspace__chat-button--{button.variant || 'default'}"
+                class:mobile-workspace__chat-button--active={button.indicator}
+                class:mobile-workspace__chat-button--holding={buttonStates[button.id]?.holding}
+                on:touchstart={(e) => handleTouchStart(button, e)}
+                on:touchend={(e) => handleTouchEnd(button, e)}
+                on:touchcancel={() => handleTouchCancel(button)}
+                aria-label={button.label || button.emoji}
+              >
+                <span class="mobile-workspace__chat-button-emoji">{button.emoji}</span>
+                {#if button.label}
+                  <span class="mobile-workspace__chat-button-label">{button.label}</span>
+                {/if}
+                {#if button.badge}
+                  <span class="mobile-workspace__chat-button-badge mobile-workspace__chat-button-badge--{button.badgeColor || 'danger'}">{button.badge}</span>
+                {/if}
+                {#if buttonStates[button.id]?.holding && buttonStates[button.id]?.holdProgress > 0}
+                  <svg class="mobile-workspace__progress-ring mobile-workspace__progress-ring--small" viewBox="0 0 36 36">
+                    <circle
+                      cx="18" cy="18" r="16"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-dasharray="100"
+                      stroke-dashoffset={100 - (buttonStates[button.id]?.holdProgress || 0)}
+                      transform="rotate(-90 18 18)"
+                    />
+                  </svg>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -569,22 +660,22 @@
     padding-left: 4.5rem;
   }
 
-  /* Chat */
-  .mobile-workspace__chat {
+  /* Chat Area (Sandwich Layout) */
+  .mobile-workspace__chat-area {
     background: var(--color-bg-card);
     border-radius: 12px;
     border: 1px solid var(--color-border);
     overflow: hidden;
     transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
   }
 
-  .mobile-workspace__chat--expanded {
+  .mobile-workspace__chat-area--expanded {
     position: fixed;
     inset: 1rem;
     inset-bottom: calc(1rem + env(safe-area-inset-bottom));
     z-index: 50;
-    display: flex;
-    flex-direction: column;
   }
 
   .mobile-workspace__chat-toggle {
@@ -604,8 +695,159 @@
     border-radius: 2px;
   }
 
-  .mobile-workspace__chat--expanded .mobile-workspace__chat-toggle {
+  .mobile-workspace__chat-area--expanded .mobile-workspace__chat-toggle {
     border-bottom: 1px solid var(--color-border);
+  }
+
+  /* Chat Input Container */
+  .mobile-workspace__chat-input {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Chat Sub-bars */
+  .mobile-workspace__chat-bar {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.375rem 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    background: var(--color-bg-elevated);
+  }
+
+  .mobile-workspace__chat-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-workspace__chat-bar--top {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .mobile-workspace__chat-bar--bottom {
+    border-top: 1px solid var(--color-border);
+  }
+
+  /* Chat Bar Buttons */
+  .mobile-workspace__chat-button {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: var(--color-bg-card);
+    color: var(--color-text);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+    position: relative;
+  }
+
+  .mobile-workspace__chat-button:active,
+  .mobile-workspace__chat-button--holding {
+    transform: scale(0.95);
+    background: var(--color-bg-hover);
+  }
+
+  .mobile-workspace__chat-button--active {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
+
+  .mobile-workspace__chat-button--primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .mobile-workspace__chat-button--success {
+    background: var(--color-success);
+    color: white;
+  }
+
+  .mobile-workspace__chat-button--warning {
+    border-color: var(--color-warning);
+    color: var(--color-warning);
+  }
+
+  .mobile-workspace__chat-button--danger {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
+  .mobile-workspace__chat-button--info {
+    border-color: var(--color-info);
+    color: var(--color-info);
+  }
+
+  .mobile-workspace__chat-button-emoji {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .mobile-workspace__chat-button-label {
+    font-size: 0.625rem;
+    color: var(--color-text-muted);
+  }
+
+  .mobile-workspace__chat-button-value {
+    font-size: 0.625rem;
+    font-family: var(--font-mono);
+    color: var(--color-text);
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-workspace__chat-button-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    font-size: 0.5rem;
+    font-weight: 600;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-workspace__chat-button-badge--danger {
+    background: var(--color-danger);
+    color: white;
+  }
+
+  .mobile-workspace__chat-button-badge--primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .mobile-workspace__chat-button-badge--success {
+    background: var(--color-success);
+    color: white;
+  }
+
+  .mobile-workspace__chat-button-badge--warning {
+    background: var(--color-warning);
+    color: black;
+  }
+
+  .mobile-workspace__chat-button-badge--info {
+    background: var(--color-info);
+    color: white;
+  }
+
+  /* Progress ring for chat buttons */
+  .mobile-workspace__progress-ring--small {
+    position: absolute;
+    inset: -1px;
+    width: calc(100% + 2px);
+    height: calc(100% + 2px);
   }
 
   /* Responsive */

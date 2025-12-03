@@ -144,7 +144,7 @@ const EVENTS = {
   },
 
   // === MENU-GENERATOR ===
-  MENU-GENERATOR: {
+  MENU_GENERATOR: {
     CONVERSATION_CREATED: 'menu-generator.conversation.created',
     MENU_CREATED: 'menu-generator.menu.created',
     MENU_EXPORTED: 'menu-generator.menu.exported',

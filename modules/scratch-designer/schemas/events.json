@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://event-core.local/schemas/scratch-designer/events.json",
+
+  "definitions": {
+    "event_envelope": {
+      "type": "object",
+      "required": ["event_id", "event_type", "correlation_id", "occurred_at", "producer", "schema_version", "payload"],
+      "properties": {
+        "event_id": { "type": "string", "format": "uuid" },
+        "event_type": { "type": "string" },
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "producer": { "type": "string", "const": "scratch-designer" },
+        "schema_version": { "type": "string" },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "design_created": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "scratch.design.created" },
+            "payload": {
+              "type": "object",
+              "required": ["design_id", "nombre"],
+              "properties": {
+                "design_id": { "type": "string", "format": "uuid" },
+                "nombre": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "design_updated": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "scratch.design.updated" },
+            "payload": {
+              "type": "object",
+              "required": ["design_id"],
+              "properties": {
+                "design_id": { "type": "string", "format": "uuid" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "design_deleted": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "scratch.design.deleted" },
+            "payload": {
+              "type": "object",
+              "required": ["design_id"],
+              "properties": {
+                "design_id": { "type": "string", "format": "uuid" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "design_exported": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "scratch.design.exported" },
+            "payload": {
+              "type": "object",
+              "required": ["design_id", "format"],
+              "properties": {
+                "design_id": { "type": "string", "format": "uuid" },
+                "format": { "type": "string", "enum": ["json", "module-ui"] }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

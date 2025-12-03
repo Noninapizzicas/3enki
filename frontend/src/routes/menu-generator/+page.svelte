@@ -96,80 +96,67 @@
   // Button Configuration
   // ===========================================
 
+  // ===========================================
+  // BARRA SUPERIOR - Acciones del módulo Menu Generator
+  // ===========================================
   const topButtons = [
-    {
-      id: 'provider',
-      emoji: '🤖',
-      label: 'IA',
-      primaryAction: { type: 'panel' as const, panelId: 'providers', label: 'Ver proveedores' },
-      secondaryAction: { type: 'panel' as const, panelId: 'provider-add', label: 'Añadir proveedor' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'provider-config', label: 'Configurar' }
-    },
-    {
-      id: 'prompt',
-      emoji: '📝',
-      label: 'Prompt',
-      primaryAction: { type: 'panel' as const, panelId: 'prompts', label: 'Ver prompts' },
-      secondaryAction: { type: 'panel' as const, panelId: 'prompt-add', label: 'Nuevo prompt' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'prompt-edit', label: 'Editar' }
-    },
-    {
-      id: 'project',
-      emoji: '📁',
-      label: 'Proyecto',
-      primaryAction: { type: 'panel' as const, panelId: 'projects', label: 'Ver proyectos' },
-      secondaryAction: { type: 'panel' as const, panelId: 'project-add', label: 'Nuevo proyecto' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'project-edit', label: 'Editar proyecto' }
-    },
-    {
-      id: 'conversations',
-      emoji: '💬',
-      label: 'Chat',
-      badge: 0,
-      primaryAction: { type: 'panel' as const, panelId: 'chat', label: 'Ver chat actual' },
-      secondaryAction: { type: 'panel' as const, panelId: 'conversations', label: 'Historial de chats' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'conversation-new', label: 'Nueva conversación' }
-    },
-    {
-      id: 'files',
-      emoji: '📎',
-      label: 'Archivos',
-      primaryAction: { type: 'panel' as const, panelId: 'files', label: 'Ver archivos' },
-      secondaryAction: { type: 'panel' as const, panelId: 'upload', label: 'Subir archivo' }
-    }
-  ];
-
-  const bottomButtons = [
-    {
-      id: 'templates',
-      emoji: '📋',
-      label: 'Plantillas',
-      badge: 0,
-      primaryAction: { type: 'panel' as const, panelId: 'templates', label: 'Ver plantillas' },
-      secondaryAction: { type: 'panel' as const, panelId: 'template-add', label: 'Nueva plantilla' }
-    },
     {
       id: 'menus',
       emoji: '🍽️',
       label: 'Menús',
       badge: 0,
-      primaryAction: { type: 'panel' as const, panelId: 'menus', label: 'Ver menús' }
+      badgeColor: 'primary' as const,
+      primaryAction: { type: 'panel' as const, panelId: 'menus', label: 'Ver menús' },
+      secondaryAction: { type: 'panel' as const, panelId: 'upload', label: 'Subir carta' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'menus-gestionar', label: 'Gestionar menús' }
     },
     {
-      id: 'history',
-      emoji: '🕐',
-      label: 'Historial',
-      primaryAction: { type: 'panel' as const, panelId: 'history', label: 'Ver historial' }
+      id: 'templates',
+      emoji: '📋',
+      label: 'Plantillas',
+      badge: 0,
+      badgeColor: 'info' as const,
+      primaryAction: { type: 'panel' as const, panelId: 'templates', label: 'Ver plantillas' },
+      secondaryAction: { type: 'panel' as const, panelId: 'template-aplicar', label: 'Aplicar plantilla' }
+    },
+    {
+      id: 'filtros',
+      emoji: '🔍',
+      label: 'Filtros',
+      primaryAction: { type: 'panel' as const, panelId: 'filtros', label: 'Filtrar menús' }
+    },
+    {
+      id: 'stats',
+      emoji: '📊',
+      label: 'Stats',
+      primaryAction: { type: 'panel' as const, panelId: 'stats', label: 'Estadísticas' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'stats-detallado', label: 'Métricas detalladas' }
     },
     {
       id: 'export',
       emoji: '⬇️',
       label: 'Exportar',
       variant: 'success' as const,
-      primaryAction: { type: 'panel' as const, panelId: 'export', label: 'Exportar' }
+      primaryAction: { type: 'panel' as const, panelId: 'export', label: 'Exportar menú' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'export-lote', label: 'Exportar varios' }
     }
   ];
 
+  // ===========================================
+  // BARRA INFERIOR - Acciones secundarias
+  // ===========================================
+  const bottomButtons = [
+    {
+      id: 'historial',
+      emoji: '🕐',
+      label: 'Historial',
+      primaryAction: { type: 'panel' as const, panelId: 'history', label: 'Ver historial' }
+    }
+  ];
+
+  // ===========================================
+  // BARRA LATERAL - Ecosistema
+  // ===========================================
   const sideButtons = [
     {
       id: 'home',
@@ -177,17 +164,25 @@
       primaryAction: { type: 'navigate' as const, target: '/', label: 'Inicio' }
     },
     {
+      id: 'modulos',
+      emoji: '🧩',
+      primaryAction: { type: 'panel' as const, panelId: 'modulos', label: 'Módulos' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'modulos-gestionar', label: 'Gestionar módulos' }
+    },
+    {
       id: 'credentials',
       emoji: '🔐',
       badge: 0,
+      badgeColor: 'warning' as const,
       primaryAction: { type: 'panel' as const, panelId: 'credentials', label: 'Ver credenciales' },
       secondaryAction: { type: 'panel' as const, panelId: 'credential-add', label: 'Añadir credencial' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'credential-edit', label: 'Editar credencial' }
+      tertiaryAction: { type: 'panel' as const, panelId: 'credential-edit', label: 'Gestionar credenciales' }
     },
     {
       id: 'settings',
       emoji: '⚙️',
-      primaryAction: { type: 'panel' as const, panelId: 'settings', label: 'Configuración' }
+      primaryAction: { type: 'panel' as const, panelId: 'settings', label: 'Configuración' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'settings-full', label: 'Configuración avanzada' }
     },
     {
       id: 'help',
@@ -196,31 +191,137 @@
     }
   ];
 
+  // ===========================================
+  // SUB-BARRA CHAT SUPERIOR - Prepara el mensaje
+  // ===========================================
+  let currentModel = 'DeepSeek';
+  let currentCredentialPreview = 'sk-...abc';
+
+  const chatTopButtons = [
+    {
+      id: 'modelo',
+      emoji: '🤖',
+      label: 'Modelo',
+      displayValue: currentModel,
+      primaryAction: { type: 'panel' as const, panelId: 'modelo-selector', label: 'Seleccionar modelo' },
+      secondaryAction: { type: 'panel' as const, panelId: 'modelo-config', label: 'Configurar modelo' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'modelos-gestionar', label: 'Gestionar modelos' }
+    },
+    {
+      id: 'credencial',
+      emoji: '🔑',
+      label: 'API Key',
+      displayValue: currentCredentialPreview,
+      variant: credentials.length > 0 ? 'success' as const : 'warning' as const,
+      primaryAction: { type: 'panel' as const, panelId: 'credencial-selector', label: 'Seleccionar API Key' },
+      secondaryAction: { type: 'panel' as const, panelId: 'credential-add', label: 'Nueva API Key' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'credentials', label: 'Gestionar API Keys' }
+    },
+    {
+      id: 'prompt',
+      emoji: '📝',
+      label: 'Prompt',
+      primaryAction: { type: 'panel' as const, panelId: 'prompts', label: 'Prompts rápidos' },
+      secondaryAction: { type: 'panel' as const, panelId: 'prompt-crear', label: 'Nuevo prompt' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'prompts-gestionar', label: 'Gestionar prompts' }
+    },
+    {
+      id: 'historial-chat',
+      emoji: '💬',
+      label: 'Chats',
+      badge: 0,
+      badgeColor: 'info' as const,
+      primaryAction: { type: 'panel' as const, panelId: 'conversations', label: 'Conversaciones' },
+      secondaryAction: { type: 'emit' as const, label: 'Nueva conversación' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'historial-gestionar', label: 'Gestionar historial' }
+    }
+  ];
+
+  // ===========================================
+  // SUB-BARRA CHAT INFERIOR - Complementa el mensaje
+  // ===========================================
+  const chatBottomButtons = [
+    {
+      id: 'tools',
+      emoji: '🔧',
+      label: 'Tools',
+      badge: 0,
+      primaryAction: { type: 'panel' as const, panelId: 'tools', label: 'Herramientas' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'tools-config', label: 'Configurar tools' }
+    },
+    {
+      id: 'adjuntar',
+      emoji: '📎',
+      label: 'Adjuntar',
+      variant: 'primary' as const,
+      primaryAction: { type: 'panel' as const, panelId: 'upload', label: 'Subir carta' },
+      secondaryAction: { type: 'emit' as const, label: 'Abrir cámara' }
+    },
+    {
+      id: 'contexto',
+      emoji: '📋',
+      label: 'Contexto',
+      indicator: false,
+      primaryAction: { type: 'panel' as const, panelId: 'contexto', label: 'Ver contexto' },
+      secondaryAction: { type: 'panel' as const, panelId: 'contexto-editar', label: 'Editar contexto' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'contexto-gestionar', label: 'Gestionar contextos' }
+    },
+    {
+      id: 'plugins',
+      emoji: '🔌',
+      label: 'Plugins',
+      badge: 0,
+      primaryAction: { type: 'panel' as const, panelId: 'plugins', label: 'Plugins activos' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'plugins-gestionar', label: 'Gestionar plugins' }
+    }
+  ];
+
   const panels = {
-    'providers': { title: 'Proveedores de IA', size: 'lg' as const },
-    'provider-add': { title: 'Añadir Proveedor', size: 'md' as const },
-    'provider-config': { title: 'Configurar Proveedor', size: 'full' as const },
-    'prompts': { title: 'Mis Prompts', size: 'lg' as const },
-    'prompt-add': { title: 'Nuevo Prompt', size: 'md' as const },
-    'prompt-edit': { title: 'Editar Prompt', size: 'full' as const },
-    'projects': { title: 'Proyectos', size: 'lg' as const },
-    'project-add': { title: 'Nuevo Proyecto', size: 'md' as const },
-    'project-edit': { title: 'Editar Proyecto', size: 'full' as const },
-    'conversations': { title: 'Conversaciones', size: 'lg' as const },
-    'conversation-new': { title: 'Nueva Conversación', size: 'md' as const },
-    'files': { title: 'Archivos', size: 'lg' as const },
-    'upload': { title: 'Subir Archivo', size: 'md' as const },
-    'templates': { title: 'Plantillas', size: 'lg' as const },
-    'template-add': { title: 'Nueva Plantilla', size: 'md' as const },
+    // Barra superior
     'menus': { title: 'Menús Generados', size: 'lg' as const },
+    'menus-gestionar': { title: 'Gestionar Menús', size: 'full' as const },
     'menu-detail': { title: 'Detalle del Menú', size: 'full' as const },
+    'templates': { title: 'Plantillas', size: 'lg' as const },
+    'template-aplicar': { title: 'Aplicar Plantilla', size: 'md' as const },
+    'filtros': { title: 'Filtrar Menús', size: 'sm' as const },
+    'stats': { title: 'Estadísticas', size: 'md' as const },
+    'stats-detallado': { title: 'Métricas Detalladas', size: 'full' as const },
+    'export': { title: 'Exportar Menú', size: 'sm' as const },
+    'export-lote': { title: 'Exportar Varios', size: 'md' as const },
+    'upload': { title: 'Subir Carta', size: 'md' as const },
     'history': { title: 'Historial', size: 'lg' as const },
-    'export': { title: 'Exportar', size: 'md' as const },
+
+    // Barra lateral (ecosistema)
+    'modulos': { title: 'Módulos Event-Core', size: 'md' as const },
+    'modulos-gestionar': { title: 'Gestionar Módulos', size: 'full' as const },
     'credentials': { title: 'Credenciales', size: 'lg' as const },
     'credential-add': { title: 'Nueva Credencial', size: 'md' as const },
     'credential-edit': { title: 'Editar Credencial', size: 'md' as const },
-    'settings': { title: 'Configuración', size: 'full' as const },
+    'credencial-selector': { title: 'Seleccionar API Key', size: 'sm' as const },
+    'settings': { title: 'Configuración', size: 'md' as const },
+    'settings-full': { title: 'Configuración Avanzada', size: 'full' as const },
     'help': { title: 'Ayuda', size: 'md' as const },
+
+    // Sub-barra chat superior
+    'modelo-selector': { title: 'Seleccionar Modelo', size: 'sm' as const },
+    'modelo-config': { title: 'Configurar Modelo', size: 'md' as const },
+    'modelos-gestionar': { title: 'Gestionar Modelos', size: 'full' as const },
+    'prompts': { title: 'Prompts Rápidos', size: 'md' as const },
+    'prompt-crear': { title: 'Nuevo Prompt', size: 'md' as const },
+    'prompts-gestionar': { title: 'Gestionar Prompts', size: 'full' as const },
+    'conversations': { title: 'Conversaciones', size: 'lg' as const },
+    'historial-gestionar': { title: 'Gestionar Historial', size: 'full' as const },
+
+    // Sub-barra chat inferior
+    'tools': { title: 'Herramientas', size: 'md' as const },
+    'tools-config': { title: 'Configurar Tools', size: 'full' as const },
+    'contexto': { title: 'Contexto Actual', size: 'md' as const },
+    'contexto-editar': { title: 'Editar Contexto', size: 'md' as const },
+    'contexto-gestionar': { title: 'Gestionar Contextos', size: 'full' as const },
+    'plugins': { title: 'Plugins Activos', size: 'md' as const },
+    'plugins-gestionar': { title: 'Gestionar Plugins', size: 'full' as const },
+
+    // Legacy/otros
     'chat': { title: 'Chat con IA', size: 'lg' as const }
   };
 
@@ -653,8 +754,11 @@
   {topButtons}
   {bottomButtons}
   {sideButtons}
+  {chatTopButtons}
+  {chatBottomButtons}
   {panels}
   showChat={true}
+  showChatBars={true}
   chatPlaceholder="Describe el menú que quieres generar..."
   chatLoading={chatLoading}
   on:buttonAction={handleButtonAction}

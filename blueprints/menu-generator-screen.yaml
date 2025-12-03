@@ -1,0 +1,1000 @@
+# ============================================================================
+# Blueprint: Menu Generator Screen - Pantalla de generador de menús con IA
+# ============================================================================
+# Extiende mobile-chat-screen para el módulo menu-generator.
+# Integra todas las funcionalidades: upload, conversaciones, templates,
+# validación y exportación de menús.
+#
+# Estructura de barras:
+#   - toolbar_top: Acciones del módulo (menús, templates, filtros, stats)
+#   - toolbar_right: Ecosistema (módulos, config, notificaciones, usuario)
+#   - toolbar_chat.top: Prepara mensaje (modelo, credencial, prompt, historial)
+#   - toolbar_chat.bottom: Complementa mensaje (tools, adjuntar, contexto, plugins)
+#
+# Triple interacción:
+#   - 1 tap: Ver/consultar información
+#   - 2 taps: Crear/añadir nuevo
+#   - Long press: Gestionar/configurar
+#
+# ============================================================================
+
+# Metadata
+name: menu-generator-screen
+extends: mobile-chat-screen
+description: Pantalla del módulo Menu Generator con chat IA para generación de menús
+version: 1.0.0
+author: Event Core Team
+type: screen
+icon: "🍽️"
+
+module:
+  name: menu-generator
+  basePath: /modules/menu-generator
+  mqttTopics:
+    - menu.generado
+    - menu.validado
+    - menu.error
+    - menu-generator.conversation.created
+    - menu-generator.message.sent
+    - menu-generator.message.received
+    - menu-generator.menu.created
+    - menu-generator.menu.exported
+
+# ============================================================================
+# BARRA SUPERIOR - Específica de Menu Generator
+# ============================================================================
+# Iconos optimizados para generación y gestión de menús
+
+toolbar_top:
+  enabled: true
+  collapsible: true
+  size: 44
+  position: top
+  background: "var(--color-bg-card)"
+  blur: true
+
+  icons:
+    # Menús - Gestión principal
+    - id: menus
+      icon: "🍽️"
+      label: Menús
+      badge: "@data.menus.count"
+      badgeColor: primary
+      actions:
+        tap:
+          type: panel
+          target: menus-lista
+          size: large
+          title: "Menús Generados"
+        doubleTap:
+          type: modal
+          target: menu-upload
+          size: medium
+          title: "Subir Carta"
+        longPress:
+          type: modal
+          target: menus-gestionar
+          size: full
+          title: "Gestionar Menús"
+
+    # Templates - Plantillas predefinidas
+    - id: templates
+      icon: "📋"
+      label: Plantillas
+      badge: "@data.templates.count"
+      badgeColor: info
+      actions:
+        tap:
+          type: panel
+          target: templates-lista
+          size: medium
+          title: "Plantillas Disponibles"
+        doubleTap:
+          type: modal
+          target: template-aplicar
+          size: medium
+          title: "Aplicar Plantilla"
+        longPress:
+          type: modal
+          target: templates-gestionar
+          size: full
+          title: "Gestionar Plantillas"
+
+    # Filtros - Por estado y categoría
+    - id: filtros
+      icon: "🔍"
+      label: Filtros
+      indicator: "@state.hasActiveFilters"
+      actions:
+        tap:
+          type: panel
+          target: filtros-menu
+          size: small
+          title: "Filtrar Menús"
+        doubleTap:
+          type: action
+          action: clearFilters
+          toast: "Filtros limpiados"
+
+    # Stats - Métricas del módulo
+    - id: stats
+      icon: "📊"
+      label: Stats
+      actions:
+        tap:
+          type: panel
+          target: stats-resumen
+          size: medium
+          title: "Estadísticas"
+        longPress:
+          type: modal
+          target: stats-detallado
+          size: full
+          title: "Métricas Detalladas"
+
+    # Exportar - Último o seleccionado
+    - id: export
+      icon: "⬇️"
+      label: Exportar
+      variant: success
+      actions:
+        tap:
+          type: panel
+          target: export-opciones
+          size: small
+          title: "Exportar Menú"
+        longPress:
+          type: modal
+          target: export-lote
+          size: medium
+          title: "Exportar Varios"
+
+# ============================================================================
+# BARRA LATERAL - Ecosistema (heredada, personalizada)
+# ============================================================================
+
+toolbar_right:
+  enabled: true
+  collapsible: true
+  size: 44
+  position: right
+  background: "var(--color-bg-elevated)"
+  blur: true
+
+  icons:
+    # Home - Volver al inicio
+    - id: home
+      icon: "🏠"
+      label: Inicio
+      actions:
+        tap:
+          type: navigate
+          target: "/"
+          transition: slide-left
+
+    # Módulos - Navegar otros módulos
+    - id: modulos
+      icon: "🧩"
+      label: Módulos
+      actions:
+        tap:
+          type: panel
+          target: modulos-lista
+          size: medium
+          title: "Módulos Event-Core"
+        longPress:
+          type: modal
+          target: modulos-gestionar
+          size: full
+          title: "Gestionar Módulos"
+
+    # Credenciales - Acceso rápido
+    - id: credenciales
+      icon: "🔐"
+      label: API Keys
+      badge: "@data.credentials.count"
+      badgeColor: warning
+      actions:
+        tap:
+          type: panel
+          target: credenciales-lista
+          size: medium
+          title: "Credenciales"
+        doubleTap:
+          type: modal
+          target: credencial-crear
+          size: medium
+          title: "Nueva Credencial"
+        longPress:
+          type: modal
+          target: credenciales-gestionar
+          size: full
+          title: "Gestionar Credenciales"
+
+    # Config - Configuración del módulo
+    - id: config
+      icon: "⚙️"
+      label: Config
+      actions:
+        tap:
+          type: panel
+          target: config-rapido
+          size: small
+          title: "Configuración"
+        longPress:
+          type: modal
+          target: config-completo
+          size: full
+          title: "Configuración Avanzada"
+
+    # Ayuda
+    - id: ayuda
+      icon: "❓"
+      label: Ayuda
+      actions:
+        tap:
+          type: panel
+          target: ayuda-menu
+          size: medium
+          title: "Ayuda"
+
+# ============================================================================
+# BARRA CHAT SUPERIOR - Prepara el mensaje
+# ============================================================================
+# Configuración de IA antes de enviar
+
+toolbar_chat:
+  enabled: true
+  position: bottom  # Sandwich alrededor del input
+  background: "var(--color-bg-card)"
+  blur: true
+
+  top:
+    size: 40
+    icons:
+      # Modelo IA
+      - id: modelo
+        icon: "🤖"
+        label: Modelo
+        displayValue: "@state.currentModel.short"
+        actions:
+          tap:
+            type: panel
+            target: modelo-selector
+            size: small
+            title: "Seleccionar Modelo"
+            props:
+              providers:
+                - deepseek
+                - openai
+                - anthropic
+                - ollama
+          doubleTap:
+            type: modal
+            target: modelo-config
+            size: medium
+            title: "Configurar Modelo"
+            props:
+              showTemperature: true
+              showMaxTokens: true
+          longPress:
+            type: modal
+            target: modelos-gestionar
+            size: full
+            title: "Gestionar Modelos"
+
+      # Credencial activa
+      - id: credencial
+        icon: "🔑"
+        label: API Key
+        displayValue: "@state.currentCredential.preview"
+        variant: "@state.credentialStatus"  # success | warning | danger
+        actions:
+          tap:
+            type: panel
+            target: credencial-selector
+            size: small
+            title: "Seleccionar API Key"
+          doubleTap:
+            type: modal
+            target: credencial-crear
+            size: medium
+            title: "Nueva API Key"
+          longPress:
+            type: modal
+            target: credenciales-gestionar
+            size: full
+            title: "Gestionar API Keys"
+
+      # Prompt/Contexto
+      - id: prompt
+        icon: "📝"
+        label: Prompt
+        badge: "@state.activePrompts.count"
+        actions:
+          tap:
+            type: panel
+            target: prompts-rapidos
+            size: medium
+            title: "Prompts Rápidos"
+            props:
+              showFavorites: true
+              showRecent: true
+          doubleTap:
+            type: modal
+            target: prompt-crear
+            size: medium
+            title: "Nuevo Prompt"
+          longPress:
+            type: modal
+            target: prompts-gestionar
+            size: full
+            title: "Gestionar Prompts"
+
+      # Historial de conversaciones
+      - id: historial
+        icon: "💬"
+        label: Chats
+        badge: "@data.conversations.count"
+        badgeColor: info
+        actions:
+          tap:
+            type: panel
+            target: conversaciones-lista
+            size: medium
+            title: "Conversaciones"
+            props:
+              showActive: true
+              showRecent: true
+          doubleTap:
+            type: action
+            action: newConversation
+            toast: "Nueva conversación creada"
+          longPress:
+            type: modal
+            target: historial-gestionar
+            size: full
+            title: "Gestionar Historial"
+
+  # ============================================================================
+  # BARRA CHAT INFERIOR - Complementa el mensaje
+  # ============================================================================
+
+  bottom:
+    size: 40
+    icons:
+      # Herramientas activas
+      - id: tools
+        icon: "🔧"
+        label: Tools
+        badge: "@state.activeTools.count"
+        actions:
+          tap:
+            type: panel
+            target: tools-disponibles
+            size: medium
+            title: "Herramientas"
+            props:
+              categories:
+                - menu
+                - ai
+                - export
+          longPress:
+            type: modal
+            target: tools-config
+            size: full
+            title: "Configurar Tools"
+
+      # Adjuntar archivo (carta de menú)
+      - id: adjuntar
+        icon: "📎"
+        label: Adjuntar
+        variant: primary
+        actions:
+          tap:
+            type: panel
+            target: adjuntar-archivo
+            size: small
+            title: "Adjuntar Archivo"
+            props:
+              accept:
+                - image/*
+                - application/pdf
+              maxSize: 20MB
+              hint: "Sube imagen o PDF de la carta"
+          doubleTap:
+            type: action
+            action: openCamera
+            toast: "Abriendo cámara..."
+
+      # Contexto actual del menú
+      - id: contexto
+        icon: "📋"
+        label: Contexto
+        indicator: "@state.hasContext"
+        actions:
+          tap:
+            type: panel
+            target: contexto-actual
+            size: medium
+            title: "Contexto Actual"
+            props:
+              showCurrentMenu: true
+              showTemplate: true
+              showStyle: true
+          doubleTap:
+            type: modal
+            target: contexto-editar
+            size: medium
+            title: "Editar Contexto"
+          longPress:
+            type: modal
+            target: contexto-gestionar
+            size: full
+            title: "Gestionar Contextos"
+
+      # Plugins activos
+      - id: plugins
+        icon: "🔌"
+        label: Plugins
+        badge: "@state.activePlugins.count"
+        actions:
+          tap:
+            type: panel
+            target: plugins-activos
+            size: medium
+            title: "Plugins Activos"
+          longPress:
+            type: modal
+            target: plugins-gestionar
+            size: full
+            title: "Gestionar Plugins"
+
+# ============================================================================
+# LAYOUT PRINCIPAL
+# ============================================================================
+
+layout:
+  type: mobile-chat-workspace
+
+  zones:
+    # Contenido principal
+    main:
+      scroll: true
+      padding: "var(--space-md)"
+      components:
+        # Stats compactos
+        - type: stat-grid
+          id: stats-mini
+          props:
+            columns: 3
+            compact: true
+            items:
+              - label: "Menús"
+                value: "@compute.count(@data.menus)"
+                icon: "🍽️"
+              - label: "Generando"
+                value: "@compute.count(@compute.filter(@data.menus, 'estado', 'generando'))"
+                icon: "⏳"
+                color: warning
+              - label: "Validados"
+                value: "@compute.count(@compute.filter(@data.menus, 'estado', 'validado'))"
+                icon: "✅"
+                color: success
+
+        # Chat history con eventos del módulo
+        - type: chat-history
+          id: chat-main
+          props:
+            showEvents: true
+            eventTypes:
+              - menu.generado
+              - menu.validado
+              - menu.error
+            showTimestamps: true
+            groupByDate: true
+
+        # Preview de menú generado (si existe)
+        - type: conditional
+          condition: "@state.currentMenu"
+          then:
+            - type: menu-preview-card
+              id: menu-preview
+              props:
+                menu: "@state.currentMenu"
+                showActions: true
+                actions:
+                  - type: validate
+                    label: "Validar"
+                    icon: "✅"
+                    condition: "@state.currentMenu.estado === 'generado'"
+                  - type: export
+                    label: "Exportar"
+                    icon: "⬇️"
+
+    # Paneles flotantes
+    panels:
+      position: overlay
+      animation: slide-up
+      backdrop: true
+      backdropBlur: true
+      sizes:
+        small: "30%"
+        medium: "50%"
+        large: "70%"
+        full: "90%"
+
+# ============================================================================
+# INPUT DE TEXTO
+# ============================================================================
+
+input:
+  type: fixed-expandable
+  placeholder: "Describe el menú que quieres generar..."
+
+  # Comportamiento del Enter
+  enterBehavior: newline
+  sendShortcut: ctrl+enter
+
+  # Botón de enviar
+  sendButton:
+    icon: "➤"
+    position: right
+    size: 44
+
+  # Expansión
+  expandOnDoubleTap: true
+  expandedSize: "50%"
+  showCounter: true
+  maxLength: 4000
+
+  # Sugerencias
+  suggestions:
+    enabled: true
+    items:
+      - "Genera un menú italiano con 20 platos"
+      - "Crea un menú para cafetería con brunch"
+      - "Diseña un menú de tapas españolas"
+      - "Añade descripciones a todos los platos"
+      - "Incluye alérgenos y precios"
+
+# ============================================================================
+# PANELES DEFINIDOS
+# ============================================================================
+
+panels:
+  # Lista de menús
+  menus-lista:
+    type: list
+    dataSource: "@data.menus"
+    itemTemplate: menu-list-item
+    sortBy: created_at
+    sortOrder: desc
+    emptyMessage: "No hay menús generados"
+    emptyIcon: "🍽️"
+    actions:
+      itemClick: viewMenuDetail
+      itemLongPress: menuContextMenu
+
+  # Upload de carta
+  menu-upload:
+    type: form
+    fields:
+      - name: file
+        type: file
+        accept: "image/*,application/pdf"
+        maxSize: 20MB
+        required: true
+        placeholder: "Selecciona imagen o PDF de la carta"
+      - name: template
+        type: select
+        options: "@data.templates"
+        optionLabel: "name"
+        optionValue: "id"
+        placeholder: "Selecciona plantilla (opcional)"
+      - name: metadata.restaurante
+        type: text
+        placeholder: "Nombre del restaurante"
+    submitLabel: "Generar Menú"
+    submitIcon: "🍽️"
+    onSubmit: uploadMenu
+
+  # Lista de templates
+  templates-lista:
+    type: grid
+    columns: 2
+    dataSource: "@data.templates"
+    itemTemplate: template-card
+    emptyMessage: "No hay plantillas disponibles"
+
+  # Filtros
+  filtros-menu:
+    type: form
+    layout: compact
+    fields:
+      - name: estado
+        type: select
+        options:
+          - { value: "", label: "Todos" }
+          - { value: "generando", label: "⏳ Generando" }
+          - { value: "generado", label: "📄 Generado" }
+          - { value: "validado", label: "✅ Validado" }
+          - { value: "error", label: "❌ Error" }
+        default: ""
+      - name: periodo
+        type: select
+        options:
+          - { value: "today", label: "Hoy" }
+          - { value: "week", label: "Esta semana" }
+          - { value: "month", label: "Este mes" }
+          - { value: "all", label: "Todo" }
+    autoSubmit: true
+    onSubmit: applyFilters
+
+  # Stats resumen
+  stats-resumen:
+    type: stats-panel
+    stats:
+      - label: "Total Menús"
+        value: "@compute.count(@data.menus)"
+        icon: "🍽️"
+        trend: "@compute.trend(@data.menus, 'week')"
+      - label: "Productos Totales"
+        value: "@compute.sum(@data.menus, 'productos_count')"
+        icon: "🍕"
+      - label: "Tasa Validación"
+        value: "@compute.percentage(@data.menus, 'estado', 'validado')"
+        icon: "✅"
+        format: "percent"
+      - label: "Tiempo Promedio"
+        value: "@compute.avg(@data.menus, 'generation_time')"
+        icon: "⏱️"
+        format: "duration"
+
+  # Export opciones
+  export-opciones:
+    type: action-list
+    actions:
+      - id: json
+        icon: "📄"
+        label: "Exportar JSON"
+        description: "Formato completo con todos los datos"
+        onClick: { action: exportMenu, format: json }
+      - id: csv
+        icon: "📊"
+        label: "Exportar CSV"
+        description: "Para Excel o hojas de cálculo"
+        onClick: { action: exportMenu, format: csv }
+      - id: markdown
+        icon: "📝"
+        label: "Exportar Markdown"
+        description: "Formato legible para documentación"
+        onClick: { action: exportMenu, format: markdown }
+
+  # Selector de modelo
+  modelo-selector:
+    type: radio-list
+    dataSource: "@data.availableModels"
+    currentValue: "@state.currentModel"
+    groupBy: provider
+    onChange: setModel
+
+  # Selector de credencial
+  credencial-selector:
+    type: radio-list
+    dataSource: "@data.credentials"
+    currentValue: "@state.currentCredential"
+    itemTemplate: credential-item
+    onChange: setCredential
+
+  # Conversaciones
+  conversaciones-lista:
+    type: list
+    dataSource: "@data.conversations"
+    itemTemplate: conversation-item
+    sortBy: updatedAt
+    sortOrder: desc
+    actions:
+      itemClick: loadConversation
+      itemLongPress: conversationContextMenu
+
+  # Adjuntar archivo
+  adjuntar-archivo:
+    type: file-picker
+    accept: "image/*,application/pdf"
+    maxSize: 20MB
+    preview: true
+    onSelect: attachFile
+    hint: "Sube imagen o PDF de la carta del menú"
+
+  # Contexto actual
+  contexto-actual:
+    type: info-panel
+    sections:
+      - title: "Menú Actual"
+        content: "@state.currentMenu"
+        emptyMessage: "No hay menú en proceso"
+      - title: "Plantilla"
+        content: "@state.currentTemplate"
+        emptyMessage: "Sin plantilla seleccionada"
+      - title: "Configuración de Estilo"
+        content: "@state.styleConfig"
+
+  # Ayuda
+  ayuda-menu:
+    type: markdown
+    content: |
+      ## Menu Generator
+
+      ### Sistema de gestos
+      - **1 Tap**: Ver/consultar información
+      - **2 Taps**: Crear/añadir nuevo
+      - **Long Press**: Gestionar/configurar
+
+      ### Barras de navegación
+      - **Superior**: Menús, plantillas, filtros
+      - **Lateral**: Ecosistema (módulos, config)
+      - **Chat Superior**: Modelo, credencial, prompt
+      - **Chat Inferior**: Tools, adjuntar, contexto
+
+      ### Cómo generar un menú
+      1. Sube una imagen/PDF de la carta
+      2. O describe el menú que quieres
+      3. Espera la generación de IA
+      4. Revisa y valida el resultado
+      5. Exporta en el formato deseado
+
+  # Credenciales lista
+  credenciales-lista:
+    type: list
+    dataSource: "@data.credentials"
+    itemTemplate: credential-list-item
+    groupBy: provider
+    emptyMessage: "No hay credenciales configuradas"
+    emptyAction:
+      label: "Añadir Credencial"
+      icon: "➕"
+      onClick: { type: modal, target: credencial-crear }
+
+  # Crear credencial
+  credencial-crear:
+    type: form
+    fields:
+      - name: provider
+        type: select
+        required: true
+        options:
+          - { value: "DEEPSEEK", label: "🔮 DeepSeek" }
+          - { value: "OPENAI", label: "🤖 OpenAI" }
+          - { value: "ANTHROPIC", label: "🧠 Anthropic" }
+          - { value: "OLLAMA", label: "🦙 Ollama" }
+      - name: level
+        type: select
+        required: true
+        options:
+          - { value: "GLOBAL", label: "🌐 Global" }
+          - { value: "PROJECT", label: "📁 Proyecto" }
+          - { value: "CLIENT", label: "👤 Cliente" }
+      - name: identifier
+        type: text
+        placeholder: "Identificador (solo para PROJECT/CLIENT)"
+        showIf: "level !== 'GLOBAL'"
+      - name: api_key
+        type: password
+        required: true
+        placeholder: "sk-..."
+    submitLabel: "Guardar Credencial"
+    onSubmit: saveCredential
+
+# ============================================================================
+# TEMPLATES DE ITEMS
+# ============================================================================
+
+itemTemplates:
+  menu-list-item:
+    layout: row
+    components:
+      - type: badge
+        value: "@item.estado"
+        colorMap:
+          generando: warning
+          generado: info
+          validado: success
+          error: danger
+      - type: text
+        value: "@item.id"
+        truncate: true
+        style: mono
+      - type: text
+        value: "@item.productos_count productos"
+        style: muted
+      - type: text
+        value: "@format.date(@item.created_at, 'short')"
+        style: small
+
+  template-card:
+    layout: card
+    components:
+      - type: emoji
+        value: "@item.emoji"
+        size: lg
+      - type: text
+        value: "@item.name"
+        style: bold
+      - type: text
+        value: "@item.description"
+        style: muted
+        lines: 2
+
+  conversation-item:
+    layout: row
+    components:
+      - type: text
+        value: "@item.title"
+        fallback: "Conversación @item.id"
+      - type: badge
+        value: "@item.messagesCount"
+        color: "@item.status === 'active' ? 'success' : 'default'"
+      - type: text
+        value: "@format.relative(@item.updatedAt)"
+        style: muted
+
+  credential-item:
+    layout: row
+    components:
+      - type: emoji
+        value: "@provider.emoji"
+      - type: text
+        value: "@item.provider"
+        style: bold
+      - type: text
+        value: "@item.level"
+        style: muted
+      - type: text
+        value: "@item.api_key_preview"
+        style: mono
+
+# ============================================================================
+# ACCIONES
+# ============================================================================
+
+actions:
+  uploadMenu:
+    endpoint: POST /modules/menu-generator/upload
+    toast:
+      success: "Menú en proceso de generación"
+      error: "Error al subir carta"
+    onSuccess:
+      - refreshMenus
+      - closePanel
+
+  validateMenu:
+    endpoint: POST /modules/menu-generator/menus/:id/validate
+    toast:
+      success: "Menú validado correctamente"
+      error: "Error al validar menú"
+    onSuccess:
+      - refreshMenus
+
+  exportMenu:
+    endpoint: POST /modules/menu-generator/menus/:id/export
+    downloadResponse: true
+    toast:
+      success: "Menú exportado"
+      error: "Error al exportar"
+
+  saveCredential:
+    endpoint: POST /modules/credential-manager/credentials
+    toast:
+      success: "Credencial guardada"
+      error: "Error al guardar credencial"
+    onSuccess:
+      - refreshCredentials
+      - closePanel
+
+  newConversation:
+    endpoint: POST /modules/menu-generator/conversations
+    toast:
+      success: "Nueva conversación creada"
+    onSuccess:
+      - loadConversation
+      - refreshConversations
+
+  sendMessage:
+    endpoint: POST /modules/menu-generator/conversations/:id/messages
+    streaming: true
+    onChunk: appendToChat
+    onComplete: messageComplete
+
+  setModel:
+    type: state
+    set: currentModel
+    persist: true
+
+  setCredential:
+    type: state
+    set: currentCredential
+    persist: true
+
+  clearFilters:
+    type: state
+    clear: filters
+    toast: "Filtros limpiados"
+
+  applyFilters:
+    type: state
+    set: filters
+    onSuccess: refreshMenus
+
+# ============================================================================
+# DATA SOURCES
+# ============================================================================
+
+dataSources:
+  menus:
+    endpoint: GET /modules/menu-generator/menus
+    refreshOn:
+      - menu.generado
+      - menu.validado
+    transform: "response.menus"
+
+  conversations:
+    endpoint: GET /modules/menu-generator/conversations
+    refreshOn:
+      - menu-generator.conversation.created
+    transform: "response.conversations"
+
+  templates:
+    endpoint: GET /modules/menu-generator/templates
+    cache: true
+    transform: "response.templates"
+
+  credentials:
+    endpoint: GET /modules/credential-manager/credentials
+    refreshOn:
+      - credential.created
+      - credential.deleted
+    transform: "response.credentials"
+
+  availableModels:
+    endpoint: GET /modules/ai-gateway/models
+    cache: true
+    transform: "response.models"
+
+# ============================================================================
+# ESTADO INICIAL
+# ============================================================================
+
+initialState:
+  currentModel: null
+  currentCredential: null
+  currentMenu: null
+  currentTemplate: null
+  currentConversation: null
+  filters: {}
+  hasActiveFilters: false
+  hasContext: false
+  activeTools: []
+  activePlugins: []
+  styleConfig:
+    menuType: "restaurant"
+    language: "es"
+    includeDescriptions: true
+    includeAllergens: true
+    includePrices: true
+
+# ============================================================================
+# MQTT INTEGRATION
+# ============================================================================
+
+mqtt:
+  enabled: true
+  topics:
+    - core/+/events/menu/#
+    - core/+/events/menu-generator/#
+    - core/+/events/credential/#
+  handlers:
+    "menu.generado": onMenuGenerado
+    "menu.validado": onMenuValidado
+    "menu.error": onMenuError
+    "menu-generator.message.received": onMessageReceived

@@ -1,0 +1,297 @@
+# ============================================================================
+# Blueprint: Mobile Chat Screen - Pantalla móvil con chat IA
+# ============================================================================
+# Template para generar pantallas de módulos con el sistema de chat integrado.
+# Sigue la filosofía definida en CONTEXT_UI.md
+#
+# Uso:
+#   1. Copiar este archivo → mi-modulo-screen.yaml
+#   2. Configurar toolbar_top con los iconos del módulo
+#   3. Ejecutar: npx plop from-blueprint
+#
+# ============================================================================
+
+# Metadata del screen
+name: mobile-chat-screen
+description: Pantalla móvil con barras flotantes y chat IA integrado
+version: 1.0.0
+author: Event Core Team
+type: screen
+icon: "📱"
+
+# ============================================================================
+# CONFIGURACIÓN DE BARRAS
+# ============================================================================
+
+# Barra Superior - CONFIGURABLE por módulo
+toolbar_top:
+  enabled: true
+  collapsible: true
+  size: 44  # ~11mm
+  icons: []  # Definir en cada implementación
+
+# Barra Lateral - ECOSISTEMA (estable)
+toolbar_right:
+  enabled: true
+  collapsible: true
+  size: 44
+  icons:
+    - id: modulos
+      icon: "🧩"
+      label: Módulos
+      actions:
+        tap: { type: panel, target: modulos-lista, size: medium }
+        longPress: { type: modal, target: modulos-gestionar, size: full }
+
+    - id: config
+      icon: "⚙️"
+      label: Sistema
+      actions:
+        tap: { type: panel, target: config-rapido, size: small }
+        longPress: { type: modal, target: config-completo, size: full }
+
+    - id: notificaciones
+      icon: "🔔"
+      label: Alertas
+      actions:
+        tap: { type: panel, target: notificaciones-lista, size: medium }
+
+    - id: usuario
+      icon: "👤"
+      label: Perfil
+      actions:
+        tap: { type: panel, target: usuario-menu, size: small }
+        longPress: { type: modal, target: usuario-config, size: medium }
+
+# Barra Chat - FIJA (no configurable)
+toolbar_chat:
+  enabled: true
+
+  # Sub-barra superior (prepara el mensaje)
+  top:
+    icons:
+      - id: modelo
+        icon: "🤖"
+        label: Modelo IA
+        actions:
+          tap: { type: panel, target: modelo-selector, size: small }
+          doubleTap: { type: modal, target: modelo-config, size: medium }
+          longPress: { type: modal, target: modelos-gestionar, size: full }
+
+      - id: credencial
+        icon: "🔑"
+        label: API Key
+        actions:
+          tap: { type: panel, target: credencial-selector, size: small }
+          doubleTap: { type: modal, target: credencial-crear, size: medium }
+          longPress: { type: modal, target: credenciales-gestionar, size: full }
+
+      - id: prompt
+        icon: "📝"
+        label: Prompt
+        actions:
+          tap: { type: panel, target: prompts-rapidos, size: medium }
+          doubleTap: { type: modal, target: prompt-crear, size: medium }
+          longPress: { type: modal, target: prompts-gestionar, size: full }
+
+      - id: historial
+        icon: "💬"
+        label: Historial
+        actions:
+          tap: { type: panel, target: conversaciones, size: medium }
+          longPress: { type: modal, target: historial-gestionar, size: full }
+
+  # Sub-barra inferior (complementa el mensaje)
+  bottom:
+    icons:
+      - id: herramientas
+        icon: "🔧"
+        label: Tools
+        actions:
+          tap: { type: panel, target: tools-disponibles, size: medium }
+          longPress: { type: modal, target: tools-config, size: full }
+
+      - id: adjuntar
+        icon: "📎"
+        label: Adjuntar
+        actions:
+          tap: { type: panel, target: adjuntar-archivo, size: small }
+
+      - id: contexto
+        icon: "📋"
+        label: Contexto
+        actions:
+          tap: { type: panel, target: contexto-actual, size: medium }
+          doubleTap: { type: modal, target: contexto-editar, size: medium }
+          longPress: { type: modal, target: contexto-gestionar, size: full }
+
+      - id: plugins
+        icon: "🔌"
+        label: Plugins
+        actions:
+          tap: { type: panel, target: plugins-activos, size: medium }
+          longPress: { type: modal, target: plugins-gestionar, size: full }
+
+# ============================================================================
+# LAYOUT
+# ============================================================================
+
+layout:
+  type: mobile-chat-workspace
+
+  zones:
+    # Zona central (chat + contenido del módulo)
+    main:
+      scroll: true
+      components:
+        - type: chat-history
+          props:
+            showEvents: true  # Mostrar eventos del módulo en el chat
+
+    # Área de paneles flotantes
+    panels:
+      position: overlay
+      sizes:
+        small: "30%"
+        medium: "50%"
+        full: "80%"
+
+# ============================================================================
+# INPUT DE TEXTO
+# ============================================================================
+
+input:
+  type: fixed-expandable
+  placeholder: "Escribe aquí..."
+
+  # Comportamiento
+  enterBehavior: newline    # Enter = salto de línea
+  sendShortcut: ctrl+enter  # Ctrl/Cmd + Enter = enviar
+
+  # Expansión
+  expandOnDoubleTap: true
+  expandedSize: "50%"       # Ventana al 50% de pantalla
+
+# ============================================================================
+# INTERACCIÓN
+# ============================================================================
+
+interaction:
+  # Triple interacción para iconos
+  icons:
+    tap:
+      delay: 300          # ms antes de confirmar single tap
+      feedback: highlight # Feedback visual
+
+    doubleTap:
+      maxDelay: 300       # ms máximo entre toques
+      feedback: scale     # Feedback visual
+
+    longPress:
+      duration: 500       # ms para activar
+      feedback: progress  # Círculo de progreso
+      vibration: true     # Haptic feedback
+
+  # Gestos globales
+  gestures:
+    swipeDown: closePanel   # Cerrar panel activo
+    swipeRight: closePanel  # Cerrar panel (alternativo)
+    tapOutside: closePanel  # Tocar fuera cierra panel
+
+# ============================================================================
+# EVENTOS
+# ============================================================================
+
+events:
+  publish:
+    - name: screen.chat.send
+      description: Mensaje enviado desde el chat
+      payload:
+        - field: message
+          type: string
+        - field: context
+          type: object
+
+    - name: screen.toolbar.action
+      description: Acción ejecutada en una barra
+      payload:
+        - field: bar
+          type: string  # top, right, chat-top, chat-bottom
+        - field: iconId
+          type: string
+        - field: actionType
+          type: string  # tap, doubleTap, longPress
+        - field: target
+          type: string
+
+  subscribe:
+    - name: ai.response.chunk
+      handler: onAIResponseChunk
+      description: Chunks de respuesta streaming
+
+    - name: ai.response.complete
+      handler: onAIResponseComplete
+      description: Respuesta completa recibida
+
+    - name: module.event
+      handler: onModuleEvent
+      description: Eventos del módulo para mostrar en chat
+
+# ============================================================================
+# INTEGRACIÓN CON MÓDULOS EVENT CORE
+# ============================================================================
+
+integrations:
+  ai-gateway:
+    - modelo-selector
+    - modelo-config
+    - modelos-gestionar
+
+  credential-manager:
+    - credencial-selector
+    - credencial-crear
+    - credenciales-gestionar
+
+  prompt-manager:
+    - prompts-rapidos
+    - prompt-crear
+    - prompts-gestionar
+
+  tool-orchestrator:
+    - tools-disponibles
+    - tools-config
+
+  plugin-manager:
+    - plugins-activos
+    - plugins-gestionar
+
+# ============================================================================
+# EJEMPLO DE USO PARA UN MÓDULO
+# ============================================================================
+
+# Para crear una pantalla para el módulo "tareas":
+#
+# name: tareas-screen
+# extends: mobile-chat-screen
+#
+# toolbar_top:
+#   icons:
+#     - id: proyecto
+#       icon: "📁"
+#       label: Proyecto
+#       actions:
+#         tap: { type: panel, target: proyecto-selector }
+#         doubleTap: { type: modal, target: proyecto-crear }
+#         longPress: { type: modal, target: proyectos-gestionar }
+#
+#     - id: filtros
+#       icon: "🔍"
+#       label: Filtros
+#       actions:
+#         tap: { type: panel, target: filtros-rapidos }
+#
+#     - id: vista
+#       icon: "📊"
+#       label: Vista
+#       actions:
+#         tap: { type: panel, target: cambiar-vista }

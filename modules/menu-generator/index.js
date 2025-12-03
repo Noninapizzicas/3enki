@@ -100,6 +100,12 @@ class MenuGeneratorModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
 
+    // Inyectar referencia al módulo ai-gateway si está disponible
+    if (core.modules && core.modules['ai-gateway']) {
+      this.aiGateway = core.modules['ai-gateway'];
+      this.logger.info('menu-generator.ai_gateway_injected');
+    }
+
     this.logger.info('modulo.loading', { module: this.name });
 
     // Suscribirse a eventos
@@ -117,12 +123,23 @@ class MenuGeneratorModule {
   // ==========================================
 
   async subscribeToEvents() {
-    await this.eventBus.subscribe('ai.response', this.onAIResponse.bind(this));
+    // Suscribirse al evento correcto de ai-gateway
+    await this.eventBus.subscribe('ai.completion.completed', this.onAICompletionCompleted.bind(this));
   }
 
-  async onAIResponse(event) {
+  /**
+   * Handler para evento ai.completion.completed de ai-gateway
+   * @param {Object} event - Evento con payload { provider, model, prompt_id, tokens_used, latency_ms, cost, metadata }
+   */
+  async onAICompletionCompleted(event) {
     const start_time = Date.now();
-    const { request_id, status, data, error } = event.payload;
+    const { prompt_id, provider, model, tokens_used, latency_ms, cost, metadata } = event.payload || {};
+
+    // Extraer request_id del metadata o prompt_id
+    const request_id = metadata?.request_id || prompt_id;
+    const data = metadata?.response_data;
+    const error = metadata?.error;
+    const status = error ? 'error' : 'success';
 
     this.logger.info('ai.response.received', {
       request_id,
@@ -1047,7 +1064,7 @@ class MenuGeneratorModule {
   // ==========================================
 
   /**
-   * Genera respuesta de IA para una conversación
+   * Genera respuesta de IA para una conversación usando ai-gateway
    * @private
    */
   async _generateAIResponse(conversation, messages, correlationId) {
@@ -1060,18 +1077,145 @@ class MenuGeneratorModule {
       content: m.content
     }));
 
-    // Simular respuesta de IA (en producción, llamar a ai-gateway)
-    // TODO: Integrar con módulo ai-gateway real
-    const mockResponse = await this._mockAIResponse(conversation, chatHistory);
+    // Preparar mensajes para ai-gateway
+    const aiMessages = [
+      { role: 'system', content: systemPrompt },
+      ...chatHistory
+    ];
 
-    return {
-      content: mockResponse.content,
-      model: conversation.aiConfig.model || 'deepseek-chat',
-      tokensUsed: mockResponse.tokensUsed || 150,
-      processingTime: Date.now() - startTime,
-      menuGenerated: mockResponse.menuGenerated || false,
-      menuData: mockResponse.menuData || null
-    };
+    try {
+      // Llamar a ai-gateway via HTTP (módulo interno)
+      const aiResponse = await this._callAIGateway(
+        aiMessages,
+        conversation.aiConfig,
+        correlationId
+      );
+
+      // Detectar si la respuesta contiene menú generado
+      const { menuGenerated, menuData } = this._parseAIResponseForMenu(aiResponse.content);
+
+      return {
+        content: aiResponse.content,
+        model: aiResponse.model || conversation.aiConfig.model || 'deepseek-chat',
+        tokensUsed: aiResponse.usage?.total_tokens || 150,
+        processingTime: Date.now() - startTime,
+        menuGenerated,
+        menuData
+      };
+    } catch (error) {
+      this.logger.error('ai.gateway.call_failed', {
+        error: error.message,
+        provider: conversation.aiConfig.provider,
+        correlation_id: correlationId
+      });
+
+      // Fallback a respuesta de error amigable
+      return {
+        content: `Lo siento, hubo un problema al procesar tu solicitud. Por favor, intenta de nuevo. (Error: ${error.message})`,
+        model: conversation.aiConfig.model || 'unknown',
+        tokensUsed: 0,
+        processingTime: Date.now() - startTime,
+        menuGenerated: false,
+        menuData: null,
+        error: true
+      };
+    }
+  }
+
+  /**
+   * Llama al módulo ai-gateway para obtener respuesta de IA
+   * @private
+   */
+  async _callAIGateway(messages, aiConfig, correlationId) {
+    // Publicar evento para solicitar al ai-gateway (patrón request-response via eventos)
+    // O llamar directamente al core.modules['ai-gateway'] si está disponible
+
+    // Opción 1: Llamada directa al módulo (si está inyectado)
+    if (this.aiGateway) {
+      const result = await this.aiGateway.handleChatCompletion({
+        body: {
+          messages,
+          provider: aiConfig.provider || 'auto',
+          model: aiConfig.model,
+          temperature: aiConfig.temperature,
+          max_tokens: aiConfig.maxTokens,
+          metadata: { source: 'menu-generator', correlationId }
+        }
+      }, { correlationId });
+
+      if (result.status !== 200) {
+        throw new Error(result.data?.message || result.data?.error || 'AI Gateway error');
+      }
+
+      return result.data;
+    }
+
+    // Opción 2: Publicar evento y esperar respuesta (event-driven)
+    const requestId = `ai_req_${Date.now()}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('AI Gateway timeout'));
+      }, 30000);
+
+      // Crear handler temporal para la respuesta
+      const responseHandler = async (event) => {
+        if (event.payload?.metadata?.request_id === requestId) {
+          clearTimeout(timeout);
+          await this.eventBus.unsubscribe('ai.completion.completed', responseHandler);
+
+          if (event.payload?.metadata?.error) {
+            reject(new Error(event.payload.metadata.error));
+          } else {
+            resolve({
+              content: event.payload.metadata?.response_content || '',
+              model: event.payload.model,
+              usage: { total_tokens: event.payload.tokens_used }
+            });
+          }
+        }
+      };
+
+      // Suscribirse temporalmente
+      this.eventBus.subscribe('ai.completion.completed', responseHandler);
+
+      // Publicar solicitud
+      this.eventBus.publish('ai.request.created', {
+        request_id: requestId,
+        messages,
+        provider: aiConfig.provider || 'auto',
+        model: aiConfig.model,
+        temperature: aiConfig.temperature,
+        max_tokens: aiConfig.maxTokens,
+        metadata: { source: 'menu-generator', correlationId }
+      }, { correlationId });
+    });
+  }
+
+  /**
+   * Parsea la respuesta de IA para detectar si contiene un menú generado
+   * @private
+   */
+  _parseAIResponseForMenu(content) {
+    // Intentar detectar JSON de menú en la respuesta
+    const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+
+    if (jsonMatch) {
+      try {
+        const menuData = JSON.parse(jsonMatch[1]);
+        if (menuData.productos || menuData.categorias) {
+          return { menuGenerated: true, menuData };
+        }
+      } catch (e) {
+        // No es JSON válido, continuar
+      }
+    }
+
+    // Detectar por palabras clave si parece que se generó un menú
+    const menuKeywords = ['productos:', 'categorías:', 'precio:', '€'];
+    const hasMenuContent = menuKeywords.some(kw => content.toLowerCase().includes(kw.toLowerCase()));
+
+    return { menuGenerated: false, menuData: null };
   }
 
   /**

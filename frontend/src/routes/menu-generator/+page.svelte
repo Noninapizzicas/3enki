@@ -61,6 +61,36 @@
     loading?: boolean;
   }
 
+  interface AIModel {
+    id: string;
+    name: string;
+    provider: string;
+    description?: string;
+  }
+
+  interface Tool {
+    id: string;
+    name: string;
+    description: string;
+    enabled: boolean;
+    category: string;
+  }
+
+  interface Plugin {
+    id: string;
+    name: string;
+    description: string;
+    enabled: boolean;
+    version: string;
+  }
+
+  interface ContextItem {
+    type: string;
+    label: string;
+    value: string;
+    active: boolean;
+  }
+
   // State
   let menus: Menu[] = [];
   let conversations: Conversation[] = [];
@@ -69,6 +99,83 @@
   let chatMessages: ChatMessage[] = [];
   let loading = true;
   let chatLoading = false;
+
+  // AI Models state
+  let availableModels: AIModel[] = [
+    { id: 'deepseek-chat', name: 'DeepSeek Chat', provider: 'DEEPSEEK', description: 'Modelo rápido y económico' },
+    { id: 'deepseek-coder', name: 'DeepSeek Coder', provider: 'DEEPSEEK', description: 'Optimizado para código' },
+    { id: 'gpt-4', name: 'GPT-4', provider: 'OPENAI', description: 'Modelo más capaz de OpenAI' },
+    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OPENAI', description: 'Rápido y económico' },
+    { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'ANTHROPIC', description: 'Modelo más capaz de Anthropic' },
+    { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'ANTHROPIC', description: 'Balance calidad/velocidad' },
+    { id: 'llama3', name: 'Llama 3', provider: 'OLLAMA', description: 'Modelo local open source' }
+  ];
+  let selectedModelId: string = 'deepseek-chat';
+
+  // Tools state
+  let availableTools: Tool[] = [
+    { id: 'menu-parser', name: 'Parser de Menús', description: 'Extrae estructura de cartas', enabled: true, category: 'menu' },
+    { id: 'image-ocr', name: 'OCR de Imágenes', description: 'Lee texto de imágenes', enabled: true, category: 'ai' },
+    { id: 'price-extractor', name: 'Extractor de Precios', description: 'Detecta precios automáticamente', enabled: true, category: 'menu' },
+    { id: 'allergen-detector', name: 'Detector de Alérgenos', description: 'Identifica alérgenos', enabled: false, category: 'menu' },
+    { id: 'json-exporter', name: 'Exportador JSON', description: 'Genera JSON estructurado', enabled: true, category: 'export' },
+    { id: 'csv-exporter', name: 'Exportador CSV', description: 'Genera hojas de cálculo', enabled: true, category: 'export' }
+  ];
+
+  // Plugins state
+  let availablePlugins: Plugin[] = [
+    { id: 'menu-validator', name: 'Validador de Menús', description: 'Verifica estructura correcta', enabled: true, version: '1.0.0' },
+    { id: 'price-formatter', name: 'Formateador de Precios', description: 'Formatea precios según moneda', enabled: true, version: '1.0.0' },
+    { id: 'translation', name: 'Traductor', description: 'Traduce menús a otros idiomas', enabled: false, version: '0.9.0' }
+  ];
+
+  // Context state
+  let contextItems: ContextItem[] = [
+    { type: 'menu', label: 'Menú actual', value: '', active: false },
+    { type: 'template', label: 'Plantilla', value: '', active: false },
+    { type: 'style', label: 'Estilo', value: 'Restaurante', active: true },
+    { type: 'language', label: 'Idioma', value: 'Español', active: true }
+  ];
+
+  // Modules state
+  interface ModuleInfo {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    status: 'active' | 'inactive' | 'error';
+    path: string;
+  }
+  let modules: ModuleInfo[] = [
+    { id: 'menu-generator', name: 'Menu Generator', description: 'Generador de menús con IA', icon: '🍽️', status: 'active', path: '/menu-generator' },
+    { id: 'credential-manager', name: 'Credential Manager', description: 'Gestión de API keys', icon: '🔐', status: 'active', path: '/credentials' },
+    { id: 'ai-gateway', name: 'AI Gateway', description: 'Pasarela IA multi-proveedor', icon: '🤖', status: 'active', path: '/ai-gateway' },
+    { id: 'prompt-manager', name: 'Prompt Manager', description: 'Gestión de prompts', icon: '📝', status: 'active', path: '/prompts' },
+    { id: 'tool-orchestrator', name: 'Tool Orchestrator', description: 'Orquestador de herramientas', icon: '🔧', status: 'active', path: '/tools' },
+    { id: 'plugin-manager', name: 'Plugin Manager', description: 'Gestión de plugins', icon: '🔌', status: 'active', path: '/plugins' }
+  ];
+
+  // Quick prompts state
+  interface QuickPrompt {
+    id: string;
+    name: string;
+    content: string;
+    category: string;
+    favorite: boolean;
+  }
+  let quickPrompts: QuickPrompt[] = [
+    { id: 'p1', name: 'Menú italiano', content: 'Genera un menú italiano con antipasti, primi, secondi y dolci', category: 'restaurant', favorite: true },
+    { id: 'p2', name: 'Menú cafetería', content: 'Crea un menú de cafetería con desayunos, brunch y meriendas', category: 'cafe', favorite: true },
+    { id: 'p3', name: 'Tapas españolas', content: 'Diseña un menú de tapas españolas tradicionales', category: 'restaurant', favorite: false },
+    { id: 'p4', name: 'Añadir alérgenos', content: 'Añade la información de alérgenos a todos los platos del menú', category: 'enhancement', favorite: false },
+    { id: 'p5', name: 'Añadir precios', content: 'Incluye precios orientativos para cada plato del menú', category: 'enhancement', favorite: true }
+  ];
+
+  // Filters state
+  let menuFilters = {
+    estado: '',
+    periodo: 'all'
+  };
 
   // Current panel content
   let currentPanel = '';
@@ -554,6 +661,70 @@
     } catch (err) {
       toast.error('Error eliminando credencial');
     }
+  }
+
+  // Model selection
+  function selectModel(modelId: string) {
+    selectedModelId = modelId;
+    const model = availableModels.find(m => m.id === modelId);
+    if (model) {
+      currentModel = model.name;
+      toast.success(`Modelo: ${model.name}`);
+    }
+    currentPanel = '';
+  }
+
+  // Credential selection for chat
+  function selectCredentialForChat(cred: Credential) {
+    currentCredentialPreview = cred.api_key_preview;
+    toast.success(`API Key: ${cred.provider}`);
+    currentPanel = '';
+  }
+
+  // Tool toggle
+  function toggleTool(toolId: string) {
+    availableTools = availableTools.map(t =>
+      t.id === toolId ? { ...t, enabled: !t.enabled } : t
+    );
+  }
+
+  // Plugin toggle
+  function togglePlugin(pluginId: string) {
+    availablePlugins = availablePlugins.map(p =>
+      p.id === pluginId ? { ...p, enabled: !p.enabled } : p
+    );
+  }
+
+  // Apply quick prompt
+  function applyQuickPrompt(prompt: QuickPrompt) {
+    // Dispatch event to chat input
+    toast.info(`Prompt aplicado: ${prompt.name}`);
+    currentPanel = '';
+  }
+
+  // Toggle prompt favorite
+  function togglePromptFavorite(promptId: string) {
+    quickPrompts = quickPrompts.map(p =>
+      p.id === promptId ? { ...p, favorite: !p.favorite } : p
+    );
+  }
+
+  // Apply filters
+  function applyMenuFilters() {
+    toast.info('Filtros aplicados');
+    currentPanel = '';
+    // Filter logic would be applied here
+  }
+
+  // Clear filters
+  function clearMenuFilters() {
+    menuFilters = { estado: '', periodo: 'all' };
+    toast.info('Filtros limpiados');
+  }
+
+  // Navigate to module
+  function navigateToModule(mod: ModuleInfo) {
+    window.location.href = mod.path;
   }
 
   // ===========================================
@@ -1099,6 +1270,367 @@
         <p><strong>Arriba:</strong> Opciones de IA y configuración</p>
         <p><strong>Abajo:</strong> Acciones y herramientas</p>
         <p><strong>Lateral:</strong> Acceso rápido (pulgar)</p>
+      </div>
+
+    <!-- Modelo Selector Panel -->
+    {:else if panelId === 'modelo-selector'}
+      <div class="space-y-2">
+        {#each Object.entries(availableModels.reduce((acc, m) => {
+          acc[m.provider] = acc[m.provider] || [];
+          acc[m.provider].push(m);
+          return acc;
+        }, {} as Record<string, AIModel[]>)) as [provider, models]}
+          <div class="mb-3">
+            <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">{provider}</h4>
+            {#each models as model (model.id)}
+              <button
+                class="w-full text-left p-3 rounded-lg transition-colors mb-1 {selectedModelId === model.id ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+                on:click={() => selectModel(model.id)}
+              >
+                <div class="flex items-center gap-3">
+                  <span class="text-lg">
+                    {#if provider === 'DEEPSEEK'}🔮
+                    {:else if provider === 'OPENAI'}🤖
+                    {:else if provider === 'ANTHROPIC'}🧠
+                    {:else}🦙{/if}
+                  </span>
+                  <div class="flex-1">
+                    <p class="font-medium text-sm">{model.name}</p>
+                    {#if model.description}
+                      <p class="text-xs text-text-muted">{model.description}</p>
+                    {/if}
+                  </div>
+                  {#if selectedModelId === model.id}
+                    <span class="text-primary">✓</span>
+                  {/if}
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/each}
+      </div>
+
+    <!-- Credencial Selector Panel -->
+    {:else if panelId === 'credencial-selector'}
+      <div class="space-y-2">
+        {#if credentials.length === 0}
+          <p class="text-center text-text-muted py-4">No hay credenciales configuradas</p>
+          <Button variant="primary" class="w-full" on:click={() => currentPanel = 'credential-add'}>
+            ➕ Añadir Credencial
+          </Button>
+        {:else}
+          {#each credentials as cred (cred.key)}
+            <button
+              class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+              on:click={() => selectCredentialForChat(cred)}
+            >
+              <div class="flex items-center gap-3">
+                <span class="text-xl">
+                  {#if cred.provider === 'DEEPSEEK'}🔮
+                  {:else if cred.provider === 'OPENAI'}🤖
+                  {:else if cred.provider === 'ANTHROPIC'}🧠
+                  {:else if cred.provider === 'OLLAMA'}🦙
+                  {:else}🔑{/if}
+                </span>
+                <div class="flex-1">
+                  <p class="font-medium text-sm">{cred.provider}</p>
+                  <p class="text-xs text-text-muted">{cred.level}{cred.identifier ? ` • ${cred.identifier}` : ''}</p>
+                </div>
+                <span class="text-xs font-mono text-text-muted">{cred.api_key_preview}</span>
+              </div>
+            </button>
+          {/each}
+        {/if}
+      </div>
+
+    <!-- Prompts Panel -->
+    {:else if panelId === 'prompts'}
+      <div class="space-y-3">
+        <div class="mb-3">
+          <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">⭐ Favoritos</h4>
+          {#each quickPrompts.filter(p => p.favorite) as prompt (prompt.id)}
+            <button
+              class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors mb-1"
+              on:click={() => applyQuickPrompt(prompt)}
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex-1">
+                  <p class="font-medium text-sm">{prompt.name}</p>
+                  <p class="text-xs text-text-muted truncate">{prompt.content}</p>
+                </div>
+                <button
+                  class="p-1 text-warning hover:text-warning/80"
+                  on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
+                >
+                  ⭐
+                </button>
+              </div>
+            </button>
+          {/each}
+        </div>
+        <div>
+          <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">📝 Todos</h4>
+          {#each quickPrompts.filter(p => !p.favorite) as prompt (prompt.id)}
+            <button
+              class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors mb-1"
+              on:click={() => applyQuickPrompt(prompt)}
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex-1">
+                  <p class="font-medium text-sm">{prompt.name}</p>
+                  <p class="text-xs text-text-muted truncate">{prompt.content}</p>
+                </div>
+                <button
+                  class="p-1 text-text-muted hover:text-warning"
+                  on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
+                >
+                  ☆
+                </button>
+              </div>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+    <!-- Filtros Panel -->
+    {:else if panelId === 'filtros'}
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-2">Estado del menú</label>
+          <select bind:value={menuFilters.estado} class="w-full p-2 bg-bg-input border border-border rounded-lg">
+            <option value="">Todos</option>
+            <option value="generando">⏳ Generando</option>
+            <option value="generado">📄 Generado</option>
+            <option value="validado">✅ Validado</option>
+            <option value="error">❌ Error</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">Período</label>
+          <select bind:value={menuFilters.periodo} class="w-full p-2 bg-bg-input border border-border rounded-lg">
+            <option value="today">Hoy</option>
+            <option value="week">Esta semana</option>
+            <option value="month">Este mes</option>
+            <option value="all">Todo</option>
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <Button variant="primary" class="flex-1" on:click={applyMenuFilters}>Aplicar</Button>
+          <Button variant="ghost" class="flex-1" on:click={clearMenuFilters}>Limpiar</Button>
+        </div>
+      </div>
+
+    <!-- Tools Panel -->
+    {:else if panelId === 'tools'}
+      <div class="space-y-2">
+        {#each Object.entries(availableTools.reduce((acc, t) => {
+          acc[t.category] = acc[t.category] || [];
+          acc[t.category].push(t);
+          return acc;
+        }, {} as Record<string, Tool[]>)) as [category, tools]}
+          <div class="mb-3">
+            <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">
+              {#if category === 'menu'}🍽️ Menú
+              {:else if category === 'ai'}🤖 IA
+              {:else if category === 'export'}⬇️ Exportación
+              {:else}{category}{/if}
+            </h4>
+            {#each tools as tool (tool.id)}
+              <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg mb-1">
+                <div class="flex-1">
+                  <p class="font-medium text-sm">{tool.name}</p>
+                  <p class="text-xs text-text-muted">{tool.description}</p>
+                </div>
+                <button
+                  class="w-12 h-6 rounded-full transition-colors {tool.enabled ? 'bg-success' : 'bg-bg-card'}"
+                  on:click={() => toggleTool(tool.id)}
+                >
+                  <span class="block w-5 h-5 rounded-full bg-white shadow transform transition-transform {tool.enabled ? 'translate-x-6' : 'translate-x-0.5'}"></span>
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/each}
+      </div>
+
+    <!-- Plugins Panel -->
+    {:else if panelId === 'plugins'}
+      <div class="space-y-2">
+        {#each availablePlugins as plugin (plugin.id)}
+          <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg">
+            <div class="flex items-center gap-3">
+              <span class="text-xl">🔌</span>
+              <div>
+                <p class="font-medium text-sm">{plugin.name}</p>
+                <p class="text-xs text-text-muted">{plugin.description}</p>
+                <p class="text-xs text-text-muted">v{plugin.version}</p>
+              </div>
+            </div>
+            <button
+              class="w-12 h-6 rounded-full transition-colors {plugin.enabled ? 'bg-success' : 'bg-bg-card'}"
+              on:click={() => togglePlugin(plugin.id)}
+            >
+              <span class="block w-5 h-5 rounded-full bg-white shadow transform transition-transform {plugin.enabled ? 'translate-x-6' : 'translate-x-0.5'}"></span>
+            </button>
+          </div>
+        {/each}
+      </div>
+
+    <!-- Contexto Panel -->
+    {:else if panelId === 'contexto'}
+      <div class="space-y-3">
+        {#each contextItems as item (item.type)}
+          <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg">
+            <div class="flex items-center gap-3">
+              <span class="text-lg">
+                {#if item.type === 'menu'}🍽️
+                {:else if item.type === 'template'}📋
+                {:else if item.type === 'style'}🎨
+                {:else if item.type === 'language'}🌐
+                {:else}📎{/if}
+              </span>
+              <div>
+                <p class="font-medium text-sm">{item.label}</p>
+                <p class="text-xs text-text-muted">{item.value || 'No definido'}</p>
+              </div>
+            </div>
+            <Badge variant={item.active ? 'success' : 'default'} size="sm">
+              {item.active ? 'Activo' : 'Inactivo'}
+            </Badge>
+          </div>
+        {/each}
+        <div class="pt-2 border-t border-border">
+          <p class="text-xs text-text-muted text-center">
+            El contexto se usa para enriquecer las peticiones a la IA
+          </p>
+        </div>
+      </div>
+
+    <!-- Modulos Panel -->
+    {:else if panelId === 'modulos'}
+      <div class="space-y-2">
+        {#each modules as mod (mod.id)}
+          <button
+            class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+            on:click={() => navigateToModule(mod)}
+          >
+            <div class="flex items-center gap-3">
+              <span class="text-2xl">{mod.icon}</span>
+              <div class="flex-1">
+                <p class="font-medium text-sm">{mod.name}</p>
+                <p class="text-xs text-text-muted">{mod.description}</p>
+              </div>
+              <Badge variant={mod.status === 'active' ? 'success' : mod.status === 'error' ? 'danger' : 'default'} size="sm">
+                {mod.status}
+              </Badge>
+            </div>
+          </button>
+        {/each}
+      </div>
+
+    <!-- Stats Panel -->
+    {:else if panelId === 'stats'}
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="p-3 bg-bg-hover rounded-lg text-center">
+            <p class="text-2xl font-bold">{totalMenus}</p>
+            <p class="text-xs text-text-muted">Total Menús</p>
+          </div>
+          <div class="p-3 bg-bg-hover rounded-lg text-center">
+            <p class="text-2xl font-bold text-success">{validadosCount}</p>
+            <p class="text-xs text-text-muted">Validados</p>
+          </div>
+          <div class="p-3 bg-bg-hover rounded-lg text-center">
+            <p class="text-2xl font-bold text-warning">{generandoCount}</p>
+            <p class="text-xs text-text-muted">En proceso</p>
+          </div>
+          <div class="p-3 bg-bg-hover rounded-lg text-center">
+            <p class="text-2xl font-bold">{menus.reduce((sum, m) => sum + m.productos_count, 0)}</p>
+            <p class="text-xs text-text-muted">Productos</p>
+          </div>
+        </div>
+        <div class="p-3 bg-bg-card rounded-lg border border-border">
+          <p class="text-sm font-medium mb-2">Tasa de validación</p>
+          <div class="w-full bg-bg-hover rounded-full h-2">
+            <div
+              class="bg-success h-2 rounded-full transition-all"
+              style="width: {totalMenus > 0 ? (validadosCount / totalMenus * 100) : 0}%"
+            ></div>
+          </div>
+          <p class="text-xs text-text-muted mt-1">
+            {totalMenus > 0 ? Math.round(validadosCount / totalMenus * 100) : 0}% de menús validados
+          </p>
+        </div>
+      </div>
+
+    <!-- Stats Detallado Panel -->
+    {:else if panelId === 'stats-detallado'}
+      <div class="space-y-4">
+        <h3 class="font-medium">Métricas Detalladas</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="p-3 bg-bg-hover rounded-lg">
+            <p class="text-xl font-bold">{totalMenus}</p>
+            <p class="text-xs text-text-muted">Total Menús</p>
+          </div>
+          <div class="p-3 bg-bg-hover rounded-lg">
+            <p class="text-xl font-bold text-success">{validadosCount}</p>
+            <p class="text-xs text-text-muted">Validados</p>
+          </div>
+          <div class="p-3 bg-bg-hover rounded-lg">
+            <p class="text-xl font-bold text-warning">{generandoCount}</p>
+            <p class="text-xs text-text-muted">Generando</p>
+          </div>
+          <div class="p-3 bg-bg-hover rounded-lg">
+            <p class="text-xl font-bold text-danger">{menus.filter(m => m.estado === 'error').length}</p>
+            <p class="text-xs text-text-muted">Errores</p>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <h4 class="text-sm font-medium">Por estado</h4>
+          {#each ['generando', 'generado', 'validado', 'error'] as estado}
+            {@const count = menus.filter(m => m.estado === estado).length}
+            <div class="flex items-center gap-2">
+              <Badge variant={estadoColors[estado]} size="sm">{estado}</Badge>
+              <div class="flex-1 bg-bg-hover rounded-full h-2">
+                <div
+                  class="h-2 rounded-full transition-all"
+                  class:bg-warning={estado === 'generando'}
+                  class:bg-info={estado === 'generado'}
+                  class:bg-success={estado === 'validado'}
+                  class:bg-danger={estado === 'error'}
+                  style="width: {totalMenus > 0 ? (count / totalMenus * 100) : 0}%"
+                ></div>
+              </div>
+              <span class="text-sm font-mono">{count}</span>
+            </div>
+          {/each}
+        </div>
+        <div class="p-3 bg-bg-card rounded-lg border border-border">
+          <p class="text-sm font-medium mb-2">Productos totales</p>
+          <p class="text-3xl font-bold">{menus.reduce((sum, m) => sum + m.productos_count, 0)}</p>
+          <p class="text-xs text-text-muted">en {menus.reduce((sum, m) => sum + m.categorias_count, 0)} categorías</p>
+        </div>
+      </div>
+
+    <!-- Settings Panel -->
+    {:else if panelId === 'settings'}
+      <div class="space-y-4 text-sm">
+        <div class="p-3 bg-bg-hover rounded-lg">
+          <p class="font-medium mb-1">Modelo por defecto</p>
+          <p class="text-text-muted">{currentModel}</p>
+        </div>
+        <div class="p-3 bg-bg-hover rounded-lg">
+          <p class="font-medium mb-1">Credenciales activas</p>
+          <p class="text-text-muted">{credentials.length} configuradas</p>
+        </div>
+        <div class="p-3 bg-bg-hover rounded-lg">
+          <p class="font-medium mb-1">Tools habilitadas</p>
+          <p class="text-text-muted">{availableTools.filter(t => t.enabled).length} de {availableTools.length}</p>
+        </div>
+        <div class="p-3 bg-bg-hover rounded-lg">
+          <p class="font-medium mb-1">Plugins activos</p>
+          <p class="text-text-muted">{availablePlugins.filter(p => p.enabled).length} de {availablePlugins.length}</p>
+        </div>
       </div>
 
     <!-- Default -->

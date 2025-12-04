@@ -47,13 +47,120 @@ module:
     - menu-generator.menu.exported
 
 # ============================================================================
-# BARRA SUPERIOR - DESHABILITADA (UI simplificada v2.0)
+# BARRA SUPERIOR - Colapsable (UI v2.0)
 # ============================================================================
-# Los iconos de Menús, Templates, Filtros, Stats, Export se acceden
-# desde otros lugares (paneles, acciones del chat)
+# Iconos de gestión de menús, colapsable para maximizar área de chat
 
 toolbar_top:
-  enabled: false
+  enabled: true
+  collapsible: true
+  collapsed_default: false  # Visible por defecto, usuario puede colapsar
+  size: 36
+  position: top
+  background: "rgba(0,0,0,0.3)"
+  blur: true
+  opacity: 0.9
+
+  icons:
+    # Menús - Gestión principal
+    - id: menus
+      icon: "🍽️"
+      label: Menús
+      size: small
+      badge: "@data.menus.count"
+      badgeColor: primary
+      actions:
+        tap:
+          type: panel
+          target: menus-lista
+          size: large
+          title: "Menús Generados"
+        doubleTap:
+          type: modal
+          target: menu-upload
+          size: medium
+          title: "Subir Carta"
+        longPress:
+          type: modal
+          target: menus-gestionar
+          size: full
+          title: "Gestionar Menús"
+
+    # Templates - Plantillas predefinidas
+    - id: templates
+      icon: "📋"
+      label: Plantillas
+      size: small
+      badge: "@data.templates.count"
+      badgeColor: info
+      actions:
+        tap:
+          type: panel
+          target: templates-lista
+          size: medium
+          title: "Plantillas Disponibles"
+        doubleTap:
+          type: modal
+          target: template-aplicar
+          size: medium
+          title: "Aplicar Plantilla"
+        longPress:
+          type: modal
+          target: templates-gestionar
+          size: full
+          title: "Gestionar Plantillas"
+
+    # Filtros - Por estado y categoría
+    - id: filtros
+      icon: "🔍"
+      label: Filtros
+      size: small
+      indicator: "@state.hasActiveFilters"
+      actions:
+        tap:
+          type: panel
+          target: filtros-menu
+          size: small
+          title: "Filtrar Menús"
+        doubleTap:
+          type: action
+          action: clearFilters
+          toast: "Filtros limpiados"
+
+    # Stats - Métricas del módulo
+    - id: stats
+      icon: "📊"
+      label: Stats
+      size: small
+      actions:
+        tap:
+          type: panel
+          target: stats-resumen
+          size: medium
+          title: "Estadísticas"
+        longPress:
+          type: modal
+          target: stats-detallado
+          size: full
+          title: "Métricas Detalladas"
+
+    # Exportar - Último o seleccionado
+    - id: export
+      icon: "⬇️"
+      label: Exportar
+      size: small
+      variant: success
+      actions:
+        tap:
+          type: panel
+          target: export-opciones
+          size: small
+          title: "Exportar Menú"
+        longPress:
+          type: modal
+          target: export-lote
+          size: medium
+          title: "Exportar Varios"
 
 # ============================================================================
 # BARRA LATERAL - Ecosistema (minimalista, transparente)

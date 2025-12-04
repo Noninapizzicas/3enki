@@ -129,17 +129,62 @@ Detecta automáticamente:
 - **sulfitos**: vino, vinagre, frutos secos
 - **moluscos**: mejillones, almejas, pulpo, calamar
 
-## TIPOS DE INGREDIENTES
+## TIPOS DE INGREDIENTES Y EMOJIS
 
-- **base**: arroz, pasta, pan, masa
-- **proteina**: carne, pescado, huevo, legumbres
-- **vegetal**: verduras, hortalizas
-- **lacteo**: quesos, nata, leche
-- **condimento**: sal, pimienta, especias
-- **salsa**: tomate, mayonesa, pesto
-- **topping**: toppings finales, decoración
-- **carbohidrato**: patatas, pan, cereales
-- **grasa**: aceite, mantequilla
+IMPORTANTE: Asigna SIEMPRE un emoji apropiado a cada ingrediente.
+
+| Tipo | Descripción | Emojis sugeridos |
+|------|-------------|------------------|
+| **base** | arroz, pasta, pan, masa | 🍚 🍝 🍞 🫓 🥖 🥯 |
+| **proteina** | carne, pescado, huevo, legumbres | 🥩 🍗 🍖 🥓 🐟 🦐 🥚 🫘 |
+| **vegetal** | verduras, hortalizas | 🥬 🥒 🍅 🧅 🧄 🥕 🌽 🥦 🍆 🫑 🥗 |
+| **lacteo** | quesos, nata, leche | 🧀 🥛 🍶 🧈 |
+| **condimento** | sal, pimienta, especias, hierbas | 🧂 🌿 🌶️ 🫚 🧅 |
+| **salsa** | tomate, mayonesa, pesto, etc | 🍅 🥫 🫒 |
+| **topping** | decoración, finales | 🍫 🥜 🌰 ✨ |
+| **carbohidrato** | patatas, cereales | 🥔 🌾 🍠 |
+| **grasa** | aceite, mantequilla | 🫒 🧈 |
+| **fruta** | frutas | 🍎 🍋 🍊 🍇 🍓 🍌 🥭 🍍 |
+| **marisco** | mariscos y moluscos | 🦐 🦞 🦀 🦑 🐙 🦪 🦪 |
+| **bebida** | líquidos | 🍷 🍺 ☕ 🧃 |
+
+### Mapeo de ingredientes comunes a emojis:
+
+**Carnes:**
+- Pollo → 🍗, Ternera/Res → 🥩, Cerdo → 🐷, Bacon/Panceta → 🥓
+- Jamón → 🍖, Chorizo → 🌭, Salchicha → 🌭
+
+**Pescados y Mariscos:**
+- Pescado genérico → 🐟, Salmón → 🍣, Atún → 🐟, Anchoas → 🐟
+- Gambas/Langostinos → 🦐, Mejillones → 🦪, Pulpo → 🐙, Calamar → 🦑
+
+**Verduras:**
+- Lechuga → 🥬, Tomate → 🍅, Cebolla → 🧅, Ajo → 🧄
+- Pimiento → 🫑, Zanahoria → 🥕, Pepino → 🥒, Champiñón → 🍄
+- Espinacas → 🥬, Brócoli → 🥦, Maíz → 🌽, Berenjena → 🍆
+- Aguacate → 🥑, Aceitunas → 🫒, Rúcula → 🥬
+
+**Lácteos:**
+- Queso genérico → 🧀, Mozzarella → 🧀, Parmesano → 🧀
+- Nata → 🥛, Mantequilla → 🧈, Mascarpone → 🧀
+
+**Bases y Carbohidratos:**
+- Pasta → 🍝, Arroz → 🍚, Pan → 🍞, Masa pizza → 🫓
+- Patata → 🥔, Boniato → 🍠
+
+**Huevos:**
+- Huevo → 🥚
+
+**Condimentos:**
+- Albahaca → 🌿, Orégano → 🌿, Perejil → 🌿, Cilantro → 🌿
+- Pimienta → 🌶️, Sal → 🧂, Trufa → 🍄
+
+**Salsas:**
+- Tomate → 🍅, Pesto → 🌿, Mayonesa → 🥚, Mostaza → 🟡
+
+**Otros:**
+- Café → ☕, Chocolate/Cacao → 🍫, Miel → 🍯, Azúcar → 🍬
+- Vino → 🍷, Aceite oliva → 🫒
 
 ## TAGS DE PRODUCTOS
 
@@ -359,10 +404,198 @@ function validateMenuStructure(menu) {
 }
 
 /**
+ * Mapeo de ingredientes a emojis por nombre
+ */
+const INGREDIENT_EMOJI_MAP = {
+  // Carnes
+  'pollo': '🍗', 'chicken': '🍗', 'pechuga': '🍗',
+  'ternera': '🥩', 'res': '🥩', 'beef': '🥩', 'vacuno': '🥩', 'entrecot': '🥩', 'solomillo': '🥩',
+  'cerdo': '🐷', 'pork': '🐷', 'lomo': '🐷',
+  'bacon': '🥓', 'panceta': '🥓', 'tocino': '🥓',
+  'jamon': '🍖', 'jamón': '🍖', 'prosciutto': '🍖', 'serrano': '🍖',
+  'chorizo': '🌭', 'salchicha': '🌭', 'frankfurter': '🌭',
+  'cordero': '🍖', 'lamb': '🍖',
+  'pato': '🦆', 'duck': '🦆',
+
+  // Pescados y Mariscos
+  'pescado': '🐟', 'fish': '🐟',
+  'salmon': '🍣', 'salmón': '🍣',
+  'atun': '🐟', 'atún': '🐟', 'tuna': '🐟',
+  'anchoa': '🐟', 'anchoas': '🐟', 'anchovy': '🐟', 'boquerones': '🐟',
+  'bacalao': '🐟', 'cod': '🐟',
+  'lubina': '🐟', 'dorada': '🐟', 'merluza': '🐟',
+  'gamba': '🦐', 'gambas': '🦐', 'langostino': '🦐', 'langostinos': '🦐', 'shrimp': '🦐', 'prawn': '🦐',
+  'mejillon': '🦪', 'mejillones': '🦪', 'mussel': '🦪',
+  'almeja': '🦪', 'almejas': '🦪', 'clam': '🦪',
+  'pulpo': '🐙', 'octopus': '🐙',
+  'calamar': '🦑', 'calamares': '🦑', 'squid': '🦑',
+  'cangrejo': '🦀', 'crab': '🦀',
+  'langosta': '🦞', 'bogavante': '🦞', 'lobster': '🦞',
+
+  // Verduras
+  'lechuga': '🥬', 'lettuce': '🥬', 'escarola': '🥬',
+  'espinaca': '🥬', 'espinacas': '🥬', 'spinach': '🥬',
+  'rucula': '🥬', 'rúcula': '🥬', 'arugula': '🥬',
+  'tomate': '🍅', 'tomato': '🍅', 'cherry': '🍅',
+  'cebolla': '🧅', 'onion': '🧅', 'cebolleta': '🧅',
+  'ajo': '🧄', 'garlic': '🧄',
+  'pimiento': '🫑', 'pepper': '🫑', 'pimientos': '🫑', 'morron': '🫑', 'morrón': '🫑',
+  'zanahoria': '🥕', 'carrot': '🥕',
+  'pepino': '🥒', 'cucumber': '🥒', 'pepinillo': '🥒',
+  'champiñon': '🍄', 'champiñones': '🍄', 'champiñón': '🍄', 'mushroom': '🍄', 'setas': '🍄', 'trufa': '🍄',
+  'brocoli': '🥦', 'brócoli': '🥦', 'broccoli': '🥦',
+  'maiz': '🌽', 'maíz': '🌽', 'corn': '🌽',
+  'berenjena': '🍆', 'eggplant': '🍆', 'aubergine': '🍆',
+  'aguacate': '🥑', 'avocado': '🥑', 'guacamole': '🥑',
+  'aceituna': '🫒', 'aceitunas': '🫒', 'olive': '🫒', 'olivas': '🫒',
+  'jalapeño': '🌶️', 'jalapeno': '🌶️', 'chile': '🌶️', 'guindilla': '🌶️',
+  'calabacin': '🥒', 'calabacín': '🥒', 'zucchini': '🥒',
+
+  // Lácteos
+  'queso': '🧀', 'cheese': '🧀',
+  'mozzarella': '🧀', 'parmesano': '🧀', 'parmesan': '🧀', 'cheddar': '🧀',
+  'gorgonzola': '🧀', 'gouda': '🧀', 'emmental': '🧀', 'manchego': '🧀',
+  'brie': '🧀', 'camembert': '🧀', 'feta': '🧀', 'roquefort': '🧀',
+  'mascarpone': '🧀', 'ricotta': '🧀', 'burrata': '🧀',
+  'nata': '🥛', 'cream': '🥛', 'crema': '🥛',
+  'leche': '🥛', 'milk': '🥛',
+  'mantequilla': '🧈', 'butter': '🧈',
+  'yogur': '🥛', 'yogurt': '🥛',
+
+  // Bases y Carbohidratos
+  'pasta': '🍝', 'spaghetti': '🍝', 'espagueti': '🍝', 'penne': '🍝', 'fusilli': '🍝',
+  'tagliatelle': '🍝', 'fettuccine': '🍝', 'rigatoni': '🍝', 'macarron': '🍝',
+  'arroz': '🍚', 'rice': '🍚',
+  'pan': '🍞', 'bread': '🍞', 'focaccia': '🍞', 'ciabatta': '🍞',
+  'baguette': '🥖', 'chapata': '🥖',
+  'masa': '🫓', 'dough': '🫓',
+  'patata': '🥔', 'patatas': '🥔', 'potato': '🥔', 'papa': '🥔',
+  'boniato': '🍠', 'sweet potato': '🍠',
+  'croutons': '🍞', 'crutones': '🍞',
+
+  // Huevos
+  'huevo': '🥚', 'huevos': '🥚', 'egg': '🥚',
+
+  // Condimentos y Especias
+  'albahaca': '🌿', 'basil': '🌿',
+  'oregano': '🌿', 'orégano': '🌿',
+  'perejil': '🌿', 'parsley': '🌿',
+  'cilantro': '🌿', 'coriander': '🌿',
+  'romero': '🌿', 'rosemary': '🌿',
+  'tomillo': '🌿', 'thyme': '🌿',
+  'menta': '🌿', 'mint': '🌿', 'hierbabuena': '🌿',
+  'pimienta': '🌶️', 'pepper': '🌶️',
+  'sal': '🧂', 'salt': '🧂',
+  'jengibre': '🫚', 'ginger': '🫚',
+
+  // Salsas
+  'tomate frito': '🥫', 'salsa tomate': '🥫', 'marinara': '🥫',
+  'pesto': '🌿',
+  'mayonesa': '🥚', 'mayo': '🥚',
+  'mostaza': '🟡', 'mustard': '🟡',
+  'ketchup': '🍅', 'catsup': '🍅',
+  'bbq': '🥫', 'barbacoa': '🥫',
+  'salsa rosa': '🥫', 'cocktail': '🥫',
+
+  // Frutas
+  'limon': '🍋', 'limón': '🍋', 'lemon': '🍋',
+  'lima': '🍋', 'lime': '🍋',
+  'naranja': '🍊', 'orange': '🍊',
+  'manzana': '🍎', 'apple': '🍎',
+  'fresa': '🍓', 'fresas': '🍓', 'strawberry': '🍓',
+  'piña': '🍍', 'pineapple': '🍍',
+  'mango': '🥭',
+  'platano': '🍌', 'plátano': '🍌', 'banana': '🍌',
+  'uva': '🍇', 'uvas': '🍇', 'grape': '🍇',
+  'melocoton': '🍑', 'melocotón': '🍑', 'peach': '🍑',
+
+  // Frutos secos
+  'almendra': '🥜', 'almendras': '🥜', 'almond': '🥜',
+  'nuez': '🥜', 'nueces': '🥜', 'walnut': '🥜',
+  'piñon': '🥜', 'piñones': '🥜', 'pine nut': '🥜',
+  'cacahuete': '🥜', 'cacahuetes': '🥜', 'peanut': '🥜',
+  'pistacho': '🥜', 'pistachos': '🥜', 'pistachio': '🥜',
+  'anacardo': '🥜', 'anacardos': '🥜', 'cashew': '🥜',
+  'avellana': '🌰', 'avellanas': '🌰', 'hazelnut': '🌰',
+
+  // Otros
+  'aceite': '🫒', 'oil': '🫒', 'aceite oliva': '🫒',
+  'vinagre': '🍶', 'vinegar': '🍶',
+  'miel': '🍯', 'honey': '🍯',
+  'azucar': '🍬', 'azúcar': '🍬', 'sugar': '🍬',
+  'chocolate': '🍫', 'cacao': '🍫', 'cocoa': '🍫',
+  'cafe': '☕', 'café': '☕', 'coffee': '☕',
+  'vino': '🍷', 'wine': '🍷',
+  'cerveza': '🍺', 'beer': '🍺'
+};
+
+/**
+ * Emojis por defecto según tipo de ingrediente
+ */
+const TYPE_EMOJI_MAP = {
+  'base': '🍚',
+  'proteina': '🥩',
+  'vegetal': '🥬',
+  'lacteo': '🧀',
+  'condimento': '🌿',
+  'salsa': '🥫',
+  'topping': '✨',
+  'carbohidrato': '🥔',
+  'grasa': '🫒',
+  'fruta': '🍎',
+  'marisco': '🦐',
+  'bebida': '🥤',
+  'otro': '🍽️'
+};
+
+/**
+ * Asigna emoji a un ingrediente basándose en su nombre y tipo
+ */
+function assignIngredientEmoji(ingredient) {
+  // Si ya tiene emoji, devolverlo
+  if (ingredient.emoji) {
+    return ingredient.emoji;
+  }
+
+  const nombre = (ingredient.nombre || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Normalizar acentos
+
+  // Buscar coincidencia exacta primero
+  for (const [key, emoji] of Object.entries(INGREDIENT_EMOJI_MAP)) {
+    if (nombre === key || nombre.includes(key)) {
+      return emoji;
+    }
+  }
+
+  // Si no hay coincidencia, usar emoji por tipo
+  if (ingredient.tipo && TYPE_EMOJI_MAP[ingredient.tipo]) {
+    return TYPE_EMOJI_MAP[ingredient.tipo];
+  }
+
+  // Emoji genérico
+  return '🍽️';
+}
+
+/**
+ * Enriquece ingredientes con emojis
+ */
+function enrichIngredients(ingredientes) {
+  return ingredientes.map(ing => ({
+    ...ing,
+    emoji: assignIngredientEmoji(ing)
+  }));
+}
+
+/**
  * Enriquece un menú con información calculada
  */
 function enrichMenu(menu) {
   const enriched = { ...menu };
+
+  // Enriquecer ingredientes con emojis
+  if (enriched.ingredientes_catalogo) {
+    enriched.ingredientes_catalogo = enrichIngredients(enriched.ingredientes_catalogo);
+  }
 
   // Calcular estadísticas
   const precios = enriched.productos
@@ -412,10 +645,14 @@ module.exports = {
   MENU_EXTRACTION_USER_PROMPT,
   MENU_CHAT_SYSTEM_PROMPT,
   REFINEMENT_PROMPT,
+  INGREDIENT_EMOJI_MAP,
+  TYPE_EMOJI_MAP,
   buildExtractionPrompt,
   buildExtractionMessages,
   buildChatSystemPrompt,
   extractJSONFromResponse,
   validateMenuStructure,
-  enrichMenu
+  enrichMenu,
+  enrichIngredients,
+  assignIngredientEmoji
 };

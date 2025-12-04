@@ -89,17 +89,20 @@ class PromptManagerModule {
   /**
    * API Handler: Create Prompt
    */
-  async createPrompt(req, res) {
+  async handleCreatePrompt(req, context) {
     try {
-      const { name, title, description, content, variables, tags, metadata } = req.body;
+      const { name, title, description, content, variables, tags, metadata } = req.body || {};
 
       // Check if prompt with same name exists
       const existing = Array.from(this.prompts.values()).find(p => p.name === name);
       if (existing) {
-        return res.status(409).json({
-          error: 'PROMPT_EXISTS',
-          message: `Prompt with name '${name}' already exists`
-        });
+        return {
+          status: 409,
+          data: {
+            error: 'PROMPT_EXISTS',
+            message: `Prompt with name '${name}' already exists`
+          }
+        };
       }
 
       // Create prompt object
@@ -135,22 +138,25 @@ class PromptManagerModule {
         name: prompt.name
       });
 
-      return res.status(201).json(prompt);
+      return { status: 201, data: prompt };
     } catch (error) {
       this.logger.error('prompt-manager.create.error', { error: error.message });
-      return res.status(500).json({
-        error: 'CREATE_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'CREATE_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: List Prompts
    */
-  async listPrompts(req, res) {
+  async handleListPrompts(req, context) {
     try {
-      const { tag, search } = req.query;
+      const { tag, search } = req.query || {};
       let prompts = Array.from(this.prompts.values());
 
       // Filter by tag
@@ -168,67 +174,82 @@ class PromptManagerModule {
         );
       }
 
-      return res.status(200).json({
-        prompts: prompts.map(p => ({
-          id: p.id,
-          name: p.name,
-          title: p.title,
-          description: p.description,
-          current_version: p.current_version,
-          tags: p.tags,
-          created_at: p.created_at,
-          updated_at: p.updated_at
-        })),
-        total: prompts.length
-      });
+      return {
+        status: 200,
+        data: {
+          prompts: prompts.map(p => ({
+            id: p.id,
+            name: p.name,
+            title: p.title,
+            description: p.description,
+            current_version: p.current_version,
+            tags: p.tags,
+            created_at: p.created_at,
+            updated_at: p.updated_at
+          })),
+          total: prompts.length
+        }
+      };
     } catch (error) {
       this.logger.error('prompt-manager.list.error', { error: error.message });
-      return res.status(500).json({
-        error: 'LIST_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'LIST_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: Get Prompt
    */
-  async getPrompt(req, res) {
+  async handleGetPrompt(req, context) {
     try {
-      const { id } = req.params;
+      const { id } = req.params || context.params || {};
       const prompt = this.prompts.get(id);
 
       if (!prompt) {
-        return res.status(404).json({
-          error: 'PROMPT_NOT_FOUND',
-          message: `Prompt with id '${id}' not found`
-        });
+        return {
+          status: 404,
+          data: {
+            error: 'PROMPT_NOT_FOUND',
+            message: `Prompt with id '${id}' not found`
+          }
+        };
       }
 
-      return res.status(200).json(prompt);
+      return { status: 200, data: prompt };
     } catch (error) {
       this.logger.error('prompt-manager.get.error', { error: error.message });
-      return res.status(500).json({
-        error: 'GET_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'GET_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: Update Prompt
    */
-  async updatePrompt(req, res) {
+  async handleUpdatePrompt(req, context) {
     try {
-      const { id } = req.params;
-      const updates = req.body;
+      const { id } = req.params || context.params || {};
+      const updates = req.body || {};
 
       const prompt = this.prompts.get(id);
       if (!prompt) {
-        return res.status(404).json({
-          error: 'PROMPT_NOT_FOUND',
-          message: `Prompt with id '${id}' not found`
-        });
+        return {
+          status: 404,
+          data: {
+            error: 'PROMPT_NOT_FOUND',
+            message: `Prompt with id '${id}' not found`
+          }
+        };
       }
 
       // Check if content changed (new version)
@@ -270,29 +291,35 @@ class PromptManagerModule {
         version: prompt.current_version
       });
 
-      return res.status(200).json(prompt);
+      return { status: 200, data: prompt };
     } catch (error) {
       this.logger.error('prompt-manager.update.error', { error: error.message });
-      return res.status(500).json({
-        error: 'UPDATE_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'UPDATE_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: Delete Prompt
    */
-  async deletePrompt(req, res) {
+  async handleDeletePrompt(req, context) {
     try {
-      const { id } = req.params;
+      const { id } = req.params || context.params || {};
 
       const prompt = this.prompts.get(id);
       if (!prompt) {
-        return res.status(404).json({
-          error: 'PROMPT_NOT_FOUND',
-          message: `Prompt with id '${id}' not found`
-        });
+        return {
+          status: 404,
+          data: {
+            error: 'PROMPT_NOT_FOUND',
+            message: `Prompt with id '${id}' not found`
+          }
+        };
       }
 
       // Delete from memory and disk
@@ -301,62 +328,80 @@ class PromptManagerModule {
 
       this.logger.info('prompt-manager.prompt.deleted', { id });
 
-      return res.status(200).json({
-        success: true,
-        message: 'Prompt deleted successfully'
-      });
+      return {
+        status: 200,
+        data: {
+          success: true,
+          message: 'Prompt deleted successfully'
+        }
+      };
     } catch (error) {
       this.logger.error('prompt-manager.delete.error', { error: error.message });
-      return res.status(500).json({
-        error: 'DELETE_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'DELETE_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: List Versions
    */
-  async listVersions(req, res) {
+  async handleListVersions(req, context) {
     try {
-      const { id } = req.params;
+      const { id } = req.params || context.params || {};
 
       const prompt = this.prompts.get(id);
       if (!prompt) {
-        return res.status(404).json({
-          error: 'PROMPT_NOT_FOUND',
-          message: `Prompt with id '${id}' not found`
-        });
+        return {
+          status: 404,
+          data: {
+            error: 'PROMPT_NOT_FOUND',
+            message: `Prompt with id '${id}' not found`
+          }
+        };
       }
 
-      return res.status(200).json({
-        prompt_id: id,
-        current_version: prompt.current_version,
-        versions: prompt.versions
-      });
+      return {
+        status: 200,
+        data: {
+          prompt_id: id,
+          current_version: prompt.current_version,
+          versions: prompt.versions
+        }
+      };
     } catch (error) {
       this.logger.error('prompt-manager.versions.error', { error: error.message });
-      return res.status(500).json({
-        error: 'LIST_VERSIONS_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'LIST_VERSIONS_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: Render Template
    */
-  async renderTemplate(req, res) {
+  async handleRenderTemplate(req, context) {
     try {
-      const { id } = req.params;
-      const { variables, version } = req.body;
+      const { id } = req.params || context.params || {};
+      const { variables, version } = req.body || {};
 
       const prompt = this.prompts.get(id);
       if (!prompt) {
-        return res.status(404).json({
-          error: 'PROMPT_NOT_FOUND',
-          message: `Prompt with id '${id}' not found`
-        });
+        return {
+          status: 404,
+          data: {
+            error: 'PROMPT_NOT_FOUND',
+            message: `Prompt with id '${id}' not found`
+          }
+        };
       }
 
       // Get specific version or latest
@@ -364,43 +409,52 @@ class PromptManagerModule {
       if (version) {
         const versionData = prompt.versions.find(v => v.version === version);
         if (!versionData) {
-          return res.status(404).json({
-            error: 'VERSION_NOT_FOUND',
-            message: `Version '${version}' not found`
-          });
+          return {
+            status: 404,
+            data: {
+              error: 'VERSION_NOT_FOUND',
+              message: `Version '${version}' not found`
+            }
+          };
         }
         content = versionData.content;
       }
 
       // Render template
-      const rendered = this.renderTemplateString(content, variables);
+      const rendered = this.renderTemplateString(content, variables || {});
 
       // Record analytics
       if (this.config.enable_analytics) {
-        this.recordUsage(id, version || prompt.current_version, variables);
+        this.recordUsage(id, version || prompt.current_version, variables || {});
       }
 
-      return res.status(200).json({
-        prompt_id: id,
-        version: version || prompt.current_version,
-        rendered,
-        variables_used: variables
-      });
+      return {
+        status: 200,
+        data: {
+          prompt_id: id,
+          version: version || prompt.current_version,
+          rendered,
+          variables_used: variables || {}
+        }
+      };
     } catch (error) {
       this.logger.error('prompt-manager.render.error', { error: error.message });
-      return res.status(500).json({
-        error: 'RENDER_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'RENDER_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: Get Analytics
    */
-  async getAnalytics(req, res) {
+  async handleGetAnalytics(req, context) {
     try {
-      const { prompt_id, days } = req.query;
+      const { prompt_id, days } = req.query || {};
       const retentionDays = parseInt(days) || this.config.analytics_retention_days || 90;
 
       const cutoffDate = new Date();
@@ -422,49 +476,61 @@ class PromptManagerModule {
         new Date(a.last_used) >= cutoffDate
       );
 
-      return res.status(200).json({
-        analytics: analyticsData,
-        total: analyticsData.length
-      });
+      return {
+        status: 200,
+        data: {
+          analytics: analyticsData,
+          total: analyticsData.length
+        }
+      };
     } catch (error) {
       this.logger.error('prompt-manager.analytics.error', { error: error.message });
-      return res.status(500).json({
-        error: 'ANALYTICS_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'ANALYTICS_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 
   /**
    * API Handler: Compare Prompts (A/B Testing)
    */
-  async comparePrompts(req, res) {
+  async handleComparePrompts(req, context) {
     try {
-      const { prompt_a_id, prompt_b_id, metric } = req.body;
+      const { prompt_a_id, prompt_b_id, metric } = req.body || {};
 
       const analyticsA = this.analytics.get(`${prompt_a_id}:*`) || { usage_count: 0 };
       const analyticsB = this.analytics.get(`${prompt_b_id}:*`) || { usage_count: 0 };
 
-      return res.status(200).json({
-        prompt_a: {
-          id: prompt_a_id,
-          ...analyticsA
-        },
-        prompt_b: {
-          id: prompt_b_id,
-          ...analyticsB
-        },
-        comparison: {
-          metric: metric || 'usage_count',
-          winner: analyticsA.usage_count > analyticsB.usage_count ? 'A' : 'B'
+      return {
+        status: 200,
+        data: {
+          prompt_a: {
+            id: prompt_a_id,
+            ...analyticsA
+          },
+          prompt_b: {
+            id: prompt_b_id,
+            ...analyticsB
+          },
+          comparison: {
+            metric: metric || 'usage_count',
+            winner: analyticsA.usage_count > analyticsB.usage_count ? 'A' : 'B'
+          }
         }
-      });
+      };
     } catch (error) {
       this.logger.error('prompt-manager.compare.error', { error: error.message });
-      return res.status(500).json({
-        error: 'COMPARE_FAILED',
-        message: error.message
-      });
+      return {
+        status: 500,
+        data: {
+          error: 'COMPARE_FAILED',
+          message: error.message
+        }
+      };
     }
   }
 

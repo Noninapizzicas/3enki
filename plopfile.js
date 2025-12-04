@@ -585,6 +585,144 @@ module.exports = function (plop) {
   });
 
   // ==========================================
+  // Generator: chat-module (Módulo con Chat IA)
+  // ==========================================
+  plop.setGenerator('chat-module', {
+    description: 'Crear módulo con interfaz de Chat IA (ChatAIWorkspace)',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '📦 Nombre del módulo (kebab-case):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) return 'Usa kebab-case (ej: mi-modulo)';
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'description',
+        message: '📝 Descripción:',
+        default: 'Módulo con Chat IA'
+      },
+      {
+        type: 'input',
+        name: 'icon',
+        message: '🔸 Icono (emoji):',
+        default: '🤖'
+      },
+      {
+        type: 'input',
+        name: 'author',
+        message: '👤 Autor:',
+        default: 'Event Core Team'
+      },
+      {
+        type: 'input',
+        name: 'chatPlaceholder',
+        message: '💬 Placeholder del chat:',
+        default: 'Escribe tu mensaje...'
+      },
+      {
+        type: 'input',
+        name: 'toolsRaw',
+        message: '🔧 Tools (nombre:descripcion:categoria, ej: parser:Extrae datos:ai):',
+        default: ''
+      },
+      {
+        type: 'input',
+        name: 'promptsRaw',
+        message: '📝 Prompts rápidos (nombre:contenido, ej: Ejemplo:Genera un ejemplo):',
+        default: ''
+      }
+    ],
+
+    actions: (data) => {
+      // Procesar tools
+      data.tools = data.toolsRaw
+        ? data.toolsRaw.split(',').map((t, i) => {
+            const parts = t.trim().split(':');
+            return {
+              id: `tool-${i + 1}`,
+              name: parts[0] || `Tool ${i + 1}`,
+              description: parts[1] || '',
+              category: parts[2] || 'general',
+              enabled: true
+            };
+          }).filter(t => t.name)
+        : [];
+
+      // Procesar prompts
+      data.prompts = data.promptsRaw
+        ? data.promptsRaw.split(',').map((p, i) => {
+            const parts = p.trim().split(':');
+            return {
+              id: `prompt-${i + 1}`,
+              name: parts[0] || `Prompt ${i + 1}`,
+              content: parts[1] || '',
+              category: 'general',
+              favorite: i === 0
+            };
+          }).filter(p => p.name)
+        : [];
+
+      // Eventos por defecto
+      data.publishEvents = [
+        `${data.name}.chat.started`,
+        `${data.name}.chat.message`,
+        `${data.name}.chat.completed`
+      ];
+
+      // APIs por defecto
+      data.apis = [
+        { method: 'GET', path: '/conversations', handler: 'handleListConversations', description: 'Listar conversaciones' },
+        { method: 'POST', path: '/conversations', handler: 'handleCreateConversation', description: 'Crear conversación' },
+        { method: 'GET', path: '/conversations/:id', handler: 'handleGetConversation', description: 'Obtener conversación' },
+        { method: 'POST', path: '/conversations/:id/messages', handler: 'handleSendMessage', description: 'Enviar mensaje' },
+        { method: 'GET', path: '/health', handler: 'handleHealthCheck', description: 'Health check' }
+      ];
+
+      // Suscripciones
+      data.subscriptions = [
+        { event: 'ai.completion.completed', handler: 'onAICompletionCompleted' }
+      ];
+      data.hasSubscriptions = true;
+
+      data.persistence = false;
+      data.hasChatUI = true;
+
+      const modulePath = `modules/${data.name}`;
+      const frontendPath = `frontend/src/routes/${data.name}`;
+
+      return [
+        { type: 'add', path: `${modulePath}/index.js`, templateFile: 'plop-templates/chat-module/index.js.hbs' },
+        { type: 'add', path: `${modulePath}/module.json`, templateFile: 'plop-templates/chat-module/module.json.hbs' },
+        { type: 'add', path: `${modulePath}/README.md`, templateFile: 'plop-templates/module/README.md.hbs' },
+        { type: 'add', path: `${frontendPath}/+page.svelte`, templateFile: 'plop-templates/chat-module/page.svelte.hbs' },
+        () => {
+          console.log('\n✅ Módulo con Chat IA creado');
+          console.log(`\n📁 Backend: ${modulePath}/`);
+          console.log(`🎨 Frontend: ${frontendPath}/+page.svelte`);
+          console.log('\n📦 Incluye:');
+          console.log('   - ChatAIWorkspace con todos los paneles');
+          console.log('   - Selector de modelos IA');
+          console.log('   - Selector de credenciales');
+          console.log('   - Tools y plugins');
+          console.log('   - Prompts rápidos');
+          console.log('\n🚀 Próximos pasos:');
+          console.log(`   1. Agregar "${data.name}" a config.json → modules.enabled`);
+          console.log('   2. Personalizar la lógica de chat en index.js');
+          console.log('   3. Reiniciar Event-Core: npm start');
+          console.log(`   4. Acceder: http://localhost:5173/${data.name}\n`);
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
   // Generator: from-blueprint
   // ==========================================
   plop.setGenerator('from-blueprint', {

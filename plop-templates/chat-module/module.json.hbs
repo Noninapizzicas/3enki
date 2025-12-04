@@ -1,0 +1,97 @@
+{
+  "name": "{{name}}",
+  "version": "1.0.0",
+  "description": "{{description}}",
+  "author": "{{author}}",
+  "icon": "{{icon}}",
+
+  "provides": [
+    "chat-interface",
+    "ai-conversations"
+  ],
+
+  "events": {
+    "publishes": [
+      {{#each publishEvents}}
+      {
+        "event": "{{this}}",
+        "description": "Evento {{this}}"
+      }{{#unless @last}},{{/unless}}
+      {{/each}}
+    ],
+    "subscribes": [
+      {
+        "event": "ai.completion.completed",
+        "description": "Respuesta del ai-gateway con resultado de IA",
+        "handler": "onAICompletionCompleted"
+      }
+    ]
+  },
+
+  "apis": [
+    {{#each apis}}
+    {
+      "method": "{{method}}",
+      "path": "{{path}}",
+      "description": "{{description}}",
+      "handler": "{{handler}}"
+    }{{#unless @last}},{{/unless}}
+    {{/each}}
+  ],
+
+  "dependencies": [
+    "ai-gateway",
+    "credential-manager"
+  ],
+
+  "config": {
+    "default_provider": "auto",
+    "default_model": "deepseek-chat",
+    "max_messages_per_conversation": 100,
+    "conversation_retention_days": 30
+  },
+
+  "ui": {
+    "enabled": true,
+    "type": "chat-workspace",
+    "route": "/{{name}}",
+    "features": {
+      "chat": true,
+      "model_selector": true,
+      "credential_selector": true,
+      "tools": true,
+      "plugins": true,
+      "prompts": true,
+      "context": true
+    },
+    "chatPlaceholder": "{{chatPlaceholder}}",
+    "tools": [
+      {{#each tools}}
+      {
+        "id": "{{id}}",
+        "name": "{{name}}",
+        "description": "{{description}}",
+        "category": "{{category}}",
+        "enabled": {{enabled}}
+      }{{#unless @last}},{{/unless}}
+      {{/each}}
+    ],
+    "prompts": [
+      {{#each prompts}}
+      {
+        "id": "{{id}}",
+        "name": "{{name}}",
+        "content": "{{content}}",
+        "category": "{{category}}",
+        "favorite": {{favorite}}
+      }{{#unless @last}},{{/unless}}
+      {{/each}}
+    ]
+  },
+
+  "tags": [
+    "chat",
+    "ai",
+    "conversations"
+  ]
+}

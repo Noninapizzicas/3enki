@@ -33,10 +33,113 @@ class AIGatewayModule {
     // Initialize providers
     await this.initializeProviders();
 
+    // Subscribe to events
+    await this.subscribeToEvents();
+
     this.logger.info('ai-gateway.loaded', {
       providers_count: this.providers.size,
       providers_available: this.getAvailableProviderNames()
     });
+  }
+
+  /**
+   * Subscribe to event bus events
+   */
+  async subscribeToEvents() {
+    // Handler para solicitudes de AI desde otros módulos via eventos
+    await this.eventBus.subscribe('ai.request.created', this.onAIRequestCreated.bind(this));
+
+    this.logger.info('ai-gateway.events.subscribed', {
+      events: ['ai.request.created']
+    });
+  }
+
+  /**
+   * Event Handler: ai.request.created
+   * Procesa solicitudes de IA enviadas por otros módulos via eventos
+   */
+  async onAIRequestCreated(event) {
+    const {
+      request_id,
+      messages,
+      provider: requestedProvider,
+      model,
+      temperature,
+      max_tokens,
+      metadata
+    } = event.payload || {};
+
+    const correlationId = event.correlationId || metadata?.correlationId;
+
+    this.logger.info('ai-gateway.request.received', {
+      request_id,
+      provider: requestedProvider,
+      has_messages: !!messages,
+      correlation_id: correlationId
+    });
+
+    try {
+      // Procesar la solicitud usando el handler HTTP existente
+      const result = await this.handleChatCompletion({
+        body: {
+          messages,
+          provider: requestedProvider,
+          model,
+          temperature,
+          max_tokens,
+          metadata: { ...metadata, request_id }
+        }
+      }, { correlationId });
+
+      // Publicar evento de completado con la respuesta
+      await this.eventBus.publish('ai.completion.completed', {
+        provider: result.data?.provider || requestedProvider,
+        model: result.data?.model,
+        prompt_id: metadata?.prompt_id,
+        tokens_used: result.data?.usage?.total_tokens || 0,
+        latency_ms: result.data?.latency_ms || 0,
+        cost: result.data?.cost || 0,
+        metadata: {
+          request_id,
+          response_content: result.data?.content,
+          response_data: result.data,
+          source: metadata?.source,
+          correlationId,
+          success: result.status === 200,
+          error: result.status !== 200 ? result.data?.message : null
+        }
+      }, { correlationId });
+
+      this.logger.info('ai-gateway.request.completed', {
+        request_id,
+        status: result.status,
+        correlation_id: correlationId
+      });
+
+    } catch (error) {
+      this.logger.error('ai-gateway.request.error', {
+        request_id,
+        error: error.message,
+        correlation_id: correlationId
+      });
+
+      // Publicar evento de error
+      await this.eventBus.publish('ai.completion.completed', {
+        provider: requestedProvider,
+        model,
+        prompt_id: metadata?.prompt_id,
+        tokens_used: 0,
+        latency_ms: 0,
+        cost: 0,
+        metadata: {
+          request_id,
+          source: metadata?.source,
+          correlationId,
+          success: false,
+          error: error.message
+        }
+      }, { correlationId });
+    }
   }
 
   /**

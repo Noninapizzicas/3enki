@@ -62,9 +62,9 @@
     ],
     "subscribes": [
       {
-        "event": "ai.response",
-        "description": "Respuesta del ai-gateway con menú parseado",
-        "handler": "onAIResponse"
+        "event": "ai.completion.completed",
+        "description": "Respuesta del ai-gateway con resultado de completado de IA",
+        "handler": "onAICompletionCompleted"
       }
     ]
   },
@@ -482,7 +482,7 @@
         "menu.generado",
         "menu.validado",
         "menu.error",
-        "ai.response"
+        "ai.completion.completed"
       ],
       "auto_refresh": true
     }

@@ -556,6 +556,434 @@ Fijo pequeño, doble toque expande, Enter ≠ Enviar
 
 ---
 
+## Componentes Reutilizables Implementados
+
+### ChatAIWorkspace - Componente Principal
+
+**Ubicación:** `frontend/src/lib/components/ai/ChatAIWorkspace.svelte`
+
+El componente `ChatAIWorkspace` encapsula toda la funcionalidad del chat con IA, incluyendo todos los paneles de las sub-barras del chat. Es **completamente reutilizable** en cualquier módulo que necesite interfaz de chat con IA.
+
+**Paneles incluidos:**
+
+| Panel ID | Función | Descripción |
+|----------|---------|-------------|
+| `modelo-selector` | Selector de modelos | Lista modelos agrupados por proveedor (DeepSeek, OpenAI, Anthropic, Ollama) |
+| `credencial-selector` | Selector de API Keys | Selección rápida de credencial para el chat |
+| `prompts` | Prompts rápidos | Lista con favoritos y todos los prompts disponibles |
+| `tools` | Herramientas | Toggle de herramientas agrupadas por categoría |
+| `plugins` | Plugins | Activación/desactivación de plugins con versión |
+| `contexto` | Contexto actual | Visualización del contexto con badges de estado |
+| `stats` | Estadísticas | Métricas con barra de progreso |
+| `settings` | Configuración | Vista general de configuración actual |
+
+**Props del componente:**
+
+```svelte
+<ChatAIWorkspace
+  currentPanel={string}              <!-- Panel activo -->
+  availableModels={AIModel[]}        <!-- Modelos disponibles -->
+  bind:selectedModelId={string}      <!-- ID del modelo seleccionado -->
+  credentials={AICredential[]}       <!-- Credenciales disponibles -->
+  bind:tools={AITool[]}              <!-- Herramientas con estado -->
+  bind:plugins={AIPlugin[]}          <!-- Plugins con estado -->
+  bind:contextItems={ContextItem[]}  <!-- Items de contexto -->
+  bind:quickPrompts={QuickPrompt[]}  <!-- Prompts rápidos -->
+  stats={{ total, validated, ... }}  <!-- Estadísticas -->
+
+  on:modelSelect                     <!-- Evento: modelo seleccionado -->
+  on:credentialSelect                <!-- Evento: credencial seleccionada -->
+  on:toolToggle                      <!-- Evento: tool activada/desactivada -->
+  on:pluginToggle                    <!-- Evento: plugin activado/desactivado -->
+  on:promptApply                     <!-- Evento: prompt aplicado -->
+  on:promptFavorite                  <!-- Evento: favorito toggled -->
+  on:addCredential                   <!-- Evento: solicitud añadir credencial -->
+  on:panelChange                     <!-- Evento: cambio de panel -->
+>
+  <!-- Slot para paneles custom -->
+  <svelte:fragment slot="panel" let:panelId={customPanelId}>
+    {#if customPanelId === 'mi-panel-custom'}
+      <!-- Contenido custom -->
+    {/if}
+  </svelte:fragment>
+</ChatAIWorkspace>
+```
+
+---
+
+### Tipos Compartidos
+
+**Ubicación:** `frontend/src/lib/components/ai/types.ts`
+
+Tipos TypeScript compartidos para todos los componentes de IA:
+
+```typescript
+// Modelo de IA
+interface AIModel {
+  id: string;
+  name: string;
+  provider: 'DEEPSEEK' | 'OPENAI' | 'ANTHROPIC' | 'OLLAMA' | string;
+  description?: string;
+}
+
+// Credencial
+interface AICredential {
+  key: string;
+  provider: string;
+  level: 'GLOBAL' | 'PROJECT' | 'CLIENT' | 'CUSTOM';
+  identifier: string | null;
+  api_key_preview: string;
+}
+
+// Herramienta
+interface AITool {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  category: string;
+}
+
+// Plugin
+interface AIPlugin {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  version: string;
+}
+
+// Contexto
+interface ContextItem {
+  type: string;
+  label: string;
+  value: string;
+  active: boolean;
+}
+
+// Prompt rápido
+interface QuickPrompt {
+  id: string;
+  name: string;
+  content: string;
+  category: string;
+  favorite: boolean;
+}
+
+// Mensaje de chat
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  provider?: string;
+  model?: string;
+  loading?: boolean;
+}
+```
+
+**Helpers disponibles:**
+
+```typescript
+import {
+  DEFAULT_MODELS,           // Array de modelos por defecto
+  PROVIDER_ICONS,           // { DEEPSEEK: '🔮', OPENAI: '🤖', ... }
+  TOOL_CATEGORY_ICONS,      // { menu: '🍽️', ai: '🤖', ... }
+  getProviderIcon,          // (provider) => emoji
+  getToolCategoryIcon,      // (category) => emoji
+  getContextIcon            // (type) => emoji
+} from '$components/ai';
+```
+
+---
+
+### Generador Plop: chat-module
+
+**Comando:** `npx plop chat-module`
+
+Genera un módulo completo con interfaz de chat IA en segundos.
+
+**Archivos generados:**
+
+```
+modules/{nombre}/
+├── index.js              # Backend con handlers de chat
+├── module.json           # Configuración del módulo
+└── README.md             # Documentación
+
+frontend/src/routes/{nombre}/
+└── +page.svelte          # Frontend usando ChatAIWorkspace
+```
+
+**Prompts del generador:**
+
+| Prompt | Descripción | Ejemplo |
+|--------|-------------|---------|
+| Nombre | kebab-case | `mi-chat-module` |
+| Descripción | Descripción del módulo | `Chat para X` |
+| Icono | Emoji | `🤖` |
+| Placeholder | Texto del input | `Escribe tu mensaje...` |
+| Tools | nombre:desc:cat | `parser:Extrae datos:ai` |
+| Prompts | nombre:contenido | `Ejemplo:Genera un ejemplo` |
+
+**Ejemplo de uso:**
+
+```bash
+$ npx plop chat-module
+
+? 📦 Nombre del módulo: recetas-generator
+? 📝 Descripción: Generador de recetas con IA
+? 🔸 Icono: 🍳
+? 💬 Placeholder: Describe la receta que quieres...
+? 🔧 Tools: ocr:Lee ingredientes:ai,validator:Valida receta:recipe
+? 📝 Prompts: Italiana:Receta italiana tradicional,Vegana:Receta 100% vegana
+
+✅ Módulo con Chat IA creado
+```
+
+---
+
+### Ejemplo de Implementación: Menu Generator
+
+**Ubicación:** `frontend/src/routes/menu-generator/+page.svelte`
+
+El módulo `menu-generator` es el ejemplo de referencia de una implementación completa con todas las funcionalidades del chat IA.
+
+**Estructura de botones implementada:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ [🍽️ Menús] [📋 Templates] [🔍 Filtros] [📊 Stats] [⬇️ Export] │  ← BARRA SUPERIOR
+├─────────────────────────────────────────────────────────────┤
+│                                                         [🏠]│
+│                                                         [🧩]│
+│              CONTENIDO PRINCIPAL                        [🔐]│  ← BARRA LATERAL
+│              (Stats + Últimos menús)                    [⚙️]│
+│                                                         [❓]│
+├─────────────────────────────────────────────────────────────┤
+│ [🤖 Modelo] [🔑 API Key] [📝 Prompt] [💬 Chats]             │  ← SUB-BARRA CHAT TOP
+├─────────────────────────────────────────────────────────────┤
+│  [Describe el menú que quieres generar...]        [Enviar]  │  ← INPUT
+├─────────────────────────────────────────────────────────────┤
+│ [🔧 Tools] [📎 Adjuntar] [📋 Contexto] [🔌 Plugins]         │  ← SUB-BARRA CHAT BOTTOM
+├─────────────────────────────────────────────────────────────┤
+│ [🕐 Historial]                                              │  ← BARRA INFERIOR
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Paneles implementados:**
+
+| Barra | Paneles |
+|-------|---------|
+| Superior | menus, menus-gestionar, templates, template-aplicar, filtros, stats, stats-detallado, export, export-lote, upload |
+| Lateral | modulos, credentials, credential-add, credential-edit, settings, settings-full, help |
+| Chat Top | modelo-selector, modelo-config, credencial-selector, prompts, prompt-crear, conversations, historial-gestionar |
+| Chat Bottom | tools, tools-config, contexto, contexto-editar, plugins, plugins-gestionar |
+| Inferior | history |
+
+**Datos de estado definidos:**
+
+```typescript
+// Modelos IA disponibles
+let availableModels: AIModel[] = [
+  { id: 'deepseek-chat', name: 'DeepSeek Chat', provider: 'DEEPSEEK' },
+  { id: 'gpt-4', name: 'GPT-4', provider: 'OPENAI' },
+  // ...
+];
+
+// Herramientas específicas del módulo
+let availableTools: Tool[] = [
+  { id: 'menu-parser', name: 'Parser de Menús', category: 'menu', enabled: true },
+  { id: 'image-ocr', name: 'OCR de Imágenes', category: 'ai', enabled: true },
+  // ...
+];
+
+// Plugins disponibles
+let availablePlugins: Plugin[] = [
+  { id: 'menu-validator', name: 'Validador de Menús', enabled: true, version: '1.0.0' },
+  // ...
+];
+
+// Prompts rápidos
+let quickPrompts: QuickPrompt[] = [
+  { id: 'p1', name: 'Menú italiano', content: 'Genera un menú italiano...', favorite: true },
+  // ...
+];
+
+// Contexto del módulo
+let contextItems: ContextItem[] = [
+  { type: 'menu', label: 'Menú actual', value: '', active: false },
+  { type: 'style', label: 'Estilo', value: 'Restaurante', active: true },
+  // ...
+];
+```
+
+---
+
+### Cómo Reutilizar en Otro Módulo
+
+**Opción 1: Usar el generador plop (recomendado)**
+
+```bash
+npx plop chat-module
+```
+
+Esto genera todo automáticamente con la estructura correcta.
+
+**Opción 2: Implementación manual**
+
+1. **Importar componentes:**
+
+```svelte
+<script>
+  import { MobileWorkspaceLayout } from '$components/layout';
+  import {
+    ChatAIWorkspace,
+    DEFAULT_MODELS,
+    type AIModel,
+    type AITool,
+    type QuickPrompt
+  } from '$components/ai';
+</script>
+```
+
+2. **Definir estado:**
+
+```typescript
+let availableModels = DEFAULT_MODELS;
+let selectedModelId = 'deepseek-chat';
+let credentials = [];  // Fetch from credential-manager
+let tools = [...];     // Específicas del módulo
+let quickPrompts = [...]; // Específicas del módulo
+let currentPanel = '';
+```
+
+3. **Definir botones de barras:**
+
+```typescript
+const chatTopButtons = [
+  {
+    id: 'modelo',
+    emoji: '🤖',
+    label: 'Modelo',
+    primaryAction: { type: 'panel', panelId: 'modelo-selector' }
+  },
+  // ...
+];
+
+const chatBottomButtons = [
+  {
+    id: 'tools',
+    emoji: '🔧',
+    label: 'Tools',
+    primaryAction: { type: 'panel', panelId: 'tools' }
+  },
+  // ...
+];
+```
+
+4. **Usar en template:**
+
+```svelte
+<MobileWorkspaceLayout
+  {topButtons}
+  {bottomButtons}
+  {sideButtons}
+  {chatTopButtons}
+  {chatBottomButtons}
+  showChat={true}
+  showChatBars={true}
+  on:panelOpen={e => currentPanel = e.detail.panelId}
+  on:panelClose={() => currentPanel = ''}
+>
+  <!-- Contenido principal -->
+
+  <svelte:fragment slot="panel" let:panelId>
+    <ChatAIWorkspace
+      currentPanel={panelId}
+      {availableModels}
+      bind:selectedModelId
+      {credentials}
+      bind:tools
+      on:modelSelect={handleModelSelect}
+    />
+  </svelte:fragment>
+</MobileWorkspaceLayout>
+```
+
+---
+
+### Checklist de Implementación Actualizado
+
+#### Componentes Base (Implementados)
+- [x] MobileWorkspaceLayout.svelte
+- [x] ToolbarIcon.svelte
+- [x] ChatToolbar.svelte
+- [x] FloatingPanel.svelte
+
+#### Componentes de IA (Implementados)
+- [x] ChatAIWorkspace.svelte
+- [x] types.ts (tipos compartidos)
+- [x] ChatInput.svelte
+- [x] ConversationPanel.svelte
+
+#### Paneles del ChatAIWorkspace (Implementados)
+- [x] modelo-selector
+- [x] credencial-selector
+- [x] prompts
+- [x] tools
+- [x] plugins
+- [x] contexto
+- [x] stats
+- [x] settings
+
+#### Generadores Plop
+- [x] `npx plop module` - Módulo backend básico
+- [x] `npx plop full-module` - Módulo con UI CRUD
+- [x] `npx plop chat-module` - Módulo con Chat IA
+- [x] `npx plop svelte-component` - Componente Svelte
+- [x] `npx plop from-blueprint` - Desde YAML
+
+#### Ejemplo de Referencia
+- [x] menu-generator (+page.svelte con todas las funcionalidades)
+
+---
+
+## Resumen de Archivos Clave
+
+```
+frontend/src/lib/components/
+├── ai/
+│   ├── index.ts                    # Exports
+│   ├── types.ts                    # Tipos compartidos
+│   ├── ChatAIWorkspace.svelte      # Componente reutilizable principal
+│   ├── ChatInput.svelte            # Input de chat
+│   └── ConversationPanel.svelte    # Panel de conversaciones
+│
+├── layout/
+│   └── MobileWorkspaceLayout.svelte  # Layout principal móvil
+│
+└── toolbar/
+    ├── ToolbarIcon.svelte          # Icono con triple interacción
+    ├── ChatToolbar.svelte          # Sub-barras del chat
+    └── MobileChatWorkspace.svelte  # Workspace de chat
+
+plop-templates/
+├── module/                         # Templates módulo básico
+├── full-module/                    # Templates módulo con UI
+├── chat-module/                    # Templates módulo con Chat IA
+│   ├── index.js.hbs
+│   ├── module.json.hbs
+│   └── page.svelte.hbs
+└── svelte-component/               # Templates componente Svelte
+
+frontend/src/routes/
+└── menu-generator/
+    └── +page.svelte                # Ejemplo de implementación completa
+```
+
+---
+
 **Este documento es la referencia canónica para toda la UI móvil de Event Core.**
 
 Cualquier implementación debe seguir estos principios y patrones.

@@ -969,6 +969,27 @@
         </div>
       </Card>
 
+      <!-- Chat conversation (visible in main area) -->
+      {#if chatMessages.length > 0}
+        <div class="chat-area bg-bg-card border border-border rounded-lg p-3 max-h-64 overflow-y-auto">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-medium text-text-muted">💬 Conversación</h3>
+            <span class="text-xs text-text-muted">{chatMessages.length} mensajes</span>
+          </div>
+          <div class="space-y-2">
+            {#each chatMessages.slice(-4) as msg (msg.id)}
+              <div class="chat-bubble chat-bubble--{msg.role}" class:opacity-60={msg.loading}>
+                {#if msg.loading}
+                  <span class="animate-pulse">Pensando...</span>
+                {:else}
+                  <p class="text-sm whitespace-pre-wrap">{msg.content}</p>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       <!-- Recent menus preview -->
       {#if menus.length > 0}
         <div class="space-y-2">
@@ -1675,6 +1696,35 @@
   .chat-panel {
     max-height: 60vh;
     overflow-y: auto;
+  }
+
+  /* Chat bubbles in main area */
+  .chat-bubble {
+    padding: 0.5rem 0.75rem;
+    border-radius: 12px;
+    max-width: 85%;
+  }
+
+  .chat-bubble--user {
+    background: var(--color-primary);
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+  }
+
+  .chat-bubble--assistant {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+  }
+
+  .chat-bubble--system {
+    background: var(--color-bg-elevated);
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    text-align: center;
+    margin: 0 auto;
   }
 
   .chat-messages {

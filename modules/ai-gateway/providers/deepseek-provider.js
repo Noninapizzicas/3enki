@@ -16,12 +16,12 @@ class DeepSeekProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    // Get API key from environment
-    this.apiKey = process.env.DEEPSEEK_API_KEY || null;
+    // Get API key from environment (support both formats)
+    this.apiKey = process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY_GLOBAL || null;
 
     if (!this.apiKey) {
       this.logger.warn('deepseek.no-api-key', {
-        message: 'DEEPSEEK_API_KEY not found in environment'
+        message: 'DEEPSEEK_API_KEY or DEEPSEEK_API_KEY_GLOBAL not found in environment'
       });
     }
 

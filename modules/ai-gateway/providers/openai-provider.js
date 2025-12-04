@@ -16,11 +16,12 @@ class OpenAIProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    this.apiKey = process.env.OPENAI_API_KEY || null;
+    // Get API key from environment (support both formats)
+    this.apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_GLOBAL || null;
 
     if (!this.apiKey) {
       this.logger.warn('openai.no-api-key', {
-        message: 'OPENAI_API_KEY not found in environment'
+        message: 'OPENAI_API_KEY or OPENAI_API_KEY_GLOBAL not found in environment'
       });
     }
 

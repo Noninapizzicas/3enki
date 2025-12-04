@@ -16,12 +16,11 @@ class DeepSeekProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    // Get API key from environment
-    this.apiKey = process.env.DEEPSEEK_API_KEY || null;
+    this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('deepseek.no-api-key', {
-        message: 'DEEPSEEK_API_KEY not found in environment'
+        message: 'DEEPSEEK_API_KEY or DEEPSEEK_API_KEY_GLOBAL not found in environment'
       });
     }
 
@@ -29,6 +28,13 @@ class DeepSeekProvider extends BaseProvider {
       available: await this.isAvailable(),
       models: this.config.models
     });
+  }
+
+  /**
+   * Refresh API key from environment (supports dynamic credential updates)
+   */
+  refreshApiKey() {
+    this.apiKey = process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY_GLOBAL || null;
   }
 
   /**

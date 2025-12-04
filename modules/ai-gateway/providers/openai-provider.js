@@ -16,11 +16,11 @@ class OpenAIProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    this.apiKey = process.env.OPENAI_API_KEY || null;
+    this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('openai.no-api-key', {
-        message: 'OPENAI_API_KEY not found in environment'
+        message: 'OPENAI_API_KEY or OPENAI_API_KEY_GLOBAL not found in environment'
       });
     }
 
@@ -28,6 +28,13 @@ class OpenAIProvider extends BaseProvider {
       available: await this.isAvailable(),
       models: this.config.models
     });
+  }
+
+  /**
+   * Refresh API key from environment (supports dynamic credential updates)
+   */
+  refreshApiKey() {
+    this.apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_GLOBAL || null;
   }
 
   /**

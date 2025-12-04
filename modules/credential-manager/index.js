@@ -100,6 +100,8 @@ class CredentialManagerModule {
           const value = valueParts.join('=');
           if (key.includes('_API_KEY_')) {
             this.credentials.set(key, value);
+            // Also set in process.env for other modules
+            process.env[key] = value;
           }
         }
       }
@@ -331,9 +333,12 @@ class CredentialManagerModule {
       const key = this.buildKey(provider, level, identifier);
       const isNew = !this.credentials.has(key);
 
-      // Save
+      // Save to memory and file
       this.credentials.set(key, api_key);
       await this.saveEnvFile();
+
+      // Also update process.env for immediate availability to other modules
+      process.env[key] = api_key;
 
       // Metrics
       if (isNew) {
@@ -585,6 +590,9 @@ class CredentialManagerModule {
       this.credentials.set(key, api_key);
       await this.saveEnvFile();
 
+      // Also update process.env for immediate availability
+      process.env[key] = api_key;
+
       this.metrics.increment('credential.updated.total');
 
       await this.eventBus.publish('credential.updated', {
@@ -643,6 +651,9 @@ class CredentialManagerModule {
     try {
       this.credentials.delete(key);
       await this.saveEnvFile();
+
+      // Also remove from process.env
+      delete process.env[key];
 
       this.metrics.increment('credential.deleted.total');
       this.updateCredentialMetrics();

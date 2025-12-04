@@ -17,11 +17,11 @@ class AnthropicProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    this.apiKey = process.env.ANTHROPIC_API_KEY || null;
+    this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('anthropic.no-api-key', {
-        message: 'ANTHROPIC_API_KEY not found in environment'
+        message: 'ANTHROPIC_API_KEY or ANTHROPIC_API_KEY_GLOBAL not found in environment'
       });
     }
 
@@ -29,6 +29,13 @@ class AnthropicProvider extends BaseProvider {
       available: await this.isAvailable(),
       models: this.config.models
     });
+  }
+
+  /**
+   * Refresh API key from environment (supports dynamic credential updates)
+   */
+  refreshApiKey() {
+    this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY_GLOBAL || null;
   }
 
   /**

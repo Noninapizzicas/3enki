@@ -30,9 +30,22 @@ class BaseProvider {
 
   /**
    * Check if provider is available
+   * Re-checks environment at runtime for dynamically added credentials
    */
   async isAvailable() {
+    // Re-check environment for API key (supports dynamic credential updates)
+    if (!this.apiKey) {
+      this.refreshApiKey();
+    }
     return this.apiKey !== null && this.config.enabled;
+  }
+
+  /**
+   * Refresh API key from environment
+   * Override in subclasses to check specific env vars
+   */
+  refreshApiKey() {
+    // Subclasses should implement this
   }
 
   /**

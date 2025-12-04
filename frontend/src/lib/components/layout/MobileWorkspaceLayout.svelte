@@ -55,6 +55,13 @@
   export let showChatBars = true; // Mostrar sub-barras del chat
   export let currentPanel: string | null = null; // Control externo del panel activo
 
+  // v2.0: Props para personalización de barras
+  export let sideBarSize: number = 44; // Tamaño en px (default 44, v2.0 usa 28)
+  export let sideBarTransparent: boolean = false; // Fondo transparente
+  export let sideBarOpacity: number = 1; // Opacidad (v2.0 usa 0.7)
+  export let topBarCollapsible: boolean = false; // Barra superior colapsable
+  export let showHeader: boolean = true; // Mostrar header (v2.0 = false)
+
   const dispatch = createEventDispatcher<{
     buttonAction: { buttonId: string; actionType: 'primary' | 'secondary' | 'tertiary'; action: ButtonAction };
     chatSubmit: { message: string; attachments: File[] };
@@ -286,10 +293,12 @@
     <slot />
   </main>
 
-  <!-- Side Bar (Right or Left) -->
+  <!-- Side Bar (Right or Left) - v2.0: Soporte para tamaño y transparencia -->
   {#if showSideBar && sideButtons.length > 0}
     <div
       class="mobile-workspace__bar mobile-workspace__bar--side mobile-workspace__bar--{sideBarPosition}"
+      class:mobile-workspace__bar--transparent={sideBarTransparent}
+      style="--sidebar-size: {sideBarSize}px; --sidebar-opacity: {sideBarOpacity};"
       transition:fly={{ x: sideBarPosition === 'right' ? 50 : -50, duration: 200 }}
     >
       <div class="mobile-workspace__bar-scroll mobile-workspace__bar-scroll--vertical">
@@ -297,6 +306,7 @@
           <button
             class="mobile-workspace__button mobile-workspace__button--side mobile-workspace__button--{button.variant || 'default'}"
             class:mobile-workspace__button--holding={buttonStates[button.id]?.holding}
+            class:mobile-workspace__button--compact={sideBarSize < 40}
             on:touchstart={(e) => handleTouchStart(button, e)}
             on:touchend={(e) => handleTouchEnd(button, e)}
             on:touchcancel={() => handleTouchCancel(button)}
@@ -606,8 +616,38 @@
   }
 
   .mobile-workspace__button--side {
-    width: 56px;
-    height: 56px;
+    width: var(--sidebar-size, 56px);
+    height: var(--sidebar-size, 56px);
+  }
+
+  /* v2.0: Botones compactos para sidebar estrecha */
+  .mobile-workspace__button--compact {
+    width: var(--sidebar-size, 28px);
+    height: var(--sidebar-size, 28px);
+    min-width: var(--sidebar-size, 28px);
+    min-height: var(--sidebar-size, 28px);
+    padding: 0.25rem;
+    border-radius: 6px;
+  }
+
+  .mobile-workspace__button--compact .mobile-workspace__button-emoji {
+    font-size: 0.875rem;
+  }
+
+  /* v2.0: Sidebar transparente */
+  .mobile-workspace__bar--transparent {
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    opacity: var(--sidebar-opacity, 1);
+  }
+
+  .mobile-workspace__bar--transparent .mobile-workspace__button {
+    background: rgba(0, 0, 0, 0.3);
+    border: none;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
 
   .mobile-workspace__button-emoji {

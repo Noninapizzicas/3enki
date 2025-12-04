@@ -22,10 +22,16 @@
 name: menu-generator-screen
 extends: mobile-chat-screen
 description: Pantalla del módulo Menu Generator con chat IA para generación de menús
-version: 1.0.0
+version: 2.0.0
 author: Event Core Team
 type: screen
 icon: "🍽️"
+
+# Layout simplificado: Sin header, sin stats, sin instrucciones
+# Solo chat + toolbars mínimas
+
+header:
+  enabled: false  # Sin barra Event-Core ni menú hamburguesa
 
 module:
   name: menu-generator
@@ -41,23 +47,26 @@ module:
     - menu-generator.menu.exported
 
 # ============================================================================
-# BARRA SUPERIOR - Específica de Menu Generator
+# BARRA SUPERIOR - Colapsable (UI v2.0)
 # ============================================================================
-# Iconos optimizados para generación y gestión de menús
+# Iconos de gestión de menús, colapsable para maximizar área de chat
 
 toolbar_top:
   enabled: true
   collapsible: true
-  size: 44
+  collapsed_default: false  # Visible por defecto, usuario puede colapsar
+  size: 36
   position: top
-  background: "var(--color-bg-card)"
+  background: "rgba(0,0,0,0.3)"
   blur: true
+  opacity: 0.9
 
   icons:
     # Menús - Gestión principal
     - id: menus
       icon: "🍽️"
       label: Menús
+      size: small
       badge: "@data.menus.count"
       badgeColor: primary
       actions:
@@ -81,6 +90,7 @@ toolbar_top:
     - id: templates
       icon: "📋"
       label: Plantillas
+      size: small
       badge: "@data.templates.count"
       badgeColor: info
       actions:
@@ -104,6 +114,7 @@ toolbar_top:
     - id: filtros
       icon: "🔍"
       label: Filtros
+      size: small
       indicator: "@state.hasActiveFilters"
       actions:
         tap:
@@ -120,6 +131,7 @@ toolbar_top:
     - id: stats
       icon: "📊"
       label: Stats
+      size: small
       actions:
         tap:
           type: panel
@@ -136,6 +148,7 @@ toolbar_top:
     - id: export
       icon: "⬇️"
       label: Exportar
+      size: small
       variant: success
       actions:
         tap:
@@ -150,22 +163,23 @@ toolbar_top:
           title: "Exportar Varios"
 
 # ============================================================================
-# BARRA LATERAL - Ecosistema (heredada, personalizada)
+# BARRA LATERAL - Ecosistema (minimalista, transparente)
 # ============================================================================
 
 toolbar_right:
   enabled: true
-  collapsible: true
-  size: 44
+  collapsible: false
+  size: 28  # 10mm aproximado
   position: right
-  background: "var(--color-bg-elevated)"
-  blur: true
+  background: transparent
+  blur: false
+  opacity: 0.7
 
   icons:
     # Home - Volver al inicio
     - id: home
       icon: "🏠"
-      label: Inicio
+      size: small
       actions:
         tap:
           type: navigate
@@ -175,7 +189,7 @@ toolbar_right:
     # Módulos - Navegar otros módulos
     - id: modulos
       icon: "🧩"
-      label: Módulos
+      size: small
       actions:
         tap:
           type: panel
@@ -191,9 +205,7 @@ toolbar_right:
     # Credenciales - Acceso rápido
     - id: credenciales
       icon: "🔐"
-      label: API Keys
-      badge: "@data.credentials.count"
-      badgeColor: warning
+      size: small
       actions:
         tap:
           type: panel
@@ -214,7 +226,7 @@ toolbar_right:
     # Config - Configuración del módulo
     - id: config
       icon: "⚙️"
-      label: Config
+      size: small
       actions:
         tap:
           type: panel
@@ -226,17 +238,6 @@ toolbar_right:
           target: config-completo
           size: full
           title: "Configuración Avanzada"
-
-    # Ayuda
-    - id: ayuda
-      icon: "❓"
-      label: Ayuda
-      actions:
-        tap:
-          type: panel
-          target: ayuda-menu
-          size: medium
-          title: "Ayuda"
 
 # ============================================================================
 # BARRA CHAT SUPERIOR - Prepara el mensaje
@@ -458,31 +459,12 @@ layout:
   type: mobile-chat-workspace
 
   zones:
-    # Contenido principal
+    # Contenido principal - Solo chat (sin stats ni instrucciones)
     main:
       scroll: true
-      padding: "var(--space-md)"
+      padding: "var(--space-sm)"
       components:
-        # Stats compactos
-        - type: stat-grid
-          id: stats-mini
-          props:
-            columns: 3
-            compact: true
-            items:
-              - label: "Menús"
-                value: "@compute.count(@data.menus)"
-                icon: "🍽️"
-              - label: "Generando"
-                value: "@compute.count(@compute.filter(@data.menus, 'estado', 'generando'))"
-                icon: "⏳"
-                color: warning
-              - label: "Validados"
-                value: "@compute.count(@compute.filter(@data.menus, 'estado', 'validado'))"
-                icon: "✅"
-                color: success
-
-        # Chat history con eventos del módulo
+        # Chat history con eventos del módulo (área principal)
         - type: chat-history
           id: chat-main
           props:
@@ -493,8 +475,9 @@ layout:
               - menu.error
             showTimestamps: true
             groupByDate: true
+            fullHeight: true  # Ocupa todo el espacio disponible
 
-        # Preview de menú generado (si existe)
+        # Preview de menú generado (si existe) - Se muestra inline en el chat
         - type: conditional
           condition: "@state.currentMenu"
           then:
@@ -503,6 +486,7 @@ layout:
               props:
                 menu: "@state.currentMenu"
                 showActions: true
+                compact: true  # Versión compacta
                 actions:
                   - type: validate
                     label: "Validar"

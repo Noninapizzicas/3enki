@@ -1358,12 +1358,15 @@
                   <p class="font-medium text-sm">{prompt.name}</p>
                   <p class="text-xs text-text-muted truncate">{prompt.content}</p>
                 </div>
-                <button
-                  class="p-1 text-warning hover:text-warning/80"
+                <span
+                  role="button"
+                  tabindex="0"
+                  class="p-1 text-warning hover:text-warning/80 cursor-pointer"
                   on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
+                  on:keydown={(e) => e.key === 'Enter' && togglePromptFavorite(prompt.id)}
                 >
                   ⭐
-                </button>
+                </span>
               </div>
             </button>
           {/each}
@@ -1380,12 +1383,15 @@
                   <p class="font-medium text-sm">{prompt.name}</p>
                   <p class="text-xs text-text-muted truncate">{prompt.content}</p>
                 </div>
-                <button
-                  class="p-1 text-text-muted hover:text-warning"
+                <span
+                  role="button"
+                  tabindex="0"
+                  class="p-1 text-text-muted hover:text-warning cursor-pointer"
                   on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
+                  on:keydown={(e) => e.key === 'Enter' && togglePromptFavorite(prompt.id)}
                 >
                   ☆
-                </button>
+                </span>
               </div>
             </button>
           {/each}

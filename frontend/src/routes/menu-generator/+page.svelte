@@ -928,6 +928,7 @@
   {chatTopButtons}
   {chatBottomButtons}
   {panels}
+  {currentPanel}
   showChat={true}
   showChatBars={true}
   chatPlaceholder="Describe el menú que quieres generar..."

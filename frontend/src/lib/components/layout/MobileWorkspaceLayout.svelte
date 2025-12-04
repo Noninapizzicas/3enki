@@ -53,6 +53,7 @@
   export let showSideBar = true;
   export let sideBarPosition: 'left' | 'right' = 'right';
   export let showChatBars = true; // Mostrar sub-barras del chat
+  export let currentPanel: string | null = null; // Control externo del panel activo
 
   const dispatch = createEventDispatcher<{
     buttonAction: { buttonId: string; actionType: 'primary' | 'secondary' | 'tertiary'; action: ButtonAction };
@@ -64,6 +65,13 @@
   // State
   let activePanel: string | null = null;
   let chatExpanded = false;
+
+  // Sync activePanel with external currentPanel prop
+  $: if (currentPanel !== null && currentPanel !== activePanel) {
+    activePanel = currentPanel;
+  } else if (currentPanel === '' && activePanel !== null) {
+    activePanel = null;
+  }
   let isMobile = true;
 
   // Button interaction state

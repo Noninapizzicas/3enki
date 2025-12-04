@@ -1,9 +1,19 @@
 /**
  * Módulo Menu Generator
  * Genera menús desde cartas físicas usando IA - Enfoque generativo
+ * Salida compatible con sistema POS: productos, categorias, ingredientes, variaciones
  */
 
 const { v4: uuidv4 } = require('uuid');
+const {
+  MENU_EXTRACTION_SYSTEM_PROMPT,
+  MENU_CHAT_SYSTEM_PROMPT,
+  buildExtractionMessages,
+  buildChatSystemPrompt,
+  extractJSONFromResponse,
+  validateMenuStructure,
+  enrichMenu
+} = require('./prompts/menu-extraction');
 
 class MenuGeneratorModule {
   constructor() {
@@ -1059,6 +1069,272 @@ class MenuGeneratorModule {
     };
   }
 
+  /**
+   * POST /menus/:id/export-pos - Exporta menú en formato POS listo para importar
+   * Genera estructura separada para: productos, categorias, ingredientes, variaciones
+   * @param {Object} req - Request con params.id
+   * @returns {Object} Datos estructurados para módulos POS
+   */
+  async handleExportPOS(req) {
+    const { id } = req.params;
+    const { target_modules = ['productos', 'categorias', 'ingredientes', 'variaciones'] } = req.body || {};
+
+    const menu = this.menus.get(id);
+    if (!menu) {
+      return {
+        status: 404,
+        data: { error: 'Menú no encontrado', code: 'MENU_NOT_FOUND' }
+      };
+    }
+
+    if (menu.estado !== 'validado' && menu.estado !== 'generado') {
+      return {
+        status: 400,
+        data: {
+          error: `Menú en estado '${menu.estado}'. Debe estar 'generado' o 'validado' para exportar`,
+          code: 'INVALID_STATE'
+        }
+      };
+    }
+
+    const posExport = {
+      menu_id: id,
+      exported_at: new Date().toISOString(),
+      modules: {}
+    };
+
+    // Exportar categorías
+    if (target_modules.includes('categorias')) {
+      posExport.modules.categorias = (menu.categorias || []).map(cat => ({
+        id: cat.id,
+        nombre: cat.nombre,
+        emoji: cat.emoji || '📋',
+        descripcion: cat.descripcion || '',
+        orden: cat.orden ?? 0,
+        activa: cat.activa !== false,
+        horario_disponible: cat.horario_disponible || null,
+        // Metadata para importación
+        _source: 'menu-generator',
+        _menu_id: id
+      }));
+    }
+
+    // Exportar ingredientes (catálogo unificado)
+    if (target_modules.includes('ingredientes')) {
+      posExport.modules.ingredientes = (menu.ingredientes_catalogo || []).map(ing => ({
+        id: ing.id,
+        nombre: ing.nombre,
+        emoji: ing.emoji || '🥄',
+        tipo: ing.tipo || 'otro',
+        unidad_medida: ing.unidad_medida || 'porcion',
+        es_extra: ing.es_extra || false,
+        precio_extra: ing.precio_extra || 0,
+        alergenos: ing.alergenos || [],
+        activo: true,
+        // Metadata para importación
+        _source: 'menu-generator',
+        _menu_id: id
+      }));
+    }
+
+    // Exportar productos
+    if (target_modules.includes('productos')) {
+      posExport.modules.productos = (menu.productos || []).map(prod => ({
+        id: prod.id,
+        nombre: prod.nombre,
+        nombre_corto: prod.nombre_corto || prod.nombre.substring(0, 20),
+        emoji: prod.emoji || '🍽️',
+        categoria_id: prod.categoria_id,
+        descripcion: prod.descripcion || '',
+        precio: prod.precio || 0,
+        precio_original: prod.precio_original || null,
+        ingredientes: (prod.ingredientes || []).map(ing => ({
+          ingrediente_id: ing.ingrediente_id,
+          cantidad: ing.cantidad || 1,
+          es_principal: ing.es_principal || false,
+          removible: ing.removible !== false,
+          visible_en_carta: ing.visible_en_carta !== false
+        })),
+        alergenos: prod.alergenos || [],
+        tags: prod.tags || [],
+        calorias: prod.calorias || null,
+        tiempo_preparacion: prod.tiempo_preparacion || null,
+        disponible: prod.disponible !== false,
+        orden: prod.orden ?? 0,
+        // Metadata para importación
+        _source: 'menu-generator',
+        _menu_id: id
+      }));
+    }
+
+    // Exportar variaciones
+    if (target_modules.includes('variaciones')) {
+      posExport.modules.variaciones = {
+        // Variaciones por producto
+        por_producto: (menu.productos || [])
+          .filter(p => p.variaciones)
+          .map(prod => ({
+            producto_id: prod.id,
+            permite_quitar_ingredientes: prod.variaciones.permite_quitar_ingredientes !== false,
+            permite_extras: prod.variaciones.permite_extras !== false,
+            extras_sugeridos: prod.variaciones.extras_sugeridos || [],
+            tamanos: prod.variaciones.tamanos || [],
+            opciones: prod.variaciones.opciones || []
+          })),
+        // Variaciones globales
+        globales: (menu.variaciones_globales || []).map(v => ({
+          id: v.id,
+          nombre: v.nombre,
+          tipo: v.tipo,
+          aplica_a_categorias: v.aplica_a_categorias || [],
+          valores: v.valores || []
+        }))
+      };
+    }
+
+    // Estadísticas de la exportación
+    posExport.estadisticas = {
+      categorias: posExport.modules.categorias?.length || 0,
+      ingredientes: posExport.modules.ingredientes?.length || 0,
+      productos: posExport.modules.productos?.length || 0,
+      variaciones_producto: posExport.modules.variaciones?.por_producto?.length || 0,
+      variaciones_globales: posExport.modules.variaciones?.globales?.length || 0
+    };
+
+    // Publicar evento
+    await this.eventBus.publish('menu-generator.menu.exported_pos', {
+      menuId: id,
+      target_modules,
+      estadisticas: posExport.estadisticas,
+      timestamp: posExport.exported_at
+    }, { correlationId: req.correlationId });
+
+    this.logger.info('menu.exported_pos', {
+      menuId: id,
+      target_modules,
+      estadisticas: posExport.estadisticas,
+      correlation_id: req.correlationId
+    });
+
+    return {
+      status: 200,
+      data: posExport
+    };
+  }
+
+  /**
+   * POST /menus/:id/apply-pos - Aplica menú directamente a módulos POS
+   * Publica eventos para que cada módulo importe sus datos
+   * @param {Object} req - Request con params.id
+   * @returns {Object} Resultado de la aplicación
+   */
+  async handleApplyToPOS(req) {
+    const { id } = req.params;
+    const { replace_existing = false, dry_run = false } = req.body || {};
+
+    const menu = this.menus.get(id);
+    if (!menu) {
+      return {
+        status: 404,
+        data: { error: 'Menú no encontrado', code: 'MENU_NOT_FOUND' }
+      };
+    }
+
+    if (menu.estado !== 'validado') {
+      return {
+        status: 400,
+        data: {
+          error: `Menú debe estar 'validado' para aplicar al POS. Estado actual: '${menu.estado}'`,
+          code: 'MENU_NOT_VALIDATED'
+        }
+      };
+    }
+
+    const correlationId = req.correlationId || `apply_${Date.now()}`;
+    const results = {
+      menu_id: id,
+      dry_run,
+      replace_existing,
+      applied_at: new Date().toISOString(),
+      events_published: []
+    };
+
+    if (dry_run) {
+      // Solo simular sin publicar eventos
+      results.simulation = {
+        categorias: menu.categorias?.length || 0,
+        ingredientes: menu.ingredientes_catalogo?.length || 0,
+        productos: menu.productos?.length || 0,
+        message: 'Simulación completada. Usa dry_run: false para aplicar cambios.'
+      };
+    } else {
+      // Publicar evento para importar categorías
+      if (menu.categorias?.length > 0) {
+        await this.eventBus.publish('pos.categorias.import', {
+          source: 'menu-generator',
+          menu_id: id,
+          replace_existing,
+          categorias: menu.categorias
+        }, { correlationId });
+        results.events_published.push('pos.categorias.import');
+      }
+
+      // Publicar evento para importar ingredientes
+      if (menu.ingredientes_catalogo?.length > 0) {
+        await this.eventBus.publish('pos.ingredientes.import', {
+          source: 'menu-generator',
+          menu_id: id,
+          replace_existing,
+          ingredientes: menu.ingredientes_catalogo
+        }, { correlationId });
+        results.events_published.push('pos.ingredientes.import');
+      }
+
+      // Publicar evento para importar productos
+      if (menu.productos?.length > 0) {
+        await this.eventBus.publish('pos.productos.import', {
+          source: 'menu-generator',
+          menu_id: id,
+          replace_existing,
+          productos: menu.productos
+        }, { correlationId });
+        results.events_published.push('pos.productos.import');
+      }
+
+      // Publicar evento para importar variaciones
+      if (menu.variaciones_globales?.length > 0) {
+        await this.eventBus.publish('pos.variaciones.import', {
+          source: 'menu-generator',
+          menu_id: id,
+          replace_existing,
+          variaciones: menu.variaciones_globales
+        }, { correlationId });
+        results.events_published.push('pos.variaciones.import');
+      }
+
+      // Marcar menú como aplicado
+      menu.estado = 'aplicado';
+      menu.applied_at = results.applied_at;
+      this.menus.set(id, menu);
+
+      // Métricas
+      this.metrics.increment('menu.applied_pos.total');
+    }
+
+    this.logger.info('menu.apply_pos', {
+      menuId: id,
+      dry_run,
+      replace_existing,
+      events: results.events_published,
+      correlation_id: correlationId
+    });
+
+    return {
+      status: 200,
+      data: results
+    };
+  }
+
   // ==========================================
   // AI RESPONSE GENERATION (Private)
   // ==========================================
@@ -1194,56 +1470,96 @@ class MenuGeneratorModule {
 
   /**
    * Parsea la respuesta de IA para detectar si contiene un menú generado
+   * Usa extractJSONFromResponse y validateMenuStructure para validación POS
    * @private
    */
   _parseAIResponseForMenu(content) {
-    // Intentar detectar JSON de menú en la respuesta
-    const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+    // Usar la función especializada para extraer JSON
+    const menuData = extractJSONFromResponse(content);
 
-    if (jsonMatch) {
-      try {
-        const menuData = JSON.parse(jsonMatch[1]);
-        if (menuData.productos || menuData.categorias) {
-          return { menuGenerated: true, menuData };
+    if (menuData) {
+      // Verificar que sea un menú válido (tiene productos o categorias)
+      if (menuData.productos || menuData.categorias) {
+        // Validar estructura
+        const validation = validateMenuStructure(menuData);
+
+        if (validation.valid) {
+          // Enriquecer con estadísticas y ordenamiento
+          const enrichedMenu = enrichMenu(menuData);
+
+          this.logger?.info('menu.parsed_from_ai', {
+            productos: enrichedMenu.productos?.length || 0,
+            categorias: enrichedMenu.categorias?.length || 0,
+            ingredientes: enrichedMenu.ingredientes_catalogo?.length || 0
+          });
+
+          return { menuGenerated: true, menuData: enrichedMenu };
+        } else {
+          // Log de errores de validación pero intentar continuar
+          this.logger?.warn('menu.validation_warnings', {
+            errors: validation.errors
+          });
+
+          // Intentar enriquecer de todas formas
+          try {
+            const enrichedMenu = enrichMenu(menuData);
+            return { menuGenerated: true, menuData: enrichedMenu };
+          } catch (e) {
+            this.logger?.error('menu.enrichment_failed', { error: e.message });
+          }
         }
-      } catch (e) {
-        // No es JSON válido, continuar
       }
     }
 
-    // Detectar por palabras clave si parece que se generó un menú
-    const menuKeywords = ['productos:', 'categorías:', 'precio:', '€'];
+    // Detectar por palabras clave si parece que se generó un menú (fallback)
+    const menuKeywords = ['productos:', 'categorías:', 'precio:', '€', '"nombre":', '"categoria_id":'];
     const hasMenuContent = menuKeywords.some(kw => content.toLowerCase().includes(kw.toLowerCase()));
+
+    if (hasMenuContent) {
+      this.logger?.info('menu.detected_keywords_but_no_json', {
+        keywords_found: menuKeywords.filter(kw => content.toLowerCase().includes(kw.toLowerCase()))
+      });
+    }
 
     return { menuGenerated: false, menuData: null };
   }
 
   /**
    * Construye el prompt del sistema según configuración
+   * Usa el prompt especializado para extracción POS
    * @private
    */
   _buildSystemPrompt(conversation) {
+    // Usar el prompt especializado para chat con capacidad POS
+    let prompt = buildChatSystemPrompt(conversation);
+
+    // Añadir configuración específica de la conversación
+    const configLines = [];
+
+    if (conversation.styleConfig) {
+      const style = conversation.styleConfig;
+      configLines.push(`\n## Configuración de esta sesión:`);
+      configLines.push(`- Tipo de establecimiento: ${style.menuType || 'restaurante'}`);
+      configLines.push(`- Idioma: ${style.language || 'español'}`);
+      configLines.push(`- Moneda: ${style.currency || 'EUR'}`);
+      if (style.includeDescriptions === false) configLines.push(`- No incluir descripciones largas`);
+      if (style.includeAllergens === false) configLines.push(`- No incluir alérgenos`);
+      if (style.includePrices === false) configLines.push(`- No incluir precios`);
+    }
+
+    // Añadir template si existe
     const template = conversation.templateId
       ? this.templates.find(t => t.id === conversation.templateId)
       : null;
 
-    let prompt = `Eres un asistente especializado en generación de menús para restaurantes.
-Tu objetivo es ayudar a crear menús profesionales y bien estructurados.
-
-Configuración actual:
-- Tipo de establecimiento: ${conversation.styleConfig?.menuType || 'restaurante'}
-- Idioma: ${conversation.styleConfig?.language || 'español'}
-- Incluir descripciones: ${conversation.styleConfig?.includeDescriptions ? 'sí' : 'no'}
-- Incluir alérgenos: ${conversation.styleConfig?.includeAllergens ? 'sí' : 'no'}
-- Incluir precios: ${conversation.styleConfig?.includePrices ? 'sí' : 'no'}
-`;
-
     if (template) {
-      prompt += `
-Plantilla seleccionada: ${template.name}
-Categorías sugeridas: ${template.categories.join(', ')}
-Nota: ${template.promptHint}
-`;
+      configLines.push(`\n## Plantilla activa: ${template.name} ${template.emoji}`);
+      configLines.push(`Categorías sugeridas: ${template.categories.join(', ')}`);
+      configLines.push(`Estilo: ${template.promptHint}`);
+    }
+
+    if (configLines.length > 0) {
+      prompt += configLines.join('\n');
     }
 
     return prompt;
@@ -1292,7 +1608,7 @@ Nota: ${template.promptHint}
   }
 
   /**
-   * Genera un menú de ejemplo
+   * Genera un menú de ejemplo en formato POS completo
    * @private
    */
   _generateSampleMenu(conversation) {
@@ -1300,41 +1616,220 @@ Nota: ${template.promptHint}
       ? this.templates.find(t => t.id === conversation.templateId)
       : this.templates[0];
 
+    const now = new Date().toISOString();
+
     return {
-      productos: [
-        { id: 'prod_1', nombre: 'Ensalada César', emoji: '🥗', categoria: 'Entrantes', precio: 8.50, descripcion: 'Lechuga romana, parmesano, croutons y aderezo César' },
-        { id: 'prod_2', nombre: 'Sopa del día', emoji: '🍲', categoria: 'Entrantes', precio: 6.00, descripcion: 'Consultar con el personal' },
-        { id: 'prod_3', nombre: 'Spaghetti Carbonara', emoji: '🍝', categoria: 'Principales', precio: 12.00, descripcion: 'Pasta fresca con huevo, panceta y pecorino' },
-        { id: 'prod_4', nombre: 'Pizza Margherita', emoji: '🍕', categoria: 'Principales', precio: 10.00, descripcion: 'Tomate, mozzarella fresca y albahaca' },
-        { id: 'prod_5', nombre: 'Tiramisú', emoji: '🍰', categoria: 'Postres', precio: 5.50, descripcion: 'Postre italiano con mascarpone y café' }
-      ],
+      menu_id: `menu_${Date.now()}`,
+      nombre: 'Carta Principal',
+      descripcion: 'Menú generado de ejemplo',
       categorias: [
-        { id: 'cat_1', nombre: 'Entrantes', emoji: '🥗', orden: 1 },
-        { id: 'cat_2', nombre: 'Principales', emoji: '🍽️', orden: 2 },
-        { id: 'cat_3', nombre: 'Postres', emoji: '🍰', orden: 3 }
+        { id: 'cat_entrantes', nombre: 'Entrantes', emoji: '🥗', orden: 0, descripcion: 'Para empezar' },
+        { id: 'cat_principales', nombre: 'Principales', emoji: '🍽️', orden: 1, descripcion: 'Platos principales' },
+        { id: 'cat_postres', nombre: 'Postres', emoji: '🍰', orden: 2, descripcion: 'Para terminar' }
       ],
-      ingredientes_catalogo: []
+      productos: [
+        {
+          id: 'prod_ensalada_cesar',
+          nombre: 'Ensalada César',
+          nombre_corto: 'César',
+          emoji: '🥗',
+          categoria_id: 'cat_entrantes',
+          descripcion: 'Lechuga romana, parmesano, croutons y aderezo César',
+          precio: 8.50,
+          ingredientes: [
+            { ingrediente_id: 'ing_lechuga', es_principal: true, removible: false },
+            { ingrediente_id: 'ing_parmesano', removible: true },
+            { ingrediente_id: 'ing_croutons', removible: true },
+            { ingrediente_id: 'ing_aderezo_cesar', removible: true }
+          ],
+          alergenos: ['gluten', 'lactosa', 'huevo'],
+          variaciones: {
+            permite_quitar_ingredientes: true,
+            permite_extras: true,
+            extras_sugeridos: [
+              { ingrediente_id: 'ing_pollo', precio_extra: 2.50 },
+              { ingrediente_id: 'ing_anchoas', precio_extra: 1.50 }
+            ]
+          },
+          tags: ['popular'],
+          orden: 0
+        },
+        {
+          id: 'prod_sopa_dia',
+          nombre: 'Sopa del Día',
+          nombre_corto: 'Sopa',
+          emoji: '🍲',
+          categoria_id: 'cat_entrantes',
+          descripcion: 'Consultar con el personal',
+          precio: 6.00,
+          ingredientes: [],
+          alergenos: [],
+          variaciones: { permite_quitar_ingredientes: false, permite_extras: false },
+          tags: [],
+          orden: 1
+        },
+        {
+          id: 'prod_spaghetti_carbonara',
+          nombre: 'Spaghetti Carbonara',
+          nombre_corto: 'Carbonara',
+          emoji: '🍝',
+          categoria_id: 'cat_principales',
+          descripcion: 'Pasta fresca con huevo, panceta y pecorino',
+          precio: 12.00,
+          ingredientes: [
+            { ingrediente_id: 'ing_spaghetti', es_principal: true, removible: false },
+            { ingrediente_id: 'ing_huevo', removible: false },
+            { ingrediente_id: 'ing_panceta', removible: true },
+            { ingrediente_id: 'ing_pecorino', removible: true }
+          ],
+          alergenos: ['gluten', 'huevo', 'lactosa'],
+          variaciones: {
+            permite_quitar_ingredientes: true,
+            permite_extras: true,
+            extras_sugeridos: [
+              { ingrediente_id: 'ing_trufa', precio_extra: 4.00 }
+            ]
+          },
+          tags: ['popular'],
+          orden: 0
+        },
+        {
+          id: 'prod_pizza_margherita',
+          nombre: 'Pizza Margherita',
+          nombre_corto: 'Margherita',
+          emoji: '🍕',
+          categoria_id: 'cat_principales',
+          descripcion: 'Tomate, mozzarella fresca y albahaca',
+          precio: 10.00,
+          ingredientes: [
+            { ingrediente_id: 'ing_masa_pizza', es_principal: true, removible: false },
+            { ingrediente_id: 'ing_tomate', removible: false },
+            { ingrediente_id: 'ing_mozzarella', removible: true },
+            { ingrediente_id: 'ing_albahaca', removible: true }
+          ],
+          alergenos: ['gluten', 'lactosa'],
+          variaciones: {
+            permite_quitar_ingredientes: true,
+            permite_extras: true,
+            tamanos: [
+              { id: 'tam_mediana', nombre: 'Mediana', precio: 10.00, es_default: true },
+              { id: 'tam_familiar', nombre: 'Familiar', precio: 14.00, es_default: false }
+            ],
+            extras_sugeridos: [
+              { ingrediente_id: 'ing_jamon', precio_extra: 2.00 },
+              { ingrediente_id: 'ing_champinones', precio_extra: 1.50 }
+            ]
+          },
+          tags: ['vegetariano'],
+          orden: 1
+        },
+        {
+          id: 'prod_tiramisu',
+          nombre: 'Tiramisú',
+          nombre_corto: 'Tiramisú',
+          emoji: '🍰',
+          categoria_id: 'cat_postres',
+          descripcion: 'Postre italiano con mascarpone y café',
+          precio: 5.50,
+          ingredientes: [
+            { ingrediente_id: 'ing_mascarpone', es_principal: true, removible: false },
+            { ingrediente_id: 'ing_cafe', removible: false },
+            { ingrediente_id: 'ing_bizcocho', removible: false },
+            { ingrediente_id: 'ing_cacao', removible: true }
+          ],
+          alergenos: ['gluten', 'lactosa', 'huevo'],
+          variaciones: { permite_quitar_ingredientes: false, permite_extras: false },
+          tags: ['popular'],
+          orden: 0
+        }
+      ],
+      ingredientes_catalogo: [
+        { id: 'ing_lechuga', nombre: 'Lechuga Romana', emoji: '🥬', tipo: 'vegetal', es_extra: false, alergenos: [] },
+        { id: 'ing_parmesano', nombre: 'Parmesano', emoji: '🧀', tipo: 'lacteo', es_extra: true, precio_extra: 1.00, alergenos: ['lactosa'] },
+        { id: 'ing_croutons', nombre: 'Croutons', emoji: '🍞', tipo: 'carbohidrato', es_extra: true, precio_extra: 0.50, alergenos: ['gluten'] },
+        { id: 'ing_aderezo_cesar', nombre: 'Aderezo César', emoji: '🥣', tipo: 'salsa', es_extra: false, alergenos: ['huevo', 'lactosa'] },
+        { id: 'ing_pollo', nombre: 'Pollo a la Plancha', emoji: '🍗', tipo: 'proteina', es_extra: true, precio_extra: 2.50, alergenos: [] },
+        { id: 'ing_anchoas', nombre: 'Anchoas', emoji: '🐟', tipo: 'proteina', es_extra: true, precio_extra: 1.50, alergenos: ['pescado'] },
+        { id: 'ing_spaghetti', nombre: 'Spaghetti', emoji: '🍝', tipo: 'base', es_extra: false, alergenos: ['gluten'] },
+        { id: 'ing_huevo', nombre: 'Huevo', emoji: '🥚', tipo: 'proteina', es_extra: false, alergenos: ['huevo'] },
+        { id: 'ing_panceta', nombre: 'Panceta', emoji: '🥓', tipo: 'proteina', es_extra: true, precio_extra: 2.00, alergenos: [] },
+        { id: 'ing_pecorino', nombre: 'Pecorino', emoji: '🧀', tipo: 'lacteo', es_extra: true, precio_extra: 1.00, alergenos: ['lactosa'] },
+        { id: 'ing_trufa', nombre: 'Trufa', emoji: '🍄', tipo: 'topping', es_extra: true, precio_extra: 4.00, alergenos: [] },
+        { id: 'ing_masa_pizza', nombre: 'Masa de Pizza', emoji: '🫓', tipo: 'base', es_extra: false, alergenos: ['gluten'] },
+        { id: 'ing_tomate', nombre: 'Salsa de Tomate', emoji: '🍅', tipo: 'salsa', es_extra: false, alergenos: [] },
+        { id: 'ing_mozzarella', nombre: 'Mozzarella', emoji: '🧀', tipo: 'lacteo', es_extra: true, precio_extra: 1.50, alergenos: ['lactosa'] },
+        { id: 'ing_albahaca', nombre: 'Albahaca Fresca', emoji: '🌿', tipo: 'condimento', es_extra: false, alergenos: [] },
+        { id: 'ing_jamon', nombre: 'Jamón', emoji: '🍖', tipo: 'proteina', es_extra: true, precio_extra: 2.00, alergenos: [] },
+        { id: 'ing_champinones', nombre: 'Champiñones', emoji: '🍄', tipo: 'vegetal', es_extra: true, precio_extra: 1.50, alergenos: [] },
+        { id: 'ing_mascarpone', nombre: 'Mascarpone', emoji: '🧀', tipo: 'lacteo', es_extra: false, alergenos: ['lactosa'] },
+        { id: 'ing_cafe', nombre: 'Café', emoji: '☕', tipo: 'otro', es_extra: false, alergenos: [] },
+        { id: 'ing_bizcocho', nombre: 'Bizcochos de Soletilla', emoji: '🍪', tipo: 'base', es_extra: false, alergenos: ['gluten', 'huevo'] },
+        { id: 'ing_cacao', nombre: 'Cacao en Polvo', emoji: '🍫', tipo: 'topping', es_extra: false, alergenos: [] }
+      ],
+      variaciones_globales: [
+        {
+          id: 'var_tamano_pizza',
+          nombre: 'Tamaño Pizza',
+          tipo: 'tamano',
+          aplica_a_categorias: ['cat_principales'],
+          valores: [
+            { nombre: 'Mediana', multiplicador_precio: 1 },
+            { nombre: 'Familiar', multiplicador_precio: 1.4 }
+          ]
+        }
+      ],
+      metadata: {
+        generado_at: now,
+        fuente: 'conversacion',
+        idioma: conversation.styleConfig?.language || 'es',
+        moneda: conversation.styleConfig?.currency || 'EUR',
+        restaurante_tipo: template?.name?.toLowerCase() || 'italiano',
+        estadisticas: {
+          total_productos: 5,
+          total_categorias: 3,
+          total_ingredientes: 21,
+          precio_medio: 8.40,
+          precio_minimo: 5.50,
+          precio_maximo: 12.00
+        },
+        confianza: 0.95
+      }
     };
   }
 
   /**
-   * Guarda un menú generado
+   * Guarda un menú generado en formato POS
    * @private
    */
   async _saveGeneratedMenu(menuData, conversationId) {
-    const menuId = `menu_${Date.now()}`;
+    // Usar menu_id del menuData si existe, o generar uno nuevo
+    const menuId = menuData.menu_id || `menu_${Date.now()}`;
 
     const menu = {
+      // Estructura POS completa
       id: menuId,
+      menu_id: menuId,
+      nombre: menuData.nombre || 'Menú sin nombre',
+      descripcion: menuData.descripcion || '',
+
+      // Datos del menú
+      categorias: menuData.categorias || [],
+      productos: menuData.productos || [],
+      ingredientes_catalogo: menuData.ingredientes_catalogo || [],
+      variaciones_globales: menuData.variaciones_globales || [],
+
+      // Metadatos
       source: {
-        tipo: 'ai_generated',
+        tipo: menuData.metadata?.fuente || 'ai_generated',
         conversationId,
         uploaded_at: new Date().toISOString()
       },
       estado: 'generado',
-      productos: menuData.productos || [],
-      categorias: menuData.categorias || [],
-      ingredientes_catalogo: menuData.ingredientes_catalogo || [],
+      metadata: {
+        ...menuData.metadata,
+        generado_at: new Date().toISOString(),
+        fuente: menuData.metadata?.fuente || 'conversacion'
+      },
       created_at: new Date().toISOString()
     };
 
@@ -1345,7 +1840,18 @@ Nota: ${template.promptHint}
     await this.eventBus.publish('menu-generator.menu.created', {
       menuId,
       conversationId,
-      productosCount: menu.productos.length
+      productosCount: menu.productos.length,
+      categoriasCount: menu.categorias.length,
+      ingredientesCount: menu.ingredientes_catalogo.length,
+      formato: 'pos'
+    });
+
+    this.logger.info('menu.saved_pos_format', {
+      menuId,
+      conversationId,
+      productos: menu.productos.length,
+      categorias: menu.categorias.length,
+      ingredientes: menu.ingredientes_catalogo.length
     });
 
     return menuId;

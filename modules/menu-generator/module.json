@@ -12,7 +12,12 @@
       "menu-generator.message.sent",
       "menu-generator.message.received",
       "menu-generator.menu.created",
-      "menu-generator.menu.exported"
+      "menu-generator.menu.exported",
+      "menu-generator.menu.exported_pos",
+      "pos.categorias.import",
+      "pos.ingredientes.import",
+      "pos.productos.import",
+      "pos.variaciones.import"
     ],
     "queries": ["menu.obtener_ultimo", "conversations.list", "templates.list"]
   },
@@ -58,6 +63,26 @@
       {
         "event": "menu-generator.menu.exported",
         "description": "Menú exportado a formato externo"
+      },
+      {
+        "event": "menu-generator.menu.exported_pos",
+        "description": "Menú exportado en formato POS estructurado"
+      },
+      {
+        "event": "pos.categorias.import",
+        "description": "Solicitud de importación de categorías al módulo POS"
+      },
+      {
+        "event": "pos.ingredientes.import",
+        "description": "Solicitud de importación de ingredientes al módulo POS"
+      },
+      {
+        "event": "pos.productos.import",
+        "description": "Solicitud de importación de productos al módulo POS"
+      },
+      {
+        "event": "pos.variaciones.import",
+        "description": "Solicitud de importación de variaciones al módulo POS"
       }
     ],
     "subscribes": [
@@ -107,6 +132,35 @@
       "handler": "handleExportMenu",
       "description": "Exportar menú (JSON, CSV, Markdown)",
       "request_schema": { "$ref": "./schemas/menu.json#/definitions/export_request" }
+    },
+    {
+      "method": "POST",
+      "path": "/menus/:id/export-pos",
+      "handler": "handleExportPOS",
+      "description": "Exportar menú en formato POS estructurado (productos, categorias, ingredientes, variaciones)",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "target_modules": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["productos", "categorias", "ingredientes", "variaciones"] },
+            "default": ["productos", "categorias", "ingredientes", "variaciones"]
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/menus/:id/apply-pos",
+      "handler": "handleApplyToPOS",
+      "description": "Aplicar menú validado directamente a módulos POS (publica eventos de importación)",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "replace_existing": { "type": "boolean", "default": false },
+          "dry_run": { "type": "boolean", "default": false }
+        }
+      }
     },
 
     {

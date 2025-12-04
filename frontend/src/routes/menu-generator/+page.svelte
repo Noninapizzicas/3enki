@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { MobileWorkspaceLayout } from '$components/layout';
-  import { Card, Button, Badge } from '$components/ui';
+  import { Button, Badge } from '$components/ui'; // v2.0: Card removido (sin stats area)
   import { Spinner } from '$components/feedback';
-  import { StatCard } from '$components/data';
+  // v2.0: StatCard removido del main area (accesible via panel stats)
   import { FileDropZone } from '$components/input';
   import { subscribe, events } from '$stores/mqtt';
   import { toast } from '$stores/toast';
@@ -262,7 +262,7 @@
   ];
 
   // ===========================================
-  // BARRA LATERAL - Ecosistema
+  // BARRA LATERAL - Ecosistema (v2.0: 28px, transparente, sin ayuda)
   // ===========================================
   const sideButtons = [
     {
@@ -290,12 +290,8 @@
       emoji: '⚙️',
       primaryAction: { type: 'panel' as const, panelId: 'settings', label: 'Configuración' },
       tertiaryAction: { type: 'panel' as const, panelId: 'settings-full', label: 'Configuración avanzada' }
-    },
-    {
-      id: 'help',
-      emoji: '❓',
-      primaryAction: { type: 'panel' as const, panelId: 'help', label: 'Ayuda' }
     }
+    // v2.0: Removido botón de ayuda (❓)
   ];
 
   // ===========================================
@@ -921,7 +917,7 @@
 </svelte:head>
 
 <MobileWorkspaceLayout
-  title="Menu Generator"
+  title=""
   {topButtons}
   {bottomButtons}
   {sideButtons}
@@ -933,41 +929,23 @@
   showChatBars={true}
   chatPlaceholder="Describe el menú que quieres generar..."
   chatLoading={chatLoading}
+  sideBarSize={28}
+  sideBarTransparent={true}
+  sideBarOpacity={0.7}
+  showHeader={false}
   on:buttonAction={handleButtonAction}
   on:chatSubmit={handleChatSubmit}
   on:panelOpen={handlePanelOpen}
   on:panelClose={handlePanelClose}
 >
-  <!-- Main Content -->
+  <!-- Main Content - v2.0: Sin stats ni instrucciones, solo chat -->
   {#if loading}
     <div class="flex items-center justify-center h-full">
       <Spinner size="lg" />
     </div>
   {:else}
-    <div class="space-y-4">
-      <!-- Stats compactos -->
-      <div class="grid grid-cols-3 gap-2">
-        <div class="stat-mini">
-          <span class="stat-mini__value">{totalMenus}</span>
-          <span class="stat-mini__label">Menús</span>
-        </div>
-        <div class="stat-mini">
-          <span class="stat-mini__value">{generandoCount}</span>
-          <span class="stat-mini__label">Generando</span>
-        </div>
-        <div class="stat-mini">
-          <span class="stat-mini__value">{validadosCount}</span>
-          <span class="stat-mini__label">Validados</span>
-        </div>
-      </div>
-
-      <!-- Quick info -->
-      <Card padding="sm">
-        <div class="text-center text-sm text-text-muted">
-          <p class="mb-2">👆 <strong>Tap</strong> = Ver | 👆👆 <strong>Doble</strong> = Añadir | 👇 <strong>Hold</strong> = Editar</p>
-          <p>Usa los botones de las barras para navegar</p>
-        </div>
-      </Card>
+    <div class="space-y-4 h-full">
+      <!-- v2.0: Removido stats grid y Card de instrucciones -->
 
       <!-- Chat conversation (visible in main area) -->
       {#if chatMessages.length > 0}
@@ -1669,28 +1647,9 @@
 </MobileWorkspaceLayout>
 
 <style>
-  .stat-mini {
-    background: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 0.75rem;
-    text-align: center;
-  }
-
-  .stat-mini__value {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: 600;
-    line-height: 1;
-  }
-
-  .stat-mini__label {
-    display: block;
-    font-size: 0.625rem;
-    color: var(--color-text-muted);
-    margin-top: 0.25rem;
-    text-transform: uppercase;
-  }
+  /* v2.0: stat-mini styles removidos (stats ahora solo en panel)
+   * Para ver stats usar toolbar_top → 📊 Stats
+   */
 
   /* Chat panel styles */
   .chat-panel {

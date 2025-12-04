@@ -1,0 +1,418 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://event-core.local/schemas/menu-pos-output.json",
+  "title": "Menu POS Output Schema",
+  "description": "Schema para JSON enriquecido compatible con sistema POS (productos, categorias, ingredientes, variaciones)",
+
+  "type": "object",
+  "required": ["menu_id", "nombre", "categorias", "productos", "ingredientes_catalogo", "metadata"],
+  "additionalProperties": false,
+
+  "properties": {
+    "menu_id": {
+      "type": "string",
+      "pattern": "^menu_[a-z0-9_]+$",
+      "description": "ID único del menú generado"
+    },
+
+    "nombre": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Nombre del menú/carta (ej: 'Carta Principal', 'Menú del Día')"
+    },
+
+    "descripcion": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Descripción general del menú"
+    },
+
+    "categorias": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/categoria" },
+      "description": "Categorías del menú ordenadas"
+    },
+
+    "productos": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/producto" },
+      "description": "Productos/platos del menú"
+    },
+
+    "ingredientes_catalogo": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/ingrediente" },
+      "description": "Catálogo unificado de ingredientes detectados"
+    },
+
+    "variaciones_globales": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/variacion_global" },
+      "description": "Variaciones aplicables a múltiples productos (tamaños, etc)"
+    },
+
+    "metadata": {
+      "type": "object",
+      "required": ["generado_at", "fuente"],
+      "properties": {
+        "generado_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fuente": {
+          "type": "string",
+          "enum": ["imagen", "pdf", "texto", "conversacion"]
+        },
+        "idioma": {
+          "type": "string",
+          "default": "es"
+        },
+        "moneda": {
+          "type": "string",
+          "default": "EUR"
+        },
+        "restaurante_tipo": {
+          "type": "string",
+          "description": "Tipo detectado: italiano, japones, tapas, cafeteria, etc"
+        },
+        "estadisticas": {
+          "type": "object",
+          "properties": {
+            "total_productos": { "type": "integer", "minimum": 0 },
+            "total_categorias": { "type": "integer", "minimum": 0 },
+            "total_ingredientes": { "type": "integer", "minimum": 0 },
+            "precio_medio": { "type": "number", "minimum": 0 },
+            "precio_minimo": { "type": "number", "minimum": 0 },
+            "precio_maximo": { "type": "number", "minimum": 0 }
+          }
+        },
+        "confianza": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Nivel de confianza en la extracción (0-1)"
+        }
+      }
+    }
+  },
+
+  "definitions": {
+    "categoria": {
+      "type": "object",
+      "required": ["id", "nombre", "orden"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^cat_[a-z0-9_]+$",
+          "description": "ID único de categoría"
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "emoji": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "descripcion": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "orden": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Orden de aparición en el menú"
+        },
+        "horario_disponible": {
+          "type": "object",
+          "properties": {
+            "desde": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$" },
+            "hasta": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$" }
+          },
+          "description": "Horario de disponibilidad (ej: desayunos solo hasta 12:00)"
+        },
+        "activa": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+
+    "producto": {
+      "type": "object",
+      "required": ["id", "nombre", "categoria_id", "precio"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^prod_[a-z0-9_]+$"
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "nombre_corto": {
+          "type": "string",
+          "maxLength": 30,
+          "description": "Nombre abreviado para tickets/cocina"
+        },
+        "emoji": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "categoria_id": {
+          "type": "string",
+          "pattern": "^cat_[a-z0-9_]+$"
+        },
+        "descripcion": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "precio": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Precio base en la moneda del menú"
+        },
+        "precio_original": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Precio original si hay descuento"
+        },
+        "ingredientes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ingrediente_producto" },
+          "description": "Ingredientes del producto con cantidades"
+        },
+        "alergenos": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/alergeno" },
+          "description": "Alérgenos detectados"
+        },
+        "variaciones": {
+          "$ref": "#/definitions/variaciones_producto"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["vegano", "vegetariano", "sin_gluten", "picante", "nuevo", "popular", "recomendado", "sin_lactosa"]
+          }
+        },
+        "calorias": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calorías aproximadas"
+        },
+        "tiempo_preparacion": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tiempo de preparación en minutos"
+        },
+        "disponible": {
+          "type": "boolean",
+          "default": true
+        },
+        "orden": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Orden dentro de la categoría"
+        }
+      }
+    },
+
+    "ingrediente": {
+      "type": "object",
+      "required": ["id", "nombre"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ing_[a-z0-9_]+$"
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "emoji": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "tipo": {
+          "type": "string",
+          "enum": ["base", "proteina", "vegetal", "lacteo", "condimento", "salsa", "topping", "carbohidrato", "grasa", "otro"]
+        },
+        "unidad_medida": {
+          "type": "string",
+          "enum": ["g", "kg", "ml", "l", "unidad", "porcion", "cucharada", "pizca"],
+          "default": "porcion"
+        },
+        "es_extra": {
+          "type": "boolean",
+          "default": false,
+          "description": "Puede añadirse como extra"
+        },
+        "precio_extra": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Precio si se añade como extra"
+        },
+        "alergenos": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/alergeno" }
+        }
+      }
+    },
+
+    "ingrediente_producto": {
+      "type": "object",
+      "required": ["ingrediente_id"],
+      "additionalProperties": false,
+      "properties": {
+        "ingrediente_id": {
+          "type": "string",
+          "pattern": "^ing_[a-z0-9_]+$"
+        },
+        "cantidad": {
+          "type": "number",
+          "minimum": 0
+        },
+        "es_principal": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ingrediente principal/destacado"
+        },
+        "removible": {
+          "type": "boolean",
+          "default": true,
+          "description": "El cliente puede pedir quitarlo"
+        },
+        "visible_en_carta": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+
+    "variaciones_producto": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "permite_quitar_ingredientes": {
+          "type": "boolean",
+          "default": true
+        },
+        "permite_extras": {
+          "type": "boolean",
+          "default": true
+        },
+        "extras_sugeridos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ingrediente_id": { "type": "string" },
+              "precio_extra": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        "tamanos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["nombre", "precio"],
+            "properties": {
+              "id": { "type": "string" },
+              "nombre": { "type": "string" },
+              "precio": { "type": "number", "minimum": 0 },
+              "es_default": { "type": "boolean", "default": false }
+            }
+          },
+          "description": "Tamaños disponibles (pequeño, mediano, grande)"
+        },
+        "opciones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["nombre", "valores"],
+            "properties": {
+              "nombre": { "type": "string" },
+              "requerido": { "type": "boolean", "default": false },
+              "valores": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "valor": { "type": "string" },
+                    "precio_extra": { "type": "number", "default": 0 }
+                  }
+                }
+              }
+            }
+          },
+          "description": "Opciones adicionales (punto de cocción, tipo de pan, etc)"
+        }
+      }
+    },
+
+    "variacion_global": {
+      "type": "object",
+      "required": ["id", "nombre", "tipo"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^var_[a-z0-9_]+$"
+        },
+        "nombre": {
+          "type": "string"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": ["tamano", "opcion", "extra"]
+        },
+        "aplica_a_categorias": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs de categorías donde aplica"
+        },
+        "valores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nombre": { "type": "string" },
+              "multiplicador_precio": { "type": "number", "default": 1 },
+              "precio_fijo": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+
+    "alergeno": {
+      "type": "string",
+      "enum": [
+        "gluten",
+        "crustaceos",
+        "huevo",
+        "pescado",
+        "cacahuete",
+        "soja",
+        "lactosa",
+        "frutos_secos",
+        "apio",
+        "mostaza",
+        "sesamo",
+        "sulfitos",
+        "altramuces",
+        "moluscos"
+      ]
+    }
+  }
+}

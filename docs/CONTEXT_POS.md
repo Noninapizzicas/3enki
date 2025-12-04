@@ -65,6 +65,69 @@
 
 ---
 
+## Menu Generator - Integración POS (v2.0)
+
+El módulo `menu-generator` es el punto de entrada principal para crear menús que alimentan al sistema POS.
+
+### APIs de Exportación POS
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `POST` | `/menus/:id/export-pos` | Exporta menú en formato estructurado para cada módulo POS |
+| `POST` | `/menus/:id/apply-pos` | Aplica menú directamente publicando eventos de importación |
+
+### Eventos de Importación Directa
+
+El menu-generator puede publicar eventos directamente a los módulos POS:
+
+```
+pos.categorias.import    → Módulo categorias importa categorías
+pos.ingredientes.import  → Módulo ingredientes importa catálogo
+pos.productos.import     → Módulo productos importa productos
+pos.variaciones.import   → Módulo variaciones importa config
+```
+
+### Flujo de Exportación
+
+```
+┌─────────────────┐     export-pos      ┌─────────────────┐
+│ menu-generator  │ ──────────────────► │  JSON separado  │
+│                 │                      │  por módulo     │
+└─────────────────┘                      └─────────────────┘
+        │
+        │ apply-pos (dry_run: false)
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│              Eventos pos.*.import                        │
+│                                                          │
+│  pos.categorias.import ─────► categorias                 │
+│  pos.ingredientes.import ───► ingredientes               │
+│  pos.productos.import ──────► productos                  │
+│  pos.variaciones.import ────► variaciones                │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Enriquecimiento de Ingredientes con Emojis
+
+El sistema incluye mapeo automático de 150+ ingredientes a emojis:
+
+| Tipo | Ejemplos | Emojis |
+|------|----------|--------|
+| Carnes | pollo, ternera, bacon | 🍗 🥩 🥓 |
+| Pescados | salmón, atún, anchoas | 🍣 🐟 🐟 |
+| Mariscos | gambas, pulpo, mejillones | 🦐 🐙 🦪 |
+| Verduras | tomate, cebolla, lechuga | 🍅 🧅 🥬 |
+| Lácteos | queso, mozzarella, nata | 🧀 🧀 🥛 |
+| Bases | pasta, arroz, pan | 🍝 🍚 🍞 |
+| Condimentos | albahaca, orégano, sal | 🌿 🌿 🧂 |
+
+**Funciones de enriquecimiento:**
+- `assignIngredientEmoji(ingredient)` - Asigna emoji por nombre/tipo
+- `enrichIngredients(ingredientes)` - Enriquece array de ingredientes
+- `enrichMenu(menu)` - Enriquece menú completo con emojis y estadísticas
+
+---
+
 ## Módulos del Sistema
 
 ### 1. productos (Catálogo)
@@ -84,6 +147,7 @@ this.menusPendientes = new Map(); // menu_id -> productos_draft
 |--------|---------|--------|
 | `menu.generado` | `onMenuGenerado` | Guarda productos como pendientes de validación |
 | `menu.validado` | `onMenuValidado` | Sincroniza catálogo, aplica correcciones |
+| `pos.productos.import` | `onProductosImport` | **[v2.0]** Importa productos desde menu-generator |
 
 **Publica**:
 | Evento | Cuándo |
@@ -150,6 +214,7 @@ this.categorias = new Map(); // categoria_id -> categoria
 | Evento | Handler | Acción |
 |--------|---------|--------|
 | `menu.generado` | `onMenuGenerado` | Sincroniza categorías del menú |
+| `pos.categorias.import` | `onCategoriasImport` | **[v2.0]** Importa categorías desde menu-generator |
 
 **Publica**:
 | Evento | Cuándo |
@@ -196,6 +261,7 @@ this.ingredientes = new Map(); // ingrediente_id -> ingrediente
 |--------|---------|--------|
 | `menu.generado` | `onMenuGenerado` | Extrae ingredientes del catálogo |
 | `producto.creado` | `onProductoCreado` | Registra ingredientes de productos |
+| `pos.ingredientes.import` | `onIngredientesImport` | **[v2.0]** Importa ingredientes con emojis desde menu-generator |
 
 **Publica**:
 | Evento | Cuándo |
@@ -244,6 +310,7 @@ this.ingredientesDisponibles = new Map(); // ingrediente_id -> {precio, disponib
 |--------|---------|--------|
 | `producto.creado` | `onProductoCreado` | Registra configuración de variaciones |
 | `pedido.item_agregado` | `onPedidoItemAgregado` | Valida variaciones del item |
+| `pos.variaciones.import` | `onVariacionesImport` | **[v2.0]** Importa variaciones globales desde menu-generator |
 
 **Publica**:
 | Evento | Cuándo |
@@ -648,55 +715,148 @@ Usuario → cobros → cobro.iniciado
 
 ---
 
-## Formato de Menú para IA
+## Formato de Menú POS (v2.0)
 
-Cuando el chat de IA genera un menú, debe seguir esta estructura:
+Cuando el chat de IA genera un menú, debe seguir esta estructura compatible con el sistema POS:
 
 ```json
 {
   "menu_id": "menu_abc123",
   "nombre": "Carta Principal",
+  "descripcion": "Menú generado por IA",
+
   "categorias": [
     {
       "id": "cat_pizzas",
       "nombre": "Pizzas",
       "emoji": "🍕",
-      "orden": 1
+      "descripcion": "Nuestras pizzas artesanales",
+      "orden": 0,
+      "activa": true,
+      "horario_disponible": null
     }
   ],
+
   "productos": [
     {
       "id": "prod_pizza_4quesos",
       "nombre": "Pizza 4 Quesos",
+      "nombre_corto": "4 Quesos",
       "emoji": "🧀",
-      "categoria": "Pizzas",
+      "categoria_id": "cat_pizzas",
       "descripcion": "Mozzarella, gorgonzola, parmesano, emmental",
       "precio": 12.50,
-      "ingredientes_base": [
-        { "id": "ing_mozzarella", "nombre": "Mozzarella", "emoji": "🧀" }
+      "precio_original": null,
+      "ingredientes": [
+        { "ingrediente_id": "ing_mozzarella", "es_principal": true, "removible": false },
+        { "ingrediente_id": "ing_gorgonzola", "removible": true },
+        { "ingrediente_id": "ing_parmesano", "removible": true },
+        { "ingrediente_id": "ing_emmental", "removible": true }
       ],
       "alergenos": ["gluten", "lactosa"],
       "variaciones": {
-        "permite_quitar": ["ing_gorgonzola"],
-        "permite_anadir": true,
+        "permite_quitar_ingredientes": true,
+        "permite_extras": true,
         "extras_sugeridos": [
-          { "ingrediente_id": "ing_jamon", "precio_extra": 1.50 }
-        ]
-      }
+          { "ingrediente_id": "ing_jamon", "precio_extra": 2.00 }
+        ],
+        "tamanos": [
+          { "id": "tam_mediana", "nombre": "Mediana", "precio": 12.50, "es_default": true },
+          { "id": "tam_familiar", "nombre": "Familiar", "precio": 17.50, "es_default": false }
+        ],
+        "opciones": []
+      },
+      "tags": ["popular"],
+      "calorias": null,
+      "tiempo_preparacion": 15,
+      "disponible": true,
+      "orden": 0
     }
   ],
+
   "ingredientes_catalogo": [
     {
       "id": "ing_mozzarella",
       "nombre": "Mozzarella",
       "emoji": "🧀",
-      "tipo": "queso",
-      "es_alergeno": true,
-      "alergenos": ["lactosa"],
-      "precio_extra": 1.00
+      "tipo": "lacteo",
+      "unidad_medida": "porcion",
+      "es_extra": true,
+      "precio_extra": 1.50,
+      "alergenos": ["lactosa"]
+    },
+    {
+      "id": "ing_jamon",
+      "nombre": "Jamón",
+      "emoji": "🍖",
+      "tipo": "proteina",
+      "unidad_medida": "porcion",
+      "es_extra": true,
+      "precio_extra": 2.00,
+      "alergenos": []
     }
-  ]
+  ],
+
+  "variaciones_globales": [
+    {
+      "id": "var_tamano_pizza",
+      "nombre": "Tamaño Pizza",
+      "tipo": "tamano",
+      "aplica_a_categorias": ["cat_pizzas"],
+      "valores": [
+        { "nombre": "Mediana", "multiplicador_precio": 1 },
+        { "nombre": "Familiar", "multiplicador_precio": 1.4 }
+      ]
+    }
+  ],
+
+  "metadata": {
+    "generado_at": "2024-12-04T10:30:00Z",
+    "fuente": "conversacion",
+    "idioma": "es",
+    "moneda": "EUR",
+    "restaurante_tipo": "italiano",
+    "estadisticas": {
+      "total_productos": 25,
+      "total_categorias": 5,
+      "total_ingredientes": 40,
+      "precio_medio": 12.50,
+      "precio_minimo": 3.00,
+      "precio_maximo": 22.00
+    },
+    "confianza": 0.85
+  }
 }
+```
+
+### Tipos de Ingrediente
+
+| Tipo | Descripción | Emoji Default |
+|------|-------------|---------------|
+| `base` | Arroz, pasta, pan, masa | 🍚 |
+| `proteina` | Carne, pescado, huevo | 🥩 |
+| `vegetal` | Verduras, hortalizas | 🥬 |
+| `lacteo` | Quesos, nata, leche | 🧀 |
+| `condimento` | Especias, hierbas | 🌿 |
+| `salsa` | Tomate, pesto, mayonesa | 🥫 |
+| `topping` | Decoración, finales | ✨ |
+| `carbohidrato` | Patatas, cereales | 🥔 |
+| `grasa` | Aceite, mantequilla | 🫒 |
+| `marisco` | Mariscos y moluscos | 🦐 |
+
+### Alérgenos Detectados Automáticamente
+
+```
+gluten      → pan, pasta, harina, rebozados
+lactosa     → queso, leche, nata, mantequilla
+huevo       → mayonesa, rebozados, pasta fresca
+pescado     → pescados, atún, salmón, anchoas
+crustaceos  → gambas, langostinos, cangrejo
+frutos_secos → almendras, nueces, piñones
+cacahuete   → cacahuetes, mantequilla de cacahuete
+soja        → salsa soja, tofu, edamame
+sesamo      → pan con sésamo, hummus
+moluscos    → mejillones, almejas, pulpo, calamar
 ```
 
 ---
@@ -742,5 +902,13 @@ event-core/
 
 ---
 
-*Última actualización: 2024-12-04*
-*Versión: 1.0.0*
+*Última actualización: 2025-12-04*
+*Versión: 2.0.0*
+
+### Changelog v2.0.0
+- Añadida sección "Menu Generator - Integración POS"
+- Nuevas APIs: `/export-pos`, `/apply-pos`
+- Nuevos eventos: `pos.categorias.import`, `pos.ingredientes.import`, `pos.productos.import`, `pos.variaciones.import`
+- Formato JSON POS actualizado con estructura completa
+- Sistema de enriquecimiento de emojis para ingredientes (150+ mapeos)
+- Documentación de tipos de ingrediente y alérgenos

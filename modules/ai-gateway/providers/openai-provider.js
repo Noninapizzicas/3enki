@@ -16,8 +16,7 @@ class OpenAIProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    // Get API key from environment (support both formats)
-    this.apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_GLOBAL || null;
+    this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('openai.no-api-key', {
@@ -29,6 +28,13 @@ class OpenAIProvider extends BaseProvider {
       available: await this.isAvailable(),
       models: this.config.models
     });
+  }
+
+  /**
+   * Refresh API key from environment (supports dynamic credential updates)
+   */
+  refreshApiKey() {
+    this.apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_GLOBAL || null;
   }
 
   /**

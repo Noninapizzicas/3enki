@@ -17,8 +17,7 @@ class AnthropicProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    // Get API key from environment (support both formats)
-    this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY_GLOBAL || null;
+    this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('anthropic.no-api-key', {
@@ -30,6 +29,13 @@ class AnthropicProvider extends BaseProvider {
       available: await this.isAvailable(),
       models: this.config.models
     });
+  }
+
+  /**
+   * Refresh API key from environment (supports dynamic credential updates)
+   */
+  refreshApiKey() {
+    this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY_GLOBAL || null;
   }
 
   /**

@@ -40,17 +40,59 @@ class AnthropicProvider extends BaseProvider {
 
   /**
    * Convert OpenAI format messages to Anthropic format
+   * Supports vision: messages with image_base64 field
    */
   convertMessages(messages) {
     const systemMessages = messages.filter(m => m.role === 'system');
     const chatMessages = messages.filter(m => m.role !== 'system');
 
-    const system = systemMessages.map(m => m.content).join('\n');
+    const system = systemMessages.map(m => {
+      // Handle system messages with content array
+      if (Array.isArray(m.content)) {
+        return m.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+      }
+      return m.content;
+    }).join('\n');
 
-    const anthropicMessages = chatMessages.map(m => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content
-    }));
+    const anthropicMessages = chatMessages.map(m => {
+      const role = m.role === 'assistant' ? 'assistant' : 'user';
+
+      // Check if message has image content (vision support)
+      if (m.image_base64 || (Array.isArray(m.content) && m.content.some(c => c.type === 'image'))) {
+        const contentParts = [];
+
+        // Add image if present in image_base64 field
+        if (m.image_base64) {
+          const mediaType = m.image_type || 'image/jpeg';
+          contentParts.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: m.image_base64
+            }
+          });
+        }
+
+        // Handle array content format
+        if (Array.isArray(m.content)) {
+          for (const part of m.content) {
+            if (part.type === 'image' && part.source) {
+              contentParts.push(part);
+            } else if (part.type === 'text') {
+              contentParts.push({ type: 'text', text: part.text });
+            }
+          }
+        } else if (typeof m.content === 'string') {
+          contentParts.push({ type: 'text', text: m.content });
+        }
+
+        return { role, content: contentParts };
+      }
+
+      // Standard text message
+      return { role, content: m.content };
+    });
 
     return { system, messages: anthropicMessages };
   }

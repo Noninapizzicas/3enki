@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { MobileWorkspaceLayout } from '$components/layout';
   import { Button, Badge } from '$components/ui'; // v2.0: Card removido (sin stats area)
   import { Spinner } from '$components/feedback';
@@ -7,7 +7,26 @@
   import { FileDropZone } from '$components/input';
   import { subscribe, events } from '$stores/mqtt';
   import { toast } from '$stores/toast';
+  import { setHideGlobalHeader, setHideGlobalSidebar, resetLayout } from '$stores/layout';
   import config from '$lib/config';
+
+  // v2.0: Ocultar header y sidebar globales (esta página usa su propio layout)
+  onMount(() => {
+    setHideGlobalHeader(true);
+    setHideGlobalSidebar(true);
+
+    // Cargar datos y suscribirse a eventos MQTT
+    loadAll();
+    subscribe([
+      'core/+/events/menu/#',
+      'core/+/events/menu-generator/#',
+      'core/+/events/credential/#'
+    ]);
+  });
+
+  onDestroy(() => {
+    resetLayout(); // Restaurar layout global al salir
+  });
 
   // Types
   interface Menu {
@@ -901,15 +920,7 @@
   // ===========================================
   // Lifecycle
   // ===========================================
-
-  onMount(() => {
-    loadAll();
-    subscribe([
-      'core/+/events/menu/#',
-      'core/+/events/menu-generator/#',
-      'core/+/events/credential/#'
-    ]);
-  });
+  // Note: onMount para layout está al inicio del script (setHideGlobalHeader, etc.)
 </script>
 
 <svelte:head>

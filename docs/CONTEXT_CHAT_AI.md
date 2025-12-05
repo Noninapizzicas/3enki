@@ -758,5 +758,316 @@ Todos los módulos exponen:
 
 ---
 
+## Interfaz de Usuario - Estructura Estándar
+
+> Basado en `blueprints/mobile-chat-screen.yaml` y `CONTEXT_UI.md`
+
+### Vista General
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ BARRA SUPERIOR (toolbar_top) - CONFIGURABLE por módulo             │
+│ [  ]  [  ]  [  ]  [  ]  [  ]     ← Cada módulo define sus iconos   │
+├─────────────────────────────────────────────────────────────────┬───┤
+│                                                                 │🧩│
+│                                                                 │   │
+│                                                                 │⚙️│
+│                    ZONA CENTRAL                                 │   │ toolbar_right
+│                    (chat-history)                               │🔔│ ECOSISTEMA
+│                                                                 │   │ (estable)
+│              ┌─────────────────────────────────┐                │👤│
+│              │ 👤 Usuario                      │                │   │
+│              │ 🤖 Asistente                    │                │   │
+│              │ 👤 Usuario                      │                │   │
+│              │ 🤖 Asistente                    │                │   │
+│              └─────────────────────────────────┘                │   │
+│                    (scroll vertical)                            │   │
+│                                                                 │◀️│
+├─────────────────────────────────────────────────────────────────┴───┤
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │ toolbar_chat.top - FIJO (prepara mensaje)                   │    │
+│  │ [🤖 Modelo] [🔑 Credencial] [📝 Prompt] [💬 Historial]      │    │
+│  ├─────────────────────────────────────────────────────────────┤    │
+│  │ [Escribe aquí...]                                 [Enviar →]│    │
+│  ├─────────────────────────────────────────────────────────────┤    │
+│  │ toolbar_chat.bottom - FIJO (complementa mensaje)            │    │
+│  │ [🔧 Tools] [📎 Adjuntar] [📋 Contexto] [🔌 Plugins]         │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Componentes FIJOS vs CONFIGURABLES
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   CONFIGURABLE (cada módulo define)        FIJO (nunca cambia)     │
+│   ════════════════════════════════         ═══════════════════     │
+│                                                                     │
+│   ┌─────────────────────────┐              ┌─────────────────────┐  │
+│   │     toolbar_top         │              │   toolbar_right     │  │
+│   │   (iconos del módulo)   │              │   (ecosistema)      │  │
+│   │   icons: []             │              │   🧩 Módulos        │  │
+│   └─────────────────────────┘              │   ⚙️ Sistema        │  │
+│                                            │   🔔 Alertas        │  │
+│                                            │   👤 Perfil         │  │
+│                                            └─────────────────────┘  │
+│                                                                     │
+│                                            ┌─────────────────────┐  │
+│                                            │   toolbar_chat      │  │
+│                                            │   (IA/Chat)         │  │
+│                                            │                     │  │
+│                                            │   TOP:              │  │
+│                                            │   🤖 Modelo         │  │
+│                                            │   🔑 Credencial     │  │
+│                                            │   📝 Prompt         │  │
+│                                            │   💬 Historial      │  │
+│                                            │                     │  │
+│                                            │   BOTTOM:           │  │
+│                                            │   🔧 Tools          │  │
+│                                            │   📎 Adjuntar       │  │
+│                                            │   📋 Contexto       │  │
+│                                            │   🔌 Plugins        │  │
+│                                            └─────────────────────┘  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+| Elemento | Tipo | Contenido |
+|----------|------|-----------|
+| **toolbar_top** | CONFIGURABLE | Definido por cada módulo |
+| **toolbar_right** | FIJO | Ecosistema (módulos, config, alertas, perfil) |
+| **toolbar_chat.top** | FIJO | Modelo, Credencial, Prompt, Historial |
+| **toolbar_chat.bottom** | FIJO | Tools, Adjuntar, Contexto, Plugins |
+| **input** | FIJO | Expandible con doble toque, Enter=newline |
+
+---
+
+### Estructura Sandwich del Chat (Detalle)
+
+```
+                    ANTES de escribir
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│  [🤖]     [🔑]     [📝]     [💬]                        │  ← Configura
+│  Modelo   API Key  Prompt   Historial                   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  [ Escribe aquí... ]                         [Enviar →] │  ← INPUT FIJO
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│  [🔧]     [📎]     [📋]     [🔌]                        │  ← Complementa
+│  Tools    Adjuntar Contexto Plugins                     │
+└─────────────────────────────────────────────────────────┘
+                          ↑
+                    DESPUÉS de escribir
+```
+
+**Flujo cognitivo natural:**
+1. Miro arriba → ¿Qué modelo? ¿Qué prompt?
+2. Escribo en el input
+3. Miro abajo → ¿Adjunto algo? ¿Activo tools?
+4. Envío
+
+---
+
+### Mapeo Iconos → Módulos Event Core
+
+| Icono | Módulo Event Core | Paneles |
+|-------|-------------------|---------|
+| 🤖 Modelo | ai-gateway | modelo-selector, modelo-config, modelos-gestionar |
+| 🔑 Credencial | credential-manager | credencial-selector, credencial-crear, credenciales-gestionar |
+| 📝 Prompt | prompt-manager | prompts-rapidos, prompt-crear, prompts-gestionar |
+| 💬 Historial | conversation-manager | conversaciones, historial-gestionar |
+| 🔧 Tools | tool-orchestrator | tools-disponibles, tools-config |
+| 📎 Adjuntar | storage-manager | adjuntar-archivo |
+| 📋 Contexto | ai-agent-framework | contexto-actual, contexto-editar, contexto-gestionar |
+| 🔌 Plugins | plugin-manager | plugins-activos, plugins-gestionar |
+
+---
+
+### Triple Interacción Estándar
+
+Cada icono en las barras tiene 3 niveles de interacción:
+
+| Gesto | Acción | Tamaño Panel | Uso |
+|-------|--------|--------------|-----|
+| **1 Toque** | Panel rápido (seleccionar) | small (30%) | 90% |
+| **2 Toques** | Modal crear (nuevo item) | medium (50%) | 8% |
+| **Long-press** | Modal gestión (editar/borrar) | full (80%) | 2% |
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│   1 TOQUE          2 TOQUES          LONG-PRESS              │
+│   ─────────        ─────────         ──────────              │
+│   [🤖] →           [🤖][🤖] →        [🤖]━━━━━● →            │
+│   Panel rápido     Modal crear       Modal gestión           │
+│   (seleccionar)    (nuevo item)      (editar/borrar)         │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Configuración de timing:**
+```javascript
+interaction: {
+  tap: { delay: 300 },           // ms antes de confirmar single tap
+  doubleTap: { maxDelay: 300 },  // ms máximo entre toques
+  longPress: { duration: 500 }   // ms para activar
+}
+```
+
+---
+
+### Paneles Flotantes
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│              ┌─────────────────────────┐                    │
+│              │ 🤖 Selector de Modelo   │  ← Panel 30%       │
+│              ├─────────────────────────┤                    │
+│              │ ○ DeepSeek Chat      🔮 │                    │
+│              │ ● GPT-4o             🤖 │                    │
+│              │ ○ Claude 3.5         🧠 │                    │
+│              │ ○ Llama 2 (local)    🦙 │                    │
+│              └─────────────────────────┘                    │
+│                                                             │
+│  ─ ─ ─ ─ ─ Chat visible de fondo (blur) ─ ─ ─ ─ ─          │
+│                                                             │
+│  [🤖 Modelo] [🔑] [📝] [💬]                                 │
+│  [input...]                                       [Enviar]  │
+│  [🔧] [📎] [📋] [🔌]                                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Comportamiento:**
+- Aparecen SOBRE el contenido
+- Chat/trabajo visible de fondo (blur opcional)
+- Cerrar: tocar fuera O swipe down
+- Nunca bloquean TODO - siempre hay contexto visible
+
+**Z-Index Strategy:**
+```
+z-index: 10   → Zona central (chat/trabajo)
+z-index: 100  → Barras flotantes
+z-index: 200  → Panel rápido (1 toque)
+z-index: 300  → Modal crear (2 toques)
+z-index: 400  → Modal gestión (long-press)
+z-index: 500  → Editor texto expandido
+z-index: 999  → Overlays críticos (confirmaciones)
+```
+
+---
+
+### Input de Texto
+
+```
+┌─────────────────────────────────────────┐
+│  [Escribe aquí...]            [Enviar]  │
+└─────────────────────────────────────────┘
+```
+
+**Comportamiento:**
+- Tamaño FIJO pequeño (no crece automáticamente)
+- Enter = salto de línea (NUNCA enviar)
+- Ctrl/Cmd + Enter = enviar
+- Doble toque = expande al 50% de pantalla
+
+**Expansión (doble toque en input):**
+```
+┌─────────────────────────────────────────┐
+│  ┌───────────────────────────────────┐  │
+│  │  Texto completo editable          │  │  ← Ventana 50%
+│  │  (scroll, edición cómoda)         │  │
+│  └───────────────────────────────────┘  │
+│                                         │
+│  Chat visible de fondo (50% inferior)   │
+└─────────────────────────────────────────┘
+```
+
+---
+
+### Eventos UI
+
+**Publica:**
+```javascript
+// Mensaje enviado desde el chat
+eventBus.publish('screen.chat.send', {
+  message: string,
+  context: object
+});
+
+// Acción en barra
+eventBus.publish('screen.toolbar.action', {
+  bar: 'top' | 'right' | 'chat-top' | 'chat-bottom',
+  iconId: string,
+  actionType: 'tap' | 'doubleTap' | 'longPress',
+  target: string
+});
+```
+
+**Escucha:**
+```javascript
+// Streaming de respuesta
+eventBus.subscribe('ai.response.chunk', (chunk) => { /* streaming */ });
+
+// Respuesta completa
+eventBus.subscribe('ai.response.complete', (response) => { /* done */ });
+
+// Eventos del módulo para mostrar en chat
+eventBus.subscribe('module.event', (event) => { /* show in chat */ });
+```
+
+---
+
+### Estructura de Archivos Frontend
+
+```
+frontend/src/lib/components/
+├── ai/
+│   ├── index.ts                    # Exports
+│   ├── types.ts                    # Tipos compartidos
+│   ├── ChatAIWorkspace.svelte      # Componente reutilizable principal
+│   ├── ChatInput.svelte            # Input de chat
+│   └── ConversationPanel.svelte    # Panel de conversaciones
+│
+├── layout/
+│   └── MobileWorkspaceLayout.svelte  # Layout principal móvil
+│
+└── toolbar/
+    ├── ToolbarIcon.svelte          # Icono con triple interacción
+    ├── ChatToolbar.svelte          # Sub-barras del chat
+    └── FloatingPanel.svelte        # Panel flotante genérico
+```
+
+---
+
+### Uso en Módulos
+
+Para crear un módulo con chat, solo hay que:
+
+1. **Definir `toolbar_top`** con los iconos específicos del módulo
+2. **Usar `ChatAIWorkspace`** como componente de chat
+3. **Las barras de chat (toolbar_chat) son automáticas**
+
+```yaml
+# mi-modulo-screen.yaml
+name: mi-modulo-screen
+extends: mobile-chat-screen
+
+toolbar_top:
+  icons:
+    - id: mi-accion
+      icon: "📁"
+      label: Mi Acción
+      actions:
+        tap: { type: panel, target: mi-panel }
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.0.0*
+*Versión: 1.1.0*

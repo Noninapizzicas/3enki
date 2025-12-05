@@ -1484,5 +1484,218 @@ ai-gateway                          credential-manager
 
 ---
 
+### Botón 💬 Historial (conversation-manager)
+
+**Módulo**: `conversation-manager`
+**Versión**: 1.0.0
+**Responsabilidad**: Gestión de conversaciones, mensajes y contexto para IA.
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/conversations` | Crear conversación (project_id, title, system_prompt, ai_settings) |
+| GET | `/conversations` | Listar conversaciones (?project_id=X) |
+| GET | `/conversations/:id` | Obtener con mensajes y contexto de proyecto |
+| PUT | `/conversations/:id` | Actualizar (title, system_prompt, model, etc.) |
+| DELETE | `/conversations/:id` | Eliminar conversación y mensajes |
+| POST | `/conversations/:id/messages` | Enviar mensaje → obtener respuesta IA |
+| GET | `/conversations/:id/messages` | Obtener mensajes (?limit=N&offset=M) |
+| GET | `/conversations/:id/context` | Contexto completo (project + conversation) |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Métricas del módulo |
+
+#### Eventos
+
+**Escucha:**
+| Evento | Acción |
+|--------|--------|
+| `db.query.response` | Respuesta de database-manager |
+| `ai.chat.response` | Respuesta de ai-gateway |
+| `project.get.response` | Contexto de project-manager |
+| `storage.info.response` | Info de storage-manager |
+| `conversation.get.request` | Query de conversación |
+| `conversation.list.request` | Query lista |
+| `message.list.request` | Query mensajes |
+| `conversation.send.request` | Enviar mensaje vía evento |
+
+**Publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `conversation.created` | Nueva conversación |
+| `conversation.updated` | Metadata actualizada |
+| `conversation.deleted` | Conversación eliminada |
+| `message.sent` | Mensaje de usuario guardado |
+| `message.received` | Respuesta de IA recibida |
+
+#### Características
+
+- **Context Window**: Últimos N mensajes (configurable por conversación)
+- **AI Settings por conversación**: provider, model, temperature, max_tokens
+- **Attachments**: Referencia a archivos en storage-manager
+- **Cost Tracking**: Tokens y costos por mensaje
+- **Project Context**: Carga metadata y storage del proyecto
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Conversaciones Recientes (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 💬 Conversaciones                       │
+├─────────────────────────────────────────┤
+│                                         │
+│  ● Diseño API REST            hace 2h   │
+│    45 msgs | Claude 3.5 | $0.15        │
+│                                         │
+│  ○ Debug módulo auth          hace 1d   │
+│    23 msgs | GPT-4o | $0.08            │
+│                                         │
+│  ○ Refactor database          hace 3d   │
+│    12 msgs | DeepSeek | $0.01          │
+│                                         │
+│  ─────────────────────────────────────  │
+│  Proyecto: [Mi Proyecto ▼]              │
+│                                         │
+│  [+ Nueva conversación]                 │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Conversaciones ordenadas por updated_at
+- Conteo de mensajes, modelo usado, costo total
+- ● = Conversación activa actual
+- Filtro por proyecto
+
+**Acciones:**
+- Tap en conversación → La carga en el chat
+- Filtrar por proyecto
+- + Nueva conversación
+
+##### 2 TAPS → Modal Crear Conversación (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 💬 Nueva Conversación                         [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Proyecto *                                         │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ▼ Mi Proyecto Actual                        │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Título                                             │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Nueva conversación                          │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  System Prompt (opcional)                           │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Eres un asistente experto en...             │   │
+│  │                                             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Configuración IA (opcional) ───               │
+│                                                     │
+│  Modelo: [Auto ▼]  Temp: [0.7]  MaxTokens: [2000] │
+│                                                     │
+│  Context Window: [20] mensajes                     │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │           💬 Crear Conversación             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Validaciones:**
+- Proyecto obligatorio
+- Título auto-generado si vacío
+
+**Evento al crear:** `conversation.created`
+
+##### LONG-PRESS → Modal Gestión (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 💬 Gestionar Conversaciones                               [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Proyecto: [Todos ▼]  Ordenar: [Recientes ▼]  [🔍 Buscar...]   │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  💬 Diseño API REST                                   hace 2h   │
+│     Proyecto: Mi Proyecto | 45 msgs                            │
+│     Claude 3.5 Sonnet | Tokens: 12.5K | $0.15                  │
+│     [📖 Abrir] [✏️ Editar] [📤 Exportar] [🗑️]                  │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  💬 Debug módulo auth                                  hace 1d  │
+│     Proyecto: Mi Proyecto | 23 msgs                            │
+│     GPT-4o | Tokens: 8.2K | $0.08                              │
+│     [📖 Abrir] [✏️ Editar] [📤 Exportar] [🗑️]                  │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  💬 Refactor database                                  hace 3d  │
+│     Proyecto: Otro Proyecto | 12 msgs                          │
+│     DeepSeek | Tokens: 3.1K | $0.01                            │
+│     [📖 Abrir] [✏️ Editar] [📤 Exportar] [🗑️]                  │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Total: 15 conversaciones | 234 msgs | $1.25                │
+│                                                                 │
+│  [+ Nueva]                    [🗑️ Limpiar antiguas] [📊 Stats] │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por conversación:**
+- 📖 Abrir → Cargar en chat
+- ✏️ Editar → Cambiar título, system prompt, settings
+- 📤 Exportar → JSON/Markdown
+- 🗑️ Eliminar → Confirmar y borrar
+
+**Acciones globales:**
+- + Nueva → Modal crear
+- 🗑️ Limpiar antiguas → Eliminar >30 días
+- 📊 Stats → Dashboard de uso
+
+#### Flujo de Mensaje
+
+```
+Usuario escribe mensaje
+         │
+         ▼
+┌─────────────────┐     ┌─────────────────┐
+│ message.sent    │────►│ Guardar en DB   │
+└─────────────────┘     └─────────────────┘
+         │
+         ▼
+┌─────────────────┐     ┌─────────────────┐
+│ Cargar contexto │────►│ project-manager │
+│ (N mensajes)    │     │ storage-manager │
+└─────────────────┘     └─────────────────┘
+         │
+         ▼
+┌─────────────────┐     ┌─────────────────┐
+│ ai.chat.request │────►│   ai-gateway    │
+└─────────────────┘     └─────────────────┘
+         │
+         ▼
+┌─────────────────┐     ┌─────────────────┐
+│ ai.chat.response│────►│ Guardar en DB   │
+└─────────────────┘     └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│ message.received│────► Frontend (MQTT)
+└─────────────────┘
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.3.0*
+*Versión: 1.4.0*

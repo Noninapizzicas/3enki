@@ -53,10 +53,11 @@ class AIGatewayModule {
    */
   async subscribeToEvents() {
     // Handler para solicitudes de AI desde otros módulos via eventos
-    await this.eventBus.subscribe('ai.request.created', this.onAIRequestCreated.bind(this));
+    // Suscribirse a 'ai.request' (publicado por menu-generator y otros módulos)
+    await this.eventBus.subscribe('ai.request', this.onAIRequestCreated.bind(this));
 
     this.logger.info('ai-gateway.events.subscribed', {
-      events: ['ai.request.created']
+      events: ['ai.request']
     });
   }
 

@@ -38,6 +38,50 @@ class OpenAIProvider extends BaseProvider {
   }
 
   /**
+   * Convert messages to OpenAI format with vision support
+   */
+  convertMessagesForVision(messages) {
+    return messages.map(m => {
+      // Check if message has image content
+      if (m.image_base64) {
+        const mediaType = m.image_type || 'image/jpeg';
+        const imageUrl = `data:${mediaType};base64,${m.image_base64}`;
+
+        const content = [
+          {
+            type: 'image_url',
+            image_url: { url: imageUrl, detail: 'high' }
+          }
+        ];
+
+        if (m.content) {
+          content.push({ type: 'text', text: m.content });
+        }
+
+        return { role: m.role, content };
+      }
+
+      // Handle array content format (already in OpenAI format)
+      if (Array.isArray(m.content)) {
+        return m;
+      }
+
+      // Standard text message
+      return m;
+    });
+  }
+
+  /**
+   * Check if messages contain images
+   */
+  hasVisionContent(messages) {
+    return messages.some(m =>
+      m.image_base64 ||
+      (Array.isArray(m.content) && m.content.some(c => c.type === 'image_url' || c.type === 'image'))
+    );
+  }
+
+  /**
    * Chat completion
    */
   async chatCompletion(messages, options = {}) {
@@ -45,11 +89,16 @@ class OpenAIProvider extends BaseProvider {
       throw new Error('OpenAI provider not available (check API key)');
     }
 
-    const model = options.model || this.config.default_model;
+    // Use vision model if images are present
+    const hasImages = this.hasVisionContent(messages);
+    const model = options.model || (hasImages ? 'gpt-4o' : this.config.default_model);
 
-    // Estimate tokens
-    const messagesText = messages.map(m => m.content).join(' ');
-    const estimatedTokens = this.countTokens(messagesText);
+    // Convert messages for vision if needed
+    const processedMessages = hasImages ? this.convertMessagesForVision(messages) : messages;
+
+    // Estimate tokens (approximate for images)
+    const messagesText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ');
+    const estimatedTokens = this.countTokens(messagesText) + (hasImages ? 1000 : 0); // Add tokens for image
 
     // Check rate limit
     const rateLimitCheck = this.checkRateLimit(estimatedTokens);
@@ -60,9 +109,9 @@ class OpenAIProvider extends BaseProvider {
     // Build request
     const requestData = {
       model,
-      messages,
+      messages: processedMessages,
       temperature: options.temperature || 0.7,
-      max_tokens: options.max_tokens || 2000,
+      max_tokens: options.max_tokens || (hasImages ? 4000 : 2000),
       top_p: options.top_p || 1,
       stream: false
     };

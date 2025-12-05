@@ -38,6 +38,52 @@ class DeepSeekProvider extends BaseProvider {
   }
 
   /**
+   * Check if messages contain images (vision content)
+   */
+  hasVisionContent(messages) {
+    return messages.some(m =>
+      m.image_base64 ||
+      (Array.isArray(m.content) && m.content.some(c => c.type === 'image_url' || c.type === 'image'))
+    );
+  }
+
+  /**
+   * Convert messages to DeepSeek VL format with vision support
+   * DeepSeek VL uses OpenAI-compatible format for images
+   */
+  convertMessagesForVision(messages) {
+    return messages.map(m => {
+      // Check if message has image_base64 field (our internal format)
+      if (m.image_base64) {
+        const mediaType = m.image_type || 'image/jpeg';
+        const imageUrl = `data:${mediaType};base64,${m.image_base64}`;
+
+        const content = [
+          {
+            type: 'image_url',
+            image_url: { url: imageUrl }
+          }
+        ];
+
+        // Add text content if present
+        if (m.content && typeof m.content === 'string') {
+          content.push({ type: 'text', text: m.content });
+        }
+
+        return { role: m.role, content };
+      }
+
+      // Handle array content format (already in correct format)
+      if (Array.isArray(m.content)) {
+        return m;
+      }
+
+      // Standard text message
+      return m;
+    });
+  }
+
+  /**
    * Chat completion
    */
   async chatCompletion(messages, options = {}) {
@@ -45,11 +91,17 @@ class DeepSeekProvider extends BaseProvider {
       throw new Error('DeepSeek provider not available (check API key)');
     }
 
-    const model = options.model || this.config.default_model;
+    // Check for vision content and select appropriate model
+    const hasImages = this.hasVisionContent(messages);
+    // Use deepseek-vl-7b-chat for vision, or specified model, or default
+    const model = options.model || (hasImages ? 'deepseek-chat' : this.config.default_model);
 
-    // Estimate tokens for rate limiting
-    const messagesText = messages.map(m => m.content).join(' ');
-    const estimatedTokens = this.countTokens(messagesText);
+    // Convert messages for vision if needed
+    const processedMessages = hasImages ? this.convertMessagesForVision(messages) : messages;
+
+    // Estimate tokens for rate limiting (add extra for images)
+    const messagesText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ');
+    const estimatedTokens = this.countTokens(messagesText) + (hasImages ? 1000 : 0);
 
     // Check rate limit
     const rateLimitCheck = this.checkRateLimit(estimatedTokens);
@@ -60,9 +112,9 @@ class DeepSeekProvider extends BaseProvider {
     // Build request
     const requestData = {
       model,
-      messages,
-      temperature: options.temperature || 0.7,
-      max_tokens: options.max_tokens || 2000,
+      messages: processedMessages,
+      temperature: options.temperature || (hasImages ? 0.3 : 0.7), // Lower temp for vision
+      max_tokens: options.max_tokens || (hasImages ? 4000 : 2000), // More tokens for menu extraction
       top_p: options.top_p || 1,
       stream: false
     };

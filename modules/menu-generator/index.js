@@ -179,7 +179,25 @@ class MenuGeneratorModule {
     if (status === 'success') {
       // Parsear respuesta de IA y enriquecer menú
       try {
-        const enrichedMenu = this.enrichMenuFromAI(menu, data);
+        // Extraer contenido de la respuesta del LLM
+        const responseContent = data?.content || metadata?.response_content || '';
+
+        // Parsear JSON del contenido (busca ```json ... ```)
+        const parsedMenu = extractJSONFromResponse(responseContent);
+
+        if (!parsedMenu) {
+          throw new Error('No se pudo extraer JSON válido de la respuesta de IA');
+        }
+
+        this.logger.info('ai.response.parsed', {
+          menu_id,
+          has_productos: !!parsedMenu.productos,
+          has_categorias: !!parsedMenu.categorias,
+          productos_count: parsedMenu.productos?.length || 0
+        });
+
+        // Enriquecer menú con datos parseados
+        const enrichedMenu = this.enrichMenuFromAI(menu, parsedMenu);
         enrichedMenu.estado = 'generado';
         enrichedMenu.generation_time = Date.now() - start_time;
 
@@ -1918,31 +1936,87 @@ class MenuGeneratorModule {
   // ==========================================
 
   async publishAIRequest(request_id, file_base64, file_name, file_type, correlation_id) {
+    // Detectar tipo de archivo para determinar media type
+    const mediaType = this.getMediaType(file_name, file_type);
+    const isImage = mediaType.startsWith('image/');
+
+    // Construir mensajes para DeepSeek VL con visión
+    const messages = [
+      {
+        role: 'system',
+        content: MENU_EXTRACTION_SYSTEM_PROMPT
+      },
+      {
+        role: 'user',
+        content: `Analiza esta carta/menú de restaurante y extrae toda la información en formato JSON estructurado.
+
+IMPORTANTE:
+1. Detecta TODOS los productos visibles con sus precios
+2. Infiere ingredientes cuando no estén explícitos
+3. Calcula alérgenos basándote en ingredientes
+4. Sugiere extras lógicos para cada producto
+5. Agrupa en categorías coherentes
+6. Asigna emojis apropiados a categorías e ingredientes
+
+Archivo: ${file_name}
+
+Responde SOLO con el JSON válido dentro de \`\`\`json ... \`\`\``,
+        // Incluir imagen en base64 si es imagen
+        ...(isImage && {
+          image_base64: file_base64,
+          image_type: mediaType
+        })
+      }
+    ];
+
     await this.eventBus.publish('ai.request', {
       request_id,
-      type: 'menu_parse',
-      prompt_id: 'menu_parser_v1',
-      data: {
-        file_base64,
+      messages,
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      temperature: 0.3,
+      max_tokens: 8000,
+      metadata: {
+        request_id,
+        prompt_id: 'menu_parser_v1',
+        source: 'menu-generator',
         file_name,
-        file_type,
-        context: {
-          extraction_requirements: [
-            'productos con nombre y precio',
-            'categorías de productos',
-            'ingredientes por producto',
-            'alérgenos detectados',
-            'variaciones posibles'
-          ]
-        }
-      },
-      options: {
-        temperature: 0.3,
-        max_tokens: 4000
+        file_type: mediaType
       }
     }, {
       correlationId: correlation_id
     });
+
+    this.logger.info('ai.request.published', {
+      request_id,
+      is_image: isImage,
+      media_type: mediaType,
+      file_name,
+      correlation_id
+    });
+  }
+
+  /**
+   * Obtiene el media type correcto para un archivo
+   */
+  getMediaType(fileName, providedType) {
+    if (providedType && providedType !== 'application/octet-stream') {
+      return providedType;
+    }
+
+    const ext = fileName.toLowerCase().split('.').pop();
+    const mimeTypes = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'pdf': 'application/pdf',
+      'txt': 'text/plain',
+      'json': 'application/json'
+    };
+
+    return mimeTypes[ext] || 'application/octet-stream';
   }
 
   async publishMenuGenerado(menu, correlation_id) {
@@ -2002,47 +2076,60 @@ class MenuGeneratorModule {
   }
 
   enrichMenuFromAI(menu, aiData) {
-    // Parsear respuesta de IA y crear estructura enriquecida
-    const productos = aiData.productos || [];
-    const categorias = aiData.categorias || [];
+    // Usar la función enrichMenu de menu-extraction.js para enriquecer ingredientes con emojis
+    const enrichedAIData = enrichMenu(aiData);
 
-    // Crear catálogo unificado de ingredientes
-    const ingredientesMap = new Map();
-    productos.forEach(prod => {
-      if (prod.ingredientes_base) {
-        prod.ingredientes_base.forEach(ing => {
-          if (!ingredientesMap.has(ing.id)) {
-            ingredientesMap.set(ing.id, ing);
-          }
-        });
-      }
-    });
-
+    // Combinar datos del menú original con datos enriquecidos de IA
     return {
       ...menu,
-      productos: productos.map(p => ({
+      menu_id: enrichedAIData.menu_id || menu.id,
+      nombre: enrichedAIData.nombre || 'Menú Generado',
+      descripcion: enrichedAIData.descripcion || '',
+
+      // Productos con formato completo
+      productos: (enrichedAIData.productos || []).map(p => ({
         id: p.id || `prod_${this.slugify(p.nombre)}`,
         nombre: p.nombre,
-        emoji: p.emoji || this.getDefaultEmoji(p.categoria),
-        categoria: p.categoria,
-        categoria_emoji: p.categoria_emoji,
-        descripcion: p.descripcion,
-        precio: p.precio,
-        ingredientes_base: p.ingredientes_base || [],
+        nombre_corto: p.nombre_corto || p.nombre,
+        emoji: p.emoji || this.getDefaultEmoji(p.categoria_id || ''),
+        categoria_id: p.categoria_id,
+        descripcion: p.descripcion || '',
+        precio: p.precio || 0,
+        ingredientes: p.ingredientes || [],
         alergenos: p.alergenos || [],
         variaciones: p.variaciones || {
-          permite_quitar: [],
-          permite_anadir: true
+          permite_quitar_ingredientes: true,
+          permite_extras: true,
+          extras_sugeridos: []
         },
-        metadata: p.metadata || {}
+        tags: p.tags || [],
+        orden: p.orden || 0,
+        disponible: p.disponible !== false
       })),
-      categorias: categorias.map((cat, idx) => ({
+
+      // Categorías
+      categorias: (enrichedAIData.categorias || []).map((cat, idx) => ({
         id: cat.id || `cat_${this.slugify(cat.nombre)}`,
         nombre: cat.nombre,
         emoji: cat.emoji || '📋',
-        orden: cat.orden !== undefined ? cat.orden : idx
+        descripcion: cat.descripcion || '',
+        orden: cat.orden !== undefined ? cat.orden : idx,
+        activa: cat.activa !== false
       })),
-      ingredientes_catalogo: Array.from(ingredientesMap.values())
+
+      // Catálogo de ingredientes (ya enriquecido con emojis)
+      ingredientes_catalogo: enrichedAIData.ingredientes_catalogo || [],
+
+      // Variaciones globales
+      variaciones_globales: enrichedAIData.variaciones_globales || [],
+
+      // Metadata
+      metadata: {
+        ...menu.metadata,
+        ...enrichedAIData.metadata,
+        generado_at: new Date().toISOString(),
+        fuente: menu.source?.tipo || 'imagen'
+      }
     };
   }
 

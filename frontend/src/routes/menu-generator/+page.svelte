@@ -507,28 +507,42 @@
 
   async function handleFileDrop(event: CustomEvent<File[]>) {
     const files = event.detail;
-    if (files.length === 0) return;
+    if (!files || files.length === 0) return;
 
     for (const file of files) {
       try {
+        toast.info(`Subiendo ${file.name}...`);
         const base64 = await fileToBase64(file);
+
         const res = await fetch(`${apiBase}/upload`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             file_base64: base64,
             file_name: file.name,
-            file_type: file.type
+            file_type: file.type || 'application/octet-stream'
           })
         });
 
-        if (!res.ok) throw new Error('Error al subir');
-        const data = await res.json();
-        toast.success(`Menú ${data.menu_id} en proceso`);
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.error || data.message || `Error ${res.status}`);
+        }
+
+        toast.success(`✅ Menú ${data.menu_id} en proceso de OCR`);
+
+        // Cerrar el panel después de subir
+        currentPanel = '';
       } catch (err) {
-        toast.error(`Error subiendo ${file.name}`);
+        console.error('Upload error:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+        toast.error(`❌ ${file.name}: ${errorMsg}`);
       }
     }
+
+    // Limpiar archivos del FileDropZone
+    uploadFiles = [];
     await fetchMenus();
   }
 
@@ -751,8 +765,187 @@
     console.log('Button action:', buttonId, actionType, action);
   }
 
-  async function handleChatSubmit(e: CustomEvent) {
-    const { message } = e.detail;
+  /**
+   * Procesa archivos adjuntos (PDF/imágenes) enviándolos al OCR y esperando resultado
+   * Flujo: Chat -> Adjuntar PDF -> OCR -> Texto -> AI -> Respuesta en chat
+   */
+  async function processAttachments(files: File[], userMessage: string = '') {
+    for (const file of files) {
+      // Validar tipo de archivo
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type) && !file.name.match(/\.(pdf|jpg|jpeg|png|webp)$/i)) {
+        toast.error(`Tipo de archivo no soportado: ${file.type || file.name}`);
+        continue;
+      }
+
+      // Mostrar mensaje del usuario con el archivo
+      const fileMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: `📎 **${file.name}**${userMessage ? `\n\n${userMessage}` : ''}`,
+        timestamp: new Date()
+      };
+      chatMessages = [...chatMessages, fileMsg];
+
+      // Mostrar loading con estado inicial
+      const assistantId = `msg-${Date.now() + 1}`;
+      chatMessages = [...chatMessages, {
+        id: assistantId,
+        role: 'assistant',
+        content: '📤 Subiendo archivo...',
+        timestamp: new Date(),
+        loading: true
+      }];
+
+      chatLoading = true;
+
+      try {
+        // PASO 1: Subir archivo
+        const base64 = await fileToBase64(file);
+        const res = await fetch(`${apiBase}/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_base64: base64,
+            file_name: file.name,
+            file_type: file.type || 'application/pdf'
+          })
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || `Error ${res.status}`);
+        }
+
+        const uploadData = await res.json();
+        const menuId = uploadData.menu_id;
+
+        // Actualizar estado: procesando OCR
+        chatMessages = chatMessages.map(m =>
+          m.id === assistantId
+            ? { ...m, content: '🔍 Extrayendo texto con OCR...' }
+            : m
+        );
+
+        // PASO 2: Polling hasta que el menú esté listo
+        const maxAttempts = 60; // 2 minutos máximo (60 * 2s)
+        let attempts = 0;
+        let menuData = null;
+
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2s
+          attempts++;
+
+          try {
+            const menuRes = await fetch(`${apiBase}/menus/${menuId}`);
+            if (!menuRes.ok) continue;
+
+            menuData = await menuRes.json();
+
+            // Actualizar mensaje según estado
+            if (menuData.estado === 'generando') {
+              const dots = '.'.repeat((attempts % 3) + 1);
+              chatMessages = chatMessages.map(m =>
+                m.id === assistantId
+                  ? { ...m, content: `🤖 Procesando con IA${dots}` }
+                  : m
+              );
+            } else if (menuData.estado === 'generado' || menuData.estado === 'validado') {
+              // Menú listo - mostrar resultado
+              break;
+            } else if (menuData.estado === 'error') {
+              throw new Error(menuData.error || 'Error procesando menú');
+            }
+          } catch (pollErr) {
+            console.warn('Poll error:', pollErr);
+          }
+        }
+
+        if (!menuData || menuData.estado === 'generando') {
+          throw new Error('Timeout: El procesamiento tardó demasiado');
+        }
+
+        // PASO 3: Mostrar resultado estructurado en el chat
+        const resultContent = formatMenuResult(menuData);
+        chatMessages = chatMessages.map(m =>
+          m.id === assistantId
+            ? { ...m, content: resultContent, loading: false }
+            : m
+        );
+
+        // Actualizar lista de menús
+        await fetchMenus();
+        toast.success(`Menú extraído: ${menuData.productos?.length || 0} productos`);
+
+      } catch (err) {
+        console.error('Process error:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+        chatMessages = chatMessages.map(m =>
+          m.id === assistantId
+            ? { ...m, content: `❌ **Error:** ${errorMsg}`, loading: false }
+            : m
+        );
+        toast.error(errorMsg);
+      } finally {
+        chatLoading = false;
+      }
+    }
+  }
+
+  /**
+   * Formatea el resultado del menú para mostrar en el chat
+   */
+  function formatMenuResult(menu: any): string {
+    if (!menu) return '❌ No se pudo procesar el menú';
+
+    const productos = menu.productos || [];
+    const categorias = menu.categorias || [];
+    const ingredientes = menu.ingredientes_catalogo || [];
+
+    let result = `✅ **Menú extraído correctamente**\n\n`;
+    result += `📋 **ID:** ${menu.id}\n`;
+    result += `📊 **Resumen:**\n`;
+    result += `- ${productos.length} productos\n`;
+    result += `- ${categorias.length} categorías\n`;
+    result += `- ${ingredientes.length} ingredientes\n\n`;
+
+    // Mostrar categorías y productos
+    if (categorias.length > 0) {
+      result += `---\n\n`;
+      for (const cat of categorias) {
+        const emoji = cat.emoji || '📂';
+        result += `### ${emoji} ${cat.nombre}\n\n`;
+
+        const catProductos = productos.filter((p: any) => p.categoria_id === cat.id);
+        for (const prod of catProductos) {
+          const prodEmoji = prod.emoji || '🍽️';
+          const precio = prod.precio ? ` - **${prod.precio.toFixed(2)}€**` : '';
+          result += `- ${prodEmoji} **${prod.nombre}**${precio}\n`;
+          if (prod.descripcion) {
+            result += `  _${prod.descripcion}_\n`;
+          }
+          if (prod.alergenos?.length > 0) {
+            result += `  ⚠️ ${prod.alergenos.join(', ')}\n`;
+          }
+        }
+        result += '\n';
+      }
+    }
+
+    result += `---\n\n`;
+    result += `💾 Puedes ver el menú completo en el panel lateral o exportarlo a JSON/CSV.`;
+
+    return result;
+  }
+
+  async function handleChatSubmit(e: CustomEvent<{ message: string; attachments?: File[] }>) {
+    const { message, attachments } = e.detail;
+
+    // Si hay archivos adjuntos, procesarlos primero con OCR
+    if (attachments && attachments.length > 0) {
+      await processAttachments(attachments, message);
+      return;
+    }
 
     if (!message.trim()) return;
 

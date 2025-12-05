@@ -1,0 +1,136 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aichat.com/schemas/chat-api/events.json",
+
+  "definitions": {
+    "event_envelope": {
+      "type": "object",
+      "required": ["event_id", "event_type", "correlation_id", "occurred_at", "producer", "schema_version", "payload"],
+      "properties": {
+        "event_id": { "type": "string", "format": "uuid" },
+        "event_type": { "type": "string" },
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "producer": { "type": "string", "const": "chat-api" },
+        "schema_version": { "type": "string" },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "conversation_created": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "chat.conversation.created" },
+            "payload": {
+              "type": "object",
+              "required": ["conversation_id", "title", "created_at"],
+              "properties": {
+                "conversation_id": { "type": "string" },
+                "title": { "type": "string" },
+                "project_id": { "type": "string" },
+                "provider": { "type": "string" },
+                "created_at": { "type": "string", "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "conversation_deleted": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "chat.conversation.deleted" },
+            "payload": {
+              "type": "object",
+              "required": ["conversation_id", "deleted_at"],
+              "properties": {
+                "conversation_id": { "type": "string" },
+                "deleted_at": { "type": "string", "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "message_sent": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "chat.message.sent" },
+            "payload": {
+              "type": "object",
+              "required": ["message_id", "conversation_id", "content"],
+              "properties": {
+                "message_id": { "type": "string" },
+                "conversation_id": { "type": "string" },
+                "content": { "type": "string" },
+                "content_length": { "type": "integer" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "message_ai_received": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "chat.message.ai.received" },
+            "payload": {
+              "type": "object",
+              "required": ["message_id", "conversation_id", "provider", "duration"],
+              "properties": {
+                "message_id": { "type": "string" },
+                "conversation_id": { "type": "string" },
+                "provider": { "type": "string" },
+                "model": { "type": "string" },
+                "tokens": { "type": "integer" },
+                "duration": { "type": "integer" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "send_response": {
+      "allOf": [
+        { "$ref": "#/definitions/event_envelope" },
+        {
+          "properties": {
+            "event_type": { "const": "chat.send.response" },
+            "payload": {
+              "type": "object",
+              "required": ["request_id", "success"],
+              "properties": {
+                "request_id": { "type": "string" },
+                "success": { "type": "boolean" },
+                "user_message_id": { "type": "string" },
+                "ai_message_id": { "type": "string" },
+                "ai_content": { "type": "string" },
+                "provider": { "type": "string" },
+                "duration": { "type": "integer" },
+                "error": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

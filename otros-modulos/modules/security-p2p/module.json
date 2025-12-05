@@ -1,0 +1,243 @@
+{
+  "name": "security-p2p",
+  "version": "1.0.0",
+  "description": "Peer-to-peer security layer with E2EE, key exchange, and node authentication",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "provides": {
+    "events": [
+      "security.keypair.generated",
+      "security.session.established",
+      "security.session.terminated",
+      "security.message.encrypted",
+      "security.message.decrypted",
+      "security.peer.authenticated",
+      "security.peer.revoked"
+    ],
+    "queries": [
+      "security.keypair.get.request",
+      "security.encrypt.request",
+      "security.decrypt.request",
+      "security.session.create.request",
+      "security.peer.verify.request"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "security.keypair.generated",
+        "description": "Keypair generated for node",
+        "schema": { "$ref": "./schemas/events.json#/definitions/keypair_generated" }
+      },
+      {
+        "event": "security.session.established",
+        "description": "Secure session established with peer",
+        "schema": { "$ref": "./schemas/events.json#/definitions/session_established" }
+      },
+      {
+        "event": "security.session.terminated",
+        "description": "Secure session terminated",
+        "schema": { "$ref": "./schemas/events.json#/definitions/session_terminated" }
+      },
+      {
+        "event": "security.message.encrypted",
+        "description": "Message encrypted successfully",
+        "schema": { "$ref": "./schemas/events.json#/definitions/message_encrypted" }
+      },
+      {
+        "event": "security.message.decrypted",
+        "description": "Message decrypted successfully",
+        "schema": { "$ref": "./schemas/events.json#/definitions/message_decrypted" }
+      },
+      {
+        "event": "security.peer.authenticated",
+        "description": "Peer authenticated successfully",
+        "schema": { "$ref": "./schemas/events.json#/definitions/peer_authenticated" }
+      },
+      {
+        "event": "security.peer.revoked",
+        "description": "Peer access revoked",
+        "schema": { "$ref": "./schemas/events.json#/definitions/peer_revoked" }
+      },
+      {
+        "event": "security.keypair.get.response",
+        "description": "Response with public key",
+        "schema": { "$ref": "./schemas/events.json#/definitions/keypair_get_response" }
+      },
+      {
+        "event": "security.encrypt.response",
+        "description": "Response with encrypted data",
+        "schema": { "$ref": "./schemas/events.json#/definitions/encrypt_response" }
+      },
+      {
+        "event": "security.decrypt.response",
+        "description": "Response with decrypted data",
+        "schema": { "$ref": "./schemas/events.json#/definitions/decrypt_response" }
+      },
+      {
+        "event": "security.session.create.response",
+        "description": "Response with session details",
+        "schema": { "$ref": "./schemas/events.json#/definitions/session_create_response" }
+      },
+      {
+        "event": "security.peer.verify.response",
+        "description": "Response with peer verification result",
+        "schema": { "$ref": "./schemas/events.json#/definitions/peer_verify_response" }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "security.keypair.get.request",
+        "description": "Get node's public key",
+        "handler": "onGetKeypairRequest"
+      },
+      {
+        "event": "security.encrypt.request",
+        "description": "Encrypt data for peer",
+        "handler": "onEncryptRequest"
+      },
+      {
+        "event": "security.decrypt.request",
+        "description": "Decrypt data from peer",
+        "handler": "onDecryptRequest"
+      },
+      {
+        "event": "security.session.create.request",
+        "description": "Create secure session with peer",
+        "handler": "onCreateSessionRequest"
+      },
+      {
+        "event": "security.peer.verify.request",
+        "description": "Verify peer identity",
+        "handler": "onVerifyPeerRequest"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/keypair",
+      "handler": "handleGetKeypair",
+      "description": "Get node's public key",
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/keypair_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/keypair/generate",
+      "handler": "handleGenerateKeypair",
+      "description": "Generate new keypair (publishes security.keypair.generated)",
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/keypair_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "handler": "handleCreateSession",
+      "description": "Create secure session with peer (publishes security.session.established)",
+      "request_schema": { "$ref": "./schemas/security.json#/definitions/session_create_request" },
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/session_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/sessions",
+      "handler": "handleListSessions",
+      "description": "List active sessions",
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/sessions_list_response" }
+    },
+    {
+      "method": "DELETE",
+      "path": "/sessions/:peer_id",
+      "handler": "handleTerminateSession",
+      "description": "Terminate session with peer (publishes security.session.terminated)",
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/session_terminate_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/encrypt",
+      "handler": "handleEncrypt",
+      "description": "Encrypt data for peer (publishes security.message.encrypted)",
+      "request_schema": { "$ref": "./schemas/security.json#/definitions/encrypt_request" },
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/encrypt_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/decrypt",
+      "handler": "handleDecrypt",
+      "description": "Decrypt data from peer (publishes security.message.decrypted)",
+      "request_schema": { "$ref": "./schemas/security.json#/definitions/decrypt_request" },
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/decrypt_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/peers/verify",
+      "handler": "handleVerifyPeer",
+      "description": "Verify peer identity (publishes security.peer.authenticated)",
+      "request_schema": { "$ref": "./schemas/security.json#/definitions/peer_verify_request" },
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/peer_verify_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/peers/:peer_id/revoke",
+      "handler": "handleRevokePeer",
+      "description": "Revoke peer access (publishes security.peer.revoked)",
+      "response_schema": { "$ref": "./schemas/security.json#/definitions/peer_revoke_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "security.keypair.generated.total",
+        "security.session.established.total",
+        "security.session.terminated.total",
+        "security.message.encrypted.total",
+        "security.message.decrypted.total",
+        "security.peer.authenticated.total",
+        "security.peer.revoked.total",
+        "security.encrypt.failed.total",
+        "security.decrypt.failed.total",
+        "security.verify.failed.total"
+      ],
+      "gauges": [
+        "security.sessions.active.count",
+        "security.peers.trusted.count"
+      ],
+      "timings": [
+        "security.encrypt.duration",
+        "security.decrypt.duration",
+        "security.keypair.generate.duration",
+        "security.session.create.duration"
+      ]
+    }
+  },
+
+  "config": {
+    "keyAlgorithm": "RSA-OAEP",
+    "keyLength": 2048,
+    "hashAlgorithm": "SHA-256",
+    "sessionExpiryMs": 3600000,
+    "maxSessionsPerPeer": 5,
+    "enableAutoRotation": false,
+    "rotationIntervalMs": 86400000
+  }
+}

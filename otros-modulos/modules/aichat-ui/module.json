@@ -1,0 +1,427 @@
+{
+  "name": "aichat-ui",
+  "version": "1.0.0",
+  "description": "Main UI for AiChat - Multi-project conversational AI chat interface",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "ui": {
+    "enabled": true,
+    "title": "AiChat",
+    "icon": "💬",
+    "description": "Chat conversacional con AI multi-proyecto",
+
+    "components": [
+      "floating-topbar",
+      "floating-sidebar",
+      "floating-input-bar",
+      "chat-message-list",
+      "selector-panel",
+      "emoji-action-button"
+    ],
+
+    "views": {
+      "main": {
+        "title": "Chat Principal",
+        "description": "Pantalla principal de chat",
+        "layout": "custom",
+
+        "structure": {
+          "topbar": {
+            "component": "floating-topbar",
+            "position": "top",
+            "config": {
+              "align": "center",
+              "buttons": [
+                {
+                  "id": "current-project",
+                  "icon": "📁",
+                  "type": "dynamic",
+                  "tooltip": "Proyecto actual",
+                  "data_field": "active_project.name",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "project-selector"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "project-config"
+                    }
+                  }
+                },
+                {
+                  "id": "separator-1",
+                  "type": "separator"
+                },
+                {
+                  "id": "current-ai",
+                  "icon": "🤖",
+                  "type": "dynamic",
+                  "tooltip": "AI actual",
+                  "data_field": "active_ai.name",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "ai-selector"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "ai-config"
+                    }
+                  }
+                },
+                {
+                  "id": "separator-2",
+                  "type": "separator"
+                },
+                {
+                  "id": "current-conversation",
+                  "icon": "💬",
+                  "type": "dynamic",
+                  "tooltip": "Conversación actual",
+                  "data_field": "active_conversation.name",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "conversation-selector"
+                    },
+                    "double_click": {
+                      "type": "event",
+                      "event": "conversation.create.request"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "conversation-config"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+
+          "sidebar": {
+            "component": "floating-sidebar",
+            "position": "left",
+            "config": {
+              "buttons": [
+                {
+                  "id": "projects",
+                  "icon": "📁",
+                  "tooltip": "Proyectos",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "project-selector"
+                    },
+                    "double_click": {
+                      "type": "event",
+                      "event": "project.create.request"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "project-config"
+                    }
+                  }
+                },
+                {
+                  "id": "conversations",
+                  "icon": "💬",
+                  "tooltip": "Conversaciones",
+                  "badge_field": "conversation_count",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "conversation-selector"
+                    },
+                    "double_click": {
+                      "type": "event",
+                      "event": "conversation.create.request"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "conversation-options"
+                    }
+                  }
+                },
+                {
+                  "id": "prompts",
+                  "icon": "💾",
+                  "tooltip": "Prompts",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "prompt-selector"
+                    },
+                    "double_click": {
+                      "type": "event",
+                      "event": "prompt.create.request"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "prompt-config"
+                    }
+                  }
+                },
+                {
+                  "id": "functions",
+                  "icon": "🛠️",
+                  "tooltip": "Funciones",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "function-list"
+                    },
+                    "double_click": {
+                      "type": "event",
+                      "event": "function.create.request"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "function-config"
+                    }
+                  }
+                },
+                {
+                  "id": "credentials",
+                  "icon": "🔑",
+                  "tooltip": "Credenciales",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "credential-selector"
+                    },
+                    "double_click": {
+                      "type": "event",
+                      "event": "credential.create.request"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "credential-config"
+                    }
+                  }
+                },
+                {
+                  "id": "files",
+                  "icon": "📂",
+                  "tooltip": "Archivos",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "file-browser"
+                    },
+                    "double_click": {
+                      "type": "event",
+                      "event": "file.create.request"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "file-options"
+                    }
+                  }
+                },
+                {
+                  "id": "editor",
+                  "icon": "📝",
+                  "tooltip": "Editor MD/JSON",
+                  "actions": {
+                    "click": {
+                      "type": "navigate",
+                      "url": "/ui/aichat/editor"
+                    }
+                  }
+                },
+                {
+                  "id": "pdf",
+                  "icon": "📄",
+                  "tooltip": "Visor PDF",
+                  "actions": {
+                    "click": {
+                      "type": "navigate",
+                      "url": "/ui/aichat/pdf-viewer"
+                    }
+                  }
+                },
+                {
+                  "id": "ai-config",
+                  "icon": "🤖",
+                  "tooltip": "Configuración AI",
+                  "actions": {
+                    "click": {
+                      "type": "open_panel",
+                      "panel": "ai-selector"
+                    },
+                    "long_press": {
+                      "type": "open_panel",
+                      "panel": "ai-config"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+
+          "chat_area": {
+            "component": "chat-message-list",
+            "position": "center",
+            "config": {
+              "endpoint": "/modules/conversation-manager/conversations/{conversation_id}/messages",
+              "mqtt_topics": [
+                "chat.message.sent",
+                "chat.message.ai.received",
+                "message.sent",
+                "message.received"
+              ],
+              "refresh_on_event": true,
+              "auto_scroll": true,
+              "markdown": true,
+              "show_timestamps": true,
+              "enable_actions": true
+            }
+          },
+
+          "input_bar": {
+            "component": "floating-input-bar",
+            "position": "bottom",
+            "config": {
+              "placeholder": "Escribe tu mensaje...",
+              "button": {
+                "icon": "🚀",
+                "tooltip": "Enviar mensaje",
+                "action": "send_message"
+              },
+              "voice_enabled": true,
+              "voice_long_press": true,
+              "submit_on_enter": true,
+              "clear_on_submit": true,
+              "max_length": 4000,
+              "endpoint": "/modules/conversation-manager/conversations/{conversation_id}/messages",
+              "event": "message.send.request"
+            }
+          }
+        },
+
+        "panels": {
+          "project-selector": {
+            "component": "selector-panel",
+            "variant": "projects",
+            "config": {
+              "title": "Seleccionar Proyecto",
+              "icon": "📁",
+              "endpoint": "/modules/project-manager/projects",
+              "search_enabled": true,
+              "on_select": {
+                "event": "project.activated",
+                "refresh_conversations": true,
+                "refresh_chat": true
+              }
+            }
+          },
+
+          "conversation-selector": {
+            "component": "selector-panel",
+            "variant": "conversations",
+            "config": {
+              "title": "Seleccionar Conversación",
+              "icon": "💬",
+              "endpoint": "/modules/conversation-manager/conversations?project_id={active_project_id}",
+              "search_enabled": true,
+              "on_select": {
+                "event": "conversation.selected",
+                "refresh_chat": true
+              }
+            }
+          },
+
+          "prompt-selector": {
+            "component": "selector-panel",
+            "variant": "prompts",
+            "config": {
+              "title": "Seleccionar Prompt",
+              "icon": "💾",
+              "endpoint": "/modules/prompt-manager/prompts",
+              "search_enabled": true,
+              "filter_by_project": true
+            }
+          },
+
+          "function-list": {
+            "component": "selector-panel",
+            "variant": "functions",
+            "config": {
+              "title": "Funciones Disponibles",
+              "icon": "🛠️",
+              "endpoint": "/modules/tool-orchestrator/tools",
+              "search_enabled": true
+            }
+          },
+
+          "credential-selector": {
+            "component": "selector-panel",
+            "variant": "credentials",
+            "config": {
+              "title": "Credenciales",
+              "icon": "🔑",
+              "endpoint": "/modules/credential-manager/credentials",
+              "search_enabled": true,
+              "mask_values": true
+            }
+          },
+
+          "file-browser": {
+            "component": "file-browser",
+            "config": {
+              "title": "Explorador de Archivos",
+              "icon": "📂",
+              "endpoint": "/modules/file-browser/files",
+              "search_enabled": true,
+              "filter_enabled": true,
+              "create_enabled": true
+            }
+          }
+        },
+
+        "state": {
+          "active_project": {
+            "source": "api",
+            "endpoint": "/modules/project-manager/projects/active",
+            "refresh_on": ["project.activated", "project.created"]
+          },
+          "active_conversation": {
+            "source": "local_storage",
+            "key": "active_conversation_id",
+            "refresh_on": ["conversation.selected", "conversation.created"]
+          },
+          "active_ai": {
+            "source": "api",
+            "endpoint": "/modules/ai-gateway/provider/current",
+            "default": {
+              "name": "DeepSeek",
+              "icon": "🤖"
+            }
+          },
+          "conversation_count": {
+            "source": "api",
+            "endpoint": "/modules/conversation-manager/conversations?count=true&project_id={active_project_id}"
+          }
+        }
+      }
+    }
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    }
+  }
+}

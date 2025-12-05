@@ -1,0 +1,188 @@
+{
+  "name": "project-manager",
+  "version": "2.0.0",
+  "description": "Event-driven project lifecycle management with database and credential integration",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "provides": {
+    "events": [
+      "project.created",
+      "project.updated",
+      "project.deleted",
+      "project.activated",
+      "project.deactivated"
+    ],
+    "queries": [
+      "project.get.request",
+      "project.list.request",
+      "project.active.request"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "project.created",
+        "description": "Project created successfully",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_created" }
+      },
+      {
+        "event": "project.updated",
+        "description": "Project metadata updated",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_updated" }
+      },
+      {
+        "event": "project.deleted",
+        "description": "Project deleted",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_deleted" }
+      },
+      {
+        "event": "project.activated",
+        "description": "Project activated (set as current)",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_activated" }
+      },
+      {
+        "event": "project.deactivated",
+        "description": "Project deactivated",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_deactivated" }
+      },
+      {
+        "event": "project.get.response",
+        "description": "Response with project details",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_get_response" }
+      },
+      {
+        "event": "project.list.response",
+        "description": "Response with projects list",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_list_response" }
+      },
+      {
+        "event": "project.active.response",
+        "description": "Response with active project ID",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_active_response" }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "project.get.request",
+        "description": "Get project details by ID",
+        "handler": "onGetProjectRequest"
+      },
+      {
+        "event": "project.list.request",
+        "description": "List all projects",
+        "handler": "onListProjectsRequest"
+      },
+      {
+        "event": "project.active.request",
+        "description": "Get active project ID",
+        "handler": "onGetActiveProjectRequest"
+      },
+      {
+        "event": "db.query.response",
+        "description": "Database query responses",
+        "handler": "onDbQueryResponse"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/projects",
+      "handler": "handleCreateProject",
+      "description": "Create new project (publishes project.created)",
+      "request_schema": { "$ref": "./schemas/project.json#/definitions/create_request" },
+      "response_schema": { "$ref": "./schemas/project.json#/definitions/project_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/projects",
+      "handler": "handleListProjects",
+      "description": "List all projects",
+      "response_schema": { "$ref": "./schemas/project.json#/definitions/list_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/projects/:id",
+      "handler": "handleGetProject",
+      "description": "Get project details",
+      "response_schema": { "$ref": "./schemas/project.json#/definitions/project_response" }
+    },
+    {
+      "method": "PUT",
+      "path": "/projects/:id",
+      "handler": "handleUpdateProject",
+      "description": "Update project metadata (publishes project.updated)",
+      "request_schema": { "$ref": "./schemas/project.json#/definitions/update_request" },
+      "response_schema": { "$ref": "./schemas/project.json#/definitions/project_response" }
+    },
+    {
+      "method": "DELETE",
+      "path": "/projects/:id",
+      "handler": "handleDeleteProject",
+      "description": "Delete project (publishes project.deleted)",
+      "response_schema": { "$ref": "./schemas/project.json#/definitions/delete_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/projects/:id/activate",
+      "handler": "handleActivateProject",
+      "description": "Activate project (publishes project.activated)",
+      "response_schema": { "$ref": "./schemas/project.json#/definitions/project_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/projects/active",
+      "handler": "handleGetActiveProject",
+      "description": "Get currently active project",
+      "response_schema": { "$ref": "./schemas/project.json#/definitions/project_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "project.created.total",
+        "project.updated.total",
+        "project.deleted.total",
+        "project.activated.total",
+        "project.query.total",
+        "project.error.total"
+      ],
+      "gauges": [
+        "project.active.count",
+        "project.total.count"
+      ],
+      "timings": [
+        "project.creation.duration",
+        "project.query.duration"
+      ]
+    }
+  },
+
+  "config": {
+    "dbTimeout": 10000,
+    "maxProjects": 1000,
+    "defaultSchema": "CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, author TEXT NOT NULL, content TEXT NOT NULL, timestamp TEXT NOT NULL, FOREIGN KEY (conversation_id) REFERENCES conversations(id));"
+  }
+}

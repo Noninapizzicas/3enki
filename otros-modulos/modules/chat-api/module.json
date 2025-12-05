@@ -1,0 +1,163 @@
+{
+  "name": "chat-api",
+  "version": "2.0.0",
+  "description": "Conversation management with AI integration using event-driven architecture",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "provides": {
+    "events": [
+      "chat.conversation.created",
+      "chat.conversation.deleted",
+      "chat.message.sent",
+      "chat.message.ai.received"
+    ],
+    "queries": [
+      "chat.send.request"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "chat.conversation.created",
+        "description": "New conversation created",
+        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_created" }
+      },
+      {
+        "event": "chat.conversation.deleted",
+        "description": "Conversation deleted",
+        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_deleted" }
+      },
+      {
+        "event": "chat.message.sent",
+        "description": "User message sent",
+        "schema": { "$ref": "./schemas/events.json#/definitions/message_sent" }
+      },
+      {
+        "event": "chat.message.ai.received",
+        "description": "AI response received",
+        "schema": { "$ref": "./schemas/events.json#/definitions/message_ai_received" }
+      },
+      {
+        "event": "chat.send.response",
+        "description": "Response to send message request",
+        "schema": { "$ref": "./schemas/events.json#/definitions/send_response" }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "chat.send.request",
+        "description": "Handle send message requests from other modules",
+        "handler": "onSendRequest"
+      },
+      {
+        "event": "db.query.response",
+        "description": "Receive database query responses",
+        "handler": "onDatabaseResponse"
+      },
+      {
+        "event": "db.schema.init.response",
+        "description": "Receive schema init responses",
+        "handler": "onSchemaInitResponse"
+      },
+      {
+        "event": "ai.generate.response",
+        "description": "Receive AI generation responses",
+        "handler": "onAIResponse"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/conversations",
+      "handler": "handleCreateConversation",
+      "description": "Create conversation (publishes chat.conversation.created)",
+      "request_schema": { "$ref": "./schemas/chat.json#/definitions/create_conversation_request" },
+      "response_schema": { "$ref": "./schemas/chat.json#/definitions/conversation_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations",
+      "handler": "handleListConversations",
+      "description": "List all conversations",
+      "response_schema": { "$ref": "./schemas/chat.json#/definitions/list_conversations_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id",
+      "handler": "handleGetConversation",
+      "description": "Get conversation with messages",
+      "response_schema": { "$ref": "./schemas/chat.json#/definitions/conversation_detail_response" }
+    },
+    {
+      "method": "DELETE",
+      "path": "/conversations/:id",
+      "handler": "handleDeleteConversation",
+      "description": "Delete conversation (publishes chat.conversation.deleted)",
+      "response_schema": { "$ref": "./schemas/chat.json#/definitions/delete_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/conversations/:id/messages",
+      "handler": "handleSendMessage",
+      "description": "Send message and get AI response (publishes chat.message.sent, chat.message.ai.received)",
+      "request_schema": { "$ref": "./schemas/chat.json#/definitions/send_message_request" },
+      "response_schema": { "$ref": "./schemas/chat.json#/definitions/send_message_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id/messages",
+      "handler": "handleGetMessages",
+      "description": "Get conversation messages",
+      "response_schema": { "$ref": "./schemas/chat.json#/definitions/messages_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "chat.conversation.created.total",
+        "chat.conversation.deleted.total",
+        "chat.message.sent.total",
+        "chat.message.ai.total",
+        "chat.errors.total"
+      ],
+      "gauges": [
+        "chat.conversations.active",
+        "chat.pending.requests"
+      ],
+      "timings": [
+        "chat.message.ai.duration",
+        "chat.db.query.duration"
+      ]
+    }
+  },
+
+  "config": {
+    "defaultProjectId": "default",
+    "defaultProvider": "deepseek",
+    "maxMessagesPerConversation": 1000,
+    "messageTimeout": 60000
+  }
+}

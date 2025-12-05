@@ -1,0 +1,180 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aichat.com/schemas/chat-api.json",
+
+  "definitions": {
+    "conversation_id": {
+      "type": "string",
+      "pattern": "^conv_[a-zA-Z0-9_]+$",
+      "description": "Conversation identifier"
+    },
+
+    "message_id": {
+      "type": "string",
+      "pattern": "^msg_[a-zA-Z0-9_]+$",
+      "description": "Message identifier"
+    },
+
+    "message_role": {
+      "type": "string",
+      "enum": ["user", "assistant", "system"],
+      "description": "Message role"
+    },
+
+    "conversation": {
+      "type": "object",
+      "required": ["id", "title", "created_at"],
+      "properties": {
+        "id": { "$ref": "#/definitions/conversation_id" },
+        "title": { "type": "string" },
+        "project_id": { "type": "string" },
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "message_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "message": {
+      "type": "object",
+      "required": ["id", "conversation_id", "role", "content", "created_at"],
+      "properties": {
+        "id": { "$ref": "#/definitions/message_id" },
+        "conversation_id": { "$ref": "#/definitions/conversation_id" },
+        "role": { "$ref": "#/definitions/message_role" },
+        "content": { "type": "string" },
+        "tokens": { "type": "integer", "minimum": 0 },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+
+    "create_conversation_request": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "default": "New Conversation"
+        },
+        "project_id": { "type": "string" },
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "system_prompt": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "conversation_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "conversation": { "$ref": "#/definitions/conversation" },
+        "error": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "list_conversations_response": {
+      "type": "object",
+      "required": ["success", "conversations", "total"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "conversations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/conversation" }
+        },
+        "total": { "type": "integer", "minimum": 0 },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "conversation_detail_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "conversation": { "$ref": "#/definitions/conversation" },
+        "messages": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/message" }
+        },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "delete_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "conversation_id": { "$ref": "#/definitions/conversation_id" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "send_message_request": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50000,
+          "description": "Message content"
+        },
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "skip_ai": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip AI response generation"
+        },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "max_tokens": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "send_message_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "user_message": { "$ref": "#/definitions/message" },
+        "ai_message": { "$ref": "#/definitions/message" },
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "duration": { "type": "integer", "minimum": 0 },
+        "error": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "messages_response": {
+      "type": "object",
+      "required": ["success", "messages", "total"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "messages": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/message" }
+        },
+        "total": { "type": "integer", "minimum": 0 },
+        "conversation_id": { "$ref": "#/definitions/conversation_id" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

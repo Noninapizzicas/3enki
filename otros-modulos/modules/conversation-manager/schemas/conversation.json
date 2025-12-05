@@ -1,0 +1,211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aichat.com/schemas/conversation-manager.json",
+
+  "definitions": {
+    "conversation": {
+      "type": "object",
+      "required": ["id", "project_id", "created_at"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "project_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "title": { "type": "string" },
+        "system_prompt": { "type": "string" },
+        "model": { "type": "string" },
+        "provider": { "type": "string" },
+        "temperature": { "type": "number" },
+        "max_tokens": { "type": "integer" },
+        "context_window": { "type": "integer" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "message_count": { "type": "integer" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "message": {
+      "type": "object",
+      "required": ["id", "conversation_id", "role", "content", "created_at"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "conversation_id": { "type": "string" },
+        "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+        "content": { "type": "string" },
+        "attachments": { "type": "array" },
+        "tokens": { "type": "integer" },
+        "cost": { "type": "number" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "project_context": {
+      "type": "object",
+      "properties": {
+        "project_id": { "type": "string" },
+        "project_name": { "type": "string" },
+        "project_description": { "type": "string" },
+        "storage_info": { "type": "object" },
+        "available_tools": { "type": "array" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "conversation_context": {
+      "type": "object",
+      "properties": {
+        "conversation_id": { "type": "string" },
+        "messages": { "type": "array" },
+        "message_count": { "type": "integer" },
+        "total_tokens": { "type": "integer" },
+        "total_cost": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+
+    "create_request": {
+      "type": "object",
+      "required": ["project_id"],
+      "properties": {
+        "project_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "title": { "type": "string" },
+        "system_prompt": { "type": "string" },
+        "model": { "type": "string" },
+        "provider": { "type": "string" },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "context_window": { "type": "integer", "minimum": 1 },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "update_request": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "system_prompt": { "type": "string" },
+        "model": { "type": "string" },
+        "provider": { "type": "string" },
+        "temperature": { "type": "number" },
+        "max_tokens": { "type": "integer" },
+        "context_window": { "type": "integer" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "send_message_request": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": { "type": "string", "minLength": 1 },
+        "attachments": { "type": "array" },
+        "user_id": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "conversation_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "conversation": { "$ref": "#/definitions/conversation" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "list_response": {
+      "type": "object",
+      "required": ["success", "conversations", "count"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "conversations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/conversation" }
+        },
+        "count": { "type": "integer" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "conversation_detail_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "conversation": { "$ref": "#/definitions/conversation" },
+        "messages": { "type": "array" },
+        "project_context": { "$ref": "#/definitions/project_context" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "delete_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "id": { "type": "string" },
+        "messages_deleted": { "type": "integer" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "send_message_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "user_message": { "$ref": "#/definitions/message" },
+        "assistant_message": { "$ref": "#/definitions/message" },
+        "tokens_used": { "type": "integer" },
+        "cost": { "type": "number" },
+        "duration": { "type": "integer" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "messages_response": {
+      "type": "object",
+      "required": ["success", "messages", "count"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "messages": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/message" }
+        },
+        "count": { "type": "integer" },
+        "total_tokens": { "type": "integer" },
+        "total_cost": { "type": "number" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "context_response": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "project_context": { "$ref": "#/definitions/project_context" },
+        "conversation_context": { "$ref": "#/definitions/conversation_context" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "name": "file-browser",
+  "version": "1.0.0",
+  "description": "File browser for navigating and managing project files",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/files",
+      "handler": "listFiles",
+      "description": "List files in project directory",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true,
+          "description": "Project ID to browse"
+        },
+        "path": {
+          "type": "string",
+          "required": false,
+          "default": "/",
+          "description": "Relative path within project"
+        },
+        "filter": {
+          "type": "string",
+          "required": false,
+          "description": "File extension filter (e.g., 'md,json,txt')"
+        }
+      },
+      "response_schema": "schemas/list-files.json"
+    },
+    {
+      "method": "GET",
+      "path": "/files/content",
+      "handler": "getFileContent",
+      "description": "Get file content",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true
+        },
+        "file_path": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "response_schema": "schemas/file-content.json"
+    },
+    {
+      "method": "POST",
+      "path": "/files",
+      "handler": "createFile",
+      "description": "Create new file",
+      "request_schema": "schemas/create-file.json",
+      "response_schema": "schemas/file-info.json"
+    },
+    {
+      "method": "DELETE",
+      "path": "/files",
+      "handler": "deleteFile",
+      "description": "Delete file",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true
+        },
+        "file_path": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/files/search",
+      "handler": "searchFiles",
+      "description": "Search files by name or content",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true
+        },
+        "query": {
+          "type": "string",
+          "required": true
+        },
+        "search_content": {
+          "type": "boolean",
+          "required": false,
+          "default": false
+        }
+      },
+      "response_schema": "schemas/search-results.json"
+    }
+  ],
+
+  "events": {
+    "subscribes": [
+      "file.list.request",
+      "file.content.request",
+      "file.create.request",
+      "file.delete.request",
+      "file.search.request"
+    ],
+    "publishes": [
+      "file.list.response",
+      "file.content.response",
+      "file.created",
+      "file.deleted",
+      "file.search.response"
+    ]
+  },
+
+  "dependencies": {
+    "modules": ["storage-manager", "project-manager"]
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "custom": [
+        "files_listed_total",
+        "files_created_total",
+        "files_deleted_total",
+        "search_queries_total"
+      ]
+    }
+  }
+}

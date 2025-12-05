@@ -2917,5 +2917,367 @@ El context window determina cuántos mensajes se envían al LLM:
 
 ---
 
+### Botón 🔌 Plugins (plugin-manager)
+
+**Módulo**: `plugin-manager`
+**Versión**: 2.0.0
+**Responsabilidad**: Descubrimiento y gestión de plugins JSON con funciones.
+**Ubicación**: `toolbar_chat.bottom`
+
+#### Propósito en Chat
+
+El botón Plugins permite extender las capacidades del chat con funciones adicionales:
+
+```
+🔌 Plugins → Funciones adicionales para el LLM
+                    │
+                    ├── weather/
+                    │   └── weather.functions.json
+                    │       ├── get_current
+                    │       └── get_forecast
+                    │
+                    ├── calculator/
+                    │   └── calculator.functions.json
+                    │       └── evaluate
+                    │
+                    └── search/
+                        └── search.functions.json
+                            └── web_search
+```
+
+**Diferencia con Tools:**
+- **Tools** (tool-orchestrator): Herramientas con handlers ejecutables
+- **Plugins** (plugin-manager): Definiciones JSON de funciones (schema para LLM)
+
+Los plugins definen QUÉ puede hacer el LLM, los tools definen CÓMO ejecutarlo.
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/plugins` | Listar plugins y funciones |
+| GET | `/plugins/:name` | Obtener plugin específico |
+| POST | `/plugins/reload` | Recargar plugins desde disco |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Métricas |
+
+#### Eventos
+
+**Escucha:**
+| Evento | Acción |
+|--------|--------|
+| `plugin.get.request` | Obtiene plugin y responde |
+| `plugin.list.request` | Lista plugins y responde |
+
+**Publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `plugin.loaded` | Plugin cargado exitosamente |
+| `plugin.unloaded` | Plugin descargado |
+| `plugin.reloaded` | Plugins recargados |
+| `plugin.error` | Error al cargar plugin |
+
+#### Estructura de Plugin
+
+Los plugins son archivos JSON con esta estructura:
+
+```javascript
+// plugins/weather/weather.functions.json
+{
+  "metadata": {
+    "name": "weather",
+    "version": "1.0.0",
+    "description": "Funciones para consultar el clima"
+  },
+  "functions": {
+    "get_current": {
+      "description": "Obtiene el clima actual de una ciudad",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "Nombre de la ciudad"
+          },
+          "units": {
+            "type": "string",
+            "enum": ["celsius", "fahrenheit"],
+            "default": "celsius"
+          }
+        },
+        "required": ["city"]
+      }
+    },
+    "get_forecast": {
+      "description": "Obtiene pronóstico de 5 días",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string" },
+          "days": { "type": "number", "default": 5 }
+        },
+        "required": ["city"]
+      }
+    }
+  }
+}
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Plugins Activos (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 🔌 Plugins Activos                      │
+├─────────────────────────────────────────┤
+│                                         │
+│  ☑ weather                   2 funcs   │
+│    get_current, get_forecast           │
+│                                         │
+│  ☑ calculator                1 func    │
+│    evaluate                            │
+│                                         │
+│  ☑ search                    1 func    │
+│    web_search                          │
+│                                         │
+│  □ experimental              3 funcs   │
+│    (desactivado)                       │
+│                                         │
+│  ─────────────────────────────────────  │
+│  Total: 4 plugins | 7 funciones        │
+│                                         │
+│  [🔄 Recargar]                          │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Lista de plugins descubiertos
+- Checkbox para activar/desactivar en conversación
+- Número de funciones por plugin
+- Nombres de funciones
+
+**Acciones:**
+- Toggle plugin → Activar/desactivar para la conversación
+- 🔄 Recargar → POST /plugins/reload
+
+##### 2 TAPS → Modal Ver Plugin (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 🔌 Plugin: weather                            [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Versión: 1.0.0                                     │
+│  Descripción: Funciones para consultar el clima    │
+│                                                     │
+│  ─── Funciones (2) ───                             │
+│                                                     │
+│  📦 get_current                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Obtiene el clima actual de una ciudad       │   │
+│  │                                             │   │
+│  │ Parámetros:                                 │   │
+│  │ • city* (string): Nombre de la ciudad       │   │
+│  │ • units (string): celsius | fahrenheit      │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  📦 get_forecast                                    │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Obtiene pronóstico de 5 días                │   │
+│  │                                             │   │
+│  │ Parámetros:                                 │   │
+│  │ • city* (string): Nombre de la ciudad       │   │
+│  │ • days (number): default 5                  │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Archivo ───                                   │
+│  📄 plugins/weather/weather.functions.json         │
+│                                                     │
+│  [☑ Usar en conversación]                          │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Funcionalidad:**
+- Ver detalles completos del plugin
+- Ver schema de cada función
+- Activar/desactivar para la conversación actual
+
+##### LONG-PRESS → Modal Gestión de Plugins (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 🔌 Gestionar Plugins                                       [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Ruta: /plugins/                            [🔄 Recargar todo]  │
+│  Auto-reload: ✅ Activo (5s)                                    │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  🔌 weather                                     v1.0.0   ✅     │
+│     Funciones para consultar el clima                          │
+│     📦 get_current, get_forecast (2 funcs)                     │
+│     Cargado: hace 2h                                           │
+│     [👁️ Ver] [📋 Schema] [🔄 Recargar]                         │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  🔌 calculator                                  v1.0.0   ✅     │
+│     Evaluador de expresiones matemáticas                       │
+│     📦 evaluate (1 func)                                       │
+│     Cargado: hace 2h                                           │
+│     [👁️ Ver] [📋 Schema] [🔄 Recargar]                         │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  🔌 search                                      v2.0.0   ✅     │
+│     Búsqueda web                                               │
+│     📦 web_search (1 func)                                     │
+│     Cargado: hace 2h                                           │
+│     [👁️ Ver] [📋 Schema] [🔄 Recargar]                         │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  ⚠️ experimental                                v0.1.0   ❌     │
+│     Plugin en desarrollo                                       │
+│     Error: Invalid JSON at line 45                            │
+│     [🔄 Reintentar] [📄 Ver archivo]                           │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Total: 4 plugins | 3 OK | 1 error | 7 funciones           │
+│                                                                 │
+│  [📁 Abrir carpeta]           [📖 Docs: crear plugin]          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por plugin:**
+- 👁️ Ver → Modal detalle del plugin
+- 📋 Schema → Ver JSON Schema completo
+- 🔄 Recargar → Recargar solo este plugin
+- 🔄 Reintentar → Para plugins con error
+
+**Acciones globales:**
+- 🔄 Recargar todo → POST /plugins/reload
+- 📁 Abrir carpeta → Abrir directorio de plugins
+- 📖 Docs → Cómo crear un plugin
+
+#### Descubrimiento Automático
+
+El plugin-manager descubre plugins automáticamente:
+
+```
+plugins/                           ← Ruta configurable
+├── weather/
+│   └── weather.functions.json     ← Detectado ✓
+├── calculator/
+│   └── calculator.functions.json  ← Detectado ✓
+├── search/
+│   └── search.functions.json      ← Detectado ✓
+└── my-plugin/
+    ├── my-plugin.functions.json   ← Detectado ✓
+    └── README.md                  ← Ignorado
+```
+
+**Reglas:**
+- Busca en subdirectorios de `plugins/`
+- Detecta archivos `*.functions.json`
+- Valida estructura (metadata.name + functions)
+- Auto-reload opcional (cada 5s por defecto)
+
+#### Integración con LLM
+
+Los plugins definen funciones que el LLM puede "llamar":
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   Usuario: "¿Qué tiempo hace en Madrid?"                       │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │ 1. Chat envía mensaje a ai-gateway                      │   │
+│   │                                                         │   │
+│   │ 2. ai-gateway incluye plugins activos como "tools"      │   │
+│   │    disponibles para el LLM                              │   │
+│   │                                                         │   │
+│   │ 3. LLM decide llamar weather.get_current                │   │
+│   │    → tool_call: {name: "weather.get_current",           │   │
+│   │                  args: {city: "Madrid"}}                │   │
+│   │                                                         │   │
+│   │ 4. tool-orchestrator ejecuta la función                 │   │
+│   │    (si tiene handler registrado)                        │   │
+│   │                                                         │   │
+│   │ 5. LLM recibe resultado y genera respuesta              │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│   Asistente: "En Madrid hace 18°C con cielo despejado."        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Crear un Plugin
+
+Para crear un nuevo plugin:
+
+1. **Crear directorio**: `plugins/mi-plugin/`
+
+2. **Crear archivo JSON**: `mi-plugin.functions.json`
+
+```json
+{
+  "metadata": {
+    "name": "mi-plugin",
+    "version": "1.0.0",
+    "description": "Mi plugin personalizado"
+  },
+  "functions": {
+    "mi_funcion": {
+      "description": "Descripción de lo que hace",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "param1": {
+            "type": "string",
+            "description": "Descripción del parámetro"
+          }
+        },
+        "required": ["param1"]
+      }
+    }
+  }
+}
+```
+
+3. **Recargar plugins**: POST /plugins/reload
+
+4. **(Opcional) Registrar handler** en tool-orchestrator:
+
+```javascript
+toolOrchestrator.registerTool(
+  'mi-plugin',
+  'mi_funcion',
+  'Descripción',
+  schema,
+  async (args) => {
+    // Implementación
+    return { result: '...' };
+  }
+);
+```
+
+#### Configuración
+
+```javascript
+{
+  pluginsPath: "plugins",      // Ruta relativa a módulos
+  autoReload: true,            // Recargar automáticamente
+  watchInterval: 5000          // Intervalo de watch (ms)
+}
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.8.0*
+*Versión: 1.9.0*

@@ -2527,5 +2527,395 @@ Los archivos adjuntos se referencian en los mensajes:
 
 ---
 
+### Botón 📋 Contexto (ai-agent-framework)
+
+**Módulo**: `ai-agent-framework`
+**Versión**: 1.0.0
+**Responsabilidad**: Framework de agentes IA con context management, tool calling y orchestration.
+**Ubicación**: `toolbar_chat.bottom`
+
+#### Propósito en Chat
+
+El botón Contexto permite ver y gestionar lo que el LLM "sabe" al responder:
+
+```
+📋 Contexto → ¿Qué ve el LLM?
+                    │
+                    ├── System Prompt (instrucciones base)
+                    ├── Context Window (últimos N mensajes)
+                    ├── Variables (datos dinámicos)
+                    ├── Attachments (archivos adjuntos)
+                    └── Agent Config (si hay agente activo)
+```
+
+**Por qué es importante:**
+- Ver qué información tiene el LLM disponible
+- Editar variables de contexto dinámicamente
+- Ajustar el context window (más/menos historial)
+- Debug de respuestas inesperadas
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/agents` | Registrar nuevo agente |
+| GET | `/agents` | Listar agentes (?enabled=true) |
+| GET | `/agents/:id` | Obtener configuración de agente |
+| PUT | `/agents/:id` | Actualizar agente |
+| DELETE | `/agents/:id` | Eliminar agente |
+| POST | `/agents/:id/trigger` | Ejecutar agente manualmente |
+| GET | `/agents/:id/context` | Obtener contexto/memoria del agente |
+| DELETE | `/agents/:id/context` | Limpiar contexto del agente |
+| GET | `/tools` | Listar tools disponibles |
+| GET | `/agents/:id/stats` | Estadísticas del agente |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Métricas |
+
+#### Eventos
+
+**El módulo principalmente opera vía HTTP/request-response.**
+
+Los agentes escuchan eventos configurados y publican resultados:
+
+```javascript
+// Agente configurado para escuchar
+agent.subscribes = ['ticket.created', 'support.request'];
+
+// Cuando llega el evento, el agente:
+// 1. Carga su contexto
+// 2. Ejecuta el LLM con tools
+// 3. Publica resultado
+```
+
+**Eventos de agentes:**
+| Evento | Cuándo |
+|--------|--------|
+| `agent.{name}.created` | Agente registrado |
+| `agent.{name}.completed` | Ejecución exitosa |
+| `agent.{name}.failed` | Ejecución fallida |
+
+#### Componentes Internos
+
+```
+ai-agent-framework
+       │
+       ├── ContextManager     ← Gestiona memoria/contexto
+       │   ├── contexts: Map<agentId, context>
+       │   ├── max_messages: 100 (configurable)
+       │   └── ttl_minutes: 1440 (auto-cleanup)
+       │
+       ├── ToolManager        ← Gestiona tools disponibles
+       │   └── tools: Map<name, tool>
+       │
+       └── Agent              ← Instancia de agente
+           ├── id, name, description
+           ├── prompt_id (referencia a prompt-manager)
+           ├── provider, model, temperature
+           ├── subscribes: [] (eventos que escucha)
+           └── tools: [] (tools que puede usar)
+```
+
+#### Estructura de Contexto
+
+```javascript
+{
+  agent_id: "agent_support",
+  messages: [
+    { role: "user", content: "...", timestamp: "..." },
+    { role: "assistant", content: "...", timestamp: "..." }
+  ],
+  metadata: {
+    // Variables personalizadas
+    user_name: "Juan",
+    project_type: "e-commerce",
+    language: "es"
+  },
+  created_at: "2024-12-05T10:00:00Z",
+  updated_at: "2024-12-05T14:30:00Z"
+}
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Vista de Contexto (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 📋 Contexto Actual                      │
+├─────────────────────────────────────────┤
+│                                         │
+│  System Prompt:                         │
+│  ┌─────────────────────────────────┐   │
+│  │ "Eres un asistente experto..."  │   │
+│  │ (ver completo →)                │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  Context Window: 20 mensajes            │
+│  ├── últimos: hace 5 min               │
+│  └── tokens estimados: ~3.2K           │
+│                                         │
+│  Variables:                             │
+│  ├── project: "Mi Proyecto"            │
+│  ├── language: "español"               │
+│  └── user: "Usuario123"                │
+│                                         │
+│  Attachments: 2 archivos               │
+│  └── documento.pdf, imagen.png         │
+│                                         │
+│  ─────────────────────────────────────  │
+│  [✏️ Editar variables]                  │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- System prompt (truncado con link a ver completo)
+- Tamaño del context window
+- Tokens estimados
+- Variables activas
+- Archivos adjuntos referenciados
+
+**Acciones:**
+- Ver prompt completo
+- Editar variables rápidamente
+
+##### 2 TAPS → Modal Editar Contexto (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 📋 Editar Contexto                            [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ─── System Prompt ───                             │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Eres un asistente experto en desarrollo.    │   │
+│  │ Tu objetivo es ayudar con tareas de         │   │
+│  │ programación de manera clara y concisa.     │   │
+│  │                                             │   │
+│  │ Variables disponibles: {{project}}, {{lang}}│   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Context Window ───                            │
+│  Mensajes a incluir: [20 ▼]                        │
+│  □ Incluir mensajes del sistema                    │
+│  ☑ Incluir attachments                             │
+│                                                     │
+│  ─── Variables ───                                 │
+│  ┌──────────────┬────────────────────────────┐    │
+│  │ project      │ Mi Proyecto                 │    │
+│  │ language     │ español                     │    │
+│  │ user_role    │ developer                   │    │
+│  │ + Añadir     │                             │    │
+│  └──────────────┴────────────────────────────┘    │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              💾 Guardar Cambios             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ⚠️ Los cambios aplican a la conversación actual   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Funcionalidad:**
+- Editar system prompt de la conversación
+- Ajustar context window (número de mensajes)
+- Añadir/editar/eliminar variables
+- Las variables se interpolan con `{{variable}}`
+
+##### LONG-PRESS → Modal Gestión de Agentes (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 📋 Gestionar Agentes y Contexto                            [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ─── Agentes Registrados ───                                   │
+│                                                                 │
+│  🤖 support-agent                              ✅ activo        │
+│     Agente de soporte al cliente                               │
+│     Prompt: support-v2 | Model: Claude 3.5                     │
+│     Subscribes: ticket.created, support.request                │
+│     Context: 45 msgs | Updated: hace 2h                        │
+│     [⚙️ Config] [📋 Ver contexto] [🧹 Limpiar] [▶️ Trigger]     │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  🤖 code-reviewer                              ✅ activo        │
+│     Revisor automático de código                               │
+│     Prompt: code-review-v1 | Model: GPT-4o                     │
+│     Subscribes: pr.created                                     │
+│     Context: 12 msgs | Updated: hace 1d                        │
+│     [⚙️ Config] [📋 Ver contexto] [🧹 Limpiar] [▶️ Trigger]     │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  🤖 translator                                 ⚪ inactivo      │
+│     Traductor automático                                       │
+│     Prompt: translator-v1 | Model: DeepSeek                    │
+│     Context: vacío                                             │
+│     [⚙️ Config] [▶️ Activar] [🗑️ Eliminar]                     │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Resumen: 3 agentes | 2 activos | 57 msgs en contexto       │
+│                                                                 │
+│  [+ Nuevo Agente]               [🧹 Limpiar todos] [📊 Stats]   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por agente:**
+- ⚙️ Config → Modal de configuración del agente
+- 📋 Ver contexto → Ver memoria/historial del agente
+- 🧹 Limpiar → DELETE /agents/:id/context
+- ▶️ Trigger → POST /agents/:id/trigger (ejecución manual)
+- ▶️ Activar / ⏸️ Desactivar → PUT /agents/:id {enabled: true/false}
+- 🗑️ Eliminar → DELETE /agents/:id
+
+**Acciones globales:**
+- + Nuevo Agente → Modal crear agente
+- 🧹 Limpiar todos → Limpiar contexto de todos los agentes
+- 📊 Stats → Dashboard de estadísticas
+
+#### Modal Crear/Editar Agente
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 🤖 Nuevo Agente                               [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Nombre *                                           │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ mi-agente-personalizado                     │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Descripción                                        │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Agente para automatizar tareas de...        │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Configuración IA ───                          │
+│                                                     │
+│  Prompt: [Seleccionar... ▼]                        │
+│  Provider: [anthropic ▼]  Model: [claude-3-5 ▼]   │
+│  Temperature: [0.7]  Max Tokens: [2000]            │
+│                                                     │
+│  ─── Triggers (eventos) ───                        │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ticket.created                              │   │
+│  │ support.request                             │   │
+│  │ + Añadir evento                             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Tools disponibles ───                         │
+│  ☑ search_kb        ☑ create_ticket               │
+│  ☑ send_email       □ execute_code                │
+│                                                     │
+│  ☑ Activar inmediatamente                          │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              🤖 Crear Agente                │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Estructura de Agente
+
+```javascript
+{
+  id: "agent_abc123",
+  name: "support-agent",
+  description: "Agente de soporte al cliente",
+  prompt_id: "prompt_support_v2",   // Referencia a prompt-manager
+  provider: "anthropic",
+  model: "claude-3-5-sonnet",
+  temperature: 0.3,
+  max_tokens: 2000,
+  subscribes: [                      // Eventos que escucha
+    "ticket.created",
+    "support.request"
+  ],
+  tools: [                          // Tools que puede usar
+    "search_kb",
+    "create_ticket",
+    "send_email"
+  ],
+  enabled: true,
+  metadata: {
+    department: "support",
+    priority: "high"
+  },
+  stats: {
+    total_runs: 1250,
+    success_rate: 0.92,
+    avg_duration_ms: 3500,
+    total_tokens: 500000
+  },
+  created_at: "2024-11-01T10:00:00Z",
+  updated_at: "2024-12-05T14:30:00Z"
+}
+```
+
+#### Flujo de Ejecución de Agente
+
+```
+Evento llega (ej: ticket.created)
+         │
+         ▼
+   ai-agent-framework
+         │
+         ├─► Busca agentes que escuchan ese evento
+         │
+         ▼
+   Agent.handleEvent(event)
+         │
+         ├─► 1. Cargar contexto (ContextManager)
+         │
+         ├─► 2. Renderizar prompt (prompt-manager)
+         │   POST /prompts/:id/render
+         │
+         ├─► 3. Llamar LLM (ai-gateway)
+         │   POST /chat
+         │
+         ├─► 4. Si hay tool_calls → tool-orchestrator
+         │   tool.call.request
+         │
+         ├─► 5. Guardar en contexto
+         │
+         └─► 6. Publicar resultado
+             agent.{name}.completed
+```
+
+#### Context Window en Chat
+
+El context window determina cuántos mensajes se envían al LLM:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                  Conversación Completa                    │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │ [msg 1] [msg 2] [msg 3] ... [msg 18] [msg 19] [msg 20]│
+│  │         ↑──────────────────────────────────────────│   │
+│  │                    Context Window = 20              │    │
+│  │                    (esto se envía al LLM)           │    │
+│  └──────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────┘
+
+         Lo que el LLM "ve":
+         ┌─────────────────────────────────────┐
+         │ System Prompt                       │
+         │ + Context Window (20 msgs)          │
+         │ + Variables interpoladas            │
+         │ + Attachments (si los hay)          │
+         └─────────────────────────────────────┘
+```
+
+**Configuración:**
+- Valor por defecto: 20 mensajes
+- Configurable por conversación (ai_settings.context_window)
+- Más mensajes = más contexto, pero más tokens/costo
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.7.0*
+*Versión: 1.8.0*

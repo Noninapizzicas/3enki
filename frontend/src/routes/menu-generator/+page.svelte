@@ -507,28 +507,42 @@
 
   async function handleFileDrop(event: CustomEvent<File[]>) {
     const files = event.detail;
-    if (files.length === 0) return;
+    if (!files || files.length === 0) return;
 
     for (const file of files) {
       try {
+        toast.info(`Subiendo ${file.name}...`);
         const base64 = await fileToBase64(file);
+
         const res = await fetch(`${apiBase}/upload`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             file_base64: base64,
             file_name: file.name,
-            file_type: file.type
+            file_type: file.type || 'application/octet-stream'
           })
         });
 
-        if (!res.ok) throw new Error('Error al subir');
-        const data = await res.json();
-        toast.success(`Menú ${data.menu_id} en proceso`);
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.error || data.message || `Error ${res.status}`);
+        }
+
+        toast.success(`✅ Menú ${data.menu_id} en proceso de OCR`);
+
+        // Cerrar el panel después de subir
+        currentPanel = '';
       } catch (err) {
-        toast.error(`Error subiendo ${file.name}`);
+        console.error('Upload error:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+        toast.error(`❌ ${file.name}: ${errorMsg}`);
       }
     }
+
+    // Limpiar archivos del FileDropZone
+    uploadFiles = [];
     await fetchMenus();
   }
 
@@ -751,8 +765,91 @@
     console.log('Button action:', buttonId, actionType, action);
   }
 
-  async function handleChatSubmit(e: CustomEvent) {
-    const { message } = e.detail;
+  /**
+   * Procesa archivos adjuntos (PDF/imágenes) enviándolos al OCR
+   */
+  async function processAttachments(files: File[], userMessage: string = '') {
+    for (const file of files) {
+      // Mostrar mensaje del usuario con el archivo
+      const fileMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: `📎 ${file.name}${userMessage ? `\n\n${userMessage}` : ''}`,
+        timestamp: new Date()
+      };
+      chatMessages = [...chatMessages, fileMsg];
+
+      // Mostrar loading
+      const assistantId = `msg-${Date.now() + 1}`;
+      chatMessages = [...chatMessages, {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+        loading: true
+      }];
+
+      chatLoading = true;
+
+      try {
+        const base64 = await fileToBase64(file);
+        const res = await fetch(`${apiBase}/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_base64: base64,
+            file_name: file.name,
+            file_type: file.type
+          })
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || `Error ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        // Actualizar mensaje con respuesta
+        chatMessages = chatMessages.map(m =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: `✅ Archivo procesado correctamente!\n\n📋 **Menú ID:** ${data.menu_id}\n⏳ **Estado:** Procesando con OCR...\n\nEl texto se está extrayendo y será enviado a la IA para estructurar el menú.`,
+                loading: false
+              }
+            : m
+        );
+
+        toast.success(`Menú ${data.menu_id} en proceso`);
+        await fetchMenus();
+
+      } catch (err) {
+        console.error('Upload error:', err);
+        chatMessages = chatMessages.map(m =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: `❌ Error procesando archivo: ${err instanceof Error ? err.message : 'Error desconocido'}`,
+                loading: false
+              }
+            : m
+        );
+        toast.error(`Error: ${err instanceof Error ? err.message : 'Error subiendo archivo'}`);
+      } finally {
+        chatLoading = false;
+      }
+    }
+  }
+
+  async function handleChatSubmit(e: CustomEvent<{ message: string; attachments?: File[] }>) {
+    const { message, attachments } = e.detail;
+
+    // Si hay archivos adjuntos, procesarlos primero con OCR
+    if (attachments && attachments.length > 0) {
+      await processAttachments(attachments, message);
+      return;
+    }
 
     if (!message.trim()) return;
 

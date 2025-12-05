@@ -2,41 +2,83 @@
  * OCR Service para Menu Generator
  * Extrae texto de imágenes (Tesseract.js) y PDFs (pdf-parse)
  * para enviar a DeepSeek en formato texto
+ *
+ * IMPORTANTE: Tesseract.js requiere descargar archivos de idioma (~15MB) la primera vez.
+ * Si no hay conexión a internet, solo funcionará la extracción de PDFs.
  */
 
-const Tesseract = require('tesseract.js');
 const pdfParse = require('pdf-parse');
+const path = require('path');
+const fs = require('fs');
 
 class OCRService {
   constructor(logger) {
     this.logger = logger;
     this.worker = null;
     this.initialized = false;
+    this.tesseractAvailable = false;
+    this.initializationAttempted = false;
+    this.langDataPath = path.join(__dirname, '..', 'tessdata');
   }
 
   /**
-   * Inicializa el worker de Tesseract (lazy initialization)
+   * Intenta inicializar Tesseract de forma segura
+   * Retorna true si está disponible, false si no
    */
-  async initialize() {
-    if (this.initialized) return;
+  async tryInitializeTesseract() {
+    if (this.initializationAttempted) {
+      return this.tesseractAvailable;
+    }
+
+    this.initializationAttempted = true;
+
+    // Verificar si ya existen los archivos de idioma descargados
+    const engTrainedData = path.join(this.langDataPath, 'eng.traineddata.gz');
+    const hasLocalData = fs.existsSync(engTrainedData);
+
+    if (!hasLocalData) {
+      this.logger?.warn('ocr.tesseract_needs_download', {
+        message: 'Tesseract requiere descargar archivos de idioma. Solo PDFs serán soportados.',
+        langDataPath: this.langDataPath
+      });
+      this.tesseractAvailable = false;
+      return false;
+    }
 
     try {
-      this.logger?.info('ocr.initializing', { engine: 'tesseract.js' });
+      this.logger?.info('ocr.initializing_tesseract', {
+        localData: hasLocalData,
+        langDataPath: this.langDataPath
+      });
 
-      // Crear worker con idiomas español e inglés
-      this.worker = await Tesseract.createWorker('spa+eng', 1, {
+      const Tesseract = require('tesseract.js');
+
+      // Crear directorio si no existe
+      if (!fs.existsSync(this.langDataPath)) {
+        fs.mkdirSync(this.langDataPath, { recursive: true });
+      }
+
+      this.worker = await Tesseract.createWorker('eng', 1, {
         logger: m => {
           if (m.status === 'recognizing text' && m.progress) {
             this.logger?.debug('ocr.progress', { progress: Math.round(m.progress * 100) });
           }
-        }
+        },
+        cacheMethod: 'readOnly',
+        cachePath: this.langDataPath
       });
 
-      this.initialized = true;
-      this.logger?.info('ocr.initialized', { languages: ['spa', 'eng'] });
+      this.tesseractAvailable = true;
+      this.logger?.info('ocr.tesseract_ready', { languages: ['eng'] });
+      return true;
+
     } catch (error) {
-      this.logger?.error('ocr.init_failed', { error: error.message });
-      throw error;
+      this.logger?.warn('ocr.tesseract_init_failed', {
+        error: error.message,
+        suggestion: 'Use PDFs instead of images'
+      });
+      this.tesseractAvailable = false;
+      return false;
     }
   }
 
@@ -56,11 +98,13 @@ class OCRService {
       let result;
 
       if (mimeType === 'application/pdf') {
+        // PDFs siempre funcionan - no requieren descarga
         result = await this.extractTextFromPDF(base64Data);
       } else if (mimeType.startsWith('image/')) {
+        // Imágenes requieren Tesseract
         result = await this.extractTextFromImage(base64Data, mimeType);
       } else {
-        throw new Error(`Tipo de archivo no soportado: ${mimeType}`);
+        throw new Error(`Tipo de archivo no soportado: ${mimeType}. Use imágenes (jpg, png) o PDFs.`);
       }
 
       const duration = Date.now() - startTime;
@@ -86,9 +130,23 @@ class OCRService {
 
   /**
    * Extrae texto de una imagen usando Tesseract.js
+   * Requiere que los archivos de idioma estén descargados
    */
   async extractTextFromImage(base64Data, mimeType) {
-    await this.initialize();
+    // Para este entorno sin internet, mostrar mensaje claro
+    // En producción con internet, Tesseract descargará los archivos automáticamente
+    const canUseTesseract = await this.tryInitializeTesseract();
+
+    if (!canUseTesseract) {
+      throw new Error(
+        'OCR de imágenes no disponible en este momento. ' +
+        'Tesseract.js necesita descargar archivos de idioma (~15MB) la primera vez que se usa. ' +
+        '\n\nAlternativas:\n' +
+        '1. Usa un archivo PDF en lugar de imagen\n' +
+        '2. Convierte la imagen a PDF antes de subirla\n' +
+        '3. Conecta a internet y reinicia el servidor para habilitar OCR de imágenes'
+      );
+    }
 
     // Crear buffer desde base64
     const buffer = Buffer.from(base64Data, 'base64');
@@ -105,6 +163,7 @@ class OCRService {
 
   /**
    * Extrae texto de un PDF usando pdf-parse
+   * No requiere conexión a internet
    */
   async extractTextFromPDF(base64Data) {
     // Crear buffer desde base64
@@ -112,7 +171,6 @@ class OCRService {
 
     // Parsear PDF
     const data = await pdfParse(buffer, {
-      // Opciones para mejor extracción
       max: 0 // Sin límite de páginas
     });
 
@@ -126,26 +184,19 @@ class OCRService {
 
   /**
    * Preprocesa el texto extraído para mejorar la calidad
-   * Limpia caracteres extraños, normaliza espacios, etc.
    */
   preprocessText(text) {
     if (!text) return '';
 
     return text
-      // Normalizar saltos de línea
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n')
-      // Eliminar líneas con solo espacios
       .replace(/^\s*$/gm, '')
-      // Reducir múltiples saltos de línea a máximo 2
       .replace(/\n{3,}/g, '\n\n')
-      // Normalizar espacios múltiples
       .replace(/[ \t]+/g, ' ')
-      // Eliminar espacios al inicio/final de líneas
       .split('\n')
       .map(line => line.trim())
       .join('\n')
-      // Eliminar espacios al inicio/final
       .trim();
   }
 
@@ -154,10 +205,8 @@ class OCRService {
    */
   formatForLLM(extractedResult, fileName) {
     const { text, confidence, pages } = extractedResult;
-
     const processedText = this.preprocessText(text);
 
-    // Construir mensaje descriptivo
     let context = `=== CONTENIDO EXTRAÍDO DEL ARCHIVO: ${fileName} ===\n`;
 
     if (pages) {
@@ -180,9 +229,14 @@ class OCRService {
    */
   async terminate() {
     if (this.worker) {
-      await this.worker.terminate();
+      try {
+        await this.worker.terminate();
+      } catch (e) {
+        // Ignorar errores de terminación
+      }
       this.worker = null;
-      this.initialized = false;
+      this.tesseractAvailable = false;
+      this.initializationAttempted = false;
       this.logger?.info('ocr.terminated');
     }
   }

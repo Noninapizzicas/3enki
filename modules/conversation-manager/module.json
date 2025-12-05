@@ -1,0 +1,234 @@
+{
+  "name": "conversation-manager",
+  "version": "1.0.0",
+  "description": "Event-driven conversation management with project context, conversation context, and AI integration",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "provides": {
+    "events": [
+      "conversation.created",
+      "conversation.updated",
+      "conversation.deleted",
+      "message.sent",
+      "message.received",
+      "conversation.context.loaded"
+    ],
+    "queries": [
+      "conversation.get.request",
+      "conversation.list.request",
+      "message.list.request",
+      "conversation.send.request"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "conversation.created",
+        "description": "Conversation created",
+        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_created" }
+      },
+      {
+        "event": "conversation.updated",
+        "description": "Conversation metadata updated",
+        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_updated" }
+      },
+      {
+        "event": "conversation.deleted",
+        "description": "Conversation deleted",
+        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_deleted" }
+      },
+      {
+        "event": "message.sent",
+        "description": "User message sent",
+        "schema": { "$ref": "./schemas/events.json#/definitions/message_sent" }
+      },
+      {
+        "event": "message.received",
+        "description": "AI response received",
+        "schema": { "$ref": "./schemas/events.json#/definitions/message_received" }
+      },
+      {
+        "event": "conversation.context.loaded",
+        "description": "Project and conversation context loaded",
+        "schema": { "$ref": "./schemas/events.json#/definitions/context_loaded" }
+      },
+      {
+        "event": "conversation.get.response",
+        "description": "Response with conversation details",
+        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_get_response" }
+      },
+      {
+        "event": "conversation.list.response",
+        "description": "Response with conversations list",
+        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_list_response" }
+      },
+      {
+        "event": "message.list.response",
+        "description": "Response with messages list",
+        "schema": { "$ref": "./schemas/events.json#/definitions/message_list_response" }
+      },
+      {
+        "event": "conversation.send.response",
+        "description": "Response with AI message",
+        "schema": { "$ref": "./schemas/events.json#/definitions/send_response" }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "conversation.get.request",
+        "description": "Get conversation details",
+        "handler": "onGetConversationRequest"
+      },
+      {
+        "event": "conversation.list.request",
+        "description": "List conversations",
+        "handler": "onListConversationsRequest"
+      },
+      {
+        "event": "message.list.request",
+        "description": "List messages",
+        "handler": "onListMessagesRequest"
+      },
+      {
+        "event": "conversation.send.request",
+        "description": "Send message and get AI response",
+        "handler": "onSendMessageRequest"
+      },
+      {
+        "event": "db.query.response",
+        "description": "Database query responses",
+        "handler": "onDbQueryResponse"
+      },
+      {
+        "event": "ai.chat.response",
+        "description": "AI chat responses",
+        "handler": "onAIChatResponse"
+      },
+      {
+        "event": "project.get.response",
+        "description": "Project details for context",
+        "handler": "onProjectGetResponse"
+      },
+      {
+        "event": "storage.info.response",
+        "description": "Storage info for project context",
+        "handler": "onStorageInfoResponse"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/conversations",
+      "handler": "handleCreateConversation",
+      "description": "Create conversation (publishes conversation.created)",
+      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/create_request" },
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/conversation_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations",
+      "handler": "handleListConversations",
+      "description": "List conversations (optionally filtered by project)",
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/list_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id",
+      "handler": "handleGetConversation",
+      "description": "Get conversation with context",
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/conversation_detail_response" }
+    },
+    {
+      "method": "PUT",
+      "path": "/conversations/:id",
+      "handler": "handleUpdateConversation",
+      "description": "Update conversation metadata (publishes conversation.updated)",
+      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/update_request" },
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/conversation_response" }
+    },
+    {
+      "method": "DELETE",
+      "path": "/conversations/:id",
+      "handler": "handleDeleteConversation",
+      "description": "Delete conversation (publishes conversation.deleted)",
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/delete_response" }
+    },
+    {
+      "method": "POST",
+      "path": "/conversations/:id/messages",
+      "handler": "handleSendMessage",
+      "description": "Send message and get AI response (publishes message.sent, message.received)",
+      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/send_message_request" },
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/send_message_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id/messages",
+      "handler": "handleGetMessages",
+      "description": "Get conversation messages",
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/messages_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id/context",
+      "handler": "handleGetContext",
+      "description": "Get full context (project + conversation)",
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/context_response" }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "conversation.created.total",
+        "conversation.updated.total",
+        "conversation.deleted.total",
+        "message.sent.total",
+        "message.received.total",
+        "conversation.context.loaded.total",
+        "conversation.error.total"
+      ],
+      "gauges": [
+        "conversation.active.count",
+        "conversation.messages.total",
+        "conversation.pending.requests"
+      ],
+      "timings": [
+        "conversation.message.duration",
+        "conversation.context.load.duration"
+      ]
+    }
+  },
+
+  "config": {
+    "contextWindow": 20,
+    "maxMessagesPerConversation": 10000,
+    "dbTimeout": 10000,
+    "aiTimeout": 60000,
+    "includeProjectContext": true,
+    "includeStorageInfo": true,
+    "defaultSystemPrompt": "You are a helpful AI assistant. Answer questions accurately and concisely."
+  }
+}

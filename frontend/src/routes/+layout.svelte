@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { connect, disconnect } from '$stores/mqtt';
   import { loadModules } from '$stores/modules';
+  import { layoutState } from '$stores/layout';
   import { Sidebar } from '$components/layout';
   import { Toast } from '$components/feedback';
   import config from '$lib/config';
@@ -10,6 +11,10 @@
   let sidebarCollapsed = false;
   let mobileOpen = false;
   let isMobile = false;
+
+  // Layout state from store (allows pages to hide global header/sidebar)
+  $: hideGlobalHeader = $layoutState.hideGlobalHeader;
+  $: hideGlobalSidebar = $layoutState.hideGlobalSidebar;
 
   onMount(() => {
     // Connect to MQTT broker using config
@@ -37,8 +42,8 @@
 </script>
 
 <div class="min-h-screen bg-bg text-text">
-  <!-- Mobile header with menu button -->
-  {#if isMobile}
+  <!-- Mobile header with menu button (hideable via layoutState) -->
+  {#if isMobile && !hideGlobalHeader}
     <header class="fixed top-0 left-0 right-0 h-14 bg-bg-card border-b border-border flex items-center px-4 z-50">
       <button
         class="p-2 hover:bg-bg-hover rounded-md transition-colors"
@@ -54,15 +59,17 @@
     </header>
   {/if}
 
-  <!-- Sidebar -->
-  <Sidebar bind:collapsed={sidebarCollapsed} bind:mobileOpen on:mobileToggle={handleMobileToggle} />
+  <!-- Sidebar (hideable via layoutState) -->
+  {#if !hideGlobalSidebar}
+    <Sidebar bind:collapsed={sidebarCollapsed} bind:mobileOpen on:mobileToggle={handleMobileToggle} />
+  {/if}
 
   <!-- Main content -->
   <main
     class="transition-all duration-normal min-h-screen"
-    class:ml-sidebar={!sidebarCollapsed && !isMobile}
-    class:ml-sidebar-collapsed={sidebarCollapsed && !isMobile}
-    class:pt-14={isMobile}
+    class:ml-sidebar={!sidebarCollapsed && !isMobile && !hideGlobalSidebar}
+    class:ml-sidebar-collapsed={sidebarCollapsed && !isMobile && !hideGlobalSidebar}
+    class:pt-14={isMobile && !hideGlobalHeader}
   >
     <slot />
   </main>

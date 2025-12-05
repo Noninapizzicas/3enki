@@ -1,0 +1,130 @@
+{
+  "name": "pdf-viewer",
+  "version": "1.0.0",
+  "description": "PDF viewer and text extraction module",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "ui": {
+    "enabled": true,
+    "title": "Visor PDF",
+    "icon": "📄",
+    "description": "Visualizador y extractor de texto de PDFs",
+    "views": {
+      "viewer": {
+        "title": "Visor PDF",
+        "description": "Visualizador de documentos PDF",
+        "layout": "fullscreen"
+      }
+    }
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/pdf/view",
+      "handler": "viewPdf",
+      "description": "Get PDF file for viewing",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true
+        },
+        "file_path": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/pdf/extract-text",
+      "handler": "extractText",
+      "description": "Extract text from PDF",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true
+        },
+        "file_path": {
+          "type": "string",
+          "required": true
+        },
+        "page": {
+          "type": "number",
+          "required": false,
+          "description": "Specific page number (1-indexed). If not provided, extracts all pages."
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/pdf/metadata",
+      "handler": "getMetadata",
+      "description": "Get PDF metadata",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true
+        },
+        "file_path": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/pdf/list",
+      "handler": "listPdfs",
+      "description": "List all PDF files in project",
+      "query_params": {
+        "project_id": {
+          "type": "string",
+          "required": true
+        }
+      }
+    }
+  ],
+
+  "events": {
+    "subscribes": [
+      "pdf.view.request",
+      "pdf.extract.request",
+      "pdf.metadata.request",
+      "pdf.list.request"
+    ],
+    "publishes": [
+      "pdf.view.response",
+      "pdf.extract.response",
+      "pdf.metadata.response",
+      "pdf.list.response",
+      "pdf.error"
+    ]
+  },
+
+  "dependencies": {
+    "modules": ["file-browser", "storage-manager", "project-manager"]
+  },
+
+  "config": {
+    "max_pdf_size": 52428800,
+    "cache_enabled": true,
+    "cache_ttl": 3600000
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "custom": [
+        "pdfs_viewed_total",
+        "text_extractions_total",
+        "pdf_errors_total"
+      ]
+    }
+  }
+}

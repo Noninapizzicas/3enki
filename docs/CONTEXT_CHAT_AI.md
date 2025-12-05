@@ -2218,5 +2218,314 @@ toolOrchestrator.registerTool(
 
 ---
 
+### Botón 📎 Adjuntar (storage-manager)
+
+**Módulo**: `storage-manager`
+**Versión**: 1.0.0
+**Responsabilidad**: Gestión de archivos con aislamiento por proyecto.
+**Ubicación**: `toolbar_chat.bottom`
+
+#### Propósito en Chat
+
+El botón Adjuntar permite incluir archivos en los mensajes:
+- Subir imágenes, PDFs, documentos para que el LLM los analice
+- Adjuntar código fuente para review
+- Incluir contexto adicional en forma de archivos
+
+```
+📎 Adjuntar → Archivos del proyecto → Adjuntar al mensaje
+                     │
+                     ├── uploads/   (archivos del usuario)
+                     ├── exports/   (exports del sistema)
+                     ├── temp/      (temporales, auto-limpieza 24h)
+                     └── files/     (archivos del sistema)
+```
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/storage/:projectId/upload` | Subir archivo (multipart/form-data) |
+| GET | `/storage/:projectId/files` | Listar archivos (?category=X) |
+| GET | `/storage/:projectId/files/:id` | Metadata de archivo |
+| GET | `/storage/:projectId/download/:id` | Descargar archivo |
+| DELETE | `/storage/:projectId/files/:id` | Eliminar archivo |
+| POST | `/storage/:projectId/cleanup` | Limpiar temporales (>24h) |
+| GET | `/storage/:projectId/info` | Info de uso (por categoría) |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Métricas |
+
+#### Eventos
+
+**Escucha:**
+| Evento | Acción |
+|--------|--------|
+| `project.created` | Auto-crea estructura de carpetas |
+| `project.deleted` | Auto-elimina storage del proyecto |
+| `file.list.request` | Lista archivos y responde |
+| `file.get.request` | Obtiene metadata y responde |
+| `storage.info.request` | Info de uso y responde |
+
+**Publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `storage.created` | Storage de proyecto creado |
+| `storage.deleted` | Storage eliminado (con stats) |
+| `storage.cleaned` | Temporales limpiados (files_deleted, bytes_freed) |
+| `file.uploaded` | Archivo subido (file_id, size, mime_type) |
+| `file.deleted` | Archivo eliminado |
+
+#### Características
+
+- **Aislamiento por proyecto**: Cada proyecto tiene su carpeta
+- **Categorías**: uploads, exports, temp, files
+- **Auto-creación**: Se crea al crear proyecto (project.created)
+- **Auto-limpieza**: Temporales >24h se eliminan automáticamente
+- **Registro en memoria**: Map() con metadata de archivos
+- **MIME detection**: Detección automática por extensión
+
+#### Estructura de Archivo
+
+```javascript
+{
+  id: "abc123-uuid",
+  project_id: "proj_xyz",
+  filename: "abc123-uuid_documento.pdf",
+  original_filename: "documento.pdf",
+  path: "/data/storage/proj_xyz/uploads/abc123-uuid_documento.pdf",
+  relative_path: "proj_xyz/uploads/abc123-uuid_documento.pdf",
+  size: 1048576,  // bytes
+  mime_type: "application/pdf",
+  category: "uploads",
+  created_at: "2024-12-05T10:00:00Z",
+  metadata: {
+    // Custom metadata opcional
+  }
+}
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Selector de Archivo (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 📎 Adjuntar Archivo                     │
+├─────────────────────────────────────────┤
+│                                         │
+│  Categoría: [uploads ▼]                 │
+│                                         │
+│  ─────────────────────────────────────  │
+│                                         │
+│  □ 📄 documento.pdf           1.2 MB    │
+│      Subido: hace 2h                    │
+│                                         │
+│  □ 🖼️ captura.png             450 KB    │
+│      Subido: hace 1d                    │
+│                                         │
+│  □ 📝 codigo.js                12 KB    │
+│      Subido: hace 3d                    │
+│                                         │
+│  ─────────────────────────────────────  │
+│  Seleccionados: 0 | [📎 Adjuntar]       │
+│                                         │
+│  [📤 Subir nuevo...]                    │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Archivos del proyecto activo
+- Filtro por categoría
+- Tamaño y fecha de subida
+- Checkbox para selección múltiple
+
+**Acciones:**
+- Seleccionar archivos → Adjuntar al mensaje actual
+- 📤 Subir nuevo → Abre file picker nativo
+- Cambiar categoría → Filtrar lista
+
+##### 2 TAPS → Modal Subir Archivo (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 📎 Subir Archivo                              [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │                                             │   │
+│  │        ┌───────────────────────┐           │   │
+│  │        │                       │           │   │
+│  │        │    📤 Arrastra        │           │   │
+│  │        │    archivos aquí      │           │   │
+│  │        │                       │           │   │
+│  │        │    o haz clic         │           │   │
+│  │        │                       │           │   │
+│  │        └───────────────────────┘           │   │
+│  │                                             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Categoría: [uploads ▼]                             │
+│                                                     │
+│  □ Adjuntar al mensaje actual                       │
+│                                                     │
+│  ─── Archivos seleccionados ───                    │
+│                                                     │
+│  📄 reporte.pdf                          2.1 MB    │
+│  🖼️ diagrama.png                         800 KB    │
+│                                         ────────    │
+│                                Total:    2.9 MB    │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              📤 Subir (2 archivos)          │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ⚠️ Máximo: 100 MB por archivo                     │
+│  Formatos: imágenes, PDF, texto, JSON              │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Funcionalidad:**
+- Drag & drop o click para seleccionar
+- Preview de archivos seleccionados
+- Seleccionar categoría destino
+- Opción de adjuntar inmediatamente al mensaje
+- Validación de tamaño y tipo MIME
+
+**Evento al subir:** `file.uploaded` por cada archivo
+
+##### LONG-PRESS → Modal Gestión de Archivos (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 📎 Gestionar Archivos                                      [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Proyecto: Mi Asistente IA                                      │
+│  Categoría: [Todas ▼]  Ordenar: [Recientes ▼]  [🔍 Buscar...]  │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📁 uploads/                                        12 archivos │
+│  ├── 📄 documento.pdf                                  1.2 MB   │
+│  │   ID: abc123 | Subido: 05/12/2024 10:30              │
+│  │   [👁️ Ver] [📥 Descargar] [🗑️ Eliminar]                    │
+│  │                                                             │
+│  ├── 🖼️ captura.png                                    450 KB   │
+│  │   ID: def456 | Subido: 04/12/2024 15:20                     │
+│  │   [👁️ Ver] [📥 Descargar] [🗑️ Eliminar]                    │
+│  │                                                             │
+│  └── 📝 codigo.js                                       12 KB   │
+│      ID: ghi789 | Subido: 02/12/2024 09:15                     │
+│      [👁️ Ver] [📥 Descargar] [🗑️ Eliminar]                    │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📁 exports/                                         3 archivos │
+│  └── 📄 conversacion_export.json                       85 KB   │
+│      ID: jkl012 | Creado: 01/12/2024 18:00                     │
+│      [👁️ Ver] [📥 Descargar] [🗑️ Eliminar]                    │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📁 temp/                                            5 archivos │
+│  └── ⚠️ 5 archivos temporales (auto-limpieza en 18h)           │
+│      [🧹 Limpiar ahora]                                        │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Uso: 2.5 MB / ∞                                            │
+│     uploads: 1.7 MB (12) | exports: 85 KB (3) | temp: 700 KB   │
+│                                                                 │
+│  [📤 Subir]           [🧹 Limpiar temp]        [🗑️ Eliminar sel.]│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por archivo:**
+- 👁️ Ver → Preview (imágenes) o abrir en nueva pestaña
+- 📥 Descargar → GET /storage/:projectId/download/:id
+- 🗑️ Eliminar → Confirmar y DELETE
+
+**Acciones globales:**
+- 📤 Subir → Abre modal subir
+- 🧹 Limpiar temp → POST /storage/:projectId/cleanup
+- 🗑️ Eliminar seleccionados → Borrar múltiples archivos
+
+#### Integración con project-manager
+
+El storage-manager reacciona automáticamente a eventos de proyecto:
+
+```
+project-manager                        storage-manager
+      │                                      │
+      │  project.created                     │
+      │  {project_id}                        │
+      │ ────────────────────────────────────►│
+      │                                      │ Crea:
+      │                                      │ data/storage/{project_id}/
+      │                                      │   ├── uploads/
+      │  storage.created                     │   ├── exports/
+      │  {project_id, directories}           │   ├── temp/
+      │ ◄────────────────────────────────────│   └── files/
+      │                                      │
+      │                                      │
+      │  project.deleted                     │
+      │  {project_id}                        │
+      │ ────────────────────────────────────►│
+      │                                      │ Elimina carpeta
+      │  storage.deleted                     │ y registry
+      │  {project_id, files_deleted,         │
+      │   bytes_freed}                       │
+      │ ◄────────────────────────────────────│
+```
+
+#### Integración con conversation-manager
+
+Los archivos adjuntos se referencian en los mensajes:
+
+```javascript
+// Mensaje con attachment
+{
+  id: "msg_xyz",
+  conversation_id: "conv_abc",
+  role: "user",
+  content: "¿Puedes analizar este documento?",
+  attachments: [
+    {
+      type: "file",
+      file_id: "abc123-uuid",        // Referencia al storage
+      name: "documento.pdf",
+      size: 1048576,
+      mime_type: "application/pdf"
+    }
+  ],
+  timestamp: "2024-12-05T10:00:00Z"
+}
+```
+
+#### Configuración
+
+```javascript
+{
+  basePath: "data/storage",
+  directories: {
+    uploads: "uploads",
+    exports: "exports",
+    temp: "temp",
+    files: "files"
+  },
+  maxFileSize: 104857600,  // 100MB
+  allowedMimeTypes: [
+    "image/*",
+    "application/pdf",
+    "text/*",
+    "application/json"
+  ],
+  tempCleanupAfterHours: 24
+}
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.6.0*
+*Versión: 1.7.0*

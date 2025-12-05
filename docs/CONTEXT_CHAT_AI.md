@@ -1950,5 +1950,273 @@ data/
 
 ---
 
+## Especificación de Botones - toolbar_chat.bottom
+
+> Botones FIJOS para funcionalidades auxiliares del chat.
+
+---
+
+### Botón 🔧 Tools (tool-orchestrator)
+
+**Módulo**: `tool-orchestrator`
+**Versión**: 2.0.0
+**Responsabilidad**: Orquestar tool calls entre AI y proveedores de herramientas.
+**Ubicación**: `toolbar_chat.bottom`
+
+#### Qué es Tool Calling
+
+Cuando el LLM necesita ejecutar una acción (buscar info, ejecutar código, etc.):
+
+```
+Usuario: "¿Qué hora es en Tokyo?"
+         │
+         ▼
+   ai-gateway (LLM)
+         │
+         │  tool_call: {name: "get_time", args: {city: "Tokyo"}}
+         ▼
+   tool-orchestrator
+         │
+         ├─► Valida args con JSON Schema
+         ├─► Ejecuta handler con timeout
+         └─► Retorna resultado al LLM
+         │
+         ▼
+   ai-gateway (LLM continúa)
+         │
+         ▼
+   "Son las 3:45 AM en Tokyo"
+```
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/tools` | Listar tools registradas |
+| GET | `/tools/:name` | Obtener tool específica |
+| POST | `/tools/:name/call` | Ejecutar tool manualmente |
+| POST | `/tools/register` | Registrar tool (placeholder) |
+| DELETE | `/tools/:name` | Desregistrar tool |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Métricas |
+
+#### Eventos
+
+**Escucha:**
+| Evento | Acción |
+|--------|--------|
+| `tool.call.request` | Ejecuta tool y responde |
+| `tool.list.request` | Lista tools disponibles |
+| `tool.get.request` | Obtiene info de tool |
+
+**Publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `tool.registered` | Nueva tool registrada |
+| `tool.unregistered` | Tool eliminada |
+| `tool.call.success` | Ejecución exitosa |
+| `tool.call.failed` | Ejecución fallida (error/timeout) |
+| `tool.call.response` | Respuesta a request |
+
+#### Estructura de Tool
+
+```javascript
+{
+  full_name: "weather.get_current",
+  module_name: "weather",
+  tool_name: "get_current",
+  description: "Obtiene el clima actual de una ciudad",
+  schema: {
+    type: "object",
+    properties: {
+      city: { type: "string", description: "Nombre de la ciudad" },
+      units: { type: "string", enum: ["celsius", "fahrenheit"] }
+    },
+    required: ["city"]
+  },
+  handler: async (args) => { ... }  // Solo en runtime
+}
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Tools Activas (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 🔧 Tools Disponibles                    │
+├─────────────────────────────────────────┤
+│                                         │
+│  ✅ weather.get_current                 │
+│     Obtiene clima actual                │
+│                                         │
+│  ✅ calculator.evaluate                 │
+│     Evalúa expresiones matemáticas      │
+│                                         │
+│  ✅ web.search                          │
+│     Busca en internet                   │
+│                                         │
+│  ⚠️ code.execute (sin handler)          │
+│     Ejecuta código                      │
+│                                         │
+│  ─────────────────────────────────────  │
+│  Total: 4 tools | 3 activas             │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Lista de tools registradas
+- Estado: ✅ activa, ⚠️ sin handler
+- Descripción breve
+
+**Acciones:**
+- Tap en tool → Ver detalle/schema
+- Toggle para habilitar/deshabilitar en conversación
+
+##### 2 TAPS → Modal Test Tool (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 🔧 Probar Tool                                [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Tool: [weather.get_current ▼]                      │
+│                                                     │
+│  Descripción: Obtiene el clima actual de una ciudad│
+│                                                     │
+│  ─── Argumentos ───                                │
+│                                                     │
+│  city * (string)                                    │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Madrid                                      │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  units (string) - celsius | fahrenheit              │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ celsius                                     │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              ▶️ Ejecutar Tool               │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Resultado ───                                 │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ {                                           │   │
+│  │   "temperature": 18,                        │   │
+│  │   "condition": "sunny",                     │   │
+│  │   "humidity": 45                            │   │
+│  │ }                                           │   │
+│  │ ✅ 245ms                                    │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Funcionalidad:**
+- Seleccionar tool
+- Formulario dinámico basado en schema
+- Ejecutar y ver resultado
+- Medir tiempo de ejecución
+
+##### LONG-PRESS → Modal Gestión (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 🔧 Gestionar Tools                                        [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Filtros: [Todos ▼] [Módulo ▼]  [🔍 Buscar...]                 │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📦 weather                                                     │
+│  ├── 🔧 get_current                              ✅ activa      │
+│  │   Obtiene clima actual                                      │
+│  │   Calls: 45 | Avg: 180ms | Errors: 2                       │
+│  │   [📋 Schema] [▶️ Test] [📊 Stats]                          │
+│  │                                                             │
+│  └── 🔧 get_forecast                             ✅ activa      │
+│      Pronóstico de 5 días                                      │
+│      Calls: 12 | Avg: 320ms | Errors: 0                       │
+│      [📋 Schema] [▶️ Test] [📊 Stats]                          │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📦 calculator                                                  │
+│  └── 🔧 evaluate                                 ✅ activa      │
+│      Evalúa expresiones matemáticas                            │
+│      Calls: 120 | Avg: 5ms | Errors: 8                        │
+│      [📋 Schema] [▶️ Test] [📊 Stats]                          │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📦 code                                                        │
+│  └── 🔧 execute                                  ⚠️ sin handler │
+│      Ejecuta código en sandbox                                 │
+│      [📋 Schema] [🗑️ Eliminar]                                 │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Total: 4 tools | Calls hoy: 177 | Errors: 10 (5.6%)        │
+│                                                                 │
+│  [📊 Dashboard]                              [🔄 Recargar]      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por tool:**
+- 📋 Schema → Ver JSON Schema completo
+- ▶️ Test → Abre modal de prueba
+- 📊 Stats → Métricas de uso
+- 🗑️ Eliminar → Solo tools sin handler
+
+**Acciones globales:**
+- 📊 Dashboard → Métricas generales
+- 🔄 Recargar → Re-descubrir tools
+
+#### Flujo de Tool Call
+
+```
+ai-gateway
+    │
+    │  tool.call.request
+    │  {tool_name, args, request_id}
+    │ ────────────────────────────────►  tool-orchestrator
+    │                                           │
+    │                                    1. Buscar tool
+    │                                    2. Validar args (AJV)
+    │                                    3. Ejecutar con timeout
+    │                                           │
+    │  tool.call.response                       │
+    │  {success, result, duration}              │
+    │ ◄────────────────────────────────────────┘
+    │
+    ▼
+  LLM continúa con resultado
+```
+
+#### Registro Programático
+
+```javascript
+// Desde otro módulo
+toolOrchestrator.registerTool(
+  'mymodule',           // moduleName
+  'my_action',          // toolName
+  'Ejecuta mi acción',  // description
+  {                     // JSON Schema
+    type: 'object',
+    properties: {
+      param1: { type: 'string' }
+    },
+    required: ['param1']
+  },
+  async (args) => {     // handler
+    return { result: 'ok' };
+  }
+);
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.5.0*
+*Versión: 1.6.0*

@@ -2,6 +2,12 @@
  * Módulo Menu Generator
  * Genera menús desde cartas físicas usando IA - Enfoque generativo
  * Salida compatible con sistema POS: productos, categorias, ingredientes, variaciones
+ *
+ * Flujo de procesamiento:
+ * 1. Recibe imagen/PDF de carta de restaurante
+ * 2. Extrae texto usando OCR (Tesseract.js para imágenes, pdf-parse para PDFs)
+ * 3. Envía texto a DeepSeek para estructurar en JSON
+ * 4. Enriquece resultado con emojis y valida estructura POS
  */
 
 const { v4: uuidv4 } = require('uuid');
@@ -14,6 +20,7 @@ const {
   validateMenuStructure,
   enrichMenu
 } = require('./prompts/menu-extraction');
+const OCRService = require('./services/ocr-service');
 
 class MenuGeneratorModule {
   constructor() {
@@ -45,6 +52,11 @@ class MenuGeneratorModule {
     this.metrics = null;
     this.eventBus = null;
     this.aiGateway = null;
+
+    // ==========================================
+    // Servicios internos
+    // ==========================================
+    this.ocrService = null;
   }
 
   /**
@@ -118,6 +130,10 @@ class MenuGeneratorModule {
 
     this.logger.info('modulo.loading', { module: this.name });
 
+    // Inicializar servicio OCR
+    this.ocrService = new OCRService(this.logger);
+    this.logger.info('menu-generator.ocr_service_created');
+
     // Suscribirse a eventos
     await this.subscribeToEvents();
 
@@ -126,6 +142,11 @@ class MenuGeneratorModule {
 
   async onUnload() {
     this.logger.info('modulo.unloading', { module: this.name });
+
+    // Limpiar servicio OCR
+    if (this.ocrService) {
+      await this.ocrService.terminate();
+    }
   }
 
   // ==========================================
@@ -1938,62 +1959,120 @@ class MenuGeneratorModule {
   async publishAIRequest(request_id, file_base64, file_name, file_type, correlation_id) {
     // Detectar tipo de archivo para determinar media type
     const mediaType = this.getMediaType(file_name, file_type);
-    const isImage = mediaType.startsWith('image/');
 
-    // Construir mensajes para DeepSeek VL con visión
-    const messages = [
-      {
-        role: 'system',
-        content: MENU_EXTRACTION_SYSTEM_PROMPT
-      },
-      {
-        role: 'user',
-        content: `Analiza esta carta/menú de restaurante y extrae toda la información en formato JSON estructurado.
-
-IMPORTANTE:
-1. Detecta TODOS los productos visibles con sus precios
-2. Infiere ingredientes cuando no estén explícitos
-3. Calcula alérgenos basándote en ingredientes
-4. Sugiere extras lógicos para cada producto
-5. Agrupa en categorías coherentes
-6. Asigna emojis apropiados a categorías e ingredientes
-
-Archivo: ${file_name}
-
-Responde SOLO con el JSON válido dentro de \`\`\`json ... \`\`\``,
-        // Incluir imagen en base64 si es imagen
-        ...(isImage && {
-          image_base64: file_base64,
-          image_type: mediaType
-        })
-      }
-    ];
-
-    await this.eventBus.publish('ai.request', {
+    this.logger.info('ai.request.processing', {
       request_id,
-      messages,
-      provider: 'deepseek',
-      model: 'deepseek-chat',
-      temperature: 0.3,
-      max_tokens: 8000,
-      metadata: {
-        request_id,
-        prompt_id: 'menu_parser_v1',
-        source: 'menu-generator',
-        file_name,
-        file_type: mediaType
-      }
-    }, {
-      correlationId: correlation_id
-    });
-
-    this.logger.info('ai.request.published', {
-      request_id,
-      is_image: isImage,
       media_type: mediaType,
       file_name,
       correlation_id
     });
+
+    try {
+      // ==========================================
+      // PASO 1: Extraer texto usando OCR
+      // ==========================================
+      const ocrResult = await this.ocrService.extractText(file_base64, file_name, mediaType);
+
+      if (!ocrResult.text || ocrResult.text.length < 10) {
+        throw new Error('No se pudo extraer texto suficiente del archivo. Asegúrate de que la imagen sea legible.');
+      }
+
+      // Formatear el texto extraído para el LLM
+      const extractedContent = this.ocrService.formatForLLM(ocrResult, file_name);
+
+      this.logger.info('ocr.completed', {
+        request_id,
+        text_length: ocrResult.text.length,
+        confidence: ocrResult.confidence,
+        pages: ocrResult.pages,
+        correlation_id
+      });
+
+      // ==========================================
+      // PASO 2: Enviar texto a DeepSeek para estructurar
+      // ==========================================
+      const messages = [
+        {
+          role: 'system',
+          content: MENU_EXTRACTION_SYSTEM_PROMPT
+        },
+        {
+          role: 'user',
+          content: `Analiza el siguiente texto extraído de una carta/menú de restaurante y genera un JSON estructurado.
+
+${extractedContent}
+
+INSTRUCCIONES:
+1. Detecta TODOS los productos con sus precios (busca patrones como "9.50", "12€", etc.)
+2. Infiere ingredientes cuando no estén explícitos basándote en el nombre del plato
+3. Calcula alérgenos basándote en los ingredientes inferidos
+4. Sugiere extras lógicos para cada producto
+5. Agrupa en categorías coherentes (Entrantes, Principales, Postres, Bebidas, etc.)
+6. Asigna emojis apropiados a categorías e ingredientes
+
+IMPORTANTE: Responde ÚNICAMENTE con el JSON válido dentro de \`\`\`json ... \`\`\``
+        }
+      ];
+
+      await this.eventBus.publish('ai.request', {
+        request_id,
+        messages,
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        temperature: 0.3,
+        max_tokens: 8000,
+        metadata: {
+          request_id,
+          prompt_id: 'menu_parser_v2_ocr',
+          source: 'menu-generator',
+          file_name,
+          file_type: mediaType,
+          ocr_confidence: ocrResult.confidence,
+          ocr_text_length: ocrResult.text.length
+        }
+      }, {
+        correlationId: correlation_id
+      });
+
+      this.logger.info('ai.request.published', {
+        request_id,
+        media_type: mediaType,
+        file_name,
+        ocr_confidence: ocrResult.confidence,
+        text_length: ocrResult.text.length,
+        correlation_id
+      });
+
+    } catch (error) {
+      this.logger.error('ai.request.ocr_failed', {
+        request_id,
+        error: error.message,
+        file_name,
+        correlation_id
+      });
+
+      // Publicar evento de error
+      await this.publishMenuError(
+        this.pendingRequests.get(request_id),
+        'ocr_extraction_failed',
+        error.message,
+        correlation_id
+      );
+
+      // Limpiar request pendiente
+      const menu_id = this.pendingRequests.get(request_id);
+      if (menu_id) {
+        const menu = this.menus.get(menu_id);
+        if (menu) {
+          menu.estado = 'error';
+          menu.error = `Error OCR: ${error.message}`;
+          this.menus.set(menu_id, menu);
+        }
+        this.pendingRequests.delete(request_id);
+      }
+
+      throw error;
+    }
   }
 
   /**

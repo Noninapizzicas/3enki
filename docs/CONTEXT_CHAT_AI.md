@@ -1069,5 +1069,215 @@ toolbar_top:
 
 ---
 
+## Especificación de Botones - toolbar_chat
+
+> Documentación exhaustiva de cada botón con APIs, eventos y paneles de interacción.
+
+---
+
+### Botón 🔑 Credencial (credential-manager)
+
+**Módulo**: `credential-manager`
+**Versión**: 2.0.0
+**Responsabilidad**: Gestión multi-nivel de API keys con resolución en cascada.
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/credentials` | Guardar credencial (provider, level, identifier, api_key) |
+| GET | `/credentials/resolve?provider=X` | Resolver credencial por cascada |
+| GET | `/credentials` | Listar credenciales (masked) |
+| PUT | `/credentials/:key` | Actualizar api_key |
+| DELETE | `/credentials/:key` | Eliminar credencial |
+| GET | `/credentials/levels` | Niveles disponibles con prioridad |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Métricas del módulo |
+
+#### Eventos
+
+**Escucha:**
+| Evento | Acción |
+|--------|--------|
+| `credential.resolve.request` | Resuelve credencial y responde |
+
+**Publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `credential.saved` | Nueva credencial guardada |
+| `credential.updated` | Credencial actualizada |
+| `credential.deleted` | Credencial eliminada |
+| `credential.resolved` | Resolución exitosa |
+| `credential.resolve.failed` | No se encontró credencial |
+| `credential.resolve.response` | Respuesta a request |
+
+#### Niveles de Prioridad
+
+```
+Prioridad    Nivel      Requiere ID    Descripción
+─────────────────────────────────────────────────────
+    1        CUSTOM        Sí          Específico personalizado
+    2        CLIENT        Sí          Por cliente
+    3        PROJECT       Sí          Por proyecto
+    4        GLOBAL        No          Fallback global
+```
+
+**Formato de Key**: `{PROVIDER}_API_KEY_{LEVEL}[_{IDENTIFIER}]`
+```
+OPENAI_API_KEY_GLOBAL
+ANTHROPIC_API_KEY_PROJECT_proj123
+DEEPSEEK_API_KEY_CLIENT_client456
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Selector (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 🔑 Credenciales Activas                 │
+├─────────────────────────────────────────┤
+│                                         │
+│  Proveedor      Nivel      Estado       │
+│  ─────────────────────────────────────  │
+│  ● Anthropic    PROJECT    ✅ Activa    │
+│  ○ OpenAI       GLOBAL     ✅ Activa    │
+│  ○ DeepSeek     ---        ⚠️ Sin key   │
+│  ○ Ollama       LOCAL      ✅ Activa    │
+│                                         │
+│  ─────────────────────────────────────  │
+│  Resolución: CUSTOM→CLIENT→PROJECT→GLOBAL│
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Lista de proveedores conocidos
+- Nivel desde el que se resuelve cada uno
+- Estado: ✅ Activa, ⚠️ Sin key, ❌ Error
+- Indicador visual del nivel activo
+
+**Acciones:**
+- Tap en proveedor → Ver detalles/preview de la key
+- Cambiar nivel activo (si hay múltiples)
+
+##### 2 TAPS → Modal Crear (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 🔑 Nueva Credencial                           [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Proveedor *                                        │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ▼ Seleccionar proveedor...                  │   │
+│  │   ○ Anthropic                               │   │
+│  │   ○ OpenAI                                  │   │
+│  │   ○ DeepSeek                                │   │
+│  │   ○ Ollama                                  │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Nivel *                                            │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ○ GLOBAL    (fallback para todo)            │   │
+│  │ ○ PROJECT   (solo este proyecto)            │   │
+│  │ ○ CLIENT    (solo este cliente)             │   │
+│  │ ○ CUSTOM    (personalizado)                 │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Identificador (si nivel ≠ GLOBAL)                  │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ proj_abc123                                 │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  API Key *                                          │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ sk-ant-api03-...                        👁️  │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              💾 Guardar Credencial          │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ⚠️ La API key se guarda en .env (no en DB)        │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Validaciones:**
+- Proveedor obligatorio
+- Nivel obligatorio
+- Identificador obligatorio si nivel ≠ GLOBAL
+- API Key obligatoria y no vacía
+
+**Evento al guardar:** `credential.saved`
+
+##### LONG-PRESS → Modal Gestión (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 🔑 Gestionar Credenciales                                 [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Filtros:  [Todos ▼]  [Anthropic ▼]  [🔍 Buscar...]            │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  GLOBAL                                                         │
+│  ├── OPENAI_API_KEY_GLOBAL                                      │
+│  │   sk-...************abcd    ✅    [✏️] [🗑️] [🧪]            │
+│  ├── ANTHROPIC_API_KEY_GLOBAL                                   │
+│  │   sk-ant-...********1234    ✅    [✏️] [🗑️] [🧪]            │
+│  └── DEEPSEEK_API_KEY_GLOBAL                                    │
+│      sk-...************5678    ✅    [✏️] [🗑️] [🧪]            │
+│                                                                 │
+│  PROJECT                                                        │
+│  ├── ANTHROPIC_API_KEY_PROJECT_proj123                          │
+│  │   sk-ant-...********wxyz    ✅    [✏️] [🗑️] [🧪]            │
+│  └── OPENAI_API_KEY_PROJECT_proj456                             │
+│      sk-...************9999    ⚠️    [✏️] [🗑️] [🧪]            │
+│                                                                 │
+│  CLIENT                                                         │
+│  └── DEEPSEEK_API_KEY_CLIENT_client789                          │
+│      sk-...************0000    ✅    [✏️] [🗑️] [🧪]            │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Total: 6 credenciales | GLOBAL: 3 | PROJECT: 2 | CLIENT: 1 │
+│                                                                 │
+│  [+ Nueva Credencial]                      [🔄 Recargar .env]   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por credencial:**
+- ✏️ Editar → Actualizar API key (PUT /credentials/:key)
+- 🗑️ Eliminar → Confirmar y borrar (DELETE /credentials/:key)
+- 🧪 Test → Probar conectividad (POST /providers/test vía ai-gateway)
+
+**Acciones globales:**
+- + Nueva Credencial → Abre modal crear
+- 🔄 Recargar .env → Re-lee archivo de credenciales
+
+#### Integración con ai-gateway
+
+El `credential-manager` se integra con `ai-gateway` así:
+
+```
+ai-gateway                          credential-manager
+    │                                      │
+    │  credential.resolve.request          │
+    │  {provider, project_id, client_id}   │
+    │ ────────────────────────────────────►│
+    │                                      │
+    │                                      │ Cascada:
+    │                                      │ CUSTOM→CLIENT→PROJECT→GLOBAL
+    │                                      │
+    │  credential.resolve.response         │
+    │  {success, api_key, resolved_from}   │
+    │ ◄────────────────────────────────────│
+    │                                      │
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.1.0*
+*Versión: 1.2.0*

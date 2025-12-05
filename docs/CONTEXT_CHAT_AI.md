@@ -1279,5 +1279,210 @@ ai-gateway                          credential-manager
 
 ---
 
+### Botón 📝 Prompt (prompt-manager)
+
+**Módulo**: `prompt-manager`
+**Responsabilidad**: Gestión de prompts con versionado, templates y analytics.
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/prompts` | Crear prompt (name, content, variables, tags) |
+| GET | `/prompts` | Listar prompts (?tag=X&search=Y) |
+| GET | `/prompts/:id` | Obtener prompt completo |
+| PUT | `/prompts/:id` | Actualizar (auto-versiona si content cambia) |
+| DELETE | `/prompts/:id` | Eliminar prompt |
+| GET | `/prompts/:id/versions` | Historial de versiones |
+| POST | `/prompts/:id/render` | Renderizar template con variables |
+| GET | `/analytics` | Analytics de uso (?prompt_id=X&days=N) |
+| POST | `/prompts/compare` | Comparar prompts (A/B testing) |
+
+#### Eventos
+
+**Escucha (via hook):**
+| Evento | Acción |
+|--------|--------|
+| `ai.*.completed` | Registra analytics (tokens, latency, cost) |
+
+**No publica eventos directamente** - opera vía HTTP.
+
+#### Características
+
+- **Versionado automático**: Cada cambio en `content` crea nueva versión
+- **Templates**: Variables con sintaxis `{{variable}}`
+- **Max versiones**: Configurable (default 10)
+- **Analytics**: Tokens, latencia, costos por prompt
+- **A/B Testing**: Comparar rendimiento entre prompts
+
+#### Estructura de Prompt
+
+```javascript
+{
+  id: "abc123",
+  name: "chat-assistant",
+  title: "Asistente de Chat",
+  description: "Prompt para conversación general",
+  content: "Eres un asistente {{tone}}. Responde en {{language}}.",
+  variables: ["tone", "language"],
+  tags: ["chat", "general"],
+  versions: [
+    { version: "1.0.0", content: "...", created_at: "..." }
+  ],
+  current_version: "1.0.0",
+  created_at: "...",
+  updated_at: "..."
+}
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Selector Rápido (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 📝 Prompts Recientes                    │
+├─────────────────────────────────────────┤
+│                                         │
+│  ● Chat General           v1.2.0   ⭐   │
+│  ○ Asistente Técnico      v2.0.0        │
+│  ○ Traductor              v1.0.0        │
+│  ○ Código Review          v3.1.0        │
+│                                         │
+│  ─────────────────────────────────────  │
+│  Tags: [chat] [código] [traducción]     │
+│                                         │
+│  [🔍 Buscar...]                         │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Prompts ordenados por uso reciente
+- Versión actual
+- ⭐ = Prompt activo en conversación actual
+- Filtro rápido por tags
+
+**Acciones:**
+- Tap en prompt → Lo aplica a la conversación
+- Tap en tag → Filtra por ese tag
+
+##### 2 TAPS → Modal Crear (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 📝 Nuevo Prompt                               [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Nombre *                                           │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ mi-prompt-personalizado                     │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Título                                             │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Mi Prompt Personalizado                     │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Contenido *                                        │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Eres un {{role}} experto en {{domain}}.     │   │
+│  │ Tu objetivo es {{objective}}.               │   │
+│  │                                             │   │
+│  │ Responde siempre en {{language}}.           │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Variables detectadas: role, domain, objective,    │
+│                        language                     │
+│                                                     │
+│  Tags (separados por coma)                         │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ custom, asistente                           │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              💾 Crear Prompt                │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Validaciones:**
+- Nombre único obligatorio
+- Contenido obligatorio
+- Variables auto-detectadas de `{{var}}`
+
+##### LONG-PRESS → Modal Gestión (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 📝 Gestionar Prompts                                      [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Filtros: [Todos ▼] [🏷️ chat ▼]  [🔍 Buscar...]                │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📝 Chat General                                    v1.2.0      │
+│     "Eres un asistente amable..."                              │
+│     Tags: chat, general                                         │
+│     Usos: 245 | Tokens avg: 850 | ⭐ 4.5                        │
+│     [✏️ Editar] [📋 Duplicar] [📊 Stats] [🗑️]                  │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📝 Asistente Técnico                               v2.0.0      │
+│     "Eres un experto en desarrollo..."                         │
+│     Tags: código, técnico                                       │
+│     Usos: 189 | Tokens avg: 1200 | ⭐ 4.8                       │
+│     [✏️ Editar] [📋 Duplicar] [📊 Stats] [🗑️]                  │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📝 Traductor                                       v1.0.0      │
+│     "Traduce el siguiente texto a {{lang}}..."                 │
+│     Tags: traducción, idiomas                                   │
+│     Usos: 56 | Tokens avg: 400 | ⭐ 4.2                         │
+│     [✏️ Editar] [📋 Duplicar] [📊 Stats] [🗑️]                  │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Total: 12 prompts | Usos hoy: 45 | Tokens: 38K             │
+│                                                                 │
+│  [+ Nuevo Prompt]              [📊 Analytics] [🔬 A/B Test]    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por prompt:**
+- ✏️ Editar → Abre editor (nuevo version si cambia content)
+- 📋 Duplicar → Crea copia con nombre-copy
+- 📊 Stats → Ver analytics detallado
+- 🗑️ Eliminar → Confirmar y borrar
+
+**Acciones globales:**
+- + Nuevo Prompt → Abre modal crear
+- 📊 Analytics → Dashboard de analytics
+- 🔬 A/B Test → Comparar 2 prompts
+
+#### Renderizado de Templates
+
+```javascript
+// POST /prompts/:id/render
+{
+  variables: {
+    role: "programador",
+    domain: "Python",
+    objective: "ayudar con código",
+    language: "español"
+  }
+}
+
+// Resultado:
+{
+  rendered: "Eres un programador experto en Python. Tu objetivo es ayudar con código. Responde siempre en español."
+}
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.2.0*
+*Versión: 1.3.0*

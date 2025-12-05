@@ -1697,5 +1697,258 @@ Usuario escribe mensaje
 
 ---
 
+## Especificación de Botones - toolbar_top
+
+> Botones CONFIGURABLES por módulo. El botón Proyecto es esencial para módulos con chat.
+
+---
+
+### Botón 📁 Proyecto (project-manager)
+
+**Módulo**: `project-manager`
+**Versión**: 1.0.0
+**Responsabilidad**: Ciclo de vida de proyectos con aislamiento de DB y storage.
+**Ubicación**: `toolbar_top` (primer botón recomendado)
+
+#### Importancia
+
+El proyecto es el **contexto raíz** de toda la aplicación:
+- Cada proyecto tiene su propia **base de datos** (database-manager)
+- Cada proyecto tiene su propio **storage** (storage-manager)
+- Las conversaciones pertenecen a un proyecto
+- Las credenciales pueden ser por proyecto (nivel PROJECT)
+
+```
+📁 Proyecto
+     │
+     ├── 🗄️ database-manager (SQLite aislada)
+     ├── 📦 storage-manager (archivos aislados)
+     ├── 💬 conversation-manager (filtrado por proyecto)
+     └── 🔑 credential-manager (nivel PROJECT)
+```
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/projects` | Crear proyecto (name, description, metadata) |
+| GET | `/projects` | Listar proyectos + active_project_id |
+| GET | `/projects/:id` | Obtener proyecto |
+| PUT | `/projects/:id` | Actualizar (name, description, metadata) |
+| DELETE | `/projects/:id` | Eliminar (no puede ser el activo) |
+| POST | `/projects/:id/activate` | Activar proyecto |
+| GET | `/projects/active` | Obtener proyecto activo |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Métricas |
+
+#### Eventos
+
+**Escucha:**
+| Evento | Acción |
+|--------|--------|
+| `db.query.response` | Respuesta de database-manager |
+| `project.get.request` | Query de proyecto |
+| `project.list.request` | Query lista |
+| `project.active.request` | Query proyecto activo |
+
+**Publica:**
+| Evento | Cuándo | Reacción |
+|--------|--------|----------|
+| `project.created` | Nuevo proyecto | → storage-manager crea carpeta |
+| `project.updated` | Metadata actualizada | |
+| `project.deleted` | Proyecto eliminado | → storage-manager elimina carpeta |
+| `project.activated` | Proyecto activado | → UI actualiza contexto |
+| `project.deactivated` | Proyecto desactivado | |
+
+#### Cadena de Eventos al Crear Proyecto
+
+```
+POST /projects {name: "Mi Proyecto"}
+         │
+         ▼
+   project-manager
+         │
+         ├─► db.query.request (INSERT INTO projects)
+         │         │
+         │         ▼
+         │   database-manager
+         │         │
+         │         ▼
+         │   db.query.response
+         │
+         ├─► project.created {project_id, name}
+         │         │
+         │         ├──────────────────────────────┐
+         │         ▼                              ▼
+         │   storage-manager                database-manager
+         │   (crea carpeta)                (crea DB proyecto)
+         │         │                              │
+         │         ▼                              ▼
+         │   storage.created              db.created
+         │
+         └─► Respuesta HTTP: {success, project}
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Selector de Proyecto (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 📁 Proyectos                            │
+├─────────────────────────────────────────┤
+│                                         │
+│  ● Mi Asistente IA              activo  │
+│    5 conversaciones | 2.5 MB           │
+│                                         │
+│  ○ Proyecto Cliente ABC                 │
+│    12 conversaciones | 15 MB           │
+│                                         │
+│  ○ Experimentos LLM                     │
+│    3 conversaciones | 500 KB           │
+│                                         │
+│  ─────────────────────────────────────  │
+│  [+ Nuevo proyecto]                     │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Proyectos ordenados por updated_at
+- ● = Proyecto activo
+- Conteo de conversaciones
+- Uso de storage
+
+**Acciones:**
+- Tap en proyecto → Lo activa (project.activated)
+- + Nuevo proyecto → Modal crear
+
+##### 2 TAPS → Modal Crear Proyecto (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 📁 Nuevo Proyecto                             [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Nombre *                                           │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Mi Nuevo Proyecto                           │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Descripción                                        │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Proyecto para experimentos con Claude...    │   │
+│  │                                             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Configuración por defecto (opcional) ───      │
+│                                                     │
+│  Proveedor: [Auto ▼]  Modelo: [Auto ▼]             │
+│                                                     │
+│  □ Activar inmediatamente                          │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              📁 Crear Proyecto              │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ⚠️ Se creará DB y storage aislados               │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Validaciones:**
+- Nombre obligatorio y único
+- Descripción opcional
+
+**Eventos al crear:**
+1. `project.created` → storage-manager + database-manager reaccionan
+2. Si "Activar inmediatamente": `project.activated`
+
+##### LONG-PRESS → Modal Gestión (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 📁 Gestionar Proyectos                                    [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Ordenar: [Recientes ▼]  [🔍 Buscar...]                        │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📁 Mi Asistente IA                              ⭐ ACTIVO     │
+│     Creado: 01/11/2024 | Actualizado: hace 2h                  │
+│     💬 5 conversaciones | 📦 2.5 MB | 💰 $1.50                 │
+│     [✏️ Editar] [📊 Stats] [📤 Exportar]                       │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📁 Proyecto Cliente ABC                                        │
+│     Creado: 15/10/2024 | Actualizado: hace 1d                  │
+│     💬 12 conversaciones | 📦 15 MB | 💰 $5.20                 │
+│     [▶️ Activar] [✏️ Editar] [📊 Stats] [📤 Exportar] [🗑️]    │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📁 Experimentos LLM                                            │
+│     Creado: 20/09/2024 | Actualizado: hace 1w                  │
+│     💬 3 conversaciones | 📦 500 KB | 💰 $0.30                 │
+│     [▶️ Activar] [✏️ Editar] [📊 Stats] [📤 Exportar] [🗑️]    │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Total: 3 proyectos | 20 conversaciones | 18 MB | $7.00     │
+│                                                                 │
+│  [+ Nuevo]                               [📥 Importar proyecto] │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por proyecto:**
+- ▶️ Activar → Activa el proyecto (project.activated)
+- ✏️ Editar → Cambiar nombre, descripción
+- 📊 Stats → Dashboard de uso del proyecto
+- 📤 Exportar → Exportar proyecto completo (DB + storage)
+- 🗑️ Eliminar → Solo si NO está activo (confirmar)
+
+**Nota:** El proyecto activo NO puede eliminarse directamente.
+
+**Acciones globales:**
+- + Nuevo → Modal crear
+- 📥 Importar proyecto → Cargar proyecto exportado
+
+#### Estructura de Proyecto
+
+```javascript
+{
+  id: "proj_abc123",
+  name: "Mi Asistente IA",
+  description: "Asistente para desarrollo",
+  created_at: "2024-11-01T10:00:00Z",
+  updated_at: "2024-12-05T14:30:00Z",
+  is_active: true,
+  metadata: {
+    default_provider: "anthropic",
+    default_model: "claude-3-5-sonnet",
+    tags: ["desarrollo", "IA"]
+  }
+}
+```
+
+#### Almacenamiento por Proyecto
+
+```
+data/
+├── projects/
+│   └── {project_id}/
+│       └── database.sqlite    ← database-manager
+│
+└── storage/
+    └── {project_id}/
+        ├── uploads/           ← storage-manager
+        ├── exports/
+        ├── temp/
+        └── files/
+```
+
+---
+
 *Última actualización: 2024-12-05*
-*Versión: 1.4.0*
+*Versión: 1.5.0*

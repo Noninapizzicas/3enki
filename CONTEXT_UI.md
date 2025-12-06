@@ -730,12 +730,10 @@ Todos los formularios usan el mismo patrón de campos + botones de acción.
 ```typescript
 interface ActionFormProps {
   fields: FormField[];
-  submitLabel?: string;      // default: "Guardar"
-  cancelLabel?: string;      // default: "Cancelar"
-  submitIcon?: string;       // Emoji opcional
+  actions?: FormAction[];    // Múltiples acciones
   loading?: boolean;
   disabled?: boolean;
-  showCancel?: boolean;      // default: true
+  // Legacy: submitLabel, cancelLabel, submitIcon, showCancel
 }
 
 interface FormField {
@@ -744,31 +742,38 @@ interface FormField {
   label: string;
   placeholder?: string;
   required?: boolean;
-  value?: string | number | boolean;  // Valor inicial
-  options?: { value: string; label: string }[];  // Para select
+  value?: string | number | boolean;
+  options?: { value: string; label: string }[];
 }
 
-// CSS Variables (padre las define):
-// --form-gap: espacio entre campos (default: 0.75rem)
-// --form-padding: padding interno (default: 0)
-// --form-label-size: tamaño label (default: 0.75rem)
-// --form-input-size: tamaño input (default: 0.875rem)
+interface FormAction {
+  label: string;
+  emit: string;              // Evento a emitir
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  icon?: string;
+  validate?: boolean;        // default: true para primary
+}
+
+// CSS Variables: --form-gap, --form-padding, --form-label-size, --form-input-size
 ```
 
-**Eventos:**
-- `submit` - Cuando se envía (devuelve `{ [name]: value }`)
-- `cancel` - Cuando se cancela
+**Eventos:** Dinámicos según `actions[].emit`
 
-**Uso:**
+**Uso simple:**
+```svelte
+<ActionForm fields={[...]} on:submit={save} on:cancel={close} />
+```
+
+**Uso con múltiples acciones:**
 ```svelte
 <ActionForm
-  fields={[
-    { name: 'name', type: 'text', label: 'Nombre', required: true },
-    { name: 'description', type: 'textarea', label: 'Descripción' }
+  fields={[...]}
+  actions={[
+    { label: 'Borrador', emit: 'draft', variant: 'ghost', validate: false },
+    { label: 'Publicar', emit: 'publish', variant: 'primary' }
   ]}
-  submitLabel="Crear"
-  on:submit={handleCreate}
-  on:cancel={closePanel}
+  on:draft={saveDraft}
+  on:publish={publish}
 />
 ```
 

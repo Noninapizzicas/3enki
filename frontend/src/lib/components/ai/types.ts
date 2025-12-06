@@ -170,12 +170,64 @@ export interface ChatMessage {
 // Conversación
 export interface Conversation {
   id: string;
+  project_id?: string;
   title?: string;
+  system_prompt?: string;
   status: 'active' | 'completed' | 'archived';
   created_at: string;
   updated_at?: string;
   messages_count: number;
+  ai_settings?: ConversationAISettings;
+  stats?: ConversationStats;
   metadata?: Record<string, unknown>;
+}
+
+// Configuración de IA por conversación
+export interface ConversationAISettings {
+  provider?: string;
+  model?: string;
+  temperature: number;
+  max_tokens: number;
+  context_window: number;
+}
+
+// Estadísticas de conversación
+export interface ConversationStats {
+  total_tokens: number;
+  total_cost: number;
+  avg_response_time?: number;
+}
+
+// Resumen de conversación para listas
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  project_id?: string;
+  project_name?: string;
+  messages_count: number;
+  model?: string;
+  total_tokens?: number;
+  total_cost?: number;
+  updated_at: string;
+  is_active?: boolean;
+}
+
+// Formulario para crear conversación
+export interface NewConversationForm {
+  project_id: string;
+  title: string;
+  system_prompt: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  context_window: number;
+}
+
+// Proyecto (referencia simplificada)
+export interface ProjectRef {
+  id: string;
+  name: string;
+  is_active?: boolean;
 }
 
 // Configuración del workspace

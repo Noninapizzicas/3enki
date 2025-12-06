@@ -16,7 +16,10 @@
     PromptTemplate,
     NewPromptForm,
     ChatMessage,
-    Conversation
+    Conversation,
+    ConversationSummary,
+    NewConversationForm,
+    ProjectRef
   } from './types';
   import {
     DEFAULT_MODELS,
@@ -113,6 +116,28 @@
   let promptFilterTag: string = 'ALL';
   let promptSearchQuery: string = '';
 
+  // Props - Conversaciones (Historial)
+  export let conversations: ConversationSummary[] = [];
+  export let activeConversationId: string = '';
+  export let projects: ProjectRef[] = [];
+  export let currentProjectId: string = '';
+
+  // Estado local para formulario de nueva conversación
+  let newConversationForm: NewConversationForm = {
+    project_id: '',
+    title: '',
+    system_prompt: '',
+    model: 'auto',
+    temperature: 0.7,
+    max_tokens: 2000,
+    context_window: 20
+  };
+
+  // Filtros para gestión de conversaciones
+  let conversationFilterProject: string = 'ALL';
+  let conversationSortBy: 'recent' | 'messages' | 'cost' = 'recent';
+  let conversationSearchQuery: string = '';
+
   // Props - Panel actual
   export let currentPanel: string = '';
 
@@ -155,6 +180,14 @@
     promptDelete: { promptId: string };
     promptStats: { promptId: string };
     promptFavorite: { promptId: string; favorite: boolean };
+    // Conversaciones (Historial)
+    conversationOpen: { conversationId: string };
+    conversationCreate: { form: NewConversationForm };
+    conversationEdit: { conversationId: string };
+    conversationExport: { conversationId: string; format: 'json' | 'markdown' };
+    conversationDelete: { conversationId: string };
+    conversationsCleanup: { olderThanDays: number };
+    conversationStats: void;
     // Panel
     panelChange: { panelId: string };
   }>();
@@ -231,6 +264,30 @@
   }), { uses: 0, tokens: 0 });
   $: detectedVariables = (newPromptForm.content.match(/\{\{(\w+)\}\}/g) || [])
     .map(v => v.replace(/[{}]/g, ''));
+
+  // Computed - Conversaciones
+  $: filteredConversations = conversations
+    .filter(c => {
+      if (conversationFilterProject !== 'ALL' && c.project_id !== conversationFilterProject) return false;
+      if (conversationSearchQuery) {
+        const query = conversationSearchQuery.toLowerCase();
+        return c.title.toLowerCase().includes(query);
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      switch (conversationSortBy) {
+        case 'messages': return b.messages_count - a.messages_count;
+        case 'cost': return (b.total_cost || 0) - (a.total_cost || 0);
+        default: return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+    });
+
+  $: conversationTotalStats = conversations.reduce((acc, c) => ({
+    count: acc.count + 1,
+    messages: acc.messages + c.messages_count,
+    cost: acc.cost + (c.total_cost || 0)
+  }), { count: 0, messages: 0, cost: 0 });
 
   $: enabledToolsCount = tools.filter(t => t.enabled).length;
   $: enabledPluginsCount = plugins.filter(p => p.enabled).length;
@@ -470,6 +527,70 @@
       promptTemplates = [...promptTemplates];
       dispatch('promptFavorite', { promptId, favorite: template.favorite || false });
     }
+  }
+
+  // Handlers - Conversaciones
+  function openConversation(conversationId: string) {
+    activeConversationId = conversationId;
+    dispatch('conversationOpen', { conversationId });
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function resetNewConversationForm() {
+    newConversationForm = {
+      project_id: currentProjectId || '',
+      title: '',
+      system_prompt: '',
+      model: 'auto',
+      temperature: 0.7,
+      max_tokens: 2000,
+      context_window: 20
+    };
+  }
+
+  function createConversation() {
+    if (!newConversationForm.project_id) return;
+    dispatch('conversationCreate', { form: { ...newConversationForm } });
+    resetNewConversationForm();
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function editConversation(conversationId: string) {
+    dispatch('conversationEdit', { conversationId });
+  }
+
+  function exportConversation(conversationId: string, format: 'json' | 'markdown') {
+    dispatch('conversationExport', { conversationId, format });
+  }
+
+  function deleteConversation(conversationId: string) {
+    if (confirm('¿Eliminar esta conversación?')) {
+      dispatch('conversationDelete', { conversationId });
+    }
+  }
+
+  function cleanupOldConversations() {
+    if (confirm('¿Eliminar conversaciones de más de 30 días?')) {
+      dispatch('conversationsCleanup', { olderThanDays: 30 });
+    }
+  }
+
+  function viewConversationStats() {
+    dispatch('conversationStats');
+  }
+
+  function formatRelativeTime(dateStr: string): string {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `hace ${diffMins}m`;
+    if (diffHours < 24) return `hace ${diffHours}h`;
+    if (diffDays < 7) return `hace ${diffDays}d`;
+    return date.toLocaleDateString();
   }
 
   function openAddCredential() {
@@ -1366,6 +1487,295 @@
       </button>
       <button class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-primary/20 transition-colors">
         🔬 A/B Test
+      </button>
+    </div>
+  </div>
+
+<!-- Panel: Conversaciones (1 TAP - 30%) -->
+{:else if currentPanel === 'conversaciones'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">💬</span>
+      <h3 class="font-medium">Conversaciones</h3>
+    </div>
+
+    <!-- Lista de conversaciones recientes -->
+    <div class="space-y-1">
+      {#each conversations.slice(0, 6) as conv (conv.id)}
+        <button
+          class="w-full text-left p-2 rounded-lg transition-colors {activeConversationId === conv.id ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+          on:click={() => openConversation(conv.id)}
+        >
+          <div class="flex items-center gap-2">
+            <span>{activeConversationId === conv.id ? '●' : '○'}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <p class="font-medium text-sm truncate">{conv.title}</p>
+                <span class="text-xs text-text-muted">{formatRelativeTime(conv.updated_at)}</span>
+              </div>
+              <div class="text-xs text-text-muted">
+                {conv.messages_count} msgs | {conv.model || 'Auto'} | {formatCost(conv.total_cost || 0)}
+              </div>
+            </div>
+          </div>
+        </button>
+      {/each}
+
+      {#if conversations.length === 0}
+        <p class="text-center text-text-muted py-4">No hay conversaciones</p>
+      {/if}
+    </div>
+
+    <!-- Filtro por proyecto -->
+    <div class="pt-2 border-t border-border">
+      <label class="text-xs text-text-muted mb-1 block">Proyecto:</label>
+      <select
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={conversationFilterProject}
+      >
+        <option value="ALL">Todos los proyectos</option>
+        {#each projects as project}
+          <option value={project.id}>{project.name}</option>
+        {/each}
+      </select>
+    </div>
+
+    <!-- Botón nueva conversación -->
+    <Button variant="primary" class="w-full" on:click={() => dispatch('panelChange', { panelId: 'conversacion-crear' })}>
+      + Nueva conversación
+    </Button>
+  </div>
+
+<!-- Panel: Conversación Crear (2 TAPS - 50%) -->
+{:else if currentPanel === 'conversacion-crear'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">💬</span>
+        <h3 class="font-medium">Nueva Conversación</h3>
+      </div>
+    </div>
+
+    <!-- Formulario -->
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Proyecto *</label>
+      <select
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={newConversationForm.project_id}
+      >
+        <option value="">Seleccionar proyecto...</option>
+        {#each projects as project}
+          <option value={project.id}>{project.name}</option>
+        {/each}
+      </select>
+    </div>
+
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Título</label>
+      <input
+        type="text"
+        placeholder="Nueva conversación"
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={newConversationForm.title}
+      />
+    </div>
+
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">System Prompt (opcional)</label>
+      <textarea
+        placeholder="Eres un asistente experto en..."
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none min-h-[80px] resize-y"
+        bind:value={newConversationForm.system_prompt}
+      ></textarea>
+    </div>
+
+    <!-- Configuración IA -->
+    <div class="pt-2 border-t border-border">
+      <h4 class="text-xs font-medium text-text-muted mb-3 uppercase">Configuración IA (opcional)</h4>
+
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <div>
+          <label class="text-xs text-text-muted mb-1 block">Modelo</label>
+          <select
+            class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+            bind:value={newConversationForm.model}
+          >
+            <option value="auto">Auto</option>
+            {#each availableModels as model}
+              <option value={model.id}>{model.name}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-text-muted mb-1 block">Temp</label>
+          <input
+            type="number"
+            min="0"
+            max="2"
+            step="0.1"
+            class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+            bind:value={newConversationForm.temperature}
+          />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs text-text-muted mb-1 block">Max Tokens</label>
+          <input
+            type="number"
+            min="100"
+            max="8192"
+            step="100"
+            class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+            bind:value={newConversationForm.max_tokens}
+          />
+        </div>
+        <div>
+          <label class="text-xs text-text-muted mb-1 block">Context Window</label>
+          <input
+            type="number"
+            min="1"
+            max="100"
+            class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+            bind:value={newConversationForm.context_window}
+          />
+          <p class="text-xs text-text-muted mt-1">mensajes</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botón crear -->
+    <Button
+      variant="primary"
+      class="w-full"
+      on:click={createConversation}
+      disabled={!newConversationForm.project_id}
+    >
+      💬 Crear Conversación
+    </Button>
+  </div>
+
+<!-- Panel: Conversaciones Gestionar (LONG-PRESS - 80%) -->
+{:else if currentPanel === 'conversaciones-gestionar'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">💬</span>
+        <h3 class="font-medium">Gestionar Conversaciones</h3>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="flex gap-2 flex-wrap">
+      <select
+        class="flex-1 min-w-[100px] p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={conversationFilterProject}
+      >
+        <option value="ALL">Todos los proyectos</option>
+        {#each projects as project}
+          <option value={project.id}>{project.name}</option>
+        {/each}
+      </select>
+      <select
+        class="p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={conversationSortBy}
+      >
+        <option value="recent">Recientes</option>
+        <option value="messages">Mensajes</option>
+        <option value="cost">Costo</option>
+      </select>
+      <input
+        type="text"
+        placeholder="🔍 Buscar..."
+        class="flex-1 min-w-[100px] p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={conversationSearchQuery}
+      />
+    </div>
+
+    <!-- Lista de conversaciones -->
+    <div class="space-y-2 max-h-[400px] overflow-y-auto">
+      {#each filteredConversations as conv (conv.id)}
+        <div class="p-3 bg-bg-hover rounded-lg border border-border">
+          <!-- Header -->
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-2">
+              <span>💬</span>
+              <span class="font-medium text-sm truncate">{conv.title}</span>
+            </div>
+            <span class="text-xs text-text-muted">{formatRelativeTime(conv.updated_at)}</span>
+          </div>
+
+          <!-- Info -->
+          <div class="text-xs text-text-muted mb-2">
+            {#if conv.project_name}Proyecto: {conv.project_name} | {/if}
+            {conv.messages_count} msgs
+          </div>
+          <div class="text-xs text-text-muted mb-2">
+            {conv.model || 'Auto'} | Tokens: {formatTokens(conv.total_tokens || 0)} | {formatCost(conv.total_cost || 0)}
+          </div>
+
+          <!-- Acciones -->
+          <div class="flex gap-1 flex-wrap">
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+              on:click={() => openConversation(conv.id)}
+            >
+              📖 Abrir
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+              on:click={() => editConversation(conv.id)}
+            >
+              ✏️ Editar
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+              on:click={() => exportConversation(conv.id, 'markdown')}
+            >
+              📤 Exportar
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-error/20 transition-colors"
+              on:click={() => deleteConversation(conv.id)}
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+      {/each}
+
+      {#if filteredConversations.length === 0}
+        <p class="text-center text-text-muted py-4">No hay conversaciones que coincidan</p>
+      {/if}
+    </div>
+
+    <!-- Stats totales -->
+    <div class="p-2 bg-bg-card rounded-lg border border-border text-sm">
+      📊 <strong>Total:</strong> {conversationTotalStats.count} conversaciones |
+      {conversationTotalStats.messages} msgs |
+      {formatCost(conversationTotalStats.cost)}
+    </div>
+
+    <!-- Acciones globales -->
+    <div class="flex gap-2 flex-wrap">
+      <Button variant="secondary" class="flex-1" on:click={() => dispatch('panelChange', { panelId: 'conversacion-crear' })}>
+        + Nueva
+      </Button>
+      <button
+        class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-error/20 transition-colors"
+        on:click={cleanupOldConversations}
+      >
+        🗑️ Limpiar antiguas
+      </button>
+      <button
+        class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-primary/20 transition-colors"
+        on:click={viewConversationStats}
+      >
+        📊 Stats
       </button>
     </div>
   </div>

@@ -7,7 +7,7 @@
    * FILOSOFÍA (CONTEXT_UI.md):
    * - Padre controla TODO vía CSS variables
    * - Campos dinámicos via props
-   * - Botones Cancelar/Submit estándar
+   * - Acciones flexibles (1 o múltiples botones)
    *
    * CSS VARIABLES (padre las define):
    * --form-gap: espacio entre campos (default: 0.75rem)
@@ -26,22 +26,44 @@
     value?: string | number | boolean;
   }
 
+  interface FormAction {
+    label: string;
+    emit: string;                    // Nombre del evento a emitir
+    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+    icon?: string;
+    validate?: boolean;              // Si debe validar antes de emitir (default: true para primary)
+    disabled?: boolean;
+  }
+
   export let fields: FormField[] = [];
+  export let actions: FormAction[] = [];  // Nueva prop para múltiples acciones
+
+  // Props legacy (retrocompatibilidad)
   export let submitLabel: string = 'Guardar';
   export let cancelLabel: string = 'Cancelar';
   export let submitIcon: string = '';
-  export let loading: boolean = false;
-  export let disabled: boolean = false;
   export let showCancel: boolean = true;
 
-  const dispatch = createEventDispatcher<{
-    submit: Record<string, unknown>;
-    cancel: void;
-  }>();
+  export let loading: boolean = false;
+  export let disabled: boolean = false;
+
+  const dispatch = createEventDispatcher();
 
   // Estado del formulario
   let formData: Record<string, unknown> = {};
   let errors: Record<string, string> = {};
+
+  // Construir acciones: si no se pasan, usar props legacy
+  $: computedActions = actions.length > 0 ? actions : buildLegacyActions();
+
+  function buildLegacyActions(): FormAction[] {
+    const result: FormAction[] = [];
+    if (showCancel) {
+      result.push({ label: cancelLabel, emit: 'cancel', variant: 'ghost', validate: false });
+    }
+    result.push({ label: submitLabel, emit: 'submit', variant: 'primary', icon: submitIcon, validate: true });
+    return result;
+  }
 
   // Inicializar valores
   $: {
@@ -66,16 +88,23 @@
     return valid;
   }
 
-  function handleSubmit(e: Event) {
-    e.preventDefault();
-    if (disabled || loading) return;
-    if (validate()) {
-      dispatch('submit', { ...formData });
-    }
+  function handleAction(action: FormAction) {
+    if (disabled || loading || action.disabled) return;
+
+    const shouldValidate = action.validate ?? (action.variant === 'primary');
+
+    if (shouldValidate && !validate()) return;
+
+    dispatch(action.emit, { ...formData });
   }
 
-  function handleCancel() {
-    dispatch('cancel');
+  function handleSubmit(e: Event) {
+    e.preventDefault();
+    // Buscar la acción primary y ejecutarla
+    const primaryAction = computedActions.find(a => a.variant === 'primary');
+    if (primaryAction) {
+      handleAction(primaryAction);
+    }
   }
 </script>
 
@@ -144,28 +173,21 @@
   </div>
 
   <div class="action-form__actions">
-    {#if showCancel}
+    {#each computedActions as action}
       <button
-        type="button"
-        class="action-form__btn action-form__btn--cancel"
-        on:click={handleCancel}
-        disabled={loading}
+        type={action.variant === 'primary' ? 'submit' : 'button'}
+        class="action-form__btn action-form__btn--{action.variant || 'secondary'}"
+        on:click={() => action.variant !== 'primary' && handleAction(action)}
+        disabled={disabled || loading || action.disabled}
       >
-        {cancelLabel}
+        {#if loading && action.variant === 'primary'}
+          <span class="action-form__spinner"></span>
+        {:else if action.icon}
+          <span>{action.icon}</span>
+        {/if}
+        {action.label}
       </button>
-    {/if}
-    <button
-      type="submit"
-      class="action-form__btn action-form__btn--submit"
-      disabled={disabled || loading}
-    >
-      {#if loading}
-        <span class="action-form__spinner"></span>
-      {:else if submitIcon}
-        <span>{submitIcon}</span>
-      {/if}
-      {submitLabel}
-    </button>
+    {/each}
   </div>
 </form>
 
@@ -276,21 +298,39 @@
     cursor: not-allowed;
   }
 
-  .action-form__btn--cancel {
+  .action-form__btn--ghost {
     background: transparent;
     color: var(--color-text-muted, #666);
   }
 
-  .action-form__btn--cancel:hover:not(:disabled) {
+  .action-form__btn--ghost:hover:not(:disabled) {
     background: var(--color-bg-hover, rgba(0,0,0,0.05));
   }
 
-  .action-form__btn--submit {
+  .action-form__btn--secondary {
+    background: var(--color-bg-muted, #f3f4f6);
+    color: var(--color-text, #374151);
+  }
+
+  .action-form__btn--secondary:hover:not(:disabled) {
+    background: var(--color-bg-hover, #e5e7eb);
+  }
+
+  .action-form__btn--primary {
     background: var(--color-primary, #3b82f6);
     color: white;
   }
 
-  .action-form__btn--submit:hover:not(:disabled) {
+  .action-form__btn--primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .action-form__btn--danger {
+    background: var(--color-danger, #ef4444);
+    color: white;
+  }
+
+  .action-form__btn--danger:hover:not(:disabled) {
     opacity: 0.9;
   }
 

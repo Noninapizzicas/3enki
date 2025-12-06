@@ -1,10 +1,28 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { MobileWorkspaceLayout } from '$components/layout';
-  import { Button, Badge } from '$components/ui'; // v2.0: Card removido (sin stats area)
+  import { Button, Badge } from '$components/ui';
   import { Spinner } from '$components/feedback';
-  // v2.0: StatCard removido del main area (accesible via panel stats)
   import { FileDropZone } from '$components/input';
+  import { ChatAIWorkspace } from '$components/ai';
+  import type {
+    AIModel,
+    AICredential,
+    AITool,
+    AIPlugin,
+    AIProvider,
+    ContextItem,
+    QuickPrompt,
+    PromptTemplate,
+    ConversationSummary,
+    ProjectRef,
+    StorageFile,
+    StorageInfo,
+    ProjectSummary,
+    FileEntry,
+    VoiceConfig,
+    CameraCapture
+  } from '$components/ai/types';
   import { subscribe, events } from '$stores/mqtt';
   import { toast } from '$stores/toast';
   import { setHideGlobalHeader, setHideGlobalSidebar, resetLayout } from '$stores/layout';
@@ -336,8 +354,8 @@
       displayValue: currentCredentialPreview,
       variant: credentials.length > 0 ? 'success' as const : 'warning' as const,
       primaryAction: { type: 'panel' as const, panelId: 'credencial-selector', label: 'Seleccionar API Key' },
-      secondaryAction: { type: 'panel' as const, panelId: 'credential-add', label: 'Nueva API Key' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'credentials', label: 'Gestionar API Keys' }
+      secondaryAction: { type: 'panel' as const, panelId: 'credencial-crear', label: 'Nueva API Key' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'credenciales-gestionar', label: 'Gestionar API Keys' }
     },
     {
       id: 'prompt',
@@ -348,13 +366,13 @@
       tertiaryAction: { type: 'panel' as const, panelId: 'prompts-gestionar', label: 'Gestionar prompts' }
     },
     {
-      id: 'historial-chat',
+      id: 'historial',
       emoji: '💬',
       label: 'Chats',
       badge: 0,
       badgeColor: 'info' as const,
-      primaryAction: { type: 'panel' as const, panelId: 'conversations', label: 'Conversaciones' },
-      secondaryAction: { type: 'emit' as const, label: 'Nueva conversación' },
+      primaryAction: { type: 'panel' as const, panelId: 'historial-conversaciones', label: 'Conversaciones' },
+      secondaryAction: { type: 'panel' as const, panelId: 'historial-crear', label: 'Nueva conversación' },
       tertiaryAction: { type: 'panel' as const, panelId: 'historial-gestionar', label: 'Gestionar historial' }
     }
   ];

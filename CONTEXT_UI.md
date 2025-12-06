@@ -572,13 +572,17 @@ Cada elemento visual sigue un patrón definido. En lugar de escribir código esp
 │                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
 │  │  ToolbarIcon    │  │  FloatingPanel  │  │  ActionForm │  │
-│  │                 │  │                 │  │             │  │
-│  │  • 1 tap        │  │  • Overlay      │  │  • Campos   │  │
-│  │  • 2 taps       │  │  • Tap fuera    │  │  • Validar  │  │
-│  │  • long-press   │  │    = cerrar     │  │  • Guardar  │  │
-│  │  • badge        │  │  • Centrado     │  │  • Cancelar │  │
-│  │  • variants     │  │  • CSS vars     │  │  • CSS vars │  │
+│  │  • 1/2/long tap │  │  • Centrado     │  │  • Campos   │  │
+│  │  • badge        │  │  • Tap fuera    │  │  • actions[]│  │
+│  │  • variants     │  │  • CSS vars     │  │  • Validar  │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────┘  │
+│                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐                   │
+│  │  SelectList     │  │  ToggleList     │                   │
+│  │  • Acordeón     │  │  • Multi-select │                   │
+│  │  • Búsqueda     │  │  • Grupos       │                   │
+│  │  • Radio        │  │  • max/todos    │                   │
+│  └─────────────────┘  └─────────────────┘                   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -779,6 +783,103 @@ interface FormAction {
 
 ---
 
+### Patrón 4: SelectList (Selección Única con Acordeón)
+
+> **Implementación:** `$components/ui/SelectList.svelte`
+
+Lista de selección única con grupos colapsables tipo acordeón.
+
+**Comportamiento:**
+- Grupos acordeón (solo 1 abierto a la vez)
+- Búsqueda colapsable (cerrada por defecto)
+- Selección única (radio)
+
+**Props:**
+```typescript
+interface SelectListProps {
+  items: SelectItem[];
+  value?: string;
+  groups?: SelectGroup[];
+  searchable?: boolean;    // default: true
+  accordion?: boolean;     // default: true
+}
+
+interface SelectItem {
+  id: string;
+  label: string;
+  group?: string;
+  icon?: string;
+  badge?: string;
+  disabled?: boolean;
+}
+
+// CSS Variables: --list-padding, --list-item-height, --list-item-padding, --list-group-bg
+```
+
+**Eventos:** `select` → `{ item }`
+
+**Uso:**
+```svelte
+<SelectList
+  {value}
+  items={models}
+  groups={providers}
+  on:select={({ detail }) => value = detail.item.id}
+/>
+```
+
+---
+
+### Patrón 5: ToggleList (Selección Múltiple con Grupos)
+
+> **Implementación:** `$components/ui/ToggleList.svelte`
+
+Lista de selección múltiple con grupos visuales (no colapsables).
+
+**Comportamiento:**
+- Multi-selección (checkboxes)
+- Grupos como separadores visuales
+- Controles "Todos / Ninguno"
+- Límite máximo opcional
+
+**Props:**
+```typescript
+interface ToggleListProps {
+  items: ToggleItem[];
+  values: string[];
+  groups?: ToggleGroup[];
+  showSelectAll?: boolean;
+  max?: number;
+}
+
+interface ToggleItem {
+  id: string;
+  label: string;
+  group?: string;
+  icon?: string;
+  description?: string;
+  disabled?: boolean;
+}
+
+// CSS Variables: --list-padding, --list-item-height, --list-item-padding, --list-group-gap
+```
+
+**Eventos:** `change` → `{ values }`, `toggle` → `{ item, active }`
+
+**Uso:**
+```svelte
+<ToggleList
+  values={enabledTools}
+  items={tools}
+  groups={categories}
+  showSelectAll
+  max={5}
+  on:change={({ detail }) => enabledTools = detail.values}
+/>
+```
+
+---
+
 ### Relación: Blueprints → Templates → Componentes
 
 ```
@@ -840,8 +941,8 @@ interface FormAction {
 | `ToolbarIcon` | ✅ Listo | `$components/toolbar/ToolbarIcon.svelte` |
 | `FloatingPanel` | ✅ Listo | `$components/feedback/FloatingPanel.svelte` |
 | `ActionForm` | ✅ Listo | `$components/ui/ActionForm.svelte` |
-| `SelectList` | 🔴 Por crear | `$components/ui/SelectList.svelte` |
-| `ToggleList` | 🔴 Por crear | `$components/ui/ToggleList.svelte` |
+| `SelectList` | ✅ Listo | `$components/ui/SelectList.svelte` |
+| `ToggleList` | ✅ Listo | `$components/ui/ToggleList.svelte` |
 
 ---
 

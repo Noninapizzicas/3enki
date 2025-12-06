@@ -1075,7 +1075,8 @@ frontend/src/lib/components/
 ├── ai/                             # COMPONENTES ESPECÍFICOS CHAT
 │   ├── index.ts                    # Exports
 │   ├── types.ts                    # Tipos compartidos
-│   ├── ChatAIWorkspace.svelte      # Workspace principal (usa base)
+│   ├── ChatAIWorkspace.svelte      # Workspace legacy (3700+ líneas)
+│   ├── ChatAIWorkspaceV2.svelte    # Workspace refactorizado (~330 líneas)
 │   ├── ChatInput.svelte            # Input de chat
 │   └── ConversationPanel.svelte    # Panel de conversaciones
 │
@@ -1105,6 +1106,53 @@ toolbar_top:
       label: Mi Acción
       actions:
         tap: { type: panel, target: mi-panel }
+```
+
+---
+
+### ChatAIWorkspaceV2 - Versión Refactorizada
+
+> **NUEVO**: Versión que usa componentes base de CONTEXT_UI.md
+
+**Comparativa:**
+| Aspecto | ChatAIWorkspace | ChatAIWorkspaceV2 |
+|---------|-----------------|-------------------|
+| Líneas de código | ~3700 | ~330 |
+| Reducción | - | 91% |
+| Paneles inline | 32 | 0 |
+| Usa componentes base | No | Sí |
+
+**Conversión de paneles:**
+| Panel Original | Componente Base |
+|----------------|-----------------|
+| `modelo-selector` | SelectList (grupos por proveedor) |
+| `credencial-selector` | SelectList (grupos por proveedor) |
+| `credencial-crear` | ActionForm |
+| `prompts-rapidos` | SelectList (grupos por categoría) |
+| `prompt-crear` | ActionForm |
+| `conversaciones` | SelectList |
+| `conversacion-crear` | ActionForm |
+| `tools` | ToggleList (grupos por categoría) |
+| `plugins` | ToggleList |
+| `contexto` | ToggleList |
+
+**Uso:**
+```svelte
+<script>
+  import { ChatAIWorkspaceV2 } from '$components/ai';
+  import { FloatingPanel } from '$components/feedback';
+
+  let openPanel = '';
+</script>
+
+<FloatingPanel bind:open={openPanel === 'modelo-selector'}>
+  <ChatAIWorkspaceV2
+    currentPanel="modelo-selector"
+    {availableModels}
+    bind:selectedModelId
+    on:modelSelect={(e) => { /* handle */ }}
+  />
+</FloatingPanel>
 ```
 
 ---

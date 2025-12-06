@@ -378,46 +378,56 @@
   ];
 
   // ===========================================
-  // SUB-BARRA CHAT INFERIOR - Complementa el mensaje
+  // SUB-BARRA CHAT INFERIOR - Complementa el mensaje (ChatAIWorkspace pattern)
   // ===========================================
   const chatBottomButtons = [
-    {
-      id: 'tools',
-      emoji: '🔧',
-      label: 'Tools',
-      badge: 0,
-      primaryAction: { type: 'panel' as const, panelId: 'tools', label: 'Herramientas' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'tools-config', label: 'Configurar tools' }
-    },
     {
       id: 'adjuntar',
       emoji: '📎',
       label: 'Adjuntar',
       variant: 'primary' as const,
-      primaryAction: { type: 'panel' as const, panelId: 'upload', label: 'Subir carta' },
-      secondaryAction: { type: 'emit' as const, label: 'Abrir cámara' }
+      primaryAction: { type: 'panel' as const, panelId: 'adjuntar-archivos', label: 'Archivos adjuntos' },
+      secondaryAction: { type: 'panel' as const, panelId: 'adjuntar-subir', label: 'Subir archivo' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'adjuntar-gestionar', label: 'Gestionar adjuntos' }
     },
     {
-      id: 'contexto',
-      emoji: '📋',
-      label: 'Contexto',
-      indicator: false,
-      primaryAction: { type: 'panel' as const, panelId: 'contexto', label: 'Ver contexto' },
-      secondaryAction: { type: 'panel' as const, panelId: 'contexto-editar', label: 'Editar contexto' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'contexto-gestionar', label: 'Gestionar contextos' }
+      id: 'proyecto',
+      emoji: '📁',
+      label: 'Proyecto',
+      primaryAction: { type: 'panel' as const, panelId: 'proyectos', label: 'Ver proyectos' },
+      secondaryAction: { type: 'panel' as const, panelId: 'proyecto-crear', label: 'Nuevo proyecto' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'proyectos-gestionar', label: 'Gestionar proyectos' }
     },
     {
-      id: 'plugins',
-      emoji: '🔌',
-      label: 'Plugins',
-      badge: 0,
-      primaryAction: { type: 'panel' as const, panelId: 'plugins', label: 'Plugins activos' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'plugins-gestionar', label: 'Gestionar plugins' }
+      id: 'explorar',
+      emoji: '📂',
+      label: 'Explorar',
+      primaryAction: { type: 'panel' as const, panelId: 'explorar-archivos', label: 'Explorar archivos' },
+      secondaryAction: { type: 'panel' as const, panelId: 'explorar-visor', label: 'Visor de archivos' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'explorar-gestionar', label: 'Gestionar explorador' }
+    },
+    {
+      id: 'voz',
+      emoji: '🎤',
+      label: 'Voz',
+      primaryAction: { type: 'panel' as const, panelId: 'voz-dictado', label: 'Dictado por voz' },
+      secondaryAction: { type: 'panel' as const, panelId: 'voz-configurar', label: 'Configurar voz' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'voz-lectura', label: 'Lectura en voz alta' }
+    },
+    {
+      id: 'camara',
+      emoji: '📷',
+      label: 'Cámara',
+      primaryAction: { type: 'panel' as const, panelId: 'camara-capturar', label: 'Capturar imagen' },
+      secondaryAction: { type: 'panel' as const, panelId: 'camara-configurar', label: 'Configurar cámara' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'camara-galeria', label: 'Galería de capturas' }
     }
   ];
 
   const panels = {
-    // Barra superior
+    // ===========================================
+    // Paneles específicos de Menu Generator
+    // ===========================================
     'menus': { title: 'Menús Generados', size: 'lg' as const },
     'menus-gestionar': { title: 'Gestionar Menús', size: 'full' as const },
     'menu-detail': { title: 'Detalle del Menú', size: 'full' as const },
@@ -434,35 +444,48 @@
     // Barra lateral (ecosistema)
     'modulos': { title: 'Módulos Event-Core', size: 'md' as const },
     'modulos-gestionar': { title: 'Gestionar Módulos', size: 'full' as const },
-    'credentials': { title: 'Credenciales', size: 'lg' as const },
-    'credential-add': { title: 'Nueva Credencial', size: 'md' as const },
-    'credential-edit': { title: 'Editar Credencial', size: 'md' as const },
-    'credencial-selector': { title: 'Seleccionar API Key', size: 'sm' as const },
     'settings': { title: 'Configuración', size: 'md' as const },
     'settings-full': { title: 'Configuración Avanzada', size: 'full' as const },
-    'help': { title: 'Ayuda', size: 'md' as const },
 
-    // Sub-barra chat superior
+    // ===========================================
+    // Paneles de ChatAIWorkspace (delegados al componente)
+    // ===========================================
+    // chatTopButtons - Modelo
     'modelo-selector': { title: 'Seleccionar Modelo', size: 'sm' as const },
     'modelo-config': { title: 'Configurar Modelo', size: 'md' as const },
     'modelos-gestionar': { title: 'Gestionar Modelos', size: 'full' as const },
+    // chatTopButtons - Credencial
+    'credencial-selector': { title: 'Seleccionar API Key', size: 'sm' as const },
+    'credencial-crear': { title: 'Nueva Credencial', size: 'md' as const },
+    'credenciales-gestionar': { title: 'Gestionar Credenciales', size: 'full' as const },
+    // chatTopButtons - Prompt
     'prompts': { title: 'Prompts Rápidos', size: 'md' as const },
     'prompt-crear': { title: 'Nuevo Prompt', size: 'md' as const },
     'prompts-gestionar': { title: 'Gestionar Prompts', size: 'full' as const },
-    'conversations': { title: 'Conversaciones', size: 'lg' as const },
+    // chatTopButtons - Historial
+    'historial-conversaciones': { title: 'Conversaciones', size: 'lg' as const },
+    'historial-crear': { title: 'Nueva Conversación', size: 'md' as const },
     'historial-gestionar': { title: 'Gestionar Historial', size: 'full' as const },
-
-    // Sub-barra chat inferior
-    'tools': { title: 'Herramientas', size: 'md' as const },
-    'tools-config': { title: 'Configurar Tools', size: 'full' as const },
-    'contexto': { title: 'Contexto Actual', size: 'md' as const },
-    'contexto-editar': { title: 'Editar Contexto', size: 'md' as const },
-    'contexto-gestionar': { title: 'Gestionar Contextos', size: 'full' as const },
-    'plugins': { title: 'Plugins Activos', size: 'md' as const },
-    'plugins-gestionar': { title: 'Gestionar Plugins', size: 'full' as const },
-
-    // Legacy/otros
-    'chat': { title: 'Chat con IA', size: 'lg' as const }
+    // chatBottomButtons - Adjuntar
+    'adjuntar-archivos': { title: 'Archivos Adjuntos', size: 'md' as const },
+    'adjuntar-subir': { title: 'Subir Archivo', size: 'md' as const },
+    'adjuntar-gestionar': { title: 'Gestionar Adjuntos', size: 'full' as const },
+    // chatBottomButtons - Proyecto
+    'proyectos': { title: 'Proyectos', size: 'lg' as const },
+    'proyecto-crear': { title: 'Nuevo Proyecto', size: 'md' as const },
+    'proyectos-gestionar': { title: 'Gestionar Proyectos', size: 'full' as const },
+    // chatBottomButtons - Explorar
+    'explorar-archivos': { title: 'Explorar Archivos', size: 'lg' as const },
+    'explorar-visor': { title: 'Visor de Archivos', size: 'full' as const },
+    'explorar-gestionar': { title: 'Gestionar Explorador', size: 'full' as const },
+    // chatBottomButtons - Voz
+    'voz-dictado': { title: 'Dictado por Voz', size: 'md' as const },
+    'voz-configurar': { title: 'Configurar Voz', size: 'md' as const },
+    'voz-lectura': { title: 'Lectura en Voz Alta', size: 'md' as const },
+    // chatBottomButtons - Cámara
+    'camara-capturar': { title: 'Capturar Imagen', size: 'md' as const },
+    'camara-configurar': { title: 'Configurar Cámara', size: 'md' as const },
+    'camara-galeria': { title: 'Galería de Capturas', size: 'lg' as const }
   };
 
   // ===========================================
@@ -1215,115 +1238,12 @@
 
   <!-- Panel Content -->
   <svelte:fragment slot="panel" let:panelId>
-    <!-- Credentials Panel -->
-    {#if panelId === 'credentials'}
-      <div class="space-y-3">
-        {#if credentials.length === 0}
-          <p class="text-center text-text-muted py-4">No hay credenciales</p>
-        {:else}
-          {#each credentials as cred (cred.key)}
-            <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg">
-              <div class="flex items-center gap-3">
-                <span class="text-xl">
-                  {#if cred.provider === 'DEEPSEEK'}🔮
-                  {:else if cred.provider === 'OPENAI'}🤖
-                  {:else if cred.provider === 'ANTHROPIC'}🧠
-                  {:else if cred.provider === 'OLLAMA'}🦙
-                  {:else}🔑{/if}
-                </span>
-                <div>
-                  <p class="font-medium text-sm">{cred.provider}</p>
-                  <p class="text-xs text-text-muted">{cred.level}{cred.identifier ? ` • ${cred.identifier}` : ''}</p>
-                  <p class="text-xs font-mono text-text-muted">{cred.api_key_preview}</p>
-                </div>
-              </div>
-              <div class="flex gap-1">
-                <button class="p-2 hover:bg-bg-card rounded" on:click={() => editCredential(cred)}>✏️</button>
-                <button class="p-2 hover:bg-bg-card rounded text-danger" on:click={() => deleteCredential(cred)}>🗑️</button>
-              </div>
-            </div>
-          {/each}
-        {/if}
-      </div>
-
-    <!-- Credential Add Panel -->
-    {:else if panelId === 'credential-add'}
-      <form class="space-y-4" on:submit|preventDefault={saveCredential}>
-        <div>
-          <label class="block text-sm font-medium mb-1">Proveedor</label>
-          <select bind:value={credentialForm.provider} class="w-full p-2 bg-bg-input border border-border rounded-lg">
-            <option value="DEEPSEEK">🔮 DeepSeek</option>
-            <option value="OPENAI">🤖 OpenAI</option>
-            <option value="ANTHROPIC">🧠 Anthropic</option>
-            <option value="OLLAMA">🦙 Ollama</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Nivel</label>
-          <select bind:value={credentialForm.level} class="w-full p-2 bg-bg-input border border-border rounded-lg">
-            <option value="GLOBAL">🌐 Global (sin identificador)</option>
-            <option value="PROJECT">📁 Proyecto</option>
-            <option value="CLIENT">👤 Cliente</option>
-            <option value="CUSTOM">⚙️ Custom</option>
-          </select>
-        </div>
-        {#if credentialForm.level !== 'GLOBAL'}
-          <div>
-            <label class="block text-sm font-medium mb-1">Identificador</label>
-            <input
-              type="text"
-              bind:value={credentialForm.identifier}
-              class="w-full p-2 bg-bg-input border border-border rounded-lg"
-              placeholder="proyecto-1 o cliente-xyz"
-            />
-          </div>
-        {/if}
-        <div>
-          <label class="block text-sm font-medium mb-1">API Key</label>
-          <input
-            type="password"
-            bind:value={credentialForm.api_key}
-            class="w-full p-2 bg-bg-input border border-border rounded-lg"
-            placeholder="sk-..."
-          />
-        </div>
-        <Button type="submit" variant="primary" class="w-full">💾 Guardar</Button>
-      </form>
-
-    <!-- Credential Edit Panel -->
-    {:else if panelId === 'credential-edit' && selectedCredential}
-      <form class="space-y-4" on:submit|preventDefault={updateCredential}>
-        <div>
-          <label class="block text-sm font-medium mb-1">Key</label>
-          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.key} disabled />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Proveedor</label>
-          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.provider} disabled />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Nivel</label>
-          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.level} disabled />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Valor actual</label>
-          <input type="text" class="w-full p-2 bg-bg-input border border-border rounded-lg text-text-muted" value={selectedCredential.api_key_preview} disabled />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Nueva API Key</label>
-          <input
-            type="password"
-            bind:value={editApiKey}
-            class="w-full p-2 bg-bg-input border border-border rounded-lg"
-            placeholder="sk-... (nuevo valor)"
-          />
-        </div>
-        <Button type="submit" variant="primary" class="w-full">💾 Actualizar</Button>
-        <Button variant="danger" class="w-full" on:click={() => deleteCredential(selectedCredential)}>🗑️ Eliminar</Button>
-      </form>
+    <!-- =========================================== -->
+    <!-- Paneles específicos de Menu Generator       -->
+    <!-- =========================================== -->
 
     <!-- Menus Panel -->
-    {:else if panelId === 'menus'}
+    {#if panelId === 'menus'}
       <div class="space-y-3">
         {#if menus.length === 0}
           <p class="text-center text-text-muted py-4">No hay menús generados</p>
@@ -1412,214 +1332,6 @@
         />
       </div>
 
-    <!-- Conversations Panel -->
-    {:else if panelId === 'conversations'}
-      <div class="space-y-3">
-        {#if conversations.length === 0}
-          <p class="text-center text-text-muted py-4">No hay conversaciones</p>
-        {:else}
-          {#each conversations as conv (conv.id)}
-            <button class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors">
-              <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-sm">{conv.title || `Conv ${conv.id.slice(-6)}`}</span>
-                <Badge variant={conv.status === 'active' ? 'success' : 'default'} size="sm">{conv.messages_count}</Badge>
-              </div>
-              <p class="text-xs text-text-muted">{formatDate(conv.created_at)}</p>
-            </button>
-          {/each}
-        {/if}
-      </div>
-
-    <!-- Chat Panel -->
-    {:else if panelId === 'chat'}
-      <div class="chat-panel">
-        {#if chatMessages.length === 0}
-          <div class="text-center text-text-muted py-8">
-            <p class="text-2xl mb-2">💬</p>
-            <p>No hay mensajes aún</p>
-            <p class="text-xs mt-1">Usa el chat de abajo para empezar</p>
-          </div>
-        {:else}
-          <div class="chat-messages space-y-3">
-            {#each chatMessages as msg (msg.id)}
-              <div class="chat-message chat-message--{msg.role}" class:chat-message--loading={msg.loading}>
-                <div class="chat-message__bubble">
-                  {#if msg.loading}
-                    <div class="flex items-center gap-2">
-                      <span class="animate-pulse">●</span>
-                      <span class="animate-pulse delay-100">●</span>
-                      <span class="animate-pulse delay-200">●</span>
-                    </div>
-                  {:else}
-                    <p class="whitespace-pre-wrap">{msg.content}</p>
-                    {#if msg.provider}
-                      <p class="text-xs text-text-muted mt-1 opacity-60">{msg.provider} • {msg.model}</p>
-                    {/if}
-                  {/if}
-                </div>
-                <span class="chat-message__time text-xs text-text-muted">
-                  {msg.timestamp.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            {/each}
-          </div>
-        {/if}
-
-        {#if chatMessages.length > 0}
-          <div class="mt-4 pt-3 border-t border-border">
-            <Button
-              variant="ghost"
-              size="sm"
-              class="w-full"
-              on:click={() => { chatMessages = []; toast.info('Chat limpiado'); }}
-            >
-              🗑️ Limpiar chat
-            </Button>
-          </div>
-        {/if}
-      </div>
-
-    <!-- Help Panel -->
-    {:else if panelId === 'help'}
-      <div class="space-y-4 text-sm">
-        <h4 class="font-medium">Sistema de gestos</h4>
-        <div class="space-y-2">
-          <p><strong>👆 1 Tap:</strong> Ver/Consultar información</p>
-          <p><strong>👆👆 2 Taps:</strong> Añadir/Crear nuevo</p>
-          <p><strong>👇 Hold 3s:</strong> Editar/Configurar</p>
-        </div>
-        <h4 class="font-medium mt-4">Barras de navegación</h4>
-        <p><strong>Arriba:</strong> Opciones de IA y configuración</p>
-        <p><strong>Abajo:</strong> Acciones y herramientas</p>
-        <p><strong>Lateral:</strong> Acceso rápido (pulgar)</p>
-      </div>
-
-    <!-- Modelo Selector Panel -->
-    {:else if panelId === 'modelo-selector'}
-      <div class="space-y-2">
-        {#each Object.entries(availableModels.reduce((acc, m) => {
-          acc[m.provider] = acc[m.provider] || [];
-          acc[m.provider].push(m);
-          return acc;
-        }, {} as Record<string, AIModel[]>)) as [provider, models]}
-          <div class="mb-3">
-            <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">{provider}</h4>
-            {#each models as model (model.id)}
-              <button
-                class="w-full text-left p-3 rounded-lg transition-colors mb-1 {selectedModelId === model.id ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
-                on:click={() => selectModel(model.id)}
-              >
-                <div class="flex items-center gap-3">
-                  <span class="text-lg">
-                    {#if provider === 'DEEPSEEK'}🔮
-                    {:else if provider === 'OPENAI'}🤖
-                    {:else if provider === 'ANTHROPIC'}🧠
-                    {:else}🦙{/if}
-                  </span>
-                  <div class="flex-1">
-                    <p class="font-medium text-sm">{model.name}</p>
-                    {#if model.description}
-                      <p class="text-xs text-text-muted">{model.description}</p>
-                    {/if}
-                  </div>
-                  {#if selectedModelId === model.id}
-                    <span class="text-primary">✓</span>
-                  {/if}
-                </div>
-              </button>
-            {/each}
-          </div>
-        {/each}
-      </div>
-
-    <!-- Credencial Selector Panel -->
-    {:else if panelId === 'credencial-selector'}
-      <div class="space-y-2">
-        {#if credentials.length === 0}
-          <p class="text-center text-text-muted py-4">No hay credenciales configuradas</p>
-          <Button variant="primary" class="w-full" on:click={() => currentPanel = 'credential-add'}>
-            ➕ Añadir Credencial
-          </Button>
-        {:else}
-          {#each credentials as cred (cred.key)}
-            <button
-              class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
-              on:click={() => selectCredentialForChat(cred)}
-            >
-              <div class="flex items-center gap-3">
-                <span class="text-xl">
-                  {#if cred.provider === 'DEEPSEEK'}🔮
-                  {:else if cred.provider === 'OPENAI'}🤖
-                  {:else if cred.provider === 'ANTHROPIC'}🧠
-                  {:else if cred.provider === 'OLLAMA'}🦙
-                  {:else}🔑{/if}
-                </span>
-                <div class="flex-1">
-                  <p class="font-medium text-sm">{cred.provider}</p>
-                  <p class="text-xs text-text-muted">{cred.level}{cred.identifier ? ` • ${cred.identifier}` : ''}</p>
-                </div>
-                <span class="text-xs font-mono text-text-muted">{cred.api_key_preview}</span>
-              </div>
-            </button>
-          {/each}
-        {/if}
-      </div>
-
-    <!-- Prompts Panel -->
-    {:else if panelId === 'prompts'}
-      <div class="space-y-3">
-        <div class="mb-3">
-          <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">⭐ Favoritos</h4>
-          {#each quickPrompts.filter(p => p.favorite) as prompt (prompt.id)}
-            <button
-              class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors mb-1"
-              on:click={() => applyQuickPrompt(prompt)}
-            >
-              <div class="flex items-center justify-between">
-                <div class="flex-1">
-                  <p class="font-medium text-sm">{prompt.name}</p>
-                  <p class="text-xs text-text-muted truncate">{prompt.content}</p>
-                </div>
-                <span
-                  role="button"
-                  tabindex="0"
-                  class="p-1 text-warning hover:text-warning/80 cursor-pointer"
-                  on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
-                  on:keydown={(e) => e.key === 'Enter' && togglePromptFavorite(prompt.id)}
-                >
-                  ⭐
-                </span>
-              </div>
-            </button>
-          {/each}
-        </div>
-        <div>
-          <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">📝 Todos</h4>
-          {#each quickPrompts.filter(p => !p.favorite) as prompt (prompt.id)}
-            <button
-              class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors mb-1"
-              on:click={() => applyQuickPrompt(prompt)}
-            >
-              <div class="flex items-center justify-between">
-                <div class="flex-1">
-                  <p class="font-medium text-sm">{prompt.name}</p>
-                  <p class="text-xs text-text-muted truncate">{prompt.content}</p>
-                </div>
-                <span
-                  role="button"
-                  tabindex="0"
-                  class="p-1 text-text-muted hover:text-warning cursor-pointer"
-                  on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
-                  on:keydown={(e) => e.key === 'Enter' && togglePromptFavorite(prompt.id)}
-                >
-                  ☆
-                </span>
-              </div>
-            </button>
-          {/each}
-        </div>
-      </div>
-
     <!-- Filtros Panel -->
     {:else if panelId === 'filtros'}
       <div class="space-y-4">
@@ -1645,92 +1357,6 @@
         <div class="flex gap-2">
           <Button variant="primary" class="flex-1" on:click={applyMenuFilters}>Aplicar</Button>
           <Button variant="ghost" class="flex-1" on:click={clearMenuFilters}>Limpiar</Button>
-        </div>
-      </div>
-
-    <!-- Tools Panel -->
-    {:else if panelId === 'tools'}
-      <div class="space-y-2">
-        {#each Object.entries(availableTools.reduce((acc, t) => {
-          acc[t.category] = acc[t.category] || [];
-          acc[t.category].push(t);
-          return acc;
-        }, {} as Record<string, Tool[]>)) as [category, tools]}
-          <div class="mb-3">
-            <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">
-              {#if category === 'menu'}🍽️ Menú
-              {:else if category === 'ai'}🤖 IA
-              {:else if category === 'export'}⬇️ Exportación
-              {:else}{category}{/if}
-            </h4>
-            {#each tools as tool (tool.id)}
-              <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg mb-1">
-                <div class="flex-1">
-                  <p class="font-medium text-sm">{tool.name}</p>
-                  <p class="text-xs text-text-muted">{tool.description}</p>
-                </div>
-                <button
-                  class="w-12 h-6 rounded-full transition-colors {tool.enabled ? 'bg-success' : 'bg-bg-card'}"
-                  on:click={() => toggleTool(tool.id)}
-                >
-                  <span class="block w-5 h-5 rounded-full bg-white shadow transform transition-transform {tool.enabled ? 'translate-x-6' : 'translate-x-0.5'}"></span>
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/each}
-      </div>
-
-    <!-- Plugins Panel -->
-    {:else if panelId === 'plugins'}
-      <div class="space-y-2">
-        {#each availablePlugins as plugin (plugin.id)}
-          <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg">
-            <div class="flex items-center gap-3">
-              <span class="text-xl">🔌</span>
-              <div>
-                <p class="font-medium text-sm">{plugin.name}</p>
-                <p class="text-xs text-text-muted">{plugin.description}</p>
-                <p class="text-xs text-text-muted">v{plugin.version}</p>
-              </div>
-            </div>
-            <button
-              class="w-12 h-6 rounded-full transition-colors {plugin.enabled ? 'bg-success' : 'bg-bg-card'}"
-              on:click={() => togglePlugin(plugin.id)}
-            >
-              <span class="block w-5 h-5 rounded-full bg-white shadow transform transition-transform {plugin.enabled ? 'translate-x-6' : 'translate-x-0.5'}"></span>
-            </button>
-          </div>
-        {/each}
-      </div>
-
-    <!-- Contexto Panel -->
-    {:else if panelId === 'contexto'}
-      <div class="space-y-3">
-        {#each contextItems as item (item.type)}
-          <div class="flex items-center justify-between p-3 bg-bg-hover rounded-lg">
-            <div class="flex items-center gap-3">
-              <span class="text-lg">
-                {#if item.type === 'menu'}🍽️
-                {:else if item.type === 'template'}📋
-                {:else if item.type === 'style'}🎨
-                {:else if item.type === 'language'}🌐
-                {:else}📎{/if}
-              </span>
-              <div>
-                <p class="font-medium text-sm">{item.label}</p>
-                <p class="text-xs text-text-muted">{item.value || 'No definido'}</p>
-              </div>
-            </div>
-            <Badge variant={item.active ? 'success' : 'default'} size="sm">
-              {item.active ? 'Activo' : 'Inactivo'}
-            </Badge>
-          </div>
-        {/each}
-        <div class="pt-2 border-t border-border">
-          <p class="text-xs text-text-muted text-center">
-            El contexto se usa para enriquecer las peticiones a la IA
-          </p>
         </div>
       </div>
 
@@ -1861,9 +1487,18 @@
         </div>
       </div>
 
-    <!-- Default -->
+    <!-- =========================================== -->
+    <!-- Paneles de IA delegados a ChatAIWorkspace  -->
+    <!-- =========================================== -->
     {:else}
-      <p class="text-center text-text-muted py-4">Panel: {panelId}</p>
+      <ChatAIWorkspace
+        currentPanel={panelId}
+        availableModels={availableModels}
+        credentials={credentials}
+        on:modelSelect={(e) => { selectedModelId = e.detail.id; currentModel = e.detail.name; currentPanel = ''; }}
+        on:credentialSelect={(e) => { currentCredentialPreview = e.detail.api_key_preview; currentPanel = ''; }}
+        on:panelClose={() => currentPanel = ''}
+      />
     {/if}
   </svelte:fragment>
 </MobileWorkspaceLayout>

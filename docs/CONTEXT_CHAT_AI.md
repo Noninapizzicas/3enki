@@ -791,7 +791,7 @@ Todos los módulos exponen:
 │  │ [Escribe aquí...]                                 [Enviar →]│    │
 │  ├─────────────────────────────────────────────────────────────┤    │
 │  │ toolbar_chat.bottom - FIJO (complementa mensaje)            │    │
-│  │ [🔧 Tools] [📎 Adjuntar] [📋 Contexto] [🔌 Plugins]         │    │
+│  │ [📎 Adjuntar] [🎤 Voz] [📷 Cámara] [📂 Explorar] [📁 Proy]  │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -840,7 +840,7 @@ Todos los módulos exponen:
 | **toolbar_top** | CONFIGURABLE | Definido por cada módulo |
 | **toolbar_right** | FIJO | Ecosistema (módulos, config, alertas, perfil) |
 | **toolbar_chat.top** | FIJO | Modelo, Credencial, Prompt, Historial |
-| **toolbar_chat.bottom** | FIJO | Tools, Adjuntar, Contexto, Plugins |
+| **toolbar_chat.bottom** | FIJO | Adjuntar, Voz, Cámara, Explorar, Proyecto |
 | **input** | FIJO | Expandible con doble toque, Enter=newline |
 
 ---
@@ -858,17 +858,17 @@ Todos los módulos exponen:
 │  [ Escribe aquí... ]                         [Enviar →] │  ← INPUT FIJO
 │                                                         │
 ├─────────────────────────────────────────────────────────┤
-│  [🔧]     [📎]     [📋]     [🔌]                        │  ← Complementa
-│  Tools    Adjuntar Contexto Plugins                     │
+│  [📎]     [🎤]     [📷]     [📂]     [📁]              │  ← Complementa
+│  Adjuntar Voz      Cámara   Explorar Proyecto          │
 └─────────────────────────────────────────────────────────┘
                           ↑
                     DESPUÉS de escribir
 ```
 
 **Flujo cognitivo natural:**
-1. Miro arriba → ¿Qué modelo? ¿Qué prompt?
+1. Miro arriba → ¿Qué modelo? ¿Qué prompt? ¿Historial?
 2. Escribo en el input
-3. Miro abajo → ¿Adjunto algo? ¿Activo tools?
+3. Miro abajo → ¿Adjunto algo? ¿Dicto por voz? ¿Foto? ¿Exploro archivos?
 4. Envío
 
 ---
@@ -877,14 +877,15 @@ Todos los módulos exponen:
 
 | Icono | Módulo Event Core | Paneles |
 |-------|-------------------|---------|
-| 🤖 Modelo | ai-gateway | modelo-selector, modelo-config, modelos-gestionar |
+| 🤖 Modelo | ai-gateway | modelo-selector, modelo-config, proveedores-gestionar |
 | 🔑 Credencial | credential-manager | credencial-selector, credencial-crear, credenciales-gestionar |
 | 📝 Prompt | prompt-manager | prompts-rapidos, prompt-crear, prompts-gestionar |
 | 💬 Historial | conversation-manager | conversaciones, historial-gestionar |
-| 🔧 Tools | tool-orchestrator | tools-disponibles, tools-config |
-| 📎 Adjuntar | storage-manager | adjuntar-archivo |
-| 📋 Contexto | ai-agent-framework | contexto-actual, contexto-editar, contexto-gestionar |
-| 🔌 Plugins | plugin-manager | plugins-activos, plugins-gestionar |
+| 📁 Proyecto | project-manager | proyectos-selector, proyecto-crear, proyectos-gestionar |
+| 📎 Adjuntar | storage-manager | adjuntar-archivo, subir-archivo, archivos-gestionar |
+| 🎤 Voz | Web Speech API (nativo) | dictado, config-voz |
+| 📷 Cámara | MediaDevices API (nativo) | capturar-foto, config-camara, galeria |
+| 📂 Explorar | file-browser + pdf-viewer + text-editor | explorar-archivos, visor-editor, archivos-gestionar |
 
 ---
 
@@ -939,7 +940,7 @@ interaction: {
 │                                                             │
 │  [🤖 Modelo] [🔑] [📝] [💬]                                 │
 │  [input...]                                       [Enviar]  │
-│  [🔧] [📎] [📋] [🔌]                                        │
+│  [📎] [🎤] [📷] [📂] [📁]                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -1072,6 +1073,245 @@ toolbar_top:
 ## Especificación de Botones - toolbar_chat
 
 > Documentación exhaustiva de cada botón con APIs, eventos y paneles de interacción.
+
+---
+
+### Botón 🤖 Modelo (ai-gateway)
+
+**Módulo**: `ai-gateway`
+**Versión**: 1.0.0
+**Responsabilidad**: Router unificado para múltiples proveedores LLM con fallback automático.
+**Ubicación**: `toolbar_chat.top` (primer botón)
+
+#### Importancia
+
+El modelo es el **cerebro** de cada conversación:
+- Define qué LLM procesa los mensajes
+- Configura parámetros de generación (temperature, max_tokens)
+- Permite fallback automático entre proveedores
+- Gestiona costos y uso por proveedor
+
+```
+🤖 Modelo → ai-gateway
+     │
+     ├── 🔄 Auto-fallback: DeepSeek → Anthropic → OpenAI → Ollama
+     ├── 💰 Cost tracking por proveedor
+     ├── ⚡ Rate limiting y retry con backoff
+     └── 📊 Usage analytics
+```
+
+#### APIs
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/chat` | Chat completion (sync con fallback) |
+| POST | `/chat/stream` | Chat completion con SSE streaming |
+| GET | `/providers` | Listar proveedores y estado |
+| GET | `/models` | Listar modelos por proveedor |
+| GET | `/models?provider=X` | Modelos de un proveedor específico |
+| GET | `/usage` | Estadísticas de uso y costos |
+| GET | `/usage?provider=X` | Uso de un proveedor específico |
+| POST | `/providers/test` | Probar conectividad de proveedor |
+
+#### Eventos
+
+**Escucha:**
+| Evento | Acción |
+|--------|--------|
+| `ai.request` | Procesa solicitud de IA desde otros módulos |
+
+**Publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `ai.completion.completed` | Respuesta del LLM recibida |
+| `ai.chat.response` | Alias de completion |
+| `ai.chat.error` | Error en la llamada |
+
+#### Proveedores Soportados
+
+| Proveedor | Prioridad | Modelos | Costo/1K tokens |
+|-----------|-----------|---------|-----------------|
+| DeepSeek | 1 (más barato) | deepseek-chat, deepseek-coder | $0.0001 / $0.0002 |
+| Anthropic | 2 | claude-3-5-sonnet, claude-3-opus | $0.003 / $0.015 |
+| OpenAI | 3 | gpt-4o, gpt-4o-mini, gpt-3.5-turbo | $0.0015 / $0.006 |
+| Ollama | 4 (local) | llama2, codellama, mistral, mixtral | $0 (local) |
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Selector de Modelo (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 🤖 Modelo Activo                        │
+├─────────────────────────────────────────┤
+│                                         │
+│  Proveedor: Anthropic  ▼                │
+│  ─────────────────────────────────────  │
+│                                         │
+│  ● claude-3-5-sonnet-20241022    ✅     │
+│    Recomendado | $0.003/1K              │
+│                                         │
+│  ○ claude-3-opus-20240229              │
+│    Más potente | $0.015/1K              │
+│                                         │
+│  ○ claude-3-haiku-20240307             │
+│    Más rápido | $0.00025/1K             │
+│                                         │
+│  ─────────────────────────────────────  │
+│  [🔄 Auto]  Usa prioridad por costo     │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Proveedor actual (dropdown para cambiar)
+- Lista de modelos del proveedor
+- ● = Modelo seleccionado
+- Costo por 1K tokens
+- Indicadores: Recomendado, Rápido, Potente
+
+**Acciones:**
+- Cambiar proveedor → Recarga lista de modelos
+- Tap en modelo → Lo selecciona para la conversación
+- [🔄 Auto] → Activa fallback automático por prioridad
+
+##### 2 TAPS → Modal Configuración (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 🤖 Configurar Modelo                          [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ─── Selección de Modelo ───                        │
+│                                                     │
+│  Modo: ○ Auto (fallback)  ● Manual                  │
+│                                                     │
+│  Proveedor *                                        │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ▼ Anthropic                                 │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Modelo *                                           │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ▼ claude-3-5-sonnet-20241022                │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ─── Parámetros de Generación ───                   │
+│                                                     │
+│  Temperature           [0.7]  ─────●───── 0-2       │
+│  (Creatividad)                                      │
+│                                                     │
+│  Max Tokens            [4096] ───●──────── 100-8K   │
+│  (Longitud máxima)                                  │
+│                                                     │
+│  Top P                 [1.0]  ──────────●─ 0-1      │
+│  (Nucleus sampling)                                 │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │           💾 Guardar Configuración          │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  □ Aplicar a todas las conversaciones nuevas       │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Validaciones:**
+- Temperature: 0.0 - 2.0 (default 0.7)
+- Max Tokens: 100 - 8192 (según modelo)
+- Top P: 0.0 - 1.0 (default 1.0)
+
+**Evento al guardar:** Actualiza `conversation.ai_settings`
+
+##### LONG-PRESS → Modal Gestión de Proveedores (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 🤖 Gestionar Proveedores                                  [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Ordenar: [Prioridad ▼]  [🔍 Buscar modelo...]                 │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  🥇 DeepSeek                              ✅ Disponible         │
+│     Prioridad: 1 | Requests: 150 | Tokens: 45K | $0.45         │
+│     Modelos: deepseek-chat, deepseek-coder                     │
+│     [🧪 Test] [📊 Stats] [⬆️⬇️ Prioridad]                      │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  🥈 Anthropic                             ✅ Disponible         │
+│     Prioridad: 2 | Requests: 89 | Tokens: 120K | $12.50        │
+│     Modelos: claude-3-5-sonnet, claude-3-opus, claude-3-haiku  │
+│     [🧪 Test] [📊 Stats] [⬆️⬇️ Prioridad]                      │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  🥉 OpenAI                                ⚠️ Sin API Key        │
+│     Prioridad: 3 | Requests: 0 | Tokens: 0 | $0.00             │
+│     Modelos: gpt-4o, gpt-4o-mini, gpt-3.5-turbo                │
+│     [🔑 Configurar Key] [📊 Stats]                              │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  🏠 Ollama (Local)                        ✅ Disponible         │
+│     Prioridad: 4 | Requests: 25 | Tokens: 8K | $0.00           │
+│     Modelos: llama2, codellama, mistral, mixtral               │
+│     [🧪 Test] [📊 Stats] [⬆️⬇️ Prioridad]                      │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Totales: 264 requests | 173K tokens | $12.95               │
+│                                                                 │
+│  [🔄 Refrescar]                    [📈 Dashboard completo]      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por proveedor:**
+- 🧪 Test → Prueba conectividad (POST /providers/test)
+- 📊 Stats → Ver estadísticas detalladas
+- ⬆️⬇️ Prioridad → Cambiar orden de fallback
+- 🔑 Configurar Key → Abre modal de credential-manager
+
+**Indicadores de estado:**
+- ✅ Disponible: API key configurada y funcional
+- ⚠️ Sin API Key: Necesita configuración
+- ❌ Error: Fallo en conectividad/autenticación
+
+#### Integración con conversation-manager
+
+El modelo seleccionado se guarda en `conversation.ai_settings`:
+
+```javascript
+{
+  conversation_id: "conv_abc123",
+  ai_settings: {
+    provider: "anthropic",
+    model: "claude-3-5-sonnet-20241022",
+    temperature: 0.7,
+    max_tokens: 4096,
+    top_p: 1.0
+  }
+}
+```
+
+#### Flujo de Fallback Automático
+
+```
+Usuario envía mensaje
+        │
+        ▼
+   ai-gateway
+        │
+        ├─► Intenta: DeepSeek (prioridad 1)
+        │   └─ ❌ Error/No disponible
+        │
+        ├─► Intenta: Anthropic (prioridad 2)
+        │   └─ ✅ Éxito → Responde
+        │
+        └─► Si todos fallan:
+            └─ ai.chat.error + mensaje al usuario
+```
 
 ---
 
@@ -1956,12 +2196,16 @@ data/
 
 ---
 
-### Botón 🔧 Tools (tool-orchestrator)
+### Botón 🔧 Tools (tool-orchestrator) - DEPRECADO
+
+> ⚠️ **DEPRECADO**: Este botón ha sido removido de la interfaz de usuario.
+> El tool-orchestrator sigue funcionando internamente para AI agents,
+> pero no requiere interacción directa del usuario en el chat.
 
 **Módulo**: `tool-orchestrator`
 **Versión**: 2.0.0
 **Responsabilidad**: Orquestar tool calls entre AI y proveedores de herramientas.
-**Ubicación**: `toolbar_chat.bottom`
+**Ubicación**: ~~`toolbar_chat.bottom`~~ (removido)
 
 #### Qué es Tool Calling
 
@@ -2527,12 +2771,622 @@ Los archivos adjuntos se referencian en los mensajes:
 
 ---
 
-### Botón 📋 Contexto (ai-agent-framework)
+### Botón 📂 Explorar (file-browser + pdf-viewer + text-editor)
+
+**Módulos**: `file-browser`, `pdf-viewer`, `text-editor`
+**Versiones**: 1.0.0
+**Responsabilidad**: Navegación, visualización y edición de archivos del proyecto.
+**Ubicación**: `toolbar_chat.bottom`
+
+#### Importancia
+
+El botón Explorar es el **visor unificado** de archivos del proyecto:
+- Navegar estructura de carpetas
+- Ver PDFs generados o adjuntos
+- Editar archivos de texto (JSON, MD, código)
+- Buscar archivos por nombre o contenido
+- Sin salir del contexto del chat
+
+```
+📂 Explorar
+     │
+     ├── 📁 file-browser   → Navegación y estructura
+     │   ├── Listar archivos/carpetas
+     │   ├── Crear/eliminar archivos
+     │   └── Buscar (por nombre o contenido)
+     │
+     ├── 📄 pdf-viewer     → Visualizar PDFs
+     │   ├── Renderizado base64
+     │   ├── Extracción de texto
+     │   └── Metadata del PDF
+     │
+     └── 📝 text-editor    → Editar texto
+         ├── Formatos: json, md, txt, js, html, css, xml, yaml
+         ├── Validación de sintaxis
+         └── Formateo automático
+```
+
+#### APIs - file-browser
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/files?project_id=X&path=/` | Listar archivos/carpetas |
+| GET | `/files/content?project_id=X&file_path=Y` | Obtener contenido de archivo |
+| POST | `/files` | Crear archivo o carpeta |
+| DELETE | `/files?project_id=X&file_path=Y` | Eliminar archivo/carpeta |
+| GET | `/files/search?project_id=X&query=Y` | Buscar por nombre |
+| GET | `/files/search?project_id=X&query=Y&search_content=true` | Buscar en contenido |
+
+#### APIs - pdf-viewer
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/pdf/view?project_id=X&file_path=Y` | Ver PDF (base64) |
+| GET | `/pdf/extract?project_id=X&file_path=Y` | Extraer texto del PDF |
+| GET | `/pdf/metadata?project_id=X&file_path=Y` | Metadata del PDF |
+| GET | `/pdf/list?project_id=X` | Listar todos los PDFs del proyecto |
+
+#### APIs - text-editor
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/editor/open?project_id=X&file_path=Y` | Abrir archivo para edición |
+| POST | `/editor/save` | Guardar cambios (project_id, file_path, content) |
+| POST | `/editor/validate` | Validar sintaxis (content, format) |
+| POST | `/editor/format` | Formatear contenido (content, format) |
+
+#### Eventos
+
+**file-browser escucha:**
+| Evento | Acción |
+|--------|--------|
+| `file.list.request` | Lista archivos y responde |
+| `file.content.request` | Obtiene contenido y responde |
+| `file.create.request` | Crea archivo/carpeta |
+| `file.delete.request` | Elimina y responde |
+| `file.search.request` | Busca y responde |
+
+**file-browser publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `file.created` | Archivo/carpeta creado |
+| `file.deleted` | Archivo/carpeta eliminado |
+| `file.list.response` | Respuesta a list request |
+| `file.content.response` | Respuesta a content request |
+| `file.search.response` | Resultados de búsqueda |
+
+**pdf-viewer escucha:**
+| Evento | Acción |
+|--------|--------|
+| `pdf.view.request` | Carga PDF en base64 |
+| `pdf.extract.request` | Extrae texto |
+| `pdf.metadata.request` | Obtiene metadata |
+| `pdf.list.request` | Lista PDFs del proyecto |
+
+**pdf-viewer publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `pdf.view.response` | PDF cargado (base64) |
+| `pdf.extract.response` | Texto extraído |
+| `pdf.metadata.response` | Metadata obtenida |
+| `pdf.list.response` | Lista de PDFs |
+
+**text-editor escucha:**
+| Evento | Acción |
+|--------|--------|
+| `editor.open.request` | Abre archivo para edición |
+| `editor.save.request` | Guarda cambios |
+| `editor.validate.request` | Valida sintaxis |
+| `editor.format.request` | Formatea contenido |
+
+**text-editor publica:**
+| Evento | Cuándo |
+|--------|--------|
+| `editor.open.response` | Archivo abierto con contenido |
+| `editor.saved` | Archivo guardado exitosamente |
+| `editor.validate.response` | Resultado de validación |
+| `editor.format.response` | Contenido formateado |
+| `editor.error` | Error en operación |
+
+#### Formatos Soportados (text-editor)
+
+| Extensión | Validación | Formateo |
+|-----------|------------|----------|
+| `.json` | Sintaxis JSON válido | Indentación automática |
+| `.md` | Links markdown | Trim de espacios finales |
+| `.txt` | - | - |
+| `.js` | - | - |
+| `.html` | - | - |
+| `.css` | - | - |
+| `.xml` | - | - |
+| `.yaml` | - | - |
+
+#### Triple Interacción
+
+##### 1 TAP → Panel Explorador de Archivos (30%)
+
+```
+┌─────────────────────────────────────────┐
+│ 📂 Explorar Proyecto                    │
+├─────────────────────────────────────────┤
+│                                         │
+│  📁 Proyecto: Mi Asistente IA           │
+│  Ruta: /                                │
+│  ─────────────────────────────────────  │
+│                                         │
+│  📁 uploads/               12 archivos  │
+│  📁 exports/                3 archivos  │
+│  📁 docs/                   5 archivos  │
+│  ─────────────────────────────────────  │
+│  📄 config.json                  2 KB   │
+│  📄 notas.md                     5 KB   │
+│  📄 informe.pdf                 1.2 MB  │
+│                                         │
+│  ─────────────────────────────────────  │
+│  [🔍 Buscar...]                         │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Datos mostrados:**
+- Estructura de carpetas del proyecto
+- Archivos ordenados: carpetas primero, luego alfabético
+- Tamaño de archivos
+- Contador de archivos en carpetas
+
+**Acciones:**
+- Tap en carpeta → Navega dentro
+- Tap en archivo → Abre visor correspondiente:
+  - `.pdf` → pdf-viewer
+  - `.json`, `.md`, `.txt`, etc → text-editor
+  - Otros → Descarga
+- 🔍 Buscar → Busca por nombre
+
+##### 2 TAPS → Modal Visor/Editor (50%)
+
+**Para PDFs:**
+```
+┌─────────────────────────────────────────────────────┐
+│ 📄 informe.pdf                                [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │                                             │   │
+│  │          [Renderizado del PDF]              │   │
+│  │                                             │   │
+│  │                                             │   │
+│  │                                             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Página: [1] de 5   [◀️] [▶️]   [🔍+] [🔍-]         │
+│                                                     │
+│  ─────────────────────────────────────────────────  │
+│  Tamaño: 1.2 MB | Modificado: hace 2h              │
+│                                                     │
+│  [📋 Extraer texto] [📎 Adjuntar al chat] [⬇️]     │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Para texto/código:**
+```
+┌─────────────────────────────────────────────────────┐
+│ 📝 config.json                          ✏️    [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ {                                           │   │
+│  │   "nombre": "Mi Proyecto",                  │   │
+│  │   "version": "1.0.0",                       │   │
+│  │   "settings": {                             │   │
+│  │     "theme": "dark",                        │   │
+│  │     "language": "es"                        │   │
+│  │   }                                         │   │
+│  │ }                                           │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Línea: 8 | Columna: 1 | JSON válido ✅             │
+│                                                     │
+│  [✨ Formatear] [💾 Guardar] [📎 Adjuntar al chat]  │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Acciones editor:**
+- ✏️ → Activar modo edición
+- ✨ Formatear → Aplica formato según tipo
+- 💾 Guardar → Guarda cambios (valida primero si es JSON)
+- 📎 Adjuntar al chat → Añade como attachment al mensaje
+
+##### LONG-PRESS → Modal Gestión de Archivos (80%)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 📂 Gestionar Archivos                                     [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  [🔍 Buscar en nombre...]  [🔍📄 Buscar en contenido...]       │
+│                                                                 │
+│  Filtrar: [Todos ▼]  [📄 PDFs] [📝 Texto] [🖼️ Imágenes]        │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📁 uploads/                                      12 archivos   │
+│  ─────────────────────────────────────────────────────────────  │
+│  │  📄 documento1.pdf         1.2 MB    hace 2h    [👁️][📎][🗑️]│
+│  │  📄 documento2.pdf         800 KB    hace 1d    [👁️][📎][🗑️]│
+│  │  🖼️ captura.png            450 KB    hace 3d    [👁️][📎][🗑️]│
+│  │  📝 notas.md                 5 KB    hace 1w    [👁️][📎][🗑️]│
+│  └────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  📁 exports/                                       3 archivos   │
+│  ─────────────────────────────────────────────────────────────  │
+│  │  📄 reporte.pdf            2.5 MB    hace 1h    [👁️][📎][🗑️]│
+│  │  📝 datos.json              15 KB    hace 2h    [👁️][📎][🗑️]│
+│  │  📝 resumen.md               8 KB    hace 2h    [👁️][📎][🗑️]│
+│  └────────────────────────────────────────────────────────────  │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  📊 Total: 15 archivos | 6.5 MB                                │
+│                                                                 │
+│  [+ Nueva carpeta]  [📤 Subir archivo]     [🗑️ Limpiar temp]   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Acciones por archivo:**
+- 👁️ Ver → Abre en visor correspondiente
+- 📎 Adjuntar → Añade al mensaje actual
+- 🗑️ Eliminar → Confirma y borra
+
+**Acciones globales:**
+- + Nueva carpeta → Crea carpeta
+- 📤 Subir archivo → Upload nuevo archivo
+- 🗑️ Limpiar temp → Elimina archivos temporales >24h
+
+#### Flujo de Búsqueda
+
+```
+Usuario busca "factura"
+        │
+        ▼
+   file-browser
+        │
+        ├─► search_content=false
+        │   └─ Busca en nombres: factura*.pdf, *factura*.json
+        │
+        └─► search_content=true
+            └─ Busca en contenido de archivos de texto
+            └─ Extensiones: .md, .txt, .json, .js, .html, .css, .xml, .yaml
+```
+
+#### Integración con Chat
+
+Los archivos explorados pueden adjuntarse al mensaje:
+
+```javascript
+// Usuario ve un PDF y hace clic en "📎 Adjuntar al chat"
+{
+  action: "attach_to_message",
+  file: {
+    path: "/exports/reporte.pdf",
+    type: "pdf",
+    size: 2621440
+  }
+}
+// → Se añade al mensaje como attachment
+// → conversation-manager lo incluye en el contexto
+```
+
+---
+
+### Botón 🎤 Voz (Web Speech API)
+
+**Módulo**: Integración nativa del navegador
+**Tecnología**: Web Speech API (SpeechRecognition + SpeechSynthesis)
+**Responsabilidad**: Entrada y salida de voz en el chat.
+**Ubicación**: `toolbar_chat.bottom`
+
+#### Propósito
+
+El botón Voz permite interactuar con el chat mediante voz:
+- Dictar mensajes en lugar de escribir
+- Escuchar respuestas del LLM leídas en voz alta
+- Modo manos libres para accesibilidad
+
+```
+🎤 Voz
+     │
+     ├── 🎙️ Speech-to-Text (STT)
+     │   └── Web Speech API: SpeechRecognition
+     │
+     └── 🔊 Text-to-Speech (TTS)
+         └── Web Speech API: SpeechSynthesis
+```
+
+#### Características
+
+| Funcionalidad | Tecnología | Soporte |
+|---------------|------------|---------|
+| Dictado de voz | SpeechRecognition | Chrome, Edge, Safari |
+| Lectura de respuestas | SpeechSynthesis | Todos los navegadores modernos |
+| Idiomas | API del navegador | Español, Inglés, +50 idiomas |
+
+#### Triple Interacción
+
+##### 1 TAP → Iniciar Dictado
+
+```
+┌─────────────────────────────────────────┐
+│                                         │
+│              🎤 Escuchando...           │
+│                                         │
+│         ████████████░░░░░░░░            │
+│                                         │
+│  "Explícame cómo funciona..."          │
+│                                         │
+│  ─────────────────────────────────────  │
+│  [❌ Cancelar]     [✅ Enviar]          │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Comportamiento:**
+- Activa el micrófono
+- Transcribe en tiempo real
+- Muestra texto reconocido
+- Al finalizar: inserta en el input
+
+##### 2 TAPS → Modal Configuración de Voz (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 🎤 Configurar Voz                             [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ─── Dictado (Speech-to-Text) ───                   │
+│                                                     │
+│  Idioma de dictado                                  │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ▼ Español (España)                          │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  □ Modo continuo (sigue escuchando)                │
+│  □ Auto-enviar al detectar silencio                │
+│                                                     │
+│  ─── Lectura (Text-to-Speech) ───                   │
+│                                                     │
+│  Voz                                                │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ▼ Microsoft Helena (es-ES)                  │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Velocidad         [1.0x] ────●──────── 0.5-2x     │
+│  Tono              [1.0]  ─────●─────── 0.5-2      │
+│                                                     │
+│  [🔊 Probar voz]                                   │
+│                                                     │
+│  ─── Accesibilidad ───                              │
+│                                                     │
+│  □ Leer respuestas automáticamente                 │
+│  □ Confirmar antes de enviar dictado               │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │           💾 Guardar Configuración          │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+##### LONG-PRESS → Modo Lectura (leer respuesta)
+
+- Lee en voz alta el último mensaje del asistente
+- Botón se convierte en ⏹️ para detener
+
+#### Implementación Frontend
+
+```javascript
+// Dictado
+const recognition = new webkitSpeechRecognition();
+recognition.lang = 'es-ES';
+recognition.continuous = false;
+recognition.interimResults = true;
+
+recognition.onresult = (event) => {
+  const transcript = event.results[0][0].transcript;
+  inputField.value = transcript;
+};
+
+// Lectura
+const utterance = new SpeechSynthesisUtterance(text);
+utterance.lang = 'es-ES';
+utterance.rate = 1.0;
+speechSynthesis.speak(utterance);
+```
+
+#### Nota
+
+Este botón NO requiere módulo backend. Usa APIs nativas del navegador.
+Los eventos de uso pueden publicarse opcionalmente para analytics.
+
+---
+
+### Botón 📷 Cámara (MediaDevices API)
+
+**Módulo**: Integración nativa del navegador
+**Tecnología**: MediaDevices API (getUserMedia)
+**Responsabilidad**: Captura de fotos para adjuntar al chat.
+**Ubicación**: `toolbar_chat.bottom`
+
+#### Propósito
+
+El botón Cámara permite capturar imágenes para enviar al LLM:
+- Tomar fotos de documentos, pantallas, objetos
+- Capturar para análisis visual (modelos multimodales)
+- Subir directamente como attachment
+
+```
+📷 Cámara
+     │
+     ├── 📸 Captura de foto
+     │   └── MediaDevices: getUserMedia({video: true})
+     │
+     └── 📤 Subida automática
+         └── → storage-manager → attachment
+```
+
+#### Triple Interacción
+
+##### 1 TAP → Capturar Foto
+
+```
+┌─────────────────────────────────────────┐
+│ 📷 Capturar Foto                        │
+├─────────────────────────────────────────┤
+│                                         │
+│  ┌─────────────────────────────────┐   │
+│  │                                 │   │
+│  │      [Vista de la cámara]       │   │
+│  │                                 │   │
+│  │                                 │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│           [ 📸 Capturar ]              │
+│                                         │
+│  [🔄 Cambiar cámara]    [❌ Cancelar]   │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Al capturar:**
+- Toma foto del video stream
+- Muestra preview
+- Ofrece: [📎 Adjuntar] [🔄 Otra foto] [❌ Descartar]
+
+##### 2 TAPS → Modal Configuración (50%)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 📷 Configurar Cámara                          [X]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Cámara                                             │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ▼ Cámara frontal                            │   │
+│  │   ○ Cámara trasera                          │   │
+│  │   ○ Cámara externa USB                      │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Resolución                                         │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ ○ Baja (640x480)     ~ 50 KB                │   │
+│  │ ● Media (1280x720)   ~ 150 KB               │   │
+│  │ ○ Alta (1920x1080)   ~ 300 KB               │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  Formato de imagen                                  │
+│  ○ JPEG (más pequeño)  ● PNG (mejor calidad)       │
+│                                                     │
+│  □ Adjuntar automáticamente al capturar            │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │           💾 Guardar Configuración          │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+##### LONG-PRESS → Galería de capturas recientes
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 📷 Capturas Recientes                                     [X]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+│  │ 📷      │  │ 📷      │  │ 📷      │  │ 📷      │            │
+│  │ img1    │  │ img2    │  │ img3    │  │ img4    │            │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘            │
+│   hace 5m      hace 1h      hace 2h      hace 1d               │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
+│  Seleccionadas: 0                                              │
+│                                                                 │
+│  [📎 Adjuntar seleccionadas]            [🗑️ Limpiar todas]     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Implementación Frontend
+
+```javascript
+// Obtener stream de video
+const stream = await navigator.mediaDevices.getUserMedia({
+  video: {
+    facingMode: 'environment', // Cámara trasera
+    width: { ideal: 1280 },
+    height: { ideal: 720 }
+  }
+});
+
+// Mostrar en video element
+videoElement.srcObject = stream;
+
+// Capturar foto
+function capturePhoto() {
+  const canvas = document.createElement('canvas');
+  canvas.width = videoElement.videoWidth;
+  canvas.height = videoElement.videoHeight;
+  canvas.getContext('2d').drawImage(videoElement, 0, 0);
+
+  const imageData = canvas.toDataURL('image/jpeg', 0.8);
+  // → Subir a storage-manager
+  // → Adjuntar al mensaje
+}
+```
+
+#### Flujo de Captura
+
+```
+Usuario tap 📷
+        │
+        ▼
+   getUserMedia()
+        │
+        ▼
+   Video preview
+        │
+   [📸 Capturar]
+        │
+        ▼
+   Canvas snapshot
+        │
+        ├─► base64 → storage-manager POST /upload
+        │
+        └─► attachment en mensaje
+                │
+                ▼
+           conversation-manager
+           (mensaje con imagen)
+```
+
+#### Nota
+
+Este botón NO requiere módulo backend específico.
+Las imágenes capturadas se suben via `storage-manager`.
+Compatible con modelos multimodales (Claude vision, GPT-4V, etc).
+
+---
+
+### Botón 📋 Contexto (ai-agent-framework) - DEPRECADO
+
+> ⚠️ **DEPRECADO**: Este botón ha sido removido de la interfaz de usuario.
+> El ai-agent-framework es infraestructura interna para agentes backend,
+> no para interacción directa del usuario en el chat. El contexto de la
+> conversación se gestiona automáticamente por conversation-manager.
 
 **Módulo**: `ai-agent-framework`
 **Versión**: 1.0.0
 **Responsabilidad**: Framework de agentes IA con context management, tool calling y orchestration.
-**Ubicación**: `toolbar_chat.bottom`
+**Ubicación**: ~~`toolbar_chat.bottom`~~ (removido)
 
 #### Propósito en Chat
 
@@ -2917,12 +3771,17 @@ El context window determina cuántos mensajes se envían al LLM:
 
 ---
 
-### Botón 🔌 Plugins (plugin-manager)
+### Botón 🔌 Plugins (plugin-manager) - DEPRECADO
+
+> ⚠️ **DEPRECADO**: Este botón ha sido removido de la interfaz de usuario.
+> La gestión de plugins es un tema avanzado que requiere su propia interfaz
+> de administración separada. Los plugins siguen funcionando internamente
+> pero el usuario no los gestiona desde el chat.
 
 **Módulo**: `plugin-manager`
 **Versión**: 2.0.0
 **Responsabilidad**: Descubrimiento y gestión de plugins JSON con funciones.
-**Ubicación**: `toolbar_chat.bottom`
+**Ubicación**: ~~`toolbar_chat.bottom`~~ (removido)
 
 #### Propósito en Chat
 

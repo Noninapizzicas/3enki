@@ -891,13 +891,26 @@ Todos los módulos exponen:
 
 ### Triple Interacción Estándar
 
+> **Implementado en:** `ToolbarIcon.svelte` (ver CONTEXT_UI.md - Patrón 1)
+
 Cada icono en las barras tiene 3 niveles de interacción:
 
-| Gesto | Acción | Tamaño Panel | Uso |
-|-------|--------|--------------|-----|
-| **1 Toque** | Panel rápido (seleccionar) | small (30%) | 90% |
-| **2 Toques** | Modal crear (nuevo item) | medium (50%) | 8% |
-| **Long-press** | Modal gestión (editar/borrar) | full (80%) | 2% |
+| Gesto | Evento | Acción | Uso |
+|-------|--------|--------|-----|
+| **1 Toque** | `on:tap` | Panel rápido (seleccionar) | 90% |
+| **2 Toques** | `on:doubleTap` | Modal crear (nuevo item) | 8% |
+| **Long-press** | `on:longPress` | Modal gestión (editar/borrar) | 2% |
+
+```svelte
+<ToolbarIcon
+  id="modelo"
+  icon="🤖"
+  displayValue={currentModel}
+  on:tap={() => openPanel('modelo-selector')}
+  on:doubleTap={() => openPanel('modelo-config')}
+  on:longPress={() => openModal('modelos-gestionar')}
+/>
+```
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -1024,24 +1037,50 @@ eventBus.subscribe('module.event', (event) => { /* show in chat */ });
 
 ---
 
+### Componentes Base (CONTEXT_UI.md)
+
+> **IMPORTANTE**: Todos los componentes de UI usan los patrones base definidos en `CONTEXT_UI.md`.
+
+| Componente Base | Ubicación | Uso en Chat |
+|-----------------|-----------|-------------|
+| `ToolbarIcon` | `$components/toolbar/` | Iconos de toolbar con triple interacción |
+| `FloatingPanel` | `$components/feedback/` | Paneles modales centrados |
+| `ActionForm` | `$components/ui/` | Formularios de configuración |
+| `SelectList` | `$components/ui/` | Selector de modelos, prompts, credenciales |
+| `ToggleList` | `$components/ui/` | Activar/desactivar tools, plugins |
+
+**Filosofía de componentes:**
+- Padre controla TODO vía CSS variables
+- Zero hardcoding
+- Tamaño compacto por defecto
+- Eventos consistentes (tap, doubleTap, longPress)
+
+---
+
 ### Estructura de Archivos Frontend
 
 ```
 frontend/src/lib/components/
-├── ai/
+├── ui/                             # COMPONENTES BASE (CONTEXT_UI.md)
+│   ├── ActionForm.svelte           # Formularios dinámicos
+│   ├── SelectList.svelte           # Lista selección única (acordeón)
+│   └── ToggleList.svelte           # Lista selección múltiple
+│
+├── toolbar/
+│   └── ToolbarIcon.svelte          # Icono con triple interacción
+│
+├── feedback/
+│   └── FloatingPanel.svelte        # Panel flotante centrado
+│
+├── ai/                             # COMPONENTES ESPECÍFICOS CHAT
 │   ├── index.ts                    # Exports
 │   ├── types.ts                    # Tipos compartidos
-│   ├── ChatAIWorkspace.svelte      # Componente reutilizable principal
+│   ├── ChatAIWorkspace.svelte      # Workspace principal (usa base)
 │   ├── ChatInput.svelte            # Input de chat
 │   └── ConversationPanel.svelte    # Panel de conversaciones
 │
-├── layout/
-│   └── MobileWorkspaceLayout.svelte  # Layout principal móvil
-│
-└── toolbar/
-    ├── ToolbarIcon.svelte          # Icono con triple interacción
-    ├── ChatToolbar.svelte          # Sub-barras del chat
-    └── FloatingPanel.svelte        # Panel flotante genérico
+└── layout/
+    └── MobileWorkspaceLayout.svelte  # Layout principal (usa ToolbarIcon)
 ```
 
 ---

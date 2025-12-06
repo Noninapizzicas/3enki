@@ -4,7 +4,7 @@
   import { Button, Badge } from '$components/ui';
   import { Spinner } from '$components/feedback';
   import { FileDropZone } from '$components/input';
-  import { ChatAIWorkspace } from '$components/ai';
+  import { ChatAIWorkspaceV2 } from '$components/ai';
   import type {
     AIModel,
     AICredential,
@@ -1456,7 +1456,8 @@
     <!-- Paneles de IA delegados a ChatAIWorkspace  -->
     <!-- =========================================== -->
     {:else}
-      <ChatAIWorkspace
+      <!-- ChatAIWorkspaceV2 - Usa componentes base (SelectList, ToggleList, ActionForm) -->
+      <ChatAIWorkspaceV2
         currentPanel={panelId}
         availableModels={availableModels}
         selectedModelId={selectedModelId}
@@ -1479,12 +1480,15 @@
           updated_at: c.created_at,
           status: c.status
         }))}
-        on:modelSelect={(e) => { selectedModelId = e.detail.id; currentModel = e.detail.name; currentPanel = ''; }}
-        on:credentialSelect={(e) => { currentCredentialPreview = e.detail.api_key_preview; currentPanel = ''; }}
-        on:toolToggle={(e) => toggleTool(e.detail.id)}
-        on:pluginToggle={(e) => togglePlugin(e.detail.id)}
-        on:promptSelect={(e) => applyQuickPrompt(e.detail)}
-        on:panelClose={() => currentPanel = ''}
+        on:modelSelect={(e) => { selectedModelId = e.detail.model.id; currentModel = e.detail.model.name; currentPanel = ''; }}
+        on:credentialSelect={(e) => { currentCredentialPreview = e.detail.credential.api_key_preview; currentPanel = ''; }}
+        on:toolsChange={(e) => { availableTools = e.detail.tools; }}
+        on:pluginsChange={(e) => { availablePlugins = e.detail.plugins; }}
+        on:promptApply={(e) => applyQuickPrompt(e.detail.prompt)}
+        on:credentialCreate={(e) => { console.log('New credential:', e.detail.data); currentPanel = ''; }}
+        on:promptCreate={(e) => { console.log('New prompt:', e.detail.data); currentPanel = ''; }}
+        on:conversationCreate={(e) => { console.log('New conversation:', e.detail.data); currentPanel = ''; }}
+        on:conversationSelect={(e) => { console.log('Select conversation:', e.detail.conversation); currentPanel = ''; }}
       />
     {/if}
   </svelte:fragment>

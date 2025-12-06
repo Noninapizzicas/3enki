@@ -11,6 +11,34 @@ export interface AIModel {
   description?: string;
   maxTokens?: number;
   costPer1kTokens?: number;
+  recommended?: boolean;
+  tags?: ('fast' | 'powerful' | 'balanced' | 'cheap')[];
+}
+
+// Proveedor de IA
+export interface AIProvider {
+  id: string;
+  name: string;
+  priority: number;
+  status: 'available' | 'no_key' | 'error' | 'offline';
+  models: string[];
+  stats: {
+    requests: number;
+    tokens: number;
+    cost: number;
+  };
+  icon?: string;
+}
+
+// Configuración del modelo para generación
+export interface ModelConfig {
+  mode: 'auto' | 'manual';
+  providerId?: string;
+  modelId?: string;
+  temperature: number;
+  maxTokens: number;
+  topP: number;
+  applyToNew?: boolean;
 }
 
 // Credencial de API

@@ -41,13 +41,36 @@ export interface ModelConfig {
   applyToNew?: boolean;
 }
 
+// Niveles de credencial con prioridad
+export type CredentialLevel = 'CUSTOM' | 'CLIENT' | 'PROJECT' | 'GLOBAL';
+
 // Credencial de API
 export interface AICredential {
   key: string;
   provider: string;
-  level: 'GLOBAL' | 'PROJECT' | 'CLIENT' | 'CUSTOM';
+  level: CredentialLevel;
   identifier: string | null;
   api_key_preview: string;
+  status?: 'active' | 'error' | 'expired';
+  created_at?: string;
+  last_used?: string;
+}
+
+// Estado de credencial por proveedor (para selector)
+export interface ProviderCredentialStatus {
+  provider: string;
+  level: CredentialLevel | null;
+  status: 'active' | 'no_key' | 'error';
+  resolvedFrom?: string;
+}
+
+// Formulario para crear credencial
+export interface NewCredentialForm {
+  provider: string;
+  level: CredentialLevel;
+  identifier: string;
+  api_key: string;
+  showKey: boolean;
 }
 
 // Herramienta disponible

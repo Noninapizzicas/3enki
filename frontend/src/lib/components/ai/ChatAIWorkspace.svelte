@@ -8,6 +8,9 @@
     AIPlugin,
     AIProvider,
     ModelConfig,
+    CredentialLevel,
+    ProviderCredentialStatus,
+    NewCredentialForm,
     ContextItem,
     QuickPrompt,
     ChatMessage,
@@ -65,6 +68,21 @@
 
   // Props - Credenciales
   export let credentials: AICredential[] = [];
+  export let providerCredentialStatus: ProviderCredentialStatus[] = [];
+
+  // Estado local para formulario de nueva credencial
+  let newCredentialForm: NewCredentialForm = {
+    provider: '',
+    level: 'GLOBAL',
+    identifier: '',
+    api_key: '',
+    showKey: false
+  };
+
+  // Filtros para gestión de credenciales
+  let credentialFilterLevel: CredentialLevel | 'ALL' = 'ALL';
+  let credentialFilterProvider: string = 'ALL';
+  let credentialSearchQuery: string = '';
 
   // Props - Tools
   export let tools: AITool[] = [];
@@ -102,6 +120,11 @@
     providerPriorityChange: { providerId: string; direction: 'up' | 'down' };
     // Credencial
     credentialSelect: { credential: AICredential };
+    credentialCreate: { form: NewCredentialForm };
+    credentialEdit: { key: string };
+    credentialDelete: { key: string };
+    credentialTest: { key: string };
+    credentialReload: void;
     addCredential: void;
     // Tools & Plugins
     toolToggle: { toolId: string; enabled: boolean };
@@ -128,6 +151,35 @@
     tokens: acc.tokens + p.stats.tokens,
     cost: acc.cost + p.stats.cost
   }), { requests: 0, tokens: 0, cost: 0 });
+
+  // Computed - Credenciales
+  $: credentialsByLevel = credentials.reduce((acc, c) => {
+    acc[c.level] = acc[c.level] || [];
+    acc[c.level].push(c);
+    return acc;
+  }, {} as Record<CredentialLevel, AICredential[]>);
+
+  $: filteredCredentials = credentials.filter(c => {
+    if (credentialFilterLevel !== 'ALL' && c.level !== credentialFilterLevel) return false;
+    if (credentialFilterProvider !== 'ALL' && c.provider !== credentialFilterProvider) return false;
+    if (credentialSearchQuery) {
+      const query = credentialSearchQuery.toLowerCase();
+      return c.key.toLowerCase().includes(query) || c.provider.toLowerCase().includes(query);
+    }
+    return true;
+  });
+
+  $: credentialStats = {
+    total: credentials.length,
+    byLevel: {
+      GLOBAL: credentialsByLevel['GLOBAL']?.length || 0,
+      PROJECT: credentialsByLevel['PROJECT']?.length || 0,
+      CLIENT: credentialsByLevel['CLIENT']?.length || 0,
+      CUSTOM: credentialsByLevel['CUSTOM']?.length || 0
+    }
+  };
+
+  $: credentialProviderOptions = [...new Set(credentials.map(c => c.provider))];
 
   $: toolsByCategory = tools.reduce((acc, t) => {
     acc[t.category] = acc[t.category] || [];
@@ -220,6 +272,79 @@
   function selectCredential(cred: AICredential) {
     dispatch('credentialSelect', { credential: cred });
     dispatch('panelChange', { panelId: '' });
+  }
+
+  function resetNewCredentialForm() {
+    newCredentialForm = {
+      provider: '',
+      level: 'GLOBAL',
+      identifier: '',
+      api_key: '',
+      showKey: false
+    };
+  }
+
+  function createCredential() {
+    if (!newCredentialForm.provider || !newCredentialForm.api_key) return;
+    if (newCredentialForm.level !== 'GLOBAL' && !newCredentialForm.identifier) return;
+
+    dispatch('credentialCreate', { form: { ...newCredentialForm } });
+    resetNewCredentialForm();
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function editCredential(key: string) {
+    dispatch('credentialEdit', { key });
+  }
+
+  function deleteCredential(key: string) {
+    if (confirm('¿Eliminar esta credencial?')) {
+      dispatch('credentialDelete', { key });
+    }
+  }
+
+  function testCredential(key: string) {
+    dispatch('credentialTest', { key });
+  }
+
+  function reloadCredentials() {
+    dispatch('credentialReload');
+  }
+
+  function getCredentialStatusIcon(status: string): string {
+    switch (status) {
+      case 'active': return '✅';
+      case 'no_key': return '⚠️';
+      case 'error': return '❌';
+      default: return '❓';
+    }
+  }
+
+  function getCredentialStatusLabel(status: string): string {
+    switch (status) {
+      case 'active': return 'Activa';
+      case 'no_key': return 'Sin key';
+      case 'error': return 'Error';
+      default: return 'Desconocido';
+    }
+  }
+
+  function getLevelDescription(level: CredentialLevel): string {
+    switch (level) {
+      case 'GLOBAL': return 'Fallback para todo';
+      case 'PROJECT': return 'Solo este proyecto';
+      case 'CLIENT': return 'Solo este cliente';
+      case 'CUSTOM': return 'Personalizado';
+    }
+  }
+
+  function getLevelPriority(level: CredentialLevel): number {
+    switch (level) {
+      case 'CUSTOM': return 1;
+      case 'CLIENT': return 2;
+      case 'PROJECT': return 3;
+      case 'GLOBAL': return 4;
+    }
   }
 
   function toggleTool(toolId: string) {
@@ -603,22 +728,58 @@
     </div>
   </div>
 
-<!-- Panel: Credencial Selector -->
+<!-- Panel: Credencial Selector (1 TAP - 30%) -->
 {:else if currentPanel === 'credencial-selector'}
-  <div class="space-y-2">
-    {#if credentials.length === 0}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">🔑</span>
+      <h3 class="font-medium">Credenciales Activas</h3>
+    </div>
+
+    <!-- Lista de proveedores con estado -->
+    {#if providerCredentialStatus.length > 0}
+      <div class="space-y-1">
+        <div class="grid grid-cols-3 text-xs text-text-muted px-2 pb-1 border-b border-border">
+          <span>Proveedor</span>
+          <span>Nivel</span>
+          <span class="text-right">Estado</span>
+        </div>
+        {#each providerCredentialStatus as pcs (pcs.provider)}
+          <button
+            class="w-full text-left p-2 rounded-lg transition-colors hover:bg-bg-hover"
+            on:click={() => {
+              const cred = credentials.find(c => c.provider === pcs.provider);
+              if (cred) selectCredential(cred);
+            }}
+          >
+            <div class="grid grid-cols-3 items-center text-sm">
+              <div class="flex items-center gap-2">
+                <span>{pcs.status === 'active' ? '●' : '○'}</span>
+                <span>{pcs.provider}</span>
+              </div>
+              <span class="text-text-muted">{pcs.level || '---'}</span>
+              <span class="text-right {pcs.status === 'active' ? 'text-success' : pcs.status === 'no_key' ? 'text-warning' : 'text-error'}">
+                {getCredentialStatusIcon(pcs.status)} {getCredentialStatusLabel(pcs.status)}
+              </span>
+            </div>
+          </button>
+        {/each}
+      </div>
+    {:else if credentials.length === 0}
       <p class="text-center text-text-muted py-4">No hay credenciales configuradas</p>
       <Button variant="primary" class="w-full" on:click={openAddCredential}>
         ➕ Añadir Credencial
       </Button>
     {:else}
+      <!-- Fallback: mostrar credenciales existentes -->
       {#each credentials as cred (cred.key)}
         <button
-          class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+          class="w-full text-left p-2 rounded-lg transition-colors hover:bg-bg-hover"
           on:click={() => selectCredential(cred)}
         >
           <div class="flex items-center gap-3">
-            <span class="text-xl">{getProviderIcon(cred.provider)}</span>
+            <span class="text-lg">{getProviderIcon(cred.provider)}</span>
             <div class="flex-1">
               <p class="font-medium text-sm">{cred.provider}</p>
               <p class="text-xs text-text-muted">{cred.level}{cred.identifier ? ` • ${cred.identifier}` : ''}</p>
@@ -628,6 +789,215 @@
         </button>
       {/each}
     {/if}
+
+    <!-- Info de resolución -->
+    <div class="pt-2 border-t border-border">
+      <p class="text-xs text-text-muted text-center">
+        Resolución: CUSTOM → CLIENT → PROJECT → GLOBAL
+      </p>
+    </div>
+  </div>
+
+<!-- Panel: Credencial Crear (2 TAPS - 50%) -->
+{:else if currentPanel === 'credencial-crear'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">🔑</span>
+        <h3 class="font-medium">Nueva Credencial</h3>
+      </div>
+    </div>
+
+    <!-- Formulario -->
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Proveedor *</label>
+      <select
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={newCredentialForm.provider}
+      >
+        <option value="">Seleccionar proveedor...</option>
+        {#each providerOptions as provider}
+          <option value={provider}>{getProviderIcon(provider)} {provider}</option>
+        {/each}
+      </select>
+    </div>
+
+    <div>
+      <label class="text-xs text-text-muted mb-2 block">Nivel *</label>
+      <div class="space-y-1">
+        {#each ['GLOBAL', 'PROJECT', 'CLIENT', 'CUSTOM'] as level}
+          <button
+            class="w-full text-left p-2 rounded-lg text-sm transition-colors {newCredentialForm.level === level ? 'bg-primary/20 border border-primary' : 'bg-bg-hover'}"
+            on:click={() => newCredentialForm.level = level}
+          >
+            <div class="flex items-center gap-2">
+              <span>{newCredentialForm.level === level ? '●' : '○'}</span>
+              <span class="font-medium">{level}</span>
+              <span class="text-xs text-text-muted">({getLevelDescription(level)})</span>
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    {#if newCredentialForm.level !== 'GLOBAL'}
+      <div>
+        <label class="text-xs text-text-muted mb-1 block">Identificador *</label>
+        <input
+          type="text"
+          placeholder="proj_abc123 o client_456"
+          class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+          bind:value={newCredentialForm.identifier}
+        />
+      </div>
+    {/if}
+
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">API Key *</label>
+      <div class="relative">
+        <input
+          type={newCredentialForm.showKey ? 'text' : 'password'}
+          placeholder="sk-..."
+          class="w-full p-2 pr-10 bg-bg-hover rounded-lg border border-border text-sm font-mono focus:border-primary focus:outline-none"
+          bind:value={newCredentialForm.api_key}
+        />
+        <button
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+          on:click={() => newCredentialForm.showKey = !newCredentialForm.showKey}
+        >
+          {newCredentialForm.showKey ? '🙈' : '👁️'}
+        </button>
+      </div>
+    </div>
+
+    <!-- Botón guardar -->
+    <Button
+      variant="primary"
+      class="w-full"
+      on:click={createCredential}
+      disabled={!newCredentialForm.provider || !newCredentialForm.api_key || (newCredentialForm.level !== 'GLOBAL' && !newCredentialForm.identifier)}
+    >
+      💾 Guardar Credencial
+    </Button>
+
+    <!-- Advertencia -->
+    <p class="text-xs text-warning text-center">
+      ⚠️ La API key se guarda en .env (no en DB)
+    </p>
+  </div>
+
+<!-- Panel: Credenciales Gestionar (LONG-PRESS - 80%) -->
+{:else if currentPanel === 'credenciales-gestionar'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">🔑</span>
+        <h3 class="font-medium">Gestionar Credenciales</h3>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="flex gap-2 flex-wrap">
+      <select
+        class="flex-1 min-w-[100px] p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={credentialFilterLevel}
+      >
+        <option value="ALL">Todos los niveles</option>
+        <option value="GLOBAL">GLOBAL</option>
+        <option value="PROJECT">PROJECT</option>
+        <option value="CLIENT">CLIENT</option>
+        <option value="CUSTOM">CUSTOM</option>
+      </select>
+      <select
+        class="flex-1 min-w-[100px] p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={credentialFilterProvider}
+      >
+        <option value="ALL">Todos los proveedores</option>
+        {#each credentialProviderOptions as provider}
+          <option value={provider}>{provider}</option>
+        {/each}
+      </select>
+      <input
+        type="text"
+        placeholder="🔍 Buscar..."
+        class="flex-1 min-w-[120px] p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={credentialSearchQuery}
+      />
+    </div>
+
+    <!-- Lista agrupada por nivel -->
+    <div class="space-y-3">
+      {#each ['GLOBAL', 'PROJECT', 'CLIENT', 'CUSTOM'] as level}
+        {@const levelCreds = filteredCredentials.filter(c => c.level === level)}
+        {#if levelCreds.length > 0}
+          <div>
+            <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">{level}</h4>
+            <div class="space-y-1">
+              {#each levelCreds as cred (cred.key)}
+                <div class="p-2 bg-bg-hover rounded-lg border border-border">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-mono truncate flex-1">{cred.key}</span>
+                    <span class="text-xs {cred.status === 'active' ? 'text-success' : cred.status === 'error' ? 'text-error' : 'text-warning'}">
+                      {getCredentialStatusIcon(cred.status || 'active')}
+                    </span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs text-text-muted font-mono">{cred.api_key_preview}</span>
+                    <div class="flex gap-1">
+                      <button
+                        class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+                        on:click={() => editCredential(cred.key)}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-error/20 transition-colors"
+                        on:click={() => deleteCredential(cred.key)}
+                        title="Eliminar"
+                      >
+                        🗑️
+                      </button>
+                      <button
+                        class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+                        on:click={() => testCredential(cred.key)}
+                        title="Probar"
+                      >
+                        🧪
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      {/each}
+
+      {#if filteredCredentials.length === 0}
+        <p class="text-center text-text-muted py-4">No hay credenciales que coincidan</p>
+      {/if}
+    </div>
+
+    <!-- Stats -->
+    <div class="p-2 bg-bg-card rounded-lg border border-border text-sm">
+      📊 <strong>Total:</strong> {credentialStats.total} credenciales |
+      GLOBAL: {credentialStats.byLevel.GLOBAL} |
+      PROJECT: {credentialStats.byLevel.PROJECT} |
+      CLIENT: {credentialStats.byLevel.CLIENT}
+    </div>
+
+    <!-- Acciones globales -->
+    <div class="flex gap-2">
+      <Button variant="secondary" class="flex-1" on:click={() => dispatch('panelChange', { panelId: 'credencial-crear' })}>
+        + Nueva Credencial
+      </Button>
+      <Button variant="primary" class="flex-1" on:click={reloadCredentials}>
+        🔄 Recargar .env
+      </Button>
+    </div>
   </div>
 
 <!-- Panel: Prompts Rápidos -->

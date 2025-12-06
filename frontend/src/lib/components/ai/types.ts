@@ -230,6 +230,51 @@ export interface ProjectRef {
   is_active?: boolean;
 }
 
+// Categorías de archivos
+export type FileCategory = 'uploads' | 'exports' | 'temp' | 'files';
+
+// Archivo en storage
+export interface StorageFile {
+  id: string;
+  project_id: string;
+  filename: string;
+  original_filename: string;
+  path: string;
+  relative_path: string;
+  size: number;
+  mime_type: string;
+  category: FileCategory;
+  created_at: string;
+  metadata?: Record<string, unknown>;
+}
+
+// Información de uso de storage
+export interface StorageInfo {
+  project_id: string;
+  total_size: number;
+  by_category: {
+    uploads: { count: number; size: number };
+    exports: { count: number; size: number };
+    temp: { count: number; size: number };
+    files: { count: number; size: number };
+  };
+}
+
+// Archivo pendiente de subir
+export interface PendingUpload {
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+}
+
+// Formulario de subida
+export interface UploadForm {
+  category: FileCategory;
+  attachToMessage: boolean;
+  files: PendingUpload[];
+}
+
 // Configuración del workspace
 export interface ChatWorkspaceConfig {
   // Modelos

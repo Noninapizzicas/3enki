@@ -19,7 +19,11 @@
     Conversation,
     ConversationSummary,
     NewConversationForm,
-    ProjectRef
+    ProjectRef,
+    FileCategory,
+    StorageFile,
+    StorageInfo,
+    PendingUpload
   } from './types';
   import {
     DEFAULT_MODELS,
@@ -138,6 +142,21 @@
   let conversationSortBy: 'recent' | 'messages' | 'cost' = 'recent';
   let conversationSearchQuery: string = '';
 
+  // Props - Archivos (Adjuntar)
+  export let storageFiles: StorageFile[] = [];
+  export let storageInfo: StorageInfo | null = null;
+
+  // Estado local para selección de archivos
+  let selectedFileIds: Set<string> = new Set();
+  let fileFilterCategory: FileCategory | 'ALL' = 'ALL';
+  let fileSearchQuery: string = '';
+
+  // Estado local para subida de archivos
+  let pendingUploads: PendingUpload[] = [];
+  let uploadCategory: FileCategory = 'uploads';
+  let attachToMessage: boolean = true;
+  let isDragging: boolean = false;
+
   // Props - Panel actual
   export let currentPanel: string = '';
 
@@ -188,6 +207,14 @@
     conversationDelete: { conversationId: string };
     conversationsCleanup: { olderThanDays: number };
     conversationStats: void;
+    // Archivos (Adjuntar)
+    filesAttach: { fileIds: string[] };
+    filesUpload: { files: PendingUpload[]; category: FileCategory; attachToMessage: boolean };
+    fileView: { fileId: string };
+    fileDownload: { fileId: string };
+    fileDelete: { fileId: string };
+    filesDeleteMultiple: { fileIds: string[] };
+    storageCleanup: void;
     // Panel
     panelChange: { panelId: string };
   }>();
@@ -288,6 +315,24 @@
     messages: acc.messages + c.messages_count,
     cost: acc.cost + (c.total_cost || 0)
   }), { count: 0, messages: 0, cost: 0 });
+
+  // Computed - Archivos
+  $: filteredFiles = storageFiles.filter(f => {
+    if (fileFilterCategory !== 'ALL' && f.category !== fileFilterCategory) return false;
+    if (fileSearchQuery) {
+      const query = fileSearchQuery.toLowerCase();
+      return f.original_filename.toLowerCase().includes(query);
+    }
+    return true;
+  });
+
+  $: filesByCategory = storageFiles.reduce((acc, f) => {
+    acc[f.category] = acc[f.category] || [];
+    acc[f.category].push(f);
+    return acc;
+  }, {} as Record<FileCategory, StorageFile[]>);
+
+  $: pendingUploadsTotalSize = pendingUploads.reduce((acc, f) => acc + f.size, 0);
 
   $: enabledToolsCount = tools.filter(t => t.enabled).length;
   $: enabledPluginsCount = plugins.filter(p => p.enabled).length;
@@ -591,6 +636,107 @@
     if (diffHours < 24) return `hace ${diffHours}h`;
     if (diffDays < 7) return `hace ${diffDays}d`;
     return date.toLocaleDateString();
+  }
+
+  // Handlers - Archivos
+  function toggleFileSelection(fileId: string) {
+    if (selectedFileIds.has(fileId)) {
+      selectedFileIds.delete(fileId);
+    } else {
+      selectedFileIds.add(fileId);
+    }
+    selectedFileIds = new Set(selectedFileIds);
+  }
+
+  function attachSelectedFiles() {
+    if (selectedFileIds.size > 0) {
+      dispatch('filesAttach', { fileIds: Array.from(selectedFileIds) });
+      selectedFileIds = new Set();
+      dispatch('panelChange', { panelId: '' });
+    }
+  }
+
+  function handleFileDrop(event: DragEvent) {
+    event.preventDefault();
+    isDragging = false;
+    const files = event.dataTransfer?.files;
+    if (files) {
+      addFilesToUpload(files);
+    }
+  }
+
+  function handleFileSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files) {
+      addFilesToUpload(input.files);
+    }
+  }
+
+  function addFilesToUpload(files: FileList) {
+    const newFiles: PendingUpload[] = Array.from(files).map(file => ({
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type
+    }));
+    pendingUploads = [...pendingUploads, ...newFiles];
+  }
+
+  function removeFromUpload(index: number) {
+    pendingUploads = pendingUploads.filter((_, i) => i !== index);
+  }
+
+  function uploadFiles() {
+    if (pendingUploads.length > 0) {
+      dispatch('filesUpload', {
+        files: pendingUploads,
+        category: uploadCategory,
+        attachToMessage
+      });
+      pendingUploads = [];
+      dispatch('panelChange', { panelId: '' });
+    }
+  }
+
+  function viewFile(fileId: string) {
+    dispatch('fileView', { fileId });
+  }
+
+  function downloadFile(fileId: string) {
+    dispatch('fileDownload', { fileId });
+  }
+
+  function deleteFile(fileId: string) {
+    if (confirm('¿Eliminar este archivo?')) {
+      dispatch('fileDelete', { fileId });
+    }
+  }
+
+  function deleteSelectedFiles() {
+    if (selectedFileIds.size > 0 && confirm(`¿Eliminar ${selectedFileIds.size} archivos?`)) {
+      dispatch('filesDeleteMultiple', { fileIds: Array.from(selectedFileIds) });
+      selectedFileIds = new Set();
+    }
+  }
+
+  function cleanupStorage() {
+    if (confirm('¿Limpiar archivos temporales (>24h)?')) {
+      dispatch('storageCleanup');
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${bytes} B`;
+  }
+
+  function getFileIcon(mimeType: string): string {
+    if (mimeType.startsWith('image/')) return '🖼️';
+    if (mimeType === 'application/pdf') return '📄';
+    if (mimeType.startsWith('text/') || mimeType.includes('json')) return '📝';
+    if (mimeType.includes('zip') || mimeType.includes('archive')) return '📦';
+    return '📎';
   }
 
   function openAddCredential() {
@@ -1777,6 +1923,288 @@
       >
         📊 Stats
       </button>
+    </div>
+  </div>
+
+<!-- Panel: Adjuntar Archivo (1 TAP - 30%) -->
+{:else if currentPanel === 'adjuntar-archivo'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📎</span>
+      <h3 class="font-medium">Adjuntar Archivo</h3>
+    </div>
+
+    <!-- Filtro por categoría -->
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Categoría:</label>
+      <select
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={fileFilterCategory}
+      >
+        <option value="ALL">Todas</option>
+        <option value="uploads">📤 Uploads</option>
+        <option value="exports">📥 Exports</option>
+        <option value="temp">⏰ Temporales</option>
+        <option value="files">📁 Sistema</option>
+      </select>
+    </div>
+
+    <!-- Lista de archivos con checkbox -->
+    <div class="space-y-1 max-h-[250px] overflow-y-auto">
+      {#each filteredFiles as file (file.id)}
+        <button
+          class="w-full text-left p-2 rounded-lg transition-colors flex items-center gap-2 {selectedFileIds.has(file.id) ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+          on:click={() => toggleFileSelection(file.id)}
+        >
+          <span class="text-lg">{selectedFileIds.has(file.id) ? '☑️' : '☐'}</span>
+          <span class="text-lg">{getFileIcon(file.mime_type)}</span>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm truncate">{file.original_filename}</p>
+            <p class="text-xs text-text-muted">{formatFileSize(file.size)} • {formatRelativeTime(file.created_at)}</p>
+          </div>
+        </button>
+      {/each}
+
+      {#if filteredFiles.length === 0}
+        <p class="text-center text-text-muted py-4">No hay archivos</p>
+      {/if}
+    </div>
+
+    <!-- Seleccionados y acciones -->
+    <div class="pt-2 border-t border-border flex items-center justify-between">
+      <span class="text-sm text-text-muted">Seleccionados: {selectedFileIds.size}</span>
+      <Button
+        variant="primary"
+        disabled={selectedFileIds.size === 0}
+        on:click={attachSelectedFiles}
+      >
+        📎 Adjuntar
+      </Button>
+    </div>
+
+    <!-- Subir nuevo -->
+    <Button variant="secondary" class="w-full" on:click={() => dispatch('panelChange', { panelId: 'subir-archivo' })}>
+      📤 Subir nuevo...
+    </Button>
+  </div>
+
+<!-- Panel: Subir Archivo (2 TAPS - 50%) -->
+{:else if currentPanel === 'subir-archivo'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">📎</span>
+        <h3 class="font-medium">Subir Archivo</h3>
+      </div>
+    </div>
+
+    <!-- Zona de drag & drop -->
+    <div
+      class="border-2 border-dashed rounded-lg p-6 text-center transition-colors {isDragging ? 'border-primary bg-primary/10' : 'border-border'}"
+      on:dragover|preventDefault={() => isDragging = true}
+      on:dragleave={() => isDragging = false}
+      on:drop={handleFileDrop}
+    >
+      <div class="text-4xl mb-2">📤</div>
+      <p class="text-sm text-text-muted mb-2">Arrastra archivos aquí</p>
+      <p class="text-xs text-text-muted mb-3">o</p>
+      <label class="inline-block">
+        <input
+          type="file"
+          multiple
+          class="hidden"
+          on:change={handleFileSelect}
+        />
+        <span class="px-4 py-2 bg-primary text-white rounded-lg cursor-pointer hover:bg-primary/90 transition-colors">
+          Seleccionar archivos
+        </span>
+      </label>
+    </div>
+
+    <!-- Categoría -->
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Categoría destino:</label>
+      <select
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={uploadCategory}
+      >
+        <option value="uploads">📤 Uploads</option>
+        <option value="temp">⏰ Temporales</option>
+      </select>
+    </div>
+
+    <!-- Checkbox adjuntar -->
+    <label class="flex items-center gap-2 text-sm cursor-pointer">
+      <input
+        type="checkbox"
+        bind:checked={attachToMessage}
+        class="accent-primary"
+      />
+      <span>Adjuntar al mensaje actual</span>
+    </label>
+
+    <!-- Archivos pendientes -->
+    {#if pendingUploads.length > 0}
+      <div class="pt-2 border-t border-border">
+        <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">Archivos seleccionados</h4>
+        <div class="space-y-1">
+          {#each pendingUploads as upload, index}
+            <div class="flex items-center justify-between p-2 bg-bg-hover rounded-lg">
+              <div class="flex items-center gap-2 min-w-0">
+                <span>{getFileIcon(upload.type)}</span>
+                <span class="text-sm truncate">{upload.name}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-muted">{formatFileSize(upload.size)}</span>
+                <button
+                  class="text-error hover:text-error/80"
+                  on:click={() => removeFromUpload(index)}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          {/each}
+        </div>
+        <div class="text-right text-sm text-text-muted mt-2">
+          Total: {formatFileSize(pendingUploadsTotalSize)}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Botón subir -->
+    <Button
+      variant="primary"
+      class="w-full"
+      disabled={pendingUploads.length === 0}
+      on:click={uploadFiles}
+    >
+      📤 Subir ({pendingUploads.length} archivos)
+    </Button>
+
+    <!-- Límites -->
+    <p class="text-xs text-text-muted text-center">
+      ⚠️ Máximo: 100 MB por archivo | Formatos: imágenes, PDF, texto, JSON
+    </p>
+  </div>
+
+<!-- Panel: Archivos Gestionar (LONG-PRESS - 80%) -->
+{:else if currentPanel === 'archivos-gestionar'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">📎</span>
+        <h3 class="font-medium">Gestionar Archivos</h3>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="flex gap-2 flex-wrap">
+      <select
+        class="flex-1 min-w-[100px] p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={fileFilterCategory}
+      >
+        <option value="ALL">Todas las categorías</option>
+        <option value="uploads">📤 Uploads</option>
+        <option value="exports">📥 Exports</option>
+        <option value="temp">⏰ Temp</option>
+        <option value="files">📁 Sistema</option>
+      </select>
+      <input
+        type="text"
+        placeholder="🔍 Buscar..."
+        class="flex-1 min-w-[100px] p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={fileSearchQuery}
+      />
+    </div>
+
+    <!-- Lista por categoría -->
+    <div class="space-y-3 max-h-[350px] overflow-y-auto">
+      {#each ['uploads', 'exports', 'temp', 'files'] as category}
+        {@const categoryFiles = filesByCategory[category] || []}
+        {#if categoryFiles.length > 0 && (fileFilterCategory === 'ALL' || fileFilterCategory === category)}
+          <div>
+            <h4 class="text-xs font-medium text-text-muted mb-2 flex items-center justify-between">
+              <span>📁 {category}/</span>
+              <span>{categoryFiles.length} archivos</span>
+            </h4>
+            <div class="space-y-1 pl-2 border-l-2 border-border">
+              {#each categoryFiles as file (file.id)}
+                <div class="p-2 bg-bg-hover rounded-lg">
+                  <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span>{getFileIcon(file.mime_type)}</span>
+                      <span class="text-sm truncate">{file.original_filename}</span>
+                    </div>
+                    <span class="text-xs text-text-muted">{formatFileSize(file.size)}</span>
+                  </div>
+                  <div class="text-xs text-text-muted mb-2">
+                    ID: {file.id.slice(0, 8)}... | {formatRelativeTime(file.created_at)}
+                  </div>
+                  <div class="flex gap-1">
+                    <button
+                      class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+                      on:click={() => viewFile(file.id)}
+                    >
+                      👁️ Ver
+                    </button>
+                    <button
+                      class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+                      on:click={() => downloadFile(file.id)}
+                    >
+                      📥 Descargar
+                    </button>
+                    <button
+                      class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-error/20 transition-colors"
+                      on:click={() => deleteFile(file.id)}
+                    >
+                      🗑️ Eliminar
+                    </button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      {/each}
+
+      {#if storageFiles.length === 0}
+        <p class="text-center text-text-muted py-4">No hay archivos</p>
+      {/if}
+    </div>
+
+    <!-- Stats de uso -->
+    {#if storageInfo}
+      <div class="p-2 bg-bg-card rounded-lg border border-border text-sm">
+        📊 <strong>Uso:</strong> {formatFileSize(storageInfo.total_size)} |
+        uploads: {formatFileSize(storageInfo.by_category.uploads.size)} ({storageInfo.by_category.uploads.count}) |
+        exports: {formatFileSize(storageInfo.by_category.exports.size)} ({storageInfo.by_category.exports.count}) |
+        temp: {formatFileSize(storageInfo.by_category.temp.size)}
+      </div>
+    {/if}
+
+    <!-- Acciones globales -->
+    <div class="flex gap-2 flex-wrap">
+      <Button variant="secondary" class="flex-1" on:click={() => dispatch('panelChange', { panelId: 'subir-archivo' })}>
+        📤 Subir
+      </Button>
+      <button
+        class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-warning/20 transition-colors"
+        on:click={cleanupStorage}
+      >
+        🧹 Limpiar temp
+      </button>
+      {#if selectedFileIds.size > 0}
+        <button
+          class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-error/20 transition-colors"
+          on:click={deleteSelectedFiles}
+        >
+          🗑️ Eliminar sel.
+        </button>
+      {/if}
     </div>
   </div>
 

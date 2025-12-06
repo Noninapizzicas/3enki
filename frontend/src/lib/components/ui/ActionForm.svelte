@@ -1,3 +1,24 @@
+<script context="module" lang="ts">
+  export interface FormField {
+    name: string;
+    type: 'text' | 'textarea' | 'select' | 'checkbox' | 'password' | 'number';
+    label: string;
+    placeholder?: string;
+    required?: boolean;
+    options?: { value: string; label: string }[];
+    value?: string | number | boolean;
+  }
+
+  export interface FormAction {
+    label: string;
+    emit: string;                    // Nombre del evento a emitir
+    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+    icon?: string;
+    validate?: boolean;              // Si debe validar antes de emitir (default: true para primary)
+    disabled?: boolean;
+  }
+</script>
+
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
@@ -15,25 +36,6 @@
    * --form-label-size: tamaño label (default: 0.75rem)
    * --form-input-size: tamaño input (default: 0.875rem)
    */
-
-  interface FormField {
-    name: string;
-    type: 'text' | 'textarea' | 'select' | 'checkbox' | 'password' | 'number';
-    label: string;
-    placeholder?: string;
-    required?: boolean;
-    options?: { value: string; label: string }[];
-    value?: string | number | boolean;
-  }
-
-  interface FormAction {
-    label: string;
-    emit: string;                    // Nombre del evento a emitir
-    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
-    icon?: string;
-    validate?: boolean;              // Si debe validar antes de emitir (default: true para primary)
-    disabled?: boolean;
-  }
 
   export let fields: FormField[] = [];
   export let actions: FormAction[] = [];  // Nueva prop para múltiples acciones
@@ -157,7 +159,8 @@
               type="checkbox"
               id={field.name}
               name={field.name}
-              bind:checked={formData[field.name]}
+              checked={Boolean(formData[field.name])}
+              on:change={(e) => formData[field.name] = e.currentTarget.checked}
               {disabled}
             />
             <span>{field.label}</span>

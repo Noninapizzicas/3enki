@@ -1,3 +1,19 @@
+<script context="module" lang="ts">
+  export interface ToggleItem {
+    id: string;
+    label: string;
+    group?: string;
+    icon?: string;
+    description?: string;
+    disabled?: boolean;
+  }
+
+  export interface ToggleGroup {
+    id: string;
+    label: string;
+  }
+</script>
+
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
@@ -15,20 +31,6 @@
    * --list-item-padding: padding de items (default: 0.5rem 0.75rem)
    * --list-group-gap: espacio antes del grupo (default: 0.75rem)
    */
-
-  interface ToggleItem {
-    id: string;
-    label: string;
-    group?: string;
-    icon?: string;
-    description?: string;
-    disabled?: boolean;
-  }
-
-  interface ToggleGroup {
-    id: string;
-    label: string;
-  }
 
   export let items: ToggleItem[] = [];
   export let groups: ToggleGroup[] = [];

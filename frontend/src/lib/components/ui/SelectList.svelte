@@ -1,3 +1,23 @@
+<script context="module" lang="ts">
+  export interface SelectItem {
+    id: string;
+    label: string;
+    group?: string;
+    icon?: string;
+    badge?: string;
+    disabled?: boolean;
+    description?: string;
+    meta?: unknown;
+  }
+
+  export interface SelectGroup {
+    id: string;
+    label: string;
+    icon?: string;
+    collapsed?: boolean;
+  }
+</script>
+
 <script lang="ts">
   import { createEventDispatcher, tick } from 'svelte';
   import { slide } from 'svelte/transition';
@@ -16,21 +36,6 @@
    * --list-item-padding: padding de items (default: 0.5rem 0.75rem)
    * --list-group-bg: fondo del header de grupo (default: transparent)
    */
-
-  interface SelectItem {
-    id: string;
-    label: string;
-    group?: string;
-    icon?: string;
-    badge?: string;
-    disabled?: boolean;
-  }
-
-  interface SelectGroup {
-    id: string;
-    label: string;
-    icon?: string;
-  }
 
   export let items: SelectItem[] = [];
   export let groups: SelectGroup[] = [];

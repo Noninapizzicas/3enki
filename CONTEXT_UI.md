@@ -571,13 +571,13 @@ Cada elemento visual sigue un patrón definido. En lugar de escribir código esp
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
-│  │  ActionButton   │  │  FloatingPanel  │  │  ActionForm │  │
+│  │  ToolbarIcon    │  │  FloatingPanel  │  │  ActionForm │  │
 │  │                 │  │                 │  │             │  │
 │  │  • 1 tap        │  │  • Overlay      │  │  • Campos   │  │
 │  │  • 2 taps       │  │  • Tap fuera    │  │  • Validar  │  │
 │  │  • long-press   │  │    = cerrar     │  │  • Guardar  │  │
-│  │  • badge        │  │  • Tamaños      │  │  • Cancelar │  │
-│  │  • estados      │  │  • Animación    │  │  • Enviar   │  │
+│  │  • badge        │  │  • Centrado     │  │  • Cancelar │  │
+│  │  • variants     │  │  • CSS vars     │  │  • CSS vars │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────┘  │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -609,7 +609,9 @@ Cada elemento visual sigue un patrón definido. En lugar de escribir código esp
 
 ---
 
-### Patrón 1: ActionButton (Botón con Triple Interacción)
+### Patrón 1: ToolbarIcon (Botón con Triple Interacción)
+
+> **Implementación:** `$components/toolbar/ToolbarIcon.svelte`
 
 Todos los botones/iconos de las barras usan el mismo componente con el mismo comportamiento.
 
@@ -622,39 +624,42 @@ Todos los botones/iconos de las barras usan el mismo componente con el mismo com
 
 **Props:**
 ```typescript
-interface ActionButtonProps {
+interface ToolbarIconProps {
   id: string;
-  emoji: string;
+  icon: string;              // Emoji
   label?: string;
   badge?: number | string;
-  badgeColor?: 'primary' | 'success' | 'warning' | 'danger';
+  badgeColor?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
   displayValue?: string;
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger';
+  active?: boolean;
   disabled?: boolean;
-
-  // Acciones
-  primaryAction: ButtonAction;    // 1 tap
-  secondaryAction?: ButtonAction; // 2 taps
-  tertiaryAction?: ButtonAction;  // long-press
+  longPressDuration?: number;  // default: 500ms
+  doubleTapDelay?: number;     // default: 250ms
 }
 
-interface ButtonAction {
-  type: 'panel' | 'modal' | 'navigate' | 'action' | 'emit';
-  target?: string;      // panelId, ruta, o nombre de acción
-  label?: string;       // Para accesibilidad
-  params?: object;      // Parámetros adicionales
-}
+// CSS Variables (padre las define):
+// --icon-size: tamaño del botón (default: 36px)
+// --icon-font-size: tamaño del emoji (default: 1rem)
+// --icon-radius: border-radius (default: 8px)
+// --icon-bg, --icon-bg-hover, --icon-bg-active
 ```
+
+**Eventos:**
+- `tap` - 1 toque
+- `doubleTap` - 2 toques
+- `longPress` - Pulsación larga
 
 **Uso:**
 ```svelte
-<ActionButton
+<ToolbarIcon
   id="modelo"
-  emoji="🤖"
+  icon="🤖"
   label="Modelo"
   displayValue={currentModel}
-  primaryAction={{ type: 'panel', target: 'modelo-selector' }}
-  secondaryAction={{ type: 'panel', target: 'modelo-config' }}
-  tertiaryAction={{ type: 'modal', target: 'modelos-gestionar' }}
+  on:tap={() => openPanel('modelo-selector')}
+  on:doubleTap={() => openPanel('modelo-config')}
+  on:longPress={() => openModal('modelos-gestionar')}
 />
 ```
 
@@ -662,43 +667,41 @@ interface ButtonAction {
 
 ### Patrón 2: FloatingPanel (Panel/Ventana Emergente)
 
+> **Implementación:** `$components/feedback/FloatingPanel.svelte`
+
 Todas las ventanas emergentes usan el mismo componente con el mismo comportamiento.
 
 **Comportamiento:**
-- Aparece sobre el contenido (overlay)
+- Aparece sobre el contenido (overlay con fondo oscuro)
 - **Tap fuera = cerrar** (siempre)
-- Swipe down = cerrar (opcional)
-- El contenido de fondo visible con blur
-- Tamaños predefinidos: small (30%), medium (50%), large (70%), full (90%)
+- **Siempre centrado** (sin variantes de posición)
+- **Sin título** (el contenido define su propio header si lo necesita)
+- Tamaño se ajusta al contenido (con máximos vía CSS)
+- ESC también cierra
 
 **Props:**
 ```typescript
 interface FloatingPanelProps {
-  id: string;
   open: boolean;
-  title?: string;
-  size: 'small' | 'medium' | 'large' | 'full';
-  position?: 'bottom' | 'center' | 'top';
-  showHeader?: boolean;
-  showClose?: boolean;
-  backdrop?: boolean;
-  backdropBlur?: boolean;
-
-  // Eventos
-  onClose: () => void;
 }
+
+// CSS Variables (padre las define):
+// --panel-padding: padding interno (default: 1rem)
+// --panel-radius: border-radius (default: 12px)
+// --panel-bg: fondo (default: var(--color-bg-card))
+// --panel-shadow: sombra (default: 0 4px 24px rgba(0,0,0,0.2))
+// --panel-max-width: ancho máximo (default: 90vw)
+// --panel-max-height: alto máximo (default: 80vh)
 ```
+
+**Eventos:**
+- `close` - Cuando se cierra (tap fuera o ESC)
 
 **Uso:**
 ```svelte
-<FloatingPanel
-  id="modelo-selector"
-  bind:open={panelOpen}
-  title="Seleccionar Modelo"
-  size="small"
-  on:close={() => panelOpen = false}
->
-  <!-- Contenido del panel -->
+<FloatingPanel bind:open={panelOpen} on:close={() => panelOpen = false}>
+  <!-- El contenido define su propia estructura -->
+  <h3>Seleccionar Modelo</h3>
   <ModelList {models} on:select={handleSelect} />
 </FloatingPanel>
 ```
@@ -707,20 +710,19 @@ interface FloatingPanelProps {
 
 ### Patrón 3: ActionForm (Formulario con Acciones)
 
+> **Implementación:** `$components/ui/ActionForm.svelte`
+
 Todos los formularios usan el mismo patrón de campos + botones de acción.
 
 **Estructura:**
 ```
 ┌─────────────────────────────────────┐
-│  Título del formulario              │
-├─────────────────────────────────────┤
 │                                     │
 │  [Campo 1]                          │
 │  [Campo 2]                          │
 │  [Campo N]                          │
 │                                     │
-├─────────────────────────────────────┤
-│  [Cancelar]              [Guardar]  │
+│         [Cancelar]  [Guardar]       │
 └─────────────────────────────────────┘
 ```
 
@@ -728,15 +730,12 @@ Todos los formularios usan el mismo patrón de campos + botones de acción.
 ```typescript
 interface ActionFormProps {
   fields: FormField[];
-  submitLabel?: string;      // "Guardar", "Enviar", "Crear"
-  cancelLabel?: string;      // "Cancelar"
+  submitLabel?: string;      // default: "Guardar"
+  cancelLabel?: string;      // default: "Cancelar"
   submitIcon?: string;       // Emoji opcional
   loading?: boolean;
   disabled?: boolean;
-
-  // Eventos
-  onSubmit: (data: object) => void;
-  onCancel: () => void;
+  showCancel?: boolean;      // default: true
 }
 
 interface FormField {
@@ -745,10 +744,20 @@ interface FormField {
   label: string;
   placeholder?: string;
   required?: boolean;
-  validation?: ValidationRules;
+  value?: string | number | boolean;  // Valor inicial
   options?: { value: string; label: string }[];  // Para select
 }
+
+// CSS Variables (padre las define):
+// --form-gap: espacio entre campos (default: 0.75rem)
+// --form-padding: padding interno (default: 0)
+// --form-label-size: tamaño label (default: 0.75rem)
+// --form-input-size: tamaño input (default: 0.875rem)
 ```
+
+**Eventos:**
+- `submit` - Cuando se envía (devuelve `{ [name]: value }`)
+- `cancel` - Cuando se cancela
 
 **Uso:**
 ```svelte
@@ -785,7 +794,7 @@ interface FormField {
 │              "CÓMO generar el código"                       │
 ├─────────────────────────────────────────────────────────────┤
 │  - Genera código que USA los componentes base               │
-│  - Importa ActionButton, FloatingPanel, ActionForm          │
+│  - Importa ToolbarIcon, FloatingPanel, ActionForm           │
 │  - Configura props según blueprint                          │
 │  - NO duplica lógica de los patrones                        │
 └─────────────────────────────────────────────────────────────┘
@@ -797,7 +806,7 @@ interface FormField {
 │              (Usa componentes base)                         │
 ├─────────────────────────────────────────────────────────────┤
 │  <MobileWorkspaceLayout>                                    │
-│    <ActionButton ... />  ← Reutiliza                        │
+│    <ToolbarIcon ... />   ← Reutiliza                        │
 │    <FloatingPanel>       ← Reutiliza                        │
 │      <ActionForm ... />  ← Reutiliza                        │
 │    </FloatingPanel>                                         │
@@ -823,9 +832,9 @@ interface FormField {
 
 | Componente | Estado | Ubicación |
 |------------|--------|-----------|
-| `ActionButton` | 🟡 Por refactorizar | `$components/ui/ActionButton.svelte` |
-| `FloatingPanel` | 🟡 Por refactorizar | `$components/ui/FloatingPanel.svelte` |
-| `ActionForm` | 🔴 Por crear | `$components/ui/ActionForm.svelte` |
+| `ToolbarIcon` | ✅ Listo | `$components/toolbar/ToolbarIcon.svelte` |
+| `FloatingPanel` | ✅ Listo | `$components/feedback/FloatingPanel.svelte` |
+| `ActionForm` | ✅ Listo | `$components/ui/ActionForm.svelte` |
 | `SelectList` | 🔴 Por crear | `$components/ui/SelectList.svelte` |
 | `ToggleList` | 🔴 Por crear | `$components/ui/ToggleList.svelte` |
 

@@ -556,7 +556,285 @@ Fijo pequeño, doble toque expande, Enter ≠ Enviar
 
 ---
 
-## Componentes Reutilizables Implementados
+## Arquitectura de Componentes Reutilizables
+
+### Filosofía: Component-First
+
+> **Principio fundamental: Máxima reutilización, mínima duplicación.**
+
+Cada elemento visual sigue un patrón definido. En lugar de escribir código específico para cada caso, construimos con **componentes base** que se combinan para crear funcionalidades específicas.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   CAPA 1: COMPONENTES BASE                  │
+│              (Patrones reutilizables en TODO)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
+│  │  ActionButton   │  │  FloatingPanel  │  │  ActionForm │  │
+│  │                 │  │                 │  │             │  │
+│  │  • 1 tap        │  │  • Overlay      │  │  • Campos   │  │
+│  │  • 2 taps       │  │  • Tap fuera    │  │  • Validar  │  │
+│  │  • long-press   │  │    = cerrar     │  │  • Guardar  │  │
+│  │  • badge        │  │  • Tamaños      │  │  • Cancelar │  │
+│  │  • estados      │  │  • Animación    │  │  • Enviar   │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              CAPA 2: COMPONENTES ESPECÍFICOS                │
+│           (Combinan base + lógica de dominio)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ModelSelector   = FloatingPanel + Lista agrupada           │
+│  FileExplorer    = FloatingPanel + Árbol + Acciones         │
+│  PromptEditor    = FloatingPanel + ActionForm + Preview     │
+│  CredentialForm  = FloatingPanel + ActionForm + Validación  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 CAPA 3: LAYOUTS/PÁGINAS                     │
+│              (Componen todo en una vista)                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  MobileWorkspaceLayout = Barras + Zona central + Paneles    │
+│  +page.svelte          = Layout + Componentes específicos   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Patrón 1: ActionButton (Botón con Triple Interacción)
+
+Todos los botones/iconos de las barras usan el mismo componente con el mismo comportamiento.
+
+**Comportamiento:**
+| Gesto | Acción | Feedback |
+|-------|--------|----------|
+| 1 tap | Acción principal (ver/seleccionar) | Highlight |
+| 2 taps | Acción secundaria (crear/añadir) | Scale |
+| Long-press | Acción terciaria (gestionar/config) | Progress circle |
+
+**Props:**
+```typescript
+interface ActionButtonProps {
+  id: string;
+  emoji: string;
+  label?: string;
+  badge?: number | string;
+  badgeColor?: 'primary' | 'success' | 'warning' | 'danger';
+  displayValue?: string;
+  disabled?: boolean;
+
+  // Acciones
+  primaryAction: ButtonAction;    // 1 tap
+  secondaryAction?: ButtonAction; // 2 taps
+  tertiaryAction?: ButtonAction;  // long-press
+}
+
+interface ButtonAction {
+  type: 'panel' | 'modal' | 'navigate' | 'action' | 'emit';
+  target?: string;      // panelId, ruta, o nombre de acción
+  label?: string;       // Para accesibilidad
+  params?: object;      // Parámetros adicionales
+}
+```
+
+**Uso:**
+```svelte
+<ActionButton
+  id="modelo"
+  emoji="🤖"
+  label="Modelo"
+  displayValue={currentModel}
+  primaryAction={{ type: 'panel', target: 'modelo-selector' }}
+  secondaryAction={{ type: 'panel', target: 'modelo-config' }}
+  tertiaryAction={{ type: 'modal', target: 'modelos-gestionar' }}
+/>
+```
+
+---
+
+### Patrón 2: FloatingPanel (Panel/Ventana Emergente)
+
+Todas las ventanas emergentes usan el mismo componente con el mismo comportamiento.
+
+**Comportamiento:**
+- Aparece sobre el contenido (overlay)
+- **Tap fuera = cerrar** (siempre)
+- Swipe down = cerrar (opcional)
+- El contenido de fondo visible con blur
+- Tamaños predefinidos: small (30%), medium (50%), large (70%), full (90%)
+
+**Props:**
+```typescript
+interface FloatingPanelProps {
+  id: string;
+  open: boolean;
+  title?: string;
+  size: 'small' | 'medium' | 'large' | 'full';
+  position?: 'bottom' | 'center' | 'top';
+  showHeader?: boolean;
+  showClose?: boolean;
+  backdrop?: boolean;
+  backdropBlur?: boolean;
+
+  // Eventos
+  onClose: () => void;
+}
+```
+
+**Uso:**
+```svelte
+<FloatingPanel
+  id="modelo-selector"
+  bind:open={panelOpen}
+  title="Seleccionar Modelo"
+  size="small"
+  on:close={() => panelOpen = false}
+>
+  <!-- Contenido del panel -->
+  <ModelList {models} on:select={handleSelect} />
+</FloatingPanel>
+```
+
+---
+
+### Patrón 3: ActionForm (Formulario con Acciones)
+
+Todos los formularios usan el mismo patrón de campos + botones de acción.
+
+**Estructura:**
+```
+┌─────────────────────────────────────┐
+│  Título del formulario              │
+├─────────────────────────────────────┤
+│                                     │
+│  [Campo 1]                          │
+│  [Campo 2]                          │
+│  [Campo N]                          │
+│                                     │
+├─────────────────────────────────────┤
+│  [Cancelar]              [Guardar]  │
+└─────────────────────────────────────┘
+```
+
+**Props:**
+```typescript
+interface ActionFormProps {
+  fields: FormField[];
+  submitLabel?: string;      // "Guardar", "Enviar", "Crear"
+  cancelLabel?: string;      // "Cancelar"
+  submitIcon?: string;       // Emoji opcional
+  loading?: boolean;
+  disabled?: boolean;
+
+  // Eventos
+  onSubmit: (data: object) => void;
+  onCancel: () => void;
+}
+
+interface FormField {
+  name: string;
+  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'password' | 'number';
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  validation?: ValidationRules;
+  options?: { value: string; label: string }[];  // Para select
+}
+```
+
+**Uso:**
+```svelte
+<ActionForm
+  fields={[
+    { name: 'name', type: 'text', label: 'Nombre', required: true },
+    { name: 'description', type: 'textarea', label: 'Descripción' }
+  ]}
+  submitLabel="Crear"
+  on:submit={handleCreate}
+  on:cancel={closePanel}
+/>
+```
+
+---
+
+### Relación: Blueprints → Templates → Componentes
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      BLUEPRINT (.yaml)                      │
+│              "QUÉ queremos construir"                       │
+├─────────────────────────────────────────────────────────────┤
+│  - Define estructura del módulo                             │
+│  - Lista de paneles necesarios                              │
+│  - Campos y validaciones                                    │
+│  - Eventos y APIs                                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ npx plop from-blueprint
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   TEMPLATE PLOP (.hbs)                      │
+│              "CÓMO generar el código"                       │
+├─────────────────────────────────────────────────────────────┤
+│  - Genera código que USA los componentes base               │
+│  - Importa ActionButton, FloatingPanel, ActionForm          │
+│  - Configura props según blueprint                          │
+│  - NO duplica lógica de los patrones                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ Genera
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   CÓDIGO GENERADO                           │
+│              (Usa componentes base)                         │
+├─────────────────────────────────────────────────────────────┤
+│  <MobileWorkspaceLayout>                                    │
+│    <ActionButton ... />  ← Reutiliza                        │
+│    <FloatingPanel>       ← Reutiliza                        │
+│      <ActionForm ... />  ← Reutiliza                        │
+│    </FloatingPanel>                                         │
+│  </MobileWorkspaceLayout>                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Beneficios de esta Arquitectura
+
+| Aspecto | Antes (Monolítico) | Ahora (Component-First) |
+|---------|-------------------|------------------------|
+| **Código** | 3000+ líneas en un archivo | Componentes pequeños y enfocados |
+| **Bugs** | Corregir en 32 lugares | Corregir en 1 componente base |
+| **Consistencia** | Cada panel diferente | Todos los paneles iguales |
+| **Testing** | Difícil de testear | Componentes aislados testeables |
+| **Nuevas features** | Copiar/pegar código | Componer componentes existentes |
+
+---
+
+### Componentes Base Requeridos
+
+| Componente | Estado | Ubicación |
+|------------|--------|-----------|
+| `ActionButton` | 🟡 Por refactorizar | `$components/ui/ActionButton.svelte` |
+| `FloatingPanel` | 🟡 Por refactorizar | `$components/ui/FloatingPanel.svelte` |
+| `ActionForm` | 🔴 Por crear | `$components/ui/ActionForm.svelte` |
+| `SelectList` | 🔴 Por crear | `$components/ui/SelectList.svelte` |
+| `ToggleList` | 🔴 Por crear | `$components/ui/ToggleList.svelte` |
+
+---
+
+## Componentes Específicos de Chat IA
+
+> **NOTA:** Esta sección describe la arquitectura objetivo.
+> La implementación actual en `ChatAIWorkspace.svelte` está siendo refactorizada.
 
 ### ChatAIWorkspace - Componente Principal
 

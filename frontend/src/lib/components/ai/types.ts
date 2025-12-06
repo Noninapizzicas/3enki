@@ -112,6 +112,9 @@ export interface QuickPrompt {
   icon?: string;
 }
 
+// Niveles de prompt (alcance)
+export type PromptLevel = 'GLOBAL' | 'PROJECT' | 'CONVERSATION';
+
 // Template de Prompt completo (según prompt-manager)
 export interface PromptTemplate {
   id: string;
@@ -121,6 +124,8 @@ export interface PromptTemplate {
   content: string;
   variables: string[];
   tags: string[];
+  level: PromptLevel;
+  project_id?: string;
   current_version: string;
   versions?: PromptVersion[];
   stats?: PromptStats;
@@ -152,6 +157,7 @@ export interface NewPromptForm {
   content: string;
   tags: string;
   description?: string;
+  level: PromptLevel;
 }
 
 // Mensaje de chat

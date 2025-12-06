@@ -14,6 +14,7 @@
     ContextItem,
     QuickPrompt,
     PromptTemplate,
+    PromptLevel,
     NewPromptForm,
     ChatMessage,
     Conversation,
@@ -121,11 +122,13 @@
     title: '',
     content: '',
     tags: '',
-    description: ''
+    description: '',
+    level: 'PROJECT'
   };
 
   // Filtros para gestión de prompts
   let promptFilterTag: string = 'ALL';
+  let promptFilterLevel: PromptLevel | 'ALL' = 'ALL';
   let promptSearchQuery: string = '';
 
   // Props - Conversaciones (Historial)
@@ -381,6 +384,7 @@
   // Computed - PromptTemplates
   $: allPromptTags = [...new Set(promptTemplates.flatMap(p => p.tags))];
   $: filteredPromptTemplates = promptTemplates.filter(p => {
+    if (promptFilterLevel !== 'ALL' && p.level !== promptFilterLevel) return false;
     if (promptFilterTag !== 'ALL' && !p.tags.includes(promptFilterTag)) return false;
     if (promptSearchQuery) {
       const query = promptSearchQuery.toLowerCase();
@@ -390,6 +394,13 @@
     }
     return true;
   });
+  $: promptsByLevel = promptTemplates.reduce((acc, p) => {
+    acc[p.level] = acc[p.level] || [];
+    acc[p.level].push(p);
+    return acc;
+  }, {} as Record<PromptLevel, PromptTemplate[]>);
+  $: globalPrompts = promptsByLevel['GLOBAL'] || [];
+  $: projectPrompts = promptsByLevel['PROJECT'] || [];
   $: promptTotalStats = promptTemplates.reduce((acc, p) => ({
     uses: acc.uses + (p.stats?.uses || 0),
     tokens: acc.tokens + (p.stats?.tokens_avg || 0) * (p.stats?.uses || 0)
@@ -690,8 +701,25 @@
       title: '',
       content: '',
       tags: '',
-      description: ''
+      description: '',
+      level: 'PROJECT'
     };
+  }
+
+  function getPromptLevelIcon(level: PromptLevel): string {
+    switch (level) {
+      case 'GLOBAL': return '🌐';
+      case 'PROJECT': return '📁';
+      case 'CONVERSATION': return '💬';
+    }
+  }
+
+  function getPromptLevelLabel(level: PromptLevel): string {
+    switch (level) {
+      case 'GLOBAL': return 'Global';
+      case 'PROJECT': return 'Proyecto';
+      case 'CONVERSATION': return 'Conversación';
+    }
   }
 
   function createPrompt() {
@@ -1731,12 +1759,59 @@
     <!-- Header -->
     <div class="flex items-center gap-2 pb-2 border-b border-border">
       <span class="text-lg">📝</span>
-      <h3 class="font-medium">Prompts Recientes</h3>
+      <h3 class="font-medium">Prompts</h3>
     </div>
 
-    <!-- Lista de prompts -->
+    <!-- Prompts Globales -->
+    {#if globalPrompts.length > 0}
+      <div>
+        <p class="text-xs text-text-muted uppercase font-medium mb-2">🌐 Globales</p>
+        <div class="space-y-1">
+          {#each globalPrompts.slice(0, 3) as template (template.id)}
+            <button
+              class="w-full text-left p-2 rounded-lg transition-colors {activePromptId === template.id ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+              on:click={() => applyPromptTemplate(template)}
+            >
+              <div class="flex items-center gap-2">
+                <span>{activePromptId === template.id ? '●' : '○'}</span>
+                <p class="font-medium text-sm truncate flex-1">{template.title || template.name}</p>
+                <span class="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">🌐</span>
+              </div>
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Prompts del Proyecto -->
+    <div>
+      <p class="text-xs text-text-muted uppercase font-medium mb-2">📁 Proyecto</p>
+      <div class="space-y-1">
+        {#each projectPrompts.slice(0, 4) as template (template.id)}
+          <button
+            class="w-full text-left p-2 rounded-lg transition-colors {activePromptId === template.id ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+            on:click={() => applyPromptTemplate(template)}
+          >
+            <div class="flex items-center gap-2">
+              <span>{activePromptId === template.id ? '●' : '○'}</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <p class="font-medium text-sm truncate">{template.title || template.name}</p>
+                  <span class="text-xs text-text-muted">v{template.current_version}</span>
+                  {#if template.favorite}
+                    <span class="text-warning">⭐</span>
+                  {/if}
+                </div>
+              </div>
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Lista de prompts legacy (fallback) -->
     <div class="space-y-1">
-      {#each promptTemplates.slice(0, 6) as template (template.id)}
+      {#each promptTemplates.filter(t => t.level === 'CONVERSATION').slice(0, 3) as template (template.id)}
         <button
           class="w-full text-left p-2 rounded-lg transition-colors {activePromptId === template.id ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
           on:click={() => applyPromptTemplate(template)}
@@ -1746,10 +1821,7 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
                 <p class="font-medium text-sm truncate">{template.title || template.name}</p>
-                <span class="text-xs text-text-muted">v{template.current_version}</span>
-                {#if template.favorite}
-                  <span class="text-warning">⭐</span>
-                {/if}
+                <span class="text-xs px-1.5 py-0.5 bg-warning/10 text-warning rounded">💬</span>
               </div>
             </div>
           </div>
@@ -1873,6 +1945,40 @@
       />
     </div>
 
+    <!-- Selector de nivel -->
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Alcance</label>
+      <div class="flex gap-2">
+        <button
+          class="flex-1 p-2 rounded-lg text-sm transition-colors {newPromptForm.level === 'GLOBAL' ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+          on:click={() => newPromptForm.level = 'GLOBAL'}
+        >
+          🌐 Global
+        </button>
+        <button
+          class="flex-1 p-2 rounded-lg text-sm transition-colors {newPromptForm.level === 'PROJECT' ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+          on:click={() => newPromptForm.level = 'PROJECT'}
+        >
+          📁 Proyecto
+        </button>
+        <button
+          class="flex-1 p-2 rounded-lg text-sm transition-colors {newPromptForm.level === 'CONVERSATION' ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+          on:click={() => newPromptForm.level = 'CONVERSATION'}
+        >
+          💬 Conv.
+        </button>
+      </div>
+      <p class="text-xs text-text-muted mt-1">
+        {#if newPromptForm.level === 'GLOBAL'}
+          Disponible en todos los proyectos
+        {:else if newPromptForm.level === 'PROJECT'}
+          Solo en el proyecto actual
+        {:else}
+          Solo en esta conversación
+        {/if}
+      </p>
+    </div>
+
     <!-- Botón crear -->
     <Button
       variant="primary"
@@ -1895,6 +2001,34 @@
       </div>
     </div>
 
+    <!-- Filtro por nivel -->
+    <div class="flex gap-1">
+      <button
+        class="px-2 py-1 text-xs rounded {promptFilterLevel === 'ALL' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => promptFilterLevel = 'ALL'}
+      >
+        Todos
+      </button>
+      <button
+        class="px-2 py-1 text-xs rounded {promptFilterLevel === 'GLOBAL' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => promptFilterLevel = 'GLOBAL'}
+      >
+        🌐 Global
+      </button>
+      <button
+        class="px-2 py-1 text-xs rounded {promptFilterLevel === 'PROJECT' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => promptFilterLevel = 'PROJECT'}
+      >
+        📁 Proyecto
+      </button>
+      <button
+        class="px-2 py-1 text-xs rounded {promptFilterLevel === 'CONVERSATION' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => promptFilterLevel = 'CONVERSATION'}
+      >
+        💬 Conv.
+      </button>
+    </div>
+
     <!-- Filtros -->
     <div class="flex gap-2 flex-wrap">
       <select
@@ -1915,7 +2049,7 @@
     </div>
 
     <!-- Lista de prompts -->
-    <div class="space-y-2">
+    <div class="space-y-2 max-h-[350px] overflow-y-auto">
       {#each filteredPromptTemplates as template (template.id)}
         <div class="p-3 bg-bg-hover rounded-lg border border-border">
           <!-- Header del prompt -->
@@ -1923,6 +2057,9 @@
             <div class="flex items-center gap-2">
               <span>📝</span>
               <span class="font-medium text-sm">{template.title || template.name}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded {template.level === 'GLOBAL' ? 'bg-primary/10 text-primary' : template.level === 'PROJECT' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}">
+                {getPromptLevelIcon(template.level)} {getPromptLevelLabel(template.level)}
+              </span>
             </div>
             <span class="text-xs text-text-muted">v{template.current_version}</span>
           </div>

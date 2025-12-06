@@ -85,6 +85,7 @@
   let buttonStates: Record<string, {
     tapCount: number;
     holdTimer: ReturnType<typeof setTimeout> | null;
+    clickTimer: ReturnType<typeof setTimeout> | null;
     holding: boolean;
     holdProgress: number;
   }> = {};
@@ -104,6 +105,7 @@
       buttonStates[buttonId] = {
         tapCount: 0,
         holdTimer: null,
+        clickTimer: null,
         holding: false,
         holdProgress: 0
       };
@@ -194,6 +196,53 @@
     buttonStates = buttonStates;
   }
 
+  // Handle mouse click (desktop support)
+  function handleClick(button: ActionButton, e: MouseEvent) {
+    // Prevent if touch event already handled
+    if (e.detail === 0) return;
+
+    initButtonState(button.id);
+    const state = buttonStates[button.id];
+
+    // Single click - primary action
+    if (e.detail === 1) {
+      if (state.clickTimer) {
+        clearTimeout(state.clickTimer);
+      }
+      state.clickTimer = setTimeout(() => {
+        executeAction(button, 'primary', button.primaryAction);
+        state.clickTimer = null;
+      }, 250);
+    }
+  }
+
+  // Handle double click (desktop support)
+  function handleDblClick(button: ActionButton, e: MouseEvent) {
+    initButtonState(button.id);
+    const state = buttonStates[button.id];
+
+    // Cancel single click
+    if (state.clickTimer) {
+      clearTimeout(state.clickTimer);
+      state.clickTimer = null;
+    }
+
+    // Double click - secondary action
+    if (button.secondaryAction) {
+      executeAction(button, 'secondary', button.secondaryAction);
+    }
+  }
+
+  // Handle context menu / right click (desktop long-press equivalent)
+  function handleContextMenu(button: ActionButton, e: MouseEvent) {
+    e.preventDefault();
+
+    // Right click - tertiary action (like long press)
+    if (button.tertiaryAction) {
+      executeAction(button, 'tertiary', button.tertiaryAction);
+    }
+  }
+
   // Handle touch cancel
   function handleTouchCancel(button: ActionButton) {
     initButtonState(button.id);
@@ -260,6 +309,9 @@
             on:touchstart={(e) => handleTouchStart(button, e)}
             on:touchend={(e) => handleTouchEnd(button, e)}
             on:touchcancel={() => handleTouchCancel(button)}
+            on:click={(e) => handleClick(button, e)}
+            on:dblclick={(e) => handleDblClick(button, e)}
+            on:contextmenu={(e) => handleContextMenu(button, e)}
             aria-label={button.label || button.emoji}
           >
             <span class="mobile-workspace__button-emoji">{button.emoji}</span>
@@ -310,6 +362,9 @@
             on:touchstart={(e) => handleTouchStart(button, e)}
             on:touchend={(e) => handleTouchEnd(button, e)}
             on:touchcancel={() => handleTouchCancel(button)}
+            on:click={(e) => handleClick(button, e)}
+            on:dblclick={(e) => handleDblClick(button, e)}
+            on:contextmenu={(e) => handleContextMenu(button, e)}
             aria-label={button.label || button.emoji}
           >
             <span class="mobile-workspace__button-emoji">{button.emoji}</span>
@@ -346,6 +401,9 @@
             on:touchstart={(e) => handleTouchStart(button, e)}
             on:touchend={(e) => handleTouchEnd(button, e)}
             on:touchcancel={() => handleTouchCancel(button)}
+            on:click={(e) => handleClick(button, e)}
+            on:dblclick={(e) => handleDblClick(button, e)}
+            on:contextmenu={(e) => handleContextMenu(button, e)}
             aria-label={button.label || button.emoji}
           >
             <span class="mobile-workspace__button-emoji">{button.emoji}</span>
@@ -396,6 +454,9 @@
                 on:touchstart={(e) => handleTouchStart(button, e)}
                 on:touchend={(e) => handleTouchEnd(button, e)}
                 on:touchcancel={() => handleTouchCancel(button)}
+                on:click={(e) => handleClick(button, e)}
+                on:dblclick={(e) => handleDblClick(button, e)}
+                on:contextmenu={(e) => handleContextMenu(button, e)}
                 aria-label={button.label || button.emoji}
               >
                 <span class="mobile-workspace__chat-button-emoji">{button.emoji}</span>
@@ -445,6 +506,9 @@
                 on:touchstart={(e) => handleTouchStart(button, e)}
                 on:touchend={(e) => handleTouchEnd(button, e)}
                 on:touchcancel={() => handleTouchCancel(button)}
+                on:click={(e) => handleClick(button, e)}
+                on:dblclick={(e) => handleDblClick(button, e)}
+                on:contextmenu={(e) => handleContextMenu(button, e)}
                 aria-label={button.label || button.emoji}
               >
                 <span class="mobile-workspace__chat-button-emoji">{button.emoji}</span>

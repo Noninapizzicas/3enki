@@ -1915,7 +1915,7 @@
     <div>
       <label class="text-xs text-text-muted mb-1 block">Contenido * (usa {'{{variable}}'} para templates)</label>
       <textarea
-        placeholder="Eres un {{role}} experto en {{domain}}..."
+        placeholder={'Eres un {{role}} experto en {{domain}}...'}
         class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none min-h-[120px] resize-y"
         bind:value={newPromptForm.content}
       ></textarea>

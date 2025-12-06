@@ -310,7 +310,7 @@
       displayValue: currentModel,
       primaryAction: { type: 'panel' as const, panelId: 'modelo-selector', label: 'Seleccionar modelo' },
       secondaryAction: { type: 'panel' as const, panelId: 'modelo-config', label: 'Configurar modelo' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'modelos-gestionar', label: 'Gestionar modelos' }
+      tertiaryAction: { type: 'panel' as const, panelId: 'proveedores-gestionar', label: 'Gestionar modelos' }
     },
     {
       id: 'credencial',
@@ -336,9 +336,9 @@
       label: 'Chats',
       badge: 0,
       badgeColor: 'info' as const,
-      primaryAction: { type: 'panel' as const, panelId: 'historial-conversaciones', label: 'Conversaciones' },
-      secondaryAction: { type: 'panel' as const, panelId: 'historial-crear', label: 'Nueva conversación' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'historial-gestionar', label: 'Gestionar historial' }
+      primaryAction: { type: 'panel' as const, panelId: 'conversaciones', label: 'Conversaciones' },
+      secondaryAction: { type: 'panel' as const, panelId: 'conversacion-crear', label: 'Nueva conversación' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'conversaciones-gestionar', label: 'Gestionar historial' }
     }
   ];
 
@@ -351,9 +351,9 @@
       emoji: '📎',
       label: 'Adjuntar',
       variant: 'primary' as const,
-      primaryAction: { type: 'panel' as const, panelId: 'adjuntar-archivos', label: 'Archivos adjuntos' },
-      secondaryAction: { type: 'panel' as const, panelId: 'adjuntar-subir', label: 'Subir archivo' },
-      tertiaryAction: { type: 'panel' as const, panelId: 'adjuntar-gestionar', label: 'Gestionar adjuntos' }
+      primaryAction: { type: 'panel' as const, panelId: 'adjuntar-archivo', label: 'Archivos adjuntos' },
+      secondaryAction: { type: 'panel' as const, panelId: 'subir-archivo', label: 'Subir archivo' },
+      tertiaryAction: { type: 'panel' as const, panelId: 'archivos-gestionar', label: 'Gestionar adjuntos' }
     },
     {
       id: 'proyecto',
@@ -418,7 +418,7 @@
     // chatTopButtons - Modelo
     'modelo-selector': { title: 'Seleccionar Modelo', size: 'sm' as const },
     'modelo-config': { title: 'Configurar Modelo', size: 'md' as const },
-    'modelos-gestionar': { title: 'Gestionar Modelos', size: 'full' as const },
+    'proveedores-gestionar': { title: 'Gestionar Modelos', size: 'full' as const },
     // chatTopButtons - Credencial
     'credencial-selector': { title: 'Seleccionar API Key', size: 'sm' as const },
     'credencial-crear': { title: 'Nueva Credencial', size: 'md' as const },
@@ -428,13 +428,13 @@
     'prompt-crear': { title: 'Nuevo Prompt', size: 'md' as const },
     'prompts-gestionar': { title: 'Gestionar Prompts', size: 'full' as const },
     // chatTopButtons - Historial
-    'historial-conversaciones': { title: 'Conversaciones', size: 'lg' as const },
-    'historial-crear': { title: 'Nueva Conversación', size: 'md' as const },
-    'historial-gestionar': { title: 'Gestionar Historial', size: 'full' as const },
+    'conversaciones': { title: 'Conversaciones', size: 'lg' as const },
+    'conversacion-crear': { title: 'Nueva Conversación', size: 'md' as const },
+    'conversaciones-gestionar': { title: 'Gestionar Historial', size: 'full' as const },
     // chatBottomButtons - Adjuntar
-    'adjuntar-archivos': { title: 'Archivos Adjuntos', size: 'md' as const },
-    'adjuntar-subir': { title: 'Subir Archivo', size: 'md' as const },
-    'adjuntar-gestionar': { title: 'Gestionar Adjuntos', size: 'full' as const },
+    'adjuntar-archivo': { title: 'Archivos Adjuntos', size: 'md' as const },
+    'subir-archivo': { title: 'Subir Archivo', size: 'md' as const },
+    'archivos-gestionar': { title: 'Gestionar Adjuntos', size: 'full' as const },
     // chatBottomButtons - Proyecto
     'proyectos': { title: 'Proyectos', size: 'lg' as const },
     'proyecto-crear': { title: 'Nuevo Proyecto', size: 'md' as const },

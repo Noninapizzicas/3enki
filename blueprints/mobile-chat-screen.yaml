@@ -238,32 +238,194 @@ events:
       description: Eventos del módulo para mostrar en chat
 
 # ============================================================================
+# PANELES CON COMPONENTES BASE (CONTEXT_UI.md)
+# ============================================================================
+#
+# Cada panel usa un componente base reutilizable.
+# Ver CONTEXT_UI.md para documentación de cada componente.
+
+panels:
+  # ─────────────────────────────────────────────────────────────────────────
+  # AI-GATEWAY (Modelos)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: modelo-selector
+    component: SelectList
+    selectList:
+      itemsSource: availableModels
+      groupsSource: modelProviders
+      valueField: selectedModelId
+    events:
+      select: modelSelect
+
+  - id: modelo-config
+    component: ActionForm
+    actionForm:
+      fields:
+        - { name: temperature, type: number, label: "Temperature", placeholder: "0.7" }
+        - { name: maxTokens, type: number, label: "Max Tokens", placeholder: "4096" }
+        - { name: topP, type: number, label: "Top P", placeholder: "1.0" }
+      actions:
+        - { label: Cancelar, emit: cancel, variant: ghost }
+        - { label: Aplicar, emit: submit, variant: primary }
+    events:
+      submit: modelConfigSave
+
+  - id: proveedores-gestionar
+    component: ToggleList
+    toggleList:
+      itemsSource: allProviders
+      valuesField: enabledProviders
+      showSelectAll: false
+    events:
+      change: providersChange
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # CREDENTIAL-MANAGER (Credenciales)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: credencial-selector
+    component: SelectList
+    selectList:
+      itemsSource: credentials
+      groupsSource: credentialProviders
+      valueField: selectedCredentialId
+    events:
+      select: credentialSelect
+
+  - id: credencial-crear
+    component: ActionForm
+    actionForm:
+      fields:
+        - { name: provider, type: select, label: "Proveedor", required: true }
+        - { name: identifier, type: text, label: "Identificador", placeholder: "Mi API Key" }
+        - { name: api_key, type: password, label: "API Key", required: true }
+      actions:
+        - { label: Cancelar, emit: cancel, variant: ghost }
+        - { label: Guardar, emit: submit, variant: primary }
+    events:
+      submit: credentialCreate
+
+  - id: credenciales-gestionar
+    component: SelectList
+    selectList:
+      itemsSource: allCredentials
+      groupsSource: credentialProviders
+      valueField: null
+    events:
+      select: credentialEdit
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PROMPT-MANAGER (Prompts)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: prompts-rapidos
+    component: SelectList
+    selectList:
+      itemsSource: quickPrompts
+      groupsSource: promptCategories
+      valueField: null
+    events:
+      select: promptApply
+
+  - id: prompt-crear
+    component: ActionForm
+    actionForm:
+      fields:
+        - { name: name, type: text, label: "Nombre", required: true }
+        - { name: content, type: textarea, label: "Contenido", required: true }
+        - { name: category, type: select, label: "Categoría" }
+      actions:
+        - { label: Cancelar, emit: cancel, variant: ghost }
+        - { label: Crear, emit: submit, variant: primary }
+    events:
+      submit: promptCreate
+
+  - id: prompts-gestionar
+    component: SelectList
+    selectList:
+      itemsSource: allPrompts
+      groupsSource: promptCategories
+      valueField: null
+    events:
+      select: promptEdit
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # TOOLS & PLUGINS
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: tools-disponibles
+    component: ToggleList
+    toggleList:
+      itemsSource: availableTools
+      groupsSource: toolCategories
+      valuesField: enabledTools
+      showSelectAll: true
+    events:
+      change: toolsChange
+
+  - id: plugins-activos
+    component: ToggleList
+    toggleList:
+      itemsSource: availablePlugins
+      valuesField: enabledPlugins
+      showSelectAll: false
+    events:
+      change: pluginsChange
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # CONVERSATION-MANAGER (Historial)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: conversaciones
+    component: SelectList
+    selectList:
+      itemsSource: conversations
+      valueField: selectedConversationId
+    events:
+      select: conversationSelect
+
+  - id: conversacion-crear
+    component: ActionForm
+    actionForm:
+      fields:
+        - { name: title, type: text, label: "Título", placeholder: "Nueva conversación" }
+        - { name: systemPrompt, type: textarea, label: "System Prompt" }
+      actions:
+        - { label: Cancelar, emit: cancel, variant: ghost }
+        - { label: Crear, emit: submit, variant: primary }
+    events:
+      submit: conversationCreate
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # CONTEXTO
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: contexto-actual
+    component: ToggleList
+    toggleList:
+      itemsSource: contextItems
+      valuesField: activeContextItems
+      showSelectAll: false
+    events:
+      change: contextChange
+
+# ============================================================================
 # INTEGRACIÓN CON MÓDULOS EVENT CORE
 # ============================================================================
 
 integrations:
   ai-gateway:
-    - modelo-selector
-    - modelo-config
-    - modelos-gestionar
+    panels: [modelo-selector, modelo-config, proveedores-gestionar]
 
   credential-manager:
-    - credencial-selector
-    - credencial-crear
-    - credenciales-gestionar
+    panels: [credencial-selector, credencial-crear, credenciales-gestionar]
 
   prompt-manager:
-    - prompts-rapidos
-    - prompt-crear
-    - prompts-gestionar
+    panels: [prompts-rapidos, prompt-crear, prompts-gestionar]
 
   tool-orchestrator:
-    - tools-disponibles
-    - tools-config
+    panels: [tools-disponibles]
 
   plugin-manager:
-    - plugins-activos
-    - plugins-gestionar
+    panels: [plugins-activos]
+
+  conversation-manager:
+    panels: [conversaciones, conversacion-crear]
 
 # ============================================================================
 # EJEMPLO DE USO PARA UN MÓDULO

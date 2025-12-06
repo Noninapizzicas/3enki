@@ -556,7 +556,400 @@ Fijo pequeño, doble toque expande, Enter ≠ Enviar
 
 ---
 
-## Componentes Reutilizables Implementados
+## Arquitectura de Componentes Reutilizables
+
+### Filosofía: Component-First
+
+> **Principio fundamental: Máxima reutilización, mínima duplicación.**
+
+Cada elemento visual sigue un patrón definido. En lugar de escribir código específico para cada caso, construimos con **componentes base** que se combinan para crear funcionalidades específicas.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   CAPA 1: COMPONENTES BASE                  │
+│              (Patrones reutilizables en TODO)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
+│  │  ToolbarIcon    │  │  FloatingPanel  │  │  ActionForm │  │
+│  │  • 1/2/long tap │  │  • Centrado     │  │  • Campos   │  │
+│  │  • badge        │  │  • Tap fuera    │  │  • actions[]│  │
+│  │  • variants     │  │  • CSS vars     │  │  • Validar  │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────┘  │
+│                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐                   │
+│  │  SelectList     │  │  ToggleList     │                   │
+│  │  • Acordeón     │  │  • Multi-select │                   │
+│  │  • Búsqueda     │  │  • Grupos       │                   │
+│  │  • Radio        │  │  • max/todos    │                   │
+│  └─────────────────┘  └─────────────────┘                   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              CAPA 2: COMPONENTES ESPECÍFICOS                │
+│           (Combinan base + lógica de dominio)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ModelSelector   = FloatingPanel + Lista agrupada           │
+│  FileExplorer    = FloatingPanel + Árbol + Acciones         │
+│  PromptEditor    = FloatingPanel + ActionForm + Preview     │
+│  CredentialForm  = FloatingPanel + ActionForm + Validación  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 CAPA 3: LAYOUTS/PÁGINAS                     │
+│              (Componen todo en una vista)                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  MobileWorkspaceLayout = Barras + Zona central + Paneles    │
+│  +page.svelte          = Layout + Componentes específicos   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Patrón 1: ToolbarIcon (Botón con Triple Interacción)
+
+> **Implementación:** `$components/toolbar/ToolbarIcon.svelte`
+
+Todos los botones/iconos de las barras usan el mismo componente con el mismo comportamiento.
+
+**Comportamiento:**
+| Gesto | Acción | Feedback |
+|-------|--------|----------|
+| 1 tap | Acción principal (ver/seleccionar) | Highlight |
+| 2 taps | Acción secundaria (crear/añadir) | Scale |
+| Long-press | Acción terciaria (gestionar/config) | Progress circle |
+
+**Props:**
+```typescript
+interface ToolbarIconProps {
+  id: string;
+  icon: string;              // Emoji
+  label?: string;
+  badge?: number | string;
+  badgeColor?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
+  displayValue?: string;
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger';
+  active?: boolean;
+  disabled?: boolean;
+  longPressDuration?: number;  // default: 500ms
+  doubleTapDelay?: number;     // default: 250ms
+}
+
+// CSS Variables (padre las define):
+// --icon-size: tamaño del botón (default: 36px)
+// --icon-font-size: tamaño del emoji (default: 1rem)
+// --icon-radius: border-radius (default: 8px)
+// --icon-bg, --icon-bg-hover, --icon-bg-active
+```
+
+**Eventos:**
+- `tap` - 1 toque
+- `doubleTap` - 2 toques
+- `longPress` - Pulsación larga
+
+**Uso:**
+```svelte
+<ToolbarIcon
+  id="modelo"
+  icon="🤖"
+  label="Modelo"
+  displayValue={currentModel}
+  on:tap={() => openPanel('modelo-selector')}
+  on:doubleTap={() => openPanel('modelo-config')}
+  on:longPress={() => openModal('modelos-gestionar')}
+/>
+```
+
+---
+
+### Patrón 2: FloatingPanel (Panel/Ventana Emergente)
+
+> **Implementación:** `$components/feedback/FloatingPanel.svelte`
+
+Todas las ventanas emergentes usan el mismo componente con el mismo comportamiento.
+
+**Comportamiento:**
+- Aparece sobre el contenido (overlay con fondo oscuro)
+- **Tap fuera = cerrar** (siempre)
+- **Siempre centrado** (sin variantes de posición)
+- **Sin título** (el contenido define su propio header si lo necesita)
+- Tamaño se ajusta al contenido (con máximos vía CSS)
+- ESC también cierra
+
+**Props:**
+```typescript
+interface FloatingPanelProps {
+  open: boolean;
+}
+
+// CSS Variables (padre las define):
+// --panel-padding: padding interno (default: 1rem)
+// --panel-radius: border-radius (default: 12px)
+// --panel-bg: fondo (default: var(--color-bg-card))
+// --panel-shadow: sombra (default: 0 4px 24px rgba(0,0,0,0.2))
+// --panel-max-width: ancho máximo (default: 90vw)
+// --panel-max-height: alto máximo (default: 80vh)
+```
+
+**Eventos:**
+- `close` - Cuando se cierra (tap fuera o ESC)
+
+**Uso:**
+```svelte
+<FloatingPanel bind:open={panelOpen} on:close={() => panelOpen = false}>
+  <!-- El contenido define su propia estructura -->
+  <h3>Seleccionar Modelo</h3>
+  <ModelList {models} on:select={handleSelect} />
+</FloatingPanel>
+```
+
+---
+
+### Patrón 3: ActionForm (Formulario con Acciones)
+
+> **Implementación:** `$components/ui/ActionForm.svelte`
+
+Todos los formularios usan el mismo patrón de campos + botones de acción.
+
+**Estructura:**
+```
+┌─────────────────────────────────────┐
+│                                     │
+│  [Campo 1]                          │
+│  [Campo 2]                          │
+│  [Campo N]                          │
+│                                     │
+│         [Cancelar]  [Guardar]       │
+└─────────────────────────────────────┘
+```
+
+**Props:**
+```typescript
+interface ActionFormProps {
+  fields: FormField[];
+  actions?: FormAction[];    // Múltiples acciones
+  loading?: boolean;
+  disabled?: boolean;
+  // Legacy: submitLabel, cancelLabel, submitIcon, showCancel
+}
+
+interface FormField {
+  name: string;
+  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'password' | 'number';
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  value?: string | number | boolean;
+  options?: { value: string; label: string }[];
+}
+
+interface FormAction {
+  label: string;
+  emit: string;              // Evento a emitir
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  icon?: string;
+  validate?: boolean;        // default: true para primary
+}
+
+// CSS Variables: --form-gap, --form-padding, --form-label-size, --form-input-size
+```
+
+**Eventos:** Dinámicos según `actions[].emit`
+
+**Uso simple:**
+```svelte
+<ActionForm fields={[...]} on:submit={save} on:cancel={close} />
+```
+
+**Uso con múltiples acciones:**
+```svelte
+<ActionForm
+  fields={[...]}
+  actions={[
+    { label: 'Borrador', emit: 'draft', variant: 'ghost', validate: false },
+    { label: 'Publicar', emit: 'publish', variant: 'primary' }
+  ]}
+  on:draft={saveDraft}
+  on:publish={publish}
+/>
+```
+
+---
+
+### Patrón 4: SelectList (Selección Única con Acordeón)
+
+> **Implementación:** `$components/ui/SelectList.svelte`
+
+Lista de selección única con grupos colapsables tipo acordeón.
+
+**Comportamiento:**
+- Grupos acordeón (solo 1 abierto a la vez)
+- Búsqueda colapsable (cerrada por defecto)
+- Selección única (radio)
+
+**Props:**
+```typescript
+interface SelectListProps {
+  items: SelectItem[];
+  value?: string;
+  groups?: SelectGroup[];
+  searchable?: boolean;    // default: true
+  accordion?: boolean;     // default: true
+}
+
+interface SelectItem {
+  id: string;
+  label: string;
+  group?: string;
+  icon?: string;
+  badge?: string;
+  disabled?: boolean;
+}
+
+// CSS Variables: --list-padding, --list-item-height, --list-item-padding, --list-group-bg
+```
+
+**Eventos:** `select` → `{ item }`
+
+**Uso:**
+```svelte
+<SelectList
+  {value}
+  items={models}
+  groups={providers}
+  on:select={({ detail }) => value = detail.item.id}
+/>
+```
+
+---
+
+### Patrón 5: ToggleList (Selección Múltiple con Grupos)
+
+> **Implementación:** `$components/ui/ToggleList.svelte`
+
+Lista de selección múltiple con grupos visuales (no colapsables).
+
+**Comportamiento:**
+- Multi-selección (checkboxes)
+- Grupos como separadores visuales
+- Controles "Todos / Ninguno"
+- Límite máximo opcional
+
+**Props:**
+```typescript
+interface ToggleListProps {
+  items: ToggleItem[];
+  values: string[];
+  groups?: ToggleGroup[];
+  showSelectAll?: boolean;
+  max?: number;
+}
+
+interface ToggleItem {
+  id: string;
+  label: string;
+  group?: string;
+  icon?: string;
+  description?: string;
+  disabled?: boolean;
+}
+
+// CSS Variables: --list-padding, --list-item-height, --list-item-padding, --list-group-gap
+```
+
+**Eventos:** `change` → `{ values }`, `toggle` → `{ item, active }`
+
+**Uso:**
+```svelte
+<ToggleList
+  values={enabledTools}
+  items={tools}
+  groups={categories}
+  showSelectAll
+  max={5}
+  on:change={({ detail }) => enabledTools = detail.values}
+/>
+```
+
+---
+
+### Relación: Blueprints → Templates → Componentes
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      BLUEPRINT (.yaml)                      │
+│              "QUÉ queremos construir"                       │
+├─────────────────────────────────────────────────────────────┤
+│  - Define estructura del módulo                             │
+│  - Lista de paneles necesarios                              │
+│  - Campos y validaciones                                    │
+│  - Eventos y APIs                                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ npx plop from-blueprint
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   TEMPLATE PLOP (.hbs)                      │
+│              "CÓMO generar el código"                       │
+├─────────────────────────────────────────────────────────────┤
+│  - Genera código que USA los componentes base               │
+│  - Importa ToolbarIcon, FloatingPanel, ActionForm           │
+│  - Configura props según blueprint                          │
+│  - NO duplica lógica de los patrones                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ Genera
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   CÓDIGO GENERADO                           │
+│              (Usa componentes base)                         │
+├─────────────────────────────────────────────────────────────┤
+│  <MobileWorkspaceLayout>                                    │
+│    <ToolbarIcon ... />   ← Reutiliza                        │
+│    <FloatingPanel>       ← Reutiliza                        │
+│      <ActionForm ... />  ← Reutiliza                        │
+│    </FloatingPanel>                                         │
+│  </MobileWorkspaceLayout>                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Beneficios de esta Arquitectura
+
+| Aspecto | Antes (Monolítico) | Ahora (Component-First) |
+|---------|-------------------|------------------------|
+| **Código** | 3000+ líneas en un archivo | Componentes pequeños y enfocados |
+| **Bugs** | Corregir en 32 lugares | Corregir en 1 componente base |
+| **Consistencia** | Cada panel diferente | Todos los paneles iguales |
+| **Testing** | Difícil de testear | Componentes aislados testeables |
+| **Nuevas features** | Copiar/pegar código | Componer componentes existentes |
+
+---
+
+### Componentes Base Requeridos
+
+| Componente | Estado | Ubicación |
+|------------|--------|-----------|
+| `ToolbarIcon` | ✅ Listo | `$components/toolbar/ToolbarIcon.svelte` |
+| `FloatingPanel` | ✅ Listo | `$components/feedback/FloatingPanel.svelte` |
+| `ActionForm` | ✅ Listo | `$components/ui/ActionForm.svelte` |
+| `SelectList` | ✅ Listo | `$components/ui/SelectList.svelte` |
+| `ToggleList` | ✅ Listo | `$components/ui/ToggleList.svelte` |
+
+---
+
+## Componentes Específicos de Chat IA
+
+> **NOTA:** Esta sección describe la arquitectura objetivo.
+> La implementación actual en `ChatAIWorkspace.svelte` está siendo refactorizada.
 
 ### ChatAIWorkspace - Componente Principal
 

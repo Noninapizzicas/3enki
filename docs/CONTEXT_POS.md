@@ -885,6 +885,59 @@ event-core/
 
 ---
 
+## Componentes UI (Referencia CONTEXT_UI.md)
+
+> Los módulos POS que requieran interfaz de usuario deben usar los componentes base definidos en `CONTEXT_UI.md`.
+
+### Componentes Base Disponibles
+
+| Componente | Uso en POS |
+|------------|------------|
+| `ToolbarIcon` | Botones de toolbar (Mesa, Pedido, Cocina) |
+| `FloatingPanel` | Modales de selección y configuración |
+| `ActionForm` | Formularios (crear cuenta, editar pedido) |
+| `SelectList` | Selector de productos, categorías (acordeón) |
+| `ToggleList` | Activar/desactivar ingredientes, variaciones |
+
+### Ejemplo: Selector de Productos
+
+```svelte
+<FloatingPanel bind:open={productosOpen} on:close={() => productosOpen = false}>
+  <SelectList
+    value={productoSeleccionado}
+    items={productos}
+    groups={categorias}
+    on:select={({ detail }) => agregarAlPedido(detail.item)}
+  />
+</FloatingPanel>
+```
+
+### Ejemplo: Variaciones de Ingredientes
+
+```svelte
+<FloatingPanel bind:open={variacionesOpen}>
+  <ToggleList
+    values={ingredientesActivos}
+    items={ingredientesProducto}
+    groups={[
+      { id: 'quitar', label: 'Quitar' },
+      { id: 'anadir', label: 'Añadir extra' }
+    ]}
+    on:change={({ detail }) => actualizarVariaciones(detail.values)}
+  />
+  <ActionForm
+    fields={[{ name: 'notas', type: 'text', label: 'Notas' }]}
+    actions={[
+      { label: 'Cancelar', emit: 'cancel', variant: 'ghost' },
+      { label: 'Aplicar', emit: 'submit', variant: 'primary' }
+    ]}
+    on:submit={confirmarVariaciones}
+  />
+</FloatingPanel>
+```
+
+---
+
 ## Notas de Implementación
 
 1. **Persistencia**: Actualmente todos los módulos usan `Map()` en memoria. En producción cambiar a base de datos.

@@ -13,6 +13,8 @@
     NewCredentialForm,
     ContextItem,
     QuickPrompt,
+    PromptTemplate,
+    NewPromptForm,
     ChatMessage,
     Conversation
   } from './types';
@@ -95,6 +97,21 @@
 
   // Props - Prompts
   export let quickPrompts: QuickPrompt[] = [];
+  export let promptTemplates: PromptTemplate[] = [];
+  export let activePromptId: string = '';
+
+  // Estado local para formulario de nuevo prompt
+  let newPromptForm: NewPromptForm = {
+    name: '',
+    title: '',
+    content: '',
+    tags: '',
+    description: ''
+  };
+
+  // Filtros para gestión de prompts
+  let promptFilterTag: string = 'ALL';
+  let promptSearchQuery: string = '';
 
   // Props - Panel actual
   export let currentPanel: string = '';
@@ -131,6 +148,12 @@
     pluginToggle: { pluginId: string; enabled: boolean };
     // Prompts
     promptApply: { prompt: QuickPrompt };
+    promptTemplateApply: { template: PromptTemplate };
+    promptCreate: { form: NewPromptForm };
+    promptEdit: { promptId: string };
+    promptDuplicate: { promptId: string };
+    promptDelete: { promptId: string };
+    promptStats: { promptId: string };
     promptFavorite: { promptId: string; favorite: boolean };
     // Panel
     panelChange: { panelId: string };
@@ -189,6 +212,25 @@
 
   $: favoritePrompts = quickPrompts.filter(p => p.favorite);
   $: nonFavoritePrompts = quickPrompts.filter(p => !p.favorite);
+
+  // Computed - PromptTemplates
+  $: allPromptTags = [...new Set(promptTemplates.flatMap(p => p.tags))];
+  $: filteredPromptTemplates = promptTemplates.filter(p => {
+    if (promptFilterTag !== 'ALL' && !p.tags.includes(promptFilterTag)) return false;
+    if (promptSearchQuery) {
+      const query = promptSearchQuery.toLowerCase();
+      return p.name.toLowerCase().includes(query) ||
+             p.title.toLowerCase().includes(query) ||
+             p.content.toLowerCase().includes(query);
+    }
+    return true;
+  });
+  $: promptTotalStats = promptTemplates.reduce((acc, p) => ({
+    uses: acc.uses + (p.stats?.uses || 0),
+    tokens: acc.tokens + (p.stats?.tokens_avg || 0) * (p.stats?.uses || 0)
+  }), { uses: 0, tokens: 0 });
+  $: detectedVariables = (newPromptForm.content.match(/\{\{(\w+)\}\}/g) || [])
+    .map(v => v.replace(/[{}]/g, ''));
 
   $: enabledToolsCount = tools.filter(t => t.enabled).length;
   $: enabledPluginsCount = plugins.filter(p => p.enabled).length;
@@ -376,6 +418,57 @@
       prompt.favorite = !prompt.favorite;
       quickPrompts = [...quickPrompts];
       dispatch('promptFavorite', { promptId, favorite: prompt.favorite });
+    }
+  }
+
+  // Handlers - PromptTemplates
+  function applyPromptTemplate(template: PromptTemplate) {
+    activePromptId = template.id;
+    dispatch('promptTemplateApply', { template });
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function resetNewPromptForm() {
+    newPromptForm = {
+      name: '',
+      title: '',
+      content: '',
+      tags: '',
+      description: ''
+    };
+  }
+
+  function createPrompt() {
+    if (!newPromptForm.name || !newPromptForm.content) return;
+    dispatch('promptCreate', { form: { ...newPromptForm } });
+    resetNewPromptForm();
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function editPrompt(promptId: string) {
+    dispatch('promptEdit', { promptId });
+  }
+
+  function duplicatePrompt(promptId: string) {
+    dispatch('promptDuplicate', { promptId });
+  }
+
+  function deletePrompt(promptId: string) {
+    if (confirm('¿Eliminar este prompt?')) {
+      dispatch('promptDelete', { promptId });
+    }
+  }
+
+  function viewPromptStats(promptId: string) {
+    dispatch('promptStats', { promptId });
+  }
+
+  function togglePromptTemplateFavorite(promptId: string) {
+    const template = promptTemplates.find(p => p.id === promptId);
+    if (template) {
+      template.favorite = !template.favorite;
+      promptTemplates = [...promptTemplates];
+      dispatch('promptFavorite', { promptId, favorite: template.favorite || false });
     }
   }
 
@@ -1000,15 +1093,42 @@
     </div>
   </div>
 
-<!-- Panel: Prompts Rápidos -->
+<!-- Panel: Prompts Rápidos (1 TAP - 30%) -->
 {:else if currentPanel === 'prompts'}
   <div class="space-y-3">
-    {#if favoritePrompts.length > 0}
-      <div class="mb-3">
-        <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">⭐ Favoritos</h4>
-        {#each favoritePrompts as prompt (prompt.id)}
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📝</span>
+      <h3 class="font-medium">Prompts Recientes</h3>
+    </div>
+
+    <!-- Lista de prompts -->
+    <div class="space-y-1">
+      {#each promptTemplates.slice(0, 6) as template (template.id)}
+        <button
+          class="w-full text-left p-2 rounded-lg transition-colors {activePromptId === template.id ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+          on:click={() => applyPromptTemplate(template)}
+        >
+          <div class="flex items-center gap-2">
+            <span>{activePromptId === template.id ? '●' : '○'}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="font-medium text-sm truncate">{template.title || template.name}</p>
+                <span class="text-xs text-text-muted">v{template.current_version}</span>
+                {#if template.favorite}
+                  <span class="text-warning">⭐</span>
+                {/if}
+              </div>
+            </div>
+          </div>
+        </button>
+      {/each}
+
+      {#if promptTemplates.length === 0}
+        <!-- Fallback a quickPrompts legacy -->
+        {#each quickPrompts as prompt (prompt.id)}
           <button
-            class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors mb-1"
+            class="w-full text-left p-2 rounded-lg transition-colors bg-bg-hover hover:bg-bg-card"
             on:click={() => applyPrompt(prompt)}
           >
             <div class="flex items-center justify-between">
@@ -1016,44 +1136,238 @@
                 <p class="font-medium text-sm">{prompt.name}</p>
                 <p class="text-xs text-text-muted truncate">{prompt.content}</p>
               </div>
-              <button
-                class="p-1 text-warning hover:text-warning/80"
-                on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
-              >
-                ⭐
-              </button>
+              {#if prompt.favorite}
+                <span class="text-warning">⭐</span>
+              {/if}
             </div>
           </button>
         {/each}
+      {/if}
+
+      {#if promptTemplates.length === 0 && quickPrompts.length === 0}
+        <p class="text-center text-text-muted py-4">No hay prompts disponibles</p>
+      {/if}
+    </div>
+
+    <!-- Tags rápidos -->
+    {#if allPromptTags.length > 0}
+      <div class="pt-2 border-t border-border">
+        <p class="text-xs text-text-muted mb-2">Tags:</p>
+        <div class="flex flex-wrap gap-1">
+          {#each allPromptTags.slice(0, 5) as tag}
+            <button
+              class="px-2 py-1 text-xs rounded-full bg-bg-hover hover:bg-primary/20 transition-colors"
+              on:click={() => { promptFilterTag = tag; dispatch('panelChange', { panelId: 'prompts-gestionar' }); }}
+            >
+              {tag}
+            </button>
+          {/each}
+        </div>
       </div>
     {/if}
-    {#if nonFavoritePrompts.length > 0}
-      <div>
-        <h4 class="text-xs font-medium text-text-muted mb-2 uppercase">📝 Todos</h4>
-        {#each nonFavoritePrompts as prompt (prompt.id)}
-          <button
-            class="w-full text-left p-3 bg-bg-hover rounded-lg hover:bg-bg-card transition-colors mb-1"
-            on:click={() => applyPrompt(prompt)}
-          >
-            <div class="flex items-center justify-between">
-              <div class="flex-1">
-                <p class="font-medium text-sm">{prompt.name}</p>
-                <p class="text-xs text-text-muted truncate">{prompt.content}</p>
-              </div>
-              <button
-                class="p-1 text-text-muted hover:text-warning"
-                on:click|stopPropagation={() => togglePromptFavorite(prompt.id)}
-              >
-                ☆
-              </button>
-            </div>
-          </button>
+
+    <!-- Búsqueda rápida -->
+    <input
+      type="text"
+      placeholder="🔍 Buscar..."
+      class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+      bind:value={promptSearchQuery}
+      on:input={() => { if (promptSearchQuery) dispatch('panelChange', { panelId: 'prompts-gestionar' }); }}
+    />
+  </div>
+
+<!-- Panel: Prompt Crear (2 TAPS - 50%) -->
+{:else if currentPanel === 'prompt-crear'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">📝</span>
+        <h3 class="font-medium">Nuevo Prompt</h3>
+      </div>
+    </div>
+
+    <!-- Formulario -->
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Nombre * (slug)</label>
+      <input
+        type="text"
+        placeholder="mi-prompt-personalizado"
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm font-mono focus:border-primary focus:outline-none"
+        bind:value={newPromptForm.name}
+      />
+    </div>
+
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Título</label>
+      <input
+        type="text"
+        placeholder="Mi Prompt Personalizado"
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={newPromptForm.title}
+      />
+    </div>
+
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Contenido * (usa {'{{variable}}'} para templates)</label>
+      <textarea
+        placeholder="Eres un {{role}} experto en {{domain}}..."
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none min-h-[120px] resize-y"
+        bind:value={newPromptForm.content}
+      ></textarea>
+    </div>
+
+    <!-- Variables detectadas -->
+    {#if detectedVariables.length > 0}
+      <div class="p-2 bg-bg-card rounded-lg border border-border">
+        <p class="text-xs text-text-muted mb-1">Variables detectadas:</p>
+        <div class="flex flex-wrap gap-1">
+          {#each detectedVariables as variable}
+            <span class="px-2 py-0.5 text-xs bg-primary/20 text-primary rounded">
+              {variable}
+            </span>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <div>
+      <label class="text-xs text-text-muted mb-1 block">Tags (separados por coma)</label>
+      <input
+        type="text"
+        placeholder="chat, asistente, custom"
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={newPromptForm.tags}
+      />
+    </div>
+
+    <!-- Botón crear -->
+    <Button
+      variant="primary"
+      class="w-full"
+      on:click={createPrompt}
+      disabled={!newPromptForm.name || !newPromptForm.content}
+    >
+      💾 Crear Prompt
+    </Button>
+  </div>
+
+<!-- Panel: Prompts Gestionar (LONG-PRESS - 80%) -->
+{:else if currentPanel === 'prompts-gestionar'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">📝</span>
+        <h3 class="font-medium">Gestionar Prompts</h3>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="flex gap-2 flex-wrap">
+      <select
+        class="flex-1 min-w-[100px] p-2 bg-bg-hover rounded-lg border border-border text-sm"
+        bind:value={promptFilterTag}
+      >
+        <option value="ALL">Todos los tags</option>
+        {#each allPromptTags as tag}
+          <option value={tag}>🏷️ {tag}</option>
         {/each}
-      </div>
-    {/if}
-    {#if quickPrompts.length === 0}
-      <p class="text-center text-text-muted py-4">No hay prompts disponibles</p>
-    {/if}
+      </select>
+      <input
+        type="text"
+        placeholder="🔍 Buscar..."
+        class="flex-1 min-w-[120px] p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={promptSearchQuery}
+      />
+    </div>
+
+    <!-- Lista de prompts -->
+    <div class="space-y-2">
+      {#each filteredPromptTemplates as template (template.id)}
+        <div class="p-3 bg-bg-hover rounded-lg border border-border">
+          <!-- Header del prompt -->
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-2">
+              <span>📝</span>
+              <span class="font-medium text-sm">{template.title || template.name}</span>
+            </div>
+            <span class="text-xs text-text-muted">v{template.current_version}</span>
+          </div>
+
+          <!-- Preview del contenido -->
+          <p class="text-xs text-text-muted mb-2 truncate">"{template.content.slice(0, 50)}..."</p>
+
+          <!-- Tags -->
+          {#if template.tags.length > 0}
+            <div class="flex flex-wrap gap-1 mb-2">
+              {#each template.tags as tag}
+                <span class="px-1.5 py-0.5 text-xs bg-bg-card rounded">{tag}</span>
+              {/each}
+            </div>
+          {/if}
+
+          <!-- Stats -->
+          {#if template.stats}
+            <div class="text-xs text-text-muted mb-2">
+              Usos: {template.stats.uses} | Tokens avg: {template.stats.tokens_avg} | ⭐ {template.stats.rating.toFixed(1)}
+            </div>
+          {/if}
+
+          <!-- Acciones -->
+          <div class="flex gap-1 flex-wrap">
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+              on:click={() => editPrompt(template.id)}
+            >
+              ✏️ Editar
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+              on:click={() => duplicatePrompt(template.id)}
+            >
+              📋 Duplicar
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-primary/20 transition-colors"
+              on:click={() => viewPromptStats(template.id)}
+            >
+              📊 Stats
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-error/20 transition-colors"
+              on:click={() => deletePrompt(template.id)}
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+      {/each}
+
+      {#if filteredPromptTemplates.length === 0}
+        <p class="text-center text-text-muted py-4">No hay prompts que coincidan</p>
+      {/if}
+    </div>
+
+    <!-- Stats totales -->
+    <div class="p-2 bg-bg-card rounded-lg border border-border text-sm">
+      📊 <strong>Total:</strong> {promptTemplates.length} prompts |
+      Usos hoy: {promptTotalStats.uses} |
+      Tokens: {formatTokens(promptTotalStats.tokens)}
+    </div>
+
+    <!-- Acciones globales -->
+    <div class="flex gap-2 flex-wrap">
+      <Button variant="secondary" class="flex-1" on:click={() => dispatch('panelChange', { panelId: 'prompt-crear' })}>
+        + Nuevo Prompt
+      </Button>
+      <button class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-primary/20 transition-colors">
+        📊 Analytics
+      </button>
+      <button class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-primary/20 transition-colors">
+        🔬 A/B Test
+      </button>
+    </div>
   </div>
 
 <!-- Panel: Tools -->

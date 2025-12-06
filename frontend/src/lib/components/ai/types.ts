@@ -102,7 +102,7 @@ export interface ContextItem {
   icon?: string;
 }
 
-// Prompt rápido
+// Prompt rápido (legacy, usar PromptTemplate para nuevos)
 export interface QuickPrompt {
   id: string;
   name: string;
@@ -110,6 +110,48 @@ export interface QuickPrompt {
   category: string;
   favorite: boolean;
   icon?: string;
+}
+
+// Template de Prompt completo (según prompt-manager)
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  title: string;
+  description?: string;
+  content: string;
+  variables: string[];
+  tags: string[];
+  current_version: string;
+  versions?: PromptVersion[];
+  stats?: PromptStats;
+  created_at?: string;
+  updated_at?: string;
+  favorite?: boolean;
+  active?: boolean;
+}
+
+// Versión de prompt
+export interface PromptVersion {
+  version: string;
+  content: string;
+  created_at: string;
+}
+
+// Estadísticas de prompt
+export interface PromptStats {
+  uses: number;
+  tokens_avg: number;
+  rating: number;
+  last_used?: string;
+}
+
+// Formulario para crear/editar prompt
+export interface NewPromptForm {
+  name: string;
+  title: string;
+  content: string;
+  tags: string;
+  description?: string;
 }
 
 // Mensaje de chat

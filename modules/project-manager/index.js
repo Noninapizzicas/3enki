@@ -1,0 +1,725 @@
+const crypto = require('crypto');
+
+const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
+
+/**
+ * Project Manager Module
+ *
+ * Event-driven project lifecycle management with database integration.
+ * - 100% event-driven (no HTTP interno)
+ * - Uses database-manager via events for all persistence
+ * - Tracks active project
+ * - Publishes lifecycle events (created, updated, deleted, activated)
+ */
+class ProjectManagerModule {
+  constructor() {
+    this.name = 'project-manager';
+    this.version = '1.0.0';
+
+    // Dependencies (injected)
+    this.logger = null;
+    this.metrics = null;
+    this.eventBus = null;
+    this.config = null;
+
+    // State
+    this.projects = new Map(); // In-memory cache: projectId -> project
+    this.activeProjectId = null;
+
+    // Pending database requests
+    this.pendingDbRequests = new Map(); // requestId -> {resolve, reject, timeout}
+
+    // Unsubscribe functions
+    this.unsubscribes = [];
+  }
+
+  async onLoad(core) {
+    this.logger = core.logger;
+    this.metrics = core.metrics;
+    this.eventBus = core.eventBus;
+    this.config = core.config || {};
+
+    this.logger.info('project-manager.loading', { module: this.name });
+
+    // Subscribe to database responses
+    const unsubDbResponse = await this.eventBus.subscribe(EVENTS.DB.QUERY_RESPONSE,
+      this.onDbQueryResponse.bind(this));
+    this.unsubscribes.push(unsubDbResponse);
+
+    // Subscribe to query events
+    const unsubGet = await this.eventBus.subscribe(EVENTS.PROJECT.GET_REQUEST,
+      this.onGetProjectRequest.bind(this));
+    this.unsubscribes.push(unsubGet);
+
+    const unsubList = await this.eventBus.subscribe(EVENTS.PROJECT.LIST_REQUEST,
+      this.onListProjectsRequest.bind(this));
+    this.unsubscribes.push(unsubList);
+
+    const unsubActive = await this.eventBus.subscribe('project.active.request',
+      this.onGetActiveProjectRequest.bind(this));
+    this.unsubscribes.push(unsubActive);
+
+    // Load existing projects from database
+    await this.loadExistingProjects();
+
+    this.logger.info('project-manager.loaded', { module: this.name });
+  }
+
+  async onUnload() {
+    this.logger.info({ correlationId: 'system' }, 'Project Manager module unloading');
+
+    // Unsubscribe all
+    for (const unsub of this.unsubscribes) {
+      await unsub();
+    }
+    this.unsubscribes = [];
+
+    // Clear pending requests
+    for (const [requestId, pending] of this.pendingDbRequests.entries()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Module unloading'));
+    }
+    this.pendingDbRequests.clear();
+
+    this.logger.info({ correlationId: 'system' }, 'Project Manager module unloaded');
+  }
+
+  // ==================== DATABASE HELPERS ====================
+
+  /**
+   * Query database via events
+   */
+  async queryDatabase(query, params = [], readOnly = false, correlationId) {
+    const requestId = crypto.randomUUID();
+
+    const dbPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingDbRequests.delete(requestId);
+        reject(new Error('Database query timeout'));
+      }, this.config.dbTimeout || 10000);
+
+      this.pendingDbRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    await this.eventBus.publish(EVENTS.DB.QUERY_REQUEST, {
+      project_id: 'system', // Project metadata stored in system DB
+      query,
+      params,
+      read_only: readOnly,
+      request_id: requestId,
+      correlation_id: correlationId
+    });
+
+    return await dbPromise;
+  }
+
+  /**
+   * Handle database query responses
+   */
+  async onDbQueryResponse(event) {
+    const { request_id, success, rows, error } = event;
+
+    const pending = this.pendingDbRequests.get(request_id);
+    if (!pending) {
+      return; // Response for unknown/expired request
+    }
+
+    clearTimeout(pending.timeout);
+    this.pendingDbRequests.delete(request_id);
+
+    if (success) {
+      pending.resolve(rows || []);
+    } else {
+      pending.reject(new Error(error || 'Database query failed'));
+    }
+  }
+
+  // ==================== INITIALIZATION ====================
+
+  /**
+   * Load existing projects from database
+   */
+  async loadExistingProjects() {
+    const correlationId = crypto.randomUUID();
+    this.logger.debug({ correlationId }, 'Loading existing projects from database');
+
+    try {
+      // Ensure projects table exists
+      await this.queryDatabase(`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          is_active INTEGER DEFAULT 0,
+          metadata TEXT
+        )
+      `, [], false, correlationId);
+
+      // Load all projects
+      const rows = await this.queryDatabase(
+        'SELECT * FROM projects ORDER BY created_at DESC',
+        [],
+        true,
+        correlationId
+      );
+
+      for (const row of rows) {
+        const project = {
+          id: row.id,
+          name: row.name,
+          description: row.description || '',
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          is_active: row.is_active === 1,
+          metadata: row.metadata ? JSON.parse(row.metadata) : {}
+        };
+
+        this.projects.set(project.id, project);
+
+        if (project.is_active) {
+          this.activeProjectId = project.id;
+        }
+      }
+
+      this.logger.info({ correlationId, count: this.projects.size }, 'Loaded existing projects');
+      // REMOVED: this.metrics.gauge('project.total.count', this.projects.size);
+
+      if (this.activeProjectId) {
+        // REMOVED: this.metrics.gauge('project.active.count', 1);
+      }
+    } catch (error) {
+      this.logger.error({ correlationId, error: error.message }, 'Failed to load projects');
+    }
+  }
+
+  // ==================== PROJECT CRUD ====================
+
+  /**
+   * Create new project
+   */
+  async createProject(name, description = '', metadata = {}, correlationId) {
+    const startTime = Date.now();
+    const projectId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    this.logger.info({ correlationId, projectId, name }, 'Creating project');
+
+    try {
+      // Insert into database
+      await this.queryDatabase(`
+        INSERT INTO projects (id, name, description, created_at, updated_at, is_active, metadata)
+        VALUES (?, ?, ?, ?, ?, 0, ?)
+      `, [
+        projectId,
+        name,
+        description,
+        now,
+        now,
+        JSON.stringify(metadata)
+      ], false, correlationId);
+
+      // Create project object
+      const project = {
+        id: projectId,
+        name,
+        description,
+        created_at: now,
+        updated_at: now,
+        is_active: false,
+        metadata
+      };
+
+      // Store in cache
+      this.projects.set(projectId, project);
+
+      // Initialize project database schema
+      await this.initializeProjectSchema(projectId, correlationId);
+
+      // Update metrics
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.created.total');
+    // → Counter extracted from events
+      // REMOVED: this.metrics.gauge('project.total.count', this.projects.size);
+      // REMOVED: this.metrics.timing('project.creation.duration', Date.now() - startTime);
+
+      // Publish event
+      await this.eventBus.publish(EVENTS.PROJECT.CREATED, {
+        project_id: projectId,
+        name,
+        description,
+        created_at: now
+      });
+
+      this.logger.info({ correlationId, projectId, name }, 'Project created successfully');
+
+      return project;
+    } catch (error) {
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.error.total', 1, { operation: 'create' });
+    // → Counter extracted from events
+      this.logger.error({ correlationId, projectId, name, error: error.message }, 'Failed to create project');
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize database schema for new project
+   */
+  async initializeProjectSchema(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Initializing project database schema');
+
+    const requestId = crypto.randomUUID();
+
+    const initPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingDbRequests.delete(requestId);
+        reject(new Error('Schema initialization timeout'));
+      }, this.config.dbTimeout || 10000);
+
+      this.pendingDbRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    await this.eventBus.publish('db.schema.init.request', {
+      project_id: projectId,
+      schema: this.config.defaultSchema,
+      request_id: requestId,
+      correlation_id: correlationId
+    });
+
+    // Wait for db.schema.init.response (handled via db.query.response)
+    // For simplicity, we'll assume success if no error thrown
+    this.logger.debug({ correlationId, projectId }, 'Project schema initialization requested');
+  }
+
+  /**
+   * Update project
+   */
+  async updateProject(projectId, updates, correlationId) {
+    this.logger.info({ correlationId, projectId, updates }, 'Updating project');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const now = new Date().toISOString();
+    const updatedFields = [];
+    const queryParts = [];
+    const params = [];
+
+    if (updates.name !== undefined) {
+      queryParts.push('name = ?');
+      params.push(updates.name);
+      project.name = updates.name;
+      updatedFields.push('name');
+    }
+
+    if (updates.description !== undefined) {
+      queryParts.push('description = ?');
+      params.push(updates.description);
+      project.description = updates.description;
+      updatedFields.push('description');
+    }
+
+    if (updates.metadata !== undefined) {
+      queryParts.push('metadata = ?');
+      params.push(JSON.stringify(updates.metadata));
+      project.metadata = updates.metadata;
+      updatedFields.push('metadata');
+    }
+
+    if (queryParts.length === 0) {
+      this.logger.warn({ correlationId, projectId }, 'No fields to update');
+      return project;
+    }
+
+    queryParts.push('updated_at = ?');
+    params.push(now);
+    params.push(projectId);
+
+    try {
+      await this.queryDatabase(
+        `UPDATE projects SET ${queryParts.join(', ')} WHERE id = ?`,
+        params,
+        false,
+        correlationId
+      );
+
+      project.updated_at = now;
+      this.projects.set(projectId, project);
+
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.updated.total');
+    // → Counter extracted from events
+
+      await this.eventBus.publish(EVENTS.PROJECT.UPDATED, {
+        project_id: projectId,
+        updated_fields: updatedFields,
+        updated_at: now
+      });
+
+      this.logger.info({ correlationId, projectId }, 'Project updated successfully');
+
+      return project;
+    } catch (error) {
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.error.total', 1, { operation: 'update' });
+    // → Counter extracted from events
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to update project');
+      throw error;
+    }
+  }
+
+  /**
+   * Delete project
+   */
+  async deleteProject(projectId, correlationId) {
+    this.logger.info({ correlationId, projectId }, 'Deleting project');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    // Cannot delete active project
+    if (project.is_active) {
+      throw new Error('Cannot delete active project. Deactivate first.');
+    }
+
+    try {
+      await this.queryDatabase(
+        'DELETE FROM projects WHERE id = ?',
+        [projectId],
+        false,
+        correlationId
+      );
+
+      this.projects.delete(projectId);
+
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.deleted.total');
+    // → Counter extracted from events
+      // REMOVED: this.metrics.gauge('project.total.count', this.projects.size);
+
+      await this.eventBus.publish(EVENTS.PROJECT.DELETED, {
+        project_id: projectId,
+        name: project.name,
+        deleted_at: new Date().toISOString()
+      });
+
+      this.logger.info({ correlationId, projectId }, 'Project deleted successfully');
+
+      return { success: true, id: projectId };
+    } catch (error) {
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.error.total', 1, { operation: 'delete' });
+    // → Counter extracted from events
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to delete project');
+      throw error;
+    }
+  }
+
+  /**
+   * Activate project
+   */
+  async activateProject(projectId, correlationId) {
+    this.logger.info({ correlationId, projectId }, 'Activating project');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    if (this.activeProjectId === projectId) {
+      this.logger.info({ correlationId, projectId }, 'Project already active');
+      return project;
+    }
+
+    try {
+      // Deactivate all projects
+      await this.queryDatabase(
+        'UPDATE projects SET is_active = 0',
+        [],
+        false,
+        correlationId
+      );
+
+      // Activate target project
+      await this.queryDatabase(
+        'UPDATE projects SET is_active = 1 WHERE id = ?',
+        [projectId],
+        false,
+        correlationId
+      );
+
+      // Update cache
+      const previousActiveId = this.activeProjectId;
+
+      if (previousActiveId) {
+        const prevProject = this.projects.get(previousActiveId);
+        if (prevProject) {
+          prevProject.is_active = false;
+          this.projects.set(previousActiveId, prevProject);
+        }
+
+        await this.eventBus.publish('project.deactivated', {
+          project_id: previousActiveId,
+          name: prevProject?.name,
+          deactivated_at: new Date().toISOString()
+        });
+      }
+
+      project.is_active = true;
+      this.projects.set(projectId, project);
+      this.activeProjectId = projectId;
+
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.activated.total');
+    // → Counter extracted from events
+      // REMOVED: this.metrics.gauge('project.active.count', 1);
+
+      await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
+        project_id: projectId,
+        name: project.name,
+        activated_at: new Date().toISOString()
+      });
+
+      this.logger.info({ correlationId, projectId }, 'Project activated successfully');
+
+      return project;
+    } catch (error) {
+      // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.error.total', 1, { operation: 'activate' });
+    // → Counter extracted from events
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to activate project');
+      throw error;
+    }
+  }
+
+  /**
+   * Get project by ID
+   */
+  getProject(projectId) {
+    return this.projects.get(projectId);
+  }
+
+  /**
+   * List all projects
+   */
+  listProjects() {
+    return Array.from(this.projects.values());
+  }
+
+  /**
+   * Get active project ID
+   */
+  getActiveProjectId() {
+    return this.activeProjectId;
+  }
+
+  // ==================== EVENT HANDLERS ====================
+
+  /**
+   * Handle project.get.request
+   */
+  async onGetProjectRequest(event) {
+    const { request_id, project_id, correlation_id } = event;
+    this.logger.debug({ correlationId: correlation_id, requestId: request_id, projectId: project_id },
+      'Received project.get.request');
+
+    const project = this.getProject(project_id);
+
+    await this.eventBus.publish(EVENTS.PROJECT.GET_RESPONSE, {
+      request_id,
+      success: !!project,
+      project: project || null,
+      error: project ? null : 'Project not found'
+    });
+  }
+
+  /**
+   * Handle project.list.request
+   */
+  async onListProjectsRequest(event) {
+    const { request_id, correlation_id } = event;
+    this.logger.debug({ correlationId: correlation_id, requestId: request_id },
+      'Received project.list.request');
+
+    const projects = this.listProjects();
+
+    await this.eventBus.publish(EVENTS.PROJECT.LIST_RESPONSE, {
+      request_id,
+      success: true,
+      projects,
+      count: projects.length,
+      active_project_id: this.activeProjectId
+    });
+  }
+
+  /**
+   * Handle project.active.request
+   */
+  async onGetActiveProjectRequest(event) {
+    const { request_id, correlation_id } = event;
+    this.logger.debug({ correlationId: correlation_id, requestId: request_id },
+      'Received project.active.request');
+
+    await this.eventBus.publish('project.active.response', {
+      request_id,
+      success: true,
+      active_project_id: this.activeProjectId
+    });
+  }
+
+  // ==================== HTTP API HANDLERS ====================
+
+  async handleCreateProject(req, res) {
+    const correlationId = crypto.randomUUID();
+    const { name, description, metadata } = req.body;
+
+    this.logger.info({ correlationId, name }, 'HTTP: Create project');
+
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'Project name is required' });
+    }
+
+    try {
+      const project = await this.createProject(name, description, metadata, correlationId);
+      res.status(201).json({ success: true, project });
+    } catch (error) {
+      this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to create project');
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async handleListProjects(req, res) {
+    const correlationId = crypto.randomUUID();
+    this.logger.debug({ correlationId }, 'HTTP: List projects');
+
+    try {
+      const projects = this.listProjects();
+      res.json({
+        success: true,
+        projects,
+        count: projects.length,
+        active_project_id: this.activeProjectId
+      });
+    } catch (error) {
+      this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to list projects');
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async handleGetProject(req, res) {
+    const correlationId = crypto.randomUUID();
+    const { id } = req.params;
+
+    this.logger.debug({ correlationId, projectId: id }, 'HTTP: Get project');
+
+    try {
+      const project = this.getProject(id);
+      if (!project) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+      res.json({ success: true, project });
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to get project');
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async handleUpdateProject(req, res) {
+    const correlationId = crypto.randomUUID();
+    const { id } = req.params;
+    const updates = req.body;
+
+    this.logger.info({ correlationId, projectId: id, updates }, 'HTTP: Update project');
+
+    try {
+      const project = await this.updateProject(id, updates, correlationId);
+      res.json({ success: true, project });
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to update project');
+
+      if (error.message.includes('not found')) {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async handleDeleteProject(req, res) {
+    const correlationId = crypto.randomUUID();
+    const { id } = req.params;
+
+    this.logger.info({ correlationId, projectId: id }, 'HTTP: Delete project');
+
+    try {
+      const result = await this.deleteProject(id, correlationId);
+      res.json({ success: true, id: result.id, message: 'Project deleted successfully' });
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to delete project');
+
+      if (error.message.includes('not found')) {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      if (error.message.includes('Cannot delete active')) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async handleActivateProject(req, res) {
+    const correlationId = crypto.randomUUID();
+    const { id } = req.params;
+
+    this.logger.info({ correlationId, projectId: id }, 'HTTP: Activate project');
+
+    try {
+      const project = await this.activateProject(id, correlationId);
+      res.json({ success: true, project });
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to activate project');
+
+      if (error.message.includes('not found')) {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async handleGetActiveProject(req, res) {
+    const correlationId = crypto.randomUUID();
+    this.logger.debug({ correlationId }, 'HTTP: Get active project');
+
+    try {
+      if (!this.activeProjectId) {
+        return res.status(404).json({ success: false, error: 'No active project' });
+      }
+
+      const project = this.getProject(this.activeProjectId);
+      res.json({ success: true, project });
+    } catch (error) {
+      this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to get active project');
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async handleHealthCheck(req, res) {
+    res.json({
+      status: 'healthy',
+      module: 'project-manager',
+      projects_count: this.projects.size,
+      active_project: this.activeProjectId,
+      uptime: process.uptime()
+    });
+  }
+
+  async handleGetMetrics(req, res) {
+    res.json({
+      module: 'project-manager',
+      metrics: {
+        total_projects: this.projects.size,
+        active_project_id: this.activeProjectId,
+        pending_db_requests: this.pendingDbRequests.size
+      }
+    });
+  }
+}
+
+module.exports = ProjectManagerModule;

@@ -96,3 +96,71 @@ config:
   caching: boolean        # ¿Cachear datos?
   metrics: boolean        # ¿Métricas detalladas?
   realtime: boolean       # ¿Actualización en tiempo real?
+
+# ============================================================================
+# PANELES UI (CONTEXT_UI.md)
+# ============================================================================
+#
+# Define los paneles flotantes del módulo.
+# Cada panel usa un componente base de CONTEXT_UI.md
+#
+# Componentes disponibles:
+#   - SelectList: Selección única con grupos acordeón
+#   - ToggleList: Selección múltiple con grupos visuales
+#   - ActionForm: Formulario con acciones
+#   - Custom: Contenido personalizado (slot)
+
+panels:
+  - id: string            # ID único del panel, ej: "modelo-selector"
+    component: string     # SelectList | ToggleList | ActionForm | Custom
+
+    # Para SelectList
+    selectList:
+      itemsSource: string   # Nombre de la prop con items
+      groupsSource: string  # Nombre de la prop con grupos (opcional)
+      valueField: string    # Campo para el valor seleccionado
+
+    # Para ToggleList
+    toggleList:
+      itemsSource: string   # Nombre de la prop con items
+      groupsSource: string  # Nombre de la prop con grupos (opcional)
+      valuesField: string   # Campo para valores seleccionados (array)
+      showSelectAll: boolean
+      max: number           # Máximo de selecciones (opcional)
+
+    # Para ActionForm
+    actionForm:
+      fieldsSource: string  # Nombre de la prop con fields, o inline
+      fields:               # O definir inline
+        - name: string
+          type: string      # text, textarea, select, checkbox, password, number
+          label: string
+          required: boolean
+          placeholder: string
+      actions:              # Botones del formulario
+        - label: string
+          emit: string      # Evento a emitir
+          variant: string   # primary, secondary, danger, ghost
+          validate: boolean # Validar antes de emitir
+
+# ============================================================================
+# TOOLBARS (iconos con triple interacción)
+# ============================================================================
+#
+# Define los iconos de las barras de herramientas.
+# Cada icono usa ToolbarIcon de CONTEXT_UI.md
+
+toolbars:
+  top:                    # Barra superior (configurable por módulo)
+    icons:
+      - id: string
+        icon: string      # Emoji
+        label: string
+        badge: string     # Campo para mostrar badge (opcional)
+        actions:
+          tap: { panel: string }        # Abre panel
+          doubleTap: { panel: string }  # Abre panel
+          longPress: { panel: string }  # Abre panel
+
+  # Las barras right y chat son fijas (definidas en mobile-chat-screen.yaml)
+

@@ -1,205 +1,162 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { MobileWorkspaceLayout } from '$components/layout';
-  import { ChatAIWorkspace, type AIModel, type AICredential, type AITool, type AIPlugin, type ContextItem, type QuickPrompt, type ChatMessage, DEFAULT_MODELS } from '$components/ai';
-  import { Card, Button, Badge } from '$components/ui';
-  import { Spinner } from '$components/feedback';
+  import { SelectList, ToggleList, ActionForm } from '$components/ui';
+  import { FloatingPanel, Spinner } from '$components/feedback';
+  import { ToolbarIcon } from '$components/navigation';
   import { subscribe, events } from '$stores/mqtt';
   import { toast } from '$stores/toast';
   import config from '$lib/config';
+  import type { SelectItem, SelectGroup } from '$components/ui/SelectList.svelte';
+  import type { ToggleItem, ToggleGroup } from '$components/ui/ToggleList.svelte';
+  import type { FormField, FormAction } from '$components/ui/ActionForm.svelte';
 
   // API Base
   const apiBase = `${config.apiUrl}/modules/{{name}}`;
   const credentialsApi = `${config.apiUrl}/modules/credential-manager`;
   const aiGatewayApi = `${config.apiUrl}/modules/ai-gateway`;
 
-  // State
+  // ============================================================================
+  // STATE
+  // ============================================================================
+
   let loading = true;
   let chatLoading = false;
-  let currentPanel = '';
 
-  // AI State
-  let availableModels: AIModel[] = DEFAULT_MODELS;
-  let selectedModelId = 'deepseek-chat';
-  let credentials: AICredential[] = [];
-  let currentModel = 'DeepSeek Chat';
-  let currentCredentialPreview = 'sk-...';
+  // Panel state - cada panel tiene su propio estado open
+  let openPanel: string | null = null;
 
-  // Tools
-  let tools: AITool[] = [
-    {{#each tools}}
-    { id: '{{id}}', name: '{{name}}', description: '{{description}}', enabled: {{enabled}}, category: '{{category}}' },
-    {{/each}}
+  // ============================================================================
+  // DATA SOURCES (from blueprint)
+  // ============================================================================
+{{#each dataSources}}
+
+  // {{comment}}
+  let {{name}}: {{type}}{{#if default}} = {{{default}}}{{/if}};
+{{/each}}
+
+  // ============================================================================
+  // TOOLBAR ICONS (generated from blueprint)
+  // ============================================================================
+
+  // Top toolbar - módulo específico
+  const topIcons = [
+{{#each toolbars.top.icons}}
+    {
+      id: '{{id}}',
+      icon: '{{icon}}',
+      label: '{{label}}',
+{{#if badge}}
+      badge: {{badge}},
+{{/if}}
+      actions: {
+{{#if actions.tap}}
+        tap: { type: '{{actions.tap.type}}', target: '{{actions.tap.target}}' },
+{{/if}}
+{{#if actions.doubleTap}}
+        doubleTap: { type: '{{actions.doubleTap.type}}', target: '{{actions.doubleTap.target}}' },
+{{/if}}
+{{#if actions.longPress}}
+        longPress: { type: '{{actions.longPress.type}}', target: '{{actions.longPress.target}}' }
+{{/if}}
+      }
+    },
+{{/each}}
   ];
 
-  // Plugins
-  let plugins: AIPlugin[] = [];
-
-  // Context
-  let contextItems: ContextItem[] = [
-    { type: 'style', label: 'Estilo', value: 'Default', active: true },
-    { type: 'language', label: 'Idioma', value: 'Español', active: true }
+  // Right toolbar - ecosistema (fijo)
+  const rightIcons = [
+    { id: 'modulos', icon: '🧩', label: 'Módulos', actions: { tap: { type: 'panel', target: 'modulos-lista' } } },
+    { id: 'config', icon: '⚙️', label: 'Sistema', actions: { tap: { type: 'panel', target: 'config-rapido' } } },
+    { id: 'notificaciones', icon: '🔔', label: 'Alertas', actions: { tap: { type: 'panel', target: 'notificaciones-lista' } } },
+    { id: 'usuario', icon: '👤', label: 'Perfil', actions: { tap: { type: 'panel', target: 'usuario-menu' } } }
   ];
 
-  // Prompts
-  let quickPrompts: QuickPrompt[] = [
-    {{#each prompts}}
-    { id: '{{id}}', name: '{{name}}', content: '{{content}}', category: '{{category}}', favorite: {{favorite}} },
-    {{/each}}
+  // Chat top toolbar
+  const chatTopIcons = [
+    { id: 'modelo', icon: '🤖', label: 'Modelo', actions: { tap: { type: 'panel', target: 'modelo-selector' }, doubleTap: { type: 'modal', target: 'modelo-config' } } },
+    { id: 'credencial', icon: '🔑', label: 'API Key', actions: { tap: { type: 'panel', target: 'credencial-selector' }, doubleTap: { type: 'modal', target: 'credencial-crear' } } },
+    { id: 'prompt', icon: '📝', label: 'Prompt', actions: { tap: { type: 'panel', target: 'prompts-rapidos' }, doubleTap: { type: 'modal', target: 'prompt-crear' } } },
+    { id: 'historial', icon: '💬', label: 'Historial', actions: { tap: { type: 'panel', target: 'conversaciones' } } }
   ];
 
-  // Chat
+  // Chat bottom toolbar
+  const chatBottomIcons = [
+    { id: 'herramientas', icon: '🔧', label: 'Tools', actions: { tap: { type: 'panel', target: 'tools-disponibles' } } },
+    { id: 'adjuntar', icon: '📎', label: 'Adjuntar', actions: { tap: { type: 'panel', target: 'adjuntar-archivo' } } },
+    { id: 'contexto', icon: '📋', label: 'Contexto', actions: { tap: { type: 'panel', target: 'contexto-actual' } } },
+    { id: 'plugins', icon: '🔌', label: 'Plugins', actions: { tap: { type: 'panel', target: 'plugins-activos' } } }
+  ];
+
+  // ============================================================================
+  // HANDLERS
+  // ============================================================================
+
+  function handleIconAction(e: CustomEvent<{ id: string; action: string; target: string }>) {
+    const { action, target } = e.detail;
+
+    if (action === 'panel' || action === 'modal') {
+      openPanel = target;
+    } else if (action === 'navigate') {
+      // goto(target)
+    }
+  }
+
+  function closePanel() {
+    openPanel = null;
+  }
+
+  // Panel event handlers
+{{#each panels}}
+{{#if events.select}}
+  function handle{{pascalCase id}}Select(e: CustomEvent<{ item: SelectItem }>) {
+    const { item } = e.detail;
+    {{events.select}}(item);
+    closePanel();
+  }
+{{/if}}
+{{#if events.change}}
+  function handle{{pascalCase id}}Change(e: CustomEvent<{ values: string[] }>) {
+    const { values } = e.detail;
+    {{events.change}}(values);
+  }
+{{/if}}
+{{#if events.submit}}
+  function handle{{pascalCase id}}Submit(e: CustomEvent<{ data: Record<string, unknown> }>) {
+    const { data } = e.detail;
+    {{events.submit}}(data);
+    closePanel();
+  }
+{{/if}}
+{{/each}}
+
+  // Domain handlers (implement these)
+{{#each eventHandlers}}
+  function {{name}}({{#if param}}{{param}}: {{paramType}}{{/if}}) {
+    // TODO: Implement {{name}}
+    console.log('{{name}}', {{#if param}}{{param}}{{/if}});
+{{#if toastMessage}}
+    toast.success('{{toastMessage}}');
+{{/if}}
+  }
+{{/each}}
+
+  // ============================================================================
+  // CHAT
+  // ============================================================================
+
+  interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: Date;
+    loading?: boolean;
+    error?: boolean;
+  }
+
   let chatMessages: ChatMessage[] = [];
 
-  // Stats
-  let stats = {
-    total: 0,
-    validated: 0,
-    processing: 0,
-    errors: 0
-  };
-
-  // Toolbar buttons
-  const topButtons = [
-    {
-      id: 'main',
-      emoji: '{{icon}}',
-      label: '{{titleCase name}}',
-      primaryAction: { type: 'panel' as const, panelId: 'main-list', label: 'Ver lista' }
-    },
-    {
-      id: 'stats',
-      emoji: '📊',
-      label: 'Stats',
-      primaryAction: { type: 'panel' as const, panelId: 'stats', label: 'Estadísticas' }
-    }
-  ];
-
-  const bottomButtons = [
-    {
-      id: 'historial',
-      emoji: '🕐',
-      label: 'Historial',
-      primaryAction: { type: 'panel' as const, panelId: 'history', label: 'Ver historial' }
-    }
-  ];
-
-  const sideButtons = [
-    {
-      id: 'home',
-      emoji: '🏠',
-      primaryAction: { type: 'navigate' as const, target: '/', label: 'Inicio' }
-    },
-    {
-      id: 'modulos',
-      emoji: '🧩',
-      primaryAction: { type: 'panel' as const, panelId: 'modulos', label: 'Módulos' }
-    },
-    {
-      id: 'credentials',
-      emoji: '🔐',
-      badge: 0,
-      primaryAction: { type: 'panel' as const, panelId: 'credentials', label: 'Ver credenciales' },
-      secondaryAction: { type: 'panel' as const, panelId: 'credential-add', label: 'Añadir credencial' }
-    },
-    {
-      id: 'settings',
-      emoji: '⚙️',
-      primaryAction: { type: 'panel' as const, panelId: 'settings', label: 'Configuración' }
-    },
-    {
-      id: 'help',
-      emoji: '❓',
-      primaryAction: { type: 'panel' as const, panelId: 'help', label: 'Ayuda' }
-    }
-  ];
-
-  const chatTopButtons = [
-    {
-      id: 'modelo',
-      emoji: '🤖',
-      label: 'Modelo',
-      displayValue: currentModel,
-      primaryAction: { type: 'panel' as const, panelId: 'modelo-selector', label: 'Seleccionar modelo' }
-    },
-    {
-      id: 'credencial',
-      emoji: '🔑',
-      label: 'API Key',
-      displayValue: currentCredentialPreview,
-      primaryAction: { type: 'panel' as const, panelId: 'credencial-selector', label: 'Seleccionar API Key' }
-    },
-    {
-      id: 'prompt',
-      emoji: '📝',
-      label: 'Prompt',
-      primaryAction: { type: 'panel' as const, panelId: 'prompts', label: 'Prompts rápidos' }
-    }
-  ];
-
-  const chatBottomButtons = [
-    {
-      id: 'tools',
-      emoji: '🔧',
-      label: 'Tools',
-      primaryAction: { type: 'panel' as const, panelId: 'tools', label: 'Herramientas' }
-    },
-    {
-      id: 'contexto',
-      emoji: '📋',
-      label: 'Contexto',
-      primaryAction: { type: 'panel' as const, panelId: 'contexto', label: 'Ver contexto' }
-    },
-    {
-      id: 'plugins',
-      emoji: '🔌',
-      label: 'Plugins',
-      primaryAction: { type: 'panel' as const, panelId: 'plugins', label: 'Plugins activos' }
-    }
-  ];
-
-  const panels = {
-    'main-list': { title: 'Lista', size: 'lg' as const },
-    'stats': { title: 'Estadísticas', size: 'md' as const },
-    'history': { title: 'Historial', size: 'lg' as const },
-    'modulos': { title: 'Módulos', size: 'md' as const },
-    'credentials': { title: 'Credenciales', size: 'lg' as const },
-    'credential-add': { title: 'Nueva Credencial', size: 'md' as const },
-    'settings': { title: 'Configuración', size: 'md' as const },
-    'help': { title: 'Ayuda', size: 'md' as const },
-    'modelo-selector': { title: 'Seleccionar Modelo', size: 'sm' as const },
-    'credencial-selector': { title: 'Seleccionar API Key', size: 'sm' as const },
-    'prompts': { title: 'Prompts Rápidos', size: 'md' as const },
-    'tools': { title: 'Herramientas', size: 'md' as const },
-    'contexto': { title: 'Contexto Actual', size: 'md' as const },
-    'plugins': { title: 'Plugins Activos', size: 'md' as const }
-  };
-
-  // API Functions
-  async function fetchCredentials() {
-    try {
-      const res = await fetch(`${credentialsApi}/credentials`);
-      if (!res.ok) return;
-      const data = await res.json();
-      credentials = data.credentials || [];
-    } catch (err) {
-      console.error('Error fetching credentials:', err);
-    }
-  }
-
-  async function loadAll() {
-    loading = true;
-    await Promise.all([fetchCredentials()]);
-    loading = false;
-  }
-
-  // Handlers
-  function handleButtonAction(e: CustomEvent) {
-    const { buttonId, actionType, action } = e.detail;
-    console.log('Button action:', buttonId, actionType, action);
-  }
-
-  async function handleChatSubmit(e: CustomEvent) {
+  async function handleChatSubmit(e: CustomEvent<{ message: string }>) {
     const { message } = e.detail;
     if (!message.trim()) return;
 
@@ -212,48 +169,42 @@
     chatMessages = [...chatMessages, userMessage];
 
     const assistantId = `msg-${Date.now() + 1}`;
-    const loadingMessage: ChatMessage = {
+    chatMessages = [...chatMessages, {
       id: assistantId,
       role: 'assistant',
       content: '',
       timestamp: new Date(),
       loading: true
-    };
-    chatMessages = [...chatMessages, loadingMessage];
+    }];
     chatLoading = true;
 
     try {
-      const aiMessages = [
-        { role: 'system', content: 'Eres un asistente útil.' },
-        ...chatMessages.filter(m => !m.loading).slice(-10).map(m => ({ role: m.role, content: m.content }))
-      ];
-
       const res = await fetch(`${aiGatewayApi}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: aiMessages,
+          messages: [
+            { role: 'system', content: 'Eres un asistente útil.' },
+            ...chatMessages.filter(m => !m.loading).slice(-10).map(m => ({ role: m.role, content: m.content }))
+          ],
           provider: 'auto',
           max_tokens: 1000,
           temperature: 0.7
         })
       });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || `Error ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(`Error ${res.status}`);
       const data = await res.json();
+
       chatMessages = chatMessages.map(m =>
         m.id === assistantId
-          ? { ...m, content: data.content || 'Sin respuesta', loading: false, provider: data.provider, model: data.model }
+          ? { ...m, content: data.content || 'Sin respuesta', loading: false }
           : m
       );
     } catch (err) {
       chatMessages = chatMessages.map(m =>
         m.id === assistantId
-          ? { ...m, content: `Error: ${err instanceof Error ? err.message : 'Error desconocido'}`, loading: false, error: true }
+          ? { ...m, content: `Error: ${err instanceof Error ? err.message : 'Error'}`, loading: false, error: true }
           : m
       );
       toast.error('Error al enviar mensaje');
@@ -262,40 +213,34 @@
     }
   }
 
-  function handlePanelOpen(e: CustomEvent) {
-    currentPanel = e.detail.panelId;
+  // ============================================================================
+  // API
+  // ============================================================================
+
+  async function loadAll() {
+    loading = true;
+    try {
+      // Load data from APIs
+{{#each apiCalls}}
+      const {{responseVar}} = await fetch(`${{{apiBase}}}/{{endpoint}}`);
+      if ({{responseVar}}.ok) {
+        const data = await {{responseVar}}.json();
+        {{targetVar}} = data.{{dataField}} || {{default}};
+      }
+{{/each}}
+    } catch (err) {
+      console.error('Error loading data:', err);
+    }
+    loading = false;
   }
 
-  function handlePanelClose() {
-    currentPanel = '';
-  }
+  // ============================================================================
+  // LIFECYCLE
+  // ============================================================================
 
-  // ChatAIWorkspace handlers
-  function handleModelSelect(e: CustomEvent) {
-    const { model } = e.detail;
-    currentModel = model.name;
-    toast.success(`Modelo: ${model.name}`);
-  }
-
-  function handleCredentialSelect(e: CustomEvent) {
-    const { credential } = e.detail;
-    currentCredentialPreview = credential.api_key_preview;
-    toast.success(`API Key: ${credential.provider}`);
-  }
-
-  function handlePromptApply(e: CustomEvent) {
-    const { prompt } = e.detail;
-    toast.info(`Prompt aplicado: ${prompt.name}`);
-  }
-
-  function handleAddCredential() {
-    currentPanel = 'credential-add';
-  }
-
-  // Lifecycle
   onMount(() => {
     loadAll();
-    subscribe(['core/+/events/{{name}}/#', 'core/+/events/credential/#']);
+    subscribe(['core/+/events/{{name}}/#']);
   });
 </script>
 
@@ -305,70 +250,133 @@
 
 <MobileWorkspaceLayout
   title="{{titleCase name}}"
-  {topButtons}
-  {bottomButtons}
-  {sideButtons}
-  {chatTopButtons}
-  {chatBottomButtons}
-  {panels}
   showChat={true}
-  showChatBars={true}
   chatPlaceholder="{{chatPlaceholder}}"
-  chatLoading={chatLoading}
-  on:buttonAction={handleButtonAction}
+  {chatLoading}
   on:chatSubmit={handleChatSubmit}
-  on:panelOpen={handlePanelOpen}
-  on:panelClose={handlePanelClose}
 >
+  <!-- Top Toolbar -->
+  <svelte:fragment slot="toolbar-top">
+    {#each topIcons as icon}
+      <ToolbarIcon
+        {icon}
+        on:action={handleIconAction}
+      />
+    {/each}
+  </svelte:fragment>
+
+  <!-- Right Toolbar -->
+  <svelte:fragment slot="toolbar-right">
+    {#each rightIcons as icon}
+      <ToolbarIcon
+        {icon}
+        on:action={handleIconAction}
+      />
+    {/each}
+  </svelte:fragment>
+
+  <!-- Chat Top Toolbar -->
+  <svelte:fragment slot="chat-toolbar-top">
+    {#each chatTopIcons as icon}
+      <ToolbarIcon
+        {icon}
+        on:action={handleIconAction}
+      />
+    {/each}
+  </svelte:fragment>
+
+  <!-- Chat Bottom Toolbar -->
+  <svelte:fragment slot="chat-toolbar-bottom">
+    {#each chatBottomIcons as icon}
+      <ToolbarIcon
+        {icon}
+        on:action={handleIconAction}
+      />
+    {/each}
+  </svelte:fragment>
+
   <!-- Main Content -->
   {#if loading}
     <div class="flex items-center justify-center h-full">
       <Spinner size="lg" />
     </div>
   {:else}
-    <div class="space-y-4">
-      <Card padding="sm">
-        <div class="text-center text-sm text-text-muted">
-          <p class="mb-2">👆 <strong>Tap</strong> = Ver | 👆👆 <strong>Doble</strong> = Añadir | 👇 <strong>Hold</strong> = Editar</p>
-          <p>Usa el chat para interactuar con la IA</p>
-        </div>
-      </Card>
+    <div class="space-y-4 p-4">
+      <slot name="content">
+        <!-- Default content -->
+        <p class="text-center text-text-muted text-sm">
+          {{titleCase name}} - Usa el chat para interactuar
+        </p>
+      </slot>
     </div>
   {/if}
-
-  <!-- Panel Content -->
-  <svelte:fragment slot="panel" let:panelId>
-    <!-- ChatAIWorkspace panels -->
-    <ChatAIWorkspace
-      {currentPanel}
-      {availableModels}
-      bind:selectedModelId
-      {credentials}
-      bind:tools
-      bind:plugins
-      bind:contextItems
-      bind:quickPrompts
-      {stats}
-      on:modelSelect={handleModelSelect}
-      on:credentialSelect={handleCredentialSelect}
-      on:promptApply={handlePromptApply}
-      on:addCredential={handleAddCredential}
-    >
-      <!-- Custom panels -->
-      <svelte:fragment slot="panel" let:panelId={customPanelId}>
-        {#if customPanelId === 'help'}
-          <div class="space-y-4 text-sm">
-            <h4 class="font-medium">Sistema de gestos</h4>
-            <div class="space-y-2">
-              <p><strong>👆 1 Tap:</strong> Ver/Consultar información</p>
-              <p><strong>👆👆 2 Taps:</strong> Añadir/Crear nuevo</p>
-              <p><strong>👇 Hold 3s:</strong> Editar/Configurar</p>
-            </div>
-          </div>
-        {:else}
-          <p class="text-center text-text-muted py-4">Panel: {customPanelId}</p>
-        {/if}
-      </svelte:fragment>
-    </ChatAIWorkspace>
-  </svelte:fragment>
 </MobileWorkspaceLayout>
+
+<!-- ============================================================================ -->
+<!-- PANELS (generated from blueprint) -->
+<!-- ============================================================================ -->
+
+{{#each panels}}
+{{#if (eq component "SelectList")}}
+<!-- Panel: {{id}} (SelectList) -->
+<FloatingPanel bind:open={openPanel === '{{id}}'} on:close={closePanel}>
+  <SelectList
+    items={ {{selectList.itemsSource}} }
+{{#if selectList.groupsSource}}
+    groups={ {{selectList.groupsSource}} }
+{{/if}}
+{{#if selectList.valueField}}
+    bind:value={ {{selectList.valueField}} }
+{{/if}}
+    on:select={handle{{pascalCase id}}Select}
+  />
+</FloatingPanel>
+
+{{else if (eq component "ToggleList")}}
+<!-- Panel: {{id}} (ToggleList) -->
+<FloatingPanel bind:open={openPanel === '{{id}}'} on:close={closePanel}>
+  <ToggleList
+    items={ {{toggleList.itemsSource}} }
+{{#if toggleList.groupsSource}}
+    groups={ {{toggleList.groupsSource}} }
+{{/if}}
+    bind:values={ {{toggleList.valuesField}} }
+{{#if toggleList.showSelectAll}}
+    showSelectAll={true}
+{{/if}}
+{{#if toggleList.max}}
+    max={ {{toggleList.max}} }
+{{/if}}
+    on:change={handle{{pascalCase id}}Change}
+  />
+</FloatingPanel>
+
+{{else if (eq component "ActionForm")}}
+<!-- Panel: {{id}} (ActionForm) -->
+<FloatingPanel bind:open={openPanel === '{{id}}'} on:close={closePanel}>
+  <ActionForm
+    fields={[
+{{#each actionForm.fields}}
+      { name: '{{name}}', type: '{{type}}', label: '{{label}}'{{#if required}}, required: true{{/if}}{{#if placeholder}}, placeholder: '{{placeholder}}'{{/if}} },
+{{/each}}
+    ]}
+    actions={[
+{{#each actionForm.actions}}
+      { label: '{{label}}', emit: '{{emit}}', variant: '{{variant}}'{{#if validate}}, validate: true{{/if}} },
+{{/each}}
+    ]}
+    on:{{events.submit}}={handle{{pascalCase id}}Submit}
+    on:cancel={closePanel}
+  />
+</FloatingPanel>
+
+{{else}}
+<!-- Panel: {{id}} (Custom) -->
+<FloatingPanel bind:open={openPanel === '{{id}}'} on:close={closePanel}>
+  <slot name="panel-{{id}}">
+    <p class="text-center text-text-muted py-4">Panel: {{id}}</p>
+  </slot>
+</FloatingPanel>
+
+{{/if}}
+{{/each}}

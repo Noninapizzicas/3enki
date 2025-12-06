@@ -758,10 +758,21 @@ module.exports = function (plop) {
         return [];
       }
 
-      // Validar campos requeridos
-      if (!blueprint.name || !blueprint.entity || !blueprint.fields) {
-        console.error('\n❌ Blueprint inválido. Campos requeridos: name, entity, fields');
-        return [];
+      // Detectar tipo de blueprint
+      const isScreen = blueprint.type === 'screen';
+      const hasPanels = blueprint.panels && blueprint.panels.length > 0;
+
+      // Validar campos requeridos según tipo
+      if (isScreen) {
+        if (!blueprint.name) {
+          console.error('\n❌ Blueprint de pantalla inválido. Campo requerido: name');
+          return [];
+        }
+      } else {
+        if (!blueprint.name || !blueprint.entity || !blueprint.fields) {
+          console.error('\n❌ Blueprint inválido. Campos requeridos: name, entity, fields');
+          return [];
+        }
       }
 
       // Transferir datos del blueprint
@@ -769,38 +780,117 @@ module.exports = function (plop) {
       data.description = blueprint.description || 'Módulo Event-Core';
       data.author = blueprint.author || 'Event Core Team';
       data.icon = blueprint.icon || '📦';
-      data.entityName = blueprint.entity.name;
-      data.pluralName = blueprint.entity.plural || blueprint.entity.name + 's';
-      data.titleField = blueprint.entity.titleField;
-      data.descriptionField = blueprint.entity.descriptionField || '';
+      data.chatPlaceholder = blueprint.input?.placeholder || 'Escribe aquí...';
 
-      // Procesar campos
-      data.fields = blueprint.fields.map(f => ({
-        name: f.name,
-        type: f.type || 'string',
-        label: f.label || f.name,
-        placeholder: f.ui?.placeholder || `Ingresa ${f.label || f.name}`,
-        inputType: f.ui?.inputType || (f.type === 'number' ? 'number' : 'text'),
-        required: f.required || false,
-        default: f.default,
-        options: f.ui?.options
-      }));
-      data.hasForm = data.fields.length > 0;
+      // ========================================
+      // PROCESAR PANELES (CONTEXT_UI)
+      // ========================================
+      if (hasPanels) {
+        data.panels = blueprint.panels.map(p => ({
+          id: p.id,
+          component: p.component,
+          selectList: p.selectList,
+          toggleList: p.toggleList,
+          actionForm: p.actionForm,
+          events: p.events || {}
+        }));
 
-      // Procesar eventos
+        // Extraer data sources de los paneles
+        const dataSources = new Map();
+        blueprint.panels.forEach(p => {
+          if (p.selectList) {
+            if (p.selectList.itemsSource) dataSources.set(p.selectList.itemsSource, { type: 'SelectItem[]', default: '[]' });
+            if (p.selectList.groupsSource) dataSources.set(p.selectList.groupsSource, { type: 'SelectGroup[]', default: '[]' });
+            if (p.selectList.valueField) dataSources.set(p.selectList.valueField, { type: 'string', default: "''" });
+          }
+          if (p.toggleList) {
+            if (p.toggleList.itemsSource) dataSources.set(p.toggleList.itemsSource, { type: 'ToggleItem[]', default: '[]' });
+            if (p.toggleList.groupsSource) dataSources.set(p.toggleList.groupsSource, { type: 'ToggleGroup[]', default: '[]' });
+            if (p.toggleList.valuesField) dataSources.set(p.toggleList.valuesField, { type: 'string[]', default: '[]' });
+          }
+        });
+        data.dataSources = Array.from(dataSources.entries()).map(([name, info]) => ({
+          name,
+          type: info.type,
+          default: info.default,
+          comment: `Data source for panels`
+        }));
+
+        // Extraer event handlers de los paneles
+        const eventHandlers = new Set();
+        blueprint.panels.forEach(p => {
+          if (p.events) {
+            Object.values(p.events).forEach(handler => {
+              if (typeof handler === 'string') eventHandlers.add(handler);
+            });
+          }
+        });
+        data.eventHandlers = Array.from(eventHandlers).map(name => ({
+          name,
+          param: 'data',
+          paramType: 'unknown',
+          toastMessage: null
+        }));
+      } else {
+        data.panels = [];
+        data.dataSources = [];
+        data.eventHandlers = [];
+      }
+
+      // ========================================
+      // PROCESAR TOOLBARS
+      // ========================================
+      data.toolbars = {
+        top: { icons: [] },
+        right: { icons: [] },
+        chatTop: { icons: [] },
+        chatBottom: { icons: [] }
+      };
+
+      if (blueprint.toolbar_top?.icons) {
+        data.toolbars.top.icons = blueprint.toolbar_top.icons;
+      }
+      if (blueprint.toolbar_right?.icons) {
+        data.toolbars.right.icons = blueprint.toolbar_right.icons;
+      }
+      if (blueprint.toolbar_chat?.top?.icons) {
+        data.toolbars.chatTop.icons = blueprint.toolbar_chat.top.icons;
+      }
+      if (blueprint.toolbar_chat?.bottom?.icons) {
+        data.toolbars.chatBottom.icons = blueprint.toolbar_chat.bottom.icons;
+      }
+
+      // ========================================
+      // PROCESAR ENTIDAD Y CAMPOS (módulos CRUD)
+      // ========================================
+      if (blueprint.entity) {
+        data.entityName = blueprint.entity.name;
+        data.pluralName = blueprint.entity.plural || blueprint.entity.name + 's';
+        data.titleField = blueprint.entity.titleField;
+        data.descriptionField = blueprint.entity.descriptionField || '';
+      }
+
+      if (blueprint.fields) {
+        data.fields = blueprint.fields.map(f => ({
+          name: f.name,
+          type: f.type || 'string',
+          label: f.label || f.name,
+          placeholder: f.ui?.placeholder || `Ingresa ${f.label || f.name}`,
+          inputType: f.ui?.inputType || (f.type === 'number' ? 'number' : 'text'),
+          required: f.required || false,
+          default: f.default,
+          options: f.ui?.options
+        }));
+        data.hasForm = data.fields.length > 0;
+      } else {
+        data.fields = [];
+        data.hasForm = false;
+      }
+
+      // ========================================
+      // PROCESAR EVENTOS
+      // ========================================
       data.publishEvents = (blueprint.events?.publish || []).map(e => e.name);
-
-      // Procesar APIs
-      const entity = data.entityName.charAt(0).toUpperCase() + data.entityName.slice(1);
-      data.apis = [
-        { method: 'GET', path: `/${data.pluralName}`, handler: `handleList${entity}s`, description: 'Listar todos' },
-        { method: 'GET', path: `/${data.pluralName}/:id`, handler: `handleGet${entity}`, description: 'Obtener por ID' },
-        { method: 'POST', path: `/${data.pluralName}`, handler: `handleCreate${entity}`, description: 'Crear nuevo' },
-        { method: 'PATCH', path: `/${data.pluralName}/:id`, handler: `handleUpdate${entity}`, description: 'Actualizar' },
-        { method: 'DELETE', path: `/${data.pluralName}/:id`, handler: `handleDelete${entity}`, description: 'Eliminar' },
-        { method: 'GET', path: '/health', handler: 'handleHealthCheck', description: 'Health check' },
-        ...(blueprint.apis || [])
-      ];
 
       // Suscripciones
       data.subscriptions = (blueprint.events?.subscribe || []).map(s => ({
@@ -809,21 +899,55 @@ module.exports = function (plop) {
       }));
       data.hasSubscriptions = data.subscriptions.length > 0;
 
-      // Config
+      // ========================================
+      // PROCESAR APIS
+      // ========================================
+      if (blueprint.entity) {
+        const entity = data.entityName.charAt(0).toUpperCase() + data.entityName.slice(1);
+        data.apis = [
+          { method: 'GET', path: `/${data.pluralName}`, handler: `handleList${entity}s`, description: 'Listar todos' },
+          { method: 'GET', path: `/${data.pluralName}/:id`, handler: `handleGet${entity}`, description: 'Obtener por ID' },
+          { method: 'POST', path: `/${data.pluralName}`, handler: `handleCreate${entity}`, description: 'Crear nuevo' },
+          { method: 'PATCH', path: `/${data.pluralName}/:id`, handler: `handleUpdate${entity}`, description: 'Actualizar' },
+          { method: 'DELETE', path: `/${data.pluralName}/:id`, handler: `handleDelete${entity}`, description: 'Eliminar' },
+          { method: 'GET', path: '/health', handler: 'handleHealthCheck', description: 'Health check' },
+          ...(blueprint.apis || [])
+        ];
+      } else {
+        data.apis = blueprint.apis || [
+          { method: 'GET', path: '/health', handler: 'handleHealthCheck', description: 'Health check' }
+        ];
+      }
+
+      // API calls para el frontend
+      data.apiCalls = [];
+
+      // ========================================
+      // CONFIGURACIÓN
+      // ========================================
       data.persistence = blueprint.config?.persistence || false;
       data.ui = blueprint.ui?.enabled !== false;
-      data.layout = blueprint.ui?.layout || 'grid';
+      data.layout = blueprint.ui?.layout || blueprint.layout?.type || 'grid';
       data.features = blueprint.ui?.features || ['create', 'edit', 'delete'];
       data.colors = blueprint.ui?.colors || [];
+      data.isScreen = isScreen;
+      data.hasChatUI = isScreen || hasPanels;
 
       const modulePath = `modules/${data.name}`;
       const frontendPath = `frontend/src/routes/${data.name}`;
 
       console.log(`\n📋 Blueprint: ${data.blueprintPath}`);
-      console.log(`📦 Módulo: ${data.name}`);
-      console.log(`📝 Entidad: ${data.entityName} (${data.pluralName})`);
-      console.log(`🔧 Campos: ${data.fields.map(f => f.name).join(', ')}`);
+      console.log(`📦 Tipo: ${isScreen ? 'Screen (Chat UI)' : 'Módulo CRUD'}`);
+      console.log(`📦 Nombre: ${data.name}`);
+      if (data.entityName) console.log(`📝 Entidad: ${data.entityName} (${data.pluralName})`);
+      if (data.fields.length) console.log(`🔧 Campos: ${data.fields.map(f => f.name).join(', ')}`);
+      if (data.panels.length) console.log(`📱 Paneles: ${data.panels.length} (${data.panels.map(p => p.component).join(', ')})`);
       console.log(`📤 Eventos: ${data.publishEvents.join(', ') || 'ninguno'}`);
+
+      // Determinar template a usar
+      const pageTemplate = data.hasChatUI
+        ? 'plop-templates/chat-module/page.svelte.hbs'
+        : 'plop-templates/full-module/page.svelte.hbs';
 
       return [
         { type: 'add', path: `${modulePath}/index.js`, templateFile: 'plop-templates/module/index.js.hbs' },
@@ -831,7 +955,7 @@ module.exports = function (plop) {
         { type: 'add', path: `${modulePath}/README.md`, templateFile: 'plop-templates/module/README.md.hbs' },
         { type: 'add', path: `${modulePath}/schemas/events.json`, templateFile: 'plop-templates/module/schemas/events.json.hbs' },
         { type: 'add', path: `${modulePath}/schemas/${data.name}.json`, templateFile: 'plop-templates/module/schemas/main.json.hbs' },
-        ...(data.ui ? [{ type: 'add', path: `${frontendPath}/+page.svelte`, templateFile: 'plop-templates/full-module/page.svelte.hbs' }] : []),
+        ...(data.ui ? [{ type: 'add', path: `${frontendPath}/+page.svelte`, templateFile: pageTemplate }] : []),
         // Copiar blueprint al módulo
         {
           type: 'add',
@@ -842,6 +966,12 @@ module.exports = function (plop) {
           console.log('\n✅ Módulo generado desde blueprint');
           console.log(`\n📁 Backend: ${modulePath}/`);
           if (data.ui) console.log(`🎨 Frontend: ${frontendPath}/+page.svelte`);
+          if (data.hasChatUI) {
+            console.log('\n📦 Incluye:');
+            console.log('   - Componentes base (SelectList, ToggleList, ActionForm)');
+            console.log('   - FloatingPanel para paneles');
+            console.log('   - ToolbarIcon con triple interacción');
+          }
           console.log('\n🚀 Próximos pasos:');
           console.log(`   1. Agregar "${data.name}" a config.json → modules.enabled`);
           console.log('   2. Personalizar la lógica en index.js');

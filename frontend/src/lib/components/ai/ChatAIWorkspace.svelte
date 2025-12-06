@@ -3759,4 +3759,3 @@
     <p class="text-center text-text-muted py-4">Panel: {currentPanel}</p>
   </slot>
 {/if}
-</script>

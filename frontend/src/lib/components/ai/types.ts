@@ -275,6 +275,52 @@ export interface UploadForm {
   files: PendingUpload[];
 }
 
+// Metadata de proyecto
+export interface ProjectMetadata {
+  default_provider?: string;
+  default_model?: string;
+  tags?: string[];
+}
+
+// Proyecto completo
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+  metadata?: ProjectMetadata;
+}
+
+// Estadísticas de proyecto para display
+export interface ProjectStats {
+  conversations_count: number;
+  storage_size: number;
+  total_cost: number;
+}
+
+// Resumen de proyecto para listas
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  stats: ProjectStats;
+  metadata?: ProjectMetadata;
+}
+
+// Formulario para crear/editar proyecto
+export interface NewProjectForm {
+  name: string;
+  description: string;
+  default_provider: string;
+  default_model: string;
+  activate_immediately: boolean;
+}
+
 // Configuración del workspace
 export interface ChatWorkspaceConfig {
   // Modelos

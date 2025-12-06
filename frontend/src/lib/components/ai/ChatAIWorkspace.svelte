@@ -23,7 +23,9 @@
     FileCategory,
     StorageFile,
     StorageInfo,
-    PendingUpload
+    PendingUpload,
+    ProjectSummary,
+    NewProjectForm
   } from './types';
   import {
     DEFAULT_MODELS,
@@ -157,6 +159,23 @@
   let attachToMessage: boolean = true;
   let isDragging: boolean = false;
 
+  // Props - Proyectos (project-manager)
+  export let projectsList: ProjectSummary[] = [];
+  export let activeProjectId: string = '';
+
+  // Estado local para formulario de nuevo proyecto
+  let newProjectForm: NewProjectForm = {
+    name: '',
+    description: '',
+    default_provider: 'auto',
+    default_model: 'auto',
+    activate_immediately: true
+  };
+
+  // Filtros para gestión de proyectos
+  let projectSortBy: 'recent' | 'name' | 'size' = 'recent';
+  let projectSearchQuery: string = '';
+
   // Props - Panel actual
   export let currentPanel: string = '';
 
@@ -215,6 +234,14 @@
     fileDelete: { fileId: string };
     filesDeleteMultiple: { fileIds: string[] };
     storageCleanup: void;
+    // Proyectos (project-manager)
+    projectActivate: { projectId: string };
+    projectCreate: { form: NewProjectForm };
+    projectEdit: { projectId: string };
+    projectDelete: { projectId: string };
+    projectExport: { projectId: string };
+    projectImport: void;
+    projectStats: { projectId: string };
     // Panel
     panelChange: { panelId: string };
   }>();
@@ -336,6 +363,33 @@
 
   $: enabledToolsCount = tools.filter(t => t.enabled).length;
   $: enabledPluginsCount = plugins.filter(p => p.enabled).length;
+
+  // Computed - Proyectos
+  $: filteredProjects = projectsList
+    .filter(p => {
+      if (projectSearchQuery) {
+        const query = projectSearchQuery.toLowerCase();
+        return p.name.toLowerCase().includes(query) ||
+               (p.description?.toLowerCase().includes(query) ?? false);
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      switch (projectSortBy) {
+        case 'name': return a.name.localeCompare(b.name);
+        case 'size': return b.stats.storage_size - a.stats.storage_size;
+        default: return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+    });
+
+  $: activeProject = projectsList.find(p => p.id === activeProjectId);
+
+  $: projectTotalStats = projectsList.reduce((acc, p) => ({
+    count: acc.count + 1,
+    conversations: acc.conversations + p.stats.conversations_count,
+    storage: acc.storage + p.stats.storage_size,
+    cost: acc.cost + p.stats.total_cost
+  }), { count: 0, conversations: 0, storage: 0, cost: 0 });
 
   // Handlers - Modelo
   function selectModel(modelId: string) {
@@ -737,6 +791,57 @@
     if (mimeType.startsWith('text/') || mimeType.includes('json')) return '📝';
     if (mimeType.includes('zip') || mimeType.includes('archive')) return '📦';
     return '📎';
+  }
+
+  // Handlers - Proyectos
+  function activateProject(projectId: string) {
+    activeProjectId = projectId;
+    dispatch('projectActivate', { projectId });
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function resetNewProjectForm() {
+    newProjectForm = {
+      name: '',
+      description: '',
+      default_provider: 'auto',
+      default_model: 'auto',
+      activate_immediately: true
+    };
+  }
+
+  function createProject() {
+    if (!newProjectForm.name) return;
+    dispatch('projectCreate', { form: { ...newProjectForm } });
+    resetNewProjectForm();
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function editProject(projectId: string) {
+    dispatch('projectEdit', { projectId });
+  }
+
+  function deleteProject(projectId: string) {
+    const project = projectsList.find(p => p.id === projectId);
+    if (project?.is_active) {
+      alert('No se puede eliminar el proyecto activo');
+      return;
+    }
+    if (confirm('¿Eliminar este proyecto? Se eliminará toda su base de datos y archivos.')) {
+      dispatch('projectDelete', { projectId });
+    }
+  }
+
+  function exportProject(projectId: string) {
+    dispatch('projectExport', { projectId });
+  }
+
+  function importProject() {
+    dispatch('projectImport');
+  }
+
+  function viewProjectStats(projectId: string) {
+    dispatch('projectStats', { projectId });
   }
 
   function openAddCredential() {
@@ -2205,6 +2310,284 @@
           🗑️ Eliminar sel.
         </button>
       {/if}
+    </div>
+  </div>
+
+<!-- Panel: Proyectos (1 TAP - 30%) -->
+{:else if currentPanel === 'proyectos'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📁</span>
+      <h3 class="font-medium">Proyectos</h3>
+    </div>
+
+    <!-- Lista de proyectos -->
+    <div class="space-y-2">
+      {#each filteredProjects as project (project.id)}
+        <button
+          class="w-full text-left p-3 rounded-lg transition-colors {project.is_active ? 'bg-primary/20 border border-primary' : 'bg-bg-hover hover:bg-bg-card'}"
+          on:click={() => activateProject(project.id)}
+        >
+          <div class="flex items-center gap-3">
+            <span class="text-lg">{project.is_active ? '●' : '○'}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="font-medium text-sm truncate">{project.name}</p>
+                {#if project.is_active}
+                  <span class="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded">activo</span>
+                {/if}
+              </div>
+              <div class="flex items-center gap-2 text-xs text-text-muted">
+                <span>💬 {project.stats.conversations_count}</span>
+                <span>|</span>
+                <span>📦 {formatFileSize(project.stats.storage_size)}</span>
+              </div>
+            </div>
+          </div>
+        </button>
+      {/each}
+
+      {#if projectsList.length === 0}
+        <p class="text-center text-text-muted py-4">No hay proyectos</p>
+      {/if}
+    </div>
+
+    <!-- Acciones -->
+    <div class="pt-2 border-t border-border">
+      <Button
+        variant="secondary"
+        class="w-full"
+        on:click={() => dispatch('panelChange', { panelId: 'proyecto-crear' })}
+      >
+        + Nuevo proyecto
+      </Button>
+    </div>
+  </div>
+
+<!-- Panel: Proyecto Crear (2 TAPS - 50%) -->
+{:else if currentPanel === 'proyecto-crear'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📁</span>
+      <h3 class="font-medium">Nuevo Proyecto</h3>
+    </div>
+
+    <!-- Formulario -->
+    <div class="space-y-4">
+      <div>
+        <label class="text-sm font-medium mb-1 block">Nombre *</label>
+        <input
+          type="text"
+          class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+          placeholder="Mi Nuevo Proyecto"
+          bind:value={newProjectForm.name}
+        />
+      </div>
+
+      <div>
+        <label class="text-sm font-medium mb-1 block">Descripción</label>
+        <textarea
+          class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none resize-none"
+          placeholder="Descripción del proyecto..."
+          rows="3"
+          bind:value={newProjectForm.description}
+        ></textarea>
+      </div>
+
+      <!-- Configuración por defecto -->
+      <div class="pt-2 border-t border-border">
+        <p class="text-xs text-text-muted mb-3">Configuración por defecto (opcional)</p>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-text-muted mb-1 block">Proveedor</label>
+            <select
+              class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+              bind:value={newProjectForm.default_provider}
+            >
+              <option value="auto">Auto</option>
+              {#each providerOptions as provider}
+                <option value={provider}>{getProviderIcon(provider)} {provider}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-text-muted mb-1 block">Modelo</label>
+            <select
+              class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+              bind:value={newProjectForm.default_model}
+            >
+              <option value="auto">Auto</option>
+              {#each availableModels as model}
+                <option value={model.id}>{model.name}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activar inmediatamente -->
+      <div class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="activate-immediately"
+          class="rounded"
+          bind:checked={newProjectForm.activate_immediately}
+        />
+        <label for="activate-immediately" class="text-sm">Activar inmediatamente</label>
+      </div>
+
+      <!-- Botón crear -->
+      <Button
+        variant="primary"
+        class="w-full"
+        disabled={!newProjectForm.name}
+        on:click={createProject}
+      >
+        📁 Crear Proyecto
+      </Button>
+
+      <p class="text-xs text-text-muted text-center">
+        ⚠️ Se creará DB y storage aislados
+      </p>
+    </div>
+  </div>
+
+<!-- Panel: Proyectos Gestionar (LONG-PRESS - 80%) -->
+{:else if currentPanel === 'proyectos-gestionar'}
+  <div class="space-y-4">
+    <!-- Header con filtros -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📁</span>
+      <h3 class="font-medium flex-1">Gestionar Proyectos</h3>
+    </div>
+
+    <!-- Filtros y búsqueda -->
+    <div class="flex gap-2">
+      <select
+        class="flex-1 p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        bind:value={projectSortBy}
+      >
+        <option value="recent">Recientes</option>
+        <option value="name">Nombre</option>
+        <option value="size">Tamaño</option>
+      </select>
+      <input
+        type="text"
+        class="flex-1 p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        placeholder="🔍 Buscar..."
+        bind:value={projectSearchQuery}
+      />
+    </div>
+
+    <!-- Lista de proyectos -->
+    <div class="space-y-3 max-h-[400px] overflow-y-auto">
+      {#each filteredProjects as project (project.id)}
+        <div class="p-3 bg-bg-hover rounded-lg">
+          <!-- Cabecera del proyecto -->
+          <div class="flex items-start gap-2 mb-2">
+            <span class="text-lg">📁</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="font-medium text-sm truncate">{project.name}</p>
+                {#if project.is_active}
+                  <span class="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded">⭐ ACTIVO</span>
+                {/if}
+              </div>
+              {#if project.description}
+                <p class="text-xs text-text-muted truncate">{project.description}</p>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Estadísticas -->
+          <div class="flex items-center gap-3 text-xs text-text-muted mb-2">
+            <span>Creado: {new Date(project.created_at).toLocaleDateString()}</span>
+            <span>|</span>
+            <span>Actualizado: {formatRelativeTime(project.updated_at)}</span>
+          </div>
+          <div class="flex items-center gap-3 text-xs mb-3">
+            <span>💬 {project.stats.conversations_count} conversaciones</span>
+            <span>|</span>
+            <span>📦 {formatFileSize(project.stats.storage_size)}</span>
+            <span>|</span>
+            <span>💰 {formatCost(project.stats.total_cost)}</span>
+          </div>
+
+          <!-- Acciones -->
+          <div class="flex gap-2 flex-wrap">
+            {#if !project.is_active}
+              <button
+                class="px-2 py-1 text-xs bg-primary/20 text-primary rounded hover:bg-primary/30 transition-colors"
+                on:click={() => activateProject(project.id)}
+              >
+                ▶️ Activar
+              </button>
+            {/if}
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-bg-hover transition-colors"
+              on:click={() => editProject(project.id)}
+            >
+              ✏️ Editar
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-bg-hover transition-colors"
+              on:click={() => viewProjectStats(project.id)}
+            >
+              📊 Stats
+            </button>
+            <button
+              class="px-2 py-1 text-xs bg-bg-card rounded hover:bg-bg-hover transition-colors"
+              on:click={() => exportProject(project.id)}
+            >
+              📤 Exportar
+            </button>
+            {#if !project.is_active}
+              <button
+                class="px-2 py-1 text-xs bg-error/10 text-error rounded hover:bg-error/20 transition-colors"
+                on:click={() => deleteProject(project.id)}
+              >
+                🗑️
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/each}
+
+      {#if filteredProjects.length === 0}
+        <p class="text-center text-text-muted py-4">
+          {projectSearchQuery ? 'No se encontraron proyectos' : 'No hay proyectos'}
+        </p>
+      {/if}
+    </div>
+
+    <!-- Footer con estadísticas totales -->
+    <div class="pt-2 border-t border-border">
+      <div class="flex items-center justify-between text-xs text-text-muted mb-3">
+        <span>📊 Total: {projectTotalStats.count} proyectos</span>
+        <span>💬 {projectTotalStats.conversations} conversaciones</span>
+        <span>📦 {formatFileSize(projectTotalStats.storage)}</span>
+        <span>💰 {formatCost(projectTotalStats.cost)}</span>
+      </div>
+
+      <!-- Acciones globales -->
+      <div class="flex gap-2">
+        <Button
+          variant="secondary"
+          class="flex-1"
+          on:click={() => dispatch('panelChange', { panelId: 'proyecto-crear' })}
+        >
+          + Nuevo
+        </Button>
+        <button
+          class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+          on:click={importProject}
+        >
+          📥 Importar proyecto
+        </button>
+      </div>
     </div>
   </div>
 

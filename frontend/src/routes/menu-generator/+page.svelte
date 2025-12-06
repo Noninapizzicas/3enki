@@ -98,35 +98,7 @@
     loading?: boolean;
   }
 
-  interface AIModel {
-    id: string;
-    name: string;
-    provider: string;
-    description?: string;
-  }
-
-  interface Tool {
-    id: string;
-    name: string;
-    description: string;
-    enabled: boolean;
-    category: string;
-  }
-
-  interface Plugin {
-    id: string;
-    name: string;
-    description: string;
-    enabled: boolean;
-    version: string;
-  }
-
-  interface ContextItem {
-    type: string;
-    label: string;
-    value: string;
-    active: boolean;
-  }
+  // Types from $components/ai/types (AIModel, AITool, AIPlugin, ContextItem, QuickPrompt, etc.)
 
   // State
   let menus: Menu[] = [];
@@ -149,8 +121,8 @@
   ];
   let selectedModelId: string = 'deepseek-chat';
 
-  // Tools state
-  let availableTools: Tool[] = [
+  // Tools state (using AITool from types)
+  let availableTools: AITool[] = [
     { id: 'menu-parser', name: 'Parser de Menús', description: 'Extrae estructura de cartas', enabled: true, category: 'menu' },
     { id: 'image-ocr', name: 'OCR de Imágenes', description: 'Lee texto de imágenes', enabled: true, category: 'ai' },
     { id: 'price-extractor', name: 'Extractor de Precios', description: 'Detecta precios automáticamente', enabled: true, category: 'menu' },
@@ -159,8 +131,8 @@
     { id: 'csv-exporter', name: 'Exportador CSV', description: 'Genera hojas de cálculo', enabled: true, category: 'export' }
   ];
 
-  // Plugins state
-  let availablePlugins: Plugin[] = [
+  // Plugins state (using AIPlugin from types)
+  let availablePlugins: AIPlugin[] = [
     { id: 'menu-validator', name: 'Validador de Menús', description: 'Verifica estructura correcta', enabled: true, version: '1.0.0' },
     { id: 'price-formatter', name: 'Formateador de Precios', description: 'Formatea precios según moneda', enabled: true, version: '1.0.0' },
     { id: 'translation', name: 'Traductor', description: 'Traduce menús a otros idiomas', enabled: false, version: '0.9.0' }
@@ -192,14 +164,7 @@
     { id: 'plugin-manager', name: 'Plugin Manager', description: 'Gestión de plugins', icon: '🔌', status: 'active', path: '/plugins' }
   ];
 
-  // Quick prompts state
-  interface QuickPrompt {
-    id: string;
-    name: string;
-    content: string;
-    category: string;
-    favorite: boolean;
-  }
+  // Quick prompts state (using QuickPrompt from types)
   let quickPrompts: QuickPrompt[] = [
     { id: 'p1', name: 'Menú italiano', content: 'Genera un menú italiano con antipasti, primi, secondi y dolci', category: 'restaurant', favorite: true },
     { id: 'p2', name: 'Menú cafetería', content: 'Crea un menú de cafetería con desayunos, brunch y meriendas', category: 'cafe', favorite: true },
@@ -1494,9 +1459,31 @@
       <ChatAIWorkspace
         currentPanel={panelId}
         availableModels={availableModels}
-        credentials={credentials}
+        selectedModelId={selectedModelId}
+        credentials={credentials.map(c => ({
+          key: c.key,
+          provider: c.provider,
+          level: c.level,
+          identifier: c.identifier,
+          api_key_preview: c.api_key_preview
+        }))}
+        tools={availableTools}
+        plugins={availablePlugins}
+        contextItems={contextItems}
+        quickPrompts={quickPrompts}
+        conversations={conversations.map(c => ({
+          id: c.id,
+          title: c.title || `Conv ${c.id.slice(-6)}`,
+          preview: '',
+          messages_count: c.messages_count,
+          updated_at: c.created_at,
+          status: c.status
+        }))}
         on:modelSelect={(e) => { selectedModelId = e.detail.id; currentModel = e.detail.name; currentPanel = ''; }}
         on:credentialSelect={(e) => { currentCredentialPreview = e.detail.api_key_preview; currentPanel = ''; }}
+        on:toolToggle={(e) => toggleTool(e.detail.id)}
+        on:pluginToggle={(e) => togglePlugin(e.detail.id)}
+        on:promptSelect={(e) => applyQuickPrompt(e.detail)}
         on:panelClose={() => currentPanel = ''}
       />
     {/if}

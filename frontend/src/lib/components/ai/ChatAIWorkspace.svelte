@@ -25,7 +25,13 @@
     StorageInfo,
     PendingUpload,
     ProjectSummary,
-    NewProjectForm
+    NewProjectForm,
+    FileEntry,
+    FileContent,
+    VoiceConfig,
+    DictationState,
+    CameraConfig,
+    CameraCapture
   } from './types';
   import {
     DEFAULT_MODELS,
@@ -176,6 +182,55 @@
   let projectSortBy: 'recent' | 'name' | 'size' = 'recent';
   let projectSearchQuery: string = '';
 
+  // Props - Explorar (file-browser)
+  export let fileEntries: FileEntry[] = [];
+  export let currentPath: string = '/';
+
+  // Estado local para explorador
+  let openedFile: FileContent | null = null;
+  let isEditing: boolean = false;
+  let editedContent: string = '';
+  let explorerSearchQuery: string = '';
+  let explorerSearchInContent: boolean = false;
+  let explorerFilter: 'all' | 'pdf' | 'text' | 'image' = 'all';
+
+  // Props - Voz (Web Speech API)
+  export let voiceConfig: VoiceConfig = {
+    stt_language: 'es-ES',
+    continuous_mode: false,
+    auto_send_on_silence: false,
+    tts_voice: '',
+    tts_rate: 1.0,
+    tts_pitch: 1.0,
+    auto_read_responses: false,
+    confirm_before_send: true
+  };
+
+  // Estado local para voz
+  let dictationState: DictationState = {
+    is_listening: false,
+    transcript: '',
+    interim_transcript: '',
+    confidence: 0
+  };
+  let isSpeaking: boolean = false;
+  let availableVoices: SpeechSynthesisVoice[] = [];
+
+  // Props - Cámara (MediaDevices API)
+  export let cameraConfig: CameraConfig = {
+    device_id: '',
+    facing_mode: 'environment',
+    resolution: 'medium',
+    format: 'jpeg',
+    auto_attach: false
+  };
+
+  // Estado local para cámara
+  export let recentCaptures: CameraCapture[] = [];
+  let isCameraActive: boolean = false;
+  let capturedImage: string | null = null;
+  let selectedCaptureIds: Set<string> = new Set();
+
   // Props - Panel actual
   export let currentPanel: string = '';
 
@@ -242,6 +297,29 @@
     projectExport: { projectId: string };
     projectImport: void;
     projectStats: { projectId: string };
+    // Explorar (file-browser)
+    explorerNavigate: { path: string };
+    explorerOpenFile: { path: string };
+    explorerCreateFolder: { path: string; name: string };
+    explorerDeleteFile: { path: string };
+    explorerSearch: { query: string; searchInContent: boolean };
+    explorerSaveFile: { path: string; content: string };
+    explorerFormatFile: { path: string };
+    explorerAttachFile: { path: string };
+    // Voz (Web Speech API)
+    voiceStartDictation: void;
+    voiceStopDictation: void;
+    voiceSendTranscript: { transcript: string };
+    voiceReadText: { text: string };
+    voiceStopReading: void;
+    voiceConfigSave: { config: VoiceConfig };
+    // Cámara (MediaDevices API)
+    cameraCapture: void;
+    cameraAttach: { dataUrl: string };
+    cameraAttachMultiple: { captureIds: string[] };
+    cameraDeleteCapture: { captureId: string };
+    cameraClearAll: void;
+    cameraConfigSave: { config: CameraConfig };
     // Panel
     panelChange: { panelId: string };
   }>();
@@ -390,6 +468,28 @@
     storage: acc.storage + p.stats.storage_size,
     cost: acc.cost + p.stats.total_cost
   }), { count: 0, conversations: 0, storage: 0, cost: 0 });
+
+  // Computed - Explorar
+  $: sortedFileEntries = [...fileEntries].sort((a, b) => {
+    if (a.type === 'folder' && b.type !== 'folder') return -1;
+    if (a.type !== 'folder' && b.type === 'folder') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  $: filteredFileEntries = sortedFileEntries.filter(f => {
+    if (explorerFilter === 'pdf' && f.mime_type !== 'application/pdf') return false;
+    if (explorerFilter === 'text' && !['json', 'md', 'txt', 'js', 'html', 'css', 'xml', 'yaml'].some(ext => f.name.endsWith(`.${ext}`))) return false;
+    if (explorerFilter === 'image' && !f.mime_type?.startsWith('image/')) return false;
+    return true;
+  });
+
+  $: explorerTotalStats = fileEntries.reduce((acc, f) => ({
+    count: acc.count + 1,
+    size: acc.size + (f.size || 0)
+  }), { count: 0, size: 0 });
+
+  // Computed - Cámara
+  $: selectedCapturesCount = selectedCaptureIds.size;
 
   // Handlers - Modelo
   function selectModel(modelId: string) {
@@ -842,6 +942,166 @@
 
   function viewProjectStats(projectId: string) {
     dispatch('projectStats', { projectId });
+  }
+
+  // Handlers - Explorar
+  function navigateToPath(path: string) {
+    currentPath = path;
+    dispatch('explorerNavigate', { path });
+  }
+
+  function navigateUp() {
+    const parts = currentPath.split('/').filter(Boolean);
+    parts.pop();
+    const parentPath = '/' + parts.join('/');
+    navigateToPath(parentPath || '/');
+  }
+
+  function openFileEntry(entry: FileEntry) {
+    if (entry.type === 'folder') {
+      navigateToPath(entry.path);
+    } else {
+      dispatch('explorerOpenFile', { path: entry.path });
+      dispatch('panelChange', { panelId: 'explorar-visor' });
+    }
+  }
+
+  function createFolder() {
+    const name = prompt('Nombre de la carpeta:');
+    if (name) {
+      dispatch('explorerCreateFolder', { path: currentPath, name });
+    }
+  }
+
+  function deleteFileEntry(path: string) {
+    if (confirm('¿Eliminar este archivo/carpeta?')) {
+      dispatch('explorerDeleteFile', { path });
+    }
+  }
+
+  function searchFiles() {
+    dispatch('explorerSearch', { query: explorerSearchQuery, searchInContent: explorerSearchInContent });
+  }
+
+  function saveOpenedFile() {
+    if (openedFile) {
+      dispatch('explorerSaveFile', { path: openedFile.path, content: editedContent });
+      isEditing = false;
+    }
+  }
+
+  function formatOpenedFile() {
+    if (openedFile) {
+      dispatch('explorerFormatFile', { path: openedFile.path });
+    }
+  }
+
+  function attachOpenedFile() {
+    if (openedFile) {
+      dispatch('explorerAttachFile', { path: openedFile.path });
+      dispatch('panelChange', { panelId: '' });
+    }
+  }
+
+  function getFileEntryIcon(entry: FileEntry): string {
+    if (entry.type === 'folder') return '📁';
+    if (entry.mime_type === 'application/pdf') return '📄';
+    if (entry.mime_type?.startsWith('image/')) return '🖼️';
+    if (['json', 'md', 'txt', 'js', 'html', 'css', 'xml', 'yaml'].some(ext => entry.name.endsWith(`.${ext}`))) return '📝';
+    return '📎';
+  }
+
+  // Handlers - Voz
+  function startDictation() {
+    dictationState = { ...dictationState, is_listening: true, transcript: '', interim_transcript: '' };
+    dispatch('voiceStartDictation');
+  }
+
+  function stopDictation() {
+    dictationState = { ...dictationState, is_listening: false };
+    dispatch('voiceStopDictation');
+  }
+
+  function cancelDictation() {
+    dictationState = { is_listening: false, transcript: '', interim_transcript: '', confidence: 0 };
+    dispatch('voiceStopDictation');
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  function sendTranscript() {
+    if (dictationState.transcript) {
+      dispatch('voiceSendTranscript', { transcript: dictationState.transcript });
+      dictationState = { is_listening: false, transcript: '', interim_transcript: '', confidence: 0 };
+      dispatch('panelChange', { panelId: '' });
+    }
+  }
+
+  function readLastResponse() {
+    dispatch('voiceReadText', { text: '' }); // El componente padre determinará qué leer
+    isSpeaking = true;
+  }
+
+  function stopReading() {
+    dispatch('voiceStopReading');
+    isSpeaking = false;
+  }
+
+  function testVoice() {
+    dispatch('voiceReadText', { text: 'Esta es una prueba de voz.' });
+  }
+
+  function saveVoiceConfig() {
+    dispatch('voiceConfigSave', { config: { ...voiceConfig } });
+    dispatch('panelChange', { panelId: '' });
+  }
+
+  // Handlers - Cámara
+  function capturePhoto() {
+    dispatch('cameraCapture');
+  }
+
+  function attachCapturedImage() {
+    if (capturedImage) {
+      dispatch('cameraAttach', { dataUrl: capturedImage });
+      capturedImage = null;
+      dispatch('panelChange', { panelId: '' });
+    }
+  }
+
+  function discardCapture() {
+    capturedImage = null;
+  }
+
+  function toggleCaptureSelection(captureId: string) {
+    if (selectedCaptureIds.has(captureId)) {
+      selectedCaptureIds.delete(captureId);
+    } else {
+      selectedCaptureIds.add(captureId);
+    }
+    selectedCaptureIds = new Set(selectedCaptureIds);
+  }
+
+  function attachSelectedCaptures() {
+    if (selectedCaptureIds.size > 0) {
+      dispatch('cameraAttachMultiple', { captureIds: Array.from(selectedCaptureIds) });
+      selectedCaptureIds = new Set();
+      dispatch('panelChange', { panelId: '' });
+    }
+  }
+
+  function deleteCapture(captureId: string) {
+    dispatch('cameraDeleteCapture', { captureId });
+  }
+
+  function clearAllCaptures() {
+    if (confirm('¿Eliminar todas las capturas?')) {
+      dispatch('cameraClearAll');
+    }
+  }
+
+  function saveCameraConfig() {
+    dispatch('cameraConfigSave', { config: { ...cameraConfig } });
+    dispatch('panelChange', { panelId: '' });
   }
 
   function openAddCredential() {
@@ -2588,6 +2848,630 @@
           📥 Importar proyecto
         </button>
       </div>
+    </div>
+  </div>
+
+<!-- Panel: Explorar Archivos (1 TAP - 30%) -->
+{:else if currentPanel === 'explorar-archivos'}
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📂</span>
+      <h3 class="font-medium flex-1">Explorar Proyecto</h3>
+    </div>
+
+    <!-- Navegación -->
+    <div class="flex items-center gap-2 text-sm">
+      <span class="text-text-muted">📁 Proyecto: {activeProject?.name || 'Sin proyecto'}</span>
+    </div>
+    <div class="flex items-center gap-2">
+      {#if currentPath !== '/'}
+        <button
+          class="px-2 py-1 text-xs bg-bg-hover rounded hover:bg-bg-card transition-colors"
+          on:click={navigateUp}
+        >
+          ⬆️ Subir
+        </button>
+      {/if}
+      <span class="text-sm text-text-muted">Ruta: {currentPath}</span>
+    </div>
+
+    <!-- Lista de archivos -->
+    <div class="space-y-1 max-h-[300px] overflow-y-auto">
+      {#each sortedFileEntries as entry (entry.path)}
+        <button
+          class="w-full text-left p-2 rounded-lg bg-bg-hover hover:bg-bg-card transition-colors flex items-center gap-2"
+          on:click={() => openFileEntry(entry)}
+        >
+          <span>{getFileEntryIcon(entry)}</span>
+          <span class="flex-1 text-sm truncate">{entry.name}</span>
+          {#if entry.type === 'folder'}
+            <span class="text-xs text-text-muted">{entry.children_count || 0} archivos</span>
+          {:else}
+            <span class="text-xs text-text-muted">{formatFileSize(entry.size || 0)}</span>
+          {/if}
+        </button>
+      {/each}
+
+      {#if fileEntries.length === 0}
+        <p class="text-center text-text-muted py-4">Carpeta vacía</p>
+      {/if}
+    </div>
+
+    <!-- Búsqueda -->
+    <div class="pt-2 border-t border-border">
+      <input
+        type="text"
+        class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        placeholder="🔍 Buscar..."
+        bind:value={explorerSearchQuery}
+        on:keydown={(e) => e.key === 'Enter' && searchFiles()}
+      />
+    </div>
+  </div>
+
+<!-- Panel: Explorar Visor/Editor (2 TAPS - 50%) -->
+{:else if currentPanel === 'explorar-visor'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">{openedFile?.format === 'json' || openedFile?.format === 'md' ? '📝' : '📄'}</span>
+      <h3 class="font-medium flex-1 truncate">{openedFile?.path.split('/').pop() || 'Archivo'}</h3>
+      {#if openedFile && ['json', 'md', 'txt', 'js', 'html', 'css', 'xml', 'yaml'].includes(openedFile.format)}
+        <button
+          class="text-sm px-2 py-1 rounded {isEditing ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+          on:click={() => { isEditing = !isEditing; editedContent = openedFile?.content || ''; }}
+        >
+          ✏️
+        </button>
+      {/if}
+    </div>
+
+    <!-- Contenido -->
+    {#if openedFile}
+      <div class="bg-bg-hover rounded-lg p-3 max-h-[300px] overflow-auto">
+        {#if isEditing}
+          <textarea
+            class="w-full h-64 bg-transparent text-sm font-mono resize-none focus:outline-none"
+            bind:value={editedContent}
+          ></textarea>
+        {:else}
+          <pre class="text-sm font-mono whitespace-pre-wrap">{openedFile.content}</pre>
+        {/if}
+      </div>
+
+      <!-- Info del archivo -->
+      <div class="flex items-center gap-2 text-xs text-text-muted">
+        <span>Línea: {openedFile.line_count || 1}</span>
+        <span>|</span>
+        <span>{openedFile.format.toUpperCase()}</span>
+        {#if openedFile.is_valid !== undefined}
+          <span>|</span>
+          <span class="{openedFile.is_valid ? 'text-success' : 'text-error'}">
+            {openedFile.is_valid ? '✅ Válido' : '❌ Inválido'}
+          </span>
+        {/if}
+      </div>
+
+      <!-- Acciones -->
+      <div class="flex gap-2 flex-wrap">
+        {#if isEditing}
+          <Button variant="secondary" on:click={formatOpenedFile}>✨ Formatear</Button>
+          <Button variant="primary" on:click={saveOpenedFile}>💾 Guardar</Button>
+        {/if}
+        <button
+          class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+          on:click={attachOpenedFile}
+        >
+          📎 Adjuntar al chat
+        </button>
+      </div>
+    {:else}
+      <p class="text-center text-text-muted py-4">No hay archivo abierto</p>
+    {/if}
+  </div>
+
+<!-- Panel: Explorar Gestionar (LONG-PRESS - 80%) -->
+{:else if currentPanel === 'explorar-gestionar'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📂</span>
+      <h3 class="font-medium flex-1">Gestionar Archivos</h3>
+    </div>
+
+    <!-- Búsqueda y filtros -->
+    <div class="flex gap-2 flex-wrap">
+      <input
+        type="text"
+        class="flex-1 p-2 bg-bg-hover rounded-lg border border-border text-sm focus:border-primary focus:outline-none"
+        placeholder="🔍 Buscar en nombre..."
+        bind:value={explorerSearchQuery}
+      />
+      <label class="flex items-center gap-1 text-xs">
+        <input type="checkbox" bind:checked={explorerSearchInContent} />
+        En contenido
+      </label>
+      <button
+        class="px-3 py-2 text-sm bg-primary/20 text-primary rounded-lg"
+        on:click={searchFiles}
+      >
+        Buscar
+      </button>
+    </div>
+
+    <div class="flex gap-2">
+      <button
+        class="px-2 py-1 text-xs rounded {explorerFilter === 'all' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => explorerFilter = 'all'}
+      >
+        Todos
+      </button>
+      <button
+        class="px-2 py-1 text-xs rounded {explorerFilter === 'pdf' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => explorerFilter = 'pdf'}
+      >
+        📄 PDFs
+      </button>
+      <button
+        class="px-2 py-1 text-xs rounded {explorerFilter === 'text' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => explorerFilter = 'text'}
+      >
+        📝 Texto
+      </button>
+      <button
+        class="px-2 py-1 text-xs rounded {explorerFilter === 'image' ? 'bg-primary/20 text-primary' : 'bg-bg-hover'}"
+        on:click={() => explorerFilter = 'image'}
+      >
+        🖼️ Imágenes
+      </button>
+    </div>
+
+    <!-- Lista de archivos con acciones -->
+    <div class="space-y-2 max-h-[300px] overflow-y-auto">
+      {#each filteredFileEntries as entry (entry.path)}
+        <div class="p-2 bg-bg-hover rounded-lg flex items-center gap-2">
+          <span>{getFileEntryIcon(entry)}</span>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm truncate">{entry.name}</p>
+            <div class="flex gap-2 text-xs text-text-muted">
+              <span>{formatFileSize(entry.size || 0)}</span>
+              {#if entry.modified_at}
+                <span>| {formatRelativeTime(entry.modified_at)}</span>
+              {/if}
+            </div>
+          </div>
+          <div class="flex gap-1">
+            <button
+              class="p-1 text-xs hover:bg-bg-card rounded"
+              on:click={() => openFileEntry(entry)}
+            >
+              👁️
+            </button>
+            <button
+              class="p-1 text-xs hover:bg-bg-card rounded"
+              on:click={() => dispatch('explorerAttachFile', { path: entry.path })}
+            >
+              📎
+            </button>
+            <button
+              class="p-1 text-xs hover:bg-error/20 text-error rounded"
+              on:click={() => deleteFileEntry(entry.path)}
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <!-- Footer -->
+    <div class="pt-2 border-t border-border">
+      <div class="text-xs text-text-muted mb-2">
+        📊 Total: {explorerTotalStats.count} archivos | {formatFileSize(explorerTotalStats.size)}
+      </div>
+      <div class="flex gap-2">
+        <button
+          class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+          on:click={createFolder}
+        >
+          + Nueva carpeta
+        </button>
+        <Button variant="secondary" on:click={() => dispatch('panelChange', { panelId: 'subir-archivo' })}>
+          📤 Subir archivo
+        </Button>
+      </div>
+    </div>
+  </div>
+
+<!-- Panel: Voz Dictado (1 TAP - 30%) -->
+{:else if currentPanel === 'voz-dictado'}
+  <div class="space-y-4 text-center">
+    <!-- Header -->
+    <div class="flex items-center justify-center gap-2 pb-2">
+      <span class="text-3xl">{dictationState.is_listening ? '🎤' : '🎙️'}</span>
+    </div>
+
+    <!-- Estado -->
+    <p class="text-lg font-medium">
+      {dictationState.is_listening ? 'Escuchando...' : 'Toca para dictar'}
+    </p>
+
+    <!-- Barra de audio (simulada) -->
+    {#if dictationState.is_listening}
+      <div class="flex justify-center gap-1">
+        {#each Array(10) as _, i}
+          <div
+            class="w-2 bg-primary rounded animate-pulse"
+            style="height: {Math.random() * 20 + 5}px; animation-delay: {i * 0.1}s"
+          ></div>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Transcripción -->
+    <div class="p-3 bg-bg-hover rounded-lg min-h-[60px]">
+      <p class="text-sm">
+        {dictationState.transcript || dictationState.interim_transcript || '...'}
+      </p>
+    </div>
+
+    <!-- Acciones -->
+    <div class="flex justify-center gap-4">
+      {#if dictationState.is_listening}
+        <button
+          class="px-4 py-2 bg-error/20 text-error rounded-lg hover:bg-error/30 transition-colors"
+          on:click={cancelDictation}
+        >
+          ❌ Cancelar
+        </button>
+        <button
+          class="px-4 py-2 bg-success/20 text-success rounded-lg hover:bg-success/30 transition-colors"
+          on:click={sendTranscript}
+          disabled={!dictationState.transcript}
+        >
+          ✅ Enviar
+        </button>
+      {:else}
+        <Button variant="primary" class="w-full" on:click={startDictation}>
+          🎤 Iniciar dictado
+        </Button>
+      {/if}
+    </div>
+  </div>
+
+<!-- Panel: Voz Configurar (2 TAPS - 50%) -->
+{:else if currentPanel === 'voz-configurar'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">🎤</span>
+      <h3 class="font-medium">Configurar Voz</h3>
+    </div>
+
+    <!-- Speech-to-Text -->
+    <div class="space-y-3">
+      <p class="text-xs text-text-muted uppercase font-medium">Dictado (Speech-to-Text)</p>
+
+      <div>
+        <label class="text-sm mb-1 block">Idioma de dictado</label>
+        <select
+          class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+          bind:value={voiceConfig.stt_language}
+        >
+          <option value="es-ES">Español (España)</option>
+          <option value="es-MX">Español (México)</option>
+          <option value="en-US">English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="fr-FR">Français</option>
+          <option value="de-DE">Deutsch</option>
+          <option value="pt-BR">Português (Brasil)</option>
+        </select>
+      </div>
+
+      <div class="space-y-2">
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" bind:checked={voiceConfig.continuous_mode} />
+          Modo continuo (sigue escuchando)
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" bind:checked={voiceConfig.auto_send_on_silence} />
+          Auto-enviar al detectar silencio
+        </label>
+      </div>
+    </div>
+
+    <!-- Text-to-Speech -->
+    <div class="space-y-3 pt-3 border-t border-border">
+      <p class="text-xs text-text-muted uppercase font-medium">Lectura (Text-to-Speech)</p>
+
+      <div>
+        <label class="text-sm mb-1 block">Voz</label>
+        <select
+          class="w-full p-2 bg-bg-hover rounded-lg border border-border text-sm"
+          bind:value={voiceConfig.tts_voice}
+        >
+          <option value="">Voz por defecto</option>
+          {#each availableVoices as voice}
+            <option value={voice.name}>{voice.name} ({voice.lang})</option>
+          {/each}
+        </select>
+      </div>
+
+      <div>
+        <label class="text-sm mb-1 block">Velocidad: {voiceConfig.tts_rate}x</label>
+        <input
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.1"
+          class="w-full"
+          bind:value={voiceConfig.tts_rate}
+        />
+      </div>
+
+      <div>
+        <label class="text-sm mb-1 block">Tono: {voiceConfig.tts_pitch}</label>
+        <input
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.1"
+          class="w-full"
+          bind:value={voiceConfig.tts_pitch}
+        />
+      </div>
+
+      <button
+        class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+        on:click={testVoice}
+      >
+        🔊 Probar voz
+      </button>
+    </div>
+
+    <!-- Accesibilidad -->
+    <div class="space-y-2 pt-3 border-t border-border">
+      <p class="text-xs text-text-muted uppercase font-medium">Accesibilidad</p>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" bind:checked={voiceConfig.auto_read_responses} />
+        Leer respuestas automáticamente
+      </label>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" bind:checked={voiceConfig.confirm_before_send} />
+        Confirmar antes de enviar dictado
+      </label>
+    </div>
+
+    <!-- Guardar -->
+    <Button variant="primary" class="w-full" on:click={saveVoiceConfig}>
+      💾 Guardar Configuración
+    </Button>
+  </div>
+
+<!-- Panel: Voz Lectura (LONG-PRESS) -->
+{:else if currentPanel === 'voz-lectura'}
+  <div class="space-y-4 text-center">
+    <!-- Header -->
+    <div class="flex items-center justify-center gap-2 pb-2">
+      <span class="text-3xl">{isSpeaking ? '🔊' : '🔇'}</span>
+    </div>
+
+    <!-- Estado -->
+    <p class="text-lg font-medium">
+      {isSpeaking ? 'Leyendo respuesta...' : 'Lectura de voz'}
+    </p>
+
+    <!-- Control -->
+    {#if isSpeaking}
+      <Button variant="secondary" class="w-full" on:click={stopReading}>
+        ⏹️ Detener lectura
+      </Button>
+    {:else}
+      <Button variant="primary" class="w-full" on:click={readLastResponse}>
+        🔊 Leer última respuesta
+      </Button>
+    {/if}
+
+    <p class="text-xs text-text-muted">
+      Long-press en el botón 🎤 para leer la última respuesta del asistente
+    </p>
+  </div>
+
+<!-- Panel: Cámara Capturar (1 TAP - 30%) -->
+{:else if currentPanel === 'camara-capturar'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📷</span>
+      <h3 class="font-medium">Capturar Foto</h3>
+    </div>
+
+    <!-- Vista de cámara (placeholder) -->
+    <div class="bg-bg-hover rounded-lg aspect-video flex items-center justify-center">
+      {#if capturedImage}
+        <img src={capturedImage} alt="Captura" class="max-w-full max-h-full rounded-lg" />
+      {:else if isCameraActive}
+        <div class="text-center">
+          <p class="text-4xl mb-2">📸</p>
+          <p class="text-sm text-text-muted">[Vista de la cámara]</p>
+        </div>
+      {:else}
+        <div class="text-center">
+          <p class="text-4xl mb-2">📷</p>
+          <p class="text-sm text-text-muted">Cámara no activa</p>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Acciones -->
+    {#if capturedImage}
+      <div class="flex gap-2">
+        <Button variant="primary" class="flex-1" on:click={attachCapturedImage}>
+          📎 Adjuntar
+        </Button>
+        <button
+          class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+          on:click={discardCapture}
+        >
+          🔄 Otra foto
+        </button>
+        <button
+          class="px-3 py-2 text-sm bg-error/20 text-error rounded-lg hover:bg-error/30 transition-colors"
+          on:click={() => { capturedImage = null; dispatch('panelChange', { panelId: '' }); }}
+        >
+          ❌
+        </button>
+      </div>
+    {:else}
+      <div class="flex gap-2">
+        <Button variant="primary" class="flex-1" on:click={capturePhoto}>
+          📸 Capturar
+        </Button>
+        <button
+          class="px-3 py-2 text-sm bg-bg-hover rounded-lg hover:bg-bg-card transition-colors"
+          on:click={() => cameraConfig.facing_mode = cameraConfig.facing_mode === 'user' ? 'environment' : 'user'}
+        >
+          🔄 Cambiar cámara
+        </button>
+      </div>
+    {/if}
+  </div>
+
+<!-- Panel: Cámara Configurar (2 TAPS - 50%) -->
+{:else if currentPanel === 'camara-configurar'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📷</span>
+      <h3 class="font-medium">Configurar Cámara</h3>
+    </div>
+
+    <!-- Cámara -->
+    <div>
+      <label class="text-sm font-medium mb-2 block">Cámara</label>
+      <div class="space-y-2">
+        <label class="flex items-center gap-2 p-2 bg-bg-hover rounded-lg cursor-pointer">
+          <input
+            type="radio"
+            name="facing"
+            value="user"
+            bind:group={cameraConfig.facing_mode}
+          />
+          <span class="text-sm">Cámara frontal</span>
+        </label>
+        <label class="flex items-center gap-2 p-2 bg-bg-hover rounded-lg cursor-pointer">
+          <input
+            type="radio"
+            name="facing"
+            value="environment"
+            bind:group={cameraConfig.facing_mode}
+          />
+          <span class="text-sm">Cámara trasera</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Resolución -->
+    <div>
+      <label class="text-sm font-medium mb-2 block">Resolución</label>
+      <div class="space-y-2">
+        <label class="flex items-center gap-2 p-2 bg-bg-hover rounded-lg cursor-pointer">
+          <input type="radio" name="resolution" value="low" bind:group={cameraConfig.resolution} />
+          <span class="text-sm">Baja (640x480) ~ 50 KB</span>
+        </label>
+        <label class="flex items-center gap-2 p-2 bg-bg-hover rounded-lg cursor-pointer">
+          <input type="radio" name="resolution" value="medium" bind:group={cameraConfig.resolution} />
+          <span class="text-sm">Media (1280x720) ~ 150 KB</span>
+        </label>
+        <label class="flex items-center gap-2 p-2 bg-bg-hover rounded-lg cursor-pointer">
+          <input type="radio" name="resolution" value="high" bind:group={cameraConfig.resolution} />
+          <span class="text-sm">Alta (1920x1080) ~ 300 KB</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Formato -->
+    <div>
+      <label class="text-sm font-medium mb-2 block">Formato de imagen</label>
+      <div class="flex gap-4">
+        <label class="flex items-center gap-2">
+          <input type="radio" name="format" value="jpeg" bind:group={cameraConfig.format} />
+          <span class="text-sm">JPEG (más pequeño)</span>
+        </label>
+        <label class="flex items-center gap-2">
+          <input type="radio" name="format" value="png" bind:group={cameraConfig.format} />
+          <span class="text-sm">PNG (mejor calidad)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Auto-adjuntar -->
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" bind:checked={cameraConfig.auto_attach} />
+      Adjuntar automáticamente al capturar
+    </label>
+
+    <!-- Guardar -->
+    <Button variant="primary" class="w-full" on:click={saveCameraConfig}>
+      💾 Guardar Configuración
+    </Button>
+  </div>
+
+<!-- Panel: Cámara Galería (LONG-PRESS - 80%) -->
+{:else if currentPanel === 'camara-galeria'}
+  <div class="space-y-4">
+    <!-- Header -->
+    <div class="flex items-center gap-2 pb-2 border-b border-border">
+      <span class="text-lg">📷</span>
+      <h3 class="font-medium">Capturas Recientes</h3>
+    </div>
+
+    <!-- Grid de capturas -->
+    <div class="grid grid-cols-4 gap-2">
+      {#each recentCaptures as capture (capture.id)}
+        <button
+          class="aspect-square bg-bg-hover rounded-lg overflow-hidden relative {selectedCaptureIds.has(capture.id) ? 'ring-2 ring-primary' : ''}"
+          on:click={() => toggleCaptureSelection(capture.id)}
+        >
+          <img src={capture.data_url} alt="Captura" class="w-full h-full object-cover" />
+          {#if selectedCaptureIds.has(capture.id)}
+            <div class="absolute top-1 right-1 w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs">
+              ✓
+            </div>
+          {/if}
+        </button>
+      {/each}
+
+      {#if recentCaptures.length === 0}
+        <div class="col-span-4 text-center py-8 text-text-muted">
+          No hay capturas recientes
+        </div>
+      {/if}
+    </div>
+
+    <!-- Info de selección -->
+    <p class="text-sm text-text-muted">
+      Seleccionadas: {selectedCapturesCount}
+    </p>
+
+    <!-- Acciones -->
+    <div class="flex gap-2">
+      <Button
+        variant="primary"
+        class="flex-1"
+        disabled={selectedCapturesCount === 0}
+        on:click={attachSelectedCaptures}
+      >
+        📎 Adjuntar seleccionadas
+      </Button>
+      <button
+        class="px-3 py-2 text-sm bg-error/20 text-error rounded-lg hover:bg-error/30 transition-colors"
+        on:click={clearAllCaptures}
+        disabled={recentCaptures.length === 0}
+      >
+        🗑️ Limpiar todas
+      </button>
     </div>
   </div>
 

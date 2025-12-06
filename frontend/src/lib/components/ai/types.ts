@@ -321,6 +321,78 @@ export interface NewProjectForm {
   activate_immediately: boolean;
 }
 
+// Archivo o carpeta en el explorador
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'folder';
+  size?: number;
+  modified_at?: string;
+  mime_type?: string;
+  children_count?: number;
+}
+
+// Contenido de archivo abierto
+export interface FileContent {
+  path: string;
+  content: string;
+  format: 'json' | 'md' | 'txt' | 'js' | 'html' | 'css' | 'xml' | 'yaml' | 'other';
+  size: number;
+  is_valid?: boolean;
+  line_count?: number;
+}
+
+// Configuración de PDF viewer
+export interface PDFViewerState {
+  path: string;
+  current_page: number;
+  total_pages: number;
+  zoom: number;
+  extracted_text?: string;
+}
+
+// Configuración de voz (Web Speech API)
+export interface VoiceConfig {
+  // Speech-to-Text
+  stt_language: string;
+  continuous_mode: boolean;
+  auto_send_on_silence: boolean;
+  // Text-to-Speech
+  tts_voice: string;
+  tts_rate: number;
+  tts_pitch: number;
+  // Accesibilidad
+  auto_read_responses: boolean;
+  confirm_before_send: boolean;
+}
+
+// Estado de dictado
+export interface DictationState {
+  is_listening: boolean;
+  transcript: string;
+  interim_transcript: string;
+  confidence: number;
+}
+
+// Configuración de cámara (MediaDevices API)
+export interface CameraConfig {
+  device_id: string;
+  facing_mode: 'user' | 'environment';
+  resolution: 'low' | 'medium' | 'high';
+  format: 'jpeg' | 'png';
+  auto_attach: boolean;
+}
+
+// Captura de cámara
+export interface CameraCapture {
+  id: string;
+  data_url: string;
+  timestamp: string;
+  size: number;
+  width: number;
+  height: number;
+}
+
 // Configuración del workspace
 export interface ChatWorkspaceConfig {
   // Modelos

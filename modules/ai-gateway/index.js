@@ -22,6 +22,70 @@ class AIGatewayModule {
     this.config = null;
     this.logger = null;
     this.eventBus = null;
+
+    // UI State: Provider/modelo seleccionado actualmente
+    this.currentProvider = 'auto';
+    this.currentModel = null;
+  }
+
+  // ============ UI HELPERS ============
+
+  /**
+   * Get display name for provider
+   */
+  getProviderDisplayName(providerId) {
+    const displayNames = {
+      deepseek: 'DeepSeek',
+      anthropic: 'Anthropic Claude',
+      openai: 'OpenAI',
+      ollama: 'Ollama (Local)'
+    };
+    return displayNames[providerId] || providerId;
+  }
+
+  /**
+   * Get icon for provider
+   */
+  getProviderIcon(providerId) {
+    const icons = {
+      deepseek: '🔮',
+      anthropic: '🧠',
+      openai: '🤖',
+      ollama: '🦙'
+    };
+    return icons[providerId] || '⚡';
+  }
+
+  /**
+   * Get display name for model
+   */
+  getModelDisplayName(modelId) {
+    const displayNames = {
+      'deepseek-chat': 'DeepSeek Chat',
+      'deepseek-coder': 'DeepSeek Coder',
+      'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
+      'claude-3-opus-20240229': 'Claude 3 Opus',
+      'claude-3-haiku-20240307': 'Claude 3 Haiku',
+      'gpt-4o': 'GPT-4o',
+      'gpt-4o-mini': 'GPT-4o Mini',
+      'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+      'llama2': 'Llama 2',
+      'codellama': 'Code Llama',
+      'mistral': 'Mistral',
+      'mixtral': 'Mixtral'
+    };
+    return displayNames[modelId] || modelId;
+  }
+
+  /**
+   * Get provider status
+   */
+  getProviderStatus(available, provider) {
+    if (!available) {
+      return 'no_api_key';
+    }
+    // Could add more status checks here (rate_limited, error, etc.)
+    return 'ready';
   }
 
   /**
@@ -533,6 +597,160 @@ class AIGatewayModule {
     } catch (error) {
       this.logger.error('ai-gateway.test.error', { error: error.message });
       return { status: 500, data: { error: 'TEST_FAILED', message: error.message } };
+    }
+  }
+
+  // ============ UI API HANDLERS ============
+
+  /**
+   * API Handler: UI State
+   * GET /ui/state - Estado completo para la UI (listo para pintar)
+   */
+  async handleUIState(req, context) {
+    try {
+      const providers = [];
+
+      for (const [name, provider] of this.providers.entries()) {
+        const available = await provider.isAvailable();
+        const config = this.config.providers?.[name];
+        const usage = this.usage.get(name);
+
+        // Construir lista de modelos formateada
+        const models = (config?.models || []).map(modelId => ({
+          id: modelId,
+          name: this.getModelDisplayName(modelId),
+          isDefault: modelId === config?.default_model,
+          isSelected: this.currentProvider === name && this.currentModel === modelId
+        }));
+
+        providers.push({
+          id: name,
+          displayName: this.getProviderDisplayName(name),
+          icon: this.getProviderIcon(name),
+          available,
+          status: this.getProviderStatus(available, provider),
+          priority: config?.priority || 99,
+          isSelected: this.currentProvider === name,
+          models,
+          pricing: {
+            input: config?.cost_per_1k_tokens?.input || 0,
+            output: config?.cost_per_1k_tokens?.output || 0,
+            currency: 'USD'
+          },
+          limits: {
+            requestsPerMinute: config?.rate_limit?.requests_per_minute || 60,
+            tokensPerMinute: config?.rate_limit?.tokens_per_minute || 100000
+          },
+          usage: usage || { requests: 0, tokens: 0, cost: 0, errors: 0 }
+        });
+      }
+
+      // Ordenar por prioridad
+      providers.sort((a, b) => a.priority - b.priority);
+
+      // Calcular totales de uso
+      const totalUsage = Array.from(this.usage.values()).reduce(
+        (acc, u) => ({
+          requests: acc.requests + u.requests,
+          tokens: acc.tokens + u.tokens,
+          cost: acc.cost + u.cost,
+          errors: acc.errors + u.errors
+        }),
+        { requests: 0, tokens: 0, cost: 0, errors: 0 }
+      );
+
+      return {
+        status: 200,
+        data: {
+          providers,
+          current: {
+            provider: this.currentProvider,
+            model: this.currentModel,
+            displayName: this.currentProvider === 'auto'
+              ? 'Automático'
+              : this.getProviderDisplayName(this.currentProvider),
+            modelDisplayName: this.currentModel
+              ? this.getModelDisplayName(this.currentModel)
+              : null
+          },
+          usage: {
+            session: totalUsage
+          }
+        }
+      };
+    } catch (error) {
+      this.logger.error('ai-gateway.ui-state.error', { error: error.message });
+      return { status: 500, data: { error: 'UI_STATE_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: UI Select
+   * POST /ui/select - Seleccionar provider y modelo
+   */
+  async handleUISelect(req, context) {
+    try {
+      const { provider, model } = req.body || {};
+
+      // Validar provider
+      if (provider && provider !== 'auto') {
+        if (!this.providers.has(provider)) {
+          return {
+            status: 400,
+            data: { error: 'INVALID_PROVIDER', message: `Provider '${provider}' not found` }
+          };
+        }
+
+        const providerInstance = this.providers.get(provider);
+        const available = await providerInstance.isAvailable();
+
+        if (!available) {
+          return {
+            status: 400,
+            data: { error: 'PROVIDER_NOT_AVAILABLE', message: `Provider '${provider}' is not available (check API key)` }
+          };
+        }
+
+        // Validar modelo si se proporciona
+        if (model) {
+          const config = this.config.providers?.[provider];
+          if (!config?.models?.includes(model)) {
+            return {
+              status: 400,
+              data: { error: 'INVALID_MODEL', message: `Model '${model}' not available for provider '${provider}'` }
+            };
+          }
+        }
+      }
+
+      // Actualizar selección
+      this.currentProvider = provider || 'auto';
+      this.currentModel = model || null;
+
+      this.logger.info('ai-gateway.ui.selected', {
+        provider: this.currentProvider,
+        model: this.currentModel
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          current: {
+            provider: this.currentProvider,
+            model: this.currentModel,
+            displayName: this.currentProvider === 'auto'
+              ? 'Automático'
+              : this.getProviderDisplayName(this.currentProvider),
+            modelDisplayName: this.currentModel
+              ? this.getModelDisplayName(this.currentModel)
+              : null
+          }
+        }
+      };
+    } catch (error) {
+      this.logger.error('ai-gateway.ui-select.error', { error: error.message });
+      return { status: 500, data: { error: 'UI_SELECT_FAILED', message: error.message } };
     }
   }
 

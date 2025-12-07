@@ -4,7 +4,7 @@
   import { Button, Badge } from '$components/ui';
   import { Spinner } from '$components/feedback';
   import { FileDropZone } from '$components/input';
-  import { ChatAIWorkspaceV2 } from '$components/ai';
+  import { ChatAIWorkspaceV2, ModelProviderSelector } from '$components/ai';
   import type {
     AIModel,
     AICredential,
@@ -1451,6 +1451,18 @@
           <p class="text-text-muted">{availablePlugins.filter(p => p.enabled).length} de {availablePlugins.length}</p>
         </div>
       </div>
+
+    <!-- =========================================== -->
+    <!-- Panel Selector de Modelo (conectado a ai-gateway) -->
+    <!-- =========================================== -->
+    {:else if panelId === 'modelo-selector'}
+      <ModelProviderSelector
+        on:select={(e) => {
+          currentModel = e.detail.model || 'Auto';
+          toast.success(`Modelo: ${currentModel}`);
+          currentPanel = '';
+        }}
+      />
 
     <!-- =========================================== -->
     <!-- Paneles de IA delegados a ChatAIWorkspace  -->

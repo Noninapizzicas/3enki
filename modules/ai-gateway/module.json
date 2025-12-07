@@ -54,6 +54,18 @@
       "description": "Probar conectividad con un proveedor",
       "schema": "./schemas/test-provider.json",
       "handler": "handleTestProvider"
+    },
+    {
+      "method": "GET",
+      "path": "/ui/state",
+      "description": "Estado completo para UI (providers, modelos, selección actual)",
+      "handler": "handleUIState"
+    },
+    {
+      "method": "POST",
+      "path": "/ui/select",
+      "description": "Seleccionar provider y modelo activo",
+      "handler": "handleUISelect"
     }
   ],
   "hooks": {},

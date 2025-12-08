@@ -101,7 +101,7 @@
         credentialsGrouped = data.credentials || { GLOBAL: [], projects: {} };
         stats = data.stats || { total: 0, byLevel: {} };
       } else {
-        error = data.error || 'Error al cargar estado';
+        error = data.message || data.error || 'Error al cargar estado';
       }
     } catch (err) {
       error = 'No se pudo conectar con el servidor';
@@ -194,7 +194,7 @@
         panelMode = 'list';
         resetForm();
       } else {
-        error = data.error || 'Error al guardar';
+        error = data.message || data.error || 'Error al guardar';
       }
     } catch (err) {
       error = 'Error de conexión al guardar';
@@ -220,7 +220,7 @@
         await loadUIState();
         dispatch('delete', { key });
       } else {
-        error = data.error || 'Error al eliminar';
+        error = data.message || data.error || 'Error al eliminar';
       }
     } catch (err) {
       error = 'Error de conexión al eliminar';

@@ -139,7 +139,7 @@ class ConversationManagerModule {
   }
 
   async onDbQueryResponse(event) {
-    const { request_id, success, rows, error } = event;
+    const { request_id, success, data, rows, error } = event;
 
     const pending = this.pendingDbRequests.get(request_id);
     if (!pending) return;
@@ -148,7 +148,8 @@ class ConversationManagerModule {
     this.pendingDbRequests.delete(request_id);
 
     if (success) {
-      pending.resolve(rows || []);
+      // database-manager sends 'data', fallback to 'rows' for compatibility
+      pending.resolve(data || rows || []);
     } else {
       pending.reject(new Error(error || 'Database query failed'));
     }

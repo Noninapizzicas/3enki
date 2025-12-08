@@ -133,12 +133,15 @@
       });
 
       const data = await res.json();
+      console.log('Test response:', data); // Debug
 
       if (data.success) {
-        testResult = { valid: data.valid, message: data.message };
+        const msg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message) || 'Validación completada';
+        testResult = { valid: data.valid, message: msg };
         return data.valid;
       } else {
-        testResult = { valid: false, message: data.error || 'Error al validar' };
+        const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error) || 'Error al validar';
+        testResult = { valid: false, message: errMsg };
         return false;
       }
     } catch (err) {
@@ -157,7 +160,8 @@
     const isValid = await apiTestCredential();
 
     if (!isValid) {
-      error = testResult?.message || 'API key no válida';
+      const errMsg = testResult?.message;
+      error = typeof errMsg === 'string' ? errMsg : 'API key no válida';
       return;
     }
 

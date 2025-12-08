@@ -1,98 +1,133 @@
 {
   "name": "prompt-manager",
-  "version": "1.0.0",
-  "description": "Sistema de gestión de prompts con versionado, templates y analytics",
+  "version": "2.0.0",
+  "description": "Sistema de gestión de prompts con versionado, slots, presets y analytics. Usa database-manager para persistencia.",
   "author": "Event Core Team",
   "provides": [
     "prompt-management",
+    "slot-management",
+    "preset-management",
     "template-rendering",
     "analytics"
   ],
   "subscribes": [
+    "db.query.response",
+    "db.schema.init.response",
     "ai.completion.completed",
     "ai.request.started"
   ],
+  "publishes": [
+    "prompt.created",
+    "prompt.updated",
+    "prompt.deleted",
+    "preset.created",
+    "preset.deleted"
+  ],
   "apis": [
+    {
+      "method": "GET",
+      "path": "/ui/state",
+      "description": "Estado UI-ready con prompts agrupados por slot, presets y stats",
+      "handler": "handleGetUIState"
+    },
     {
       "method": "POST",
       "path": "/prompts",
       "description": "Crear un nuevo prompt",
-      "schema": "./schemas/create-prompt.json",
       "handler": "handleCreatePrompt"
     },
     {
       "method": "GET",
       "path": "/prompts",
-      "description": "Listar todos los prompts",
-      "schema": "./schemas/list-prompts.json",
+      "description": "Listar todos los prompts (filtrar por slot_type, tag, search)",
       "handler": "handleListPrompts"
     },
     {
       "method": "GET",
       "path": "/prompts/:id",
       "description": "Obtener un prompt específico",
-      "schema": "./schemas/get-prompt.json",
       "handler": "handleGetPrompt"
     },
     {
       "method": "PUT",
       "path": "/prompts/:id",
       "description": "Actualizar un prompt existente",
-      "schema": "./schemas/update-prompt.json",
       "handler": "handleUpdatePrompt"
     },
     {
       "method": "DELETE",
       "path": "/prompts/:id",
       "description": "Eliminar un prompt",
-      "schema": "./schemas/delete-prompt.json",
       "handler": "handleDeletePrompt"
     },
     {
       "method": "GET",
       "path": "/prompts/:id/versions",
       "description": "Listar versiones de un prompt",
-      "schema": "./schemas/list-versions.json",
       "handler": "handleListVersions"
     },
     {
       "method": "POST",
       "path": "/prompts/:id/render",
       "description": "Renderizar template de prompt con variables",
-      "schema": "./schemas/render-template.json",
       "handler": "handleRenderTemplate"
+    },
+    {
+      "method": "POST",
+      "path": "/presets",
+      "description": "Crear un nuevo preset de slots",
+      "handler": "handleCreatePreset"
+    },
+    {
+      "method": "GET",
+      "path": "/presets",
+      "description": "Listar todos los presets",
+      "handler": "handleListPresets"
+    },
+    {
+      "method": "GET",
+      "path": "/presets/:id",
+      "description": "Obtener un preset específico con sus slots",
+      "handler": "handleGetPreset"
+    },
+    {
+      "method": "DELETE",
+      "path": "/presets/:id",
+      "description": "Eliminar un preset",
+      "handler": "handleDeletePreset"
     },
     {
       "method": "GET",
       "path": "/analytics",
       "description": "Obtener analytics de prompts",
-      "schema": "./schemas/get-analytics.json",
       "handler": "handleGetAnalytics"
     },
     {
-      "method": "POST",
-      "path": "/prompts/compare",
-      "description": "Comparar performance de dos prompts (A/B testing)",
-      "schema": "./schemas/compare-prompts.json",
-      "handler": "handleComparePrompts"
+      "method": "GET",
+      "path": "/health",
+      "description": "Health check del módulo",
+      "handler": "handleHealthCheck"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "description": "Métricas del módulo",
+      "handler": "handleGetMetrics"
     }
   ],
-  "hooks": {
-    "afterEventReceive": {
-      "event_pattern": "ai.*.completed",
-      "description": "Registrar analytics cuando se completa una IA request"
-    }
-  },
   "config": {
-    "storage_path": "./data/prompts",
     "max_versions_per_prompt": 10,
     "enable_analytics": true,
     "analytics_retention_days": 90
   },
-  "dependencies": [],
+  "dependencies": [
+    "database-manager"
+  ],
   "tags": [
     "ai",
     "prompts",
+    "slots",
+    "presets",
     "templates",
     "analytics"
   ]

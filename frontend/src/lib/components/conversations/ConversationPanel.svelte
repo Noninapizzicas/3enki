@@ -115,10 +115,14 @@
     error = null;
     try {
       const res = await fetch(`${apiBase}/ui/state?project_id=${projectId}`);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
       const data = await res.json();
+
+      if (!res.ok) {
+        error = data.error || `HTTP ${res.status}: ${res.statusText}`;
+        dispatch('error', { message: error });
+        console.error('ConversationPanel: Server error', data);
+        return;
+      }
 
       if (data.success) {
         sections = data.sections || [];
@@ -129,7 +133,7 @@
         dispatch('error', { message: error });
       }
     } catch (err) {
-      error = 'No se pudo conectar con el servidor';
+      error = err instanceof Error ? err.message : 'No se pudo conectar con el servidor';
       dispatch('error', { message: error });
       console.error('ConversationPanel: Error loading UI state', err);
     } finally {

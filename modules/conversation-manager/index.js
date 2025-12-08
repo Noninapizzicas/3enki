@@ -139,7 +139,9 @@ class ConversationManagerModule {
   }
 
   async onDbQueryResponse(event) {
-    const { request_id, success, data, rows, error } = event;
+    // Handle both wrapped (event.data) and unwrapped event formats
+    const eventData = event.data || event;
+    const { request_id, success, data, rows, error } = eventData;
 
     const pending = this.pendingDbRequests.get(request_id);
     if (!pending) return;
@@ -1266,8 +1268,12 @@ class ConversationManagerModule {
         }
       });
     } catch (error) {
-      this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to get UI state');
-      res.status(500).json({ success: false, error: error.message });
+      this.logger.error({ correlationId, error: error.message, stack: error.stack }, 'HTTP: Failed to get UI state');
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        details: 'Check server logs for more info'
+      });
     }
   }
 

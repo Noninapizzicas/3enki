@@ -69,9 +69,8 @@
     if ('vibrate' in navigator) navigator.vibrate(pattern);
   }
 
-  function handlePointerDown(e: PointerEvent) {
+  function startPress() {
     if (disabled) return;
-    e.preventDefault();
 
     vibrate(5);
     const startTime = Date.now();
@@ -91,7 +90,7 @@
     }, longPressDuration);
   }
 
-  function handlePointerUp(e: PointerEvent) {
+  function endPress() {
     if (disabled) return;
 
     if (isLongPressing) {
@@ -118,11 +117,42 @@
     }
   }
 
-  function handlePointerCancel() {
+  function cancelPress() {
     clearAllTimers();
     tapCount = 0;
     longPressProgress = 0;
     isLongPressing = false;
+  }
+
+  // Pointer events (desktop + mobile)
+  function handlePointerDown(e: PointerEvent) {
+    // Solo para mouse, touch usa sus propios eventos
+    if (e.pointerType === 'touch') return;
+    startPress();
+  }
+
+  function handlePointerUp(e: PointerEvent) {
+    if (e.pointerType === 'touch') return;
+    endPress();
+  }
+
+  function handlePointerCancel() {
+    cancelPress();
+  }
+
+  // Touch events (móvil - más fiables)
+  function handleTouchStart(e: TouchEvent) {
+    e.preventDefault(); // Evita scroll y zoom
+    startPress();
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    e.preventDefault();
+    endPress();
+  }
+
+  function handleTouchCancel() {
+    cancelPress();
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -150,6 +180,9 @@
   on:pointerup={handlePointerUp}
   on:pointercancel={handlePointerCancel}
   on:pointerleave={handlePointerCancel}
+  on:touchstart={handleTouchStart}
+  on:touchend={handleTouchEnd}
+  on:touchcancel={handleTouchCancel}
   on:contextmenu={handleContextMenu}
 >
   <!-- Progress ring (long-press) -->

@@ -118,7 +118,8 @@
       const data = await res.json();
 
       if (!res.ok) {
-        error = data.error || `HTTP ${res.status}: ${res.statusText}`;
+        const errMsg = data.error;
+        error = typeof errMsg === 'string' ? errMsg : `HTTP ${res.status}: ${res.statusText}`;
         dispatch('error', { message: error });
         console.error('ConversationPanel: Server error', data);
         return;
@@ -128,8 +129,10 @@
         sections = data.sections || [];
         conversations = data.conversations || [];
         stats = data.stats || { total_conversations: 0, total_messages: 0, active_today: 0 };
+        error = null; // Clear any previous error
       } else {
-        error = data.message || data.error || 'Error al cargar';
+        const errMsg = data.message || data.error;
+        error = typeof errMsg === 'string' ? errMsg : 'Error al cargar';
         dispatch('error', { message: error });
       }
     } catch (err) {

@@ -102,8 +102,7 @@
         presets = data.presets || [];
         stats = data.stats || { total_prompts: 0, total_presets: 0, by_slot: {} };
       } else {
-        const errMsg = typeof data.error === 'string' ? data.error : (data.message || 'Error al cargar');
-        error = errMsg;
+        error = data.message || data.error || 'Error al cargar';
       }
     } catch (err) {
       error = 'No se pudo conectar con el servidor';
@@ -144,8 +143,8 @@
         panelMode = 'list';
         resetPromptForm();
       } else {
-        const errMsg = typeof data.error === 'string' ? data.error : (data.message || JSON.stringify(data.error) || 'Error al guardar');
-        error = errMsg;
+        // Backend devuelve { error: 'CODE', message: 'texto' }
+        error = data.message || data.error || 'Error al guardar';
       }
     } catch (err) {
       error = 'Error de conexión al guardar';
@@ -164,7 +163,7 @@
       if (data.success) {
         await loadUIState();
       } else {
-        error = data.error || 'Error al eliminar';
+        error = data.message || data.error || 'Error al eliminar';
       }
     } catch (err) {
       error = 'Error de conexión al eliminar';
@@ -206,7 +205,7 @@
         panelMode = 'list';
         resetPresetForm();
       } else {
-        error = data.error || 'Error al guardar preset';
+        error = data.message || data.error || 'Error al guardar preset';
       }
     } catch (err) {
       error = 'Error de conexión';
@@ -224,7 +223,7 @@
       if (data.success) {
         await loadUIState();
       } else {
-        error = data.error || 'Error al eliminar preset';
+        error = data.message || data.error || 'Error al eliminar preset';
       }
     } catch (err) {
       error = 'Error de conexión';

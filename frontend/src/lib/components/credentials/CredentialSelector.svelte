@@ -7,12 +7,15 @@
    * - Doble tap: Añadir nueva credencial
    *
    * Icono muestra contador (activas/total proveedores)
+   *
+   * Conecta con: /api/modules/credential-manager/credentials
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
 
   // Props
   export let size: 'sm' | 'md' | 'lg' = 'md';
+  export let apiBase: string = '/api/modules/credential-manager';
 
   // Proveedores disponibles
   const providers = [
@@ -35,18 +38,17 @@
   // Estado
   let panelOpen = false;
   let panelMode: 'list' | 'add' | 'edit' = 'list';
+  let loading = false;
+  let error: string | null = null;
 
-  // Credenciales (mock inicial)
+  // Credenciales desde backend
   let credentials: Array<{
     key: string;
     provider: string;
     level: string;
     identifier: string | null;
     preview: string;
-  }> = [
-    { key: 'DEEPSEEK_API_KEY_GLOBAL', provider: 'DEEPSEEK', level: 'GLOBAL', identifier: null, preview: '****abc' },
-    { key: 'OPENAI_API_KEY_GLOBAL', provider: 'OPENAI', level: 'GLOBAL', identifier: null, preview: '****xyz' }
-  ];
+  }> = [];
 
   // Proyectos existentes (extraídos de credenciales)
   $: projects = [...new Set(
@@ -79,7 +81,112 @@
   const dispatch = createEventDispatcher<{
     save: { provider: string; level: string; identifier: string | null };
     delete: { key: string };
+    error: { message: string };
   }>();
+
+  // ==========================================
+  // API Functions - Conecta con .env via backend
+  // ==========================================
+
+  async function loadCredentials() {
+    loading = true;
+    error = null;
+    try {
+      const res = await fetch(`${apiBase}/credentials`);
+      const data = await res.json();
+
+      if (data.success && data.credentials) {
+        credentials = data.credentials.map((c: any) => ({
+          key: c.key,
+          provider: c.provider,
+          level: c.level,
+          identifier: c.identifier,
+          preview: c.api_key_preview || '****'
+        }));
+      } else {
+        error = data.error || 'Error al cargar credenciales';
+      }
+    } catch (err) {
+      error = 'No se pudo conectar con el servidor';
+      console.error('CredentialSelector: Error loading credentials', err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function apiSaveCredential() {
+    if (!newCredential.apiKey) return;
+
+    loading = true;
+    error = null;
+    try {
+      const res = await fetch(`${apiBase}/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: newCredential.provider,
+          level: newCredential.level,
+          identifier: newCredential.level !== 'GLOBAL' ? newCredential.identifier : null,
+          api_key: newCredential.apiKey
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // Recargar lista desde backend
+        await loadCredentials();
+
+        dispatch('save', {
+          provider: newCredential.provider,
+          level: newCredential.level,
+          identifier: newCredential.identifier || null
+        });
+
+        panelMode = 'list';
+        resetForm();
+      } else {
+        error = data.error || 'Error al guardar';
+      }
+    } catch (err) {
+      error = 'Error de conexión al guardar';
+      console.error('CredentialSelector: Error saving credential', err);
+      dispatch('error', { message: 'Error al guardar credencial' });
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function apiDeleteCredential(key: string) {
+    loading = true;
+    error = null;
+    try {
+      const res = await fetch(`${apiBase}/credentials/${encodeURIComponent(key)}`, {
+        method: 'DELETE'
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // Recargar lista desde backend
+        await loadCredentials();
+        dispatch('delete', { key });
+      } else {
+        error = data.error || 'Error al eliminar';
+      }
+    } catch (err) {
+      error = 'Error de conexión al eliminar';
+      console.error('CredentialSelector: Error deleting credential', err);
+      dispatch('error', { message: 'Error al eliminar credencial' });
+    } finally {
+      loading = false;
+    }
+  }
+
+  // Cargar credenciales al montar
+  onMount(() => {
+    loadCredentials();
+  });
 
   function clearTimers() {
     if (tapTimeout) clearTimeout(tapTimeout);
@@ -147,42 +254,14 @@
     editingKey = null;
   }
 
+  // Usa la API real para guardar en .env
   function saveCredential() {
-    if (!newCredential.apiKey) return;
-
-    const key = newCredential.level === 'GLOBAL'
-      ? `${newCredential.provider}_API_KEY_GLOBAL`
-      : `${newCredential.provider}_API_KEY_${newCredential.level}_${newCredential.identifier}`;
-
-    // Mock: añadir a la lista
-    const existing = credentials.findIndex(c => c.key === key);
-    const preview = '****' + newCredential.apiKey.slice(-4);
-
-    if (existing >= 0) {
-      credentials[existing].preview = preview;
-    } else {
-      credentials = [...credentials, {
-        key,
-        provider: newCredential.provider,
-        level: newCredential.level,
-        identifier: newCredential.identifier || null,
-        preview
-      }];
-    }
-
-    dispatch('save', {
-      provider: newCredential.provider,
-      level: newCredential.level,
-      identifier: newCredential.identifier || null
-    });
-
-    panelMode = 'list';
-    resetForm();
+    apiSaveCredential();
   }
 
+  // Usa la API real para eliminar de .env
   function deleteCredential(key: string) {
-    credentials = credentials.filter(c => c.key !== key);
-    dispatch('delete', { key });
+    apiDeleteCredential(key);
   }
 
   function getProviderIcon(providerId: string): string {
@@ -224,10 +303,21 @@
   {#if panelMode === 'list'}
     <!-- Lista de credenciales -->
     <div class="panel">
-      <h3>🔐 Credenciales</h3>
+      <div class="panel-header">
+        <h3>🔐 Credenciales</h3>
+        <button class="refresh-btn" on:click={loadCredentials} disabled={loading}>
+          {loading ? '⏳' : '🔄'}
+        </button>
+      </div>
 
-      {#if credentials.length === 0}
-        <p class="panel-empty">No hay credenciales configuradas</p>
+      {#if error}
+        <div class="panel-error">{error}</div>
+      {/if}
+
+      {#if loading && credentials.length === 0}
+        <p class="panel-loading">Cargando...</p>
+      {:else if credentials.length === 0}
+        <p class="panel-empty">No hay credenciales en .env</p>
       {:else}
         <!-- GLOBAL -->
         {#if grouped.GLOBAL.length > 0}
@@ -238,7 +328,9 @@
                 <span class="cred-icon">{getProviderIcon(cred.provider)}</span>
                 <span class="cred-name">{cred.provider}</span>
                 <span class="cred-preview">{cred.preview}</span>
-                <button class="cred-delete" on:click={() => deleteCredential(cred.key)}>🗑️</button>
+                <button class="cred-delete" on:click={() => deleteCredential(cred.key)} disabled={loading}>
+                  {loading ? '⏳' : '🗑️'}
+                </button>
               </div>
             {/each}
           </div>
@@ -253,7 +345,9 @@
                 <span class="cred-icon">{getProviderIcon(cred.provider)}</span>
                 <span class="cred-name">{cred.provider}</span>
                 <span class="cred-preview">{cred.preview}</span>
-                <button class="cred-delete" on:click={() => deleteCredential(cred.key)}>🗑️</button>
+                <button class="cred-delete" on:click={() => deleteCredential(cred.key)} disabled={loading}>
+                  {loading ? '⏳' : '🗑️'}
+                </button>
               </div>
             {/each}
           </div>
@@ -332,10 +426,18 @@
         />
       </div>
 
+      {#if error}
+        <div class="panel-error">{error}</div>
+      {/if}
+
       <div class="form-actions">
-        <button class="cancel-btn" on:click={() => panelMode = 'list'}>Cancelar</button>
-        <button class="save-btn" on:click={saveCredential}>💾 Guardar</button>
+        <button class="cancel-btn" on:click={() => { panelMode = 'list'; error = null; }}>Cancelar</button>
+        <button class="save-btn" on:click={saveCredential} disabled={loading || !newCredential.apiKey}>
+          {loading ? '⏳ Guardando...' : '💾 Guardar'}
+        </button>
       </div>
+
+      <p class="form-hint">⚠️ Se guarda en archivo .env del servidor</p>
     </div>
   {/if}
 </FloatingPanel>
@@ -382,15 +484,50 @@
     padding: 0.5rem;
   }
 
-  .panel h3 {
-    margin: 0 0 1rem;
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .panel-header h3 {
+    margin: 0;
     font-size: 1.1rem;
   }
 
-  .panel-empty {
+  .refresh-btn {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+
+  .refresh-btn:hover {
+    opacity: 1;
+  }
+
+  .refresh-btn:disabled {
+    cursor: not-allowed;
+  }
+
+  .panel-empty,
+  .panel-loading {
     text-align: center;
     color: #888;
     padding: 1rem;
+  }
+
+  .panel-error {
+    background: #fee2e2;
+    color: #dc2626;
+    padding: 0.5rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    margin-bottom: 0.75rem;
   }
 
   /* Grupos */
@@ -541,5 +678,17 @@
     border-radius: 8px;
     font-weight: bold;
     cursor: pointer;
+  }
+
+  .save-btn:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+  }
+
+  .form-hint {
+    margin-top: 0.75rem;
+    font-size: 0.7rem;
+    color: #888;
+    text-align: center;
   }
 </style>

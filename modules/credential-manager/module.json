@@ -399,6 +399,12 @@
       "description": "Get UI-ready state with providers, levels, and grouped credentials"
     },
     {
+      "method": "POST",
+      "path": "/ui/test",
+      "handler": "handleTestCredential",
+      "description": "Test if an API key is valid before saving"
+    },
+    {
       "method": "GET",
       "path": "/health",
       "handler": "handleHealthCheck",

@@ -111,8 +111,55 @@
     }
   }
 
+  // Estado del test
+  let testResult: { valid: boolean; message: string } | null = null;
+  let testing = false;
+
+  async function apiTestCredential(): Promise<boolean> {
+    if (!newCredential.apiKey || !newCredential.provider) return false;
+
+    testing = true;
+    testResult = null;
+    error = null;
+
+    try {
+      const res = await fetch(`${apiBase}/ui/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: newCredential.provider,
+          api_key: newCredential.apiKey
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        testResult = { valid: data.valid, message: data.message };
+        return data.valid;
+      } else {
+        testResult = { valid: false, message: data.error || 'Error al validar' };
+        return false;
+      }
+    } catch (err) {
+      testResult = { valid: false, message: 'Error de conexión al validar' };
+      console.error('CredentialSelector: Error testing credential', err);
+      return false;
+    } finally {
+      testing = false;
+    }
+  }
+
   async function apiSaveCredential() {
     if (!newCredential.apiKey) return;
+
+    // Primero validar la API key
+    const isValid = await apiTestCredential();
+
+    if (!isValid) {
+      error = testResult?.message || 'API key no válida';
+      return;
+    }
 
     loading = true;
     error = null;
@@ -249,6 +296,7 @@
       apiKey: ''
     };
     editingKey = null;
+    testResult = null;
   }
 
   // Usa la API real para guardar en .env
@@ -410,18 +458,31 @@
         />
       </div>
 
+      <!-- Test result feedback -->
+      {#if testResult}
+        <div class="test-result" class:valid={testResult.valid} class:invalid={!testResult.valid}>
+          {testResult.valid ? '✅' : '❌'} {testResult.message}
+        </div>
+      {/if}
+
       {#if error}
         <div class="panel-error">{error}</div>
       {/if}
 
       <div class="form-actions">
-        <button class="cancel-btn" on:click={() => { panelMode = 'list'; error = null; }}>Cancelar</button>
-        <button class="save-btn" on:click={saveCredential} disabled={loading || !newCredential.apiKey}>
-          {loading ? '⏳ Guardando...' : '💾 Guardar'}
+        <button class="cancel-btn" on:click={() => { panelMode = 'list'; error = null; testResult = null; }}>Cancelar</button>
+        <button class="save-btn" on:click={saveCredential} disabled={loading || testing || !newCredential.apiKey}>
+          {#if testing}
+            🔍 Validando...
+          {:else if loading}
+            ⏳ Guardando...
+          {:else}
+            💾 Guardar
+          {/if}
         </button>
       </div>
 
-      <p class="form-hint">⚠️ Se guarda en archivo .env del servidor</p>
+      <p class="form-hint">⚠️ Se valida y guarda en archivo .env del servidor</p>
     </div>
   {/if}
 </FloatingPanel>
@@ -512,6 +573,25 @@
     border-radius: 6px;
     font-size: 0.8rem;
     margin-bottom: 0.75rem;
+  }
+
+  /* Test result */
+  .test-result {
+    padding: 0.5rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    margin-bottom: 0.75rem;
+    text-align: center;
+  }
+
+  .test-result.valid {
+    background: #dcfce7;
+    color: #16a34a;
+  }
+
+  .test-result.invalid {
+    background: #fee2e2;
+    color: #dc2626;
   }
 
   /* Grupos */

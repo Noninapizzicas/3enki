@@ -153,7 +153,10 @@ class ConversationManagerModule {
       // database-manager sends 'data', fallback to 'rows' for compatibility
       pending.resolve(data || rows || []);
     } else {
-      pending.reject(new Error(error || 'Database query failed'));
+      // Ensure error message is a string
+      const errorMsg = typeof error === 'string' ? error
+        : (error?.message || JSON.stringify(error) || 'Database query failed');
+      pending.reject(new Error(errorMsg));
     }
   }
 

@@ -8,10 +8,11 @@
 
 ## Módulos Analizados
 
-| Módulo | Fecha | Estado |
-|--------|-------|--------|
-| ai-gateway | 2025-12-07 | ✅ Analizado |
-| credential-manager | 2025-12-08 | ✅ Analizado |
+| Módulo | Fecha | Estado | Componente UI |
+|--------|-------|--------|---------------|
+| ai-gateway | 2025-12-07 | ✅ Analizado | AISelector |
+| credential-manager | 2025-12-08 | ✅ Analizado | CredentialSelector |
+| prompt-manager | 2025-12-08 | ✅ Analizado | SlotSelector |
 
 ---
 
@@ -45,6 +46,7 @@ GET /recurso?filtro=valor → { items: [] }
 - `ai-gateway: GET /usage?provider=deepseek` → Stats filtradas
 - `credential-manager: GET /credentials?level=GLOBAL` → Credenciales filtradas por nivel
 - `credential-manager: GET /credentials/resolve?provider=deepseek` → Resolver por cascada
+- `prompt-manager: GET /prompts?slot_type=system&tag=ai&search=code` → Prompts filtrados por slot, tag y búsqueda
 
 ---
 
@@ -111,6 +113,7 @@ POST /accion { campo1, campo2, campo3, ... } → { result }
 **Ejemplos:**
 - `ai-gateway: POST /chat { messages, provider, model, temperature, max_tokens }`
 - `credential-manager: POST /credentials { provider, level, identifier, api_key }`
+- `prompt-manager: POST /prompts { name, title, description, slot_type, content, variables, tags }`
 
 ---
 
@@ -124,6 +127,7 @@ GET /recurso → { items: [], grouped_by: "campo" }
 
 **Ejemplos:**
 - `credential-manager: GET /credentials` → Lista agrupada por `level` (GLOBAL, PROJECT, etc.)
+- `prompt-manager: GET /ui/state` → Prompts agrupados por `slot_type` (system, context, prefix, suffix, format)
 
 ---
 
@@ -137,6 +141,8 @@ DELETE /recurso/:id → { success, deleted }
 
 **Ejemplos:**
 - `credential-manager: DELETE /credentials/:key` → Eliminar credencial específica
+- `prompt-manager: DELETE /prompts/:id` → Eliminar prompt
+- `prompt-manager: DELETE /presets/:id` → Eliminar preset
 
 ---
 
@@ -150,6 +156,76 @@ PUT /recurso/:id { campo } → { success, updated }
 
 **Ejemplos:**
 - `credential-manager: PUT /credentials/:key { api_key }` → Actualizar API key
+- `prompt-manager: PUT /prompts/:id { title, content, slot_type }` → Actualizar prompt (con versionado automático si cambia content)
+
+---
+
+### Patrón 11: UI-Ready con Múltiples Estructuras
+
+```
+GET /ui/state → {
+  categorias: [],
+  itemsPorCategoria: Record<cat, items[]>,
+  relacionados: [],
+  stats: {}
+}
+```
+
+**UI:** Panel completo con filtros + lista agrupada + chips relacionados + stats
+
+**Ejemplos:**
+- `prompt-manager: GET /ui/state` → `{ slotTypes[], promptsBySlot: Record<slot, prompts[]>, presets[], stats }`
+
+**Componente:** SlotSelector usa este patrón para:
+- Filtros de slot_type (tabs)
+- Lista agrupada de prompts
+- Chips de presets para selección rápida
+- Badge con total_prompts
+
+---
+
+### Patrón 12: CRUD con Relaciones M:N
+
+```
+POST /recurso { name, relaciones: Record<categoria, ids[]> } → { success, recurso }
+GET /recurso/:id → { recurso, relaciones: Record<categoria, ids[]> }
+```
+
+**UI:** Formulario con selección múltiple por categoría
+
+**Ejemplos:**
+- `prompt-manager: POST /presets { name, description, slots: { system: [id1], context: [id2, id3] } }`
+- `prompt-manager: GET /presets/:id` → Devuelve preset con slots poblados
+
+**Componente:** SlotSelector - modo "presets" muestra checkboxes agrupados por slot_type
+
+---
+
+### Patrón 13: Renderizado/Preview
+
+```
+POST /recurso/:id/render { variables } → { rendered, variables_used }
+```
+
+**UI:** Preview con inputs para variables dinámicas
+
+**Ejemplos:**
+- `prompt-manager: POST /prompts/:id/render { variables: { nombre: "Juan" } }` → `{ rendered: "Hola Juan..." }`
+
+---
+
+### Patrón 14: Versionado Automático
+
+```
+PUT /recurso/:id { content } → { success, version }
+GET /recurso/:id/versions → { versions: [{ version, content, created_at }] }
+```
+
+**UI:** Historial de versiones con diff/rollback
+
+**Ejemplos:**
+- `prompt-manager: PUT /prompts/:id` → Auto-bump version si cambia content
+- `prompt-manager: GET /prompts/:id/versions` → Lista de versiones del prompt
 
 ---
 
@@ -165,8 +241,12 @@ PUT /recurso/:id { campo } → { success, updated }
 | 6 | `POST` | `{ selection }` | `{ current }` | onClick en lista |
 | 7 | `POST` | `{ múltiples }` | `{ result }` | ActionForm |
 | 8 | `GET` | ninguno | `{ items[], grouped }` | GroupedList |
-| 9 | `DELETE` | `/:id` | `{ success }` | Button eliminar |
+| 9 | `DELETE` | `/:id` | `{ success }` | Button eliminar + confirmación |
 | 10 | `PUT` | `/:id { campo }` | `{ success }` | EditForm / InlineEdit |
+| 11 | `GET` | `/ui/state` | `{ cats[], itemsByCat, related[], stats }` | Panel completo con filtros |
+| 12 | `POST` | `{ relaciones: Record<cat,ids[]> }` | `{ success }` | Checkboxes por categoría |
+| 13 | `POST` | `/:id/render { vars }` | `{ rendered }` | Preview con variables |
+| 14 | `PUT/GET` | `/:id/versions` | `{ versions[] }` | Historial con rollback |
 
 ---
 
@@ -187,9 +267,8 @@ PUT /recurso/:id { campo } → { success, updated }
 ## Próximos Módulos a Analizar
 
 - [x] credential-manager ✅
-- [ ] prompt-manager
+- [x] prompt-manager ✅
 - [ ] conversation-manager
-- [ ] plugin-manager
 - [ ] storage-manager
 - [ ] project-manager
 

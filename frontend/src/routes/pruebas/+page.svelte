@@ -4,6 +4,7 @@
    */
   import { AISelector } from '$components/ai';
   import { CredentialSelector } from '$components/credentials';
+  import { SlotSelector } from '$components/prompts';
 
   let log: string[] = [];
 
@@ -27,6 +28,15 @@
 
   function handleCredDelete(e: CustomEvent) {
     addLog(`🔐 Eliminado: ${e.detail.key}`);
+  }
+
+  // SlotSelector events
+  function handlePromptSave(e: CustomEvent) {
+    addLog(`📝 Prompt guardado: ${e.detail.prompt.name}`);
+  }
+
+  function handlePresetSelect(e: CustomEvent) {
+    addLog(`📦 Preset aplicado: ${e.detail.presetId}`);
   }
 </script>
 
@@ -59,6 +69,20 @@
         on:delete={handleCredDelete}
       />
       <div class="selector-label">CredentialSelector</div>
+    </div>
+
+    <div class="selector-card">
+      <div class="selector-info">
+        <span>Tap: Ver slots</span>
+        <span>2x Tap: Añadir</span>
+        <span>Mantener: Presets</span>
+      </div>
+      <SlotSelector
+        size="lg"
+        on:save={handlePromptSave}
+        on:presetSelect={handlePresetSelect}
+      />
+      <div class="selector-label">SlotSelector</div>
     </div>
   </div>
 

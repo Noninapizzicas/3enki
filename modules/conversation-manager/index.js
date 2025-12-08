@@ -139,7 +139,9 @@ class ConversationManagerModule {
   }
 
   async onDbQueryResponse(event) {
-    const { request_id, success, data, rows, error } = event;
+    // Handle both wrapped (event.data) and unwrapped event formats
+    const eventData = event.data || event;
+    const { request_id, success, data, rows, error } = eventData;
 
     const pending = this.pendingDbRequests.get(request_id);
     if (!pending) return;

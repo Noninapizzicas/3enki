@@ -1266,8 +1266,12 @@ class ConversationManagerModule {
         }
       });
     } catch (error) {
-      this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to get UI state');
-      res.status(500).json({ success: false, error: error.message });
+      this.logger.error({ correlationId, error: error.message, stack: error.stack }, 'HTTP: Failed to get UI state');
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        details: 'Check server logs for more info'
+      });
     }
   }
 

@@ -1,320 +1,287 @@
 <script lang="ts">
   /**
-   * Página de Pruebas - ToolbarIcon con triple interacción
-   *
-   * INTERACCIONES:
-   * - 1 tap: Abre panel de selección
-   * - 2 taps: Cambio rápido (cicla modelos)
-   * - Long press: Panel de configuración
+   * PRUEBA DIRECTA - Botón con 3 interacciones
+   * Sin componentes externos, lógica inline
    */
-  import { ToolbarIcon } from '$components/toolbar';
   import { FloatingPanel } from '$components/feedback';
 
-  // Estado del panel
+  // Config
+  const TAP_DELAY = 300;
+  const LONG_PRESS_TIME = 500;
+
+  // Estado
   let panelOpen = false;
   let panelMode: 'select' | 'config' = 'select';
+  let log: string[] = [];
 
-  // Modelos mock (sin backend)
-  const mockModels = [
-    { id: 'auto', name: 'Auto', icon: '⚡', provider: 'auto' },
-    { id: 'deepseek-chat', name: 'DeepSeek', icon: '🔮', provider: 'deepseek' },
-    { id: 'claude-3-5-sonnet', name: 'Claude', icon: '🧠', provider: 'anthropic' },
-    { id: 'gpt-4o', name: 'GPT-4o', icon: '🤖', provider: 'openai' },
-    { id: 'llama2', name: 'Llama 2', icon: '🦙', provider: 'ollama' }
+  // Modelos
+  const models = [
+    { id: 'auto', name: 'Auto', icon: '⚡' },
+    { id: 'deepseek', name: 'DeepSeek', icon: '🔮' },
+    { id: 'claude', name: 'Claude', icon: '🧠' },
+    { id: 'gpt4', name: 'GPT-4', icon: '🤖' }
   ];
+  let currentIdx = 0;
+  $: current = models[currentIdx];
 
-  let currentIndex = 0;
-  $: currentModel = mockModels[currentIndex];
+  // Timers
+  let tapTimeout: number | null = null;
+  let longPressTimeout: number | null = null;
+  let tapCount = 0;
+  let isLongPress = false;
 
-  // Log de acciones
-  let actionLog: string[] = [];
-
-  function logAction(action: string) {
-    const time = new Date().toLocaleTimeString();
-    actionLog = [`[${time}] ${action}`, ...actionLog.slice(0, 9)];
+  function addLog(msg: string) {
+    log = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...log.slice(0, 9)];
   }
 
-  // Handlers
-  function handleTap() {
-    logAction('TAP → Abrir selector');
+  function clearTimers() {
+    if (tapTimeout) clearTimeout(tapTimeout);
+    if (longPressTimeout) clearTimeout(longPressTimeout);
+    tapTimeout = null;
+    longPressTimeout = null;
+  }
+
+  // === ACCIONES ===
+  function doTap() {
+    addLog('TAP → Abrir selector');
     panelMode = 'select';
     panelOpen = true;
   }
 
-  function handleDoubleTap() {
-    currentIndex = (currentIndex + 1) % mockModels.length;
-    logAction(`DOBLE TAP → ${currentModel.name}`);
+  function doDoubleTap() {
+    currentIdx = (currentIdx + 1) % models.length;
+    addLog(`DOBLE TAP → ${models[currentIdx].name}`);
   }
 
-  function handleLongPress() {
-    logAction('LONG PRESS → Config');
+  function doLongPress() {
+    addLog('LONG PRESS → Config');
     panelMode = 'config';
     panelOpen = true;
   }
 
-  function selectModel(index: number) {
-    currentIndex = index;
-    logAction(`SELECCIÓN → ${mockModels[index].name}`);
+  // === EVENTOS TOUCH ===
+  function onTouchStart(e: TouchEvent) {
+    e.preventDefault();
+    isLongPress = false;
+
+    // Iniciar timer de long press
+    longPressTimeout = window.setTimeout(() => {
+      isLongPress = true;
+      clearTimers();
+      doLongPress();
+    }, LONG_PRESS_TIME);
+  }
+
+  function onTouchEnd(e: TouchEvent) {
+    e.preventDefault();
+
+    // Si fue long press, ya se ejecutó
+    if (isLongPress) {
+      isLongPress = false;
+      return;
+    }
+
+    clearTimers();
+    tapCount++;
+
+    if (tapCount === 1) {
+      // Esperar por posible doble tap
+      tapTimeout = window.setTimeout(() => {
+        if (tapCount === 1) {
+          doTap();
+        }
+        tapCount = 0;
+      }, TAP_DELAY);
+    } else if (tapCount >= 2) {
+      clearTimers();
+      doDoubleTap();
+      tapCount = 0;
+    }
+  }
+
+  function onTouchCancel() {
+    clearTimers();
+    tapCount = 0;
+    isLongPress = false;
+  }
+
+  function selectModel(idx: number) {
+    currentIdx = idx;
+    addLog(`Seleccionado: ${models[idx].name}`);
     panelOpen = false;
   }
 </script>
 
-<svelte:head>
-  <title>Pruebas | Event Core</title>
-</svelte:head>
+<div class="page">
+  <h1>Pruebas</h1>
 
-<div class="pruebas">
-  <header class="pruebas__header">
-    <h1>Pruebas de Componentes</h1>
-  </header>
+  <div class="info">
+    <span>1 tap: Lista</span>
+    <span>2 taps: Siguiente</span>
+    <span>Mantener: Config</span>
+  </div>
 
-  <main class="pruebas__content">
-    <!-- Instrucciones -->
-    <section class="pruebas__section pruebas__section--info">
-      <p><strong>1 tap:</strong> Abrir lista</p>
-      <p><strong>2 taps:</strong> Siguiente modelo</p>
-      <p><strong>Mantener:</strong> Config</p>
-    </section>
+  <!-- BOTÓN -->
+  <div class="btn-container">
+    <button
+      class="btn"
+      on:touchstart={onTouchStart}
+      on:touchend={onTouchEnd}
+      on:touchcancel={onTouchCancel}
+    >
+      <span class="btn-icon">{current.icon}</span>
+      <span class="btn-label">{current.name}</span>
+    </button>
+  </div>
 
-    <!-- Botón -->
-    <section class="pruebas__section">
-      <h2>ToolbarIcon</h2>
-      <div class="pruebas__toolbar">
-        <ToolbarIcon
-          id="model-selector"
-          icon={currentModel.icon}
-          displayValue={currentModel.name}
-          active={panelOpen}
-          on:tap={handleTap}
-          on:doubleTap={handleDoubleTap}
-          on:longPress={handleLongPress}
-        />
-      </div>
+  <div class="current">
+    Actual: {current.icon} {current.name}
+  </div>
 
-      <div class="pruebas__status">
-        <span>{currentModel.icon}</span>
-        <strong>{currentModel.name}</strong>
-        <code>({currentModel.provider})</code>
-      </div>
-    </section>
-
-    <!-- Log -->
-    <section class="pruebas__section">
-      <h2>Log</h2>
-      <div class="pruebas__log">
-        {#if actionLog.length === 0}
-          <p class="pruebas__log-empty">Toca el botón...</p>
-        {:else}
-          {#each actionLog as log}
-            <div class="pruebas__log-item">{log}</div>
-          {/each}
-        {/if}
-      </div>
-    </section>
-  </main>
+  <!-- LOG -->
+  <div class="log">
+    <h2>Log</h2>
+    {#each log as entry}
+      <div class="log-item">{entry}</div>
+    {:else}
+      <div class="log-empty">Toca el botón...</div>
+    {/each}
+  </div>
 </div>
 
-<!-- Panel flotante -->
-<FloatingPanel bind:open={panelOpen} on:close={() => panelOpen = false}>
+<!-- PANEL -->
+<FloatingPanel bind:open={panelOpen}>
   {#if panelMode === 'select'}
-    <div class="select-panel">
-      <h3>Seleccionar Modelo</h3>
-      <div class="select-panel__list">
-        {#each mockModels as model, i}
-          <button
-            class="select-panel__item"
-            class:select-panel__item--active={i === currentIndex}
-            on:click={() => selectModel(i)}
-          >
-            <span class="select-panel__icon">{model.icon}</span>
-            <span class="select-panel__name">{model.name}</span>
-            {#if i === currentIndex}
-              <span class="select-panel__check">✓</span>
-            {/if}
-          </button>
-        {/each}
-      </div>
+    <div class="panel">
+      <h3>Seleccionar</h3>
+      {#each models as m, i}
+        <button
+          class="panel-item"
+          class:active={i === currentIdx}
+          on:click={() => selectModel(i)}
+        >
+          {m.icon} {m.name}
+        </button>
+      {/each}
     </div>
   {:else}
-    <div class="config-panel">
-      <h3>⚙️ Configuración</h3>
-      <p>Opciones avanzadas aquí</p>
-      <button class="config-panel__close" on:click={() => panelOpen = false}>
-        Cerrar
-      </button>
+    <div class="panel">
+      <h3>⚙️ Config</h3>
+      <p>Opciones aquí</p>
+      <button on:click={() => panelOpen = false}>Cerrar</button>
     </div>
   {/if}
 </FloatingPanel>
 
 <style>
-  .pruebas {
+  .page {
     min-height: 100vh;
-    background: #1a1a2e;
-    color: #eee;
-  }
-
-  .pruebas__header {
     padding: 1rem;
-    background: #16213e;
-    border-bottom: 1px solid #0f3460;
+    background: #111;
+    color: #fff;
   }
 
-  .pruebas__header h1 {
-    margin: 0;
-    font-size: 1.25rem;
-  }
+  h1 { margin: 0 0 1rem; font-size: 1.5rem; }
+  h2 { margin: 0 0 0.5rem; font-size: 1rem; color: #888; }
 
-  .pruebas__content {
-    padding: 1rem;
-  }
-
-  .pruebas__section {
-    background: #16213e;
-    border-radius: 12px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-  }
-
-  .pruebas__section--info {
+  .info {
     display: flex;
-    gap: 1rem;
-    font-size: 0.75rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    font-size: 0.75rem;
   }
-
-  .pruebas__section--info p {
-    margin: 0;
-    padding: 0.5rem 0.75rem;
-    background: #0f3460;
+  .info span {
+    padding: 0.5rem;
+    background: #222;
     border-radius: 6px;
   }
 
-  .pruebas__section h2 {
-    margin: 0 0 0.75rem 0;
-    font-size: 0.875rem;
-    color: #888;
-  }
-
-  .pruebas__toolbar {
+  .btn-container {
     display: flex;
     justify-content: center;
     padding: 2rem;
-    background: #0f1729;
-    border-radius: 8px;
-
-    --icon-size: 72px;
-    --icon-font-size: 2rem;
-    --icon-radius: 16px;
-    --icon-bg: #16213e;
-    --icon-bg-hover: #1e3a5f;
-    --icon-bg-active: #3b82f6;
+    background: #1a1a1a;
+    border-radius: 12px;
+    margin-bottom: 1rem;
   }
 
-  .pruebas__status {
+  .btn {
+    width: 80px;
+    height: 80px;
+    border: none;
+    border-radius: 16px;
+    background: #333;
+    color: #fff;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    margin-top: 1rem;
+    gap: 4px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .btn:active {
+    background: #3b82f6;
+    transform: scale(0.95);
+  }
+
+  .btn-icon { font-size: 2rem; }
+  .btn-label { font-size: 0.7rem; }
+
+  .current {
+    text-align: center;
     padding: 0.75rem;
-    background: #0f1729;
+    background: #1a1a1a;
     border-radius: 8px;
-    font-size: 1rem;
+    margin-bottom: 1rem;
   }
 
-  .pruebas__status code {
-    font-size: 0.75rem;
-    color: #888;
-  }
-
-  .pruebas__log {
-    font-family: monospace;
-    font-size: 0.75rem;
+  .log {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 1rem;
     max-height: 200px;
     overflow-y: auto;
   }
 
-  .pruebas__log-empty {
+  .log-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid #333;
+    font-family: monospace;
+    font-size: 0.75rem;
+  }
+
+  .log-empty {
     color: #666;
     text-align: center;
-    padding: 1rem;
-    margin: 0;
   }
 
-  .pruebas__log-item {
-    padding: 0.5rem;
-    border-bottom: 1px solid #0f3460;
-  }
-
-  /* Panel de selección */
-  .select-panel {
-    min-width: 280px;
-  }
-
-  .select-panel h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
-  }
-
-  .select-panel__list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .select-panel__item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    background: #f3f4f6;
-    border: 2px solid transparent;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .select-panel__item:hover {
-    background: #e5e7eb;
-  }
-
-  .select-panel__item--active {
-    border-color: #3b82f6;
-    background: #eff6ff;
-  }
-
-  .select-panel__icon {
-    font-size: 1.5rem;
-  }
-
-  .select-panel__name {
-    flex: 1;
-    font-weight: 500;
-    color: #111;
-  }
-
-  .select-panel__check {
-    color: #3b82f6;
-    font-weight: bold;
-  }
-
-  /* Config panel */
-  .config-panel {
+  /* Panel */
+  .panel {
     min-width: 250px;
     padding: 0.5rem;
   }
+  .panel h3 { margin: 0 0 1rem; }
 
-  .config-panel h3 {
-    margin: 0 0 0.5rem 0;
-  }
-
-  .config-panel__close {
-    margin-top: 1rem;
-    padding: 0.5rem 1rem;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 6px;
+  .panel-item {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: #f0f0f0;
+    color: #111;
+    font-size: 1rem;
+    text-align: left;
     cursor: pointer;
+  }
+  .panel-item.active {
+    border-color: #3b82f6;
+    background: #e0f0ff;
   }
 </style>

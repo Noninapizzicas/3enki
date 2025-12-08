@@ -98,6 +98,18 @@ const EVENTS = {
     OBTENER: 'cuenta.obtener',
   },
 
+  // === DB ===
+  DB: {
+    CREATED: 'db.created',
+    DELETED: 'db.deleted',
+    QUERY_EXECUTED: 'db.query.executed',
+    QUERY_REQUEST: 'db.query.request',
+    QUERY_RESPONSE: 'db.query.response',
+    SCHEMA_INIT_REQUEST: 'db.schema.init.request',
+    SCHEMA_INIT_RESPONSE: 'db.schema.init.response',
+    SCHEMA_INITIALIZED: 'db.schema.initialized',
+  },
+
   // === DIA ===
   DIA: {
     INICIADO: 'dia.iniciado',

@@ -141,12 +141,12 @@ class DatabaseManagerModule {
     );
 
     await this.eventBus.subscribe(
-      'db.schema.init.request',
+      EVENTS.DB.SCHEMA_INIT_REQUEST,
       this.onSchemaInitRequest.bind(this)
     );
 
     this.logger.info('events.subscribed', {
-      events: [EVENTS.DB.QUERY_REQUEST, 'db.schema.init.request']
+      events: [EVENTS.DB.QUERY_REQUEST, EVENTS.DB.SCHEMA_INIT_REQUEST]
     });
   }
 
@@ -861,7 +861,7 @@ class DatabaseManagerModule {
   }
 
   async publishSchemaInitResponse(projectId, requestId, success, error, correlationId) {
-    await this.eventBus.publish('db.schema.init.response', {
+    await this.eventBus.publish(EVENTS.DB.SCHEMA_INIT_RESPONSE, {
       project_id: projectId,
       request_id: requestId,
       success,

@@ -83,13 +83,15 @@ function moduleToDomain(moduleName) {
 /**
  * Extrae el dominio del nombre del evento
  * 'tool.call.request' -> 'TOOL'
+ * 'menu-generator.conversation.created' -> 'MENU_GENERATOR'
  */
 function getDomainFromEvent(eventName) {
   const domain = eventName.split('.')[0];
   // Evitar dominios inválidos como identificadores JS
   if (domain === '*') return 'WILDCARD';
   if (/^\d/.test(domain)) return '_' + domain.toUpperCase();
-  return domain.toUpperCase();
+  // Convert hyphens to underscores for valid JS identifiers
+  return domain.replace(/-/g, '_').toUpperCase();
 }
 
 /**

@@ -20,10 +20,17 @@
 const EVENTS = {
   // === AI ===
   AI: {
+    CHAT_REQUEST: 'ai.chat.request',
+    CHAT_RESPONSE: 'ai.chat.response',
+    COMPLETION_COMPLETED: 'ai.completion.completed',
     ERROR: 'ai.error',
+    GENERATE_REQUEST: 'ai.generate.request',
+    GENERATE_RESPONSE: 'ai.generate.response',
     PROVIDERS: 'ai.providers',
     REQUEST: 'ai.request',
     RESPONSE: 'ai.response',
+    RESPONSE_FAILED: 'ai.response.failed',
+    RESPONSE_GENERATED: 'ai.response.generated',
     USAGE: 'ai.usage',
   },
 
@@ -51,6 +58,16 @@ const EVENTS = {
     ORDEN_ACTUALIZADO: 'categoria.orden_actualizado',
   },
 
+  // === CHAT ===
+  CHAT: {
+    CONVERSATION_CREATED: 'chat.conversation.created',
+    CONVERSATION_DELETED: 'chat.conversation.deleted',
+    MESSAGE_AI_RECEIVED: 'chat.message.ai.received',
+    MESSAGE_SENT: 'chat.message.sent',
+    SEND_REQUEST: 'chat.send.request',
+    SEND_RESPONSE: 'chat.send.response',
+  },
+
   // === COBRO ===
   COBRO: {
     COMPLETADO: 'cobro.completado',
@@ -69,6 +86,20 @@ const EVENTS = {
     HISTORIAL: 'cocina.historial',
     ITEM_PREPARADO: 'cocina.item_preparado',
     PEDIDO_LISTO: 'cocina.pedido_listo',
+  },
+
+  // === CONVERSATION ===
+  CONVERSATION: {
+    CONTEXT_LOADED: 'conversation.context.loaded',
+    CREATED: 'conversation.created',
+    DELETED: 'conversation.deleted',
+    GET_REQUEST: 'conversation.get.request',
+    GET_RESPONSE: 'conversation.get.response',
+    LIST_REQUEST: 'conversation.list.request',
+    LIST_RESPONSE: 'conversation.list.response',
+    SEND_REQUEST: 'conversation.send.request',
+    SEND_RESPONSE: 'conversation.send.response',
+    UPDATED: 'conversation.updated',
   },
 
   // === CONVERSATIONS ===
@@ -105,14 +136,24 @@ const EVENTS = {
     QUERY_EXECUTED: 'db.query.executed',
     QUERY_REQUEST: 'db.query.request',
     QUERY_RESPONSE: 'db.query.response',
+    SCHEMA_INITIALIZED: 'db.schema.initialized',
     SCHEMA_INIT_REQUEST: 'db.schema.init.request',
     SCHEMA_INIT_RESPONSE: 'db.schema.init.response',
-    SCHEMA_INITIALIZED: 'db.schema.initialized',
   },
 
   // === DIA ===
   DIA: {
     INICIADO: 'dia.iniciado',
+  },
+
+  // === FILE ===
+  FILE: {
+    DELETED: 'file.deleted',
+    GET_REQUEST: 'file.get.request',
+    GET_RESPONSE: 'file.get.response',
+    LIST_REQUEST: 'file.list.request',
+    LIST_RESPONSE: 'file.list.response',
+    UPLOADED: 'file.uploaded',
   },
 
   // === FUNCTION ===
@@ -155,11 +196,12 @@ const EVENTS = {
     VALIDADO: 'menu.validado',
   },
 
-  // === MENU-GENERATOR ===
+  // === MENU_GENERATOR ===
   MENU_GENERATOR: {
     CONVERSATION_CREATED: 'menu-generator.conversation.created',
     MENU_CREATED: 'menu-generator.menu.created',
     MENU_EXPORTED: 'menu-generator.menu.exported',
+    MENU_EXPORTED_POS: 'menu-generator.menu.exported_pos',
     MESSAGE_RECEIVED: 'menu-generator.message.received',
     MESSAGE_SENT: 'menu-generator.message.sent',
   },
@@ -175,6 +217,14 @@ const EVENTS = {
   MESAS: {
     DISPONIBLES: 'mesas.disponibles',
     OCUPADAS: 'mesas.ocupadas',
+  },
+
+  // === MESSAGE ===
+  MESSAGE: {
+    LIST_REQUEST: 'message.list.request',
+    LIST_RESPONSE: 'message.list.response',
+    RECEIVED: 'message.received',
+    SENT: 'message.sent',
   },
 
   // === METRICAS ===
@@ -228,6 +278,14 @@ const EVENTS = {
     UNLOADED: 'plugin.unloaded',
   },
 
+  // === POS ===
+  POS: {
+    CATEGORIAS_IMPORT: 'pos.categorias.import',
+    INGREDIENTES_IMPORT: 'pos.ingredientes.import',
+    PRODUCTOS_IMPORT: 'pos.productos.import',
+    VARIACIONES_IMPORT: 'pos.variaciones.import',
+  },
+
   // === PRODUCTO ===
   PRODUCTO: {
     ACTUALIZADO: 'producto.actualizado',
@@ -236,6 +294,59 @@ const EVENTS = {
     ELIMINADO: 'producto.eliminado',
     LISTAR: 'producto.listar',
     OBTENER: 'producto.obtener',
+  },
+
+  // === PROJECT ===
+  PROJECT: {
+    ACTIVATED: 'project.activated',
+    ACTIVE_REQUEST: 'project.active.request',
+    ACTIVE_RESPONSE: 'project.active.response',
+    CREATED: 'project.created',
+    DEACTIVATED: 'project.deactivated',
+    DELETED: 'project.deleted',
+    GET_REQUEST: 'project.get.request',
+    GET_RESPONSE: 'project.get.response',
+    LIST_REQUEST: 'project.list.request',
+    LIST_RESPONSE: 'project.list.response',
+    UPDATED: 'project.updated',
+  },
+
+  // === SCRATCH ===
+  SCRATCH: {
+    DESIGN_CREATED: 'scratch.design.created',
+    DESIGN_DELETED: 'scratch.design.deleted',
+    DESIGN_EXPORTED: 'scratch.design.exported',
+    DESIGN_UPDATED: 'scratch.design.updated',
+  },
+
+  // === SECURITY ===
+  SECURITY: {
+    DECRYPT_REQUEST: 'security.decrypt.request',
+    DECRYPT_RESPONSE: 'security.decrypt.response',
+    ENCRYPT_REQUEST: 'security.encrypt.request',
+    ENCRYPT_RESPONSE: 'security.encrypt.response',
+    KEYPAIR_GENERATED: 'security.keypair.generated',
+    KEYPAIR_GET_REQUEST: 'security.keypair.get.request',
+    KEYPAIR_GET_RESPONSE: 'security.keypair.get.response',
+    MESSAGE_DECRYPTED: 'security.message.decrypted',
+    MESSAGE_ENCRYPTED: 'security.message.encrypted',
+    PEER_AUTHENTICATED: 'security.peer.authenticated',
+    PEER_REVOKED: 'security.peer.revoked',
+    PEER_VERIFY_REQUEST: 'security.peer.verify.request',
+    PEER_VERIFY_RESPONSE: 'security.peer.verify.response',
+    SESSION_CREATE_REQUEST: 'security.session.create.request',
+    SESSION_CREATE_RESPONSE: 'security.session.create.response',
+    SESSION_ESTABLISHED: 'security.session.established',
+    SESSION_TERMINATED: 'security.session.terminated',
+  },
+
+  // === STORAGE ===
+  STORAGE: {
+    CLEANED: 'storage.cleaned',
+    CREATED: 'storage.created',
+    DELETED: 'storage.deleted',
+    INFO_REQUEST: 'storage.info.request',
+    INFO_RESPONSE: 'storage.info.response',
   },
 
   // === TELEFONO ===
@@ -272,6 +383,16 @@ const EVENTS = {
     ACCION: 'ui.accion',
     RENDERED: 'ui.rendered',
     RENDER_ERROR: 'ui.render_error',
+  },
+
+  // === UI_DESIGNER ===
+  UI_DESIGNER: {
+    EXPORT_JSON: 'ui-designer.export.json',
+    EXPORT_SVELTE: 'ui-designer.export.svelte',
+    EXPORT_YAML: 'ui-designer.export.yaml',
+    TEMPLATE_CREATED: 'ui-designer.template.created',
+    TEMPLATE_DELETED: 'ui-designer.template.deleted',
+    TEMPLATE_UPDATED: 'ui-designer.template.updated',
   },
 
   // === VARIACION ===
@@ -336,8 +457,18 @@ const API_ROUTES = {
     LIST_MODELS: '/modules/ai-gateway/models',
     GET_USAGE: '/modules/ai-gateway/usage',
     TEST_PROVIDER: '/modules/ai-gateway/providers/test',
+    U_I_STATE: '/modules/ai-gateway/ui/state',
+    U_I_SELECT: '/modules/ai-gateway/ui/select',
+    U_I_CONFIG_GET: '/modules/ai-gateway/ui/config',
+    U_I_CONFIG_POST: '/modules/ai-gateway/ui/config',
+    GENERATE: '/modules/ai-connector/generate',
     HEALTH_CHECK: '/modules/ai-gateway/health',
     GET_METRICS: '/modules/ai-gateway/metrics',
+  },
+
+  AICHAT: {
+    BASE: '/modules/aichat-ui',
+    HEALTH_CHECK: '/modules/aichat-ui/health',
   },
 
   CALLING: {
@@ -358,6 +489,18 @@ const API_ROUTES = {
     REORDER_CATEGORIAS: '/modules/categorias/categorias/reorder',
     HEALTH_CHECK: '/modules/categorias/health',
     GET_METRICS: '/modules/categorias/metrics',
+  },
+
+  CHAT: {
+    BASE: '/modules/chat-api',
+    CREATE_CONVERSATION: '/modules/chat-api/conversations',
+    LIST_CONVERSATIONS: '/modules/chat-api/conversations',
+    GET_CONVERSATION: '/modules/chat-api/conversations/:id',
+    DELETE_CONVERSATION: '/modules/chat-api/conversations/:id',
+    SEND_MESSAGE: '/modules/chat-api/conversations/:id/messages',
+    GET_MESSAGES: '/modules/chat-api/conversations/:id/messages',
+    HEALTH_CHECK: '/modules/chat-api/health',
+    GET_METRICS: '/modules/chat-api/metrics',
   },
 
   COBRO: {
@@ -393,6 +536,21 @@ const API_ROUTES = {
     HEALTH_CHECK: '/modules/comandero/health',
   },
 
+  CONVERSATION: {
+    BASE: '/modules/conversation-manager',
+    CREATE_CONVERSATION: '/modules/conversation-manager/conversations',
+    LIST_CONVERSATIONS: '/modules/conversation-manager/conversations',
+    GET_CONVERSATION: '/modules/conversation-manager/conversations/:id',
+    UPDATE_CONVERSATION: '/modules/conversation-manager/conversations/:id',
+    DELETE_CONVERSATION: '/modules/conversation-manager/conversations/:id',
+    SEND_MESSAGE: '/modules/conversation-manager/conversations/:id/messages',
+    GET_MESSAGES: '/modules/conversation-manager/conversations/:id/messages',
+    GET_CONTEXT: '/modules/conversation-manager/conversations/:id/context',
+    U_I_STATE: '/modules/conversation-manager/ui/state',
+    HEALTH_CHECK: '/modules/conversation-manager/health',
+    GET_METRICS: '/modules/conversation-manager/metrics',
+  },
+
   CREDENTIAL: {
     BASE: '/modules/credential-manager',
     SAVE_CREDENTIAL: '/modules/credential-manager/credentials',
@@ -401,6 +559,8 @@ const API_ROUTES = {
     UPDATE_CREDENTIAL: '/modules/credential-manager/credentials/:key',
     DELETE_CREDENTIAL: '/modules/credential-manager/credentials/:key',
     GET_LEVELS: '/modules/credential-manager/credentials/levels',
+    GET_U_I_STATE: '/modules/credential-manager/ui/state',
+    TEST_CREDENTIAL: '/modules/credential-manager/ui/test',
     HEALTH_CHECK: '/modules/credential-manager/health',
     GET_METRICS: '/modules/credential-manager/metrics',
   },
@@ -455,6 +615,27 @@ const API_ROUTES = {
     GET_METRICS: '/modules/cuentas-telefono/metrics',
   },
 
+  DATABASE: {
+    BASE: '/modules/database-manager',
+    LIST_DATABASES: '/modules/database-manager/databases',
+    EXECUTE_QUERY: '/modules/database-manager/databases/:projectId/query',
+    GET_SCHEMA: '/modules/database-manager/databases/:projectId/schema',
+    INIT_SCHEMA: '/modules/database-manager/databases/:projectId/init',
+    DELETE_DATABASE: '/modules/database-manager/databases/:projectId',
+    LIST_TABLES: '/modules/database-manager/databases/:projectId/tables',
+    HEALTH_CHECK: '/modules/database-manager/health',
+    GET_METRICS: '/modules/database-manager/metrics',
+  },
+
+  FILE: {
+    BASE: '/modules/file-browser',
+    LIST_FILES: '/modules/file-browser/files',
+    GET_FILE_CONTENT: '/modules/file-browser/files/content',
+    CREATE_FILE: '/modules/file-browser/files',
+    DELETE_FILE: '/modules/file-browser/files',
+    SEARCH_FILES: '/modules/file-browser/files/search',
+  },
+
   INGREDIENTE: {
     BASE: '/modules/ingredientes',
     LIST_INGREDIENTES: '/modules/ingredientes/ingredientes',
@@ -473,6 +654,8 @@ const API_ROUTES = {
     GET_MENU: '/modules/menu-generator/menus/:id',
     VALIDATE_MENU: '/modules/menu-generator/menus/:id/validate',
     EXPORT_MENU: '/modules/menu-generator/menus/:id/export',
+    EXPORT_P_O_S: '/modules/menu-generator/menus/:id/export-pos',
+    APPLY_TO_P_O_S: '/modules/menu-generator/menus/:id/apply-pos',
     LIST_CONVERSATIONS: '/modules/menu-generator/conversations',
     CREATE_CONVERSATION: '/modules/menu-generator/conversations',
     GET_CONVERSATION: '/modules/menu-generator/conversations/:id',
@@ -508,6 +691,14 @@ const API_ROUTES = {
     TOGGLE_PIN: '/modules/notas/notas/:id/pin',
     HEALTH_CHECK: '/modules/notas/health',
     GET_METRICS: '/modules/notas/metrics',
+  },
+
+  PDF: {
+    BASE: '/modules/pdf-viewer',
+    VIEW_PDF: '/modules/pdf-viewer/pdf/view',
+    EXTRACT_TEXT: '/modules/pdf-viewer/pdf/extract-text',
+    GET_METADATA: '/modules/pdf-viewer/pdf/metadata',
+    LIST_PDFS: '/modules/pdf-viewer/pdf/list',
   },
 
   PEDIDO: {
@@ -566,8 +757,22 @@ const API_ROUTES = {
     GET_METRICS: '/modules/productos/metrics',
   },
 
+  PROJECT: {
+    BASE: '/modules/project-manager',
+    CREATE_PROJECT: '/modules/project-manager/projects',
+    LIST_PROJECTS: '/modules/project-manager/projects',
+    GET_PROJECT: '/modules/project-manager/projects/:id',
+    UPDATE_PROJECT: '/modules/project-manager/projects/:id',
+    DELETE_PROJECT: '/modules/project-manager/projects/:id',
+    ACTIVATE_PROJECT: '/modules/project-manager/projects/:id/activate',
+    GET_ACTIVE_PROJECT: '/modules/project-manager/projects/active',
+    HEALTH_CHECK: '/modules/project-manager/health',
+    GET_METRICS: '/modules/project-manager/metrics',
+  },
+
   PROMPT: {
     BASE: '/modules/prompt-manager',
+    GET_U_I_STATE: '/modules/prompt-manager/ui/state',
     CREATE_PROMPT: '/modules/prompt-manager/prompts',
     LIST_PROMPTS: '/modules/prompt-manager/prompts',
     GET_PROMPT: '/modules/prompt-manager/prompts/:id',
@@ -575,8 +780,73 @@ const API_ROUTES = {
     DELETE_PROMPT: '/modules/prompt-manager/prompts/:id',
     LIST_VERSIONS: '/modules/prompt-manager/prompts/:id/versions',
     RENDER_TEMPLATE: '/modules/prompt-manager/prompts/:id/render',
+    CREATE_PRESET: '/modules/prompt-manager/presets',
+    LIST_PRESETS: '/modules/prompt-manager/presets',
+    GET_PRESET: '/modules/prompt-manager/presets/:id',
+    DELETE_PRESET: '/modules/prompt-manager/presets/:id',
     GET_ANALYTICS: '/modules/prompt-manager/analytics',
-    COMPARE_PROMPTS: '/modules/prompt-manager/prompts/compare',
+    HEALTH_CHECK: '/modules/prompt-manager/health',
+    GET_METRICS: '/modules/prompt-manager/metrics',
+  },
+
+  SCRATCH: {
+    BASE: '/modules/scratch-designer',
+    GET_ALL_BLOCKS: '/modules/scratch-designer/blocks/all',
+    GET_MODULE_BLOCKS: '/modules/scratch-designer/blocks/modules',
+    GET_EVENT_BLOCKS: '/modules/scratch-designer/blocks/events',
+    GET_ACTION_BLOCKS: '/modules/scratch-designer/blocks/actions',
+    GET_COMPONENT_BLOCKS: '/modules/scratch-designer/blocks/components',
+    GET_CONTAINER_BLOCKS: '/modules/scratch-designer/blocks/containers',
+    GET_DATA_BLOCKS: '/modules/scratch-designer/blocks/data',
+    GET_CONDITION_BLOCKS: '/modules/scratch-designer/blocks/conditions',
+    LIST_DESIGNS: '/modules/scratch-designer/designs',
+    CREATE_DESIGN: '/modules/scratch-designer/designs',
+    GET_DESIGN: '/modules/scratch-designer/designs/:id',
+    UPDATE_DESIGN: '/modules/scratch-designer/designs/:id',
+    DELETE_DESIGN: '/modules/scratch-designer/designs/:id',
+    DUPLICATE_DESIGN: '/modules/scratch-designer/designs/:id/duplicate',
+    VALIDATE_CONNECTION: '/modules/scratch-designer/validate/connection',
+    VALIDATE_DESIGN: '/modules/scratch-designer/validate/design',
+    EXPORT_J_S_O_N: '/modules/scratch-designer/export/json',
+    EXPORT_MODULE_U_I: '/modules/scratch-designer/export/module-ui',
+    HEALTH_CHECK: '/modules/scratch-designer/health',
+    GET_METRICS: '/modules/scratch-designer/metrics',
+  },
+
+  SECURITY: {
+    BASE: '/modules/security-p2p',
+    GET_KEYPAIR: '/modules/security-p2p/keypair',
+    GENERATE_KEYPAIR: '/modules/security-p2p/keypair/generate',
+    CREATE_SESSION: '/modules/security-p2p/sessions',
+    LIST_SESSIONS: '/modules/security-p2p/sessions',
+    TERMINATE_SESSION: '/modules/security-p2p/sessions/:peer_id',
+    ENCRYPT: '/modules/security-p2p/encrypt',
+    DECRYPT: '/modules/security-p2p/decrypt',
+    VERIFY_PEER: '/modules/security-p2p/peers/verify',
+    REVOKE_PEER: '/modules/security-p2p/peers/:peer_id/revoke',
+    HEALTH_CHECK: '/modules/security-p2p/health',
+    GET_METRICS: '/modules/security-p2p/metrics',
+  },
+
+  STORAGE: {
+    BASE: '/modules/storage-manager',
+    UPLOAD_FILE: '/modules/storage-manager/storage/:projectId/upload',
+    LIST_FILES: '/modules/storage-manager/storage/:projectId/files',
+    GET_FILE: '/modules/storage-manager/storage/:projectId/files/:fileId',
+    DOWNLOAD_FILE: '/modules/storage-manager/storage/:projectId/download/:fileId',
+    DELETE_FILE: '/modules/storage-manager/storage/:projectId/files/:fileId',
+    CLEANUP_TEMP: '/modules/storage-manager/storage/:projectId/cleanup',
+    GET_STORAGE_INFO: '/modules/storage-manager/storage/:projectId/info',
+    HEALTH_CHECK: '/modules/storage-manager/health',
+    GET_METRICS: '/modules/storage-manager/metrics',
+  },
+
+  TEXT: {
+    BASE: '/modules/text-editor',
+    OPEN_FILE: '/modules/text-editor/editor/open',
+    SAVE_FILE: '/modules/text-editor/editor/save',
+    VALIDATE_CONTENT: '/modules/text-editor/editor/validate',
+    FORMAT_CONTENT: '/modules/text-editor/editor/format',
   },
 
   TOOL: {
@@ -591,12 +861,28 @@ const API_ROUTES = {
   },
 
   UI: {
-    BASE: '/modules/ui-renderer',
+    BASE: '/modules/ui-designer',
+    LIST_TEMPLATES: '/modules/ui-designer/templates',
+    CREATE_TEMPLATE: '/modules/ui-designer/templates',
+    GET_TEMPLATE: '/modules/ui-designer/templates/:id',
+    UPDATE_TEMPLATE: '/modules/ui-designer/templates/:id',
+    DELETE_TEMPLATE: '/modules/ui-designer/templates/:id',
+    DUPLICATE_TEMPLATE: '/modules/ui-designer/templates/:id/duplicate',
+    PUBLISH_TEMPLATE: '/modules/ui-designer/templates/:id/publish',
+    ARCHIVE_TEMPLATE: '/modules/ui-designer/templates/:id/archive',
+    LIST_LAYOUTS: '/modules/ui-designer/layouts',
+    GET_LAYOUT: '/modules/ui-designer/layouts/:type',
+    GET_PREDEFINED_TEMPLATES: '/modules/ui-designer/predefined',
+    CREATE_FROM_PREDEFINED: '/modules/ui-designer/predefined/create',
+    LIST_COMPONENTS: '/modules/ui-renderer/components',
+    GET_COMPONENT_SCHEMA: '/modules/ui-designer/components/:name',
+    EXPORT_YAML: '/modules/ui-designer/export/yaml',
+    EXPORT_SVELTE: '/modules/ui-designer/export/svelte',
+    EXPORT_JSON: '/modules/ui-designer/export/json',
+    HEALTH_CHECK: '/modules/ui-renderer/health',
     RENDER_U_I: '/modules/ui-renderer/ui/:module/:view?',
     GET_COMPONENT: '/modules/ui-renderer/component/:name',
     RENDER_COMPONENT: '/modules/ui-renderer/component/:name/render',
-    LIST_COMPONENTS: '/modules/ui-renderer/components',
-    HEALTH_CHECK: '/modules/ui-renderer/health',
     GET_METRICS: '/modules/ui-renderer/metrics',
   },
 
@@ -644,6 +930,13 @@ const MODULES = {
       subscribes: ['plugin.loaded', 'function.get.request', 'function.list.request', 'function.execute.request'],
     },
   },
+  'conversation-manager': {
+    version: '1.0.0',
+    events: {
+      publishes: ['ai.chat.request', 'conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response'],
+      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response'],
+    },
+  },
   'credential-manager': {
     version: '2.0.0',
     events: {
@@ -658,11 +951,25 @@ const MODULES = {
       subscribes: [],
     },
   },
+  'database-manager': {
+    version: '2.0.0',
+    events: {
+      publishes: ['db.created', 'db.deleted', 'db.query.executed', 'db.schema.initialized', 'db.query.response', 'db.schema.init.response'],
+      subscribes: ['db.query.request', 'db.schema.init.request'],
+    },
+  },
+  'file-browser': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
+    },
+  },
   'menu-generator': {
     version: '2.0.0',
     events: {
-      publishes: ['ai.request', 'menu.generado', 'menu.validado', 'menu.error', 'menu-generator.conversation.created', 'menu-generator.message.sent', 'menu-generator.message.received', 'menu-generator.menu.created', 'menu-generator.menu.exported'],
-      subscribes: ['ai.response', 'menu.obtener_ultimo', 'conversations.list', 'templates.list'],
+      publishes: ['ai.request', 'menu.generado', 'menu.validado', 'menu.error', 'menu-generator.conversation.created', 'menu-generator.message.sent', 'menu-generator.message.received', 'menu-generator.menu.created', 'menu-generator.menu.exported', 'menu-generator.menu.exported_pos', 'pos.categorias.import', 'pos.ingredientes.import', 'pos.productos.import', 'pos.variaciones.import'],
+      subscribes: ['ai.completion.completed', 'menu.obtener_ultimo', 'conversations.list', 'templates.list'],
     },
   },
   'metricas': {
@@ -679,6 +986,13 @@ const MODULES = {
       subscribes: ['nota.obtener', 'nota.listar'],
     },
   },
+  'pdf-viewer': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
+    },
+  },
   'plugin-manager': {
     version: '2.0.0',
     events: {
@@ -686,7 +1000,35 @@ const MODULES = {
       subscribes: ['plugin.get.request', 'plugin.list.request'],
     },
   },
+  'project-manager': {
+    version: '2.0.0',
+    events: {
+      publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response'],
+      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response'],
+    },
+  },
   'prompt-manager': {
+    version: '2.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
+    },
+  },
+  'scratch-designer': {
+    version: '2.0.0',
+    events: {
+      publishes: ['scratch.design.created', 'scratch.design.updated', 'scratch.design.deleted', 'scratch.design.exported'],
+      subscribes: [],
+    },
+  },
+  'storage-manager': {
+    version: '1.0.0',
+    events: {
+      publishes: ['storage.created', 'storage.deleted', 'storage.cleaned', 'file.uploaded', 'file.deleted', 'file.list.response', 'file.get.response', 'storage.info.response'],
+      subscribes: ['project.created', 'project.deleted', 'file.list.request', 'file.get.request', 'storage.info.request'],
+    },
+  },
+  'text-editor': {
     version: '1.0.0',
     events: {
       publishes: [],
@@ -700,6 +1042,20 @@ const MODULES = {
       subscribes: ['tool.call.request', 'tool.list.request', 'tool.get.request'],
     },
   },
+  'ui-designer': {
+    version: '1.0.0',
+    events: {
+      publishes: ['ui-designer.template.created', 'ui-designer.template.updated', 'ui-designer.template.deleted', 'ui-designer.export.yaml', 'ui-designer.export.svelte', 'ui-designer.export.json'],
+      subscribes: [],
+    },
+  },
+  'ai-connector': {
+    version: '2.0.0',
+    events: {
+      publishes: ['ai.response.generated', 'ai.response.failed', 'ai.generate.response'],
+      subscribes: ['ai.generate.request', 'credential.resolve.response'],
+    },
+  },
   'ai-gateway': {
     version: '2.1.0',
     events: {
@@ -707,11 +1063,25 @@ const MODULES = {
       subscribes: ['ai.request', 'credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolve.response', 'ai.providers', 'ai.usage'],
     },
   },
+  'aichat-ui': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
+    },
+  },
   'categorias': {
     version: '1.0.0',
     events: {
       publishes: ['categoria.creada', 'categoria.actualizada', 'categoria.orden_actualizado'],
       subscribes: ['menu.generado', 'categoria.obtener', 'categoria.listar'],
+    },
+  },
+  'chat-api': {
+    version: '2.0.0',
+    events: {
+      publishes: ['chat.conversation.created', 'chat.conversation.deleted', 'chat.message.sent', 'chat.message.ai.received', 'chat.send.response'],
+      subscribes: ['chat.send.request', 'db.query.response', 'db.schema.init.response', 'ai.generate.response'],
     },
   },
   'cobros': {
@@ -733,6 +1103,13 @@ const MODULES = {
     events: {
       publishes: ['pedido.item_agregado', 'pedido.item_eliminado', 'pedido.enviado_cocina'],
       subscribes: ['cuenta.actualizada'],
+    },
+  },
+  'conversation-manager': {
+    version: '1.0.0',
+    events: {
+      publishes: ['conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response'],
+      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response'],
     },
   },
   'credential-manager': {
@@ -770,6 +1147,20 @@ const MODULES = {
       subscribes: ['cocina.pedido_listo', 'cobro.completado', 'telefono.pendientes', 'telefono.contactos'],
     },
   },
+  'database-manager': {
+    version: '2.0.0',
+    events: {
+      publishes: ['db.created', 'db.deleted', 'db.query.executed', 'db.schema.initialized', 'db.query.response', 'db.schema.init.response'],
+      subscribes: ['db.query.request', 'db.schema.init.request'],
+    },
+  },
+  'file-browser': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
+    },
+  },
   'ingredientes': {
     version: '1.0.0',
     events: {
@@ -782,6 +1173,13 @@ const MODULES = {
     events: {
       publishes: ['ai.request', 'menu.generado', 'menu.validado', 'menu.error'],
       subscribes: ['ai.response', 'menu.obtener_ultimo'],
+    },
+  },
+  'pdf-viewer': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
     },
   },
   'pedidos': {
@@ -803,6 +1201,34 @@ const MODULES = {
     events: {
       publishes: ['producto.creado', 'producto.actualizado', 'producto.eliminado', 'catalogo.actualizado'],
       subscribes: ['menu.generado', 'menu.validado', 'producto.obtener', 'producto.listar', 'producto.buscar'],
+    },
+  },
+  'project-manager': {
+    version: '2.0.0',
+    events: {
+      publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response'],
+      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response'],
+    },
+  },
+  'security-p2p': {
+    version: '1.0.0',
+    events: {
+      publishes: ['security.keypair.generated', 'security.session.established', 'security.session.terminated', 'security.message.encrypted', 'security.message.decrypted', 'security.peer.authenticated', 'security.peer.revoked', 'security.keypair.get.response', 'security.encrypt.response', 'security.decrypt.response', 'security.session.create.response', 'security.peer.verify.response'],
+      subscribes: ['security.keypair.get.request', 'security.encrypt.request', 'security.decrypt.request', 'security.session.create.request', 'security.peer.verify.request'],
+    },
+  },
+  'storage-manager': {
+    version: '1.0.0',
+    events: {
+      publishes: ['storage.created', 'storage.deleted', 'storage.cleaned', 'file.uploaded', 'file.deleted', 'file.list.response', 'file.get.response', 'storage.info.response'],
+      subscribes: ['project.created', 'project.deleted', 'file.list.request', 'file.get.request', 'storage.info.request'],
+    },
+  },
+  'text-editor': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
     },
   },
   'ui-renderer': {

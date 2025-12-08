@@ -66,6 +66,18 @@
       "path": "/ui/select",
       "description": "Seleccionar provider y modelo activo",
       "handler": "handleUISelect"
+    },
+    {
+      "method": "GET",
+      "path": "/ui/config",
+      "description": "Obtener configuración de parámetros LLM (temperature, tokens, etc.)",
+      "handler": "handleUIConfigGet"
+    },
+    {
+      "method": "POST",
+      "path": "/ui/config",
+      "description": "Actualizar configuración de parámetros LLM",
+      "handler": "handleUIConfigPost"
     }
   ],
   "hooks": {},

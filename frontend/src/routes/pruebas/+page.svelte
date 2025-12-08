@@ -1,8 +1,11 @@
 <script lang="ts">
   /**
-   * PRUEBA DIRECTA - Botón con 3 interacciones
-   * Sin componentes externos, lógica inline
+   * PRUEBA - Botón IA con 3 interacciones
+   * - 1 tap: Selector de modelo
+   * - 2 taps: Siguiente modelo
+   * - Long press: Configuración LLM
    */
+  import { onMount } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
 
   // Config
@@ -14,7 +17,7 @@
   let panelMode: 'select' | 'config' = 'select';
   let log: string[] = [];
 
-  // Modelos
+  // Modelos (mock)
   const models = [
     { id: 'auto', name: 'Auto', icon: '⚡' },
     { id: 'deepseek', name: 'DeepSeek', icon: '🔮' },
@@ -23,6 +26,26 @@
   ];
   let currentIdx = 0;
   $: current = models[currentIdx];
+
+  // Configuración LLM
+  let config = {
+    temperature: 0.7,
+    maxTokens: 2048,
+    topP: 1.0,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    systemPrompt: '',
+    stream: true
+  };
+
+  // Presets
+  const presets = [
+    { id: 'precise', name: 'Preciso', icon: '🎯' },
+    { id: 'balanced', name: 'Balanceado', icon: '⚖️' },
+    { id: 'creative', name: 'Creativo', icon: '🎨' },
+    { id: 'code', name: 'Código', icon: '💻' }
+  ];
+  let activePreset = 'balanced';
 
   // Timers
   let tapTimeout: number | null = null;
@@ -43,7 +66,7 @@
 
   // === ACCIONES ===
   function doTap() {
-    addLog('TAP → Abrir selector');
+    addLog('TAP → Selector');
     panelMode = 'select';
     panelOpen = true;
   }
@@ -63,8 +86,6 @@
   function onTouchStart(e: TouchEvent) {
     e.preventDefault();
     isLongPress = false;
-
-    // Iniciar timer de long press
     longPressTimeout = window.setTimeout(() => {
       isLongPress = true;
       clearTimers();
@@ -74,22 +95,15 @@
 
   function onTouchEnd(e: TouchEvent) {
     e.preventDefault();
-
-    // Si fue long press, ya se ejecutó
     if (isLongPress) {
       isLongPress = false;
       return;
     }
-
     clearTimers();
     tapCount++;
-
     if (tapCount === 1) {
-      // Esperar por posible doble tap
       tapTimeout = window.setTimeout(() => {
-        if (tapCount === 1) {
-          doTap();
-        }
+        if (tapCount === 1) doTap();
         tapCount = 0;
       }, TAP_DELAY);
     } else if (tapCount >= 2) {
@@ -107,13 +121,42 @@
 
   function selectModel(idx: number) {
     currentIdx = idx;
-    addLog(`Seleccionado: ${models[idx].name}`);
+    addLog(`Modelo: ${models[idx].name}`);
+    panelOpen = false;
+  }
+
+  function applyPreset(presetId: string) {
+    activePreset = presetId;
+    switch (presetId) {
+      case 'precise':
+        config.temperature = 0.3;
+        config.topP = 0.9;
+        break;
+      case 'balanced':
+        config.temperature = 0.7;
+        config.topP = 1.0;
+        break;
+      case 'creative':
+        config.temperature = 1.2;
+        config.topP = 0.95;
+        break;
+      case 'code':
+        config.temperature = 0.2;
+        config.topP = 0.9;
+        config.systemPrompt = 'Eres un experto programador.';
+        break;
+    }
+    addLog(`Preset: ${presetId}`);
+  }
+
+  function saveConfig() {
+    addLog(`Config guardada: temp=${config.temperature}`);
     panelOpen = false;
   }
 </script>
 
 <div class="page">
-  <h1>Pruebas</h1>
+  <h1>Pruebas IA</h1>
 
   <div class="info">
     <span>1 tap: Lista</span>
@@ -135,7 +178,7 @@
   </div>
 
   <div class="current">
-    Actual: {current.icon} {current.name}
+    {current.icon} {current.name} | 🌡️ {config.temperature}
   </div>
 
   <!-- LOG -->
@@ -152,8 +195,9 @@
 <!-- PANEL -->
 <FloatingPanel bind:open={panelOpen}>
   {#if panelMode === 'select'}
+    <!-- Panel Selector -->
     <div class="panel">
-      <h3>Seleccionar</h3>
+      <h3>Seleccionar Modelo</h3>
       {#each models as m, i}
         <button
           class="panel-item"
@@ -165,10 +209,79 @@
       {/each}
     </div>
   {:else}
-    <div class="panel">
-      <h3>⚙️ Config</h3>
-      <p>Opciones aquí</p>
-      <button on:click={() => panelOpen = false}>Cerrar</button>
+    <!-- Panel Config -->
+    <div class="panel config-panel">
+      <h3>⚙️ Configuración LLM</h3>
+
+      <!-- Presets -->
+      <div class="presets">
+        {#each presets as p}
+          <button
+            class="preset-btn"
+            class:active={activePreset === p.id}
+            on:click={() => applyPreset(p.id)}
+          >
+            {p.icon}
+          </button>
+        {/each}
+      </div>
+
+      <!-- Temperature -->
+      <div class="config-row">
+        <label>
+          <span>🌡️ Temperatura</span>
+          <span class="value">{config.temperature.toFixed(1)}</span>
+        </label>
+        <input type="range" min="0" max="2" step="0.1" bind:value={config.temperature} />
+      </div>
+
+      <!-- Max Tokens -->
+      <div class="config-row">
+        <label>
+          <span>📏 Máx Tokens</span>
+          <span class="value">{config.maxTokens}</span>
+        </label>
+        <input type="range" min="256" max="8192" step="256" bind:value={config.maxTokens} />
+      </div>
+
+      <!-- Top P -->
+      <div class="config-row">
+        <label>
+          <span>🎯 Top P</span>
+          <span class="value">{config.topP.toFixed(2)}</span>
+        </label>
+        <input type="range" min="0" max="1" step="0.05" bind:value={config.topP} />
+      </div>
+
+      <!-- Stream toggle -->
+      <div class="config-row toggle-row">
+        <label>
+          <span>⚡ Streaming</span>
+        </label>
+        <button
+          class="toggle"
+          class:on={config.stream}
+          on:click={() => config.stream = !config.stream}
+        >
+          {config.stream ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
+      <!-- System Prompt -->
+      <div class="config-row">
+        <label>
+          <span>📝 System Prompt</span>
+        </label>
+        <textarea
+          bind:value={config.systemPrompt}
+          placeholder="Instrucciones para el modelo..."
+          rows="3"
+        ></textarea>
+      </div>
+
+      <button class="save-btn" on:click={saveConfig}>
+        Guardar
+      </button>
     </div>
   {/if}
 </FloatingPanel>
@@ -183,6 +296,7 @@
 
   h1 { margin: 0 0 1rem; font-size: 1.5rem; }
   h2 { margin: 0 0 0.5rem; font-size: 1rem; color: #888; }
+  h3 { margin: 0 0 1rem; font-size: 1.1rem; }
 
   .info {
     display: flex;
@@ -244,15 +358,15 @@
     background: #1a1a1a;
     border-radius: 12px;
     padding: 1rem;
-    max-height: 200px;
+    max-height: 150px;
     overflow-y: auto;
   }
 
   .log-item {
-    padding: 0.5rem;
+    padding: 0.4rem;
     border-bottom: 1px solid #333;
     font-family: monospace;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
 
   .log-empty {
@@ -262,10 +376,10 @@
 
   /* Panel */
   .panel {
-    min-width: 250px;
+    min-width: 280px;
+    max-width: 320px;
     padding: 0.5rem;
   }
-  .panel h3 { margin: 0 0 1rem; }
 
   .panel-item {
     display: block;
@@ -283,5 +397,108 @@
   .panel-item.active {
     border-color: #3b82f6;
     background: #e0f0ff;
+  }
+
+  /* Config Panel */
+  .config-panel {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  .presets {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .preset-btn {
+    flex: 1;
+    padding: 0.75rem;
+    font-size: 1.25rem;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    background: #f5f5f5;
+    cursor: pointer;
+  }
+  .preset-btn.active {
+    border-color: #3b82f6;
+    background: #e0f0ff;
+  }
+
+  .config-row {
+    margin-bottom: 1rem;
+  }
+
+  .config-row label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+    color: #333;
+  }
+
+  .config-row .value {
+    font-weight: bold;
+    color: #3b82f6;
+  }
+
+  .config-row input[type="range"] {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: #ddd;
+    appearance: none;
+  }
+
+  .config-row input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #3b82f6;
+    cursor: pointer;
+  }
+
+  .toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .toggle {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #ddd;
+    color: #666;
+  }
+  .toggle.on {
+    background: #22c55e;
+    color: white;
+  }
+
+  .config-row textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.875rem;
+    resize: none;
+  }
+
+  .save-btn {
+    width: 100%;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
   }
 </style>

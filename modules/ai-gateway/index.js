@@ -26,6 +26,17 @@ class AIGatewayModule {
     // UI State: Provider/modelo seleccionado actualmente
     this.currentProvider = 'auto';
     this.currentModel = null;
+
+    // Configuración de parámetros LLM
+    this.chatConfig = {
+      temperature: 0.7,
+      maxTokens: 2048,
+      topP: 1.0,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      systemPrompt: '',
+      stream: true
+    };
   }
 
   // ============ UI HELPERS ============
@@ -751,6 +762,160 @@ class AIGatewayModule {
     } catch (error) {
       this.logger.error('ai-gateway.ui-select.error', { error: error.message });
       return { status: 500, data: { error: 'UI_SELECT_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: UI Config GET
+   * GET /ui/config - Obtener configuración de parámetros LLM
+   */
+  async handleUIConfigGet(req, context) {
+    try {
+      // Definición de parámetros con metadatos para la UI
+      const configSchema = {
+        temperature: {
+          value: this.chatConfig.temperature,
+          type: 'range',
+          min: 0,
+          max: 2,
+          step: 0.1,
+          label: 'Temperatura',
+          description: 'Creatividad de las respuestas (0=preciso, 2=creativo)',
+          icon: '🌡️'
+        },
+        maxTokens: {
+          value: this.chatConfig.maxTokens,
+          type: 'range',
+          min: 256,
+          max: 8192,
+          step: 256,
+          label: 'Máx. Tokens',
+          description: 'Longitud máxima de la respuesta',
+          icon: '📏'
+        },
+        topP: {
+          value: this.chatConfig.topP,
+          type: 'range',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          label: 'Top P',
+          description: 'Nucleus sampling (diversidad)',
+          icon: '🎯'
+        },
+        frequencyPenalty: {
+          value: this.chatConfig.frequencyPenalty,
+          type: 'range',
+          min: -2,
+          max: 2,
+          step: 0.1,
+          label: 'Penalización Frecuencia',
+          description: 'Reduce repetición de palabras',
+          icon: '🔄'
+        },
+        presencePenalty: {
+          value: this.chatConfig.presencePenalty,
+          type: 'range',
+          min: -2,
+          max: 2,
+          step: 0.1,
+          label: 'Penalización Presencia',
+          description: 'Fomenta temas nuevos',
+          icon: '💡'
+        },
+        systemPrompt: {
+          value: this.chatConfig.systemPrompt,
+          type: 'textarea',
+          maxLength: 4000,
+          label: 'System Prompt',
+          description: 'Instrucciones iniciales para el modelo',
+          icon: '📝',
+          placeholder: 'Ej: Eres un asistente experto en programación...'
+        },
+        stream: {
+          value: this.chatConfig.stream,
+          type: 'toggle',
+          label: 'Streaming',
+          description: 'Respuestas en tiempo real',
+          icon: '⚡'
+        }
+      };
+
+      return {
+        status: 200,
+        data: {
+          config: configSchema,
+          presets: [
+            { id: 'precise', name: 'Preciso', icon: '🎯', temperature: 0.3, topP: 0.9 },
+            { id: 'balanced', name: 'Balanceado', icon: '⚖️', temperature: 0.7, topP: 1.0 },
+            { id: 'creative', name: 'Creativo', icon: '🎨', temperature: 1.2, topP: 0.95 },
+            { id: 'code', name: 'Código', icon: '💻', temperature: 0.2, topP: 0.9, systemPrompt: 'Eres un experto programador. Responde con código limpio y comentado.' }
+          ]
+        }
+      };
+    } catch (error) {
+      this.logger.error('ai-gateway.ui-config-get.error', { error: error.message });
+      return { status: 500, data: { error: 'UI_CONFIG_GET_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: UI Config POST
+   * POST /ui/config - Actualizar configuración de parámetros LLM
+   */
+  async handleUIConfigPost(req, context) {
+    try {
+      const updates = req.body || {};
+
+      // Validar y aplicar cada parámetro
+      if (typeof updates.temperature === 'number') {
+        this.chatConfig.temperature = Math.max(0, Math.min(2, updates.temperature));
+      }
+      if (typeof updates.maxTokens === 'number') {
+        this.chatConfig.maxTokens = Math.max(256, Math.min(8192, updates.maxTokens));
+      }
+      if (typeof updates.topP === 'number') {
+        this.chatConfig.topP = Math.max(0, Math.min(1, updates.topP));
+      }
+      if (typeof updates.frequencyPenalty === 'number') {
+        this.chatConfig.frequencyPenalty = Math.max(-2, Math.min(2, updates.frequencyPenalty));
+      }
+      if (typeof updates.presencePenalty === 'number') {
+        this.chatConfig.presencePenalty = Math.max(-2, Math.min(2, updates.presencePenalty));
+      }
+      if (typeof updates.systemPrompt === 'string') {
+        this.chatConfig.systemPrompt = updates.systemPrompt.slice(0, 4000);
+      }
+      if (typeof updates.stream === 'boolean') {
+        this.chatConfig.stream = updates.stream;
+      }
+
+      // Aplicar preset si se proporciona
+      if (updates.preset) {
+        const presets = {
+          precise: { temperature: 0.3, topP: 0.9 },
+          balanced: { temperature: 0.7, topP: 1.0 },
+          creative: { temperature: 1.2, topP: 0.95 },
+          code: { temperature: 0.2, topP: 0.9, systemPrompt: 'Eres un experto programador. Responde con código limpio y comentado.' }
+        };
+        const preset = presets[updates.preset];
+        if (preset) {
+          Object.assign(this.chatConfig, preset);
+        }
+      }
+
+      this.logger.info('ai-gateway.ui.config-updated', { config: this.chatConfig });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          config: this.chatConfig
+        }
+      };
+    } catch (error) {
+      this.logger.error('ai-gateway.ui-config-post.error', { error: error.message });
+      return { status: 500, data: { error: 'UI_CONFIG_POST_FAILED', message: error.message } };
     }
   }
 

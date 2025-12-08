@@ -108,11 +108,13 @@ POST /providers/test - Probar conectividad
 **Responsabilidad**: Gestionar conversaciones, mensajes y contexto para IA.
 
 **Características**:
+- **DB por proyecto**: Cada proyecto tiene su propia base de datos aislada
 - Context window configurable por conversación
 - Carga de contexto de proyecto (metadata, storage)
 - Settings de IA por conversación (modelo, temperature, max_tokens)
 - Soporte de attachments
 - Tracking de costos/tokens por mensaje
+- Lazy loading de conversaciones por proyecto
 
 **Escucha**: `conversation.get.request`, `conversation.list.request`, `message.list.request`, `conversation.send.request`, `db.query.response`, `ai.chat.response`, `project.get.response`, `storage.info.response`
 
@@ -120,14 +122,34 @@ POST /providers/test - Probar conectividad
 
 **APIs**:
 ```
-POST   /conversations           - Crear conversación
-GET    /conversations           - Listar (filtro por proyecto)
-GET    /conversations/:id       - Obtener con contexto
-PUT    /conversations/:id       - Actualizar metadata
-DELETE /conversations/:id       - Eliminar
-POST   /conversations/:id/messages - Enviar mensaje
-GET    /conversations/:id/messages - Obtener mensajes
+POST   /conversations              - Crear conversación
+GET    /conversations              - Listar (filtro por proyecto)
+GET    /conversations/:id          - Obtener con contexto
+PUT    /conversations/:id          - Actualizar metadata
+DELETE /conversations/:id          - Eliminar
+POST   /conversations/:id/messages - Enviar mensaje (trigger AI)
+GET    /conversations/:id/messages - Obtener mensajes paginados
 GET    /conversations/:id/context  - Contexto completo
+GET    /ui/state?project_id=X      - UI-ready (secciones temporales)
+```
+
+**Endpoint /ui/state** (Patrón 16):
+```javascript
+// GET /ui/state?project_id=test-project
+{
+  success: true,
+  project_id: "test-project",
+  sections: [
+    { id: "today", label: "Hoy", conversations: [...] },
+    { id: "yesterday", label: "Ayer", conversations: [...] },
+    { id: "this_week", label: "Esta semana", conversations: [...] }
+  ],
+  stats: {
+    total_conversations: 15,
+    total_messages: 234,
+    active_today: 3
+  }
+}
 ```
 
 **Estructura de Conversación**:
@@ -137,14 +159,14 @@ GET    /conversations/:id/context  - Contexto completo
   project_id: "proj_xyz",
   title: "Diseño de API REST",
   system_prompt: "Eres un experto en diseño de APIs...",
-  ai_settings: {
-    provider: "anthropic",
-    model: "claude-3-5-sonnet-20241022",
-    temperature: 0.7,
-    max_tokens: 4096
-  },
+  model: "claude-3-5-sonnet-20241022",
+  provider: "anthropic",
+  temperature: 0.7,
+  max_tokens: 4096,
   context_window: 20,
-  stats: { message_count: 45, total_tokens: 12500, total_cost: 0.15 }
+  message_count: 45,
+  created_at: "2025-12-08T10:00:00Z",
+  updated_at: "2025-12-08T15:30:00Z"
 }
 ```
 
@@ -406,19 +428,33 @@ Todos los módulos exponen:
 > - Componentes base (ToolbarIcon, FloatingPanel, ActionForm, etc.)
 > - Patrones de diseño móvil
 
-### Mapeo Botones → Módulos
+### Mapeo Botones → Módulos → Componentes
 
-| Botón | Módulo | Paneles |
-|-------|--------|---------|
-| 🤖 Modelo | ai-gateway | modelo-selector, modelo-config |
-| 🔑 Credencial | credential-manager | credencial-selector, credencial-crear |
-| 📝 Prompt | prompt-manager | prompts-rapidos, prompt-crear |
-| 💬 Historial | conversation-manager | conversaciones, historial-gestionar |
-| 📁 Proyecto | project-manager | proyectos-selector, proyecto-crear |
-| 📎 Adjuntar | storage-manager | adjuntar-archivo, subir-archivo |
-| 📂 Explorar | file-browser + pdf-viewer + text-editor | explorar-archivos |
-| 🎤 Voz | Web Speech API (nativo) | dictado, config-voz |
-| 📷 Cámara | MediaDevices API (nativo) | capturar-foto |
+| Botón | Módulo | Componente | Gestos |
+|-------|--------|------------|--------|
+| 🤖 Modelo | ai-gateway | `AISelector` | tap: lista, long: config |
+| 🔑 Credencial | credential-manager | `CredentialSelector` | tap: ver, 2x: añadir |
+| 📝 Prompt | prompt-manager | `SlotSelector` | tap: slots, 2x: añadir, long: presets |
+| 💬 Chat | conversation-manager | `ConversationPanel` | tap: chat/lista, 2x: nueva, long: config |
+| 📁 Proyecto | project-manager | (pendiente) | tap: selector, 2x: crear |
+| 📎 Adjuntar | storage-manager | (pendiente) | tap: archivos, 2x: subir |
+| 📂 Explorar | file-browser | (pendiente) | tap: explorar |
+| 🎤 Voz | Web Speech API | (nativo) | tap: dictado |
+| 📷 Cámara | MediaDevices API | (nativo) | tap: capturar |
+
+### Componentes Implementados
+
+```
+frontend/src/lib/components/
+├── ai/
+│   └── AISelector.svelte         # Selector de modelo/proveedor
+├── credentials/
+│   └── CredentialSelector.svelte # Gestión de API keys
+├── prompts/
+│   └── SlotSelector.svelte       # Gestión de prompts por slot
+└── conversations/
+    └── ConversationPanel.svelte  # Chat + gestión conversaciones
+```
 
 ---
 
@@ -452,11 +488,39 @@ Todos los módulos exponen:
 
 ---
 
-### 💬 Historial (conversation-manager)
+### 💬 Chat (conversation-manager) - `ConversationPanel`
 
-**1 TAP**: Panel conversaciones recientes
+**Componente**: `frontend/src/lib/components/conversations/ConversationPanel.svelte`
+
+**1 TAP**: Chat activo o lista de conversaciones agrupada por fecha
 **2 TAPS**: Modal crear nueva conversación
-**LONG-PRESS**: Modal gestión de conversaciones (editar, exportar, eliminar)
+**LONG-PRESS**: Modal configuración de conversación activa
+
+**Modos del Panel**:
+| Modo | Descripción |
+|------|-------------|
+| `list` | Lista agrupada por secciones temporales (Hoy, Ayer, etc.) |
+| `chat` | Interfaz de chat con mensajes y input |
+| `create` | Formulario nueva conversación |
+| `settings` | Config + zona de peligro (eliminar) |
+
+**Props**:
+```svelte
+<ConversationPanel
+  projectId="mi-proyecto"  <!-- Requerido -->
+  size="md"
+  on:select={...}
+  on:message={...}
+  on:create={...}
+  on:delete={...}
+/>
+```
+
+**Eventos**:
+- `select`: Conversación seleccionada
+- `message`: Mensaje enviado (con respuesta AI)
+- `create`: Nueva conversación creada
+- `delete`: Conversación eliminada
 
 ---
 
@@ -520,13 +584,28 @@ Las imágenes se suben via storage-manager. Compatible con modelos multimodales.
 
 1. **Persistencia**: Todos los módulos usan eventos para persistir en database-manager
 2. **Aislamiento**: Cada proyecto tiene su propia base de datos y storage
-3. **Correlación**: Siempre propagar `correlation_id` para trazabilidad
-4. **Context Window**: Configurable por conversación (default: 20 mensajes)
-5. **Fallback**: ai-gateway hace fallback automático entre proveedores
-6. **Costos**: Se trackean tokens y costos por mensaje en conversation-manager
-7. **Attachments**: Archivos se suben a storage-manager y se referencian en mensajes
+3. **DB por Proyecto**: conversation-manager usa `ensureProjectSchema(projectId)` para lazy init
+4. **Correlación**: Siempre propagar `correlation_id` para trazabilidad
+5. **Context Window**: Configurable por conversación (default: 20 mensajes)
+6. **Fallback**: ai-gateway hace fallback automático entre proveedores
+7. **Costos**: Se trackean tokens y costos por mensaje en conversation-manager
+8. **Attachments**: Archivos se suben a storage-manager y se referencian en mensajes
+9. **UI-Ready**: Endpoints `/ui/state` devuelven datos listos para pintar en componentes
 
 ---
 
-*Última actualización: 2024-12-08*
-*Versión: 2.0.0*
+## Página de Pruebas
+
+Todos los componentes se pueden probar en `/pruebas`:
+
+```svelte
+<AISelector size="lg" />
+<CredentialSelector size="lg" />
+<SlotSelector size="lg" />
+<ConversationPanel size="lg" projectId="test-project" />
+```
+
+---
+
+*Última actualización: 2025-12-08*
+*Versión: 2.1.0*

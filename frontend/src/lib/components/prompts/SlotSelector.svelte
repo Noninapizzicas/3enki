@@ -9,7 +9,7 @@
    *
    * Conecta con: /api/modules/prompt-manager/ui/state (UI-ready endpoint)
    */
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
 
   // Props
@@ -25,6 +25,9 @@
   let panelMode: 'list' | 'add' | 'presets' | 'edit' = 'list';
   let loading = false;
   let error: string | null = null;
+
+  // Estado para confirmación de eliminación
+  let deleteConfirm: { type: 'prompt' | 'preset'; id: string; name: string } | null = null;
 
   // Datos UI-ready desde backend
   let slotTypes: Array<{ id: string; name: string; icon: string; count: number }> = [];
@@ -94,6 +97,9 @@
     error = null;
     try {
       const res = await fetch(`${apiBase}/ui/state`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
 
       if (data.success) {
@@ -103,9 +109,11 @@
         stats = data.stats || { total_prompts: 0, total_presets: 0, by_slot: {} };
       } else {
         error = data.message || data.error || 'Error al cargar';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'No se pudo conectar con el servidor';
+      dispatch('error', { message: error });
       console.error('SlotSelector: Error loading UI state', err);
     } finally {
       loading = false;
@@ -115,6 +123,7 @@
   async function apiSavePrompt() {
     if (!newPrompt.name || !newPrompt.content) {
       error = 'Nombre y contenido son requeridos';
+      dispatch('error', { message: error });
       return;
     }
 
@@ -134,8 +143,11 @@
         })
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
       const data = await res.json();
-      console.log('Save response:', data); // Debug
 
       if (data.success) {
         await loadUIState();
@@ -143,11 +155,12 @@
         panelMode = 'list';
         resetPromptForm();
       } else {
-        // Backend devuelve { error: 'CODE', message: 'texto' }
         error = data.message || data.error || 'Error al guardar';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'Error de conexión al guardar';
+      dispatch('error', { message: error });
       console.error('SlotSelector: Error saving prompt', err);
     } finally {
       loading = false;
@@ -158,15 +171,21 @@
     loading = true;
     try {
       const res = await fetch(`${apiBase}/prompts/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
 
       if (data.success) {
         await loadUIState();
+        deleteConfirm = null;
       } else {
         error = data.message || data.error || 'Error al eliminar';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'Error de conexión al eliminar';
+      dispatch('error', { message: error });
     } finally {
       loading = false;
     }
@@ -175,6 +194,7 @@
   async function apiSavePreset() {
     if (!newPreset.name) {
       error = 'Nombre del preset es requerido';
+      dispatch('error', { message: error });
       return;
     }
 
@@ -182,6 +202,7 @@
     const hasSelection = Object.values(selectedPrompts).some(arr => arr.length > 0);
     if (!hasSelection) {
       error = 'Selecciona al menos un prompt';
+      dispatch('error', { message: error });
       return;
     }
 
@@ -198,6 +219,10 @@
         })
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
       const data = await res.json();
 
       if (data.success) {
@@ -206,9 +231,11 @@
         resetPresetForm();
       } else {
         error = data.message || data.error || 'Error al guardar preset';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'Error de conexión';
+      dispatch('error', { message: error });
     } finally {
       loading = false;
     }
@@ -218,15 +245,21 @@
     loading = true;
     try {
       const res = await fetch(`${apiBase}/presets/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
 
       if (data.success) {
         await loadUIState();
+        deleteConfirm = null;
       } else {
         error = data.message || data.error || 'Error al eliminar preset';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'Error de conexión';
+      dispatch('error', { message: error });
     } finally {
       loading = false;
     }
@@ -235,14 +268,21 @@
   async function applyPreset(presetId: string) {
     try {
       const res = await fetch(`${apiBase}/presets/${presetId}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
 
       if (data.success && data.preset.slots) {
         selectedPrompts = { ...selectedPrompts, ...data.preset.slots };
         dispatch('presetSelect', { presetId });
+      } else {
+        error = data.message || data.error || 'Error al aplicar preset';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'Error al aplicar preset';
+      dispatch('error', { message: error });
     }
   }
 
@@ -307,16 +347,21 @@
     if (isLongPress) return;
 
     tapCount++;
-    if (tapCount === 1) {
-      tapTimeout = window.setTimeout(() => {
-        if (tapCount === 1) {
-          handleTap();
-        } else if (tapCount >= 2) {
-          handleDoubleTap();
-        }
-        tapCount = 0;
-      }, TAP_DELAY);
+
+    // Cancelar timeout anterior para detectar doble tap correctamente
+    if (tapTimeout) {
+      clearTimeout(tapTimeout);
     }
+
+    tapTimeout = window.setTimeout(() => {
+      if (tapCount >= 2) {
+        handleDoubleTap();
+      } else {
+        handleTap();
+      }
+      tapCount = 0;
+      tapTimeout = null;
+    }, TAP_DELAY);
   }
 
   function handleTap() {
@@ -349,6 +394,11 @@
 
   onMount(() => {
     loadUIState();
+  });
+
+  onDestroy(() => {
+    if (tapTimeout) clearTimeout(tapTimeout);
+    if (longPressTimeout) clearTimeout(longPressTimeout);
   });
 
   // ==========================================
@@ -441,7 +491,7 @@
                     {/if}
                     <button
                       class="delete-btn"
-                      on:click|stopPropagation={() => apiDeletePrompt(prompt.id)}
+                      on:click|stopPropagation={() => deleteConfirm = { type: 'prompt', id: prompt.id, name: prompt.name }}
                       title="Eliminar"
                     >🗑️</button>
                   </div>
@@ -586,12 +636,34 @@
                 </div>
                 <div class="preset-actions">
                   <button class="apply-btn" on:click={() => applyPreset(preset.id)}>Aplicar</button>
-                  <button class="delete-btn" on:click={() => apiDeletePreset(preset.id)}>🗑️</button>
+                  <button class="delete-btn" on:click={() => deleteConfirm = { type: 'preset', id: preset.id, name: preset.name }}>🗑️</button>
                 </div>
               </div>
             {/each}
           </div>
         {/if}
+      </div>
+    {/if}
+
+    <!-- Modal de confirmación de eliminación -->
+    {#if deleteConfirm}
+      <div class="delete-confirm-overlay" on:click={() => deleteConfirm = null} on:keydown={(e) => e.key === 'Escape' && (deleteConfirm = null)} role="button" tabindex="0">
+        <div class="delete-confirm-modal" on:click|stopPropagation role="dialog" aria-modal="true">
+          <div class="delete-confirm-icon">⚠️</div>
+          <h4>¿Eliminar {deleteConfirm.type === 'prompt' ? 'prompt' : 'preset'}?</h4>
+          <p class="delete-confirm-name">"{deleteConfirm.name}"</p>
+          <p class="delete-confirm-warning">Esta acción no se puede deshacer.</p>
+          <div class="delete-confirm-actions">
+            <button class="cancel-btn" on:click={() => deleteConfirm = null}>Cancelar</button>
+            <button
+              class="confirm-delete-btn"
+              on:click={() => deleteConfirm?.type === 'prompt' ? apiDeletePrompt(deleteConfirm.id) : apiDeletePreset(deleteConfirm.id)}
+              disabled={loading}
+            >
+              {loading ? '⏳ Eliminando...' : '🗑️ Eliminar'}
+            </button>
+          </div>
+        </div>
       </div>
     {/if}
   </div>
@@ -992,5 +1064,78 @@
 
   .preset-actions .delete-btn:hover {
     opacity: 1;
+  }
+
+  /* Modal de confirmación de eliminación */
+  .delete-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .delete-confirm-modal {
+    background: var(--color-bg-card, white);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  }
+
+  .delete-confirm-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .delete-confirm-modal h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .delete-confirm-name {
+    font-weight: 500;
+    color: var(--color-text-primary, #111827);
+    margin: 0 0 0.25rem 0;
+    word-break: break-word;
+  }
+
+  .delete-confirm-warning {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary, #6b7280);
+    margin: 0 0 1rem 0;
+  }
+
+  .delete-confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .confirm-delete-btn {
+    padding: 0.5rem 1rem;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .confirm-delete-btn:hover {
+    background: #b91c1c;
+  }
+
+  .confirm-delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

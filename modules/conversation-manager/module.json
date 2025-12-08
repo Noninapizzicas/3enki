@@ -25,6 +25,11 @@
   "events": {
     "publishes": [
       {
+        "event": "ai.chat.request",
+        "description": "Request AI chat completion",
+        "schema": { "$ref": "./schemas/events.json#/definitions/ai_chat_request" }
+      },
+      {
         "event": "conversation.created",
         "description": "Conversation created",
         "schema": { "$ref": "./schemas/events.json#/definitions/conversation_created" }

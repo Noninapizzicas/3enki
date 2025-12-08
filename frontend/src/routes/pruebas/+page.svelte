@@ -72,8 +72,8 @@
   }
 
   function doDoubleTap() {
-    currentIdx = (currentIdx + 1) % models.length;
-    addLog(`DOBLE TAP → ${models[currentIdx].name}`);
+    // Misma acción que tap simple
+    doTap();
   }
 
   function doLongPress() {
@@ -159,8 +159,7 @@
   <h1>Pruebas IA</h1>
 
   <div class="info">
-    <span>1 tap: Lista</span>
-    <span>2 taps: Siguiente</span>
+    <span>Tap: Modelo</span>
     <span>Mantener: Config</span>
   </div>
 

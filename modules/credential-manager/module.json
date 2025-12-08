@@ -394,6 +394,12 @@
     },
     {
       "method": "GET",
+      "path": "/ui/state",
+      "handler": "handleGetUIState",
+      "description": "Get UI-ready state with providers, levels, and grouped credentials"
+    },
+    {
+      "method": "GET",
       "path": "/health",
       "handler": "handleHealthCheck",
       "description": "Health check endpoint"

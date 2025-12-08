@@ -755,6 +755,86 @@ class CredentialManagerModule {
   }
 
   // ==========================================
+  // UI State Endpoint - Datos listos para pintar
+  // ==========================================
+
+  async handleGetUIState(req, context) {
+    this.logger.info('ui.state.request', {
+      correlation_id: context.correlationId
+    });
+
+    // Proveedores disponibles con metadata UI
+    const providers = [
+      { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
+      { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
+      { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
+      { id: 'OLLAMA', name: 'Ollama', icon: '🦙' }
+    ];
+
+    // Niveles disponibles con metadata UI
+    const levels = [
+      { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },
+      { id: 'PROJECT', name: 'Proyecto', icon: '🔵', requiresIdentifier: true },
+      { id: 'CLIENT', name: 'Cliente', icon: '🟡', requiresIdentifier: true },
+      { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true }
+    ];
+
+    // Credenciales agrupadas y enriquecidas
+    const credentialsGrouped = {
+      GLOBAL: [],
+      projects: {}
+    };
+
+    for (const [key, value] of this.credentials.entries()) {
+      const parsed = this.parseKey(key);
+      if (!parsed) continue;
+
+      const provider = providers.find(p => p.id === parsed.provider);
+      const credential = {
+        key,
+        provider: parsed.provider,
+        providerName: provider?.name || parsed.provider,
+        providerIcon: provider?.icon || '🔑',
+        level: parsed.level,
+        identifier: parsed.identifier,
+        preview: this.maskApiKey(value)
+      };
+
+      if (parsed.level === 'GLOBAL') {
+        credentialsGrouped.GLOBAL.push(credential);
+      } else if (parsed.level === 'PROJECT' && parsed.identifier) {
+        if (!credentialsGrouped.projects[parsed.identifier]) {
+          credentialsGrouped.projects[parsed.identifier] = [];
+        }
+        credentialsGrouped.projects[parsed.identifier].push(credential);
+      }
+    }
+
+    // Estadísticas
+    const stats = {
+      total: this.credentials.size,
+      byLevel: { GLOBAL: 0, PROJECT: 0, CLIENT: 0, CUSTOM: 0 }
+    };
+    for (const key of this.credentials.keys()) {
+      const level = this.extractLevel(key);
+      if (stats.byLevel[level] !== undefined) {
+        stats.byLevel[level]++;
+      }
+    }
+
+    return {
+      status: 200,
+      data: {
+        success: true,
+        providers,
+        levels,
+        credentials: credentialsGrouped,
+        stats
+      }
+    };
+  }
+
+  // ==========================================
   // Core Logic
   // ==========================================
 

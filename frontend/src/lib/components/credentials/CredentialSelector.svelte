@@ -8,7 +8,7 @@
    *
    * Icono muestra contador (activas/total proveedores)
    *
-   * Conecta con: /api/modules/credential-manager/credentials
+   * Conecta con: /api/modules/credential-manager/ui/state (UI-ready endpoint)
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
@@ -16,20 +16,6 @@
   // Props
   export let size: 'sm' | 'md' | 'lg' = 'md';
   export let apiBase: string = '/api/modules/credential-manager';
-
-  // Proveedores disponibles
-  const providers = [
-    { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
-    { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
-    { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
-    { id: 'OLLAMA', name: 'Ollama', icon: '🦙' }
-  ];
-
-  // Niveles
-  const levels = [
-    { id: 'GLOBAL', name: 'Global', icon: '🟢' },
-    { id: 'PROJECT', name: 'Proyecto', icon: '🔵' }
-  ];
 
   // Config tiempos
   const TAP_DELAY = 300;
@@ -41,24 +27,37 @@
   let loading = false;
   let error: string | null = null;
 
-  // Credenciales desde backend
-  let credentials: Array<{
-    key: string;
-    provider: string;
-    level: string;
-    identifier: string | null;
-    preview: string;
-  }> = [];
+  // Datos UI-ready desde backend (no hardcodeados)
+  let providers: Array<{ id: string; name: string; icon: string }> = [];
+  let levels: Array<{ id: string; name: string; icon: string; requiresIdentifier: boolean }> = [];
 
-  // Proyectos existentes (extraídos de credenciales)
-  $: projects = [...new Set(
-    credentials
-      .filter(c => c.level === 'PROJECT' && c.identifier)
-      .map(c => c.identifier)
-  )];
+  // Credenciales agrupadas desde backend
+  let credentialsGrouped: {
+    GLOBAL: Array<{
+      key: string;
+      provider: string;
+      providerName: string;
+      providerIcon: string;
+      level: string;
+      identifier: string | null;
+      preview: string;
+    }>;
+    projects: Record<string, Array<{
+      key: string;
+      provider: string;
+      providerName: string;
+      providerIcon: string;
+      level: string;
+      identifier: string | null;
+      preview: string;
+    }>>;
+  } = { GLOBAL: [], projects: {} };
+
+  // Stats
+  let stats = { total: 0, byLevel: { GLOBAL: 0, PROJECT: 0, CLIENT: 0, CUSTOM: 0 } };
 
   // Contador
-  $: activeCount = credentials.length;
+  $: activeCount = stats.total;
   $: totalProviders = providers.length;
 
   // Formulario añadir
@@ -88,27 +87,25 @@
   // API Functions - Conecta con .env via backend
   // ==========================================
 
-  async function loadCredentials() {
+  async function loadUIState() {
     loading = true;
     error = null;
     try {
-      const res = await fetch(`${apiBase}/credentials`);
+      const res = await fetch(`${apiBase}/ui/state`);
       const data = await res.json();
 
-      if (data.success && data.credentials) {
-        credentials = data.credentials.map((c: any) => ({
-          key: c.key,
-          provider: c.provider,
-          level: c.level,
-          identifier: c.identifier,
-          preview: c.api_key_preview || '****'
-        }));
+      if (data.success) {
+        // Datos UI-ready desde backend
+        providers = data.providers || [];
+        levels = data.levels || [];
+        credentialsGrouped = data.credentials || { GLOBAL: [], projects: {} };
+        stats = data.stats || { total: 0, byLevel: {} };
       } else {
-        error = data.error || 'Error al cargar credenciales';
+        error = data.error || 'Error al cargar estado';
       }
     } catch (err) {
       error = 'No se pudo conectar con el servidor';
-      console.error('CredentialSelector: Error loading credentials', err);
+      console.error('CredentialSelector: Error loading UI state', err);
     } finally {
       loading = false;
     }
@@ -134,8 +131,8 @@
       const data = await res.json();
 
       if (data.success) {
-        // Recargar lista desde backend
-        await loadCredentials();
+        // Recargar estado desde backend
+        await loadUIState();
 
         dispatch('save', {
           provider: newCredential.provider,
@@ -168,8 +165,8 @@
       const data = await res.json();
 
       if (data.success) {
-        // Recargar lista desde backend
-        await loadCredentials();
+        // Recargar estado desde backend
+        await loadUIState();
         dispatch('delete', { key });
       } else {
         error = data.error || 'Error al eliminar';
@@ -183,9 +180,9 @@
     }
   }
 
-  // Cargar credenciales al montar
+  // Cargar estado UI al montar
   onMount(() => {
-    loadCredentials();
+    loadUIState();
   });
 
   function clearTimers() {
@@ -264,19 +261,6 @@
     apiDeleteCredential(key);
   }
 
-  function getProviderIcon(providerId: string): string {
-    return providers.find(p => p.id === providerId)?.icon || '🔑';
-  }
-
-  // Agrupar por nivel/proyecto
-  $: grouped = {
-    GLOBAL: credentials.filter(c => c.level === 'GLOBAL'),
-    projects: projects.map(proj => ({
-      name: proj,
-      credentials: credentials.filter(c => c.level === 'PROJECT' && c.identifier === proj)
-    })).filter(g => g.credentials.length > 0)
-  };
-
   // Tamaños
   const sizes = {
     sm: { btn: 48, icon: '1.25rem', label: '0.6rem' },
@@ -305,7 +289,7 @@
     <div class="panel">
       <div class="panel-header">
         <h3>🔐 Credenciales</h3>
-        <button class="refresh-btn" on:click={loadCredentials} disabled={loading}>
+        <button class="refresh-btn" on:click={loadUIState} disabled={loading}>
           {loading ? '⏳' : '🔄'}
         </button>
       </div>
@@ -314,19 +298,19 @@
         <div class="panel-error">{error}</div>
       {/if}
 
-      {#if loading && credentials.length === 0}
+      {#if loading && stats.total === 0}
         <p class="panel-loading">Cargando...</p>
-      {:else if credentials.length === 0}
+      {:else if stats.total === 0}
         <p class="panel-empty">No hay credenciales en .env</p>
       {:else}
         <!-- GLOBAL -->
-        {#if grouped.GLOBAL.length > 0}
+        {#if credentialsGrouped.GLOBAL.length > 0}
           <div class="group">
             <div class="group-title">🟢 GLOBAL</div>
-            {#each grouped.GLOBAL as cred}
+            {#each credentialsGrouped.GLOBAL as cred}
               <div class="cred-item">
-                <span class="cred-icon">{getProviderIcon(cred.provider)}</span>
-                <span class="cred-name">{cred.provider}</span>
+                <span class="cred-icon">{cred.providerIcon}</span>
+                <span class="cred-name">{cred.providerName}</span>
                 <span class="cred-preview">{cred.preview}</span>
                 <button class="cred-delete" on:click={() => deleteCredential(cred.key)} disabled={loading}>
                   {loading ? '⏳' : '🗑️'}
@@ -337,13 +321,13 @@
         {/if}
 
         <!-- Proyectos -->
-        {#each grouped.projects as proj}
+        {#each Object.entries(credentialsGrouped.projects) as [projectName, projectCreds]}
           <div class="group">
-            <div class="group-title">🔵 {proj.name}</div>
-            {#each proj.credentials as cred}
+            <div class="group-title">🔵 {projectName}</div>
+            {#each projectCreds as cred}
               <div class="cred-item">
-                <span class="cred-icon">{getProviderIcon(cred.provider)}</span>
-                <span class="cred-name">{cred.provider}</span>
+                <span class="cred-icon">{cred.providerIcon}</span>
+                <span class="cred-name">{cred.providerName}</span>
                 <span class="cred-preview">{cred.preview}</span>
                 <button class="cred-delete" on:click={() => deleteCredential(cred.key)} disabled={loading}>
                   {loading ? '⏳' : '🗑️'}
@@ -396,21 +380,21 @@
         </div>
       </div>
 
-      <!-- Identificador (si es PROJECT) -->
-      {#if newCredential.level === 'PROJECT'}
+      <!-- Identificador (si requiere identificador) -->
+      {#if levels.find(l => l.id === newCredential.level)?.requiresIdentifier}
         <div class="form-group">
-          <label>Proyecto</label>
-          {#if projects.length > 0}
+          <label>Identificador</label>
+          {#if Object.keys(credentialsGrouped.projects).length > 0}
             <select bind:value={newCredential.identifier}>
-              <option value="">-- Nuevo proyecto --</option>
-              {#each projects as proj}
+              <option value="">-- Nuevo --</option>
+              {#each Object.keys(credentialsGrouped.projects) as proj}
                 <option value={proj}>{proj}</option>
               {/each}
             </select>
           {/if}
           <input
             type="text"
-            placeholder="Nombre del proyecto"
+            placeholder="Nombre del identificador"
             bind:value={newCredential.identifier}
           />
         </div>

@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * Página de Pruebas - AISelector
+   * Página de Pruebas - Selectores
    */
   import { AISelector } from '$components/ai';
+  import { CredentialSelector } from '$components/credentials';
 
   let log: string[] = [];
 
@@ -10,30 +11,55 @@
     log = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...log.slice(0, 9)];
   }
 
+  // AISelector events
   function handleModelChange(e: CustomEvent) {
-    addLog(`Modelo: ${e.detail.model.icon} ${e.detail.model.name}`);
+    addLog(`🤖 Modelo: ${e.detail.model.icon} ${e.detail.model.name}`);
   }
 
   function handleConfigChange(e: CustomEvent) {
-    addLog(`Config: temp=${e.detail.temperature}, tokens=${e.detail.maxTokens}`);
+    addLog(`🤖 Config: temp=${e.detail.temperature}`);
+  }
+
+  // CredentialSelector events
+  function handleCredSave(e: CustomEvent) {
+    addLog(`🔐 Guardado: ${e.detail.provider} (${e.detail.level})`);
+  }
+
+  function handleCredDelete(e: CustomEvent) {
+    addLog(`🔐 Eliminado: ${e.detail.key}`);
   }
 </script>
 
 <div class="page">
-  <h1>AISelector</h1>
+  <h1>Pruebas</h1>
 
-  <div class="info">
-    <span>Tap: Modelo</span>
-    <span>Mantener: Config</span>
-  </div>
+  <!-- Selectores -->
+  <div class="selectors">
+    <div class="selector-card">
+      <div class="selector-info">
+        <span>Tap: Modelo</span>
+        <span>Mantener: Config</span>
+      </div>
+      <AISelector
+        size="lg"
+        on:modelChange={handleModelChange}
+        on:configChange={handleConfigChange}
+      />
+      <div class="selector-label">AISelector</div>
+    </div>
 
-  <!-- AISelector -->
-  <div class="selector-container">
-    <AISelector
-      size="lg"
-      on:modelChange={handleModelChange}
-      on:configChange={handleConfigChange}
-    />
+    <div class="selector-card">
+      <div class="selector-info">
+        <span>Tap: Ver</span>
+        <span>2x Tap: Añadir</span>
+      </div>
+      <CredentialSelector
+        size="lg"
+        on:save={handleCredSave}
+        on:delete={handleCredDelete}
+      />
+      <div class="selector-label">CredentialSelector</div>
+    </div>
   </div>
 
   <!-- Log -->
@@ -42,7 +68,7 @@
     {#each log as entry}
       <div class="log-item">{entry}</div>
     {:else}
-      <div class="log-empty">Toca el botón...</div>
+      <div class="log-empty">Toca los botones...</div>
     {/each}
   </div>
 </div>
@@ -55,37 +81,55 @@
     color: #fff;
   }
 
-  h1 { margin: 0 0 1rem; font-size: 1.5rem; }
-  h2 { margin: 0 0 0.5rem; font-size: 1rem; color: #888; }
-
-  .info {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin-bottom: 1.5rem;
-    font-size: 0.75rem;
+  h1 {
+    margin: 0 0 1.5rem;
+    font-size: 1.5rem;
   }
 
-  .info span {
-    padding: 0.5rem;
-    background: #222;
-    border-radius: 6px;
+  h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+    color: #888;
   }
 
-  .selector-container {
+  .selectors {
     display: flex;
+    gap: 1rem;
     justify-content: center;
-    padding: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .selector-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.5rem;
     background: #1a1a1a;
-    border-radius: 12px;
-    margin-bottom: 1rem;
+    border-radius: 16px;
+    min-width: 140px;
+  }
+
+  .selector-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.65rem;
+    color: #666;
+  }
+
+  .selector-label {
+    font-size: 0.75rem;
+    color: #888;
+    font-weight: 500;
   }
 
   .log {
     background: #1a1a1a;
     border-radius: 12px;
     padding: 1rem;
-    max-height: 200px;
+    max-height: 250px;
     overflow-y: auto;
   }
 
@@ -93,11 +137,12 @@
     padding: 0.4rem;
     border-bottom: 1px solid #333;
     font-family: monospace;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
   }
 
   .log-empty {
     color: #666;
     text-align: center;
+    padding: 1rem;
   }
 </style>

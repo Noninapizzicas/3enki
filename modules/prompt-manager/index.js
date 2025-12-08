@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const { EVENTS } = require('../../core/constants');
 
 /**
  * Prompt Manager Module
@@ -74,8 +75,8 @@ class PromptManagerModule {
 
   async subscribeToEvents() {
     // Listen for DB query responses
-    await this.eventBus.subscribe('db.query.response', this.onQueryResponse.bind(this));
-    await this.eventBus.subscribe('db.schema.init.response', this.onSchemaInitResponse.bind(this));
+    await this.eventBus.subscribe(EVENTS.DB.QUERY_RESPONSE, this.onQueryResponse.bind(this));
+    await this.eventBus.subscribe(EVENTS.DB.SCHEMA_INIT_RESPONSE, this.onSchemaInitResponse.bind(this));
 
     this.logger.info('prompt-manager.events.subscribed');
   }
@@ -130,7 +131,7 @@ class PromptManagerModule {
         }
       }, 10000);
 
-      this.eventBus.publish('db.query.request', {
+      this.eventBus.publish(EVENTS.DB.QUERY_REQUEST, {
         project_id,
         query,
         params,
@@ -158,7 +159,7 @@ class PromptManagerModule {
           }
         }, 5000);
 
-        this.eventBus.publish('db.schema.init.request', {
+        this.eventBus.publish(EVENTS.DB.SCHEMA_INIT_REQUEST, {
           project_id: this.GLOBAL_PROJECT_ID,
           schema,
           request_id

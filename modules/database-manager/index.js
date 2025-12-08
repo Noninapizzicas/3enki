@@ -136,17 +136,17 @@ class DatabaseManagerModule {
 
   async subscribeToEvents() {
     await this.eventBus.subscribe(
-      'db.query.request',
+      EVENTS.DB.QUERY_REQUEST,
       this.onQueryRequest.bind(this)
     );
 
     await this.eventBus.subscribe(
-      'db.schema.init.request',
+      EVENTS.DB.SCHEMA_INIT_REQUEST,
       this.onSchemaInitRequest.bind(this)
     );
 
     this.logger.info('events.subscribed', {
-      events: ['db.query.request', 'db.schema.init.request']
+      events: [EVENTS.DB.QUERY_REQUEST, EVENTS.DB.SCHEMA_INIT_REQUEST]
     });
   }
 
@@ -851,7 +851,7 @@ class DatabaseManagerModule {
   }
 
   async publishQueryResponse(projectId, requestId, success, data, error, correlationId) {
-    await this.eventBus.publish('db.query.response', {
+    await this.eventBus.publish(EVENTS.DB.QUERY_RESPONSE, {
       project_id: projectId,
       request_id: requestId,
       success,
@@ -861,7 +861,7 @@ class DatabaseManagerModule {
   }
 
   async publishSchemaInitResponse(projectId, requestId, success, error, correlationId) {
-    await this.eventBus.publish('db.schema.init.response', {
+    await this.eventBus.publish(EVENTS.DB.SCHEMA_INIT_RESPONSE, {
       project_id: projectId,
       request_id: requestId,
       success,

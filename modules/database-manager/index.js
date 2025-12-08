@@ -155,6 +155,13 @@ class DatabaseManagerModule {
   // ==========================================
 
   async onQueryRequest(event) {
+    // Debug: log raw event structure
+    this.logger.info('query.request.raw', {
+      event_keys: Object.keys(event || {}),
+      has_data: !!event?.data,
+      data_keys: event?.data ? Object.keys(event.data) : []
+    });
+
     const {
       project_id,
       query,
@@ -166,7 +173,7 @@ class DatabaseManagerModule {
 
     this.logger.info('query.request.received', {
       project_id,
-      query: query.substring(0, 100),
+      query: query ? query.substring(0, 100) : '(no query)',
       read_only,
       request_id,
       correlation_id
@@ -238,6 +245,13 @@ class DatabaseManagerModule {
   }
 
   async onSchemaInitRequest(event) {
+    // Debug: log raw event structure
+    this.logger.info('schema.init.request.raw', {
+      event_keys: Object.keys(event || {}),
+      has_data: !!event?.data,
+      data_keys: event?.data ? Object.keys(event.data) : []
+    });
+
     const {
       project_id,
       schema,

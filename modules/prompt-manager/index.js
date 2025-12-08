@@ -82,7 +82,7 @@ class PromptManagerModule {
   }
 
   onQueryResponse(event) {
-    const { request_id, success, data, error } = event.payload || event;
+    const { request_id, success, data, error } = event.data || event;
 
     if (this.pendingRequests.has(request_id)) {
       const { resolve, reject } = this.pendingRequests.get(request_id);
@@ -97,7 +97,7 @@ class PromptManagerModule {
   }
 
   onSchemaInitResponse(event) {
-    const { request_id, success, error } = event.payload || event;
+    const { request_id, success, error } = event.data || event;
 
     if (this.pendingRequests.has(request_id)) {
       const { resolve, reject } = this.pendingRequests.get(request_id);

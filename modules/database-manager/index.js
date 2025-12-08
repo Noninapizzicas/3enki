@@ -162,7 +162,7 @@ class DatabaseManagerModule {
       read_only = false,
       request_id,
       correlation_id
-    } = event.payload || event;
+    } = event.data || event;
 
     this.logger.info('query.request.received', {
       project_id,
@@ -243,7 +243,7 @@ class DatabaseManagerModule {
       schema,
       request_id,
       correlation_id
-    } = event.payload || event;
+    } = event.data || event;
 
     this.logger.info('schema.init.request.received', {
       project_id,

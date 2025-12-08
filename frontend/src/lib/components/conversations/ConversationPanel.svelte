@@ -494,11 +494,14 @@
           <div class="section">
             <div class="section-header">{section.label}</div>
             {#each section.conversations as conv}
-              <button
+              <div
                 class="conversation-item"
                 class:active={activeConversation?.id === conv.id}
                 class:recent={conv.isRecent}
                 on:click={() => selectConversation(conv)}
+                on:keydown={(e) => e.key === 'Enter' && selectConversation(conv)}
+                role="button"
+                tabindex="0"
               >
                 <div class="conv-icon">{conv.icon || '💬'}</div>
                 <div class="conv-info">
@@ -512,7 +515,7 @@
                     on:click|stopPropagation={() => deleteConfirm = { id: conv.id, title: conv.displayTitle }}
                   >🗑️</button>
                 </div>
-              </button>
+              </div>
             {/each}
           </div>
         {/each}

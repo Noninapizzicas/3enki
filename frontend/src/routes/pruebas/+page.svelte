@@ -5,8 +5,12 @@
   import { AISelector } from '$components/ai';
   import { CredentialSelector } from '$components/credentials';
   import { SlotSelector } from '$components/prompts';
+  import { ConversationPanel } from '$components/conversations';
 
   let log: string[] = [];
+
+  // Project ID de prueba
+  const testProjectId = 'test-project';
 
   function addLog(msg: string) {
     log = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...log.slice(0, 9)];
@@ -37,6 +41,23 @@
 
   function handlePresetSelect(e: CustomEvent) {
     addLog(`📦 Preset aplicado: ${e.detail.presetId}`);
+  }
+
+  // ConversationPanel events
+  function handleConvSelect(e: CustomEvent) {
+    addLog(`💬 Conversación: ${e.detail.conversation.displayTitle}`);
+  }
+
+  function handleConvMessage(e: CustomEvent) {
+    addLog(`💬 Mensaje enviado: ${e.detail.content.slice(0, 30)}...`);
+  }
+
+  function handleConvCreate(e: CustomEvent) {
+    addLog(`💬 Nueva conversación: ${e.detail.conversation.title}`);
+  }
+
+  function handleConvDelete(e: CustomEvent) {
+    addLog(`💬 Eliminada: ${e.detail.conversationId.slice(0, 8)}...`);
   }
 </script>
 
@@ -83,6 +104,23 @@
         on:presetSelect={handlePresetSelect}
       />
       <div class="selector-label">SlotSelector</div>
+    </div>
+
+    <div class="selector-card">
+      <div class="selector-info">
+        <span>Tap: Chat/Lista</span>
+        <span>2x Tap: Nueva</span>
+        <span>Mantener: Config</span>
+      </div>
+      <ConversationPanel
+        size="lg"
+        projectId={testProjectId}
+        on:select={handleConvSelect}
+        on:message={handleConvMessage}
+        on:create={handleConvCreate}
+        on:delete={handleConvDelete}
+      />
+      <div class="selector-label">ConversationPanel</div>
     </div>
   </div>
 

@@ -10,7 +10,7 @@
    *
    * Conecta con: /api/modules/credential-manager/ui/state (UI-ready endpoint)
    */
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
 
   // Props
@@ -26,6 +26,9 @@
   let panelMode: 'list' | 'add' | 'edit' = 'list';
   let loading = false;
   let error: string | null = null;
+
+  // Estado para confirmación de eliminación
+  let deleteConfirm: { key: string; provider: string } | null = null;
 
   // Datos UI-ready desde backend (no hardcodeados)
   let providers: Array<{ id: string; name: string; icon: string }> = [];
@@ -92,6 +95,9 @@
     error = null;
     try {
       const res = await fetch(`${apiBase}/ui/state`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
 
       if (data.success) {
@@ -102,9 +108,11 @@
         stats = data.stats || { total: 0, byLevel: {} };
       } else {
         error = data.message || data.error || 'Error al cargar estado';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'No se pudo conectar con el servidor';
+      dispatch('error', { message: error });
       console.error('CredentialSelector: Error loading UI state', err);
     } finally {
       loading = false;
@@ -132,8 +140,11 @@
         })
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
       const data = await res.json();
-      console.log('Test response:', data); // Debug
 
       if (data.success) {
         const msg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message) || 'Validación completada';
@@ -162,6 +173,7 @@
     if (!isValid) {
       const errMsg = testResult?.message;
       error = typeof errMsg === 'string' ? errMsg : 'API key no válida';
+      dispatch('error', { message: error });
       return;
     }
 
@@ -179,6 +191,10 @@
         })
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
       const data = await res.json();
 
       if (data.success) {
@@ -195,11 +211,12 @@
         resetForm();
       } else {
         error = data.message || data.error || 'Error al guardar';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'Error de conexión al guardar';
+      dispatch('error', { message: error });
       console.error('CredentialSelector: Error saving credential', err);
-      dispatch('error', { message: 'Error al guardar credencial' });
     } finally {
       loading = false;
     }
@@ -213,19 +230,25 @@
         method: 'DELETE'
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
       const data = await res.json();
 
       if (data.success) {
         // Recargar estado desde backend
         await loadUIState();
+        deleteConfirm = null;
         dispatch('delete', { key });
       } else {
         error = data.message || data.error || 'Error al eliminar';
+        dispatch('error', { message: error });
       }
     } catch (err) {
       error = 'Error de conexión al eliminar';
+      dispatch('error', { message: error });
       console.error('CredentialSelector: Error deleting credential', err);
-      dispatch('error', { message: 'Error al eliminar credencial' });
     } finally {
       loading = false;
     }
@@ -234,6 +257,10 @@
   // Cargar estado UI al montar
   onMount(() => {
     loadUIState();
+  });
+
+  onDestroy(() => {
+    clearTimers();
   });
 
   function clearTimers() {
@@ -272,24 +299,79 @@
       isLongPress = false;
       return;
     }
-    clearTimers();
-    tapCount++;
-    if (tapCount === 1) {
-      tapTimeout = window.setTimeout(() => {
-        if (tapCount === 1) doTap();
-        tapCount = 0;
-      }, TAP_DELAY);
-    } else if (tapCount >= 2) {
-      clearTimers();
-      doDoubleTap();
-      tapCount = 0;
+
+    if (longPressTimeout) {
+      clearTimeout(longPressTimeout);
+      longPressTimeout = null;
     }
+
+    tapCount++;
+
+    // Cancelar timeout anterior para detectar doble tap correctamente
+    if (tapTimeout) {
+      clearTimeout(tapTimeout);
+    }
+
+    tapTimeout = window.setTimeout(() => {
+      if (tapCount >= 2) {
+        doDoubleTap();
+      } else {
+        doTap();
+      }
+      tapCount = 0;
+      tapTimeout = null;
+    }, TAP_DELAY);
   }
 
   function onTouchCancel() {
     clearTimers();
     tapCount = 0;
     isLongPress = false;
+  }
+
+  // === EVENTOS MOUSE (desktop) ===
+  function onMouseDown() {
+    isLongPress = false;
+    longPressTimeout = window.setTimeout(() => {
+      isLongPress = true;
+      clearTimers();
+      // Long press no hace nada en este componente
+    }, LONG_PRESS_TIME);
+  }
+
+  function onMouseUp() {
+    if (isLongPress) {
+      isLongPress = false;
+      return;
+    }
+
+    if (longPressTimeout) {
+      clearTimeout(longPressTimeout);
+      longPressTimeout = null;
+    }
+
+    tapCount++;
+
+    if (tapTimeout) {
+      clearTimeout(tapTimeout);
+    }
+
+    tapTimeout = window.setTimeout(() => {
+      if (tapCount >= 2) {
+        doDoubleTap();
+      } else {
+        doTap();
+      }
+      tapCount = 0;
+      tapTimeout = null;
+    }, TAP_DELAY);
+  }
+
+  function onMouseLeave() {
+    if (longPressTimeout) {
+      clearTimeout(longPressTimeout);
+      longPressTimeout = null;
+    }
   }
 
   function resetForm() {
@@ -329,6 +411,9 @@
   on:touchstart={onTouchStart}
   on:touchend={onTouchEnd}
   on:touchcancel={onTouchCancel}
+  on:mousedown={onMouseDown}
+  on:mouseup={onMouseUp}
+  on:mouseleave={onMouseLeave}
 >
   <span class="cred-selector__icon">🔐</span>
   <span class="cred-selector__label">{activeCount}/{totalProviders}</span>
@@ -364,8 +449,8 @@
                 <span class="cred-icon">{cred.providerIcon}</span>
                 <span class="cred-name">{cred.providerName}</span>
                 <span class="cred-preview">{cred.preview}</span>
-                <button class="cred-delete" on:click={() => deleteCredential(cred.key)} disabled={loading}>
-                  {loading ? '⏳' : '🗑️'}
+                <button class="cred-delete" on:click={() => deleteConfirm = { key: cred.key, provider: cred.providerName }} disabled={loading}>
+                  🗑️
                 </button>
               </div>
             {/each}
@@ -381,8 +466,8 @@
                 <span class="cred-icon">{cred.providerIcon}</span>
                 <span class="cred-name">{cred.providerName}</span>
                 <span class="cred-preview">{cred.preview}</span>
-                <button class="cred-delete" on:click={() => deleteCredential(cred.key)} disabled={loading}>
-                  {loading ? '⏳' : '🗑️'}
+                <button class="cred-delete" on:click={() => deleteConfirm = { key: cred.key, provider: cred.providerName }} disabled={loading}>
+                  🗑️
                 </button>
               </div>
             {/each}
@@ -487,6 +572,28 @@
       </div>
 
       <p class="form-hint">⚠️ Se valida y guarda en archivo .env del servidor</p>
+    </div>
+  {/if}
+
+  <!-- Modal de confirmación de eliminación -->
+  {#if deleteConfirm}
+    <div class="delete-confirm-overlay" on:click={() => deleteConfirm = null} on:keydown={(e) => e.key === 'Escape' && (deleteConfirm = null)} role="button" tabindex="0">
+      <div class="delete-confirm-modal" on:click|stopPropagation role="dialog" aria-modal="true">
+        <div class="delete-confirm-icon">⚠️</div>
+        <h4>¿Eliminar credencial?</h4>
+        <p class="delete-confirm-name">{deleteConfirm.provider}</p>
+        <p class="delete-confirm-warning">Esta acción eliminará la API key del archivo .env</p>
+        <div class="delete-confirm-actions">
+          <button class="cancel-btn" on:click={() => deleteConfirm = null}>Cancelar</button>
+          <button
+            class="confirm-delete-btn"
+            on:click={() => deleteConfirm && apiDeleteCredential(deleteConfirm.key)}
+            disabled={loading}
+          >
+            {loading ? '⏳ Eliminando...' : '🗑️ Eliminar'}
+          </button>
+        </div>
+      </div>
     </div>
   {/if}
 </FloatingPanel>
@@ -758,5 +865,78 @@
     font-size: 0.7rem;
     color: #888;
     text-align: center;
+  }
+
+  /* Modal de confirmación de eliminación */
+  .delete-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .delete-confirm-modal {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  }
+
+  .delete-confirm-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .delete-confirm-modal h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111;
+  }
+
+  .delete-confirm-name {
+    font-weight: 500;
+    color: #111;
+    margin: 0 0 0.25rem 0;
+  }
+
+  .delete-confirm-warning {
+    font-size: 0.8rem;
+    color: #666;
+    margin: 0 0 1rem 0;
+  }
+
+  .delete-confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .confirm-delete-btn {
+    padding: 0.5rem 1rem;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .confirm-delete-btn:hover {
+    background: #b91c1c;
+  }
+
+  .confirm-delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

@@ -8,7 +8,7 @@
    *
    * Icono dinámico según modelo seleccionado.
    */
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
 
   // Props
@@ -117,6 +117,47 @@
     isLongPress = false;
   }
 
+  // === EVENTOS MOUSE (desktop) ===
+  function onMouseDown() {
+    isLongPress = false;
+    longPressTimeout = window.setTimeout(() => {
+      isLongPress = true;
+      clearTimers();
+      doLongPress();
+    }, LONG_PRESS_TIME);
+  }
+
+  function onMouseUp() {
+    if (isLongPress) {
+      isLongPress = false;
+      return;
+    }
+    clearTimers();
+    tapCount++;
+    if (tapCount === 1) {
+      tapTimeout = window.setTimeout(() => {
+        if (tapCount === 1) doTap();
+        tapCount = 0;
+      }, TAP_DELAY);
+    } else if (tapCount >= 2) {
+      clearTimers();
+      doTap();
+      tapCount = 0;
+    }
+  }
+
+  function onMouseLeave() {
+    if (longPressTimeout) {
+      clearTimeout(longPressTimeout);
+      longPressTimeout = null;
+    }
+  }
+
+  // Cleanup
+  onDestroy(() => {
+    clearTimers();
+  });
+
   function selectModel(idx: number) {
     currentIdx = idx;
     panelOpen = false;
@@ -167,6 +208,9 @@
   on:touchstart={onTouchStart}
   on:touchend={onTouchEnd}
   on:touchcancel={onTouchCancel}
+  on:mousedown={onMouseDown}
+  on:mouseup={onMouseUp}
+  on:mouseleave={onMouseLeave}
 >
   <span class="ai-selector__icon">{current.icon}</span>
   <span class="ai-selector__label">{current.name}</span>

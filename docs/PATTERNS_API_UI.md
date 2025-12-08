@@ -13,6 +13,7 @@
 | ai-gateway | 2025-12-07 | ✅ Analizado | AISelector |
 | credential-manager | 2025-12-08 | ✅ Analizado | CredentialSelector |
 | prompt-manager | 2025-12-08 | ✅ Analizado | SlotSelector |
+| conversation-manager | 2025-12-08 | ✅ Analizado | ConversationList (propuesto) |
 
 ---
 
@@ -229,6 +230,50 @@ GET /recurso/:id/versions → { versions: [{ version, content, created_at }] }
 
 ---
 
+### Patrón 15: Chat con Contexto
+
+```
+POST /conversaciones/:id/messages { content } → { user_message, assistant_message, tokens, cost }
+GET /conversaciones/:id/context → { project_context, conversation_context }
+```
+
+**UI:** `ChatPanel` con historial de mensajes + indicadores de contexto cargado
+
+**Ejemplos:**
+- `conversation-manager: POST /conversations/:id/messages { content, user_id }` → Envía mensaje y recibe respuesta AI
+- `conversation-manager: GET /conversations/:id/context` → Contexto completo (proyecto + conversación)
+- `conversation-manager: GET /conversations/:id/messages?limit=100` → Historial paginado
+
+**Características:**
+- Integración con ai-gateway para respuestas
+- Contexto de proyecto (nombre, descripción, archivos)
+- Context window configurable por conversación
+- Attachments via storage-manager
+
+---
+
+### Patrón 16: UI-Ready con Secciones Temporales
+
+```
+GET /ui/state?project_id=X → {
+  sections: [{ id, label, items[] }],
+  items: [],
+  stats: {}
+}
+```
+
+**UI:** Lista agrupada por fecha (Hoy, Ayer, Esta semana, etc.)
+
+**Ejemplos:**
+- `conversation-manager: GET /ui/state?project_id=X` → Conversaciones agrupadas por fecha
+
+**Componente:** ConversationList usa este patrón para:
+- Secciones temporales (today, yesterday, this_week, this_month, older)
+- Stats (total_conversations, total_messages, active_today)
+- Items con displayTitle, subtitle, icon, isRecent
+
+---
+
 ## Tabla Resumen
 
 | # | Método | Params | Response | → Componente UI |
@@ -247,6 +292,8 @@ GET /recurso/:id/versions → { versions: [{ version, content, created_at }] }
 | 12 | `POST` | `{ relaciones: Record<cat,ids[]> }` | `{ success }` | Checkboxes por categoría |
 | 13 | `POST` | `/:id/render { vars }` | `{ rendered }` | Preview con variables |
 | 14 | `PUT/GET` | `/:id/versions` | `{ versions[] }` | Historial con rollback |
+| 15 | `POST/GET` | `/:id/messages` | `{ user_msg, ai_msg }` | ChatPanel |
+| 16 | `GET` | `/ui/state?project_id` | `{ sections[], stats }` | Lista temporal agrupada |
 
 ---
 
@@ -268,7 +315,7 @@ GET /recurso/:id/versions → { versions: [{ version, content, created_at }] }
 
 - [x] credential-manager ✅
 - [x] prompt-manager ✅
-- [ ] conversation-manager
+- [x] conversation-manager ✅ (DB por proyecto implementado)
 - [ ] storage-manager
 - [ ] project-manager
 

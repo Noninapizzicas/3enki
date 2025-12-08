@@ -181,6 +181,13 @@
     },
     {
       "method": "GET",
+      "path": "/ui/state",
+      "handler": "handleUIState",
+      "description": "UI-ready state for conversation management (grouped by date, with stats)",
+      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/ui_state_response" }
+    },
+    {
+      "method": "GET",
       "path": "/health",
       "handler": "handleHealthCheck",
       "description": "Health check endpoint"

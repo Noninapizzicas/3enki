@@ -26,6 +26,7 @@ class ConversationManagerModule {
     // In-memory state
     this.conversations = new Map(); // conversationId -> conversation
     this.messages = new Map(); // conversationId -> [messages]
+    this.initializedProjects = new Set(); // Track projects with initialized schema
 
     // Pending requests
     this.pendingDbRequests = new Map();
@@ -79,11 +80,8 @@ class ConversationManagerModule {
       this.onSendMessageRequest.bind(this));
     this.unsubscribes.push(unsubSend);
 
-    // Initialize database schema
-    await this.initializeSchema();
-
-    // Load existing conversations
-    await this.loadExistingConversations();
+    // Note: Schema is initialized per-project on first access (ensureProjectSchema)
+    // Conversations are loaded on-demand via loadProjectConversations
 
     this.logger.info({ correlationId: 'system' }, 'Conversation Manager module loaded');
   }
@@ -158,13 +156,21 @@ class ConversationManagerModule {
 
   // ==================== INITIALIZATION ====================
 
-  async initializeSchema() {
-    const correlationId = crypto.randomUUID();
-    this.logger.debug({ correlationId }, 'Initializing conversation schema');
+  /**
+   * Ensure schema exists for a specific project
+   * Each project has its own database with conversations and messages tables
+   */
+  async ensureProjectSchema(projectId, correlationId) {
+    // Skip if already initialized
+    if (this.initializedProjects.has(projectId)) {
+      return;
+    }
+
+    this.logger.debug({ correlationId, projectId }, 'Initializing conversation schema for project');
 
     try {
-      // Conversations table
-      await this.queryDatabase('system', `
+      // Conversations table (project_id column kept for potential cross-project queries)
+      await this.queryDatabase(projectId, `
         CREATE TABLE IF NOT EXISTS conversations (
           id TEXT PRIMARY KEY,
           project_id TEXT NOT NULL,
@@ -184,7 +190,7 @@ class ConversationManagerModule {
       `, [], false, correlationId);
 
       // Messages table
-      await this.queryDatabase('system', `
+      await this.queryDatabase(projectId, `
         CREATE TABLE IF NOT EXISTS messages (
           id TEXT PRIMARY KEY,
           conversation_id TEXT NOT NULL,
@@ -199,34 +205,44 @@ class ConversationManagerModule {
         )
       `, [], false, correlationId);
 
-      // Indexes
-      await this.queryDatabase('system', `
-        CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id)
-      `, [], false, correlationId);
-
-      await this.queryDatabase('system', `
+      // Index for messages by conversation
+      await this.queryDatabase(projectId, `
         CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)
       `, [], false, correlationId);
 
-      this.logger.info({ correlationId }, 'Conversation schema initialized');
+      this.initializedProjects.add(projectId);
+      this.logger.info({ correlationId, projectId }, 'Conversation schema initialized for project');
     } catch (error) {
-      this.logger.error({ correlationId, error: error.message }, 'Failed to initialize schema');
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to initialize schema for project');
+      throw error;
     }
   }
 
-  async loadExistingConversations() {
-    const correlationId = crypto.randomUUID();
-    this.logger.debug({ correlationId }, 'Loading existing conversations');
+  /**
+   * Load conversations for a specific project (lazy loading)
+   * Called when accessing project conversations for the first time
+   */
+  async loadProjectConversations(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Loading conversations for project');
 
     try {
-      const rows = await this.queryDatabase('system',
-        'SELECT * FROM conversations ORDER BY created_at DESC',
+      // Ensure schema exists for this project
+      await this.ensureProjectSchema(projectId, correlationId);
+
+      const rows = await this.queryDatabase(projectId,
+        'SELECT * FROM conversations ORDER BY updated_at DESC',
         [],
         true,
         correlationId
       );
 
+      let loadedCount = 0;
       for (const row of rows) {
+        // Skip if already in memory (from another load)
+        if (this.conversations.has(row.id)) {
+          continue;
+        }
+
         const conversation = {
           id: row.id,
           project_id: row.project_id,
@@ -245,12 +261,14 @@ class ConversationManagerModule {
         };
 
         this.conversations.set(conversation.id, conversation);
+        loadedCount++;
       }
 
-      this.logger.info({ correlationId, count: this.conversations.size }, 'Loaded conversations');
-      // REMOVED: this.metrics.gauge('conversation.active.count', this.conversations.size);
+      this.logger.info({ correlationId, projectId, loadedCount, totalRows: rows.length }, 'Loaded project conversations');
+      return rows.length;
     } catch (error) {
-      this.logger.error({ correlationId, error: error.message }, 'Failed to load conversations');
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to load project conversations');
+      throw error;
     }
   }
 
@@ -355,7 +373,7 @@ class ConversationManagerModule {
     // Load messages (limited by context window)
     const contextWindow = conversation.context_window || this.config.contextWindow || 20;
 
-    const messages = await this.queryDatabase('system',
+    const messages = await this.queryDatabase(conversation.project_id,
       `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?`,
       [conversationId, contextWindow],
       true,
@@ -413,7 +431,10 @@ class ConversationManagerModule {
     };
 
     try {
-      await this.queryDatabase('system',
+      // Ensure schema exists for this project
+      await this.ensureProjectSchema(projectId, correlationId);
+
+      await this.queryDatabase(projectId,
         `INSERT INTO conversations (id, project_id, user_id, title, system_prompt, model, provider,
           temperature, max_tokens, context_window, created_at, updated_at, message_count, metadata)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -496,7 +517,7 @@ class ConversationManagerModule {
     params.push(conversationId);
 
     try {
-      await this.queryDatabase('system',
+      await this.queryDatabase(conversation.project_id,
         `UPDATE conversations SET ${queryParts.join(', ')} WHERE id = ?`,
         params,
         false,
@@ -537,7 +558,7 @@ class ConversationManagerModule {
 
     try {
       // Delete messages (CASCADE should handle this, but explicit for clarity)
-      const messagesDeleted = await this.queryDatabase('system',
+      const messagesDeleted = await this.queryDatabase(conversation.project_id,
         'DELETE FROM messages WHERE conversation_id = ?',
         [conversationId],
         false,
@@ -545,7 +566,7 @@ class ConversationManagerModule {
       );
 
       // Delete conversation
-      await this.queryDatabase('system',
+      await this.queryDatabase(conversation.project_id,
         'DELETE FROM conversations WHERE id = ?',
         [conversationId],
         false,
@@ -607,7 +628,7 @@ class ConversationManagerModule {
       };
 
       // Save user message
-      await this.queryDatabase('system',
+      await this.queryDatabase(conversation.project_id,
         `INSERT INTO messages (id, conversation_id, role, content, attachments, tokens, cost, created_at, metadata)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -627,7 +648,7 @@ class ConversationManagerModule {
 
       // Update conversation message count
       conversation.message_count += 1;
-      await this.queryDatabase('system',
+      await this.queryDatabase(conversation.project_id,
         'UPDATE conversations SET message_count = message_count + 1, updated_at = ? WHERE id = ?',
         [now, conversationId],
         false,
@@ -697,7 +718,7 @@ class ConversationManagerModule {
       };
 
       // Save assistant message
-      await this.queryDatabase('system',
+      await this.queryDatabase(conversation.project_id,
         `INSERT INTO messages (id, conversation_id, role, content, attachments, tokens, cost, created_at, metadata)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -717,7 +738,7 @@ class ConversationManagerModule {
 
       // Update conversation
       conversation.message_count += 1;
-      await this.queryDatabase('system',
+      await this.queryDatabase(conversation.project_id,
         'UPDATE conversations SET message_count = message_count + 1, updated_at = ? WHERE id = ?',
         [assistantNow, conversationId],
         false,
@@ -808,7 +829,12 @@ class ConversationManagerModule {
   }
 
   async getMessages(conversationId, limit = 100, offset = 0, correlationId) {
-    const messages = await this.queryDatabase('system',
+    const conversation = this.conversations.get(conversationId);
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${conversationId}`);
+    }
+
+    const messages = await this.queryDatabase(conversation.project_id,
       `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?`,
       [conversationId, limit, offset],
       true,
@@ -957,11 +983,19 @@ class ConversationManagerModule {
     this.logger.debug({ correlationId, projectId: project_id }, 'HTTP: List conversations');
 
     try {
+      // If project_id provided, load conversations from that project's DB
+      if (project_id) {
+        await this.loadProjectConversations(project_id, correlationId);
+      }
+
       let conversations = Array.from(this.conversations.values());
 
       if (project_id) {
         conversations = conversations.filter(c => c.project_id === project_id);
       }
+
+      // Sort by updated_at descending
+      conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
       res.json({ success: true, conversations, count: conversations.length });
     } catch (error) {
@@ -1114,6 +1148,124 @@ class ConversationManagerModule {
     } catch (error) {
       this.logger.error({ correlationId, conversationId: id, error: error.message },
         'HTTP: Failed to get context');
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * GET /ui/state - UI-ready endpoint for conversation management
+   * Returns data structured for direct UI consumption
+   */
+  async handleUIState(req, res) {
+    const correlationId = crypto.randomUUID();
+    const { project_id } = req.query;
+
+    this.logger.debug({ correlationId, projectId: project_id }, 'HTTP: Get UI state');
+
+    if (!project_id) {
+      return res.status(400).json({ success: false, error: 'project_id is required' });
+    }
+
+    try {
+      // Load conversations for this project
+      await this.loadProjectConversations(project_id, correlationId);
+
+      // Get conversations for this project
+      const conversations = Array.from(this.conversations.values())
+        .filter(c => c.project_id === project_id)
+        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+      // Calculate stats
+      const totalMessages = conversations.reduce((sum, c) => sum + (c.message_count || 0), 0);
+      const activeToday = conversations.filter(c => {
+        const updated = new Date(c.updated_at);
+        const today = new Date();
+        return updated.toDateString() === today.toDateString();
+      }).length;
+
+      // Group by date for UI sections
+      const grouped = {};
+      const now = new Date();
+      const todayStr = now.toDateString();
+      const yesterdayStr = new Date(now - 86400000).toDateString();
+
+      for (const conv of conversations) {
+        const updatedDate = new Date(conv.updated_at);
+        const dateStr = updatedDate.toDateString();
+
+        let groupKey;
+        if (dateStr === todayStr) {
+          groupKey = 'today';
+        } else if (dateStr === yesterdayStr) {
+          groupKey = 'yesterday';
+        } else if (now - updatedDate < 7 * 86400000) {
+          groupKey = 'this_week';
+        } else if (now - updatedDate < 30 * 86400000) {
+          groupKey = 'this_month';
+        } else {
+          groupKey = 'older';
+        }
+
+        if (!grouped[groupKey]) {
+          grouped[groupKey] = [];
+        }
+
+        // UI-ready conversation item
+        grouped[groupKey].push({
+          id: conv.id,
+          title: conv.title || 'New Conversation',
+          displayTitle: conv.title || 'New Conversation',
+          subtitle: `${conv.message_count || 0} messages`,
+          icon: '💬',
+          message_count: conv.message_count || 0,
+          model: conv.model,
+          provider: conv.provider,
+          updated_at: conv.updated_at,
+          created_at: conv.created_at,
+          isRecent: (now - new Date(conv.updated_at)) < 3600000 // within 1 hour
+        });
+      }
+
+      // UI sections in display order
+      const sections = ['today', 'yesterday', 'this_week', 'this_month', 'older'];
+      const sectionLabels = {
+        today: 'Hoy',
+        yesterday: 'Ayer',
+        this_week: 'Esta semana',
+        this_month: 'Este mes',
+        older: 'Anteriores'
+      };
+
+      const uiSections = sections
+        .filter(key => grouped[key]?.length > 0)
+        .map(key => ({
+          id: key,
+          label: sectionLabels[key],
+          conversations: grouped[key]
+        }));
+
+      res.json({
+        success: true,
+        project_id,
+        sections: uiSections,
+        conversations: conversations.map(c => ({
+          id: c.id,
+          title: c.title,
+          displayTitle: c.title || 'New Conversation',
+          message_count: c.message_count,
+          model: c.model,
+          provider: c.provider,
+          updated_at: c.updated_at,
+          created_at: c.created_at
+        })),
+        stats: {
+          total_conversations: conversations.length,
+          total_messages: totalMessages,
+          active_today: activeToday
+        }
+      });
+    } catch (error) {
+      this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to get UI state');
       res.status(500).json({ success: false, error: error.message });
     }
   }

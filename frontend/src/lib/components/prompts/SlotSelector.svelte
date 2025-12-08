@@ -102,7 +102,8 @@
         presets = data.presets || [];
         stats = data.stats || { total_prompts: 0, total_presets: 0, by_slot: {} };
       } else {
-        error = data.error || 'Error al cargar';
+        const errMsg = typeof data.error === 'string' ? data.error : (data.message || 'Error al cargar');
+        error = errMsg;
       }
     } catch (err) {
       error = 'No se pudo conectar con el servidor';
@@ -135,6 +136,7 @@
       });
 
       const data = await res.json();
+      console.log('Save response:', data); // Debug
 
       if (data.success) {
         await loadUIState();
@@ -142,7 +144,8 @@
         panelMode = 'list';
         resetPromptForm();
       } else {
-        error = data.error || 'Error al guardar';
+        const errMsg = typeof data.error === 'string' ? data.error : (data.message || JSON.stringify(data.error) || 'Error al guardar');
+        error = errMsg;
       }
     } catch (err) {
       error = 'Error de conexión al guardar';

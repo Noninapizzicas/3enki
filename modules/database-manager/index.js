@@ -274,7 +274,7 @@ class DatabaseManagerModule {
       );
 
       // Publish schema initialized event
-      await this.eventBus.publish('db.schema.initialized', {
+      await this.eventBus.publish(EVENTS.DB.SCHEMA_INITIALIZED, {
         project_id,
         initialized_at: new Date().toISOString()
       }, { correlationId: correlation_id });

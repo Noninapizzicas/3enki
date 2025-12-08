@@ -755,6 +755,222 @@ class CredentialManagerModule {
   }
 
   // ==========================================
+  // UI State Endpoint - Datos listos para pintar
+  // ==========================================
+
+  async handleGetUIState(req, context) {
+    this.logger.info('ui.state.request', {
+      correlation_id: context.correlationId
+    });
+
+    // Proveedores disponibles con metadata UI
+    const providers = [
+      { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
+      { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
+      { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
+      { id: 'OLLAMA', name: 'Ollama', icon: '🦙' }
+    ];
+
+    // Niveles disponibles con metadata UI
+    const levels = [
+      { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },
+      { id: 'PROJECT', name: 'Proyecto', icon: '🔵', requiresIdentifier: true },
+      { id: 'CLIENT', name: 'Cliente', icon: '🟡', requiresIdentifier: true },
+      { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true }
+    ];
+
+    // Credenciales agrupadas y enriquecidas
+    const credentialsGrouped = {
+      GLOBAL: [],
+      projects: {}
+    };
+
+    for (const [key, value] of this.credentials.entries()) {
+      const parsed = this.parseKey(key);
+      if (!parsed) continue;
+
+      const provider = providers.find(p => p.id === parsed.provider);
+      const credential = {
+        key,
+        provider: parsed.provider,
+        providerName: provider?.name || parsed.provider,
+        providerIcon: provider?.icon || '🔑',
+        level: parsed.level,
+        identifier: parsed.identifier,
+        preview: this.maskApiKey(value)
+      };
+
+      if (parsed.level === 'GLOBAL') {
+        credentialsGrouped.GLOBAL.push(credential);
+      } else if (parsed.level === 'PROJECT' && parsed.identifier) {
+        if (!credentialsGrouped.projects[parsed.identifier]) {
+          credentialsGrouped.projects[parsed.identifier] = [];
+        }
+        credentialsGrouped.projects[parsed.identifier].push(credential);
+      }
+    }
+
+    // Estadísticas
+    const stats = {
+      total: this.credentials.size,
+      byLevel: { GLOBAL: 0, PROJECT: 0, CLIENT: 0, CUSTOM: 0 }
+    };
+    for (const key of this.credentials.keys()) {
+      const level = this.extractLevel(key);
+      if (stats.byLevel[level] !== undefined) {
+        stats.byLevel[level]++;
+      }
+    }
+
+    return {
+      status: 200,
+      data: {
+        success: true,
+        providers,
+        levels,
+        credentials: credentialsGrouped,
+        stats
+      }
+    };
+  }
+
+  // ==========================================
+  // UI Test Endpoint - Validar API key antes de guardar
+  // ==========================================
+
+  async handleTestCredential(req, context) {
+    const { provider, api_key } = req.body || {};
+
+    this.logger.info('ui.test.request', {
+      provider,
+      correlation_id: context.correlationId
+    });
+
+    if (!provider || !api_key) {
+      return {
+        status: 400,
+        data: {
+          success: false,
+          valid: false,
+          error: 'Provider y api_key son requeridos'
+        }
+      };
+    }
+
+    try {
+      let valid = false;
+      let message = '';
+
+      switch (provider.toUpperCase()) {
+        case 'DEEPSEEK':
+          valid = await this.testDeepSeek(api_key);
+          message = valid ? 'API key válida' : 'API key inválida o sin créditos';
+          break;
+
+        case 'OPENAI':
+          valid = await this.testOpenAI(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
+        case 'ANTHROPIC':
+          valid = await this.testAnthropic(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
+        case 'OLLAMA':
+          // Ollama es local, no necesita validación de API key
+          valid = api_key && api_key.length > 0;
+          message = 'Ollama es local - no requiere validación';
+          break;
+
+        default:
+          valid = api_key && api_key.length > 10;
+          message = 'Provider no reconocido - validación básica';
+      }
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          valid,
+          provider,
+          message
+        }
+      };
+    } catch (error) {
+      this.logger.error('ui.test.error', {
+        provider,
+        error: error.message,
+        correlation_id: context.correlationId
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          valid: false,
+          provider,
+          message: `Error al validar: ${error.message}`
+        }
+      };
+    }
+  }
+
+  // Test helpers para cada provider
+  async testDeepSeek(apiKey) {
+    try {
+      const response = await fetch('https://api.deepseek.com/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async testOpenAI(apiKey) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async testAnthropic(apiKey) {
+    try {
+      // Anthropic no tiene endpoint de listado, usamos un mensaje mínimo
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }]
+        })
+      });
+      // 200 = válida, 401 = inválida, otros pueden ser rate limit pero key válida
+      return response.status !== 401;
+    } catch {
+      return false;
+    }
+  }
+
+  // ==========================================
   // Core Logic
   // ==========================================
 

@@ -11,6 +11,7 @@
 | Módulo | Fecha | Estado |
 |--------|-------|--------|
 | ai-gateway | 2025-12-07 | ✅ Analizado |
+| credential-manager | 2025-12-08 | ✅ Analizado |
 
 ---
 
@@ -27,6 +28,7 @@ GET /recurso → { items: [] }
 **Ejemplos:**
 - `ai-gateway: GET /providers` → Lista de providers
 - `ai-gateway: GET /models` → Lista de modelos
+- `credential-manager: GET /credentials/levels` → Lista de niveles disponibles
 
 ---
 
@@ -41,6 +43,8 @@ GET /recurso?filtro=valor → { items: [] }
 **Ejemplos:**
 - `ai-gateway: GET /models?provider=deepseek` → Lista filtrada por provider
 - `ai-gateway: GET /usage?provider=deepseek` → Stats filtradas
+- `credential-manager: GET /credentials?level=GLOBAL` → Credenciales filtradas por nivel
+- `credential-manager: GET /credentials/resolve?provider=deepseek` → Resolver por cascada
 
 ---
 
@@ -106,20 +110,63 @@ POST /accion { campo1, campo2, campo3, ... } → { result }
 
 **Ejemplos:**
 - `ai-gateway: POST /chat { messages, provider, model, temperature, max_tokens }`
+- `credential-manager: POST /credentials { provider, level, identifier, api_key }`
+
+---
+
+### Patrón 8: GET Lista Agrupada
+
+```
+GET /recurso → { items: [], grouped_by: "campo" }
+```
+
+**UI:** `GroupedList` con secciones colapsables
+
+**Ejemplos:**
+- `credential-manager: GET /credentials` → Lista agrupada por `level` (GLOBAL, PROJECT, etc.)
+
+---
+
+### Patrón 9: DELETE por ID/Key
+
+```
+DELETE /recurso/:id → { success, deleted }
+```
+
+**UI:** `Button` de eliminar con confirmación
+
+**Ejemplos:**
+- `credential-manager: DELETE /credentials/:key` → Eliminar credencial específica
+
+---
+
+### Patrón 10: PUT Actualización
+
+```
+PUT /recurso/:id { campo } → { success, updated }
+```
+
+**UI:** `EditForm` o `InlineEdit`
+
+**Ejemplos:**
+- `credential-manager: PUT /credentials/:key { api_key }` → Actualizar API key
 
 ---
 
 ## Tabla Resumen
 
-| Método | Params | Response | → Componente UI |
-|--------|--------|----------|-----------------|
-| `GET` | ninguno | `{ items: [] }` | SelectList / Table |
-| `GET` | `?filtro=X` | `{ items: [] }` | SelectList + Dropdown |
-| `GET` | ninguno | `{ current, options }` | SelectList con estado |
-| `GET` | ninguno | `{ items, totals }` | StatsCard |
-| `POST` | `{ id }` | `{ success }` | Button acción |
-| `POST` | `{ selection }` | `{ current }` | onClick en lista |
-| `POST` | `{ múltiples }` | `{ result }` | ActionForm |
+| # | Método | Params | Response | → Componente UI |
+|---|--------|--------|----------|-----------------|
+| 1 | `GET` | ninguno | `{ items: [] }` | SelectList / Table |
+| 2 | `GET` | `?filtro=X` | `{ items: [] }` | SelectList + Dropdown |
+| 3 | `GET` | ninguno | `{ current, options }` | SelectList con estado |
+| 4 | `GET` | ninguno | `{ items, totals }` | StatsCard |
+| 5 | `POST` | `{ id }` | `{ success }` | Button acción |
+| 6 | `POST` | `{ selection }` | `{ current }` | onClick en lista |
+| 7 | `POST` | `{ múltiples }` | `{ result }` | ActionForm |
+| 8 | `GET` | ninguno | `{ items[], grouped }` | GroupedList |
+| 9 | `DELETE` | `/:id` | `{ success }` | Button eliminar |
+| 10 | `PUT` | `/:id { campo }` | `{ success }` | EditForm / InlineEdit |
 
 ---
 
@@ -139,10 +186,12 @@ POST /accion { campo1, campo2, campo3, ... } → { result }
 
 ## Próximos Módulos a Analizar
 
-- [ ] credential-manager
+- [x] credential-manager ✅
 - [ ] prompt-manager
 - [ ] conversation-manager
 - [ ] plugin-manager
+- [ ] storage-manager
+- [ ] project-manager
 
 ---
 
@@ -155,4 +204,4 @@ POST /accion { campo1, campo2, campo3, ... } → { result }
 
 ---
 
-*Última actualización: 2025-12-07*
+*Última actualización: 2025-12-08*

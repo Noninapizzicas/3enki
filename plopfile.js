@@ -723,6 +723,166 @@ module.exports = function (plop) {
   });
 
   // ==========================================
+  // Generator: selector-panel
+  // ==========================================
+  plop.setGenerator('selector-panel', {
+    description: 'Crear un wrapper de SelectorPanel para un módulo específico',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '📦 Nombre del componente (PascalCase, ej: MyModelSelector):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[A-Z][a-zA-Z0-9]*$/.test(value)) return 'Usa PascalCase';
+          return true;
+        }
+      },
+      {
+        type: 'list',
+        name: 'module',
+        message: '🔌 Módulo a conectar:',
+        choices: [
+          { name: '🤖 ai-gateway - Selección de modelo IA', value: 'ai-gateway' },
+          { name: '🔑 credential-manager - Gestión de API keys', value: 'credential-manager' },
+          { name: '📝 prompt-manager - Selección de prompts', value: 'prompt-manager' },
+          { name: '💬 conversation-manager - Historial de conversaciones', value: 'conversation-manager' }
+        ]
+      },
+      {
+        type: 'list',
+        name: 'panelMode',
+        message: '📱 Modo del panel:',
+        choices: [
+          { name: 'quick - Panel pequeño para selección rápida (30%)', value: 'quick' },
+          { name: 'create - Modal para crear nuevo (50%)', value: 'create' },
+          { name: 'manage - Vista completa de gestión (85%)', value: 'manage' }
+        ],
+        default: 'quick'
+      },
+      {
+        type: 'input',
+        name: 'title',
+        message: '🏷️ Título personalizado (vacío = usar default del módulo):',
+        default: ''
+      }
+    ],
+
+    actions: (data) => {
+      // Títulos por defecto según módulo
+      const defaultTitles = {
+        'ai-gateway': 'Seleccionar Modelo',
+        'credential-manager': 'Credenciales',
+        'prompt-manager': 'Prompts',
+        'conversation-manager': 'Conversaciones'
+      };
+
+      data.defaultTitle = defaultTitles[data.module] || 'Selector';
+      data.hasCustomTitle = !!data.title;
+
+      const componentPath = 'frontend/src/lib/components/selectors';
+
+      return [
+        {
+          type: 'add',
+          path: `${componentPath}/{{name}}.svelte`,
+          template: `<!--
+  {{name}}.svelte
+  ================
+  Wrapper de SelectorPanel para ${data.module}
+  Generado con: npx plop selector-panel
+
+  Uso:
+    <{{name}}
+      bind:open={showPanel}
+      bind:selectedValue={currentValue}
+      on:select={handleSelect}
+    />
+-->
+<script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  import SelectorPanel from './SelectorPanel.svelte';
+
+  // Props
+  export let projectId: string | null = null;
+  export let open = false;
+  export let selectedValue: string | string[] | null = null;
+  export let allowCreate = true;
+  export let showStats = true;
+
+  // Events
+  const dispatch = createEventDispatcher<{
+    select: { itemId: string; item: any; metadata?: Record<string, unknown> };
+    create: { groupId?: string };
+    edit: { itemId: string; item: any };
+    delete: { itemId: string };
+    close: void;
+  }>();
+
+  function handleSelect(event: CustomEvent) {
+    dispatch('select', event.detail);
+  }
+
+  function handleCreate(event: CustomEvent) {
+    dispatch('create', event.detail);
+  }
+
+  function handleEdit(event: CustomEvent) {
+    dispatch('edit', event.detail);
+  }
+
+  function handleDelete(event: CustomEvent) {
+    dispatch('delete', event.detail);
+  }
+
+  function handleClose() {
+    dispatch('close');
+  }
+</script>
+
+<SelectorPanel
+  module="${data.module}"
+  panelMode="${data.panelMode}"
+  {projectId}
+  bind:open
+  bind:selectedValue
+  {allowCreate}
+  {showStats}
+  ${data.hasCustomTitle ? `title="${data.title}"` : ''}
+  on:select={handleSelect}
+  on:create={handleCreate}
+  on:edit={handleEdit}
+  on:delete={handleDelete}
+  on:close={handleClose}
+/>
+`
+        },
+        // Agregar export al index.ts
+        {
+          type: 'append',
+          path: `${componentPath}/index.ts`,
+          template: "export { default as {{name}} } from './{{name}}.svelte';\n"
+        },
+        () => {
+          console.log('\\n✅ Componente selector creado exitosamente');
+          console.log(`\\n📁 Archivo: ${componentPath}/${data.name}.svelte`);
+          console.log('\\n📦 Uso:');
+          console.log(`   import { ${data.name} } from '$lib/components/selectors';`);
+          console.log('');
+          console.log(`   <${data.name}`);
+          console.log('     bind:open={showPanel}');
+          console.log('     bind:selectedValue={currentValue}');
+          console.log('     on:select={handleSelect}');
+          console.log('   />');
+          console.log('');
+          return '';
+        }
+      ];
+    }
+  });
+
+  // ==========================================
   // Generator: from-blueprint
   // ==========================================
   plop.setGenerator('from-blueprint', {

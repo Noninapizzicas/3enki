@@ -1,0 +1,499 @@
+# ============================================================================
+# Blueprint: Selector Panel - Componente unificado para selectores UI
+# ============================================================================
+# Template para generar paneles selectores que consumen /ui/state de módulos.
+# Sigue los patrones de CONTEXT_UI.md con triple interacción.
+#
+# Uso:
+#   1. Importar SelectorPanel en tu componente
+#   2. Configurar module y panelMode
+#   3. Manejar eventos (onSelect, onCreate, etc.)
+#
+# Módulos soportados:
+#   - ai-gateway: Selección de modelo/proveedor IA
+#   - credential-manager: Gestión de API keys
+#   - prompt-manager: Selección de prompts/slots
+#   - conversation-manager: Historial de conversaciones
+#
+# ============================================================================
+
+name: selector-panel
+description: Panel selector unificado con triple interacción y soporte MQTT
+version: 2.0.0
+author: Event Core Team
+type: component
+icon: "🎛️"
+
+# ============================================================================
+# ESTRUCTURA DE DATOS NORMALIZADA
+# ============================================================================
+# Todos los módulos se normalizan a esta estructura:
+
+dataStructure:
+  groups:
+    description: Secciones/categorías para agrupar items
+    schema:
+      id: string           # Identificador único
+      label: string        # Texto a mostrar
+      icon: string         # Emoji
+      count: number        # Cantidad de items
+      expanded: boolean    # Estado del acordeón
+      variant: string      # default | primary | warning | danger
+      items: array         # Items del grupo
+
+  items:
+    description: Elementos seleccionables
+    schema:
+      id: string           # Identificador único
+      label: string        # Texto principal
+      sublabel: string     # Texto secundario (opcional)
+      icon: string         # Emoji (opcional)
+      badge: string        # Badge texto (opcional)
+      badgeVariant: string # success | warning | danger | info
+      selected: boolean    # Si está seleccionado
+      disabled: boolean    # Si está deshabilitado
+      metadata: object     # Datos extra del item
+
+  selection:
+    description: Estado de selección
+    schema:
+      mode: string         # single | multiple
+      value: any           # ID o array de IDs
+
+  stats:
+    description: Estadísticas para mostrar
+    schema:
+      items: array         # [{ label, value, icon }]
+
+# ============================================================================
+# ADAPTADORES POR MÓDULO
+# ============================================================================
+
+adapters:
+  # AI Gateway - Selección de modelo
+  ai-gateway:
+    endpoint: /modules/ai-gateway/ui/state
+    transform:
+      groups: |
+        data.providers.map(p => ({
+          id: p.id,
+          label: p.displayName,
+          icon: p.icon,
+          count: p.models.length,
+          expanded: p.id === data.current.provider,
+          variant: p.available ? 'default' : 'warning',
+          items: p.models.map(m => ({
+            id: `${p.id}:${m.id}`,
+            label: m.name,
+            sublabel: p.pricing ? `$${p.pricing.input}/1K in` : null,
+            selected: m.isSelected,
+            metadata: { provider: p.id, model: m.id }
+          }))
+        }))
+      selection:
+        mode: single
+        value: data.current.model
+      stats:
+        - label: Requests
+          value: data.usage.session.requests
+          icon: "📊"
+        - label: Tokens
+          value: data.usage.session.tokens
+          icon: "🔤"
+        - label: Costo
+          value: `$${data.usage.session.cost.toFixed(4)}`
+          icon: "💰"
+
+  # Credential Manager - Gestión de API keys
+  credential-manager:
+    endpoint: /modules/credential-manager/ui/state
+    transform:
+      groups: |
+        data.levels.map(level => ({
+          id: level.id,
+          label: level.name,
+          icon: level.icon,
+          count: data.stats.byLevel[level.id] || 0,
+          expanded: level.id === 'GLOBAL',
+          variant: 'default',
+          items: (data.credentials[level.id] || []).map(c => ({
+            id: c.key,
+            label: c.providerName,
+            sublabel: c.preview,
+            icon: c.providerIcon,
+            badge: c.identifier,
+            metadata: { provider: c.provider, level: c.level }
+          }))
+        }))
+      selection:
+        mode: single
+        value: null
+      stats:
+        - label: Total
+          value: data.stats.total
+          icon: "🔑"
+
+  # Prompt Manager - Selección de slots
+  prompt-manager:
+    endpoint: /modules/prompt-manager/ui/state
+    transform:
+      groups: |
+        data.slotTypes.map(slot => ({
+          id: slot.id,
+          label: slot.name,
+          icon: slot.icon,
+          count: slot.count,
+          expanded: slot.count > 0,
+          variant: 'default',
+          items: (data.promptsBySlot[slot.id] || []).map(p => ({
+            id: p.id,
+            label: p.title,
+            sublabel: p.description,
+            badge: p.level === 'PROJECT' ? 'Proyecto' : null,
+            badgeVariant: p.level === 'PROJECT' ? 'info' : null,
+            metadata: { slotType: slot.id, tags: p.tags }
+          }))
+        }))
+      selection:
+        mode: multiple
+        value: []
+      stats:
+        - label: Prompts
+          value: data.stats.total_prompts
+          icon: "📝"
+        - label: Presets
+          value: data.stats.total_presets
+          icon: "📦"
+
+  # Conversation Manager - Historial
+  conversation-manager:
+    endpoint: /modules/conversation-manager/ui/state
+    transform:
+      groups: |
+        data.sections.map(section => ({
+          id: section.id,
+          label: section.label,
+          icon: section.id === 'today' ? '📅' : '📆',
+          count: section.conversations.length,
+          expanded: section.id === 'today',
+          variant: 'default',
+          items: section.conversations.map(c => ({
+            id: c.id,
+            label: c.displayTitle,
+            sublabel: c.subtitle,
+            icon: c.icon,
+            badge: c.isRecent ? 'Nuevo' : null,
+            badgeVariant: 'success',
+            metadata: {
+              messageCount: c.message_count,
+              model: c.model,
+              provider: c.provider
+            }
+          }))
+        }))
+      selection:
+        mode: single
+        value: null
+      stats:
+        - label: Total
+          value: data.stats.total_conversations
+          icon: "💬"
+        - label: Mensajes
+          value: data.stats.total_messages
+          icon: "📨"
+        - label: Hoy
+          value: data.stats.active_today
+          icon: "🔥"
+
+# ============================================================================
+# CONFIGURACIÓN DE UI
+# ============================================================================
+
+ui:
+  # Modos de panel
+  modes:
+    quick:
+      description: Panel pequeño para selección rápida
+      size: small        # 30% altura
+      showStats: true
+      showActions: false
+      allowCreate: false
+      groupsCollapsible: true
+
+    create:
+      description: Modal para crear nuevo item
+      size: medium       # 50% altura
+      showStats: false
+      showActions: true
+      allowCreate: true
+      groupsCollapsible: false
+
+    manage:
+      description: Vista completa de gestión
+      size: full         # 90% altura
+      showStats: true
+      showActions: true
+      allowCreate: true
+      groupsCollapsible: true
+
+  # Tamaños de panel
+  sizes:
+    small: "30%"
+    medium: "50%"
+    large: "70%"
+    full: "90%"
+
+  # Animaciones
+  animations:
+    panel: slide-up
+    group: accordion
+    item: fade
+    selection: scale
+
+  # Colores por variante
+  variants:
+    default:
+      bg: "var(--color-bg-card)"
+      border: "var(--color-border)"
+      text: "var(--color-text)"
+    primary:
+      bg: "var(--color-primary-light)"
+      border: "var(--color-primary)"
+      text: "var(--color-primary)"
+    success:
+      bg: "var(--color-success-light)"
+      border: "var(--color-success)"
+      text: "var(--color-success)"
+    warning:
+      bg: "var(--color-warning-light)"
+      border: "var(--color-warning)"
+      text: "var(--color-warning)"
+    danger:
+      bg: "var(--color-danger-light)"
+      border: "var(--color-danger)"
+      text: "var(--color-danger)"
+
+# ============================================================================
+# SISTEMA DE GESTOS
+# ============================================================================
+
+gestures:
+  # Triple interacción para items
+  item:
+    tap:
+      delay: 250           # ms antes de confirmar single tap
+      action: select       # Seleccionar item
+      feedback: highlight  # Visual feedback
+
+    doubleTap:
+      maxDelay: 300        # ms máximo entre taps
+      action: edit         # Abrir edición
+      feedback: scale
+
+    longPress:
+      duration: 500        # ms para activar
+      action: contextMenu  # Mostrar opciones
+      feedback: progress
+      vibration: true
+
+  # Interacción para grupos
+  group:
+    tap:
+      action: toggle       # Expandir/colapsar
+
+  # Gestos globales
+  global:
+    swipeDown: close
+    swipeRight: close
+    tapOutside: close
+
+# ============================================================================
+# EVENTOS
+# ============================================================================
+
+events:
+  # Eventos emitidos por el componente
+  emits:
+    - name: select
+      description: Item seleccionado
+      payload: { itemId, item, metadata }
+
+    - name: create
+      description: Solicitud de crear nuevo
+      payload: { groupId }
+
+    - name: edit
+      description: Solicitud de editar item
+      payload: { itemId, item }
+
+    - name: delete
+      description: Solicitud de eliminar item
+      payload: { itemId }
+
+    - name: close
+      description: Panel cerrado
+      payload: {}
+
+  # MQTT topics para actualizaciones
+  mqtt:
+    ai-gateway:
+      - ai.completion.completed
+    credential-manager:
+      - credential.saved
+      - credential.updated
+      - credential.deleted
+    prompt-manager:
+      - prompt.created
+      - prompt.updated
+      - prompt.deleted
+    conversation-manager:
+      - conversation.created
+      - conversation.updated
+      - conversation.deleted
+      - message.received
+
+# ============================================================================
+# ACCESIBILIDAD
+# ============================================================================
+
+accessibility:
+  # Focus trap en modal
+  focusTrap: true
+
+  # Navegación por teclado
+  keyboard:
+    ArrowUp: previousItem
+    ArrowDown: nextItem
+    Enter: selectItem
+    Space: toggleGroup
+    Escape: close
+
+  # ARIA labels
+  aria:
+    panel: "Panel de selección"
+    group: "Grupo {{label}}, {{count}} elementos"
+    item: "{{label}}, {{#if selected}}seleccionado{{/if}}"
+    close: "Cerrar panel"
+
+# ============================================================================
+# TIMER MANAGEMENT (Patrón de AISelector)
+# ============================================================================
+
+timers:
+  # Tipos de timer usados
+  types:
+    tapTimeout: ReturnType<typeof setTimeout>
+    longPressTimeout: ReturnType<typeof setTimeout>
+    debounceTimeout: ReturnType<typeof setTimeout>
+
+  # Función de limpieza
+  clearTimers: |
+    function clearTimers() {
+      if (tapTimeout) clearTimeout(tapTimeout);
+      if (longPressTimeout) clearTimeout(longPressTimeout);
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+      tapTimeout = null;
+      longPressTimeout = null;
+      debounceTimeout = null;
+    }
+
+  # Eventos que limpian timers
+  clearOn:
+    - touchend
+    - touchcancel
+    - onDestroy
+
+# ============================================================================
+# PLANTILLA DE COMPONENTE
+# ============================================================================
+
+template:
+  file: plop-templates/selector-panel/SelectorPanel.svelte.hbs
+
+  # Props del componente generado
+  props:
+    - name: module
+      type: "'ai-gateway' | 'credential-manager' | 'prompt-manager' | 'conversation-manager'"
+      required: true
+
+    - name: projectId
+      type: string
+      required: false
+      default: "null"
+
+    - name: panelMode
+      type: "'quick' | 'create' | 'manage'"
+      required: false
+      default: "'quick'"
+
+    - name: open
+      type: boolean
+      required: false
+      default: "false"
+      bindable: true
+
+    - name: selectedValue
+      type: "string | string[] | null"
+      required: false
+      default: "null"
+      bindable: true
+
+  # Slots del componente
+  slots:
+    - name: header
+      description: Contenido personalizado del header
+
+    - name: empty
+      description: Estado vacío personalizado
+
+    - name: footer
+      description: Acciones adicionales en footer
+
+# ============================================================================
+# EJEMPLO DE USO
+# ============================================================================
+
+examples:
+  # Selector de modelo IA (AISelector)
+  ai-selector: |
+    <SelectorPanel
+      module="ai-gateway"
+      panelMode="quick"
+      bind:open={showModelPanel}
+      bind:selectedValue={currentModel}
+      on:select={handleModelSelect}
+    />
+
+  # Selector de credenciales (CredentialSelector)
+  credential-selector: |
+    <SelectorPanel
+      module="credential-manager"
+      panelMode="quick"
+      {projectId}
+      bind:open={showCredentialPanel}
+      on:select={handleCredentialSelect}
+      on:create={openCreateCredential}
+    />
+
+  # Selector de prompts (SlotSelector)
+  slot-selector: |
+    <SelectorPanel
+      module="prompt-manager"
+      panelMode="quick"
+      {projectId}
+      bind:open={showPromptPanel}
+      bind:selectedValue={activePrompts}
+      on:select={handlePromptToggle}
+    />
+
+  # Historial de conversaciones (ConversationPanel)
+  conversation-selector: |
+    <SelectorPanel
+      module="conversation-manager"
+      panelMode="quick"
+      {projectId}
+      bind:open={showHistoryPanel}
+      bind:selectedValue={currentConversation}
+      on:select={loadConversation}
+      on:create={createNewConversation}
+    />

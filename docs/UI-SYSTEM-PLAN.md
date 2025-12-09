@@ -912,3 +912,331 @@ SIEMPRE:
 - Validación
 - Documentación
 ```
+
+---
+
+# PARTE 4: GUÍA DE GENERACIÓN DE UI POR MÓDULO
+
+Esta guía es el **patrón definitivo** para crear la UI de cualquier módulo.
+Seguir estos pasos en orden garantiza consistencia y cumplimiento del sistema.
+
+---
+
+## PASO 1: Análisis del Módulo (6 Preguntas)
+
+Antes de escribir código, responder estas 6 preguntas:
+
+| # | Pregunta | Ejemplo (credential-manager) |
+|---|----------|------------------------------|
+| 1 | ¿Qué **SELECCIONA** el usuario? | Credencial existente |
+| 2 | ¿Qué **AÑADE** el usuario? | Nueva API key |
+| 3 | ¿Qué **CONFIGURA** el usuario? | Editar/eliminar credencial |
+| 4 | ¿Qué **datos** necesita del backend? | GET /ui/state → credentials, providers, levels |
+| 5 | ¿Qué **eventos** emite? | credential.saved, credential.deleted |
+| 6 | ¿Cómo se **integra** con otros módulos? | Necesita project-manager para nivel PROJECT |
+
+---
+
+## PASO 2: Decisión enableAdd
+
+```
+¿Se puede CREAR un nuevo elemento desde la UI?
+    │
+    ├── SÍ → enableAdd = true (3 interacciones)
+    │        Ejemplos: credential-manager, prompt-manager
+    │
+    └── NO → enableAdd = false (2 interacciones)
+             Requiere archivos/config backend
+             Ejemplos: ai-gateway (providers en JSON)
+```
+
+---
+
+## PASO 3: Bocetos ASCII
+
+Crear bocetos para cada panel ANTES de codificar:
+
+### Panel Select (tap/click)
+```
+┌─────────────────────────────────────────┐
+│  🔐 Seleccionar [Entidad]               │
+│  ───────────────────────────────────────│
+│  ┌─────────────────────────────────┐    │
+│  │ 🔍 Buscar...                    │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  ── Grupo 1 ─────────────────────────   │
+│  ┌─────────────────────────────────┐    │
+│  │ 📄 Item 1                    ✓  │    │
+│  └─────────────────────────────────┘    │
+│  ┌─────────────────────────────────┐    │
+│  │ 📄 Item 2                       │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+```
+
+### Panel Add (doble tap) - Solo si enableAdd=true
+```
+┌─────────────────────────────────────────┐
+│  ➕ Nueva [Entidad]                     │
+│  ───────────────────────────────────────│
+│                                         │
+│  Campo 1                                │
+│  ┌─────────────────────────────────┐    │
+│  │ valor...                        │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Campo 2 (si depende de otro módulo)    │
+│  ┌─────────────────────────────────┐    │
+│  │ 📁 Selector de otro módulo   ▼  │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  ┌──────────┐  ┌──────────────────┐     │
+│  │ Cancelar │  │     ✓ Guardar   │     │
+│  └──────────┘  └──────────────────┘     │
+└─────────────────────────────────────────┘
+```
+
+### Panel Config (long press/click derecho)
+```
+┌─────────────────────────────────────────┐
+│  ⚙️ Configurar [Entidad]                │
+│  ───────────────────────────────────────│
+│                                         │
+│  📄 [Nombre del item seleccionado]      │
+│                                         │
+│  [Campos editables]                     │
+│                                         │
+│  ┌──────────────────────────────────┐   │
+│  │  🧪 Probar / Validar             │   │
+│  └──────────────────────────────────┘   │
+│                                         │
+│  ┌─────────┐ ┌────────┐ ┌─────────┐    │
+│  │ 🗑️ Del. │ │ Cancel │ │  Save   │    │
+│  └─────────┘ └────────┘ └─────────┘    │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## PASO 4: Checklist Pre-Código
+
+```
+[ ] SelectorPanel tiene adapter para este módulo
+[ ] Panel Add necesario? (enableAdd=true)
+[ ] Panel Config necesario? (siempre sí)
+[ ] Button unificado con gestos
+[ ] Integración con otros módulos identificada
+```
+
+---
+
+## PASO 5: Estructura de Archivos
+
+```
+frontend/src/lib/components/{modulo}/
+├── {Modulo}Button.svelte      # Botón con 2-3 interacciones
+├── {Modulo}AddPanel.svelte    # Solo si enableAdd=true
+├── {Modulo}ConfigPanel.svelte # Siempre
+└── index.ts                   # Exports
+```
+
+El **SelectorPanel** es genérico y vive en `feedback/`:
+```
+frontend/src/lib/components/feedback/
+├── FloatingPanel.svelte       # Panel base
+├── SelectorPanel.svelte       # Selector genérico con adapters
+└── index.ts
+```
+
+---
+
+## PASO 6: Crear Componentes
+
+### 6.1 {Modulo}Button.svelte
+
+```svelte
+<!--
+  {Modulo}Button.svelte
+  Botón con interacción dual/triple según enableAdd
+-->
+<script lang="ts">
+  // Props
+  export let size: 'sm' | 'md' | 'lg' = 'md';
+  export let projectId: string | null = null;
+  export let disabled = false;
+
+  // Paneles
+  let selectorOpen = false;
+  let addOpen = false;      // Solo si enableAdd
+  let configOpen = false;
+
+  // Gestos
+  const TIMING = {
+    tapDelay: 250,
+    doubleTapMax: 300,
+    longPressDuration: 500
+  };
+
+  // Acciones
+  function doSelect() { selectorOpen = true; }
+  function doAdd() { addOpen = true; }     // Solo si enableAdd
+  function doConfig() { configOpen = true; }
+</script>
+```
+
+### 6.2 {Modulo}AddPanel.svelte (si enableAdd=true)
+
+```svelte
+<!--
+  Integración con otros módulos:
+  Si un campo depende de otro módulo, hacer fetch:
+
+  $: if (needsOtherModule) {
+    fetch(api.moduleApi('otro-modulo', '/endpoint'));
+  }
+-->
+```
+
+### 6.3 {Modulo}ConfigPanel.svelte
+
+```svelte
+<!--
+  Siempre incluir:
+  - Vista del item seleccionado
+  - Campos editables
+  - Botón test/validar (si aplica)
+  - Acciones: Eliminar, Cancelar, Guardar
+-->
+```
+
+---
+
+## PASO 7: Compliance Checklist
+
+| Área | Verificación |
+|------|--------------|
+| **CSS** | Variables de tokens.json con fallbacks |
+| **API** | Usar `api.moduleApi(module, path)` |
+| **Eventos** | Svelte createEventDispatcher |
+| **Naming** | BEM para CSS, camelCase para props |
+| **Types** | TypeScript interfaces para datos |
+
+### CSS Variables Pattern
+```css
+.component {
+  --_bg: var(--module-bg, var(--color-bg-card, #1a1d24));
+  --_color: var(--module-color, var(--color-text, #ffffff));
+  --_radius: var(--module-radius, var(--radius-lg, 12px));
+}
+```
+
+### API Pattern
+```typescript
+import { api } from '$lib/config';
+
+// ✅ Correcto
+const res = await fetch(api.moduleApi('mi-modulo', '/ui/state'));
+
+// ❌ Incorrecto
+const res = await fetch(`/api/modules/mi-modulo/ui/state`);
+```
+
+---
+
+## PASO 8: Actualizar Exports
+
+```typescript
+// frontend/src/lib/components/{modulo}/index.ts
+
+/** @deprecated Use {Modulo}Button instead */
+export { default as {Modulo}Selector } from './{Modulo}Selector.svelte';
+
+// Nuevos componentes (UI-SYSTEM-PLAN compliant)
+export { default as {Modulo}Button } from './{Modulo}Button.svelte';
+export { default as {Modulo}AddPanel } from './{Modulo}AddPanel.svelte';
+export { default as {Modulo}ConfigPanel } from './{Modulo}ConfigPanel.svelte';
+```
+
+---
+
+## PASO 9: Commit Pattern
+
+```bash
+# Primer commit: componentes principales
+feat(ui): add {Modulo}AddPanel, {Modulo}ConfigPanel and deprecate {Modulo}Selector
+
+# Segundo commit: botón unificado
+feat(ui): complete {modulo} UI with triple interaction
+
+# Fix de compliance
+fix(ui): use api.moduleApi() helper instead of hardcoded paths
+```
+
+---
+
+## EJEMPLO COMPLETO: credential-manager
+
+### Análisis
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Selecciona? | Credencial (provider + level + identifier) |
+| ¿Añade? | Nueva API key |
+| ¿Configura? | Editar key, test, eliminar |
+| ¿Datos? | GET /ui/state → credentials, providers, levels |
+| ¿Eventos? | credential.saved, credential.deleted |
+| ¿Integración? | project-manager (para nivel PROJECT) |
+
+### enableAdd = true
+Porque se puede crear API key desde UI sin modificar archivos.
+
+### Integración con project-manager
+```typescript
+// En CredentialAddPanel.svelte
+$: if (form.level === 'PROJECT' && projects.length === 0) {
+  loadProjects();
+}
+
+async function loadProjects() {
+  const res = await fetch(api.moduleApi('project-manager', '/projects'));
+  const data = await res.json();
+  projects = data.projects;
+}
+```
+
+### Componentes creados
+- `CredentialButton.svelte` - 3 interacciones
+- `CredentialAddPanel.svelte` - Con selector de proyectos
+- `CredentialConfigPanel.svelte` - Edit/test/delete
+
+---
+
+## PLANTILLA RÁPIDA
+
+Para un nuevo módulo, copiar y adaptar:
+
+```
+1. Leer module.json del módulo
+2. Responder 6 preguntas
+3. Decidir enableAdd (true/false)
+4. Crear bocetos ASCII
+5. Verificar SelectorPanel adapter
+6. Crear {Modulo}Button.svelte
+7. Crear {Modulo}AddPanel.svelte (si enableAdd)
+8. Crear {Modulo}ConfigPanel.svelte
+9. Actualizar index.ts
+10. Pasar compliance checklist
+11. Commit y push
+```
+
+---
+
+## MÓDULOS PENDIENTES
+
+| Módulo | enableAdd | Integración | Estado |
+|--------|-----------|-------------|--------|
+| ai-gateway | ❌ | - | ✅ Completo |
+| credential-manager | ✅ | project-manager | ✅ Completo |
+| prompt-manager | ✅ | ? | ⏳ Pendiente |
+| conversation-manager | ✅ | project-manager | ⏳ Pendiente |
+| project-manager | ✅ | - | ⏳ Pendiente |

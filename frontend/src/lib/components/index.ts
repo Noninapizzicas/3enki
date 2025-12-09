@@ -9,3 +9,4 @@ export * from './input';
 export * from './conversations';
 export * from './credentials';
 export * from './projects';
+export * from './prompts';

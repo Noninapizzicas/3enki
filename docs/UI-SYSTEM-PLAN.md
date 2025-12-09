@@ -1237,6 +1237,6 @@ Para un nuevo módulo, copiar y adaptar:
 |--------|-----------|-------------|--------|
 | ai-gateway | ❌ | - | ✅ Completo |
 | credential-manager | ✅ | project-manager | ✅ Completo |
-| prompt-manager | ✅ | ? | ⏳ Pendiente |
+| prompt-manager | ✅ | - | ✅ Completo |
 | conversation-manager | ✅ | project-manager | ⏳ Pendiente |
 | project-manager | ✅ | - | ✅ Completo |

@@ -473,6 +473,174 @@ design-system/tokens.json → tailwind.config.js
 
 ---
 
+# PARTE 3: Proceso de Diseño
+
+## Antes de Codificar
+
+**OBLIGATORIO** antes de escribir código:
+
+### 1. Boceto Visual
+
+Dibujar cada elemento/panel:
+
+```
+┌─────────────────────────────────────┐
+│  BOCETO: [nombre del panel]         │
+├─────────────────────────────────────┤
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Header / Título            │    │
+│  ├─────────────────────────────┤    │
+│  │                             │    │
+│  │  Contenido principal        │    │
+│  │  - Elementos                │    │
+│  │  - Interacciones            │    │
+│  │                             │    │
+│  ├─────────────────────────────┤    │
+│  │  Acciones / Footer          │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  Notas:                             │
+│  - Tamaño aproximado               │
+│  - Estados (hover, active, etc.)   │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+### 2. Diagrama de Interacciones
+
+Mapear flujo de acciones:
+
+```
+┌─────────────────────────────────────────────────────┐
+│  INTERACCIONES: [nombre del módulo]                 │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  [Botón] ─── click ───► [Panel Select]              │
+│     │                        │                      │
+│     │                        ├── seleccionar item   │
+│     │                        │      │               │
+│     │                        │      ▼               │
+│     │                        │   emit: select       │
+│     │                        │      │               │
+│     │                        │      ▼               │
+│     │                        │   cerrar panel       │
+│     │                        │                      │
+│     ├── dbl click ──► [Panel Add]                   │
+│     │                        │                      │
+│     │                        ├── llenar form        │
+│     │                        ├── validar            │
+│     │                        ├── guardar            │
+│     │                        │      │               │
+│     │                        │      ▼               │
+│     │                        │   emit: created      │
+│     │                        │                      │
+│     └── long press ─► [Panel Extra]                 │
+│                              │                      │
+│                              ├── editar             │
+│                              ├── eliminar           │
+│                              └── configurar         │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+### 3. Checklist Pre-Código
+
+```
+□ Boceto visual de cada panel
+□ Diagrama de interacciones
+□ Estados identificados (loading, error, empty, success)
+□ Eventos que emite cada acción
+□ Datos que necesita (props)
+□ Endpoint(s) que consume
+```
+
+---
+
+## Ejemplo Completo: credential-manager
+
+### Boceto: Panel Select
+
+```
+┌─────────────────────────────────────┐
+│  🔐 Credenciales                [×] │
+├─────────────────────────────────────┤
+│  [🔍 Buscar...]                     │
+├─────────────────────────────────────┤
+│  ▼ GLOBAL                           │
+│    ○ OpenAI      ****7a2f    ✓     │
+│    ● DeepSeek    ****3b1c    ✓     │
+├─────────────────────────────────────┤
+│  ▶ PROJECT                          │
+├─────────────────────────────────────┤
+│  ▶ CLIENT                           │
+└─────────────────────────────────────┘
+  Tamaño: 300px ancho, max 400px alto
+  Estados: loading, empty, error
+```
+
+### Boceto: Panel Add
+
+```
+┌─────────────────────────────────────┐
+│  Nueva Credencial               [×] │
+├─────────────────────────────────────┤
+│                                     │
+│  Proveedor                          │
+│  [▼ Seleccionar...]                 │
+│                                     │
+│  API Key                            │
+│  [********************************] │
+│                                     │
+│  Nivel                              │
+│  ○ Global  ○ Project  ○ Client      │
+│                                     │
+│  Identificador (opcional)           │
+│  [                              ]   │
+│                                     │
+├─────────────────────────────────────┤
+│        [Cancelar]  [💾 Guardar]     │
+└─────────────────────────────────────┘
+  Validación: provider + api_key requeridos
+```
+
+### Diagrama Interacciones
+
+```
+[🔐 Creds]
+    │
+    ├── tap ──────────► Panel Select
+    │                      │
+    │                      ├── buscar ──► filtrar lista
+    │                      ├── expandir grupo
+    │                      ├── seleccionar ──► emit:select ──► cerrar
+    │                      └── tap fuera ──► cerrar
+    │
+    ├── dbl tap ──────► Panel Add
+    │                      │
+    │                      ├── llenar campos
+    │                      ├── [Guardar] ──► validar
+    │                      │                    │
+    │                      │              ┌─────┴─────┐
+    │                      │              │           │
+    │                      │           válido      error
+    │                      │              │           │
+    │                      │              ▼           ▼
+    │                      │         POST /api   mostrar error
+    │                      │              │
+    │                      │              ▼
+    │                      │         emit:created
+    │                      │              │
+    │                      │              ▼
+    │                      │           cerrar
+    │                      │
+    │                      └── [Cancelar] ──► cerrar
+    │
+    └── long press ───► Panel Extra (futuro)
+```
+
+---
+
 # RESUMEN
 
 ```

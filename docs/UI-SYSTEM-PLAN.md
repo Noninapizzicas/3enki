@@ -641,6 +641,175 @@ Mapear flujo de acciones:
 
 ---
 
+# PARTE 4: Perfil del Ejecutor
+
+## Perfil Ideal para Implementación
+
+El ejecutor de este sistema debe cumplir con el siguiente perfil para garantizar eficiencia y calidad.
+
+---
+
+### Formación Técnica
+
+| Área | Nivel | Conocimientos Específicos |
+|------|-------|---------------------------|
+| **JavaScript/TypeScript** | Avanzado | ES6+, async/await, tipos, interfaces |
+| **Svelte/SvelteKit** | Intermedio-Avanzado | Componentes, stores, eventos, SSR |
+| **CSS/Tailwind** | Intermedio | Flexbox, Grid, variables CSS, tokens |
+| **Event-Driven** | Intermedio | Pub/Sub, MQTT, EventEmitter |
+| **REST APIs** | Intermedio | Diseño, consumo, estados HTTP |
+| **JSON Schema** | Básico | Validación, tipos, estructuras |
+
+---
+
+### Habilidades Requeridas
+
+```
+DISEÑO:
+├── Pensamiento visual (bocetos rápidos)
+├── Diagramación de flujos
+├── Identificación de estados UI
+└── Simplificación de interfaces
+
+CÓDIGO:
+├── Componentización (dividir en partes pequeñas)
+├── Reutilización (detectar patrones repetidos)
+├── Tipado estricto (TypeScript)
+└── Código limpio (legible > ingenioso)
+
+SISTEMA:
+├── Entender arquitectura event-driven
+├── Separar responsabilidades (módulo = 1 cosa)
+├── API-first thinking
+└── Debugging de eventos asíncronos
+```
+
+---
+
+### Carácter y Actitud
+
+#### Obligatorio
+
+```
+MINIMALISTA
+└── Pregunta: "¿Puedo hacerlo con menos?"
+└── Rechaza: Sobre-ingeniería, features innecesarias
+└── Busca: La solución más simple que funcione
+
+METÓDICO
+└── Sigue el proceso: Análisis → Boceto → Diagrama → Código
+└── No salta pasos por "ahorrar tiempo"
+└── Documenta mientras avanza
+
+PRAGMÁTICO
+└── Prioriza: Funciona > Perfecto
+└── Itera: Versión simple primero, mejora después
+└── Entrega: Prefiere algo terminado a algo a medias
+
+CONSISTENTE
+└── Sigue convenciones establecidas
+└── No inventa nuevos patrones sin razón
+└── Respeta la filosofía del proyecto
+```
+
+#### Deseable
+
+```
+PACIENTE
+└── Los paneles flotantes requieren atención al detalle
+└── Las interacciones móviles necesitan pruebas
+
+VISUAL
+└── Puede "ver" la UI antes de codificarla
+└── Detecta inconsistencias visuales
+
+COMUNICATIVO
+└── Pregunta cuando hay ambigüedad
+└── Documenta decisiones técnicas
+```
+
+---
+
+### Anti-perfil (NO debe ser)
+
+```
+❌ PERFECCIONISTA PARALIZANTE
+   "No puedo empezar hasta que esté todo definido"
+
+❌ SOBRE-INGENIERO
+   "Voy a crear una abstracción para esto"
+
+❌ COWBOY
+   "Ya sé cómo hacerlo, no necesito bocetos"
+
+❌ ACUMULADOR
+   "Mejor añado esta feature por si acaso"
+
+❌ INCONSISTENTE
+   "En este componente lo hago diferente"
+```
+
+---
+
+### Flujo de Trabajo Esperado
+
+```
+1. RECIBIR TAREA
+   └── Leer requisitos
+   └── Identificar módulo(s) involucrados
+
+2. ANALIZAR (10%)
+   └── Aplicar template de análisis
+   └── Responder las 6 preguntas
+   └── Identificar endpoints necesarios
+
+3. DISEÑAR (20%)
+   └── Boceto visual de cada panel
+   └── Diagrama de interacciones
+   └── Completar checklist pre-código
+
+4. CODIFICAR (50%)
+   └── Componentes base primero
+   └── Integración después
+   └── Tipado completo
+
+5. VERIFICAR (15%)
+   └── Funciona en móvil
+   └── Funciona en PC
+   └── Estados manejados (loading, error, empty)
+
+6. DOCUMENTAR (5%)
+   └── Props documentadas
+   └── Eventos documentados
+   └── Ejemplo de uso
+```
+
+---
+
+### Métricas de Éxito
+
+| Métrica | Objetivo |
+|---------|----------|
+| Componentes < 200 líneas | 90% |
+| Reutilización de base | 80%+ |
+| Tipado completo | 100% |
+| Boceto antes de código | 100% |
+| Tiempo diseño vs código | 30% / 70% |
+
+---
+
+### Resumen del Perfil
+
+```
+FORMACIÓN:  JS/TS + Svelte + CSS + Event-Driven
+HABILIDAD:  Componentizar + Simplificar + Tipar
+CARÁCTER:   Minimalista + Metódico + Pragmático
+ACTITUD:    Proceso > Prisa, Simple > Complejo
+ENTREGA:    Funciona + Consistente + Documentado
+```
+
+---
+
 # RESUMEN
 
 ```

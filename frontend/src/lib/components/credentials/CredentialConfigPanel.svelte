@@ -29,6 +29,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
+  import { api } from '$lib/config';
 
   // ============================================================================
   // TYPES
@@ -60,8 +61,8 @@
   /** Credencial a configurar */
   export let credential: Credential | null = null;
 
-  /** Base URL de la API */
-  export let apiBase = '/api/modules/credential-manager';
+  /** Nombre del módulo para API */
+  const MODULE_NAME = 'credential-manager';
 
   // ============================================================================
   // STATE
@@ -101,7 +102,7 @@
       // Test con la nueva API key si existe, sino con la actual
       const apiKeyToTest = newApiKey || null;
 
-      const res = await fetch(`${apiBase}/ui/test`, {
+      const res = await fetch(api.moduleApi(MODULE_NAME, '/ui/test'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -138,7 +139,7 @@
     error = null;
 
     try {
-      const res = await fetch(`${apiBase}/credentials/${encodeURIComponent(credential.key)}`, {
+      const res = await fetch(api.moduleApi(MODULE_NAME, `/credentials/${encodeURIComponent(credential.key)}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -173,7 +174,7 @@
     error = null;
 
     try {
-      const res = await fetch(`${apiBase}/credentials/${encodeURIComponent(credential.key)}`, {
+      const res = await fetch(api.moduleApi(MODULE_NAME, `/credentials/${encodeURIComponent(credential.key)}`), {
         method: 'DELETE'
       });
 

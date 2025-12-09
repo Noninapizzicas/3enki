@@ -18,7 +18,7 @@
   import { onMount, createEventDispatcher } from 'svelte';
   import { fade } from 'svelte/transition';
   import { FloatingPanel } from '$components/feedback';
-  import config from '$lib/config';
+  import { api } from '$lib/config';
 
   // ============================================================================
   // TYPES
@@ -98,7 +98,7 @@
     error = null;
 
     try {
-      const response = await fetch(`${config.apiUrl}/modules/ai-gateway/ui/config`);
+      const response = await fetch(api.moduleApi('ai-gateway', '/ui/config'));
 
       if (!response.ok) {
         throw new Error(`Error ${response.status}`);
@@ -129,7 +129,7 @@
     error = null;
 
     try {
-      const response = await fetch(`${config.apiUrl}/modules/ai-gateway/ui/config`, {
+      const response = await fetch(api.moduleApi('ai-gateway', '/ui/config'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(localConfig)

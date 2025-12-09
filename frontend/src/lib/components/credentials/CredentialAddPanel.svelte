@@ -29,6 +29,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import { FloatingPanel } from '$components/feedback';
+  import { api } from '$lib/config';
 
   // ============================================================================
   // TYPES
@@ -62,8 +63,8 @@
   /** Proyecto actual para pre-seleccionar */
   export let projectId: string | null = null;
 
-  /** Base URL de la API */
-  export let apiBase = '/api/modules/credential-manager';
+  /** Nombre del módulo para API */
+  const MODULE_NAME = 'credential-manager';
 
   // ============================================================================
   // STATE
@@ -120,7 +121,7 @@
 
   async function loadProviders(): Promise<void> {
     try {
-      const res = await fetch(`${apiBase}/ui/state`);
+      const res = await fetch(api.moduleApi(MODULE_NAME, '/ui/state'));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
@@ -146,7 +147,7 @@
     error = null;
 
     try {
-      const res = await fetch(`${apiBase}/ui/test`, {
+      const res = await fetch(api.moduleApi(MODULE_NAME, '/ui/test'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -195,7 +196,7 @@
     error = null;
 
     try {
-      const res = await fetch(`${apiBase}/credentials`, {
+      const res = await fetch(api.moduleApi(MODULE_NAME, '/credentials'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

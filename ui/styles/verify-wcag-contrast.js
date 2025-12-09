@@ -1,208 +1,193 @@
+#!/usr/bin/env node
 /**
  * Event Core UI - WCAG Contrast Verification
  *
  * Script para verificar que todos los colores del sistema cumplan con
- * WCAG AA (ratio ≥ 4.5:1)
+ * WCAG AA (ratio >= 4.5:1)
+ *
+ * Usage: node verify-wcag-contrast.js
  */
 
-import { DesignTokens, calculateContrastRatio, meetsWCAG_AA_onWhite, meetsWCAG_AA_onBlack } from './design-tokens.js';
+import { readFileSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Load tokens from single source of truth
+const tokens = JSON.parse(
+  readFileSync(join(__dirname, '../../design-system/tokens.json'), 'utf-8')
+);
 
 /**
- * Verifica todos los colores funcionales
+ * Calculate luminance for a hex color
+ */
+function getLuminance(hex) {
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = ((rgb >> 16) & 0xff) / 255;
+  const g = ((rgb >> 8) & 0xff) / 255;
+  const b = (rgb & 0xff) / 255;
+
+  const [rs, gs, bs] = [r, g, b].map(c =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  );
+
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Calculate contrast ratio between two colors
+ */
+function calculateContrastRatio(hexColor1, hexColor2) {
+  const lum1 = getLuminance(hexColor1);
+  const lum2 = getLuminance(hexColor2);
+  const lighter = Math.max(lum1, lum2);
+  const darker = Math.min(lum1, lum2);
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Extract all colors from tokens
+ */
+function extractColors() {
+  const colors = [];
+
+  for (const [group, values] of Object.entries(tokens.colors)) {
+    if (typeof values === 'object') {
+      for (const [shade, hex] of Object.entries(values)) {
+        if (hex.startsWith('#')) {
+          colors.push({
+            name: shade === 'DEFAULT' ? group : `${group}-${shade}`,
+            hex,
+            group
+          });
+        }
+      }
+    }
+  }
+
+  return colors;
+}
+
+/**
+ * Verify all colors
  */
 function verifyAllColors() {
   console.log('='.repeat(70));
-  console.log('VERIFICACIÓN DE CONTRASTE WCAG AA');
-  console.log('Mínimo requerido: 4.5:1');
+  console.log('WCAG AA CONTRAST VERIFICATION');
+  console.log('Minimum required: 4.5:1');
+  console.log('Source: design-system/tokens.json');
   console.log('='.repeat(70));
   console.log('');
 
+  const colors = extractColors();
   const results = [];
 
-  for (const [nombre, colorData] of Object.entries(DesignTokens.colors)) {
-    const { hex, significado } = colorData;
+  for (const color of colors) {
+    const contrasteBlanco = calculateContrastRatio(color.hex, '#FFFFFF');
+    const contrasteNegro = calculateContrastRatio(color.hex, '#000000');
 
-    // Calcular contrastes
-    const contrasteBlanco = calculateContrastRatio(hex, '#FFFFFF');
-    const contrasteNegro = calculateContrastRatio(hex, '#000000');
-
-    // Verificar cumplimiento
     const cumpleBlanco = contrasteBlanco >= 4.5;
     const cumpleNegro = contrasteNegro >= 4.5;
 
-    // Recomendación de fondo
     let recomendacion;
     if (cumpleBlanco && !cumpleNegro) {
-      recomendacion = 'Usar texto BLANCO';
+      recomendacion = 'Use WHITE text';
     } else if (cumpleNegro && !cumpleBlanco) {
-      recomendacion = 'Usar texto NEGRO';
+      recomendacion = 'Use BLACK text';
     } else if (cumpleBlanco && cumpleNegro) {
-      recomendacion = 'Ambos colores OK';
+      recomendacion = 'Both colors OK';
     } else {
-      recomendacion = '⚠️ NINGUNO CUMPLE';
+      recomendacion = 'WARNING: Neither passes';
     }
 
     results.push({
-      nombre,
-      hex,
-      significado,
+      name: color.name,
+      hex: color.hex,
+      group: color.group,
       contrasteBlanco: contrasteBlanco.toFixed(2),
       contrasteNegro: contrasteNegro.toFixed(2),
       cumpleBlanco,
       cumpleNegro,
       recomendacion
     });
-
-    // Imprimir resultado
-    console.log(`📊 ${nombre.toUpperCase()}`);
-    console.log(`   Color: ${hex}`);
-    console.log(`   Significado: ${significado}`);
-    console.log(`   Contraste con blanco: ${contrasteBlanco.toFixed(2)}:1 ${cumpleBlanco ? '✅' : '❌'}`);
-    console.log(`   Contraste con negro: ${contrasteNegro.toFixed(2)}:1 ${cumpleNegro ? '✅' : '❌'}`);
-    console.log(`   → ${recomendacion}`);
-    console.log('');
   }
 
   return results;
 }
 
 /**
- * Genera recomendaciones para los colores que no cumplen
+ * Print results grouped by color group
  */
-function generateRecommendations(results) {
-  console.log('='.repeat(70));
-  console.log('RECOMENDACIONES');
-  console.log('='.repeat(70));
-  console.log('');
+function printResults(results) {
+  const groups = [...new Set(results.map(r => r.group))];
 
-  const problemColors = results.filter(r => !r.cumpleBlanco && !r.cumpleNegro);
+  for (const group of groups) {
+    console.log(`\n${group.toUpperCase()}`);
+    console.log('-'.repeat(40));
 
-  if (problemColors.length === 0) {
-    console.log('✅ Todos los colores cumplen con WCAG AA!');
-  } else {
-    console.log(`⚠️  ${problemColors.length} color(es) no cumplen con WCAG AA:`);
-    console.log('');
+    const groupColors = results.filter(r => r.group === group);
 
-    problemColors.forEach(color => {
-      console.log(`   ${color.nombre} (${color.hex})`);
-      console.log(`   Sugerencia: Oscurecer o aclarar el color, o usar solo para elementos decorativos`);
-      console.log('');
-    });
-  }
+    for (const color of groupColors) {
+      const whiteIcon = color.cumpleBlanco ? '✓' : '✗';
+      const blackIcon = color.cumpleNegro ? '✓' : '✗';
 
-  // Imprimir colores que solo funcionan con un fondo específico
-  const whiteOnlyColors = results.filter(r => r.cumpleBlanco && !r.cumpleNegro);
-  const blackOnlyColors = results.filter(r => !r.cumpleBlanco && r.cumpleNegro);
-
-  if (whiteOnlyColors.length > 0) {
-    console.log('');
-    console.log('💡 Colores que REQUIEREN texto blanco:');
-    whiteOnlyColors.forEach(c => {
-      console.log(`   - ${c.nombre} (${c.hex}): ${c.significado}`);
-    });
-  }
-
-  if (blackOnlyColors.length > 0) {
-    console.log('');
-    console.log('💡 Colores que REQUIEREN texto negro:');
-    blackOnlyColors.forEach(c => {
-      console.log(`   - ${c.nombre} (${c.hex}): ${c.significado}`);
-    });
-  }
-}
-
-/**
- * Verifica combinaciones de colores específicas del sistema
- */
-function verifyColorCombinations() {
-  console.log('');
-  console.log('='.repeat(70));
-  console.log('VERIFICACIÓN DE COMBINACIONES DE COLORES');
-  console.log('='.repeat(70));
-  console.log('');
-
-  const combinations = [
-    {
-      name: 'Botón Verde Acción (texto blanco)',
-      bg: DesignTokens.colors.verde_accion.hex,
-      fg: '#FFFFFF'
-    },
-    {
-      name: 'Botón Rojo Error (texto blanco)',
-      bg: DesignTokens.colors.rojo_error.hex,
-      fg: '#FFFFFF'
-    },
-    {
-      name: 'Botón Azul Info (texto blanco)',
-      bg: DesignTokens.colors.azul_info.hex,
-      fg: '#FFFFFF'
-    },
-    {
-      name: 'Botón Ámbar Pendiente (texto negro)',
-      bg: DesignTokens.colors.ambar_pendiente.hex,
-      fg: '#000000'
-    },
-    {
-      name: 'Botón Gris Base (texto blanco)',
-      bg: DesignTokens.colors.gris_base.hex,
-      fg: '#FFFFFF'
+      console.log(
+        `  ${color.name.padEnd(20)} ${color.hex}  ` +
+        `W:${color.contrasteBlanco}${whiteIcon}  ` +
+        `B:${color.contrasteNegro}${blackIcon}`
+      );
     }
-  ];
-
-  combinations.forEach(combo => {
-    const ratio = calculateContrastRatio(combo.bg, combo.fg);
-    const cumple = ratio >= 4.5;
-
-    console.log(`${cumple ? '✅' : '❌'} ${combo.name}`);
-    console.log(`   Fondo: ${combo.bg}, Texto: ${combo.fg}`);
-    console.log(`   Ratio: ${ratio.toFixed(2)}:1 ${cumple ? '(Cumple WCAG AA)' : '(NO cumple WCAG AA)'}`);
-    console.log('');
-  });
+  }
 }
 
 /**
- * Genera reporte JSON
+ * Generate summary
  */
-function generateJSONReport(results) {
-  const report = {
+function printSummary(results) {
+  const passing = results.filter(r => r.cumpleBlanco || r.cumpleNegro).length;
+  const failing = results.filter(r => !r.cumpleBlanco && !r.cumpleNegro).length;
+
+  console.log('\n' + '='.repeat(70));
+  console.log('SUMMARY');
+  console.log('='.repeat(70));
+  console.log(`Total colors: ${results.length}`);
+  console.log(`Passing: ${passing}`);
+  console.log(`Failing: ${failing}`);
+
+  if (failing > 0) {
+    console.log('\nColors that need attention:');
+    results
+      .filter(r => !r.cumpleBlanco && !r.cumpleNegro)
+      .forEach(r => console.log(`  - ${r.name} (${r.hex})`));
+  }
+}
+
+/**
+ * Generate JSON report
+ */
+function generateReport(results) {
+  return {
     timestamp: new Date().toISOString(),
+    source: 'design-system/tokens.json',
     standard: 'WCAG AA',
     min_ratio: 4.5,
-    total_colors: results.length,
+    total: results.length,
     passing: results.filter(r => r.cumpleBlanco || r.cumpleNegro).length,
     failing: results.filter(r => !r.cumpleBlanco && !r.cumpleNegro).length,
     colors: results
   };
-
-  return report;
 }
 
-/**
- * Ejecutar verificación
- */
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const results = verifyAllColors();
-  generateRecommendations(results);
-  verifyColorCombinations();
+// Main execution
+const results = verifyAllColors();
+printResults(results);
+printSummary(results);
 
-  console.log('');
-  console.log('='.repeat(70));
-  console.log('RESUMEN');
-  console.log('='.repeat(70));
-
-  const report = generateJSONReport(results);
-  console.log(`Total de colores: ${report.total_colors}`);
-  console.log(`✅ Aprobados: ${report.passing}`);
-  console.log(`❌ Reprobados: ${report.failing}`);
-  console.log('');
-
-  // Escribir reporte JSON
-  const fs = await import('fs');
-  fs.writeFileSync(
-    './wcag-contrast-report.json',
-    JSON.stringify(report, null, 2)
-  );
-  console.log('📄 Reporte guardado en: wcag-contrast-report.json');
-}
-
-export { verifyAllColors, generateRecommendations, verifyColorCombinations, generateJSONReport };
+const report = generateReport(results);
+writeFileSync(
+  join(__dirname, 'wcag-contrast-report.json'),
+  JSON.stringify(report, null, 2)
+);
+console.log('\nReport saved: ui/styles/wcag-contrast-report.json');

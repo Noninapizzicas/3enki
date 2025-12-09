@@ -1,70 +1,621 @@
 {
-  "timestamp": "2025-11-09T17:06:49.258Z",
+  "timestamp": "2025-12-09T00:25:09.043Z",
+  "source": "design-system/tokens.json",
   "standard": "WCAG AA",
   "min_ratio": 4.5,
-  "total_colors": 6,
-  "passing": 6,
+  "total": 61,
+  "passing": 61,
   "failing": 0,
   "colors": [
     {
-      "nombre": "verde_accion",
-      "hex": "#2FBF71",
-      "significado": "Confirmar/Continuar/OK",
-      "contrasteBlanco": "2.38",
-      "contrasteNegro": "8.81",
-      "cumpleBlanco": false,
-      "cumpleNegro": true,
-      "recomendacion": "Usar texto NEGRO"
-    },
-    {
-      "nombre": "ambar_pendiente",
-      "hex": "#F5B700",
-      "significado": "Pendiente/Espera/Confirmación requerida",
-      "contrasteBlanco": "1.80",
-      "contrasteNegro": "11.66",
-      "cumpleBlanco": false,
-      "cumpleNegro": true,
-      "recomendacion": "Usar texto NEGRO"
-    },
-    {
-      "nombre": "rojo_error",
-      "hex": "#E63946",
-      "significado": "Error/Bloqueo/Urgente",
-      "contrasteBlanco": "4.17",
-      "contrasteNegro": "5.04",
-      "cumpleBlanco": false,
-      "cumpleNegro": true,
-      "recomendacion": "Usar texto NEGRO"
-    },
-    {
-      "nombre": "azul_info",
-      "hex": "#1D4ED8",
-      "significado": "Información/Contexto",
-      "contrasteBlanco": "6.70",
-      "contrasteNegro": "3.13",
-      "cumpleBlanco": true,
-      "cumpleNegro": false,
-      "recomendacion": "Usar texto BLANCO"
-    },
-    {
-      "nombre": "gris_base",
-      "hex": "#6B7280",
-      "significado": "Neutro/Deshabilitado",
-      "contrasteBlanco": "4.83",
-      "contrasteNegro": "4.34",
-      "cumpleBlanco": true,
-      "cumpleNegro": false,
-      "recomendacion": "Usar texto BLANCO"
-    },
-    {
-      "nombre": "gris_fondo",
-      "hex": "#0F1216",
-      "significado": "Fondo oscuro",
+      "name": "bg",
+      "hex": "#0f1216",
+      "group": "bg",
       "contrasteBlanco": "18.78",
       "contrasteNegro": "1.12",
       "cumpleBlanco": true,
       "cumpleNegro": false,
-      "recomendacion": "Usar texto BLANCO"
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "bg-card",
+      "hex": "#1a1d24",
+      "group": "bg",
+      "contrasteBlanco": "16.87",
+      "contrasteNegro": "1.25",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "bg-hover",
+      "hex": "#252a33",
+      "group": "bg",
+      "contrasteBlanco": "14.41",
+      "contrasteNegro": "1.46",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "bg-input",
+      "hex": "#0d0f12",
+      "group": "bg",
+      "contrasteBlanco": "19.19",
+      "contrasteNegro": "1.09",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "primary-50",
+      "hex": "#eff6ff",
+      "group": "primary",
+      "contrasteBlanco": "1.09",
+      "contrasteNegro": "19.30",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "primary-100",
+      "hex": "#dbeafe",
+      "group": "primary",
+      "contrasteBlanco": "1.22",
+      "contrasteNegro": "17.21",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "primary-200",
+      "hex": "#bfdbfe",
+      "group": "primary",
+      "contrasteBlanco": "1.42",
+      "contrasteNegro": "14.78",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "primary-300",
+      "hex": "#93c5fd",
+      "group": "primary",
+      "contrasteBlanco": "1.80",
+      "contrasteNegro": "11.65",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "primary-400",
+      "hex": "#60a5fa",
+      "group": "primary",
+      "contrasteBlanco": "2.54",
+      "contrasteNegro": "8.26",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "primary-500",
+      "hex": "#3b82f6",
+      "group": "primary",
+      "contrasteBlanco": "3.68",
+      "contrasteNegro": "5.71",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "primary-600",
+      "hex": "#2563eb",
+      "group": "primary",
+      "contrasteBlanco": "5.17",
+      "contrasteNegro": "4.06",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "primary-700",
+      "hex": "#1d4ed8",
+      "group": "primary",
+      "contrasteBlanco": "6.70",
+      "contrasteNegro": "3.13",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "primary-800",
+      "hex": "#1e40af",
+      "group": "primary",
+      "contrasteBlanco": "8.72",
+      "contrasteNegro": "2.41",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "primary-900",
+      "hex": "#1e3a8a",
+      "group": "primary",
+      "contrasteBlanco": "10.36",
+      "contrasteNegro": "2.03",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "primary",
+      "hex": "#3b82f6",
+      "group": "primary",
+      "contrasteBlanco": "3.68",
+      "contrasteNegro": "5.71",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "primary-hover",
+      "hex": "#2563eb",
+      "group": "primary",
+      "contrasteBlanco": "5.17",
+      "contrasteNegro": "4.06",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "success-50",
+      "hex": "#ecfdf5",
+      "group": "success",
+      "contrasteBlanco": "1.05",
+      "contrasteNegro": "19.94",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "success-100",
+      "hex": "#d1fae5",
+      "group": "success",
+      "contrasteBlanco": "1.13",
+      "contrasteNegro": "18.52",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "success-500",
+      "hex": "#22c55e",
+      "group": "success",
+      "contrasteBlanco": "2.28",
+      "contrasteNegro": "9.22",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "success-600",
+      "hex": "#16a34a",
+      "group": "success",
+      "contrasteBlanco": "3.30",
+      "contrasteNegro": "6.37",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "success-700",
+      "hex": "#15803d",
+      "group": "success",
+      "contrasteBlanco": "5.02",
+      "contrasteNegro": "4.19",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "success-900",
+      "hex": "#14532d",
+      "group": "success",
+      "contrasteBlanco": "9.11",
+      "contrasteNegro": "2.30",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "success",
+      "hex": "#22c55e",
+      "group": "success",
+      "contrasteBlanco": "2.28",
+      "contrasteNegro": "9.22",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "success-hover",
+      "hex": "#16a34a",
+      "group": "success",
+      "contrasteBlanco": "3.30",
+      "contrasteNegro": "6.37",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "warning-50",
+      "hex": "#fefce8",
+      "group": "warning",
+      "contrasteBlanco": "1.03",
+      "contrasteNegro": "20.30",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "warning-100",
+      "hex": "#fef9c3",
+      "group": "warning",
+      "contrasteBlanco": "1.07",
+      "contrasteNegro": "19.55",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "warning-500",
+      "hex": "#f59e0b",
+      "group": "warning",
+      "contrasteBlanco": "2.15",
+      "contrasteNegro": "9.78",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "warning-600",
+      "hex": "#d97706",
+      "group": "warning",
+      "contrasteBlanco": "3.19",
+      "contrasteNegro": "6.59",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "warning-700",
+      "hex": "#ca8a04",
+      "group": "warning",
+      "contrasteBlanco": "2.94",
+      "contrasteNegro": "7.15",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "warning-900",
+      "hex": "#713f12",
+      "group": "warning",
+      "contrasteBlanco": "8.67",
+      "contrasteNegro": "2.42",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "warning",
+      "hex": "#f59e0b",
+      "group": "warning",
+      "contrasteBlanco": "2.15",
+      "contrasteNegro": "9.78",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "warning-hover",
+      "hex": "#d97706",
+      "group": "warning",
+      "contrasteBlanco": "3.19",
+      "contrasteNegro": "6.59",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "danger-50",
+      "hex": "#fef2f2",
+      "group": "danger",
+      "contrasteBlanco": "1.09",
+      "contrasteNegro": "19.20",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "danger-100",
+      "hex": "#fee2e2",
+      "group": "danger",
+      "contrasteBlanco": "1.22",
+      "contrasteNegro": "17.19",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "danger-500",
+      "hex": "#ef4444",
+      "group": "danger",
+      "contrasteBlanco": "3.76",
+      "contrasteNegro": "5.58",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "danger-600",
+      "hex": "#dc2626",
+      "group": "danger",
+      "contrasteBlanco": "4.83",
+      "contrasteNegro": "4.35",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "danger-700",
+      "hex": "#b91c1c",
+      "group": "danger",
+      "contrasteBlanco": "6.47",
+      "contrasteNegro": "3.25",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "danger-900",
+      "hex": "#7f1d1d",
+      "group": "danger",
+      "contrasteBlanco": "10.02",
+      "contrasteNegro": "2.10",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "danger",
+      "hex": "#ef4444",
+      "group": "danger",
+      "contrasteBlanco": "3.76",
+      "contrasteNegro": "5.58",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "danger-hover",
+      "hex": "#dc2626",
+      "group": "danger",
+      "contrasteBlanco": "4.83",
+      "contrasteNegro": "4.35",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "info-50",
+      "hex": "#eff6ff",
+      "group": "info",
+      "contrasteBlanco": "1.09",
+      "contrasteNegro": "19.30",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "info-100",
+      "hex": "#dbeafe",
+      "group": "info",
+      "contrasteBlanco": "1.22",
+      "contrasteNegro": "17.21",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "info-500",
+      "hex": "#06b6d4",
+      "group": "info",
+      "contrasteBlanco": "2.43",
+      "contrasteNegro": "8.65",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "info-700",
+      "hex": "#0e7490",
+      "group": "info",
+      "contrasteBlanco": "5.36",
+      "contrasteNegro": "3.92",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "info-900",
+      "hex": "#164e63",
+      "group": "info",
+      "contrasteBlanco": "9.11",
+      "contrasteNegro": "2.30",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "info",
+      "hex": "#06b6d4",
+      "group": "info",
+      "contrasteBlanco": "2.43",
+      "contrasteNegro": "8.65",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "gray-50",
+      "hex": "#f9fafb",
+      "group": "gray",
+      "contrasteBlanco": "1.05",
+      "contrasteNegro": "20.10",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "gray-100",
+      "hex": "#f3f4f6",
+      "group": "gray",
+      "contrasteBlanco": "1.10",
+      "contrasteNegro": "19.08",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "gray-200",
+      "hex": "#e5e7eb",
+      "group": "gray",
+      "contrasteBlanco": "1.24",
+      "contrasteNegro": "16.96",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "gray-300",
+      "hex": "#d1d5db",
+      "group": "gray",
+      "contrasteBlanco": "1.47",
+      "contrasteNegro": "14.25",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "gray-400",
+      "hex": "#9ca3af",
+      "group": "gray",
+      "contrasteBlanco": "2.54",
+      "contrasteNegro": "8.27",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "gray-500",
+      "hex": "#6b7280",
+      "group": "gray",
+      "contrasteBlanco": "4.83",
+      "contrasteNegro": "4.34",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "gray-600",
+      "hex": "#4b5563",
+      "group": "gray",
+      "contrasteBlanco": "7.56",
+      "contrasteNegro": "2.78",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "gray-700",
+      "hex": "#374151",
+      "group": "gray",
+      "contrasteBlanco": "10.31",
+      "contrasteNegro": "2.04",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "gray-800",
+      "hex": "#1f2937",
+      "group": "gray",
+      "contrasteBlanco": "14.68",
+      "contrasteNegro": "1.43",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "gray-900",
+      "hex": "#111827",
+      "group": "gray",
+      "contrasteBlanco": "17.74",
+      "contrasteNegro": "1.18",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "border",
+      "hex": "#374151",
+      "group": "border",
+      "contrasteBlanco": "10.31",
+      "contrasteNegro": "2.04",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
+    },
+    {
+      "name": "border-focus",
+      "hex": "#3b82f6",
+      "group": "border",
+      "contrasteBlanco": "3.68",
+      "contrasteNegro": "5.71",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "text",
+      "hex": "#ffffff",
+      "group": "text",
+      "contrasteBlanco": "1.00",
+      "contrasteNegro": "21.00",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "text-muted",
+      "hex": "#9ca3af",
+      "group": "text",
+      "contrasteBlanco": "2.54",
+      "contrasteNegro": "8.27",
+      "cumpleBlanco": false,
+      "cumpleNegro": true,
+      "recomendacion": "Use BLACK text"
+    },
+    {
+      "name": "text-disabled",
+      "hex": "#6b7280",
+      "group": "text",
+      "contrasteBlanco": "4.83",
+      "contrasteNegro": "4.34",
+      "cumpleBlanco": true,
+      "cumpleNegro": false,
+      "recomendacion": "Use WHITE text"
     }
   ]
 }

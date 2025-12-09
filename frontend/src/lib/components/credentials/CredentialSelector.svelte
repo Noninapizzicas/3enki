@@ -2,11 +2,25 @@
   /**
    * CredentialSelector - Gestión de API Keys
    *
-   * Gestos:
+   * @deprecated Usar CredentialButton + SelectorPanel + CredentialAddPanel + CredentialConfigPanel
+   *
+   * Este componente está DEPRECADO porque:
+   * 1. No cumple con UI-SYSTEM-PLAN.md (triple interacción)
+   * 2. Long press no tiene acción
+   * 3. No separa responsabilidades (Select/Add/Config)
+   *
+   * Migración:
+   * ```svelte
+   * <CredentialButton
+   *   on:select={handleSelect}
+   *   on:add={handleAdd}
+   *   on:config={handleConfig}
+   * />
+   * ```
+   *
+   * Gestos legacy (solo para referencia):
    * - Tap: Ver credenciales existentes
    * - Doble tap: Añadir nueva credencial
-   *
-   * Icono muestra contador (activas/total proveedores)
    *
    * Conecta con: /api/modules/credential-manager/ui/state (UI-ready endpoint)
    */

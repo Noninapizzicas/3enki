@@ -8,7 +8,8 @@
   Funcionalidad:
   - Seleccionar proveedor (OPENAI, DEEPSEEK, ANTHROPIC, OLLAMA)
   - Seleccionar nivel (GLOBAL, PROJECT, CLIENT, CUSTOM)
-  - Identificador (opcional según nivel)
+  - PROJECT: selector de proyectos (fetch de project-manager)
+  - CLIENT/CUSTOM: input manual de identificador
   - API Key con test antes de guardar
 
   Skinnable via CSS Variables (desde tokens.json):
@@ -23,7 +24,11 @@
       on:cancel={handleCancel}
     />
 
-  @version 1.0.0
+  Integración:
+  - credential-manager: proveedores, niveles, guardar credencial
+  - project-manager: lista de proyectos para nivel PROJECT
+
+  @version 1.1.0
   @author Event Core Team
 -->
 <script lang="ts">
@@ -53,6 +58,12 @@
     message: string;
   }
 
+  interface Project {
+    id: string;
+    name: string;
+    description?: string;
+  }
+
   // ============================================================================
   // PROPS
   // ============================================================================
@@ -73,6 +84,8 @@
   // Datos del backend
   let providers: Provider[] = [];
   let levels: Level[] = [];
+  let projects: Project[] = [];
+  let loadingProjects = false;
 
   // Formulario
   let form = {
@@ -97,12 +110,19 @@
 
   $: selectedLevel = levels.find(l => l.id === form.level);
   $: requiresIdentifier = selectedLevel?.requiresIdentifier ?? false;
+  $: isProjectLevel = form.level === 'PROJECT';
+  $: needsManualInput = requiresIdentifier && !isProjectLevel; // CLIENT, CUSTOM
   $: canSave = form.apiKey.length > 0 && (!requiresIdentifier || form.identifier.length > 0);
 
   // Pre-seleccionar PROJECT si hay projectId
   $: if (open && projectId && form.level === 'GLOBAL') {
     form.level = 'PROJECT';
     form.identifier = projectId;
+  }
+
+  // Cargar proyectos cuando se selecciona nivel PROJECT
+  $: if (isProjectLevel && projects.length === 0 && !loadingProjects) {
+    loadProjects();
   }
 
   // ============================================================================
@@ -136,6 +156,31 @@
       }
     } catch (err) {
       console.error('CredentialAddPanel: Error loading providers', err);
+    }
+  }
+
+  async function loadProjects(): Promise<void> {
+    if (loadingProjects) return;
+
+    loadingProjects = true;
+    try {
+      const res = await fetch(api.moduleApi('project-manager', '/projects'));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.projects)) {
+        projects = data.projects;
+
+        // Si hay projectId preseleccionado, verificar que existe
+        if (projectId && !projects.find(p => p.id === projectId)) {
+          form.identifier = projects[0]?.id || '';
+        }
+      }
+    } catch (err) {
+      console.error('CredentialAddPanel: Error loading projects', err);
+      // No bloquear, permitir input manual como fallback
+    } finally {
+      loadingProjects = false;
     }
   }
 
@@ -316,14 +361,45 @@
       </div>
     </div>
 
-    <!-- Identifier (conditional) -->
-    {#if requiresIdentifier}
+    <!-- Project Selector (when level = PROJECT) -->
+    {#if isProjectLevel}
+      <div class="cred-add__field">
+        <label class="cred-add__label">Proyecto</label>
+        {#if loadingProjects}
+          <div class="cred-add__loading">Cargando proyectos...</div>
+        {:else if projects.length > 0}
+          <select
+            class="cred-add__select"
+            bind:value={form.identifier}
+          >
+            <option value="">Seleccionar proyecto...</option>
+            {#each projects as project}
+              <option value={project.id}>
+                📁 {project.name}
+              </option>
+            {/each}
+          </select>
+        {:else}
+          <!-- Fallback a input manual si no hay proyectos -->
+          <input
+            type="text"
+            class="cred-add__input"
+            placeholder="ID del proyecto"
+            bind:value={form.identifier}
+          />
+          <span class="cred-add__field-hint">No se encontraron proyectos</span>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Identifier manual (CLIENT, CUSTOM) -->
+    {#if needsManualInput}
       <div class="cred-add__field">
         <label class="cred-add__label">Identificador</label>
         <input
           type="text"
           class="cred-add__input"
-          placeholder="proyecto-1 o cliente-xyz"
+          placeholder={form.level === 'CLIENT' ? 'cliente-xyz' : 'custom-id'}
           bind:value={form.identifier}
         />
       </div>
@@ -523,6 +599,53 @@
   .cred-add__level--active {
     border-color: var(--color-primary, #3b82f6);
     background: hsl(217 91% 60% / 0.1);
+  }
+
+  /* === SELECT (Project dropdown) === */
+  .cred-add__select {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    background: var(--_input-bg);
+    color: var(--_color);
+    border: 1px solid var(--_border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color var(--_transition);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.5rem;
+  }
+
+  .cred-add__select:focus {
+    outline: none;
+    border-color: var(--color-primary, #3b82f6);
+  }
+
+  .cred-add__select option {
+    background: var(--_input-bg);
+    color: var(--_color);
+  }
+
+  /* === LOADING === */
+  .cred-add__loading {
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--_color-muted);
+    background: var(--_input-bg);
+    border: 1px solid var(--_border);
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  /* === FIELD HINT === */
+  .cred-add__field-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--_color-muted);
+    margin-top: 0.25rem;
   }
 
   /* === INPUT === */

@@ -1,5 +1,23 @@
 <script lang="ts">
   /**
+   * @deprecated Use SelectorPanel with module="ai-gateway" instead.
+   * This component will be removed in a future version.
+   *
+   * Migration:
+   * ```svelte
+   * // OLD:
+   * <AISelector on:modelChange={handle} />
+   *
+   * // NEW:
+   * <SelectorPanel
+   *   module="ai-gateway"
+   *   panelMode="quick"
+   *   bind:open={showPanel}
+   *   on:select={handleSelect}
+   * />
+   * <AIConfigPanel bind:open={showConfig} on:save={handleConfigSave} />
+   * ```
+   *
    * AISelector - Selector de modelo IA con configuración
    *
    * Botón con gestos:

@@ -1239,4 +1239,4 @@ Para un nuevo módulo, copiar y adaptar:
 | credential-manager | ✅ | project-manager | ✅ Completo |
 | prompt-manager | ✅ | ? | ⏳ Pendiente |
 | conversation-manager | ✅ | project-manager | ⏳ Pendiente |
-| project-manager | ✅ | - | ⏳ Pendiente |
+| project-manager | ✅ | - | ✅ Completo |

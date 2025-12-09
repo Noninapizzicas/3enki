@@ -1,0 +1,36 @@
+/**
+ * Text Editor UI Components
+ * =========================
+ *
+ * Componentes para edición de archivos de texto.
+ *
+ * Uso principal:
+ *   import { TextEditorButton } from '$components/editor';
+ *
+ *   <TextEditorButton
+ *     {file}
+ *     {projectId}
+ *     on:save={handleSave}
+ *   />
+ *
+ * Interacción dual (enableAdd=false):
+ * - Tap: abrir editor
+ * - Long press: configuración
+ *
+ * Formatos soportados:
+ * - MD, JSON, TXT, JS, TS, HTML, CSS, YAML, XML
+ *
+ * @module components/editor
+ * @version 1.0.0
+ */
+
+// Main component - use this
+export { default as TextEditorButton } from './TextEditorButton.svelte';
+
+// Individual panels (for advanced use)
+export { default as TextEditorPanel } from './TextEditorPanel.svelte';
+export { default as TextEditorConfigPanel } from './TextEditorConfigPanel.svelte';
+
+// Types
+export type { FileInfo } from './TextEditorPanel.svelte';
+export type { EditorSettings } from './TextEditorConfigPanel.svelte';

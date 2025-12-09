@@ -24,13 +24,20 @@ COMPONENT-FIRST         → Máxima reutilización UI
 
 ### Estructura por módulo
 
-Cada módulo tiene **1-3 paneles** según necesidad:
+Cada módulo tiene **2-3 paneles** según necesidad:
 
-| Panel | Propósito | Invocación PC | Invocación Móvil |
-|-------|-----------|---------------|------------------|
-| **Select** | Ver/elegir items | Click | Tap |
-| **Add** | Crear nuevo | Doble click | Doble tap |
-| **Extra** | Config/avanzado | Click derecho | Long press |
+| Panel | Propósito | Invocación PC | Invocación Móvil | ¿Obligatorio? |
+|-------|-----------|---------------|------------------|---------------|
+| **Select** | Ver/elegir items | Click | Tap | ✅ Sí |
+| **Add** | Crear nuevo | Doble click | Doble tap | ⚠️ Opcional |
+| **Extra** | Config/avanzado | Click derecho | Long press | ✅ Sí |
+
+**Nota:** El panel **Add** solo es necesario si el módulo permite crear nuevos elementos desde la UI.
+Si crear un nuevo elemento requiere modificar archivos o configuración backend, Add NO aplica.
+
+Ejemplos:
+- `credential-manager`: Add ✅ (crear API key desde UI)
+- `ai-gateway`: Add ❌ (añadir provider requiere archivos backend)
 
 ### Comportamiento
 
@@ -48,10 +55,21 @@ Cada módulo tiene **1-3 paneles** según necesidad:
 Botón que detecta tipo de interacción:
 
 ```svelte
+<!-- 2 interacciones (sin Add) - default -->
 <ModuleButton
   module="ai-gateway"
   icon="🤖"
   label="AI"
+  on:select={openSelectPanel}
+  on:extra={openExtraPanel}
+/>
+
+<!-- 3 interacciones (con Add) -->
+<ModuleButton
+  module="credential-manager"
+  icon="🔐"
+  label="Creds"
+  enableAdd={true}
   on:select={openSelectPanel}
   on:add={openAddPanel}
   on:extra={openExtraPanel}
@@ -59,8 +77,12 @@ Botón que detecta tipo de interacción:
 ```
 
 Interacciones:
-- PC: click / doble click / click derecho
-- Móvil: tap / doble tap / long press
+- PC: click / doble click (si `enableAdd=true`) / click derecho
+- Móvil: tap / doble tap (si `enableAdd=true`) / long press
+
+**Prop `enableAdd`:**
+- `false` (default): Doble tap/click no hace nada
+- `true`: Doble tap/click emite evento `on:add`
 
 ### 2. FloatingPanel
 
@@ -120,19 +142,20 @@ Antes de implementar cada módulo, responder:
 | ¿Endpoints? | GET /ui/state, POST /ui/select |
 | ¿Endpoint UI? | Ya existe /ui/state |
 | ¿Elementos UI? | Lista proveedores, lista modelos, badges estado |
-| ¿Paneles? | Select (elegir), Add (nuevo proveedor), Extra (config avanzada) |
+| ¿Paneles? | Select (elegir), Config (parámetros LLM) |
+| ¿enableAdd? | ❌ No - añadir provider requiere archivos backend |
 
 ---
 
 ## Módulos Principales
 
-| Módulo | Paneles | Prioridad |
-|--------|---------|-----------|
-| `ai-gateway` | Select, Add, Config | Alta |
-| `credential-manager` | Select, Add | Alta |
-| `prompt-manager` | Select, Add | Alta |
-| `conversation-manager` | Select, Add | Media |
-| `project-manager` | Select, Add | Media |
+| Módulo | Paneles | enableAdd | Prioridad |
+|--------|---------|-----------|-----------|
+| `ai-gateway` | Select, Config | ❌ No | Alta |
+| `credential-manager` | Select, Add, Config | ✅ Sí | Alta |
+| `prompt-manager` | Select, Add, Config | ✅ Sí | Alta |
+| `conversation-manager` | Select, Add, Config | ✅ Sí | Media |
+| `project-manager` | Select, Add, Config | ✅ Sí | Media |
 
 ---
 
@@ -319,13 +342,17 @@ module.exports = NombreModulo;
 
 ## Reglas de Paneles Flotantes
 
-### Patrón: 1-3 paneles por módulo
+### Patrón: 2-3 paneles por módulo
 
-| Panel | Invocación | Propósito |
-|-------|------------|-----------|
-| Select | 1 tap / click | Ver y elegir |
-| Add | 2 taps / doble click | Crear nuevo |
-| Extra | Long press / click derecho | Config/gestión |
+| Panel | Invocación | Propósito | ¿Obligatorio? |
+|-------|------------|-----------|---------------|
+| Select | 1 tap / click | Ver y elegir | ✅ Siempre |
+| Add | 2 taps / doble click | Crear nuevo | ⚠️ Si enableAdd=true |
+| Extra | Long press / click derecho | Config/gestión | ✅ Siempre |
+
+**Decidir si Add aplica:**
+- ¿Se puede crear desde UI? → enableAdd=true
+- ¿Requiere archivos/backend? → enableAdd=false (default)
 
 ### Implementación
 
@@ -831,8 +858,9 @@ Antes de escribir código SIEMPRE:
 - Un módulo NO importa otro módulo (solo eventos)
 
 ## Paneles Flotantes
-- 1-3 paneles por módulo (Select/Add/Extra)
-- Invocación: tap/click, doble tap/doble click, long press/click derecho
+- 2-3 paneles por módulo (Select + Config obligatorios, Add opcional)
+- enableAdd=true → 3 interacciones (tap/doble tap/long press)
+- enableAdd=false → 2 interacciones (tap/long press)
 - Tap fuera = cerrar (siempre)
 - Sin navegación tradicional
 
@@ -865,8 +893,8 @@ CÓDIGO = Mínimo necesario + Máxima reutilización
 
 UI:
 - Paneles flotantes (no páginas)
-- 1-3 paneles por módulo (Select/Add/Extra)
-- ModuleButton con triple interacción
+- 2-3 paneles por módulo (Select + Config obligatorios, Add opcional)
+- ModuleButton con enableAdd prop (2 o 3 interacciones)
 - Click fuera = cerrar
 
 BACKEND:

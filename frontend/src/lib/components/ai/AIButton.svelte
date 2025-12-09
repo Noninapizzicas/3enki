@@ -1,12 +1,15 @@
 <!--
   AIButton.svelte
   ================
-  Botón unificado para AI con TRIPLE interacción.
+  Botón unificado para AI con interacción dual/triple.
 
   Gestos (según UI-SYSTEM-PLAN.md):
   - Tap/Click: Abre SelectorPanel (elegir modelo)
-  - Doble tap/Doble click: Abre panel Add (añadir credencial)
+  - Doble tap/Doble click: Abre panel Add (OPCIONAL - solo si enableAdd=true)
   - Long press / Click derecho: Abre AIConfigPanel (configuración LLM)
+
+  Para ai-gateway: enableAdd=false (default) → Solo 2 interacciones
+  Para credential-manager: enableAdd=true → 3 interacciones completas
 
   Skinnable via CSS Variables (desde tokens.json):
   --ai-btn-bg, --ai-btn-bg-hover, --ai-btn-bg-active
@@ -15,12 +18,12 @@
   Uso:
     <AIButton
       size="md"
+      enableAdd={false}
       on:select={handleSelect}
-      on:add={handleAdd}
       on:config={handleConfig}
     />
 
-  @version 2.0.0
+  @version 2.1.0
   @author Event Core Team
 -->
 <script lang="ts">
@@ -49,6 +52,9 @@
 
   /** Deshabilitar interacciones */
   export let disabled = false;
+
+  /** Habilitar doble tap → Add (default false para ai-gateway) */
+  export let enableAdd = false;
 
   // ============================================================================
   // CONFIGURATION (siguiendo tokens.json)
@@ -132,8 +138,9 @@
     selectorOpen = true;
   }
 
-  /** Doble tap/Doble click → Panel Add (añadir credencial) */
+  /** Doble tap/Doble click → Panel Add (solo si enableAdd=true) */
   function doAdd(): void {
+    if (!enableAdd) return; // No hacer nada si Add está deshabilitado
     addOpen = true;
     dispatch('add', { projectId });
   }
@@ -331,7 +338,9 @@
   on:contextmenu={handleContextMenu}
   aria-label="Selector de modelo IA"
   aria-disabled={disabled}
-  title="Tap: seleccionar | Doble tap: añadir | Long press: config"
+  title={enableAdd
+    ? "Tap: seleccionar | Doble tap: añadir | Long press: config"
+    : "Tap: seleccionar | Long press: config"}
 >
   <span class="ai-btn__icon">{currentIcon}</span>
   {#if showLabel}

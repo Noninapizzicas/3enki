@@ -1,114 +1,159 @@
 /** @type {import('tailwindcss').Config} */
+// AUTO-GENERATED from design-system/tokens.json - DO NOT EDIT DIRECTLY
+// Run: node design-system/generate.js
+
 export default {
   content: ['./src/**/*.{html,js,svelte,ts}'],
   theme: {
     extend: {
-      // Colores desde auto-ui/config/theme.json
       colors: {
-        bg: {
-          DEFAULT: '#0f1216',
-          card: '#1a1d24',
-          hover: '#252a33',
-          input: '#0d0f12'
-        },
-        primary: {
-          DEFAULT: '#3b82f6',
-          hover: '#2563eb'
-        },
-        success: {
-          DEFAULT: '#22c55e',
-          hover: '#16a34a'
-        },
-        warning: {
-          DEFAULT: '#f59e0b',
-          hover: '#d97706'
-        },
-        danger: {
-          DEFAULT: '#ef4444',
-          hover: '#dc2626'
-        },
-        info: {
-          DEFAULT: '#06b6d4'
-        },
-        border: {
-          DEFAULT: '#374151',
-          focus: '#3b82f6'
-        },
-        text: {
-          DEFAULT: '#ffffff',
-          muted: '#9ca3af',
-          disabled: '#6b7280'
-        }
+            'bg': {
+                  'DEFAULT': '#0f1216',
+                  'card': '#1a1d24',
+                  'hover': '#252a33',
+                  'input': '#0d0f12'
+            },
+            'primary': {
+                  '50': '#eff6ff',
+                  '100': '#dbeafe',
+                  '200': '#bfdbfe',
+                  '300': '#93c5fd',
+                  '400': '#60a5fa',
+                  '500': '#3b82f6',
+                  '600': '#2563eb',
+                  '700': '#1d4ed8',
+                  '800': '#1e40af',
+                  '900': '#1e3a8a',
+                  'DEFAULT': '#3b82f6',
+                  'hover': '#2563eb'
+            },
+            'success': {
+                  '50': '#ecfdf5',
+                  '100': '#d1fae5',
+                  '500': '#22c55e',
+                  '600': '#16a34a',
+                  '700': '#15803d',
+                  '900': '#14532d',
+                  'DEFAULT': '#22c55e',
+                  'hover': '#16a34a'
+            },
+            'warning': {
+                  '50': '#fefce8',
+                  '100': '#fef9c3',
+                  '500': '#f59e0b',
+                  '600': '#d97706',
+                  '700': '#ca8a04',
+                  '900': '#713f12',
+                  'DEFAULT': '#f59e0b',
+                  'hover': '#d97706'
+            },
+            'danger': {
+                  '50': '#fef2f2',
+                  '100': '#fee2e2',
+                  '500': '#ef4444',
+                  '600': '#dc2626',
+                  '700': '#b91c1c',
+                  '900': '#7f1d1d',
+                  'DEFAULT': '#ef4444',
+                  'hover': '#dc2626'
+            },
+            'info': {
+                  '50': '#eff6ff',
+                  '100': '#dbeafe',
+                  '500': '#06b6d4',
+                  '700': '#0e7490',
+                  '900': '#164e63',
+                  'DEFAULT': '#06b6d4'
+            },
+            'gray': {
+                  '50': '#f9fafb',
+                  '100': '#f3f4f6',
+                  '200': '#e5e7eb',
+                  '300': '#d1d5db',
+                  '400': '#9ca3af',
+                  '500': '#6b7280',
+                  '600': '#4b5563',
+                  '700': '#374151',
+                  '800': '#1f2937',
+                  '900': '#111827'
+            },
+            'border': {
+                  'DEFAULT': '#374151',
+                  'focus': '#3b82f6'
+            },
+            'text': {
+                  'DEFAULT': '#ffffff',
+                  'muted': '#9ca3af',
+                  'disabled': '#6b7280'
+            }
       },
-      // Spacing desde theme.json
       spacing: {
-        'xs': '4px',
-        'sm': '8px',
-        'md': '16px',
-        'lg': '24px',
-        'xl': '32px',
-        '2xl': '48px'
+            'xs': '4px',
+            'sm': '8px',
+            'md': '16px',
+            'lg': '24px',
+            'xl': '32px',
+            '2xl': '48px'
       },
-      // Border radius desde theme.json
       borderRadius: {
-        'sm': '4px',
-        'md': '8px',
-        'lg': '12px',
-        'xl': '16px'
+            'sm': '4px',
+            'md': '8px',
+            'lg': '12px',
+            'xl': '16px',
+            'full': '9999px'
       },
-      // Tipografía desde theme.json
       fontFamily: {
-        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+        sans: ["system-ui","-apple-system","BlinkMacSystemFont","Segoe UI","sans-serif"],
+        mono: ["JetBrains Mono","Fira Code","monospace"]
       },
       fontSize: {
-        'xs': '0.75rem',
-        'sm': '0.875rem',
-        'base': '1rem',
-        'lg': '1.25rem',
-        'xl': '1.5rem',
-        '2xl': '2rem'
+            'xs': '0.75rem',
+            'sm': '0.875rem',
+            'base': '1rem',
+            'lg': '1.25rem',
+            'xl': '1.5rem',
+            '2xl': '2rem',
+            '3xl': '2.5rem',
+            '4xl': '3rem'
       },
       fontWeight: {
-        normal: '400',
-        medium: '500',
-        semibold: '600',
-        bold: '700'
+            'normal': '400',
+            'medium': '500',
+            'semibold': '600',
+            'bold': '700'
       },
-      // Sombras desde theme.json
       boxShadow: {
-        'sm': '0 1px 2px rgba(0,0,0,0.3)',
-        'md': '0 4px 6px rgba(0,0,0,0.4)',
-        'lg': '0 10px 15px rgba(0,0,0,0.5)',
-        'xl': '0 20px 25px rgba(0,0,0,0.6)'
+            'sm': '0 1px 2px rgba(0,0,0,0.3)',
+            'md': '0 4px 6px rgba(0,0,0,0.4)',
+            'lg': '0 10px 15px rgba(0,0,0,0.5)',
+            'xl': '0 20px 25px rgba(0,0,0,0.6)'
       },
-      // Transiciones desde theme.json
       transitionDuration: {
-        'fast': '150ms',
-        'normal': '250ms',
-        'slow': '350ms'
+            'fast': '150ms',
+            'normal': '250ms',
+            'slow': '350ms'
       },
-      // Z-index desde theme.json
       zIndex: {
-        'dropdown': '100',
-        'modal': '200',
-        'toast': '300',
-        'tooltip': '400'
+            'dropdown': '100',
+            'sticky': '200',
+            'fixed': '300',
+            'modal-backdrop': '400',
+            'modal': '500',
+            'popover': '600',
+            'tooltip': '700',
+            'toast': '800'
       },
-      // Breakpoints personalizados
       screens: {
-        'sm': '640px',
-        'md': '768px',
-        'lg': '1024px',
-        'xl': '1280px'
+            'sm': '640px',
+            'md': '768px',
+            'lg': '1024px',
+            'xl': '1280px'
       },
-      // Anchos específicos para componentes
       width: {
         'sidebar': '280px',
         'sidebar-collapsed': '64px',
         'modal': '500px'
       },
-      // Márgenes para el sidebar
       margin: {
         'sidebar': '280px',
         'sidebar-collapsed': '64px'

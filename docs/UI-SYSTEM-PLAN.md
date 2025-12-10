@@ -1363,3 +1363,89 @@ Los módulos de workspace permiten trabajar con archivos y contenido directament
 | file-browser | ✅ | project-manager | ✅ Completo |
 | text-editor | ❌ | file-browser | ✅ Completo |
 | pdf-viewer | ❌ | file-browser | ✅ Completo |
+
+---
+
+## ESTADO DE COMPONENTES DE TOOLBAR
+
+### Componentes Base
+
+| Componente | Ubicación | CSS Tokens | Estado |
+|------------|-----------|------------|--------|
+| ToolbarIcon | `toolbar/` | ✅ | ✅ Completo |
+| FloatingToolbar | `toolbar/` | ✅ | ✅ Completo |
+| TopToolbar | `toolbar/` | ✅ | ✅ Completo |
+| ModuleToolbar | `toolbar/` | ✅ | ✅ Completo |
+| ChatToolbar | `toolbar/` | ✅ | ✅ Completo |
+
+### Componentes de Ecosistema
+
+| Componente | Ubicación | Interacción | enableAdd | Estado |
+|------------|-----------|-------------|-----------|--------|
+| EcosystemToolbar | `ecosystem/` | Triple | Parcial | ✅ Completo |
+
+**EcosystemToolbar** incluye 4 botones con paneles integrados:
+
+| Botón | TAP (Select) | DOUBLE TAP (Add) | LONG PRESS (Config) |
+|-------|--------------|------------------|---------------------|
+| 🧩 Módulos | Lista módulos | Marketplace | Gestionar módulo |
+| ⚙️ Sistema | Config rápida | - | Sistema completo |
+| 🔔 Alertas | Notificaciones | - | Config alertas |
+| 👤 Usuario | Menú perfil | - | Config cuenta |
+
+### Componentes Mobile
+
+| Componente | Ubicación | CSS Tokens | Estado |
+|------------|-----------|------------|--------|
+| MobileWorkspaceLayout | `layout/` | ✅ | ✅ Completo |
+| MobileChatWorkspace | `toolbar/` | ✅ | ✅ Completo |
+
+### Componentes de Chat
+
+| Componente | Ubicación | CSS Tokens | Estado |
+|------------|-----------|------------|--------|
+| ChatInputBar | `chat/` | ✅ | ✅ Completo |
+| ChatInput | `ai/` | ✅ | ✅ Completo |
+
+### Componentes de Módulos (Button + Panels)
+
+| Módulo | Button | AddPanel | ConfigPanel | CSS Tokens |
+|--------|--------|----------|-------------|------------|
+| menu-generator | ✅ | ✅ | ✅ | ✅ |
+| credential-manager | ✅ | ✅ | ✅ | ✅ |
+| prompt-manager | ✅ | ✅ | ✅ | ✅ |
+| conversation-manager | ✅ | ✅ | ✅ | ✅ |
+| project-manager | ✅ | ✅ | ✅ | ✅ |
+| file-browser | ✅ | ✅ | ✅ | ✅ |
+| ai-gateway | ✅ | ❌ | ✅ | ✅ |
+
+---
+
+## CORRECCIONES CSS REALIZADAS
+
+Componentes que tenían HSL hardcodeado y fueron corregidos:
+
+| Componente | Problema | Solución |
+|------------|----------|----------|
+| ChatInputBar | `hsl(217 91% 60%)` | `var(--color-primary, #3b82f6)` |
+| MenuGeneratorButton | `hsla(25, 95%, 53%, 0.1)` | `rgb(249 115 22 / 0.1)` |
+| MenuGeneratorAddPanel | HSL en badges/buttons | CSS variables con fallbacks |
+| MenuGeneratorConfigPanel | HSL en estados | `var(--color-*, fallback)` |
+| TopToolbar | `hsl(220 13% 10%)` | `#1a1d24` (hex fallback) |
+
+### Patrón CSS correcto:
+
+```css
+/* Variables locales con fallbacks */
+.component {
+  --_bg: var(--component-bg, var(--color-bg-card, #1a1d24));
+  --_color: var(--component-color, var(--color-text, #ffffff));
+  --_accent: var(--component-accent, var(--color-primary, #3b82f6));
+}
+
+/* Colores con opacidad */
+.element {
+  background: rgb(59 130 246 / 0.1);  /* ✅ Correcto */
+  background: hsla(217, 91%, 60%, 0.1); /* ❌ Incorrecto */
+}
+```

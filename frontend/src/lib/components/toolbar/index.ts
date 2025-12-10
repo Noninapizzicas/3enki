@@ -9,6 +9,7 @@ export { default as ToolbarIcon } from './ToolbarIcon.svelte';
 export { default as ModuleToolbar } from './ModuleToolbar.svelte';
 export { default as EcosystemToolbar } from './EcosystemToolbar.svelte';
 export { default as ChatToolbar } from './ChatToolbar.svelte';
+export { default as TopToolbar } from './TopToolbar.svelte';
 
 // Layout completo
 export { default as MobileChatWorkspace } from './MobileChatWorkspace.svelte';

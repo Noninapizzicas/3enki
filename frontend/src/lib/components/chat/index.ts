@@ -6,5 +6,5 @@
  * @module components/chat
  */
 
-// Barra de entrada principal
-export { default as ChatInputBar } from './ChatInputBar.svelte';
+// Barra de entrada principal (uisis = UI System compliant)
+export { default as ChatInputBar } from './uisis-ChatInputBar.svelte';

@@ -15,7 +15,8 @@
  * - LONG PRESS: Panel Config
  */
 
-export { default as EcosystemToolbar } from './EcosystemToolbar.svelte';
+// uisis = UI System compliant
+export { default as EcosystemToolbar } from './uisis-EcosystemToolbar.svelte';
 
 /** @deprecated Use the toolbar/EcosystemToolbar for backwards compatibility */
-export { default as EcosystemToolbarLegacy } from '$components/toolbar/EcosystemToolbar.svelte';
+export { default as EcosystemToolbarLegacy } from '$components/toolbar/uisis-EcosystemToolbar.svelte';

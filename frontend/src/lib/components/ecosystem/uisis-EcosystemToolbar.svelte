@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { fly } from 'svelte/transition';
-  import ToolbarIcon from '$components/toolbar/ToolbarIcon.svelte';
+  import ToolbarIcon from '$components/toolbar/uisis-ToolbarIcon.svelte';
   import FloatingPanel from '$components/feedback/FloatingPanel.svelte';
 
   /**

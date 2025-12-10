@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import ToolbarIcon from './ToolbarIcon.svelte';
-  import type { ActionConfig } from './FloatingToolbar.svelte';
+  import ToolbarIcon from './uisis-ToolbarIcon.svelte';
+  import type { ActionConfig } from './uisis-FloatingToolbar.svelte';
 
   /**
    * ChatToolbar - Barra de chat con estructura sandwich

@@ -1,5 +1,5 @@
 /**
- * Menu Generator Module Exports
+ * Menu Generator Module Exports (uisis = UI System compliant)
  * ==============================
  * Componentes UI para el módulo menu-generator.
  * Genera menús JSON desde cartas físicas (PDF/imagen) usando IA.
@@ -13,8 +13,8 @@
  */
 
 // Botón principal con triple interacción
-export { default as MenuGeneratorButton } from './MenuGeneratorButton.svelte';
+export { default as MenuGeneratorButton } from './uisis-MenuGeneratorButton.svelte';
 
 // Paneles
-export { default as MenuGeneratorAddPanel } from './MenuGeneratorAddPanel.svelte';
-export { default as MenuGeneratorConfigPanel } from './MenuGeneratorConfigPanel.svelte';
+export { default as MenuGeneratorAddPanel } from './uisis-MenuGeneratorAddPanel.svelte';
+export { default as MenuGeneratorConfigPanel } from './uisis-MenuGeneratorConfigPanel.svelte';

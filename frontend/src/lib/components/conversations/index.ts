@@ -23,12 +23,12 @@
  * @version 1.0.0
  */
 
-// Main component - use this
-export { default as ConversationButton } from './ConversationButton.svelte';
+// Main component - use this (uisis = UI System compliant)
+export { default as ConversationButton } from './uisis-ConversationButton.svelte';
 
 // Individual panels (for advanced use)
-export { default as ConversationAddPanel } from './ConversationAddPanel.svelte';
-export { default as ConversationConfigPanel } from './ConversationConfigPanel.svelte';
+export { default as ConversationAddPanel } from './uisis-ConversationAddPanel.svelte';
+export { default as ConversationConfigPanel } from './uisis-ConversationConfigPanel.svelte';
 
 // Legacy component (full chat functionality)
 export { default as ConversationPanel } from './ConversationPanel.svelte';

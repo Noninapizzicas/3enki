@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import FloatingToolbar from './FloatingToolbar.svelte';
-  import type { ToolbarIconConfig, ActionConfig } from './FloatingToolbar.svelte';
+  import FloatingToolbar from './uisis-FloatingToolbar.svelte';
+  import type { ToolbarIconConfig, ActionConfig } from './uisis-FloatingToolbar.svelte';
 
   /**
    * EcosystemToolbar - Barra lateral derecha para ecosistema

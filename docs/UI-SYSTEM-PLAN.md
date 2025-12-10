@@ -84,7 +84,75 @@ Interacciones:
 - `false` (default): Doble tap/click no hace nada
 - `true`: Doble tap/click emite evento `on:add`
 
-### 2. FloatingPanel
+### 2. ChatInputBar
+
+Barra de entrada de chat con estructura sandwich y módulos integrados.
+
+#### Estructura
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ TOP: [🤖 AI] [🔐 Creds] [📝 Prompts] [💬 Conv]   [modelo]   │
+├─────────────────────────────────────────────────────────────┤
+│ ATTACHMENTS: [📄 file.txt ×] [🖼️ imagen.png ×]             │
+├─────────────────────────────────────────────────────────────┤
+│ INPUT: [📎] [________mensaje__________________] [➤]        │
+├─────────────────────────────────────────────────────────────┤
+│ BOTTOM: [📂 Proj] [📁 Files] [📝 Editor] [📄 PDF]  hint    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Props
+
+| Prop | Tipo | Default | Descripción |
+|------|------|---------|-------------|
+| `projectId` | `string \| null` | `null` | ID del proyecto actual |
+| `message` | `string` | `''` | Mensaje a enviar (bind) |
+| `placeholder` | `string` | `'Escribe tu mensaje...'` | Placeholder del input |
+| `sending` | `boolean` | `false` | Estado de envío |
+| `attachments` | `Attachment[]` | `[]` | Archivos adjuntos |
+| `currentModel` | `string` | `''` | Modelo actual (badge) |
+| `editorFile` | `any` | `null` | Archivo abierto en editor |
+| `pdfFile` | `any` | `null` | Archivo PDF abierto |
+
+#### Eventos
+
+| Evento | Payload | Descripción |
+|--------|---------|-------------|
+| `send` | `{ message, attachments }` | Enviar mensaje |
+| `selectModel` | `{ provider, model }` | Modelo IA seleccionado |
+| `selectCredential` | `{ key }` | Credencial seleccionada |
+| `selectPrompt` | `{ id, content }` | Prompt aplicado al mensaje |
+| `selectConversation` | `{ id }` | Conversación cambiada |
+| `selectProject` | `{ id }` | Proyecto cambiado |
+| `selectFile` | `{ file }` | Archivo seleccionado |
+| `openEditor` | `{ file }` | Abrir archivo en editor |
+| `openPdf` | `{ file }` | Abrir PDF en visor |
+| `attach` | `{ files }` | Archivos adjuntados |
+| `removeAttachment` | `{ id }` | Adjunto eliminado |
+
+#### Uso
+
+```svelte
+<ChatInputBar
+  {projectId}
+  bind:message
+  {currentModel}
+  on:send={handleSend}
+  on:selectModel={handleModelSelect}
+  on:selectPrompt={handlePromptSelect}
+  on:attach={handleAttach}
+/>
+```
+
+#### Módulos integrados
+
+| Fila | Módulos | Propósito |
+|------|---------|-----------|
+| **Top** | AI, Credential, Prompt, Conversation | Preparación del mensaje |
+| **Bottom** | Project, FileBrowser, TextEditor, PdfViewer | Contexto y workspace |
+
+### 3. FloatingPanel
 
 Panel flotante genérico:
 
@@ -156,6 +224,10 @@ Antes de implementar cada módulo, responder:
 | `prompt-manager` | Select, Add, Config | ✅ Sí | Alta |
 | `conversation-manager` | Select, Add, Config | ✅ Sí | Media |
 | `project-manager` | Select, Add, Config | ✅ Sí | Media |
+| `menu-generator` | Select, Add, Config | ✅ Sí | Media |
+| `file-browser` | Select, Add, Config | ✅ Sí | Media |
+| `text-editor` | Select, Config | ❌ No | Media |
+| `pdf-viewer` | Select, Config | ❌ No | Media |
 
 ---
 
@@ -164,12 +236,20 @@ Antes de implementar cada módulo, responder:
 ```
 Workspace
     │
-    └── Toolbar con ModuleButtons
+    ├── TopToolbar (módulos de workspace)
+    │       │
+    │       ├── [📁 Files] ────► FileBrowserPanel
+    │       ├── [📝 Editor] ───► TextEditorPanel
+    │       └── [📄 PDF] ──────► PdfViewerPanel
+    │
+    └── ChatInputBar (módulos de chat)
             │
-            ├── [🤖 AI] ──────► AIGatewayPanel
-            ├── [🔐 Creds] ───► CredentialPanel
-            ├── [📝 Prompts] ─► PromptPanel
-            └── [💬 Conv] ────► ConversationPanel
+            ├── [🤖 AI] ──────► AIConfigPanel
+            ├── [🔐 Creds] ───► CredentialPanel (Select/Add/Config)
+            ├── [📝 Prompts] ─► PromptPanel (Select/Add/Config)
+            ├── [💬 Conv] ────► ConversationPanel (Select/Add/Config)
+            ├── [📂 Project] ─► ProjectPanel (Select/Add/Config)
+            └── [🍔 Menu] ────► MenuGeneratorPanel (Select/Add/Config)
                     │
                     └── FloatingPanel
                           │
@@ -200,8 +280,17 @@ frontend/src/lib/components/
 ├── ui/               # Componentes base (Button, Input, Card...)
 ├── feedback/         # Feedback (Modal, Toast, FloatingPanel...)
 ├── layout/           # Layouts (Sidebar, Header...)
-├── toolbar/          # Barras y botones (ToolbarIcon...)
-├── ai/               # Componentes IA (ChatWorkspace...)
+├── toolbar/          # Barras y botones (ToolbarIcon, TopToolbar...)
+├── chat/             # ChatInputBar con módulos integrados
+├── ai/               # Componentes IA (AIButton, AIConfigPanel)
+├── credentials/      # CredentialButton, AddPanel, ConfigPanel
+├── prompts/          # PromptButton, AddPanel, ConfigPanel
+├── projects/         # ProjectButton, AddPanel, ConfigPanel
+├── conversations/    # ConversationButton, AddPanel, ConfigPanel
+├── menu/             # MenuGeneratorButton, AddPanel, ConfigPanel
+├── files/            # FileBrowserButton, AddPanel, ConfigPanel
+├── editor/           # TextEditorButton, ConfigPanel, Panel
+├── pdf/              # PdfViewerButton, ConfigPanel, Panel
 └── {dominio}/        # Componentes específicos de dominio
 ```
 
@@ -224,12 +313,35 @@ frontend/src/routes/
 | Módulo backend | kebab-case | `ai-gateway` |
 | Archivo JS | kebab-case | `context-manager.js` |
 | Componente Svelte | PascalCase | `FloatingPanel.svelte` |
+| **Componente UI-SYSTEM-PLAN** | **uisis-PascalCase** | `uisis-ToolbarIcon.svelte` |
 | Store Svelte | camelCase | `mqttStore.ts` |
 | Evento MQTT | dot.notation | `ai.model.selected` |
 | Constante | UPPER_SNAKE | `EVENTS.AI.MODEL_SELECTED` |
 | Variable/función | camelCase | `handleModelSelect` |
 | Prop Svelte | camelCase | `selectedModelId` |
 | CSS class | kebab-case | `floating-panel` |
+
+### Prefijo uisis- (UI System)
+
+Los componentes que cumplen con UI-SYSTEM-PLAN llevan prefijo `uisis-` para identificación rápida:
+
+```
+uisis-ToolbarIcon.svelte     ✅ Cumple UI-SYSTEM-PLAN
+ToolbarIcon.svelte           ❌ Versión legacy (deprecated)
+```
+
+**Beneficios:**
+- Identificación inmediata de componentes alineados
+- Migración gradual sin romper código existente
+- Los exports mantienen nombres limpios: `export { default as ToolbarIcon } from './uisis-ToolbarIcon.svelte'`
+
+**Componentes con prefijo uisis-:**
+- toolbar/: FloatingToolbar, ToolbarIcon, TopToolbar, ModuleToolbar, ChatToolbar, EcosystemToolbar, MobileChatWorkspace
+- layout/: MobileWorkspaceLayout
+- chat/: ChatInputBar
+- ecosystem/: EcosystemToolbar
+- ai/: AIButton, AIConfigPanel, ChatInput
+- Todos los módulos: {Module}Button, {Module}AddPanel, {Module}ConfigPanel
 
 ---
 
@@ -1231,12 +1343,132 @@ Para un nuevo módulo, copiar y adaptar:
 
 ---
 
-## MÓDULOS PENDIENTES
+## MÓDULOS DE WORKSPACE
+
+Los módulos de workspace permiten trabajar con archivos y contenido directamente:
+
+### file-browser
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Selecciona? | Archivo/carpeta del proyecto |
+| ¿Añade? | Nueva carpeta, nuevo archivo |
+| ¿Configura? | Renombrar, eliminar, mover |
+| ¿enableAdd? | ✅ Sí |
+
+### text-editor
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Selecciona? | Archivo abierto (de file-browser) |
+| ¿Añade? | ❌ No (depende de file-browser) |
+| ¿Configura? | Opciones de editor (theme, font size) |
+| ¿enableAdd? | ❌ No |
+
+### pdf-viewer
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Selecciona? | PDF abierto (de file-browser) |
+| ¿Añade? | ❌ No (depende de file-browser) |
+| ¿Configura? | Opciones de visualización (zoom, modo) |
+| ¿enableAdd? | ❌ No |
+
+---
+
+## ESTADO DE MÓDULOS
 
 | Módulo | enableAdd | Integración | Estado |
 |--------|-----------|-------------|--------|
 | ai-gateway | ❌ | - | ✅ Completo |
 | credential-manager | ✅ | project-manager | ✅ Completo |
 | prompt-manager | ✅ | - | ✅ Completo |
-| conversation-manager | ✅ | project-manager | ⏳ Pendiente |
+| conversation-manager | ✅ | project-manager | ✅ Completo |
 | project-manager | ✅ | - | ✅ Completo |
+| menu-generator | ✅ | - | ✅ Completo |
+| file-browser | ✅ | project-manager | ✅ Completo |
+| text-editor | ❌ | file-browser | ✅ Completo |
+| pdf-viewer | ❌ | file-browser | ✅ Completo |
+
+---
+
+## ESTADO DE COMPONENTES DE TOOLBAR
+
+### Componentes Base
+
+| Componente | Ubicación | CSS Tokens | Estado |
+|------------|-----------|------------|--------|
+| ToolbarIcon | `toolbar/` | ✅ | ✅ Completo |
+| FloatingToolbar | `toolbar/` | ✅ | ✅ Completo |
+| TopToolbar | `toolbar/` | ✅ | ✅ Completo |
+| ModuleToolbar | `toolbar/` | ✅ | ✅ Completo |
+| ChatToolbar | `toolbar/` | ✅ | ✅ Completo |
+
+### Componentes de Ecosistema
+
+| Componente | Ubicación | Interacción | enableAdd | Estado |
+|------------|-----------|-------------|-----------|--------|
+| EcosystemToolbar | `ecosystem/` | Triple | Parcial | ✅ Completo |
+
+**EcosystemToolbar** incluye 4 botones con paneles integrados:
+
+| Botón | TAP (Select) | DOUBLE TAP (Add) | LONG PRESS (Config) |
+|-------|--------------|------------------|---------------------|
+| 🧩 Módulos | Lista módulos | Marketplace | Gestionar módulo |
+| ⚙️ Sistema | Config rápida | - | Sistema completo |
+| 🔔 Alertas | Notificaciones | - | Config alertas |
+| 👤 Usuario | Menú perfil | - | Config cuenta |
+
+### Componentes Mobile
+
+| Componente | Ubicación | CSS Tokens | Estado |
+|------------|-----------|------------|--------|
+| MobileWorkspaceLayout | `layout/` | ✅ | ✅ Completo |
+| MobileChatWorkspace | `toolbar/` | ✅ | ✅ Completo |
+
+### Componentes de Chat
+
+| Componente | Ubicación | CSS Tokens | Estado |
+|------------|-----------|------------|--------|
+| ChatInputBar | `chat/` | ✅ | ✅ Completo |
+| ChatInput | `ai/` | ✅ | ✅ Completo |
+
+### Componentes de Módulos (Button + Panels)
+
+| Módulo | Button | AddPanel | ConfigPanel | CSS Tokens |
+|--------|--------|----------|-------------|------------|
+| menu-generator | ✅ | ✅ | ✅ | ✅ |
+| credential-manager | ✅ | ✅ | ✅ | ✅ |
+| prompt-manager | ✅ | ✅ | ✅ | ✅ |
+| conversation-manager | ✅ | ✅ | ✅ | ✅ |
+| project-manager | ✅ | ✅ | ✅ | ✅ |
+| file-browser | ✅ | ✅ | ✅ | ✅ |
+| ai-gateway | ✅ | ❌ | ✅ | ✅ |
+
+---
+
+## CORRECCIONES CSS REALIZADAS
+
+Componentes que tenían HSL hardcodeado y fueron corregidos:
+
+| Componente | Problema | Solución |
+|------------|----------|----------|
+| ChatInputBar | `hsl(217 91% 60%)` | `var(--color-primary, #3b82f6)` |
+| MenuGeneratorButton | `hsla(25, 95%, 53%, 0.1)` | `rgb(249 115 22 / 0.1)` |
+| MenuGeneratorAddPanel | HSL en badges/buttons | CSS variables con fallbacks |
+| MenuGeneratorConfigPanel | HSL en estados | `var(--color-*, fallback)` |
+| TopToolbar | `hsl(220 13% 10%)` | `#1a1d24` (hex fallback) |
+
+### Patrón CSS correcto:
+
+```css
+/* Variables locales con fallbacks */
+.component {
+  --_bg: var(--component-bg, var(--color-bg-card, #1a1d24));
+  --_color: var(--component-color, var(--color-text, #ffffff));
+  --_accent: var(--component-accent, var(--color-primary, #3b82f6));
+}
+
+/* Colores con opacidad */
+.element {
+  background: rgb(59 130 246 / 0.1);  /* ✅ Correcto */
+  background: hsla(217, 91%, 60%, 0.1); /* ❌ Incorrecto */
+}
+```

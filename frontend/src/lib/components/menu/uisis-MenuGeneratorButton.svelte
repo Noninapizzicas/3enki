@@ -353,10 +353,10 @@
 
 <style>
   .menu-btn {
-    --_accent: var(--menu-accent, hsl(25 95% 53%));
-    --_bg: var(--menu-bg, var(--color-bg-elevated, hsl(220 13% 16%)));
-    --_text: var(--menu-text, var(--color-text, hsl(220 10% 90%)));
-    --_border: var(--menu-border, var(--color-border, hsl(220 13% 22%)));
+    --_accent: var(--menu-accent, var(--color-warning, #f97316));
+    --_bg: var(--menu-bg, var(--color-bg-elevated, #1a1d24));
+    --_text: var(--menu-text, var(--color-text, #e5e7eb));
+    --_border: var(--menu-border, var(--color-border, #374151));
 
     position: relative;
     display: flex;
@@ -379,12 +379,12 @@
 
   .menu-btn:hover:not(.disabled) {
     border-color: var(--_accent);
-    background: hsla(25, 95%, 53%, 0.1);
+    background: rgb(249 115 22 / 0.1);
   }
 
   .menu-btn.selected {
     border-color: var(--_accent);
-    background: hsla(25, 95%, 53%, 0.15);
+    background: rgb(249 115 22 / 0.15);
   }
 
   .menu-btn.disabled {
@@ -417,7 +417,7 @@
   /* Selector Panel */
   .selector-panel {
     width: min(320px, 90vw);
-    background: var(--color-bg-card, hsl(220 13% 14%));
+    background: var(--color-bg-card, #1a1d24);
     border-radius: var(--radius-lg, 12px);
     overflow: hidden;
   }
@@ -427,8 +427,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 1rem;
-    background: linear-gradient(135deg, hsla(25, 95%, 53%, 0.15), transparent);
-    border-bottom: 1px solid var(--color-border, hsl(220 13% 20%));
+    background: linear-gradient(135deg, rgb(249 115 22 / 0.15), transparent);
+    border-bottom: 1px solid var(--color-border, #374151);
   }
 
   .selector-header h3 {
@@ -447,7 +447,7 @@
   .empty {
     padding: 2rem 1rem;
     text-align: center;
-    color: var(--color-text-secondary, hsl(220 10% 60%));
+    color: var(--color-text-muted, #9ca3af);
   }
 
   .empty {
@@ -464,10 +464,10 @@
   .empty-action {
     margin-top: 0.5rem;
     padding: 0.5rem 1rem;
-    background: hsla(25, 95%, 53%, 0.2);
+    background: rgb(249 115 22 / 0.2);
     border: none;
     border-radius: var(--radius-md, 8px);
-    color: hsl(25 95% 60%);
+    color: var(--color-warning, #f97316);
     cursor: pointer;
   }
 
@@ -483,19 +483,19 @@
     padding: 0.75rem 1rem;
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--color-border, hsl(220 13% 20%));
-    color: var(--color-text, hsl(220 10% 90%));
+    border-bottom: 1px solid var(--color-border, #374151);
+    color: var(--color-text, #e5e7eb);
     cursor: pointer;
     text-align: left;
     transition: background 0.15s ease;
   }
 
   .item:hover {
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
   }
 
   .item.selected {
-    background: hsla(25, 95%, 53%, 0.1);
+    background: rgb(249 115 22 / 0.1);
   }
 
   .item-estado {
@@ -516,33 +516,33 @@
 
   .item-meta {
     font-size: 0.75rem;
-    color: var(--color-text-secondary, hsl(220 10% 60%));
+    color: var(--color-text-muted, #9ca3af);
   }
 
   .item-check {
-    color: hsl(25 95% 53%);
+    color: var(--color-warning, #f97316);
     font-weight: bold;
   }
 
   .selector-footer {
     padding: 0.75rem 1rem;
-    border-top: 1px solid var(--color-border, hsl(220 13% 20%));
+    border-top: 1px solid var(--color-border, #374151);
   }
 
   .footer-btn {
     width: 100%;
     padding: 0.625rem;
-    background: hsla(25, 95%, 53%, 0.15);
-    border: 1px dashed hsla(25, 95%, 53%, 0.4);
+    background: rgb(249 115 22 / 0.15);
+    border: 1px dashed rgb(249 115 22 / 0.4);
     border-radius: var(--radius-md, 8px);
-    color: hsl(25 95% 60%);
+    color: var(--color-warning, #f97316);
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
   .footer-btn:hover {
-    background: hsla(25, 95%, 53%, 0.25);
+    background: rgb(249 115 22 / 0.25);
     border-style: solid;
   }
 </style>

@@ -201,11 +201,11 @@
 
 <style>
   .add-panel {
-    --_accent: var(--menu-accent, hsl(25 95% 53%));
-    --_bg: var(--panel-bg, var(--color-bg-card, hsl(220 13% 14%)));
-    --_text: var(--panel-text, var(--color-text, hsl(220 10% 90%)));
-    --_text-muted: var(--color-text-secondary, hsl(220 10% 60%));
-    --_border: var(--color-border, hsl(220 13% 20%));
+    --_accent: var(--menu-accent, var(--color-warning, #f97316));
+    --_bg: var(--panel-bg, var(--color-bg-card, #1a1d24));
+    --_text: var(--panel-text, var(--color-text, #e5e7eb));
+    --_text-muted: var(--color-text-muted, #9ca3af);
+    --_border: var(--color-border, #374151);
     --_radius: var(--radius-md, 8px);
 
     width: min(360px, 90vw);
@@ -219,7 +219,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 1rem;
-    background: linear-gradient(135deg, hsla(25, 95%, 53%, 0.15), transparent);
+    background: linear-gradient(135deg, rgb(249 115 22 / 0.15), transparent);
     border-bottom: 1px solid var(--_border);
   }
 
@@ -257,7 +257,7 @@
 
   .field input[type="text"] {
     padding: 0.625rem 0.75rem;
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
     border: 1px solid var(--_border);
     border-radius: var(--_radius);
     color: var(--_text);
@@ -267,7 +267,7 @@
   .field input:focus {
     outline: none;
     border-color: var(--_accent);
-    box-shadow: 0 0 0 2px hsla(25, 95%, 53%, 0.2);
+    box-shadow: 0 0 0 2px rgb(249 115 22 / 0.2);
   }
 
   .loading {
@@ -289,7 +289,7 @@
     align-items: center;
     gap: 0.25rem;
     padding: 0.75rem 0.5rem;
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
     border: 2px solid transparent;
     border-radius: var(--_radius);
     cursor: pointer;
@@ -297,12 +297,12 @@
   }
 
   .template-card:hover {
-    background: hsla(220, 13%, 50%, 0.15);
+    background: rgb(107 114 128 / 0.15);
     border-color: var(--_border);
   }
 
   .template-card.selected {
-    background: hsla(25, 95%, 53%, 0.15);
+    background: rgb(249 115 22 / 0.15);
     border-color: var(--_accent);
   }
 
@@ -318,7 +318,7 @@
 
   .ai-config {
     padding: 0.75rem;
-    background: hsla(220, 13%, 50%, 0.05);
+    background: rgb(107 114 128 / 0.05);
     border-radius: var(--_radius);
   }
 
@@ -354,7 +354,7 @@
   .field-row select {
     flex: 1;
     padding: 0.375rem 0.5rem;
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
     border: 1px solid var(--_border);
     border-radius: 4px;
     color: var(--_text);
@@ -393,12 +393,12 @@
   }
 
   .btn-cancel {
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
     color: var(--_text-muted);
   }
 
   .btn-cancel:hover {
-    background: hsla(220, 13%, 50%, 0.2);
+    background: rgb(107 114 128 / 0.2);
   }
 
   .btn-create {

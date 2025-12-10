@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import ModuleToolbar from './ModuleToolbar.svelte';
-  import EcosystemToolbar from './EcosystemToolbar.svelte';
-  import ChatToolbar from './ChatToolbar.svelte';
-  import type { ToolbarIconConfig, ActionConfig } from './FloatingToolbar.svelte';
+  import ModuleToolbar from './uisis-ModuleToolbar.svelte';
+  import EcosystemToolbar from './uisis-EcosystemToolbar.svelte';
+  import ChatToolbar from './uisis-ChatToolbar.svelte';
+  import type { ToolbarIconConfig, ActionConfig } from './uisis-FloatingToolbar.svelte';
 
   /**
    * MobileChatWorkspace - Layout completo para pantalla móvil con chat

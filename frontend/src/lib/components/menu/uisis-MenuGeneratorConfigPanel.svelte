@@ -323,11 +323,11 @@
 
 <style>
   .config-panel {
-    --_accent: var(--menu-accent, hsl(25 95% 53%));
-    --_bg: var(--panel-bg, var(--color-bg-card, hsl(220 13% 14%)));
-    --_text: var(--panel-text, var(--color-text, hsl(220 10% 90%)));
-    --_text-muted: var(--color-text-secondary, hsl(220 10% 60%));
-    --_border: var(--color-border, hsl(220 13% 20%));
+    --_accent: var(--menu-accent, var(--color-warning, #f97316));
+    --_bg: var(--panel-bg, var(--color-bg-card, #1a1d24));
+    --_text: var(--panel-text, var(--color-text, #e5e7eb));
+    --_text-muted: var(--color-text-muted, #9ca3af);
+    --_border: var(--color-border, #374151);
     --_radius: var(--radius-md, 8px);
 
     width: min(340px, 90vw);
@@ -341,7 +341,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 1rem;
-    background: linear-gradient(135deg, hsla(25, 95%, 53%, 0.15), transparent);
+    background: linear-gradient(135deg, rgb(249 115 22 / 0.15), transparent);
     border-bottom: 1px solid var(--_border);
   }
 
@@ -371,7 +371,7 @@
   }
 
   .error {
-    color: hsl(0 70% 60%);
+    color: var(--color-danger, #ef4444);
   }
 
   .menu-info {
@@ -407,28 +407,28 @@
   }
 
   .estado-badge.warning {
-    background: hsla(45, 90%, 50%, 0.15);
-    color: hsl(45 90% 60%);
+    background: rgb(234 179 8 / 0.15);
+    color: var(--color-warning, #eab308);
   }
 
   .estado-badge.info {
-    background: hsla(200, 90%, 50%, 0.15);
-    color: hsl(200 90% 60%);
+    background: rgb(6 182 212 / 0.15);
+    color: var(--color-info, #06b6d4);
   }
 
   .estado-badge.success {
-    background: hsla(142, 70%, 45%, 0.15);
-    color: hsl(142 70% 55%);
+    background: rgb(34 197 94 / 0.15);
+    color: var(--color-success, #22c55e);
   }
 
   .estado-badge.primary {
-    background: hsla(25, 95%, 53%, 0.15);
+    background: rgb(249 115 22 / 0.15);
     color: var(--_accent);
   }
 
   .estado-badge.danger {
-    background: hsla(0, 70%, 50%, 0.15);
-    color: hsl(0 70% 60%);
+    background: rgb(239 68 68 / 0.15);
+    color: var(--color-danger, #ef4444);
   }
 
   .stats-grid {
@@ -442,7 +442,7 @@
     flex-direction: column;
     align-items: center;
     padding: 0.75rem;
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
     border-radius: var(--_radius);
   }
 
@@ -464,7 +464,7 @@
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.75rem;
-    background: hsla(220, 13%, 50%, 0.05);
+    background: rgb(107 114 128 / 0.05);
     border-radius: var(--_radius);
   }
 
@@ -484,9 +484,9 @@
 
   .error-inline {
     padding: 0.5rem;
-    background: hsla(0, 70%, 50%, 0.1);
+    background: rgb(239 68 68 / 0.1);
     border-radius: var(--_radius);
-    color: hsl(0 70% 60%);
+    color: var(--color-danger, #ef4444);
     font-size: 0.8125rem;
     text-align: center;
   }
@@ -517,12 +517,12 @@
   }
 
   .action-btn.validate {
-    background: hsla(142, 70%, 45%, 0.2);
-    color: hsl(142 70% 55%);
+    background: rgb(34 197 94 / 0.2);
+    color: var(--color-success, #22c55e);
   }
 
   .action-btn.validate:hover:not(:disabled) {
-    background: hsla(142, 70%, 45%, 0.3);
+    background: rgb(34 197 94 / 0.3);
   }
 
   .export-row {
@@ -533,7 +533,7 @@
   .export-select {
     flex: 0 0 100px;
     padding: 0.625rem 0.5rem;
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
     border: 1px solid var(--_border);
     border-radius: var(--_radius);
     color: var(--_text);
@@ -542,12 +542,12 @@
 
   .action-btn.export {
     flex: 1;
-    background: hsla(217, 91%, 60%, 0.2);
-    color: hsl(217 91% 70%);
+    background: rgb(59 130 246 / 0.2);
+    color: var(--color-primary, #3b82f6);
   }
 
   .action-btn.export:hover:not(:disabled) {
-    background: hsla(217, 91%, 60%, 0.3);
+    background: rgb(59 130 246 / 0.3);
   }
 
   .action-btn.apply {
@@ -560,11 +560,11 @@
   }
 
   .action-btn.delete {
-    background: hsla(0, 70%, 50%, 0.15);
-    color: hsl(0 70% 60%);
+    background: rgb(239 68 68 / 0.15);
+    color: var(--color-danger, #ef4444);
   }
 
   .action-btn.delete:hover:not(:disabled) {
-    background: hsla(0, 70%, 50%, 0.25);
+    background: rgb(239 68 68 / 0.25);
   }
 </style>

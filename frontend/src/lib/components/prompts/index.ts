@@ -22,12 +22,12 @@
  * @version 1.0.0
  */
 
-// Main component - use this
-export { default as PromptButton } from './PromptButton.svelte';
+// Main component - use this (uisis = UI System compliant)
+export { default as PromptButton } from './uisis-PromptButton.svelte';
 
 // Individual panels (for advanced use)
-export { default as PromptAddPanel } from './PromptAddPanel.svelte';
-export { default as PromptConfigPanel } from './PromptConfigPanel.svelte';
+export { default as PromptAddPanel } from './uisis-PromptAddPanel.svelte';
+export { default as PromptConfigPanel } from './uisis-PromptConfigPanel.svelte';
 
 // Types
 export type { Prompt } from './PromptConfigPanel.svelte';

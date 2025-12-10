@@ -73,9 +73,9 @@
 
 <style>
   .top-toolbar {
-    --_bg: var(--toolbar-bg, var(--color-bg-elevated, hsl(220 13% 10%)));
-    --_border: var(--toolbar-border, var(--color-border, hsl(220 13% 20%)));
-    --_text: var(--toolbar-text, var(--color-text-secondary, hsl(220 10% 60%)));
+    --_bg: var(--toolbar-bg, var(--color-bg-elevated, #1a1d24));
+    --_border: var(--toolbar-border, var(--color-border, #374151));
+    --_text: var(--toolbar-text, var(--color-text-secondary, #9ca3af));
     --_radius: var(--toolbar-radius, var(--radius-lg, 12px));
 
     position: relative;
@@ -100,11 +100,11 @@
   }
 
   .toggle-btn:hover {
-    background: hsla(220, 13%, 50%, 0.1);
+    background: rgb(107 114 128 / 0.1);
   }
 
   .toggle-btn:focus-visible {
-    outline: 2px solid var(--color-primary, hsl(217 91% 60%));
+    outline: 2px solid var(--color-primary, #3b82f6);
     outline-offset: -2px;
   }
 

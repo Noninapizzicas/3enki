@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import ToolbarIcon from './ToolbarIcon.svelte';
+  import ToolbarIcon from './uisis-ToolbarIcon.svelte';
 
   /**
    * FloatingToolbar - Componente base para barras flotantes

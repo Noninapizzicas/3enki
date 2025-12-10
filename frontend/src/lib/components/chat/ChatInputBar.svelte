@@ -381,8 +381,8 @@
   .chat-input-bar__model-badge {
     font-size: 0.6875rem;
     padding: 0.125rem 0.5rem;
-    background: hsl(217 91% 60% / 0.15);
-    color: hsl(217 91% 60%);
+    background: rgb(59 130 246 / 0.15);
+    color: var(--color-primary, #3b82f6);
     border-radius: 1rem;
     max-width: 120px;
     white-space: nowrap;
@@ -439,7 +439,7 @@
   }
 
   .attachment-chip__remove:hover {
-    background: hsl(0 70% 50%);
+    background: var(--color-danger, #ef4444);
     color: white;
   }
 
@@ -470,7 +470,7 @@
   .chat-input-bar__attach-btn:hover {
     background: var(--color-bg-elevated, #232830);
     color: var(--color-text, #ffffff);
-    border-color: hsl(142 71% 45% / 0.3);
+    border-color: rgb(34 197 94 / 0.3);
   }
 
   .chat-input-bar__textarea {
@@ -490,7 +490,7 @@
   }
 
   .chat-input-bar__textarea:focus {
-    border-color: hsl(217 91% 60%);
+    border-color: var(--color-primary, #3b82f6);
   }
 
   .chat-input-bar__textarea::placeholder {
@@ -508,7 +508,7 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    background: hsl(217 91% 60%);
+    background: var(--color-primary, #3b82f6);
     color: white;
     border: none;
     border-radius: 50%;
@@ -519,7 +519,7 @@
   }
 
   .chat-input-bar__send-btn:hover:not(:disabled) {
-    background: hsl(217 91% 55%);
+    background: var(--color-primary-hover, #2563eb);
     transform: scale(1.05);
   }
 

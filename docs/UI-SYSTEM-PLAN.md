@@ -84,7 +84,24 @@ Interacciones:
 - `false` (default): Doble tap/click no hace nada
 - `true`: Doble tap/click emite evento `on:add`
 
-### 2. FloatingPanel
+### 2. ChatInputBar
+
+Barra de entrada de chat con botones de módulos integrados:
+
+```svelte
+<ChatInputBar
+  on:send={handleSend}
+  on:moduleSelect={handleModuleSelect}
+/>
+```
+
+Características:
+- Input de texto expandible
+- Botones de módulos integrados (credentials, prompts, ai-gateway)
+- Soporte para adjuntos
+- Triple interacción en botones de módulo
+
+### 3. FloatingPanel
 
 Panel flotante genérico:
 
@@ -156,6 +173,10 @@ Antes de implementar cada módulo, responder:
 | `prompt-manager` | Select, Add, Config | ✅ Sí | Alta |
 | `conversation-manager` | Select, Add, Config | ✅ Sí | Media |
 | `project-manager` | Select, Add, Config | ✅ Sí | Media |
+| `menu-generator` | Select, Add, Config | ✅ Sí | Media |
+| `file-browser` | Select, Add, Config | ✅ Sí | Media |
+| `text-editor` | Select, Config | ❌ No | Media |
+| `pdf-viewer` | Select, Config | ❌ No | Media |
 
 ---
 
@@ -164,12 +185,20 @@ Antes de implementar cada módulo, responder:
 ```
 Workspace
     │
-    └── Toolbar con ModuleButtons
+    ├── TopToolbar (módulos de workspace)
+    │       │
+    │       ├── [📁 Files] ────► FileBrowserPanel
+    │       ├── [📝 Editor] ───► TextEditorPanel
+    │       └── [📄 PDF] ──────► PdfViewerPanel
+    │
+    └── ChatInputBar (módulos de chat)
             │
-            ├── [🤖 AI] ──────► AIGatewayPanel
-            ├── [🔐 Creds] ───► CredentialPanel
-            ├── [📝 Prompts] ─► PromptPanel
-            └── [💬 Conv] ────► ConversationPanel
+            ├── [🤖 AI] ──────► AIConfigPanel
+            ├── [🔐 Creds] ───► CredentialPanel (Select/Add/Config)
+            ├── [📝 Prompts] ─► PromptPanel (Select/Add/Config)
+            ├── [💬 Conv] ────► ConversationPanel (Select/Add/Config)
+            ├── [📂 Project] ─► ProjectPanel (Select/Add/Config)
+            └── [🍔 Menu] ────► MenuGeneratorPanel (Select/Add/Config)
                     │
                     └── FloatingPanel
                           │
@@ -200,8 +229,17 @@ frontend/src/lib/components/
 ├── ui/               # Componentes base (Button, Input, Card...)
 ├── feedback/         # Feedback (Modal, Toast, FloatingPanel...)
 ├── layout/           # Layouts (Sidebar, Header...)
-├── toolbar/          # Barras y botones (ToolbarIcon...)
-├── ai/               # Componentes IA (ChatWorkspace...)
+├── toolbar/          # Barras y botones (ToolbarIcon, TopToolbar...)
+├── chat/             # ChatInputBar con módulos integrados
+├── ai/               # Componentes IA (AIButton, AIConfigPanel)
+├── credentials/      # CredentialButton, AddPanel, ConfigPanel
+├── prompts/          # PromptButton, AddPanel, ConfigPanel
+├── projects/         # ProjectButton, AddPanel, ConfigPanel
+├── conversations/    # ConversationButton, AddPanel, ConfigPanel
+├── menu/             # MenuGeneratorButton, AddPanel, ConfigPanel
+├── files/            # FileBrowserButton, AddPanel, ConfigPanel
+├── editor/           # TextEditorButton, ConfigPanel, Panel
+├── pdf/              # PdfViewerButton, ConfigPanel, Panel
 └── {dominio}/        # Componentes específicos de dominio
 ```
 
@@ -1231,12 +1269,46 @@ Para un nuevo módulo, copiar y adaptar:
 
 ---
 
-## MÓDULOS PENDIENTES
+## MÓDULOS DE WORKSPACE
+
+Los módulos de workspace permiten trabajar con archivos y contenido directamente:
+
+### file-browser
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Selecciona? | Archivo/carpeta del proyecto |
+| ¿Añade? | Nueva carpeta, nuevo archivo |
+| ¿Configura? | Renombrar, eliminar, mover |
+| ¿enableAdd? | ✅ Sí |
+
+### text-editor
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Selecciona? | Archivo abierto (de file-browser) |
+| ¿Añade? | ❌ No (depende de file-browser) |
+| ¿Configura? | Opciones de editor (theme, font size) |
+| ¿enableAdd? | ❌ No |
+
+### pdf-viewer
+| Pregunta | Respuesta |
+|----------|-----------|
+| ¿Selecciona? | PDF abierto (de file-browser) |
+| ¿Añade? | ❌ No (depende de file-browser) |
+| ¿Configura? | Opciones de visualización (zoom, modo) |
+| ¿enableAdd? | ❌ No |
+
+---
+
+## ESTADO DE MÓDULOS
 
 | Módulo | enableAdd | Integración | Estado |
 |--------|-----------|-------------|--------|
 | ai-gateway | ❌ | - | ✅ Completo |
 | credential-manager | ✅ | project-manager | ✅ Completo |
 | prompt-manager | ✅ | - | ✅ Completo |
-| conversation-manager | ✅ | project-manager | ⏳ Pendiente |
+| conversation-manager | ✅ | project-manager | ✅ Completo |
 | project-manager | ✅ | - | ✅ Completo |
+| menu-generator | ✅ | - | ✅ Completo |
+| file-browser | ✅ | project-manager | ✅ Completo |
+| text-editor | ❌ | file-browser | ✅ Completo |
+| pdf-viewer | ❌ | file-browser | ✅ Completo |

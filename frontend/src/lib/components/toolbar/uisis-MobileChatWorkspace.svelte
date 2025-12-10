@@ -24,6 +24,8 @@
   export let currentCredential: string = '';
   export let notificationCount: number = 0;
   export let sending: boolean = false;
+  export let projectId: string | null = null;
+  export let currentFile: { name: string; path: string; extension?: string } | null = null;
   let className = '';
   export { className as class };
 
@@ -163,6 +165,8 @@
     {currentModel}
     {currentCredential}
     {sending}
+    {projectId}
+    {currentFile}
     on:send={handleSend}
     on:action={handleChatAction}
     on:expandInput={handleExpandInput}

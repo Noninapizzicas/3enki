@@ -18,74 +18,17 @@
 // ============================================
 
 const EVENTS = {
+  // === ADMIN ===
+  ADMIN: {
+    ACTION: 'admin.action',
+  },
+
   // === AI ===
   AI: {
     CHAT_REQUEST: 'ai.chat.request',
     CHAT_RESPONSE: 'ai.chat.response',
     COMPLETION_COMPLETED: 'ai.completion.completed',
-    ERROR: 'ai.error',
-    GENERATE_REQUEST: 'ai.generate.request',
-    GENERATE_RESPONSE: 'ai.generate.response',
-    PROVIDERS: 'ai.providers',
     REQUEST: 'ai.request',
-    RESPONSE: 'ai.response',
-    RESPONSE_FAILED: 'ai.response.failed',
-    RESPONSE_GENERATED: 'ai.response.generated',
-    USAGE: 'ai.usage',
-  },
-
-  // === BOTON ===
-  BOTON: {
-    PULSADO: 'boton.pulsado',
-  },
-
-  // === CAJA ===
-  CAJA: {
-    CERRADA: 'caja.cerrada',
-  },
-
-  // === CATALOGO ===
-  CATALOGO: {
-    ACTUALIZADO: 'catalogo.actualizado',
-  },
-
-  // === CATEGORIA ===
-  CATEGORIA: {
-    ACTUALIZADA: 'categoria.actualizada',
-    CREADA: 'categoria.creada',
-    LISTAR: 'categoria.listar',
-    OBTENER: 'categoria.obtener',
-    ORDEN_ACTUALIZADO: 'categoria.orden_actualizado',
-  },
-
-  // === CHAT ===
-  CHAT: {
-    CONVERSATION_CREATED: 'chat.conversation.created',
-    CONVERSATION_DELETED: 'chat.conversation.deleted',
-    MESSAGE_AI_RECEIVED: 'chat.message.ai.received',
-    MESSAGE_SENT: 'chat.message.sent',
-    SEND_REQUEST: 'chat.send.request',
-    SEND_RESPONSE: 'chat.send.response',
-  },
-
-  // === COBRO ===
-  COBRO: {
-    COMPLETADO: 'cobro.completado',
-    FALLIDO: 'cobro.fallido',
-    INICIADO: 'cobro.iniciado',
-    LISTAR: 'cobro.listar',
-    OBTENER: 'cobro.obtener',
-    POR_CUENTA: 'cobro.por_cuenta',
-    PROCESADO: 'cobro.procesado',
-    REEMBOLSADO: 'cobro.reembolsado',
-  },
-
-  // === COCINA ===
-  COCINA: {
-    ACTIVOS: 'cocina.activos',
-    HISTORIAL: 'cocina.historial',
-    ITEM_PREPARADO: 'cocina.item_preparado',
-    PEDIDO_LISTO: 'cocina.pedido_listo',
   },
 
   // === CONVERSATION ===
@@ -118,17 +61,6 @@ const EVENTS = {
     UPDATED: 'credential.updated',
   },
 
-  // === CUENTA ===
-  CUENTA: {
-    ACTUALIZADA: 'cuenta.actualizada',
-    CERRADA: 'cuenta.cerrada',
-    CREADA: 'cuenta.creada',
-    ELIMINADA: 'cuenta.eliminada',
-    ESTADO_CAMBIADO: 'cuenta.estado_cambiado',
-    LISTAR: 'cuenta.listar',
-    OBTENER: 'cuenta.obtener',
-  },
-
   // === DB ===
   DB: {
     CREATED: 'db.created',
@@ -141,18 +73,33 @@ const EVENTS = {
     SCHEMA_INIT_RESPONSE: 'db.schema.init.response',
   },
 
-  // === DIA ===
-  DIA: {
-    INICIADO: 'dia.iniciado',
+  // === EDITOR ===
+  EDITOR: {
+    ERROR: 'editor.error',
+    FORMAT_REQUEST: 'editor.format.request',
+    FORMAT_RESPONSE: 'editor.format.response',
+    OPEN_REQUEST: 'editor.open.request',
+    OPEN_RESPONSE: 'editor.open.response',
+    SAVED: 'editor.saved',
+    SAVE_REQUEST: 'editor.save.request',
+    VALIDATE_REQUEST: 'editor.validate.request',
+    VALIDATE_RESPONSE: 'editor.validate.response',
   },
 
   // === FILE ===
   FILE: {
+    CONTENT_REQUEST: 'file.content.request',
+    CONTENT_RESPONSE: 'file.content.response',
+    CREATED: 'file.created',
+    CREATE_REQUEST: 'file.create.request',
     DELETED: 'file.deleted',
+    DELETE_REQUEST: 'file.delete.request',
     GET_REQUEST: 'file.get.request',
     GET_RESPONSE: 'file.get.response',
     LIST_REQUEST: 'file.list.request',
     LIST_RESPONSE: 'file.list.response',
+    SEARCH_REQUEST: 'file.search.request',
+    SEARCH_RESPONSE: 'file.search.response',
     UPLOADED: 'file.uploaded',
   },
 
@@ -168,24 +115,6 @@ const EVENTS = {
     GET_RESPONSE: 'function.get.response',
     LIST_REQUEST: 'function.list.request',
     LIST_RESPONSE: 'function.list.response',
-  },
-
-  // === INGREDIENTE ===
-  INGREDIENTE: {
-    ACTUALIZADO: 'ingrediente.actualizado',
-    BUSCAR: 'ingrediente.buscar',
-    CREADO: 'ingrediente.creado',
-    LISTAR: 'ingrediente.listar',
-    OBTENER: 'ingrediente.obtener',
-  },
-
-  // === LLEVAR ===
-  LLEVAR: {
-    ACTIVOS: 'llevar.activos',
-    LISTOS: 'llevar.listos',
-    TICKET_CREADO: 'llevar.ticket_creado',
-    TICKET_ENTREGADO: 'llevar.ticket_entregado',
-    TICKET_LISTO: 'llevar.ticket_listo',
   },
 
   // === MENU ===
@@ -204,19 +133,6 @@ const EVENTS = {
     MENU_EXPORTED_POS: 'menu-generator.menu.exported_pos',
     MESSAGE_RECEIVED: 'menu-generator.message.received',
     MESSAGE_SENT: 'menu-generator.message.sent',
-  },
-
-  // === MESA ===
-  MESA: {
-    ABIERTA: 'mesa.abierta',
-    CAMARERO_ASIGNADO: 'mesa.camarero_asignado',
-    CERRADA: 'mesa.cerrada',
-  },
-
-  // === MESAS ===
-  MESAS: {
-    DISPONIBLES: 'mesas.disponibles',
-    OCUPADAS: 'mesas.ocupadas',
   },
 
   // === MESSAGE ===
@@ -245,25 +161,17 @@ const EVENTS = {
     OBTENER: 'nota.obtener',
   },
 
-  // === PEDIDO ===
-  PEDIDO: {
-    CANCELADO: 'pedido.cancelado',
-    COMPLETADO: 'pedido.completado',
-    CREADO: 'pedido.creado',
-    ENVIADO_COCINA: 'pedido.enviado_cocina',
-    ITEM_ACTUALIZADO: 'pedido.item_actualizado',
-    ITEM_AGREGADO: 'pedido.item_agregado',
-    ITEM_ELIMINADO: 'pedido.item_eliminado',
-    LISTAR: 'pedido.listar',
-    OBTENER: 'pedido.obtener',
-    POR_CUENTA: 'pedido.por_cuenta',
-  },
-
-  // === PERSISTENCIA ===
-  PERSISTENCIA: {
-    CUADRE_CAJA: 'persistencia.cuadre_caja',
-    EVENTOS: 'persistencia.eventos',
-    VENTAS: 'persistencia.ventas',
+  // === PDF ===
+  PDF: {
+    ERROR: 'pdf.error',
+    EXTRACT_REQUEST: 'pdf.extract.request',
+    EXTRACT_RESPONSE: 'pdf.extract.response',
+    LIST_REQUEST: 'pdf.list.request',
+    LIST_RESPONSE: 'pdf.list.response',
+    METADATA_REQUEST: 'pdf.metadata.request',
+    METADATA_RESPONSE: 'pdf.metadata.response',
+    VIEW_REQUEST: 'pdf.view.request',
+    VIEW_RESPONSE: 'pdf.view.response',
   },
 
   // === PLUGIN ===
@@ -284,16 +192,6 @@ const EVENTS = {
     INGREDIENTES_IMPORT: 'pos.ingredientes.import',
     PRODUCTOS_IMPORT: 'pos.productos.import',
     VARIACIONES_IMPORT: 'pos.variaciones.import',
-  },
-
-  // === PRODUCTO ===
-  PRODUCTO: {
-    ACTUALIZADO: 'producto.actualizado',
-    BUSCAR: 'producto.buscar',
-    CREADO: 'producto.creado',
-    ELIMINADO: 'producto.eliminado',
-    LISTAR: 'producto.listar',
-    OBTENER: 'producto.obtener',
   },
 
   // === PROJECT ===
@@ -319,27 +217,6 @@ const EVENTS = {
     DESIGN_UPDATED: 'scratch.design.updated',
   },
 
-  // === SECURITY ===
-  SECURITY: {
-    DECRYPT_REQUEST: 'security.decrypt.request',
-    DECRYPT_RESPONSE: 'security.decrypt.response',
-    ENCRYPT_REQUEST: 'security.encrypt.request',
-    ENCRYPT_RESPONSE: 'security.encrypt.response',
-    KEYPAIR_GENERATED: 'security.keypair.generated',
-    KEYPAIR_GET_REQUEST: 'security.keypair.get.request',
-    KEYPAIR_GET_RESPONSE: 'security.keypair.get.response',
-    MESSAGE_DECRYPTED: 'security.message.decrypted',
-    MESSAGE_ENCRYPTED: 'security.message.encrypted',
-    PEER_AUTHENTICATED: 'security.peer.authenticated',
-    PEER_REVOKED: 'security.peer.revoked',
-    PEER_VERIFY_REQUEST: 'security.peer.verify.request',
-    PEER_VERIFY_RESPONSE: 'security.peer.verify.response',
-    SESSION_CREATE_REQUEST: 'security.session.create.request',
-    SESSION_CREATE_RESPONSE: 'security.session.create.response',
-    SESSION_ESTABLISHED: 'security.session.established',
-    SESSION_TERMINATED: 'security.session.terminated',
-  },
-
   // === STORAGE ===
   STORAGE: {
     CLEANED: 'storage.cleaned',
@@ -347,16 +224,6 @@ const EVENTS = {
     DELETED: 'storage.deleted',
     INFO_REQUEST: 'storage.info.request',
     INFO_RESPONSE: 'storage.info.response',
-  },
-
-  // === TELEFONO ===
-  TELEFONO: {
-    CONTACTOS: 'telefono.contactos',
-    CONTACTO_IDENTIFICADO: 'telefono.contacto_identificado',
-    LISTO_PARA_RECOGER: 'telefono.listo_para_recoger',
-    LLAMADA_DETECTADA: 'telefono.llamada_detectada',
-    PEDIDO_CREADO: 'telefono.pedido_creado',
-    PENDIENTES: 'telefono.pendientes',
   },
 
   // === TEMPLATES ===
@@ -380,9 +247,7 @@ const EVENTS = {
 
   // === UI ===
   UI: {
-    ACCION: 'ui.accion',
-    RENDERED: 'ui.rendered',
-    RENDER_ERROR: 'ui.render_error',
+    COMPONENT_LOADED: 'ui.component.loaded',
   },
 
   // === UI_DESIGNER ===
@@ -393,14 +258,6 @@ const EVENTS = {
     TEMPLATE_CREATED: 'ui-designer.template.created',
     TEMPLATE_DELETED: 'ui-designer.template.deleted',
     TEMPLATE_UPDATED: 'ui-designer.template.updated',
-  },
-
-  // === VARIACION ===
-  VARIACION: {
-    CALCULAR_PRECIO: 'variacion.calcular_precio',
-    RECHAZADA: 'variacion.rechazada',
-    VALIDADA: 'variacion.validada',
-    VALIDAR: 'variacion.validar',
   },
 
   // === WILDCARD ===
@@ -461,14 +318,6 @@ const API_ROUTES = {
     U_I_SELECT: '/modules/ai-gateway/ui/select',
     U_I_CONFIG_GET: '/modules/ai-gateway/ui/config',
     U_I_CONFIG_POST: '/modules/ai-gateway/ui/config',
-    GENERATE: '/modules/ai-connector/generate',
-    HEALTH_CHECK: '/modules/ai-gateway/health',
-    GET_METRICS: '/modules/ai-gateway/metrics',
-  },
-
-  AICHAT: {
-    BASE: '/modules/aichat-ui',
-    HEALTH_CHECK: '/modules/aichat-ui/health',
   },
 
   CALLING: {
@@ -478,62 +327,6 @@ const API_ROUTES = {
     EXECUTE_FUNCTION: '/modules/calling-generator/functions/:name/execute',
     HEALTH_CHECK: '/modules/calling-generator/health',
     GET_METRICS: '/modules/calling-generator/metrics',
-  },
-
-  CATEGORIA: {
-    BASE: '/modules/categorias',
-    LIST_CATEGORIAS: '/modules/categorias/categorias',
-    GET_CATEGORIA: '/modules/categorias/categorias/:id',
-    CREATE_CATEGORIA: '/modules/categorias/categorias',
-    UPDATE_CATEGORIA: '/modules/categorias/categorias/:id',
-    REORDER_CATEGORIAS: '/modules/categorias/categorias/reorder',
-    HEALTH_CHECK: '/modules/categorias/health',
-    GET_METRICS: '/modules/categorias/metrics',
-  },
-
-  CHAT: {
-    BASE: '/modules/chat-api',
-    CREATE_CONVERSATION: '/modules/chat-api/conversations',
-    LIST_CONVERSATIONS: '/modules/chat-api/conversations',
-    GET_CONVERSATION: '/modules/chat-api/conversations/:id',
-    DELETE_CONVERSATION: '/modules/chat-api/conversations/:id',
-    SEND_MESSAGE: '/modules/chat-api/conversations/:id/messages',
-    GET_MESSAGES: '/modules/chat-api/conversations/:id/messages',
-    HEALTH_CHECK: '/modules/chat-api/health',
-    GET_METRICS: '/modules/chat-api/metrics',
-  },
-
-  COBRO: {
-    BASE: '/modules/cobros',
-    INICIAR_COBRO: '/modules/cobros/cobros',
-    LIST_COBROS: '/modules/cobros/cobros',
-    GET_COBRO: '/modules/cobros/cobros/:id',
-    CONFIRMAR_COBRO: '/modules/cobros/cobros/:id/confirmar',
-    REEMBOLSAR_COBRO: '/modules/cobros/cobros/:id/reembolsar',
-    LIST_METODOS_PAGO: '/modules/cobros/metodos-pago',
-    HEALTH_CHECK: '/modules/cobros/health',
-    GET_METRICS: '/modules/cobros/metrics',
-  },
-
-  COCINA: {
-    BASE: '/modules/cocina',
-    GET_ACTIVOS: '/modules/cocina/cocina/activos',
-    GET_HISTORIAL: '/modules/cocina/cocina/historial',
-    GET_PEDIDO: '/modules/cocina/cocina/pedidos/:pedido_id',
-    PREPARAR_ITEM: '/modules/cocina/cocina/items/:item_id/preparar',
-    MARCAR_LISTO: '/modules/cocina/cocina/pedidos/:pedido_id/listo',
-    S_S_E_STREAM: '/modules/cocina/cocina/stream',
-    HEALTH_CHECK: '/modules/cocina/health',
-    GET_METRICS: '/modules/cocina/metrics',
-  },
-
-  COMANDERO: {
-    BASE: '/modules/comandero',
-    GET_PEDIDO: '/modules/comandero/pedido/:cuenta_id',
-    ADD_ITEM: '/modules/comandero/pedido/:cuenta_id/items',
-    REMOVE_ITEM: '/modules/comandero/pedido/:cuenta_id/items/:item_id',
-    ENVIAR_COCINA: '/modules/comandero/pedido/:cuenta_id/enviar',
-    HEALTH_CHECK: '/modules/comandero/health',
   },
 
   CONVERSATION: {
@@ -565,56 +358,6 @@ const API_ROUTES = {
     GET_METRICS: '/modules/credential-manager/metrics',
   },
 
-  CUENTA: {
-    BASE: '/modules/cuentas',
-    CREATE_CUENTA: '/modules/cuentas/cuentas',
-    LIST_CUENTAS: '/modules/cuentas/cuentas',
-    GET_CUENTA: '/modules/cuentas/cuentas/:id',
-    DELETE_CUENTA: '/modules/cuentas/cuentas/:id',
-    GET_STATS: '/modules/cuentas/stats',
-    HEALTH_CHECK: '/modules/cuentas/health',
-    GET_METRICS: '/modules/cuentas/metrics',
-  },
-
-  CUENTA_LLEVAR: {
-    BASE: '/modules/cuentas-llevar',
-    CREAR_TICKET: '/modules/cuentas-llevar/llevar/crear-ticket',
-    MARCAR_LISTO: '/modules/cuentas-llevar/llevar/:id/listo',
-    ENTREGAR: '/modules/cuentas-llevar/llevar/:id/entregar',
-    GET_ACTIVOS: '/modules/cuentas-llevar/llevar/activos',
-    GET_LISTOS: '/modules/cuentas-llevar/llevar/listos',
-    GET_TICKET: '/modules/cuentas-llevar/llevar/:id',
-    DISPLAY: '/modules/cuentas-llevar/llevar/display',
-    HEALTH_CHECK: '/modules/cuentas-llevar/health',
-    GET_METRICS: '/modules/cuentas-llevar/metrics',
-  },
-
-  CUENTA_MESA: {
-    BASE: '/modules/cuentas-mesa',
-    ABRIR_MESA: '/modules/cuentas-mesa/mesas/abrir',
-    ASIGNAR_CAMARERO: '/modules/cuentas-mesa/mesas/:id/asignar-camarero',
-    CERRAR_MESA: '/modules/cuentas-mesa/mesas/:id/cerrar',
-    GET_DISPONIBLES: '/modules/cuentas-mesa/mesas/disponibles',
-    GET_OCUPADAS: '/modules/cuentas-mesa/mesas/ocupadas',
-    GET_MESA: '/modules/cuentas-mesa/mesas/:numero',
-    LIST_ALL: '/modules/cuentas-mesa/mesas',
-    HEALTH_CHECK: '/modules/cuentas-mesa/health',
-    GET_METRICS: '/modules/cuentas-mesa/metrics',
-  },
-
-  CUENTA_TELEFONO: {
-    BASE: '/modules/cuentas-telefono',
-    LLAMADA_ENTRANTE: '/modules/cuentas-telefono/telefono/llamada-entrante',
-    CREAR_PEDIDO: '/modules/cuentas-telefono/telefono/crear-pedido',
-    GET_PENDIENTES: '/modules/cuentas-telefono/telefono/pendientes',
-    GET_PEDIDO: '/modules/cuentas-telefono/telefono/:id',
-    MARCAR_LISTO: '/modules/cuentas-telefono/telefono/:id/listo',
-    GET_CONTACTOS: '/modules/cuentas-telefono/telefono/contactos',
-    GUARDAR_CONTACTO: '/modules/cuentas-telefono/telefono/contactos',
-    HEALTH_CHECK: '/modules/cuentas-telefono/health',
-    GET_METRICS: '/modules/cuentas-telefono/metrics',
-  },
-
   DATABASE: {
     BASE: '/modules/database-manager',
     LIST_DATABASES: '/modules/database-manager/databases',
@@ -634,17 +377,6 @@ const API_ROUTES = {
     CREATE_FILE: '/modules/file-browser/files',
     DELETE_FILE: '/modules/file-browser/files',
     SEARCH_FILES: '/modules/file-browser/files/search',
-  },
-
-  INGREDIENTE: {
-    BASE: '/modules/ingredientes',
-    LIST_INGREDIENTES: '/modules/ingredientes/ingredientes',
-    GET_INGREDIENTE: '/modules/ingredientes/ingredientes/:id',
-    SEARCH_INGREDIENTES: '/modules/ingredientes/ingredientes/search',
-    LIST_ALERGENOS: '/modules/ingredientes/alergenos',
-    UPDATE_INGREDIENTE: '/modules/ingredientes/ingredientes/:id',
-    HEALTH_CHECK: '/modules/ingredientes/health',
-    GET_METRICS: '/modules/ingredientes/metrics',
   },
 
   MENU: {
@@ -701,38 +433,6 @@ const API_ROUTES = {
     LIST_PDFS: '/modules/pdf-viewer/pdf/list',
   },
 
-  PEDIDO: {
-    BASE: '/modules/pedidos',
-    CREATE_PEDIDO: '/modules/pedidos/pedidos',
-    LIST_PEDIDOS: '/modules/pedidos/pedidos',
-    GET_PEDIDO: '/modules/pedidos/pedidos/:id',
-    AGREGAR_ITEM: '/modules/pedidos/pedidos/:id/items',
-    ACTUALIZAR_ITEM: '/modules/pedidos/pedidos/:id/items/:item_id',
-    ELIMINAR_ITEM: '/modules/pedidos/pedidos/:id/items/:item_id',
-    ENVIAR_COCINA: '/modules/pedidos/pedidos/:id/enviar-cocina',
-    COMPLETAR_PEDIDO: '/modules/pedidos/pedidos/:id/completar',
-    CANCELAR_PEDIDO: '/modules/pedidos/pedidos/:id/cancelar',
-    CALCULAR_TOTAL: '/modules/pedidos/pedidos/:id/total',
-    HEALTH_CHECK: '/modules/pedidos/health',
-    GET_METRICS: '/modules/pedidos/metrics',
-  },
-
-  PERSISTENCIA: {
-    BASE: '/modules/persistencia-comandero',
-    GET_CUENTAS_ACTIVAS: '/modules/persistencia-comandero/cuentas-activas',
-    GET_EVENTOS: '/modules/persistencia-comandero/eventos',
-    GET_EVENTOS_FECHA: '/modules/persistencia-comandero/eventos/:fecha',
-    GET_VENTAS: '/modules/persistencia-comandero/ventas',
-    GET_VENTAS_FECHA: '/modules/persistencia-comandero/ventas/:fecha',
-    CUADRE_CAJA: '/modules/persistencia-comandero/cuadre-caja',
-    CUADRE_CAJA_FECHA: '/modules/persistencia-comandero/cuadre-caja/:fecha',
-    CIERRE_CAJA: '/modules/persistencia-comandero/cierre-caja',
-    INICIAR_DIA: '/modules/persistencia-comandero/iniciar-dia',
-    BACKUP: '/modules/persistencia-comandero/backup',
-    HEALTH_CHECK: '/modules/persistencia-comandero/health',
-    GET_METRICS: '/modules/persistencia-comandero/metrics',
-  },
-
   PLUGIN: {
     BASE: '/modules/plugin-manager',
     GET_PLUGIN: '/modules/plugin-manager/plugins/:name',
@@ -740,21 +440,6 @@ const API_ROUTES = {
     RELOAD_PLUGINS: '/modules/plugin-manager/plugins/reload',
     HEALTH_CHECK: '/modules/plugin-manager/health',
     GET_METRICS: '/modules/plugin-manager/metrics',
-  },
-
-  PRODUCTO: {
-    BASE: '/modules/productos',
-    LIST_PRODUCTOS: '/modules/productos/productos',
-    GET_PRODUCTO: '/modules/productos/productos/:id',
-    SEARCH_PRODUCTOS: '/modules/productos/productos/search',
-    LIST_CATEGORIAS: '/modules/productos/categorias',
-    LIST_INGREDIENTES: '/modules/productos/ingredientes',
-    LIST_PIZZAS: '/modules/productos/pizzas',
-    UPDATE_PRODUCTO: '/modules/productos/productos/:id',
-    DELETE_PRODUCTO: '/modules/productos/productos/:id',
-    GET_STATS: '/modules/productos/stats',
-    HEALTH_CHECK: '/modules/productos/health',
-    GET_METRICS: '/modules/productos/metrics',
   },
 
   PROJECT: {
@@ -813,21 +498,6 @@ const API_ROUTES = {
     GET_METRICS: '/modules/scratch-designer/metrics',
   },
 
-  SECURITY: {
-    BASE: '/modules/security-p2p',
-    GET_KEYPAIR: '/modules/security-p2p/keypair',
-    GENERATE_KEYPAIR: '/modules/security-p2p/keypair/generate',
-    CREATE_SESSION: '/modules/security-p2p/sessions',
-    LIST_SESSIONS: '/modules/security-p2p/sessions',
-    TERMINATE_SESSION: '/modules/security-p2p/sessions/:peer_id',
-    ENCRYPT: '/modules/security-p2p/encrypt',
-    DECRYPT: '/modules/security-p2p/decrypt',
-    VERIFY_PEER: '/modules/security-p2p/peers/verify',
-    REVOKE_PEER: '/modules/security-p2p/peers/:peer_id/revoke',
-    HEALTH_CHECK: '/modules/security-p2p/health',
-    GET_METRICS: '/modules/security-p2p/metrics',
-  },
-
   STORAGE: {
     BASE: '/modules/storage-manager',
     UPLOAD_FILE: '/modules/storage-manager/storage/:projectId/upload',
@@ -874,25 +544,12 @@ const API_ROUTES = {
     GET_LAYOUT: '/modules/ui-designer/layouts/:type',
     GET_PREDEFINED_TEMPLATES: '/modules/ui-designer/predefined',
     CREATE_FROM_PREDEFINED: '/modules/ui-designer/predefined/create',
-    LIST_COMPONENTS: '/modules/ui-renderer/components',
+    LIST_COMPONENTS: '/modules/ui-designer/components',
     GET_COMPONENT_SCHEMA: '/modules/ui-designer/components/:name',
     EXPORT_YAML: '/modules/ui-designer/export/yaml',
     EXPORT_SVELTE: '/modules/ui-designer/export/svelte',
     EXPORT_JSON: '/modules/ui-designer/export/json',
-    HEALTH_CHECK: '/modules/ui-renderer/health',
-    RENDER_U_I: '/modules/ui-renderer/ui/:module/:view?',
-    GET_COMPONENT: '/modules/ui-renderer/component/:name',
-    RENDER_COMPONENT: '/modules/ui-renderer/component/:name/render',
-    GET_METRICS: '/modules/ui-renderer/metrics',
-  },
-
-  VARIACION: {
-    BASE: '/modules/variaciones',
-    GET_VARIACIONES_PRODUCTO: '/modules/variaciones/productos/:producto_id/variaciones',
-    VALIDAR_VARIACION: '/modules/variaciones/validar',
-    CALCULAR_PRECIO: '/modules/variaciones/calcular-precio',
-    HEALTH_CHECK: '/modules/variaciones/health',
-    GET_METRICS: '/modules/variaciones/metrics',
+    HEALTH_CHECK: '/modules/ui-designer/health',
   },
 
 };
@@ -905,8 +562,8 @@ const MODULES = {
   'admin-panel': {
     version: '1.0.0',
     events: {
-      publishes: [],
-      subscribes: [],
+      publishes: ['admin.action'],
+      subscribes: ['plugin.loaded', 'ui.component.loaded'],
     },
   },
   'ai-agent-framework': {
@@ -961,8 +618,8 @@ const MODULES = {
   'file-browser': {
     version: '1.0.0',
     events: {
-      publishes: [],
-      subscribes: [],
+      publishes: ['file.list.response', 'file.content.response', 'file.created', 'file.deleted', 'file.search.response'],
+      subscribes: ['file.list.request', 'file.content.request', 'file.create.request', 'file.delete.request', 'file.search.request'],
     },
   },
   'menu-generator': {
@@ -989,8 +646,8 @@ const MODULES = {
   'pdf-viewer': {
     version: '1.0.0',
     events: {
-      publishes: [],
-      subscribes: [],
+      publishes: ['pdf.view.response', 'pdf.extract.response', 'pdf.metadata.response', 'pdf.list.response', 'pdf.error'],
+      subscribes: ['pdf.view.request', 'pdf.extract.request', 'pdf.metadata.request', 'pdf.list.request'],
     },
   },
   'plugin-manager': {
@@ -1031,8 +688,8 @@ const MODULES = {
   'text-editor': {
     version: '1.0.0',
     events: {
-      publishes: [],
-      subscribes: [],
+      publishes: ['editor.open.response', 'editor.saved', 'editor.validate.response', 'editor.format.response', 'editor.error'],
+      subscribes: ['editor.open.request', 'editor.save.request', 'editor.validate.request', 'editor.format.request'],
     },
   },
   'tool-orchestrator': {
@@ -1047,202 +704,6 @@ const MODULES = {
     events: {
       publishes: ['ui-designer.template.created', 'ui-designer.template.updated', 'ui-designer.template.deleted', 'ui-designer.export.yaml', 'ui-designer.export.svelte', 'ui-designer.export.json'],
       subscribes: [],
-    },
-  },
-  'ai-connector': {
-    version: '2.0.0',
-    events: {
-      publishes: ['ai.response.generated', 'ai.response.failed', 'ai.generate.response'],
-      subscribes: ['ai.generate.request', 'credential.resolve.response'],
-    },
-  },
-  'ai-gateway': {
-    version: '2.1.0',
-    events: {
-      publishes: ['ai.response', 'ai.error', 'credential.resolve.request'],
-      subscribes: ['ai.request', 'credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolve.response', 'ai.providers', 'ai.usage'],
-    },
-  },
-  'aichat-ui': {
-    version: '1.0.0',
-    events: {
-      publishes: [],
-      subscribes: [],
-    },
-  },
-  'categorias': {
-    version: '1.0.0',
-    events: {
-      publishes: ['categoria.creada', 'categoria.actualizada', 'categoria.orden_actualizado'],
-      subscribes: ['menu.generado', 'categoria.obtener', 'categoria.listar'],
-    },
-  },
-  'chat-api': {
-    version: '2.0.0',
-    events: {
-      publishes: ['chat.conversation.created', 'chat.conversation.deleted', 'chat.message.sent', 'chat.message.ai.received', 'chat.send.response'],
-      subscribes: ['chat.send.request', 'db.query.response', 'db.schema.init.response', 'ai.generate.response'],
-    },
-  },
-  'cobros': {
-    version: '1.1.0',
-    events: {
-      publishes: ['cobro.iniciado', 'cobro.completado', 'cobro.fallido', 'cobro.reembolsado'],
-      subscribes: ['pedido.completado', 'cuenta.creada', 'cobro.obtener', 'cobro.listar', 'cobro.por_cuenta'],
-    },
-  },
-  'cocina': {
-    version: '1.0.0',
-    events: {
-      publishes: ['cocina.item_preparado', 'cocina.pedido_listo'],
-      subscribes: ['pedido.enviado_cocina', 'pedido.item_agregado', 'pedido.cancelado', 'cocina.activos', 'cocina.historial'],
-    },
-  },
-  'comandero': {
-    version: '1.0.0',
-    events: {
-      publishes: ['pedido.item_agregado', 'pedido.item_eliminado', 'pedido.enviado_cocina'],
-      subscribes: ['cuenta.actualizada'],
-    },
-  },
-  'conversation-manager': {
-    version: '1.0.0',
-    events: {
-      publishes: ['conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response'],
-      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response'],
-    },
-  },
-  'credential-manager': {
-    version: '2.0.0',
-    events: {
-      publishes: ['credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolved', 'credential.resolve.failed', 'credential.resolve.response'],
-      subscribes: ['credential.resolve.request'],
-    },
-  },
-  'cuentas': {
-    version: '2.0.0',
-    events: {
-      publishes: ['cuenta.creada', 'cuenta.actualizada', 'cuenta.eliminada', 'cuenta.estado_cambiado'],
-      subscribes: ['pedido.item_agregado', 'pedido.item_eliminado', 'cobro.procesado', 'cuenta.obtener', 'cuenta.listar'],
-    },
-  },
-  'cuentas-llevar': {
-    version: '1.0.0',
-    events: {
-      publishes: ['llevar.ticket_creado', 'llevar.ticket_listo', 'llevar.ticket_entregado', 'cuenta.creada', 'cuenta.cerrada'],
-      subscribes: ['cocina.pedido_listo', 'cobro.completado', 'llevar.activos', 'llevar.listos'],
-    },
-  },
-  'cuentas-mesa': {
-    version: '1.0.0',
-    events: {
-      publishes: ['mesa.abierta', 'mesa.camarero_asignado', 'mesa.cerrada', 'cuenta.creada', 'cuenta.cerrada'],
-      subscribes: ['pedido.creado', 'cobro.completado', 'mesas.disponibles', 'mesas.ocupadas'],
-    },
-  },
-  'cuentas-telefono': {
-    version: '1.0.0',
-    events: {
-      publishes: ['telefono.llamada_detectada', 'telefono.contacto_identificado', 'telefono.pedido_creado', 'telefono.listo_para_recoger', 'cuenta.creada', 'cuenta.cerrada'],
-      subscribes: ['cocina.pedido_listo', 'cobro.completado', 'telefono.pendientes', 'telefono.contactos'],
-    },
-  },
-  'database-manager': {
-    version: '2.0.0',
-    events: {
-      publishes: ['db.created', 'db.deleted', 'db.query.executed', 'db.schema.initialized', 'db.query.response', 'db.schema.init.response'],
-      subscribes: ['db.query.request', 'db.schema.init.request'],
-    },
-  },
-  'file-browser': {
-    version: '1.0.0',
-    events: {
-      publishes: [],
-      subscribes: [],
-    },
-  },
-  'ingredientes': {
-    version: '1.0.0',
-    events: {
-      publishes: ['ingrediente.creado', 'ingrediente.actualizado'],
-      subscribes: ['menu.generado', 'producto.creado', 'ingrediente.obtener', 'ingrediente.listar', 'ingrediente.buscar'],
-    },
-  },
-  'menu-generator': {
-    version: '1.0.0',
-    events: {
-      publishes: ['ai.request', 'menu.generado', 'menu.validado', 'menu.error'],
-      subscribes: ['ai.response', 'menu.obtener_ultimo'],
-    },
-  },
-  'pdf-viewer': {
-    version: '1.0.0',
-    events: {
-      publishes: [],
-      subscribes: [],
-    },
-  },
-  'pedidos': {
-    version: '1.0.0',
-    events: {
-      publishes: ['pedido.creado', 'pedido.item_agregado', 'pedido.item_actualizado', 'pedido.item_eliminado', 'pedido.enviado_cocina', 'pedido.completado', 'pedido.cancelado'],
-      subscribes: ['variacion.validada', 'variacion.rechazada', 'cuenta.creada', 'pedido.obtener', 'pedido.listar', 'pedido.por_cuenta'],
-    },
-  },
-  'persistencia-comandero': {
-    version: '1.1.0',
-    events: {
-      publishes: ['caja.cerrada', 'dia.iniciado'],
-      subscribes: ['boton.pulsado', 'ui.accion', 'cuenta.creada', 'cuenta.cerrada', 'cobro.iniciado', 'cobro.completado', 'cobro.reembolsado', 'pedido.creado', 'mesa.abierta', 'telefono.pedido_creado', 'llevar.ticket_creado', 'persistencia.eventos', 'persistencia.ventas', 'persistencia.cuadre_caja'],
-    },
-  },
-  'productos': {
-    version: '2.0.0',
-    events: {
-      publishes: ['producto.creado', 'producto.actualizado', 'producto.eliminado', 'catalogo.actualizado'],
-      subscribes: ['menu.generado', 'menu.validado', 'producto.obtener', 'producto.listar', 'producto.buscar'],
-    },
-  },
-  'project-manager': {
-    version: '2.0.0',
-    events: {
-      publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response'],
-      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response'],
-    },
-  },
-  'security-p2p': {
-    version: '1.0.0',
-    events: {
-      publishes: ['security.keypair.generated', 'security.session.established', 'security.session.terminated', 'security.message.encrypted', 'security.message.decrypted', 'security.peer.authenticated', 'security.peer.revoked', 'security.keypair.get.response', 'security.encrypt.response', 'security.decrypt.response', 'security.session.create.response', 'security.peer.verify.response'],
-      subscribes: ['security.keypair.get.request', 'security.encrypt.request', 'security.decrypt.request', 'security.session.create.request', 'security.peer.verify.request'],
-    },
-  },
-  'storage-manager': {
-    version: '1.0.0',
-    events: {
-      publishes: ['storage.created', 'storage.deleted', 'storage.cleaned', 'file.uploaded', 'file.deleted', 'file.list.response', 'file.get.response', 'storage.info.response'],
-      subscribes: ['project.created', 'project.deleted', 'file.list.request', 'file.get.request', 'storage.info.request'],
-    },
-  },
-  'text-editor': {
-    version: '1.0.0',
-    events: {
-      publishes: [],
-      subscribes: [],
-    },
-  },
-  'ui-renderer': {
-    version: '1.0.0',
-    events: {
-      publishes: ['ui.rendered', 'ui.render_error'],
-      subscribes: [],
-    },
-  },
-  'variaciones': {
-    version: '1.0.0',
-    events: {
-      publishes: ['variacion.validada', 'variacion.rechazada'],
-      subscribes: ['producto.creado', 'pedido.item_agregado', 'variacion.validar', 'variacion.calcular_precio'],
     },
   },
 };

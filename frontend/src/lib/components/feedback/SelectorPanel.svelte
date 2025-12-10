@@ -160,7 +160,7 @@
   // STATE
   // ============================================================================
 
-  let loading = true;
+  let loading = false;  // Empieza en false, se pone true al cargar
   let error: string | null = null;
   let data: NormalizedData | null = null;
 

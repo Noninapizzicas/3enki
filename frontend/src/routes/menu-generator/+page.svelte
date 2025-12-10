@@ -4,7 +4,8 @@
   import { Button, Badge } from '$components/ui';
   import { Spinner } from '$components/feedback';
   import { FileDropZone } from '$components/input';
-  import { ChatAIWorkspaceV2, ModelProviderSelector } from '$components/ai';
+  import { ChatAIWorkspaceV2 } from '$components/ai';
+  import { SelectorPanel } from '$components/feedback';
   import type {
     AIModel,
     AICredential,
@@ -1456,13 +1457,21 @@
     <!-- Panel Selector de Modelo (conectado a ai-gateway) -->
     <!-- =========================================== -->
     {:else if panelId === 'modelo-selector'}
-      <ModelProviderSelector
-        on:select={(e) => {
-          currentModel = e.detail.model || 'Auto';
-          toast.success(`Modelo: ${currentModel}`);
-          currentPanel = '';
-        }}
-      />
+      <div class="p-4 text-center">
+        <p class="text-text-muted mb-4">Selección de modelo</p>
+        <SelectorPanel
+          module="ai-gateway"
+          panelMode="quick"
+          open={true}
+          on:select={(e) => {
+            const model = e.detail.metadata?.model || 'Auto';
+            currentModel = model;
+            toast.success(`Modelo: ${currentModel}`);
+            currentPanel = '';
+          }}
+          on:close={() => currentPanel = ''}
+        />
+      </div>
 
     <!-- =========================================== -->
     <!-- Paneles de IA delegados a ChatAIWorkspace  -->

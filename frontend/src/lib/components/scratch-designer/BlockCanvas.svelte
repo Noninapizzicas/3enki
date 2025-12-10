@@ -71,8 +71,7 @@
 
 <div
   bind:this={canvasEl}
-  class="h-full overflow-auto p-4 md:p-6 bg-bg-secondary transition-colors overscroll-contain"
-  class:bg-primary/5={isDragOver}
+  class="h-full overflow-auto p-4 md:p-6 bg-bg-secondary transition-colors overscroll-contain {isDragOver ? 'bg-primary bg-opacity-5' : ''}"
   on:dragover={handleDragOver}
   on:dragleave={handleDragLeave}
   on:drop={handleDrop}

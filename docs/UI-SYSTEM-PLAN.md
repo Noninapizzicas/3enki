@@ -313,12 +313,35 @@ frontend/src/routes/
 | Módulo backend | kebab-case | `ai-gateway` |
 | Archivo JS | kebab-case | `context-manager.js` |
 | Componente Svelte | PascalCase | `FloatingPanel.svelte` |
+| **Componente UI-SYSTEM-PLAN** | **uisis-PascalCase** | `uisis-ToolbarIcon.svelte` |
 | Store Svelte | camelCase | `mqttStore.ts` |
 | Evento MQTT | dot.notation | `ai.model.selected` |
 | Constante | UPPER_SNAKE | `EVENTS.AI.MODEL_SELECTED` |
 | Variable/función | camelCase | `handleModelSelect` |
 | Prop Svelte | camelCase | `selectedModelId` |
 | CSS class | kebab-case | `floating-panel` |
+
+### Prefijo uisis- (UI System)
+
+Los componentes que cumplen con UI-SYSTEM-PLAN llevan prefijo `uisis-` para identificación rápida:
+
+```
+uisis-ToolbarIcon.svelte     ✅ Cumple UI-SYSTEM-PLAN
+ToolbarIcon.svelte           ❌ Versión legacy (deprecated)
+```
+
+**Beneficios:**
+- Identificación inmediata de componentes alineados
+- Migración gradual sin romper código existente
+- Los exports mantienen nombres limpios: `export { default as ToolbarIcon } from './uisis-ToolbarIcon.svelte'`
+
+**Componentes con prefijo uisis-:**
+- toolbar/: FloatingToolbar, ToolbarIcon, TopToolbar, ModuleToolbar, ChatToolbar, EcosystemToolbar, MobileChatWorkspace
+- layout/: MobileWorkspaceLayout
+- chat/: ChatInputBar
+- ecosystem/: EcosystemToolbar
+- ai/: AIButton, AIConfigPanel, ChatInput
+- Todos los módulos: {Module}Button, {Module}AddPanel, {Module}ConfigPanel
 
 ---
 

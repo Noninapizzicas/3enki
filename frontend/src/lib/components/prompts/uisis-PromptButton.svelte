@@ -28,9 +28,9 @@
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
   import { SelectorPanel } from '$components/feedback';
-  import PromptAddPanel from './PromptAddPanel.svelte';
-  import PromptConfigPanel from './PromptConfigPanel.svelte';
-  import type { Prompt } from './PromptConfigPanel.svelte';
+  import PromptAddPanel from './uisis-PromptAddPanel.svelte';
+  import PromptConfigPanel from './uisis-PromptConfigPanel.svelte';
+  import type { Prompt } from './uisis-PromptConfigPanel.svelte';
 
   // ============================================================================
   // TYPES

@@ -34,4 +34,4 @@ export { default as ConversationConfigPanel } from './uisis-ConversationConfigPa
 export { default as ConversationPanel } from './ConversationPanel.svelte';
 
 // Types
-export type { Conversation } from './ConversationConfigPanel.svelte';
+export type { Conversation } from './uisis-ConversationConfigPanel.svelte';

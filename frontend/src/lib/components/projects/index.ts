@@ -30,4 +30,4 @@ export { default as ProjectAddPanel } from './uisis-ProjectAddPanel.svelte';
 export { default as ProjectConfigPanel } from './uisis-ProjectConfigPanel.svelte';
 
 // Types
-export type { Project } from './ProjectConfigPanel.svelte';
+export type { Project } from './uisis-ProjectConfigPanel.svelte';

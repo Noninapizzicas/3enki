@@ -18,8 +18,8 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import FloatingPanel from '../feedback/FloatingPanel.svelte';
-  import MenuGeneratorAddPanel from './MenuGeneratorAddPanel.svelte';
-  import MenuGeneratorConfigPanel from './MenuGeneratorConfigPanel.svelte';
+  import MenuGeneratorAddPanel from './uisis-MenuGeneratorAddPanel.svelte';
+  import MenuGeneratorConfigPanel from './uisis-MenuGeneratorConfigPanel.svelte';
   import { api } from '$lib/config';
 
   // Props

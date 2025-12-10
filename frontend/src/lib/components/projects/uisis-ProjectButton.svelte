@@ -28,9 +28,9 @@
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
   import { SelectorPanel } from '$components/feedback';
-  import ProjectAddPanel from './ProjectAddPanel.svelte';
-  import ProjectConfigPanel from './ProjectConfigPanel.svelte';
-  import type { Project } from './ProjectConfigPanel.svelte';
+  import ProjectAddPanel from './uisis-ProjectAddPanel.svelte';
+  import ProjectConfigPanel from './uisis-ProjectConfigPanel.svelte';
+  import type { Project } from './uisis-ProjectConfigPanel.svelte';
 
   // ============================================================================
   // TYPES

@@ -29,9 +29,9 @@
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
   import { SelectorPanel } from '$components/feedback';
-  import CredentialAddPanel from './CredentialAddPanel.svelte';
-  import CredentialConfigPanel from './CredentialConfigPanel.svelte';
-  import type { Credential } from './CredentialConfigPanel.svelte';
+  import CredentialAddPanel from './uisis-CredentialAddPanel.svelte';
+  import CredentialConfigPanel from './uisis-CredentialConfigPanel.svelte';
+  import type { Credential } from './uisis-CredentialConfigPanel.svelte';
 
   // ============================================================================
   // TYPES

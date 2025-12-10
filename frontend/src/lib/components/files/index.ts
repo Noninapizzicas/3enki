@@ -31,4 +31,4 @@ export { default as FileBrowserAddPanel } from './uisis-FileBrowserAddPanel.svel
 export { default as FileBrowserConfigPanel } from './uisis-FileBrowserConfigPanel.svelte';
 
 // Types
-export type { FileItem } from './FileBrowserConfigPanel.svelte';
+export type { FileItem } from './uisis-FileBrowserConfigPanel.svelte';

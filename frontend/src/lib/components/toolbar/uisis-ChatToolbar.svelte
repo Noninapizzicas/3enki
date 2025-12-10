@@ -3,6 +3,11 @@
   import ToolbarIcon from './uisis-ToolbarIcon.svelte';
   import type { ActionConfig } from './uisis-FloatingToolbar.svelte';
 
+  // Componentes uisis- con paneles auto-gestionados
+  import { FileBrowserButton } from '$components/files';
+  import { TextEditorButton } from '$components/editor';
+  import { PdfViewerButton } from '$components/pdf';
+
   /**
    * ChatToolbar - Barra de chat con estructura sandwich
    *
@@ -22,6 +27,8 @@
   export let sending = false;
   export let currentModel: string = '';
   export let currentCredential: string = '';
+  export let projectId: string | null = null;
+  export let currentFile: { name: string; path: string; extension?: string } | null = null;
   let className = '';
   export { className as class };
 
@@ -34,6 +41,15 @@
       bar: 'top' | 'bottom';
     };
     expandInput: void;
+    // Eventos de file browser
+    fileSelect: { file: unknown };
+    fileAdd: { path: string };
+    // Eventos de editor
+    editorOpen: { file: unknown };
+    editorSave: { file: unknown; content: string };
+    // Eventos de PDF
+    pdfOpen: { file: unknown };
+    pdfExtractText: { text: string };
   }>();
 
   // Iconos fijos - Sub-barra superior (Chat directo)
@@ -238,6 +254,39 @@
 
   <!-- Sub-barra inferior (Adyacentes) -->
   <div class="chat-bar-bottom flex items-center gap-1 px-2 py-1 border-t border-border/50">
+    <!-- File Browser (uisis- con paneles auto-gestionados) -->
+    <FileBrowserButton
+      size="sm"
+      showLabel={false}
+      {projectId}
+      on:select={(e) => dispatch('fileSelect', { file: e.detail.file })}
+      on:add={(e) => dispatch('fileAdd', { path: e.detail.path })}
+    />
+
+    <!-- Text Editor (uisis- con paneles auto-gestionados) -->
+    <TextEditorButton
+      size="sm"
+      showLabel={false}
+      file={currentFile}
+      {projectId}
+      on:openEditor={(e) => dispatch('editorOpen', { file: e.detail.file })}
+      on:save={(e) => dispatch('editorSave', { file: e.detail.file, content: e.detail.content })}
+    />
+
+    <!-- PDF Viewer (uisis- con paneles auto-gestionados) -->
+    <PdfViewerButton
+      size="sm"
+      showLabel={false}
+      file={currentFile?.extension === 'pdf' ? currentFile : null}
+      {projectId}
+      on:openViewer={(e) => dispatch('pdfOpen', { file: e.detail.file })}
+      on:extractText={(e) => dispatch('pdfExtractText', { text: e.detail.text })}
+    />
+
+    <!-- Separador visual -->
+    <div class="w-px h-6 bg-border/50 mx-1"></div>
+
+    <!-- Iconos estáticos -->
     {#each bottomBarIcons as icon (icon.id)}
       <ToolbarIcon
         id={icon.id}

@@ -26,6 +26,7 @@
 -->
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { browser } from '$app/environment';
   import { FloatingPanel } from '$components/feedback';
   import { api } from '$lib/config';
 
@@ -218,12 +219,16 @@
   // ============================================================================
 
   onMount(() => {
-    // Global keyboard listener for save
-    window.addEventListener('keydown', handleKeydown);
+    // Global keyboard listener for save (only in browser)
+    if (browser) {
+      window.addEventListener('keydown', handleKeydown);
+    }
   });
 
   onDestroy(() => {
-    window.removeEventListener('keydown', handleKeydown);
+    if (browser) {
+      window.removeEventListener('keydown', handleKeydown);
+    }
   });
 </script>
 

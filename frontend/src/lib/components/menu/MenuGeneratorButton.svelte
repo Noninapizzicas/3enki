@@ -1,0 +1,548 @@
+<!--
+  MenuGeneratorButton.svelte
+  Botón con triple interacción para gestión de menús generados.
+
+  Interacciones:
+  - tap: Selector de menús/conversaciones
+  - dbl tap: Crear nueva conversación
+  - long press: Configurar menú seleccionado
+
+  Eventos:
+  - select: { menuId, conversationId }
+  - create: { title, templateId, aiConfig }
+  - validate: { menuId }
+  - export: { menuId, format }
+  - applyPos: { menuId }
+  - delete: { menuId }
+-->
+<script lang="ts">
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import FloatingPanel from '../feedback/FloatingPanel.svelte';
+  import MenuGeneratorAddPanel from './MenuGeneratorAddPanel.svelte';
+  import MenuGeneratorConfigPanel from './MenuGeneratorConfigPanel.svelte';
+  import { api } from '$lib/config';
+
+  // Props
+  export let size: 'sm' | 'md' | 'lg' = 'md';
+  export let showLabel = true;
+  export let disabled = false;
+
+  interface MenuItem {
+    id: string;
+    type: 'menu' | 'conversation';
+    title: string;
+    estado?: string;
+    productosCount?: number;
+    updatedAt?: string;
+    conversationId?: string;
+  }
+
+  const dispatch = createEventDispatcher<{
+    select: { menuId: string | null; conversationId: string | null };
+    create: { title: string; templateId: string | null; aiConfig: any };
+    validate: { menuId: string };
+    export: { menuId: string; format: string };
+    applyPos: { menuId: string };
+    delete: { menuId: string };
+  }>();
+
+  // Estado de paneles
+  let selectorOpen = false;
+  let addOpen = false;
+  let configOpen = false;
+
+  // Estado de selección
+  let selectedMenuId: string | null = null;
+  let selectedConversationId: string | null = null;
+
+  // Lista de items
+  let items: MenuItem[] = [];
+  let loading = false;
+  let error = '';
+
+  // Gesture handling
+  const TIMING = {
+    tapDelay: 250,
+    doubleTapMax: 300,
+    longPressDuration: 500
+  };
+
+  let tapCount = 0;
+  let tapTimer: ReturnType<typeof setTimeout> | null = null;
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let isLongPress = false;
+
+  // Cargar items cuando se abre el selector
+  $: if (selectorOpen) {
+    loadItems();
+  }
+
+  async function loadItems() {
+    loading = true;
+    error = '';
+    items = [];
+
+    try {
+      // Cargar conversaciones y menús en paralelo
+      const [convRes, menuRes] = await Promise.all([
+        fetch(api.moduleApi('menu-generator', '/conversations?limit=20')),
+        fetch(api.moduleApi('menu-generator', '/menus'))
+      ]);
+
+      const convData = await convRes.json();
+      const menuData = await menuRes.json();
+
+      // Mapear conversaciones
+      const conversations = (convData.conversations || []).map((c: any) => ({
+        id: c.menuId || c.id,
+        type: 'conversation' as const,
+        title: c.title || `Conversación ${c.id.slice(-6)}`,
+        estado: c.status,
+        conversationId: c.id,
+        updatedAt: c.updatedAt
+      }));
+
+      // Mapear menús sin conversación
+      const menus = (menuData.menus || [])
+        .filter((m: any) => !conversations.some((c: MenuItem) => c.id === m.id))
+        .map((m: any) => ({
+          id: m.id,
+          type: 'menu' as const,
+          title: `Menú ${m.id.slice(-6)}`,
+          estado: m.estado,
+          productosCount: m.productos_count,
+          updatedAt: m.created_at
+        }));
+
+      items = [...conversations, ...menus];
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Error cargando datos';
+    } finally {
+      loading = false;
+    }
+  }
+
+  // Gesture handlers
+  function handlePointerDown(e: PointerEvent) {
+    if (disabled) return;
+
+    isLongPress = false;
+
+    longPressTimer = setTimeout(() => {
+      isLongPress = true;
+      doConfig();
+    }, TIMING.longPressDuration);
+  }
+
+  function handlePointerUp(e: PointerEvent) {
+    if (disabled) return;
+
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+
+    if (isLongPress) {
+      isLongPress = false;
+      return;
+    }
+
+    tapCount++;
+
+    if (tapCount === 1) {
+      tapTimer = setTimeout(() => {
+        if (tapCount === 1) {
+          doSelect();
+        }
+        tapCount = 0;
+      }, TIMING.doubleTapMax);
+    } else if (tapCount === 2) {
+      if (tapTimer) {
+        clearTimeout(tapTimer);
+        tapTimer = null;
+      }
+      tapCount = 0;
+      doAdd();
+    }
+  }
+
+  function handlePointerLeave() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function handleContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    if (!disabled) {
+      doConfig();
+    }
+  }
+
+  // Actions
+  function doSelect() {
+    selectorOpen = true;
+  }
+
+  function doAdd() {
+    addOpen = true;
+  }
+
+  function doConfig() {
+    if (selectedMenuId) {
+      configOpen = true;
+    } else {
+      // Si no hay menú seleccionado, mostrar selector primero
+      selectorOpen = true;
+    }
+  }
+
+  function handleItemSelect(item: MenuItem) {
+    selectedMenuId = item.type === 'menu' ? item.id : item.id;
+    selectedConversationId = item.conversationId || null;
+
+    dispatch('select', {
+      menuId: selectedMenuId,
+      conversationId: selectedConversationId
+    });
+
+    selectorOpen = false;
+  }
+
+  function handleCreate(e: CustomEvent) {
+    dispatch('create', e.detail);
+  }
+
+  function handleValidate(e: CustomEvent) {
+    dispatch('validate', e.detail);
+  }
+
+  function handleExport(e: CustomEvent) {
+    dispatch('export', e.detail);
+  }
+
+  function handleApplyPos(e: CustomEvent) {
+    dispatch('applyPos', e.detail);
+  }
+
+  function handleDelete(e: CustomEvent) {
+    dispatch('delete', e.detail);
+    selectedMenuId = null;
+    selectedConversationId = null;
+  }
+
+  function getEstadoEmoji(estado?: string) {
+    const emojis: Record<string, string> = {
+      generando: '⏳',
+      generado: '✨',
+      validado: '✅',
+      aplicado: '🚀',
+      active: '💬',
+      error: '❌'
+    };
+    return emojis[estado || ''] || '📄';
+  }
+
+  // Cleanup
+  onDestroy(() => {
+    if (tapTimer) clearTimeout(tapTimer);
+    if (longPressTimer) clearTimeout(longPressTimer);
+  });
+
+  // Tamaños
+  const sizes = {
+    sm: { button: '44px', icon: '1.25rem', font: '0.625rem' },
+    md: { button: '56px', icon: '1.5rem', font: '0.75rem' },
+    lg: { button: '72px', icon: '2rem', font: '0.875rem' }
+  };
+
+  $: currentSize = sizes[size];
+</script>
+
+<!-- Botón principal -->
+<button
+  class="menu-btn"
+  class:selected={!!selectedMenuId}
+  class:disabled
+  style="--btn-size: {currentSize.button}; --icon-size: {currentSize.icon}; --font-size: {currentSize.font}"
+  on:pointerdown={handlePointerDown}
+  on:pointerup={handlePointerUp}
+  on:pointerleave={handlePointerLeave}
+  on:contextmenu={handleContextMenu}
+  {disabled}
+>
+  <span class="btn-icon">🍽️</span>
+  {#if showLabel}
+    <span class="btn-label">Menú</span>
+  {/if}
+  {#if selectedMenuId}
+    <span class="selected-indicator" />
+  {/if}
+</button>
+
+<!-- Panel Selector -->
+<FloatingPanel bind:open={selectorOpen}>
+  <div class="selector-panel">
+    <header class="selector-header">
+      <span>🍽️</span>
+      <h3>Menús</h3>
+    </header>
+
+    <div class="selector-body">
+      {#if loading}
+        <div class="loading">Cargando...</div>
+      {:else if error}
+        <div class="error">{error}</div>
+      {:else if items.length === 0}
+        <div class="empty">
+          <span class="empty-icon">📭</span>
+          <span>No hay menús</span>
+          <button class="empty-action" on:click={() => { selectorOpen = false; addOpen = true; }}>
+            Crear nuevo
+          </button>
+        </div>
+      {:else}
+        <div class="items-list">
+          {#each items as item}
+            <button
+              class="item"
+              class:selected={item.id === selectedMenuId}
+              on:click={() => handleItemSelect(item)}
+            >
+              <span class="item-estado">{getEstadoEmoji(item.estado)}</span>
+              <div class="item-info">
+                <span class="item-title">{item.title}</span>
+                {#if item.productosCount !== undefined}
+                  <span class="item-meta">{item.productosCount} productos</span>
+                {/if}
+              </div>
+              {#if item.id === selectedMenuId}
+                <span class="item-check">✓</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <footer class="selector-footer">
+      <button class="footer-btn" on:click={() => { selectorOpen = false; addOpen = true; }}>
+        + Nuevo Menú
+      </button>
+    </footer>
+  </div>
+</FloatingPanel>
+
+<!-- Panel Add -->
+<MenuGeneratorAddPanel
+  bind:open={addOpen}
+  on:create={handleCreate}
+/>
+
+<!-- Panel Config -->
+<MenuGeneratorConfigPanel
+  bind:open={configOpen}
+  menuId={selectedMenuId}
+  conversationId={selectedConversationId}
+  on:validate={handleValidate}
+  on:export={handleExport}
+  on:applyPos={handleApplyPos}
+  on:delete={handleDelete}
+/>
+
+<style>
+  .menu-btn {
+    --_accent: var(--menu-accent, hsl(25 95% 53%));
+    --_bg: var(--menu-bg, var(--color-bg-elevated, hsl(220 13% 16%)));
+    --_text: var(--menu-text, var(--color-text, hsl(220 10% 90%)));
+    --_border: var(--menu-border, var(--color-border, hsl(220 13% 22%)));
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    width: var(--btn-size);
+    height: var(--btn-size);
+    padding: 0.25rem;
+    background: var(--_bg);
+    border: 2px solid var(--_border);
+    border-radius: var(--radius-lg, 12px);
+    color: var(--_text);
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    transition: all 0.15s ease;
+  }
+
+  .menu-btn:hover:not(.disabled) {
+    border-color: var(--_accent);
+    background: hsla(25, 95%, 53%, 0.1);
+  }
+
+  .menu-btn.selected {
+    border-color: var(--_accent);
+    background: hsla(25, 95%, 53%, 0.15);
+  }
+
+  .menu-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-icon {
+    font-size: var(--icon-size);
+    line-height: 1;
+  }
+
+  .btn-label {
+    font-size: var(--font-size);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .selected-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    background: var(--_accent);
+    border-radius: 50%;
+  }
+
+  /* Selector Panel */
+  .selector-panel {
+    width: min(320px, 90vw);
+    background: var(--color-bg-card, hsl(220 13% 14%));
+    border-radius: var(--radius-lg, 12px);
+    overflow: hidden;
+  }
+
+  .selector-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, hsla(25, 95%, 53%, 0.15), transparent);
+    border-bottom: 1px solid var(--color-border, hsl(220 13% 20%));
+  }
+
+  .selector-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .selector-body {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .loading,
+  .error,
+  .empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--color-text-secondary, hsl(220 10% 60%));
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .empty-icon {
+    font-size: 2rem;
+  }
+
+  .empty-action {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: hsla(25, 95%, 53%, 0.2);
+    border: none;
+    border-radius: var(--radius-md, 8px);
+    color: hsl(25 95% 60%);
+    cursor: pointer;
+  }
+
+  .items-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--color-border, hsl(220 13% 20%));
+    color: var(--color-text, hsl(220 10% 90%));
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+  }
+
+  .item:hover {
+    background: hsla(220, 13%, 50%, 0.1);
+  }
+
+  .item.selected {
+    background: hsla(25, 95%, 53%, 0.1);
+  }
+
+  .item-estado {
+    font-size: 1.25rem;
+  }
+
+  .item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .item-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .item-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary, hsl(220 10% 60%));
+  }
+
+  .item-check {
+    color: hsl(25 95% 53%);
+    font-weight: bold;
+  }
+
+  .selector-footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--color-border, hsl(220 13% 20%));
+  }
+
+  .footer-btn {
+    width: 100%;
+    padding: 0.625rem;
+    background: hsla(25, 95%, 53%, 0.15);
+    border: 1px dashed hsla(25, 95%, 53%, 0.4);
+    border-radius: var(--radius-md, 8px);
+    color: hsl(25 95% 60%);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .footer-btn:hover {
+    background: hsla(25, 95%, 53%, 0.25);
+    border-style: solid;
+  }
+</style>

@@ -31,9 +31,9 @@
   import { onDestroy, createEventDispatcher } from 'svelte';
   import { slide } from 'svelte/transition';
   import { FloatingPanel } from '$components/feedback';
-  import FileBrowserAddPanel from './FileBrowserAddPanel.svelte';
-  import FileBrowserConfigPanel from './FileBrowserConfigPanel.svelte';
-  import type { FileItem } from './FileBrowserConfigPanel.svelte';
+  import FileBrowserAddPanel from './uisis-FileBrowserAddPanel.svelte';
+  import FileBrowserConfigPanel from './uisis-FileBrowserConfigPanel.svelte';
+  import type { FileItem } from './uisis-FileBrowserConfigPanel.svelte';
   import { api } from '$lib/config';
 
   // ============================================================================

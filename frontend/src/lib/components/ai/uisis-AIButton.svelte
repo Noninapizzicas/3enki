@@ -29,7 +29,7 @@
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
   import { SelectorPanel } from '$components/feedback';
-  import AIConfigPanel from './AIConfigPanel.svelte';
+  import AIConfigPanel from './uisis-AIConfigPanel.svelte';
 
   // ============================================================================
   // TYPES

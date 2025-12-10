@@ -29,9 +29,9 @@
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
   import { SelectorPanel } from '$components/feedback';
-  import ConversationAddPanel from './ConversationAddPanel.svelte';
-  import ConversationConfigPanel from './ConversationConfigPanel.svelte';
-  import type { Conversation } from './ConversationConfigPanel.svelte';
+  import ConversationAddPanel from './uisis-ConversationAddPanel.svelte';
+  import ConversationConfigPanel from './uisis-ConversationConfigPanel.svelte';
+  import type { Conversation } from './uisis-ConversationConfigPanel.svelte';
 
   // ============================================================================
   // TYPES

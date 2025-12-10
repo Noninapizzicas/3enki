@@ -30,4 +30,4 @@ export { default as PromptAddPanel } from './uisis-PromptAddPanel.svelte';
 export { default as PromptConfigPanel } from './uisis-PromptConfigPanel.svelte';
 
 // Types
-export type { Prompt } from './PromptConfigPanel.svelte';
+export type { Prompt } from './uisis-PromptConfigPanel.svelte';

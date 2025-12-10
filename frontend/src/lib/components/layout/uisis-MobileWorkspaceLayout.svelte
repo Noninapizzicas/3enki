@@ -2,7 +2,7 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import FloatingPanel from '$components/feedback/FloatingPanel.svelte';
-  import ChatInput from '$components/ai/ChatInput.svelte';
+  import { ChatInput } from '$components/ai';
   import Badge from '$components/ui/Badge.svelte';
   import Spinner from '$components/feedback/Spinner.svelte';
 

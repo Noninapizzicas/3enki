@@ -397,7 +397,9 @@
     error = null;
 
     try {
-      const url = new URL(`${config.apiUrl}${moduleConfig.endpoint}`);
+      // Build URL - handle both absolute and relative apiUrl
+      const baseUrl = config.apiUrl || window.location.origin;
+      const url = new URL(moduleConfig.endpoint, baseUrl);
       if (projectId) {
         url.searchParams.set('project_id', projectId);
       }

@@ -1,11 +1,19 @@
 <script lang="ts">
   /**
-   * Página de Pruebas - Selectores
+   * Página de Pruebas - UI-SYSTEM-PLAN Components (uisis-)
+   *
+   * Interacción triple:
+   * - TAP: Panel Select
+   * - DOUBLE TAP: Panel Add (si enableAdd=true)
+   * - LONG PRESS: Panel Config
    */
-  import { AISelector } from '$components/ai';
-  import { CredentialSelector } from '$components/credentials';
-  import { SlotSelector } from '$components/prompts';
-  import { ConversationPanel } from '$components/conversations';
+  import { AIButton } from '$components/ai';
+  import { CredentialButton } from '$components/credentials';
+  import { PromptButton } from '$components/prompts';
+  import { ConversationButton } from '$components/conversations';
+  import { ProjectButton } from '$components/projects';
+  import { FileBrowserButton } from '$components/files';
+  import { MenuGeneratorButton } from '$components/menu';
 
   let log: string[] = [];
 
@@ -13,124 +21,190 @@
   const testProjectId = 'test-project';
 
   function addLog(msg: string) {
-    log = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...log.slice(0, 9)];
+    log = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...log.slice(0, 19)];
   }
 
-  // AISelector events
-  function handleModelChange(e: CustomEvent) {
-    addLog(`🤖 Modelo: ${e.detail.model.icon} ${e.detail.model.name}`);
+  // AI events
+  function handleAISelect(e: CustomEvent) {
+    addLog(`🤖 Select: ${e.detail?.model?.name || 'modelo'}`);
+  }
+  function handleAIConfig(e: CustomEvent) {
+    addLog(`🤖 Config: ${JSON.stringify(e.detail || {}).slice(0, 50)}`);
   }
 
-  function handleConfigChange(e: CustomEvent) {
-    addLog(`🤖 Config: temp=${e.detail.temperature}`);
+  // Credential events
+  function handleCredSelect(e: CustomEvent) {
+    addLog(`🔐 Select: ${e.detail?.provider || 'credencial'}`);
+  }
+  function handleCredAdd(e: CustomEvent) {
+    addLog(`🔐 Add: nueva credencial`);
+  }
+  function handleCredConfig(e: CustomEvent) {
+    addLog(`🔐 Config: ${e.detail?.key || 'config'}`);
   }
 
-  // CredentialSelector events
-  function handleCredSave(e: CustomEvent) {
-    addLog(`🔐 Guardado: ${e.detail.provider} (${e.detail.level})`);
+  // Prompt events
+  function handlePromptSelect(e: CustomEvent) {
+    addLog(`📝 Select: ${e.detail?.name || 'prompt'}`);
+  }
+  function handlePromptAdd(e: CustomEvent) {
+    addLog(`📝 Add: nuevo prompt`);
+  }
+  function handlePromptConfig(e: CustomEvent) {
+    addLog(`📝 Config: ${e.detail?.id || 'config'}`);
   }
 
-  function handleCredDelete(e: CustomEvent) {
-    addLog(`🔐 Eliminado: ${e.detail.key}`);
-  }
-
-  // SlotSelector events
-  function handlePromptSave(e: CustomEvent) {
-    addLog(`📝 Prompt guardado: ${e.detail.prompt.name}`);
-  }
-
-  function handlePresetSelect(e: CustomEvent) {
-    addLog(`📦 Preset aplicado: ${e.detail.presetId}`);
-  }
-
-  // ConversationPanel events
+  // Conversation events
   function handleConvSelect(e: CustomEvent) {
-    addLog(`💬 Conversación: ${e.detail.conversation.displayTitle}`);
+    addLog(`💬 Select: ${e.detail?.title || 'conversación'}`);
+  }
+  function handleConvAdd(e: CustomEvent) {
+    addLog(`💬 Add: nueva conversación`);
+  }
+  function handleConvConfig(e: CustomEvent) {
+    addLog(`💬 Config: ${e.detail?.id || 'config'}`);
   }
 
-  function handleConvMessage(e: CustomEvent) {
-    addLog(`💬 Mensaje enviado: ${e.detail.content.slice(0, 30)}...`);
+  // Project events
+  function handleProjectSelect(e: CustomEvent) {
+    addLog(`📂 Select: ${e.detail?.name || 'proyecto'}`);
+  }
+  function handleProjectAdd(e: CustomEvent) {
+    addLog(`📂 Add: nuevo proyecto`);
+  }
+  function handleProjectConfig(e: CustomEvent) {
+    addLog(`📂 Config: ${e.detail?.id || 'config'}`);
   }
 
-  function handleConvCreate(e: CustomEvent) {
-    addLog(`💬 Nueva conversación: ${e.detail.conversation.title}`);
+  // FileBrowser events
+  function handleFileSelect(e: CustomEvent) {
+    addLog(`📁 Select: ${e.detail?.name || 'archivo'}`);
+  }
+  function handleFileAdd(e: CustomEvent) {
+    addLog(`📁 Add: nuevo archivo/carpeta`);
+  }
+  function handleFileConfig(e: CustomEvent) {
+    addLog(`📁 Config: ${e.detail?.path || 'config'}`);
   }
 
-  function handleConvDelete(e: CustomEvent) {
-    addLog(`💬 Eliminada: ${e.detail.conversationId.slice(0, 8)}...`);
+  // MenuGenerator events
+  function handleMenuSelect(e: CustomEvent) {
+    addLog(`🍔 Select: ${e.detail?.name || 'menú'}`);
+  }
+  function handleMenuAdd(e: CustomEvent) {
+    addLog(`🍔 Add: nuevo menú`);
+  }
+  function handleMenuConfig(e: CustomEvent) {
+    addLog(`🍔 Config: ${e.detail?.id || 'config'}`);
   }
 </script>
 
 <div class="page">
-  <h1>Pruebas</h1>
+  <h1>🧪 Pruebas UI-SYSTEM-PLAN</h1>
+  <p class="subtitle">Componentes uisis- con interacción triple</p>
 
-  <!-- Selectores -->
-  <div class="selectors">
-    <div class="selector-card">
-      <div class="selector-info">
-        <span>Tap: Modelo</span>
-        <span>Mantener: Config</span>
-      </div>
-      <AISelector
+  <!-- Interacción info -->
+  <div class="interactions-info">
+    <span class="interaction"><kbd>TAP</kbd> Select</span>
+    <span class="interaction"><kbd>2×TAP</kbd> Add</span>
+    <span class="interaction"><kbd>HOLD</kbd> Config</span>
+  </div>
+
+  <!-- Buttons Grid -->
+  <div class="buttons-grid">
+    <!-- AI (enableAdd=false) -->
+    <div class="button-card">
+      <AIButton
         size="lg"
-        on:modelChange={handleModelChange}
-        on:configChange={handleConfigChange}
+        on:select={handleAISelect}
+        on:config={handleAIConfig}
       />
-      <div class="selector-label">AISelector</div>
+      <div class="button-label">AIButton</div>
+      <div class="button-info">enableAdd: ❌</div>
     </div>
 
-    <div class="selector-card">
-      <div class="selector-info">
-        <span>Tap: Ver</span>
-        <span>2x Tap: Añadir</span>
-      </div>
-      <CredentialSelector
+    <!-- Credential (enableAdd=true) -->
+    <div class="button-card">
+      <CredentialButton
         size="lg"
-        on:save={handleCredSave}
-        on:delete={handleCredDelete}
+        on:select={handleCredSelect}
+        on:add={handleCredAdd}
+        on:config={handleCredConfig}
       />
-      <div class="selector-label">CredentialSelector</div>
+      <div class="button-label">CredentialButton</div>
+      <div class="button-info">enableAdd: ✅</div>
     </div>
 
-    <div class="selector-card">
-      <div class="selector-info">
-        <span>Tap: Ver slots</span>
-        <span>2x Tap: Añadir</span>
-        <span>Mantener: Presets</span>
-      </div>
-      <SlotSelector
+    <!-- Prompt (enableAdd=true) -->
+    <div class="button-card">
+      <PromptButton
         size="lg"
-        on:save={handlePromptSave}
-        on:presetSelect={handlePresetSelect}
+        on:select={handlePromptSelect}
+        on:add={handlePromptAdd}
+        on:config={handlePromptConfig}
       />
-      <div class="selector-label">SlotSelector</div>
+      <div class="button-label">PromptButton</div>
+      <div class="button-info">enableAdd: ✅</div>
     </div>
 
-    <div class="selector-card">
-      <div class="selector-info">
-        <span>Tap: Chat/Lista</span>
-        <span>2x Tap: Nueva</span>
-        <span>Mantener: Config</span>
-      </div>
-      <ConversationPanel
+    <!-- Conversation (enableAdd=true) -->
+    <div class="button-card">
+      <ConversationButton
         size="lg"
         projectId={testProjectId}
         on:select={handleConvSelect}
-        on:message={handleConvMessage}
-        on:create={handleConvCreate}
-        on:delete={handleConvDelete}
+        on:add={handleConvAdd}
+        on:config={handleConvConfig}
       />
-      <div class="selector-label">ConversationPanel</div>
+      <div class="button-label">ConversationButton</div>
+      <div class="button-info">enableAdd: ✅</div>
+    </div>
+
+    <!-- Project (enableAdd=true) -->
+    <div class="button-card">
+      <ProjectButton
+        size="lg"
+        on:select={handleProjectSelect}
+        on:add={handleProjectAdd}
+        on:config={handleProjectConfig}
+      />
+      <div class="button-label">ProjectButton</div>
+      <div class="button-info">enableAdd: ✅</div>
+    </div>
+
+    <!-- FileBrowser (enableAdd=true) -->
+    <div class="button-card">
+      <FileBrowserButton
+        size="lg"
+        projectId={testProjectId}
+        on:select={handleFileSelect}
+        on:add={handleFileAdd}
+        on:config={handleFileConfig}
+      />
+      <div class="button-label">FileBrowserButton</div>
+      <div class="button-info">enableAdd: ✅</div>
+    </div>
+
+    <!-- MenuGenerator (enableAdd=true) -->
+    <div class="button-card">
+      <MenuGeneratorButton
+        size="lg"
+        on:select={handleMenuSelect}
+        on:add={handleMenuAdd}
+        on:config={handleMenuConfig}
+      />
+      <div class="button-label">MenuGeneratorButton</div>
+      <div class="button-info">enableAdd: ✅</div>
     </div>
   </div>
 
   <!-- Log -->
   <div class="log">
-    <h2>Log</h2>
+    <h2>📋 Event Log</h2>
     {#each log as entry}
       <div class="log-item">{entry}</div>
     {:else}
-      <div class="log-empty">Toca los botones...</div>
+      <div class="log-empty">Interactúa con los botones...</div>
     {/each}
   </div>
 </div>
@@ -138,73 +212,107 @@
 <style>
   .page {
     min-height: 100vh;
-    padding: 1rem;
-    background: #111;
-    color: #fff;
+    padding: 1.5rem;
+    background: var(--color-bg, #0a0a0a);
+    color: var(--color-text, #fff);
   }
 
   h1 {
-    margin: 0 0 1.5rem;
+    margin: 0;
     font-size: 1.5rem;
   }
 
   h2 {
-    margin: 0 0 0.5rem;
+    margin: 0 0 0.75rem;
     font-size: 1rem;
-    color: #888;
+    color: var(--color-text-muted, #888);
   }
 
-  .selectors {
+  .subtitle {
+    margin: 0.25rem 0 1.5rem;
+    color: var(--color-text-muted, #666);
+    font-size: 0.875rem;
+  }
+
+  .interactions-info {
     display: flex;
-    gap: 1rem;
+    gap: 1.5rem;
     justify-content: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 0.75rem;
+    background: var(--color-bg-card, #1a1d24);
+    border-radius: 8px;
   }
 
-  .selector-card {
+  .interaction {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #888);
+  }
+
+  kbd {
+    padding: 0.2rem 0.4rem;
+    background: var(--color-bg, #0a0a0a);
+    border: 1px solid var(--color-border, #333);
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-family: monospace;
+  }
+
+  .buttons-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .button-card {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.75rem;
-    padding: 1.5rem;
-    background: #1a1a1a;
-    border-radius: 16px;
-    min-width: 140px;
+    padding: 1.5rem 1rem;
+    background: var(--color-bg-card, #1a1d24);
+    border-radius: 12px;
+    border: 1px solid var(--color-border, #2a2a2a);
   }
 
-  .selector-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.65rem;
-    color: #666;
-  }
-
-  .selector-label {
+  .button-label {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--color-text, #fff);
     font-weight: 500;
   }
 
+  .button-info {
+    font-size: 0.65rem;
+    color: var(--color-text-muted, #666);
+  }
+
   .log {
-    background: #1a1a1a;
+    background: var(--color-bg-card, #1a1d24);
     border-radius: 12px;
     padding: 1rem;
-    max-height: 250px;
+    max-height: 300px;
     overflow-y: auto;
+    border: 1px solid var(--color-border, #2a2a2a);
   }
 
   .log-item {
-    padding: 0.4rem;
-    border-bottom: 1px solid #333;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--color-border, #333);
     font-family: monospace;
     font-size: 0.75rem;
   }
 
+  .log-item:last-child {
+    border-bottom: none;
+  }
+
   .log-empty {
-    color: #666;
+    color: var(--color-text-muted, #666);
     text-align: center;
-    padding: 1rem;
+    padding: 2rem;
   }
 </style>

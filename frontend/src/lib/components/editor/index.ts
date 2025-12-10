@@ -24,13 +24,13 @@
  * @version 1.0.0
  */
 
-// Main component - use this
-export { default as TextEditorButton } from './TextEditorButton.svelte';
+// Main component - use this (uisis = UI System compliant)
+export { default as TextEditorButton } from './uisis-TextEditorButton.svelte';
 
 // Individual panels (for advanced use)
 export { default as TextEditorPanel } from './TextEditorPanel.svelte';
-export { default as TextEditorConfigPanel } from './TextEditorConfigPanel.svelte';
+export { default as TextEditorConfigPanel } from './uisis-TextEditorConfigPanel.svelte';
 
 // Types
 export type { FileInfo } from './TextEditorPanel.svelte';
-export type { EditorSettings } from './TextEditorConfigPanel.svelte';
+export type { EditorSettings } from './uisis-TextEditorConfigPanel.svelte';

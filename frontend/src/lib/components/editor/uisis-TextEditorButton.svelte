@@ -1,24 +1,25 @@
 <!--
-  PdfViewerButton.svelte
-  ======================
-  Botón unificado para visor de PDF con DOBLE interacción.
+  TextEditorButton.svelte
+  =======================
+  Botón unificado para editor de texto con DOBLE interacción.
 
   Gestos (según UI-SYSTEM-PLAN.md):
-  - Tap/Click: Abre el visor PDF con el archivo actual (si hay)
-  - Long press / Click derecho: Abre PdfViewerConfigPanel (zoom, extraer)
+  - Tap/Click: Abre el editor con el archivo actual (si hay)
+  - Long press / Click derecho: Abre TextEditorConfigPanel (configuración)
 
-  pdf-viewer usa enableAdd=false (PDFs son externos, no se crean).
+  text-editor usa enableAdd=false (archivos se crean desde file-browser).
 
   Skinnable via CSS Variables:
-  --pdf-btn-bg, --pdf-btn-color
+  --editor-btn-bg, --editor-btn-color
 
   Uso:
-    <PdfViewerButton
+    <TextEditorButton
       size="md"
       {file}
       {projectId}
-      on:openViewer={handleOpenViewer}
+      on:openEditor={handleOpenEditor}
       on:config={handleConfig}
+      on:save={handleSave}
     />
 
   @version 1.0.0
@@ -26,9 +27,10 @@
 -->
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
-  import PdfViewerPanel from './PdfViewerPanel.svelte';
-  import PdfViewerConfigPanel from './PdfViewerConfigPanel.svelte';
-  import type { PdfFile } from './PdfViewerPanel.svelte';
+  import TextEditorPanel from './TextEditorPanel.svelte';
+  import TextEditorConfigPanel from './uisis-TextEditorConfigPanel.svelte';
+  import type { FileInfo } from './TextEditorPanel.svelte';
+  import type { EditorSettings } from './uisis-TextEditorConfigPanel.svelte';
 
   // ============================================================================
   // TYPES
@@ -43,8 +45,8 @@
   /** Tamaño del botón */
   export let size: Size = 'md';
 
-  /** Archivo PDF actualmente abierto */
-  export let file: PdfFile | null = null;
+  /** Archivo actualmente abierto */
+  export let file: FileInfo | null = null;
 
   /** Project ID */
   export let projectId: string | null = null;
@@ -73,12 +75,20 @@
   // STATE
   // ============================================================================
 
-  let viewerOpen = false;
+  let editorOpen = false;
   let configOpen = false;
-  let zoom = 100;
+  let editorContent = '';
 
-  let currentIcon = '📕';
-  let currentLabel = 'PDF';
+  let settings: EditorSettings = {
+    tabSize: 2,
+    autoSave: true,
+    autoSaveInterval: 30000,
+    wordWrap: true,
+    showLineNumbers: true
+  };
+
+  let currentIcon = '📝';
+  let currentLabel = 'Editor';
 
   let longPressTimeout: ReturnType<typeof setTimeout> | null = null;
   let isLongPress = false;
@@ -95,9 +105,9 @@
   // ============================================================================
 
   const dispatch = createEventDispatcher<{
-    openViewer: { file: PdfFile | null };
+    openEditor: { file: FileInfo | null };
     config: void;
-    extractText: { text: string };
+    save: { file: FileInfo; content: string };
   }>();
 
   // ============================================================================
@@ -120,10 +130,10 @@
   // ACTIONS
   // ============================================================================
 
-  /** Tap/Click → Abrir visor */
-  function doOpenViewer(): void {
-    viewerOpen = true;
-    dispatch('openViewer', { file });
+  /** Tap/Click → Abrir editor */
+  function doOpenEditor(): void {
+    editorOpen = true;
+    dispatch('openEditor', { file });
   }
 
   /** Long press/Click derecho → Config */
@@ -155,7 +165,7 @@
       return;
     }
 
-    doOpenViewer();
+    doOpenEditor();
   }
 
   function handleTouchCancel(): void {
@@ -185,7 +195,7 @@
       return;
     }
 
-    doOpenViewer();
+    doOpenEditor();
   }
 
   function handleMouseLeave(): void {
@@ -202,22 +212,31 @@
   // PANEL HANDLERS
   // ============================================================================
 
-  function handleZoomChange(e: CustomEvent<{ zoom: number }>): void {
-    zoom = e.detail.zoom;
+  function handleEditorSave(e: CustomEvent<{ file: FileInfo; content: string }>): void {
+    dispatch('save', e.detail);
   }
 
-  function handleExtractText(e: CustomEvent<{ text: string }>): void {
-    dispatch('extractText', { text: e.detail.text });
+  function handleEditorContentChange(e: CustomEvent<{ content: string }>): void {
+    editorContent = e.detail.content;
+  }
+
+  function handleConfigFormat(e: CustomEvent<{ content: string }>): void {
+    editorContent = e.detail.content;
+    // Will need to communicate with editor panel
+  }
+
+  function handleConfigSettingsChange(e: CustomEvent<{ settings: EditorSettings }>): void {
+    settings = e.detail.settings;
   }
 
   // ============================================================================
   // PUBLIC METHOD
   // ============================================================================
 
-  /** Open viewer with a specific file */
-  export function openWithFile(fileToOpen: PdfFile): void {
+  /** Open editor with a specific file */
+  export function openWithFile(fileToOpen: FileInfo): void {
     file = fileToOpen;
-    viewerOpen = true;
+    editorOpen = true;
   }
 
   // ============================================================================
@@ -232,9 +251,9 @@
 <!-- Button -->
 <button
   type="button"
-  class="pdf-btn"
-  class:pdf-btn--disabled={disabled}
-  class:pdf-btn--active={hasFile}
+  class="editor-btn"
+  class:editor-btn--disabled={disabled}
+  class:editor-btn--active={hasFile}
   style:--_size="{s.btn}px"
   style:--_icon-size={s.icon}
   style:--_label-size={s.label}
@@ -245,48 +264,54 @@
   on:mouseup={handleMouseUp}
   on:mouseleave={handleMouseLeave}
   on:contextmenu={handleContextMenu}
-  aria-label="Visor de PDF"
+  aria-label="Editor de texto"
   aria-disabled={disabled}
-  title="Tap: abrir visor | Long press: configuración"
+  title="Tap: abrir editor | Long press: configuración"
 >
-  <span class="pdf-btn__icon">{currentIcon}</span>
+  <span class="editor-btn__icon">{currentIcon}</span>
   {#if showLabel}
-    <span class="pdf-btn__label">{currentLabel}</span>
+    <span class="editor-btn__label">{currentLabel}</span>
   {/if}
   {#if hasFile}
-    <span class="pdf-btn__indicator" />
+    <span class="editor-btn__indicator" />
   {/if}
 </button>
 
-<!-- Viewer Panel -->
-<PdfViewerPanel
-  bind:open={viewerOpen}
+<!-- Editor Panel -->
+<TextEditorPanel
+  bind:open={editorOpen}
   {file}
   {projectId}
+  showLineNumbers={settings.showLineNumbers}
+  wordWrap={settings.wordWrap}
+  tabSize={settings.tabSize}
+  on:save={handleEditorSave}
+  on:contentChange={handleEditorContentChange}
 />
 
 <!-- Config Panel -->
-<PdfViewerConfigPanel
+<TextEditorConfigPanel
   bind:open={configOpen}
-  file={file ? { name: file.name, path: file.path, size: file.size } : null}
+  file={file ? { name: file.name, path: file.path, extension: file.extension || '' } : null}
+  content={editorContent}
   {projectId}
-  bind:zoom
-  on:zoomChange={handleZoomChange}
-  on:extractText={handleExtractText}
+  bind:settings
+  on:format={handleConfigFormat}
+  on:settingsChange={handleConfigSettingsChange}
 />
 
 <style>
-  .pdf-btn {
+  .editor-btn {
     /* === SKINNABLE VARIABLES === */
-    --_bg: var(--pdf-btn-bg, hsl(0 70% 50% / 0.15));
-    --_bg-hover: var(--pdf-btn-bg-hover, hsl(0 70% 50% / 0.25));
-    --_bg-active: var(--pdf-btn-bg-active, hsl(0 70% 50% / 0.35));
-    --_color: var(--pdf-btn-color, var(--color-text, #ffffff));
-    --_color-muted: var(--pdf-btn-color-muted, var(--color-text-muted, #9ca3af));
-    --_border: var(--pdf-btn-border, transparent);
-    --_border-focus: var(--pdf-btn-border-focus, hsl(0 70% 50%));
-    --_radius: var(--pdf-btn-radius, var(--radius-lg, 12px));
-    --_transition: var(--pdf-btn-transition, var(--transition-fast, 150ms));
+    --_bg: var(--editor-btn-bg, hsl(217 91% 60% / 0.15));
+    --_bg-hover: var(--editor-btn-bg-hover, hsl(217 91% 60% / 0.25));
+    --_bg-active: var(--editor-btn-bg-active, hsl(217 91% 60% / 0.35));
+    --_color: var(--editor-btn-color, var(--color-text, #ffffff));
+    --_color-muted: var(--editor-btn-color-muted, var(--color-text-muted, #9ca3af));
+    --_border: var(--editor-btn-border, transparent);
+    --_border-focus: var(--editor-btn-border-focus, hsl(217 91% 60%));
+    --_radius: var(--editor-btn-radius, var(--radius-lg, 12px));
+    --_transition: var(--editor-btn-transition, var(--transition-fast, 150ms));
 
     /* === LAYOUT === */
     position: relative;
@@ -319,39 +344,39 @@
   }
 
   /* === STATES === */
-  .pdf-btn:hover:not(.pdf-btn--disabled) {
+  .editor-btn:hover:not(.editor-btn--disabled) {
     background: var(--_bg-hover);
   }
 
-  .pdf-btn:active:not(.pdf-btn--disabled) {
+  .editor-btn:active:not(.editor-btn--disabled) {
     background: var(--_bg-active);
     transform: scale(0.95);
   }
 
-  .pdf-btn:focus-visible {
+  .editor-btn:focus-visible {
     outline: none;
     border-color: var(--_border-focus);
-    box-shadow: 0 0 0 3px hsl(0 70% 50% / 0.3);
+    box-shadow: 0 0 0 3px hsl(217 91% 60% / 0.3);
   }
 
-  .pdf-btn--disabled {
+  .editor-btn--disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .pdf-btn--active {
-    --_bg: hsl(0 70% 50% / 0.25);
-    border-color: hsl(0 70% 50% / 0.3);
+  .editor-btn--active {
+    --_bg: hsl(217 91% 60% / 0.25);
+    border-color: hsl(217 91% 60% / 0.3);
   }
 
   /* === ICON === */
-  .pdf-btn__icon {
+  .editor-btn__icon {
     font-size: var(--_icon-size);
     line-height: 1;
   }
 
   /* === LABEL === */
-  .pdf-btn__label {
+  .editor-btn__label {
     font-size: var(--_label-size);
     font-weight: var(--font-weight-medium, 500);
     color: var(--_color-muted);
@@ -362,26 +387,26 @@
   }
 
   /* === FILE INDICATOR === */
-  .pdf-btn__indicator {
+  .editor-btn__indicator {
     position: absolute;
     top: 6px;
     right: 6px;
     width: 8px;
     height: 8px;
-    background: hsl(0 70% 50%);
+    background: hsl(217 91% 60%);
     border-radius: 50%;
   }
 
   /* === TOUCH DEVICES === */
   @media (hover: none) {
-    .pdf-btn:active:not(.pdf-btn--disabled) {
+    .editor-btn:active:not(.editor-btn--disabled) {
       background: var(--_bg-active);
     }
   }
 
   /* === REDUCED MOTION === */
   @media (prefers-reduced-motion: reduce) {
-    .pdf-btn {
+    .editor-btn {
       transition: none;
     }
   }

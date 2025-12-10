@@ -112,7 +112,8 @@ function processModuleJson(modulePath, moduleName) {
     if (moduleJson.events) {
       if (moduleJson.events.publishes) {
         for (const pub of moduleJson.events.publishes) {
-          const eventName = pub.event || pub.name;
+          // Soporta tanto strings como objetos {event: "..."} o {name: "..."}
+          const eventName = typeof pub === 'string' ? pub : (pub.event || pub.name);
           if (eventName) {
             moduleEvents.publishes.push(eventName);
           }
@@ -120,7 +121,8 @@ function processModuleJson(modulePath, moduleName) {
       }
       if (moduleJson.events.subscribes) {
         for (const sub of moduleJson.events.subscribes) {
-          const eventName = sub.event || sub.name;
+          // Soporta tanto strings como objetos {event: "..."} o {name: "..."}
+          const eventName = typeof sub === 'string' ? sub : (sub.event || sub.name);
           if (eventName) {
             moduleEvents.subscribes.push(eventName);
           }

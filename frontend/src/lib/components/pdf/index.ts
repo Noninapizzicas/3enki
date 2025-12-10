@@ -27,12 +27,12 @@
  * @version 1.0.0
  */
 
-// Main component - use this
-export { default as PdfViewerButton } from './PdfViewerButton.svelte';
+// Main component - use this (uisis = UI System compliant)
+export { default as PdfViewerButton } from './uisis-PdfViewerButton.svelte';
 
 // Individual panels (for advanced use)
 export { default as PdfViewerPanel } from './PdfViewerPanel.svelte';
-export { default as PdfViewerConfigPanel } from './PdfViewerConfigPanel.svelte';
+export { default as PdfViewerConfigPanel } from './uisis-PdfViewerConfigPanel.svelte';
 
 // Types
 export type { PdfFile } from './PdfViewerPanel.svelte';

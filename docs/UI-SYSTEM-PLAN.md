@@ -86,20 +86,71 @@ Interacciones:
 
 ### 2. ChatInputBar
 
-Barra de entrada de chat con botones de módulos integrados:
+Barra de entrada de chat con estructura sandwich y módulos integrados.
+
+#### Estructura
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ TOP: [🤖 AI] [🔐 Creds] [📝 Prompts] [💬 Conv]   [modelo]   │
+├─────────────────────────────────────────────────────────────┤
+│ ATTACHMENTS: [📄 file.txt ×] [🖼️ imagen.png ×]             │
+├─────────────────────────────────────────────────────────────┤
+│ INPUT: [📎] [________mensaje__________________] [➤]        │
+├─────────────────────────────────────────────────────────────┤
+│ BOTTOM: [📂 Proj] [📁 Files] [📝 Editor] [📄 PDF]  hint    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Props
+
+| Prop | Tipo | Default | Descripción |
+|------|------|---------|-------------|
+| `projectId` | `string \| null` | `null` | ID del proyecto actual |
+| `message` | `string` | `''` | Mensaje a enviar (bind) |
+| `placeholder` | `string` | `'Escribe tu mensaje...'` | Placeholder del input |
+| `sending` | `boolean` | `false` | Estado de envío |
+| `attachments` | `Attachment[]` | `[]` | Archivos adjuntos |
+| `currentModel` | `string` | `''` | Modelo actual (badge) |
+| `editorFile` | `any` | `null` | Archivo abierto en editor |
+| `pdfFile` | `any` | `null` | Archivo PDF abierto |
+
+#### Eventos
+
+| Evento | Payload | Descripción |
+|--------|---------|-------------|
+| `send` | `{ message, attachments }` | Enviar mensaje |
+| `selectModel` | `{ provider, model }` | Modelo IA seleccionado |
+| `selectCredential` | `{ key }` | Credencial seleccionada |
+| `selectPrompt` | `{ id, content }` | Prompt aplicado al mensaje |
+| `selectConversation` | `{ id }` | Conversación cambiada |
+| `selectProject` | `{ id }` | Proyecto cambiado |
+| `selectFile` | `{ file }` | Archivo seleccionado |
+| `openEditor` | `{ file }` | Abrir archivo en editor |
+| `openPdf` | `{ file }` | Abrir PDF en visor |
+| `attach` | `{ files }` | Archivos adjuntados |
+| `removeAttachment` | `{ id }` | Adjunto eliminado |
+
+#### Uso
 
 ```svelte
 <ChatInputBar
+  {projectId}
+  bind:message
+  {currentModel}
   on:send={handleSend}
-  on:moduleSelect={handleModuleSelect}
+  on:selectModel={handleModelSelect}
+  on:selectPrompt={handlePromptSelect}
+  on:attach={handleAttach}
 />
 ```
 
-Características:
-- Input de texto expandible
-- Botones de módulos integrados (credentials, prompts, ai-gateway)
-- Soporte para adjuntos
-- Triple interacción en botones de módulo
+#### Módulos integrados
+
+| Fila | Módulos | Propósito |
+|------|---------|-----------|
+| **Top** | AI, Credential, Prompt, Conversation | Preparación del mensaje |
+| **Bottom** | Project, FileBrowser, TextEditor, PdfViewer | Contexto y workspace |
 
 ### 3. FloatingPanel
 

@@ -27,9 +27,9 @@
 -->
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
-  import TextEditorPanel from './TextEditorPanel.svelte';
+  import TextEditorPanel from './uisis-TextEditorPanel.svelte';
   import TextEditorConfigPanel from './uisis-TextEditorConfigPanel.svelte';
-  import type { FileInfo } from './TextEditorPanel.svelte';
+  import type { FileInfo } from './uisis-TextEditorPanel.svelte';
   import type { EditorSettings } from './uisis-TextEditorConfigPanel.svelte';
 
   // ============================================================================

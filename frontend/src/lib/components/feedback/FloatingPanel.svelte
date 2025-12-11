@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import { fly } from 'svelte/transition';
+  import { browser } from '$app/environment';
 
   /**
    * FloatingPanel - Panel flotante en la parte superior de la PANTALLA
    *
-   * Usa position: fixed para posicionarse sobre todo.
+   * USA PORTAL: Se renderiza en document.body para escapar de stacking contexts
+   * (ej: backdrop-blur en ChatToolbar crea un stacking context que atrapa z-index)
+   *
    * z-index: 9999 para estar encima de cualquier otro elemento.
    */
 
@@ -13,6 +16,10 @@
   export let title = '';
 
   const dispatch = createEventDispatcher<{ close: void }>();
+
+  // Portal: contenedor que se moverá al body
+  let portalContainer: HTMLDivElement | null = null;
+  let mounted = false;
 
   function handleClose() {
     open = false;
@@ -26,42 +33,76 @@
   function handleBackdropClick(e: MouseEvent | PointerEvent) {
     if (e.target === e.currentTarget) handleClose();
   }
+
+  // Portal: mover al body cuando se monte
+  onMount(() => {
+    mounted = true;
+  });
+
+  onDestroy(() => {
+    // Cleanup: remover del body
+    if (browser && portalContainer && portalContainer.parentNode === document.body) {
+      document.body.removeChild(portalContainer);
+    }
+  });
+
+  // Mover al body cuando el contenedor exista y estemos montados
+  async function moveToBody(node: HTMLDivElement) {
+    if (browser && mounted) {
+      await tick();
+      document.body.appendChild(node);
+    }
+  }
+
+  $: if (browser && portalContainer && mounted) {
+    if (portalContainer.parentNode !== document.body) {
+      document.body.appendChild(portalContainer);
+    }
+  }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
 
-{#if open}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div
-    class="floating-panel__backdrop"
-    on:click={handleBackdropClick}
-    on:pointerup={handleBackdropClick}
-  >
+<!-- Portal container - se mueve al body -->
+<div bind:this={portalContainer} class="floating-panel-portal" use:moveToBody>
+  {#if open}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div
-      class="floating-panel"
-      transition:fly={{ duration: 200, y: -20 }}
-      role="dialog"
-      aria-modal="true"
+      class="floating-panel__backdrop"
+      on:click={handleBackdropClick}
+      on:pointerup={handleBackdropClick}
     >
-      {#if title}
-        <div class="floating-panel__header">
-          <h3 class="floating-panel__title">{title}</h3>
-          <button
-            type="button"
-            class="floating-panel__close"
-            on:click={handleClose}
-            aria-label="Cerrar"
-          >
-            ✕
-          </button>
-        </div>
-      {/if}
-      <slot />
+      <div
+        class="floating-panel"
+        transition:fly={{ duration: 200, y: -20 }}
+        role="dialog"
+        aria-modal="true"
+      >
+        {#if title}
+          <div class="floating-panel__header">
+            <h3 class="floating-panel__title">{title}</h3>
+            <button
+              type="button"
+              class="floating-panel__close"
+              on:click={handleClose}
+              aria-label="Cerrar"
+            >
+              ✕
+            </button>
+          </div>
+        {/if}
+        <slot />
+      </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</div>
 
 <style>
+  /* Portal container: no afecta layout cuando está en posición original */
+  .floating-panel-portal {
+    display: contents;
+  }
+
   .floating-panel__backdrop {
     position: fixed;
     inset: 0;

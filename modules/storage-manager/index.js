@@ -614,18 +614,20 @@ class StorageManagerModule {
   }
 
   // ==================== HTTP API HANDLERS ====================
+  // Handlers use new gateway API style: return { status, data } instead of res.json()
+  // Exception: handleDownloadFile uses streaming response via body/headers
 
-  async handleUploadFile(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { projectId } = req.params;
-    const category = req.body.category || 'uploads';
-    const metadata = req.body.metadata ? JSON.parse(req.body.metadata) : {};
+  async handleUploadFile(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { projectId } = req.params || {};
+    const category = req.body?.category || 'uploads';
+    const metadata = req.body?.metadata ? JSON.parse(req.body.metadata) : {};
     const file = req.file;
 
     this.logger.info({ correlationId, projectId, category }, 'HTTP: Upload file');
 
     if (!file) {
-      return res.status(400).json({ success: false, error: 'No file provided' });
+      return { status: 400, data: { success: false, error: 'No file provided' } };
     }
 
     try {
@@ -641,87 +643,95 @@ class StorageManagerModule {
         uploaded_at: fileMetadata.created_at
       });
 
-      res.status(201).json({ success: true, file: fileMetadata });
+      return { status: 201, data: { success: true, file: fileMetadata } };
     } catch (error) {
       this.logger.error({ correlationId, projectId, error: error.message },
         'HTTP: Failed to upload file');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleListFiles(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { projectId } = req.params;
-    const { category } = req.query;
+  async handleListFiles(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { projectId } = req.params || {};
+    const { category } = req.query || {};
 
     this.logger.debug({ correlationId, projectId, category }, 'HTTP: List files');
 
     try {
       const result = this.listFiles(projectId, category);
-      res.json({ success: true, ...result });
+      return { status: 200, data: { success: true, ...result } };
     } catch (error) {
       this.logger.error({ correlationId, projectId, error: error.message },
         'HTTP: Failed to list files');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleGetFile(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { fileId } = req.params;
+  async handleGetFile(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { fileId } = req.params || {};
 
     this.logger.debug({ correlationId, fileId }, 'HTTP: Get file metadata');
 
     try {
       const file = this.getFile(fileId);
       if (!file) {
-        return res.status(404).json({ success: false, error: 'File not found' });
+        return { status: 404, data: { success: false, error: 'File not found' } };
       }
-      res.json({ success: true, file });
+      return { status: 200, data: { success: true, file } };
     } catch (error) {
       this.logger.error({ correlationId, fileId, error: error.message },
         'HTTP: Failed to get file');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleDownloadFile(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { fileId } = req.params;
+  async handleDownloadFile(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { fileId } = req.params || {};
 
     this.logger.info({ correlationId, fileId }, 'HTTP: Download file');
 
     try {
       const file = this.getFile(fileId);
       if (!file) {
-        return res.status(404).json({ success: false, error: 'File not found' });
+        return { status: 404, data: { success: false, error: 'File not found' } };
       }
 
       if (!fs.existsSync(file.path)) {
-        return res.status(404).json({ success: false, error: 'Physical file not found' });
+        return { status: 404, data: { success: false, error: 'Physical file not found' } };
       }
 
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('file.downloaded.total');
-    // → Counter extracted from events
+      // Read file and return as binary response
+      const fileContent = fs.readFileSync(file.path);
 
-      res.download(file.path, file.original_filename);
+      return {
+        status: 200,
+        body: fileContent,
+        headers: {
+          'Content-Type': file.mime_type || 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${file.original_filename}"`,
+          'Content-Length': String(fileContent.length)
+        }
+      };
     } catch (error) {
       this.logger.error({ correlationId, fileId, error: error.message },
         'HTTP: Failed to download file');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleDeleteFile(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { fileId } = req.params;
+  async handleDeleteFile(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { fileId } = req.params || {};
 
     this.logger.info({ correlationId, fileId }, 'HTTP: Delete file');
 
     try {
       const file = this.getFile(fileId);
       if (!file) {
-        return res.status(404).json({ success: false, error: 'File not found' });
+        return { status: 404, data: { success: false, error: 'File not found' } };
       }
 
       const result = this.deleteFile(fileId, correlationId);
@@ -734,17 +744,17 @@ class StorageManagerModule {
         deleted_at: new Date().toISOString()
       });
 
-      res.json({ success: true, file_id: fileId, message: 'File deleted successfully' });
+      return { status: 200, data: { success: true, file_id: fileId, message: 'File deleted successfully' } };
     } catch (error) {
       this.logger.error({ correlationId, fileId, error: error.message },
         'HTTP: Failed to delete file');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleCleanupTemp(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { projectId } = req.params;
+  async handleCleanupTemp(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { projectId } = req.params || {};
 
     this.logger.info({ correlationId, projectId }, 'HTTP: Cleanup temp files');
 
@@ -758,50 +768,56 @@ class StorageManagerModule {
         cleaned_at: new Date().toISOString()
       });
 
-      res.json({ success: true, ...result });
+      return { status: 200, data: { success: true, ...result } };
     } catch (error) {
       this.logger.error({ correlationId, projectId, error: error.message },
         'HTTP: Failed to cleanup temp files');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleGetStorageInfo(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { projectId } = req.params;
+  async handleGetStorageInfo(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { projectId } = req.params || {};
 
     this.logger.debug({ correlationId, projectId }, 'HTTP: Get storage info');
 
     try {
       const storage = this.getStorageInfo(projectId);
-      res.json({ success: true, storage });
+      return { status: 200, data: { success: true, storage } };
     } catch (error) {
       this.logger.error({ correlationId, projectId, error: error.message },
         'HTTP: Failed to get storage info');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleHealthCheck(req, res) {
-    res.json({
-      status: 'healthy',
-      module: 'storage-manager',
-      total_files: this.files.size,
-      total_size: this.calculateTotalSize(),
-      projects_count: this.countProjectStorages(),
-      uptime: process.uptime()
-    });
-  }
-
-  async handleGetMetrics(req, res) {
-    res.json({
-      module: 'storage-manager',
-      metrics: {
+  async handleHealthCheck(req, context) {
+    return {
+      status: 200,
+      data: {
+        status: 'healthy',
+        module: 'storage-manager',
         total_files: this.files.size,
         total_size: this.calculateTotalSize(),
-        projects_count: this.countProjectStorages()
+        projects_count: this.countProjectStorages(),
+        uptime: process.uptime()
       }
-    });
+    };
+  }
+
+  async handleGetMetrics(req, context) {
+    return {
+      status: 200,
+      data: {
+        module: 'storage-manager',
+        metrics: {
+          total_files: this.files.size,
+          total_size: this.calculateTotalSize(),
+          projects_count: this.countProjectStorages()
+        }
+      }
+    };
   }
 
   // ==================== HELPERS ====================

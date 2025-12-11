@@ -2,6 +2,7 @@
   PromptButton.svelte
   ===================
   Botón unificado para prompts con TRIPLE interacción.
+  Usa GestureButton como base para el manejo de gestos.
 
   Gestos (según UI-SYSTEM-PLAN.md):
   - Tap/Click: Abre SelectorPanel (elegir prompt)
@@ -11,8 +12,7 @@
   prompt-manager usa enableAdd=true (se pueden crear desde UI).
 
   Skinnable via CSS Variables (desde tokens.json):
-  --prompt-btn-bg, --prompt-btn-bg-hover, --prompt-btn-bg-active
-  --prompt-btn-color, --prompt-btn-radius, --prompt-btn-border
+  --gesture-btn-bg, --gesture-btn-bg-hover, --gesture-btn-bg-active
 
   Uso:
     <PromptButton
@@ -22,11 +22,12 @@
       on:config={handleConfig}
     />
 
-  @version 1.0.0
+  @version 2.0.0
   @author Event Core Team
 -->
 <script lang="ts">
-  import { onDestroy, createEventDispatcher } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
+  import { GestureButton } from '$components/ui';
   import { SelectorPanel } from '$components/feedback';
   import PromptAddPanel from './uisis-PromptAddPanel.svelte';
   import PromptConfigPanel from './uisis-PromptConfigPanel.svelte';
@@ -55,22 +56,6 @@
   export let disabled = false;
 
   // ============================================================================
-  // CONFIGURATION (siguiendo tokens.json)
-  // ============================================================================
-
-  const SIZES: Record<Size, { btn: number; icon: string; label: string }> = {
-    sm: { btn: 44, icon: '1.125rem', label: '0.625rem' },
-    md: { btn: 56, icon: '1.5rem', label: '0.6875rem' },
-    lg: { btn: 72, icon: '2rem', label: '0.75rem' }
-  };
-
-  const TIMING = {
-    tapDelay: 350,      // Aumentado para dar más tiempo al doble tap
-    doubleTapMax: 400,  // Aumentado para mejor detección
-    longPressDuration: 500
-  };
-
-  // ============================================================================
   // STATE
   // ============================================================================
 
@@ -83,20 +68,8 @@
   let selectedPrompt: Prompt | null = null;
 
   // Display
-  let currentIcon = '📝';
-  let currentLabel = 'Prompts';
-
-  // Gesture state
-  let tapTimeout: ReturnType<typeof setTimeout> | null = null;
-  let longPressTimeout: ReturnType<typeof setTimeout> | null = null;
-  let tapCount = 0;
-  let isLongPress = false;
-
-  // ============================================================================
-  // COMPUTED
-  // ============================================================================
-
-  $: s = SIZES[size];
+  const currentIcon = '📝';
+  const currentLabel = 'Prompts';
 
   // ============================================================================
   // EVENTS
@@ -109,155 +82,20 @@
   }>();
 
   // ============================================================================
-  // TIMER MANAGEMENT
+  // GESTURE HANDLERS
   // ============================================================================
 
-  function clearTimers(): void {
-    if (tapTimeout) {
-      clearTimeout(tapTimeout);
-      tapTimeout = null;
-    }
-    if (longPressTimeout) {
-      clearTimeout(longPressTimeout);
-      longPressTimeout = null;
-    }
-  }
-
-  function resetGestureState(): void {
-    clearTimers();
-    tapCount = 0;
-    isLongPress = false;
-  }
-
-  // ============================================================================
-  // ACTIONS
-  // ============================================================================
-
-  /** Tap/Click → Panel Select (elegir prompt) */
-  function doSelect(): void {
+  function handleGestureSelect(): void {
     selectorOpen = true;
   }
 
-  /** Doble tap/Doble click → Panel Add (nuevo prompt) */
-  function doAdd(): void {
+  function handleGestureAdd(): void {
     addOpen = true;
     dispatch('add');
   }
 
-  /** Long press/Click derecho → Panel Config (editar prompt) */
-  function doConfig(): void {
+  function handleGestureConfig(): void {
     configOpen = true;
-  }
-
-  // ============================================================================
-  // TOUCH HANDLERS (Mobile)
-  // ============================================================================
-
-  function handleTouchStart(e: TouchEvent): void {
-    if (disabled) return;
-    e.preventDefault(); // Prevenir eventos mouse duplicados
-
-    clearTimers();
-    longPressTimeout = setTimeout(() => {
-      isLongPress = true;
-      doConfig();
-    }, TIMING.longPressDuration);
-  }
-
-  function handleTouchEnd(e: TouchEvent): void {
-    if (disabled) return;
-    e.preventDefault();
-
-    clearTimeout(longPressTimeout!);
-    longPressTimeout = null;
-
-    if (isLongPress) {
-      isLongPress = false;
-      return;
-    }
-
-    tapCount++;
-
-    if (tapCount === 1) {
-      tapTimeout = setTimeout(() => {
-        if (tapCount === 1) {
-          doSelect();
-        }
-        tapCount = 0;
-      }, TIMING.tapDelay);
-    } else if (tapCount >= 2) {
-      clearTimeout(tapTimeout!);
-      tapTimeout = null;
-      tapCount = 0;
-      doAdd();
-    }
-  }
-
-  function handleTouchCancel(): void {
-    resetGestureState();
-  }
-
-  // ============================================================================
-  // MOUSE HANDLERS (Desktop)
-  // ============================================================================
-
-  function handleMouseDown(e: MouseEvent): void {
-    if (disabled || e.button !== 0) return;
-
-    clearTimers();
-    longPressTimeout = setTimeout(() => {
-      isLongPress = true;
-      doConfig();
-    }, TIMING.longPressDuration);
-  }
-
-  function handleMouseUp(e: MouseEvent): void {
-    if (disabled || e.button !== 0) return;
-
-    // Si fue long press, ignorar
-    if (isLongPress) {
-      isLongPress = false;
-      return;
-    }
-
-    clearTimers();
-    tapCount++;
-
-    if (tapCount === 1) {
-      // Esperar posible segundo click
-      tapTimeout = setTimeout(() => {
-        if (tapCount === 1) {
-          doSelect();
-        }
-        tapCount = 0;
-      }, TIMING.tapDelay);
-    } else if (tapCount >= 2) {
-      // Doble click detectado
-      clearTimers();
-      tapCount = 0;
-      doAdd();
-    }
-  }
-
-  function handleMouseLeave(): void {
-    clearTimeout(longPressTimeout!);
-    longPressTimeout = null;
-    isLongPress = false;
-  }
-
-  function handleContextMenu(e: MouseEvent): void {
-    if (disabled) return;
-    e.preventDefault();
-    resetGestureState();
-    doConfig();
-  }
-
-  /** Handler nativo para doble click (fallback más fiable) */
-  function handleDblClick(e: MouseEvent): void {
-    if (disabled) return;
-    e.preventDefault();
-    clearTimers();
-    doAdd();
   }
 
   // ============================================================================
@@ -283,41 +121,29 @@
     configOpen = false;
     selectedPrompt = null;
   }
-
-  // ============================================================================
-  // LIFECYCLE
-  // ============================================================================
-
-  onDestroy(() => {
-    resetGestureState();
-  });
 </script>
 
-<!-- Button -->
-<button
-  type="button"
-  class="prompt-btn"
-  class:prompt-btn--disabled={disabled}
-  style:--_size="{s.btn}px"
-  style:--_icon-size={s.icon}
-  style:--_label-size={s.label}
-  on:touchstart={handleTouchStart}
-  on:touchend={handleTouchEnd}
-  on:touchcancel={handleTouchCancel}
-  on:mousedown={handleMouseDown}
-  on:mouseup={handleMouseUp}
-  on:mouseleave={handleMouseLeave}
-  on:dblclick={handleDblClick}
-  on:contextmenu={handleContextMenu}
-  aria-label="Gestión de prompts"
-  aria-disabled={disabled}
-  title="Tap: seleccionar | Doble tap: nuevo | Long press: config"
+<!-- Button con GestureButton base -->
+<div
+  class="prompt-btn-wrapper"
+  style:--gesture-btn-bg="hsl(45 93% 47% / 0.15)"
+  style:--gesture-btn-bg-hover="hsl(45 93% 47% / 0.25)"
+  style:--gesture-btn-bg-active="hsl(45 93% 47% / 0.35)"
+  style:--gesture-btn-border-focus="var(--color-warning, #f59e0b)"
 >
-  <span class="prompt-btn__icon">{currentIcon}</span>
-  {#if showLabel}
-    <span class="prompt-btn__label">{currentLabel}</span>
-  {/if}
-</button>
+  <GestureButton
+    {size}
+    icon={currentIcon}
+    label={currentLabel}
+    {showLabel}
+    {disabled}
+    enableAdd={true}
+    ariaLabel="Gestión de prompts"
+    on:select={handleGestureSelect}
+    on:add={handleGestureAdd}
+    on:config={handleGestureConfig}
+  />
+</div>
 
 <!-- Panel Select (tap/click) -->
 <SelectorPanel
@@ -342,99 +168,7 @@
 />
 
 <style>
-  .prompt-btn {
-    /* === SKINNABLE VARIABLES === */
-    --_bg: var(--prompt-btn-bg, hsl(45 93% 47% / 0.15));
-    --_bg-hover: var(--prompt-btn-bg-hover, hsl(45 93% 47% / 0.25));
-    --_bg-active: var(--prompt-btn-bg-active, hsl(45 93% 47% / 0.35));
-    --_color: var(--prompt-btn-color, var(--color-text, #ffffff));
-    --_color-muted: var(--prompt-btn-color-muted, var(--color-text-muted, #9ca3af));
-    --_border: var(--prompt-btn-border, transparent);
-    --_border-focus: var(--prompt-btn-border-focus, var(--color-warning, #f59e0b));
-    --_radius: var(--prompt-btn-radius, var(--radius-lg, 12px));
-    --_shadow: var(--prompt-btn-shadow, none);
-    --_transition: var(--prompt-btn-transition, var(--transition-fast, 150ms));
-
-    /* === LAYOUT === */
-    width: var(--_size);
-    height: var(--_size);
-    min-width: var(--_size);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-
-    /* === APPEARANCE === */
-    background: var(--_bg);
-    color: var(--_color);
-    border: 1px solid var(--_border);
-    border-radius: var(--_radius);
-    box-shadow: var(--_shadow);
-
-    /* === INTERACTION === */
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-
-    /* === ANIMATION === */
-    transition:
-      background var(--_transition) ease,
-      transform var(--_transition) ease,
-      border-color var(--_transition) ease,
-      box-shadow var(--_transition) ease;
-  }
-
-  /* === STATES === */
-  .prompt-btn:hover:not(.prompt-btn--disabled) {
-    background: var(--_bg-hover);
-  }
-
-  .prompt-btn:active:not(.prompt-btn--disabled) {
-    background: var(--_bg-active);
-    transform: scale(0.95);
-  }
-
-  .prompt-btn:focus-visible {
-    outline: none;
-    border-color: var(--_border-focus);
-    box-shadow: 0 0 0 3px hsl(45 93% 47% / 0.3);
-  }
-
-  .prompt-btn--disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* === ICON === */
-  .prompt-btn__icon {
-    font-size: var(--_icon-size);
-    line-height: 1;
-  }
-
-  /* === LABEL === */
-  .prompt-btn__label {
-    font-size: var(--_label-size);
-    font-weight: var(--font-weight-medium, 500);
-    color: var(--_color-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: calc(var(--_size) - 8px);
-  }
-
-  /* === TOUCH DEVICES === */
-  @media (hover: none) {
-    .prompt-btn:active:not(.prompt-btn--disabled) {
-      background: var(--_bg-active);
-    }
-  }
-
-  /* === REDUCED MOTION === */
-  @media (prefers-reduced-motion: reduce) {
-    .prompt-btn {
-      transition: none;
-    }
+  .prompt-btn-wrapper {
+    display: contents;
   }
 </style>

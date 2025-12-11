@@ -33,7 +33,7 @@
     if (e.key === 'Escape') handleClose();
   }
 
-  function handleBackdropClick(e: PointerEvent) {
+  function handleBackdropClick(e: MouseEvent | PointerEvent) {
     if (e.target === e.currentTarget) handleClose();
   }
 </script>
@@ -42,7 +42,11 @@
 
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="floating-panel__backdrop" on:pointerup={handleBackdropClick}>
+  <div
+    class="floating-panel__backdrop"
+    on:click={handleBackdropClick}
+    on:pointerup={handleBackdropClick}
+  >
     <div
       class="floating-panel"
       transition:scale={{ duration: 150, start: 0.95 }}
@@ -67,17 +71,19 @@
   }
 
   .floating-panel {
-    --_padding: var(--panel-padding, 1rem);
+    --_padding: var(--panel-padding, 0);
     --_radius: var(--panel-radius, 12px);
     --_bg: var(--panel-bg, var(--color-bg-card, #fff));
     --_shadow: var(--panel-shadow, 0 4px 24px rgba(0,0,0,0.2));
     --_max-width: var(--panel-max-width, 90vw);
     --_max-height: var(--panel-max-height, 80vh);
+    --_border: var(--panel-border, 2px solid rgba(255,255,255,0.1));
 
     padding: var(--_padding);
     border-radius: var(--_radius);
     background: var(--_bg);
     box-shadow: var(--_shadow);
+    border: var(--_border);
     max-width: var(--_max-width);
     max-height: var(--_max-height);
     overflow: auto;

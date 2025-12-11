@@ -59,16 +59,14 @@
     </header>
   {/if}
 
-  <!-- Sidebar (hideable via layoutState) -->
-  {#if !hideGlobalSidebar}
+  <!-- Sidebar deshabilitado - usar MobileChatWorkspace en su lugar -->
+  <!-- {#if !hideGlobalSidebar}
     <Sidebar bind:collapsed={sidebarCollapsed} bind:mobileOpen on:mobileToggle={handleMobileToggle} />
-  {/if}
+  {/if} -->
 
   <!-- Main content -->
   <main
-    class="transition-all duration-normal min-h-screen"
-    class:ml-sidebar={!sidebarCollapsed && !isMobile && !hideGlobalSidebar}
-    class:ml-sidebar-collapsed={sidebarCollapsed && !isMobile && !hideGlobalSidebar}
+    class="min-h-screen"
     class:pt-14={isMobile && !hideGlobalHeader}
   >
     <slot />

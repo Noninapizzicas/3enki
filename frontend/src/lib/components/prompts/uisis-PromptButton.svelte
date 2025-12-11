@@ -45,6 +45,9 @@
   /** Tamaño del botón (sm: 44px, md: 56px, lg: 72px) */
   export let size: Size = 'md';
 
+  /** Proyecto actual (para filtrar prompts) */
+  export let projectId: string | null = null;
+
   /** Mostrar label debajo del icono */
   export let showLabel = true;
 
@@ -293,6 +296,7 @@
 <SelectorPanel
   bind:open={selectorOpen}
   module="prompt-manager"
+  {projectId}
   on:select={handleSelectorSelect}
 />
 

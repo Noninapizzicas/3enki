@@ -68,7 +68,7 @@
     align-items: flex-start;
     justify-content: center;
     padding: 1rem;
-    padding-top: env(safe-area-inset-top, 1rem);
+    padding-top: max(env(safe-area-inset-top, 0px), 1rem);
     background: rgba(0, 0, 0, 0.4);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -80,9 +80,10 @@
     --_bg: var(--panel-bg, var(--color-bg-card, #fff));
     --_shadow: var(--panel-shadow, 0 4px 24px rgba(0,0,0,0.2));
     --_max-width: var(--panel-max-width, 90vw);
-    --_max-height: var(--panel-max-height, 80vh);
-    --_border: var(--panel-border, 2px solid rgba(255,255,255,0.1));
+    --_max-height: var(--panel-max-height, 70vh);
+    --_border: var(--panel-border, 1px solid rgba(255,255,255,0.1));
 
+    margin-top: 0.5rem;
     padding: var(--_padding);
     border-radius: var(--_radius);
     background: var(--_bg);

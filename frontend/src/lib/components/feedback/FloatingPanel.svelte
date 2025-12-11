@@ -1,18 +1,19 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { scale } from 'svelte/transition';
+  import { fly } from 'svelte/transition';
 
   /**
-   * FloatingPanel - Panel flotante centrado
+   * FloatingPanel - Panel flotante en la parte superior
    *
    * FILOSOFÍA (CONTEXT_UI.md):
    * - Padre controla TODO vía CSS variables
-   * - SIEMPRE centrado
+   * - Posicionado en la parte SUPERIOR de la pantalla
    * - SIN título (contenido define su propio header si necesita)
    * - Tap fuera = cerrar
+   * - Scroll interno cuando el contenido excede max-height
    *
    * CSS VARIABLES (padre las define):
-   * --panel-padding: padding interno (default: 1rem)
+   * --panel-padding: padding interno (default: 0)
    * --panel-radius: border-radius (default: 12px)
    * --panel-bg: fondo (default: var(--color-bg-card))
    * --panel-shadow: sombra (default: 0 4px 24px rgba(0,0,0,0.2))
@@ -49,7 +50,7 @@
   >
     <div
       class="floating-panel"
-      transition:scale={{ duration: 150, start: 0.95 }}
+      transition:fly={{ duration: 200, y: -20 }}
       role="dialog"
       aria-modal="true"
     >
@@ -64,10 +65,13 @@
     inset: 0;
     z-index: var(--z-modal, 50);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 1rem;
+    padding-top: env(safe-area-inset-top, 1rem);
     background: rgba(0, 0, 0, 0.4);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .floating-panel {

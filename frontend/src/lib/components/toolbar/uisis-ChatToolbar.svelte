@@ -7,6 +7,10 @@
   import { FileBrowserButton } from '$components/files';
   import { TextEditorButton } from '$components/editor';
   import { PdfViewerButton } from '$components/pdf';
+  import { AIButton } from '$components/ai';
+  import { CredentialButton } from '$components/credentials';
+  import { PromptButton } from '$components/prompts';
+  import { ConversationButton } from '$components/conversations';
 
   /**
    * ChatToolbar - Barra de chat con estructura sandwich
@@ -52,48 +56,8 @@
     pdfExtractText: { text: string };
   }>();
 
-  // Iconos fijos - Sub-barra superior (Chat directo)
-  const topBarIcons = [
-    {
-      id: 'modelo',
-      icon: '🤖',
-      label: 'Modelo IA',
-      actions: {
-        tap: { type: 'panel' as const, target: 'modelo-selector', size: 'small' as const },
-        doubleTap: { type: 'modal' as const, target: 'modelo-config', size: 'medium' as const },
-        longPress: { type: 'modal' as const, target: 'modelos-gestionar', size: 'full' as const }
-      }
-    },
-    {
-      id: 'credencial',
-      icon: '🔑',
-      label: 'API Key',
-      actions: {
-        tap: { type: 'panel' as const, target: 'credencial-selector', size: 'small' as const },
-        doubleTap: { type: 'modal' as const, target: 'credencial-crear', size: 'medium' as const },
-        longPress: { type: 'modal' as const, target: 'credenciales-gestionar', size: 'full' as const }
-      }
-    },
-    {
-      id: 'prompt',
-      icon: '📝',
-      label: 'Prompt',
-      actions: {
-        tap: { type: 'panel' as const, target: 'prompts-rapidos', size: 'medium' as const },
-        doubleTap: { type: 'modal' as const, target: 'prompt-crear', size: 'medium' as const },
-        longPress: { type: 'modal' as const, target: 'prompts-gestionar', size: 'full' as const }
-      }
-    },
-    {
-      id: 'historial',
-      icon: '💬',
-      label: 'Historial',
-      actions: {
-        tap: { type: 'panel' as const, target: 'conversaciones', size: 'medium' as const },
-        longPress: { type: 'modal' as const, target: 'historial-gestionar', size: 'full' as const }
-      }
-    }
-  ];
+  // Nota: Los iconos de la barra superior ahora son componentes uisis- Button
+  // que auto-gestionan sus propios paneles (AIButton, CredentialButton, etc.)
 
   // Iconos fijos - Sub-barra inferior (Adyacentes)
   const bottomBarIcons = [
@@ -140,16 +104,15 @@
   let tapCount = 0;
   let tapTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Handlers de iconos
-  function handleIconEvent(bar: 'top' | 'bottom', type: 'tap' | 'doubleTap' | 'longPress') {
+  // Handler de iconos para barra inferior (los de la barra superior son componentes uisis-)
+  function handleBottomIconEvent(type: 'tap' | 'doubleTap' | 'longPress') {
     return (event: CustomEvent<{ id: string }>) => {
-      const icons = bar === 'top' ? topBarIcons : bottomBarIcons;
-      const icon = icons.find(i => i.id === event.detail.id);
+      const icon = bottomBarIcons.find(i => i.id === event.detail.id);
       dispatch('action', {
         type,
         iconId: event.detail.id,
         action: icon?.actions?.[type],
-        bar
+        bar: 'bottom'
       });
     };
   }
@@ -186,32 +149,41 @@
     }
   }
 
-  // Badges dinámicos
-  $: {
-    const modelIcon = topBarIcons.find(i => i.id === 'modelo');
-    if (modelIcon && currentModel) {
-      // Mostrar abreviación del modelo
-      modelIcon.badge = currentModel.slice(0, 3);
-    }
-  }
 </script>
 
 <div class="chat-toolbar fixed bottom-0 left-0 right-0 z-100 bg-bg-card/95 backdrop-blur-sm border-t border-border {className}">
-  <!-- Sub-barra superior (Chat directo) -->
+  <!-- Sub-barra superior (Chat directo) - Componentes uisis- con paneles auto-gestionados -->
   <div class="chat-bar-top flex items-center gap-1 px-2 py-1 border-b border-border/50">
-    {#each topBarIcons as icon (icon.id)}
-      <ToolbarIcon
-        id={icon.id}
-        icon={icon.icon}
-        label={icon.label}
-        badge={icon.badge}
-        showLabel={false}
-        orientation="horizontal"
-        on:tap={handleIconEvent('top', 'tap')}
-        on:doubleTap={handleIconEvent('top', 'doubleTap')}
-        on:longPress={handleIconEvent('top', 'longPress')}
-      />
-    {/each}
+    <!-- Modelo IA (uisis- con panel auto-gestionado) -->
+    <AIButton
+      size="sm"
+      showLabel={false}
+      on:selectModel={(e) => dispatch('action', { type: 'tap', iconId: 'modelo', bar: 'top' })}
+    />
+
+    <!-- Credenciales (uisis- con panel auto-gestionado) -->
+    <CredentialButton
+      size="sm"
+      showLabel={false}
+      {projectId}
+      on:select={(e) => dispatch('action', { type: 'tap', iconId: 'credencial', bar: 'top' })}
+    />
+
+    <!-- Prompts (uisis- con panel auto-gestionado) -->
+    <PromptButton
+      size="sm"
+      showLabel={false}
+      {projectId}
+      on:select={(e) => dispatch('action', { type: 'tap', iconId: 'prompt', bar: 'top' })}
+    />
+
+    <!-- Conversaciones/Historial (uisis- con panel auto-gestionado) -->
+    <ConversationButton
+      size="sm"
+      showLabel={false}
+      {projectId}
+      on:select={(e) => dispatch('action', { type: 'tap', iconId: 'historial', bar: 'top' })}
+    />
 
     <!-- Indicador de modelo activo -->
     {#if currentModel}
@@ -286,7 +258,7 @@
     <!-- Separador visual -->
     <div class="w-px h-6 bg-border/50 mx-1"></div>
 
-    <!-- Iconos estáticos -->
+    <!-- Iconos estáticos (tools, adjuntar, contexto, plugins) -->
     {#each bottomBarIcons as icon (icon.id)}
       <ToolbarIcon
         id={icon.id}
@@ -295,9 +267,9 @@
         badge={icon.badge}
         showLabel={false}
         orientation="horizontal"
-        on:tap={handleIconEvent('bottom', 'tap')}
-        on:doubleTap={handleIconEvent('bottom', 'doubleTap')}
-        on:longPress={handleIconEvent('bottom', 'longPress')}
+        on:tap={handleBottomIconEvent('tap')}
+        on:doubleTap={handleBottomIconEvent('doubleTap')}
+        on:longPress={handleBottomIconEvent('longPress')}
       />
     {/each}
   </div>

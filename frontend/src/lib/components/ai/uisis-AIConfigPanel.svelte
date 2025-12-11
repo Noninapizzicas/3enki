@@ -62,7 +62,7 @@
   // STATE
   // ============================================================================
 
-  let loading = true;
+  let loading = false;  // Empieza en false, se pone true al cargar
   let saving = false;
   let error: string | null = null;
   let schema: ConfigSchema | null = null;

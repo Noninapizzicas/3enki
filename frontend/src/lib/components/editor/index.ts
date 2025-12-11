@@ -28,9 +28,9 @@
 export { default as TextEditorButton } from './uisis-TextEditorButton.svelte';
 
 // Individual panels (for advanced use)
-export { default as TextEditorPanel } from './TextEditorPanel.svelte';
+export { default as TextEditorPanel } from './uisis-TextEditorPanel.svelte';
 export { default as TextEditorConfigPanel } from './uisis-TextEditorConfigPanel.svelte';
 
 // Types
-export type { FileInfo } from './TextEditorPanel.svelte';
+export type { FileInfo } from './uisis-TextEditorPanel.svelte';
 export type { EditorSettings } from './uisis-TextEditorConfigPanel.svelte';

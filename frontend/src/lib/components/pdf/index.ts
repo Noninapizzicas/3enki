@@ -31,8 +31,8 @@
 export { default as PdfViewerButton } from './uisis-PdfViewerButton.svelte';
 
 // Individual panels (for advanced use)
-export { default as PdfViewerPanel } from './PdfViewerPanel.svelte';
+export { default as PdfViewerPanel } from './uisis-PdfViewerPanel.svelte';
 export { default as PdfViewerConfigPanel } from './uisis-PdfViewerConfigPanel.svelte';
 
 // Types
-export type { PdfFile } from './PdfViewerPanel.svelte';
+export type { PdfFile } from './uisis-PdfViewerPanel.svelte';

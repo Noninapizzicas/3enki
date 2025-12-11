@@ -26,9 +26,9 @@
 -->
 <script lang="ts">
   import { onDestroy, createEventDispatcher } from 'svelte';
-  import PdfViewerPanel from './PdfViewerPanel.svelte';
+  import PdfViewerPanel from './uisis-PdfViewerPanel.svelte';
   import PdfViewerConfigPanel from './uisis-PdfViewerConfigPanel.svelte';
-  import type { PdfFile } from './PdfViewerPanel.svelte';
+  import type { PdfFile } from './uisis-PdfViewerPanel.svelte';
 
   // ============================================================================
   // TYPES

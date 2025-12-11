@@ -566,159 +566,169 @@ class ProjectManagerModule {
   }
 
   // ==================== HTTP API HANDLERS ====================
+  // Handlers use new gateway API style: return { status, data } instead of res.json()
 
-  async handleCreateProject(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { name, description, metadata } = req.body;
+  async handleCreateProject(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { name, description, metadata } = req.body || {};
 
     this.logger.info({ correlationId, name }, 'HTTP: Create project');
 
     if (!name || name.trim().length === 0) {
-      return res.status(400).json({ success: false, error: 'Project name is required' });
+      return { status: 400, data: { success: false, error: 'Project name is required' } };
     }
 
     try {
       const project = await this.createProject(name, description, metadata, correlationId);
-      res.status(201).json({ success: true, project });
+      return { status: 201, data: { success: true, project } };
     } catch (error) {
       this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to create project');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleListProjects(req, res) {
-    const correlationId = crypto.randomUUID();
+  async handleListProjects(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
     this.logger.debug({ correlationId }, 'HTTP: List projects');
 
     try {
       const projects = this.listProjects();
-      res.json({
-        success: true,
-        projects,
-        count: projects.length,
-        active_project_id: this.activeProjectId
-      });
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projects,
+          count: projects.length,
+          active_project_id: this.activeProjectId
+        }
+      };
     } catch (error) {
       this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to list projects');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleGetProject(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
+  async handleGetProject(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
 
     this.logger.debug({ correlationId, projectId: id }, 'HTTP: Get project');
 
     try {
       const project = this.getProject(id);
       if (!project) {
-        return res.status(404).json({ success: false, error: 'Project not found' });
+        return { status: 404, data: { success: false, error: 'Project not found' } };
       }
-      res.json({ success: true, project });
+      return { status: 200, data: { success: true, project } };
     } catch (error) {
       this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to get project');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleUpdateProject(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
-    const updates = req.body;
+  async handleUpdateProject(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+    const updates = req.body || {};
 
     this.logger.info({ correlationId, projectId: id, updates }, 'HTTP: Update project');
 
     try {
       const project = await this.updateProject(id, updates, correlationId);
-      res.json({ success: true, project });
+      return { status: 200, data: { success: true, project } };
     } catch (error) {
       this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to update project');
 
       if (error.message.includes('not found')) {
-        return res.status(404).json({ success: false, error: error.message });
+        return { status: 404, data: { success: false, error: error.message } };
       }
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleDeleteProject(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
+  async handleDeleteProject(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
 
     this.logger.info({ correlationId, projectId: id }, 'HTTP: Delete project');
 
     try {
       const result = await this.deleteProject(id, correlationId);
-      res.json({ success: true, id: result.id, message: 'Project deleted successfully' });
+      return { status: 200, data: { success: true, id: result.id, message: 'Project deleted successfully' } };
     } catch (error) {
       this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to delete project');
 
       if (error.message.includes('not found')) {
-        return res.status(404).json({ success: false, error: error.message });
+        return { status: 404, data: { success: false, error: error.message } };
       }
       if (error.message.includes('Cannot delete active')) {
-        return res.status(400).json({ success: false, error: error.message });
+        return { status: 400, data: { success: false, error: error.message } };
       }
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleActivateProject(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
+  async handleActivateProject(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
 
     this.logger.info({ correlationId, projectId: id }, 'HTTP: Activate project');
 
     try {
       const project = await this.activateProject(id, correlationId);
-      res.json({ success: true, project });
+      return { status: 200, data: { success: true, project } };
     } catch (error) {
       this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to activate project');
 
       if (error.message.includes('not found')) {
-        return res.status(404).json({ success: false, error: error.message });
+        return { status: 404, data: { success: false, error: error.message } };
       }
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleGetActiveProject(req, res) {
-    const correlationId = crypto.randomUUID();
+  async handleGetActiveProject(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
     this.logger.debug({ correlationId }, 'HTTP: Get active project');
 
     try {
       if (!this.activeProjectId) {
-        return res.status(404).json({ success: false, error: 'No active project' });
+        return { status: 404, data: { success: false, error: 'No active project' } };
       }
 
       const project = this.getProject(this.activeProjectId);
-      res.json({ success: true, project });
+      return { status: 200, data: { success: true, project } };
     } catch (error) {
       this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to get active project');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleHealthCheck(req, res) {
-    res.json({
-      status: 'healthy',
-      module: 'project-manager',
-      projects_count: this.projects.size,
-      active_project: this.activeProjectId,
-      uptime: process.uptime()
-    });
+  async handleHealthCheck(req, context) {
+    return {
+      status: 200,
+      data: {
+        status: 'healthy',
+        module: 'project-manager',
+        projects_count: this.projects.size,
+        active_project: this.activeProjectId,
+        uptime: process.uptime()
+      }
+    };
   }
 
-  async handleGetMetrics(req, res) {
-    res.json({
-      module: 'project-manager',
-      metrics: {
-        total_projects: this.projects.size,
-        active_project_id: this.activeProjectId,
-        pending_db_requests: this.pendingDbRequests.size
+  async handleGetMetrics(req, context) {
+    return {
+      status: 200,
+      data: {
+        module: 'project-manager',
+        metrics: {
+          total_projects: this.projects.size,
+          active_project_id: this.activeProjectId,
+          pending_db_requests: this.pendingDbRequests.size
+        }
       }
-    });
+    };
   }
 }
 

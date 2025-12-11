@@ -91,6 +91,7 @@
   let longPressTimeout: ReturnType<typeof setTimeout> | null = null;
   let tapCount = 0;
   let isLongPress = false;
+  let isProcessing = false; // Evita acciones duplicadas
 
   // ============================================================================
   // COMPUTED
@@ -127,6 +128,7 @@
     clearTimers();
     tapCount = 0;
     isLongPress = false;
+    isProcessing = false;
   }
 
   // ============================================================================
@@ -135,18 +137,27 @@
 
   /** Tap/Click → Select */
   function doSelect(): void {
+    if (isProcessing) return;
+    isProcessing = true;
     dispatch('select');
+    // Reset después de un breve delay para permitir nueva interacción
+    setTimeout(() => { isProcessing = false; }, 100);
   }
 
   /** Doble tap/Doble click → Add (solo si enableAdd=true) */
   function doAdd(): void {
-    if (!enableAdd) return;
+    if (!enableAdd || isProcessing) return;
+    isProcessing = true;
     dispatch('add');
+    setTimeout(() => { isProcessing = false; }, 100);
   }
 
   /** Long press/Click derecho → Config */
   function doConfig(): void {
+    if (isProcessing) return;
+    isProcessing = true;
     dispatch('config');
+    setTimeout(() => { isProcessing = false; }, 100);
   }
 
   // ============================================================================
@@ -154,7 +165,7 @@
   // ============================================================================
 
   function handleTouchStart(e: TouchEvent): void {
-    if (disabled) return;
+    if (disabled || isProcessing) return;
     e.preventDefault();
 
     clearTimers();
@@ -165,7 +176,7 @@
   }
 
   function handleTouchEnd(e: TouchEvent): void {
-    if (disabled) return;
+    if (disabled || isProcessing) return;
     e.preventDefault();
 
     clearTimeout(longPressTimeout!);
@@ -180,7 +191,7 @@
 
     if (tapCount === 1) {
       tapTimeout = setTimeout(() => {
-        if (tapCount === 1) {
+        if (tapCount === 1 && !isProcessing) {
           doSelect();
         }
         tapCount = 0;
@@ -202,7 +213,7 @@
   // ============================================================================
 
   function handleMouseDown(e: MouseEvent): void {
-    if (disabled || e.button !== 0) return;
+    if (disabled || isProcessing || e.button !== 0) return;
 
     clearTimers();
     longPressTimeout = setTimeout(() => {
@@ -212,7 +223,7 @@
   }
 
   function handleMouseUp(e: MouseEvent): void {
-    if (disabled || e.button !== 0) return;
+    if (disabled || isProcessing || e.button !== 0) return;
 
     if (isLongPress) {
       isLongPress = false;
@@ -224,7 +235,7 @@
 
     if (tapCount === 1) {
       tapTimeout = setTimeout(() => {
-        if (tapCount === 1) {
+        if (tapCount === 1 && !isProcessing) {
           doSelect();
         }
         tapCount = 0;
@@ -243,7 +254,7 @@
   }
 
   function handleContextMenu(e: MouseEvent): void {
-    if (disabled) return;
+    if (disabled || isProcessing) return;
     e.preventDefault();
     resetGestureState();
     doConfig();
@@ -251,9 +262,10 @@
 
   /** Handler nativo para doble click (fallback más fiable) */
   function handleDblClick(e: MouseEvent): void {
-    if (disabled) return;
+    if (disabled || isProcessing) return;
     e.preventDefault();
     clearTimers();
+    tapCount = 0; // Reset para evitar conflicto con manual tap counting
     doAdd();
   }
 

@@ -2,6 +2,7 @@
   FileBrowserButton.svelte
   ========================
   Botón unificado para navegación de archivos con TRIPLE interacción.
+  Usa GestureButton como base para el manejo de gestos.
 
   Gestos (según UI-SYSTEM-PLAN.md):
   - Tap/Click: Abre selector de archivos (árbol navegable)
@@ -11,7 +12,7 @@
   file-browser usa enableAdd=true (se pueden crear desde UI).
 
   Skinnable via CSS Variables (desde tokens.json):
-  --filebrowser-btn-bg, --filebrowser-btn-color
+  --gesture-btn-bg, --gesture-btn-bg-hover, --gesture-btn-bg-active
 
   Uso:
     <FileBrowserButton
@@ -24,12 +25,13 @@
       on:openPdf={handleOpenPdf}
     />
 
-  @version 1.0.0
+  @version 2.0.0
   @author Event Core Team
 -->
 <script lang="ts">
-  import { onDestroy, createEventDispatcher } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
   import { slide } from 'svelte/transition';
+  import { GestureButton } from '$components/ui';
   import { FloatingPanel } from '$components/feedback';
   import FileBrowserAddPanel from './uisis-FileBrowserAddPanel.svelte';
   import FileBrowserConfigPanel from './uisis-FileBrowserConfigPanel.svelte';
@@ -65,22 +67,6 @@
   export let disabled = false;
 
   // ============================================================================
-  // CONFIGURATION
-  // ============================================================================
-
-  const SIZES: Record<Size, { btn: number; icon: string; label: string }> = {
-    sm: { btn: 44, icon: '1.125rem', label: '0.625rem' },
-    md: { btn: 56, icon: '1.5rem', label: '0.6875rem' },
-    lg: { btn: 72, icon: '2rem', label: '0.75rem' }
-  };
-
-  const TIMING = {
-    tapDelay: 250,
-    doubleTapMax: 300,
-    longPressDuration: 500
-  };
-
-  // ============================================================================
   // STATE
   // ============================================================================
 
@@ -100,20 +86,13 @@
   let selectedFile: FileItem | null = null;
 
   // Display
-  let currentIcon = '📁';
-  let currentLabel = 'Archivos';
-
-  // Gesture state
-  let tapTimeout: ReturnType<typeof setTimeout> | null = null;
-  let longPressTimeout: ReturnType<typeof setTimeout> | null = null;
-  let tapCount = 0;
-  let isLongPress = false;
+  const currentIcon = '📁';
+  const currentLabel = 'Archivos';
 
   // ============================================================================
   // COMPUTED
   // ============================================================================
 
-  $: s = SIZES[size];
   $: filteredTree = searchQuery ? filterTree(tree, searchQuery.toLowerCase()) : tree;
 
   // ============================================================================
@@ -127,27 +106,6 @@
     openEditor: { file: FileItem };
     openPdf: { file: FileItem };
   }>();
-
-  // ============================================================================
-  // TIMER MANAGEMENT
-  // ============================================================================
-
-  function clearTimers(): void {
-    if (tapTimeout) {
-      clearTimeout(tapTimeout);
-      tapTimeout = null;
-    }
-    if (longPressTimeout) {
-      clearTimeout(longPressTimeout);
-      longPressTimeout = null;
-    }
-  }
-
-  function resetGestureState(): void {
-    clearTimers();
-    tapCount = 0;
-    isLongPress = false;
-  }
 
   // ============================================================================
   // FILE TREE OPERATIONS
@@ -270,111 +228,23 @@
   }
 
   // ============================================================================
-  // ACTIONS
+  // GESTURE HANDLERS
   // ============================================================================
 
-  /** Tap/Click → Panel Select (navegar archivos) */
-  function doSelect(): void {
+  function handleGestureSelect(): void {
     selectorOpen = true;
     loadRootTree();
   }
 
-  /** Doble tap/Doble click → Panel Add (crear archivo/carpeta) */
-  function doAdd(): void {
+  function handleGestureAdd(): void {
     addOpen = true;
     dispatch('add', { path: currentPath });
   }
 
-  /** Long press/Click derecho → Panel Config (gestionar archivo) */
-  function doConfig(): void {
+  function handleGestureConfig(): void {
     if (selectedFile) {
       configOpen = true;
     }
-  }
-
-  // ============================================================================
-  // TOUCH HANDLERS (Mobile)
-  // ============================================================================
-
-  function handleTouchStart(e: TouchEvent): void {
-    if (disabled) return;
-
-    longPressTimeout = setTimeout(() => {
-      isLongPress = true;
-      doConfig();
-    }, TIMING.longPressDuration);
-  }
-
-  function handleTouchEnd(e: TouchEvent): void {
-    if (disabled) return;
-
-    clearTimeout(longPressTimeout!);
-
-    if (isLongPress) {
-      isLongPress = false;
-      return;
-    }
-
-    tapCount++;
-
-    if (tapCount === 1) {
-      tapTimeout = setTimeout(() => {
-        if (tapCount === 1) {
-          doSelect();
-        }
-        tapCount = 0;
-      }, TIMING.tapDelay);
-    } else if (tapCount === 2) {
-      clearTimeout(tapTimeout!);
-      tapCount = 0;
-      doAdd();
-    }
-  }
-
-  function handleTouchCancel(): void {
-    resetGestureState();
-  }
-
-  // ============================================================================
-  // MOUSE HANDLERS (Desktop)
-  // ============================================================================
-
-  function handleMouseDown(e: MouseEvent): void {
-    if (disabled || e.button !== 0) return;
-
-    longPressTimeout = setTimeout(() => {
-      isLongPress = true;
-      doConfig();
-    }, TIMING.longPressDuration);
-  }
-
-  function handleMouseUp(e: MouseEvent): void {
-    if (disabled || e.button !== 0) return;
-
-    clearTimeout(longPressTimeout!);
-
-    if (isLongPress) {
-      isLongPress = false;
-      return;
-    }
-
-    if (e.detail === 2) {
-      doAdd();
-    } else if (e.detail === 1) {
-      tapTimeout = setTimeout(() => {
-        doSelect();
-      }, TIMING.doubleTapMax);
-    }
-  }
-
-  function handleMouseLeave(): void {
-    clearTimers();
-  }
-
-  function handleContextMenu(e: MouseEvent): void {
-    if (disabled) return;
-    e.preventDefault();
-    doConfig();
   }
 
   // ============================================================================
@@ -442,40 +312,29 @@
     dispatch('openPdf', { file: e.detail.file });
     configOpen = false;
   }
-
-  // ============================================================================
-  // LIFECYCLE
-  // ============================================================================
-
-  onDestroy(() => {
-    resetGestureState();
-  });
 </script>
 
-<!-- Button -->
-<button
-  type="button"
-  class="filebrowser-btn"
-  class:filebrowser-btn--disabled={disabled}
-  style:--_size="{s.btn}px"
-  style:--_icon-size={s.icon}
-  style:--_label-size={s.label}
-  on:touchstart={handleTouchStart}
-  on:touchend={handleTouchEnd}
-  on:touchcancel={handleTouchCancel}
-  on:mousedown={handleMouseDown}
-  on:mouseup={handleMouseUp}
-  on:mouseleave={handleMouseLeave}
-  on:contextmenu={handleContextMenu}
-  aria-label="Navegador de archivos"
-  aria-disabled={disabled}
-  title="Tap: navegar | Doble tap: nuevo | Long press: config"
+<!-- Button con GestureButton base -->
+<div
+  class="filebrowser-btn-wrapper"
+  style:--gesture-btn-bg="hsl(142 71% 45% / 0.15)"
+  style:--gesture-btn-bg-hover="hsl(142 71% 45% / 0.25)"
+  style:--gesture-btn-bg-active="hsl(142 71% 45% / 0.35)"
+  style:--gesture-btn-border-focus="hsl(142 71% 45%)"
 >
-  <span class="filebrowser-btn__icon">{currentIcon}</span>
-  {#if showLabel}
-    <span class="filebrowser-btn__label">{currentLabel}</span>
-  {/if}
-</button>
+  <GestureButton
+    {size}
+    icon={currentIcon}
+    label={currentLabel}
+    {showLabel}
+    {disabled}
+    enableAdd={true}
+    ariaLabel="Navegador de archivos"
+    on:select={handleGestureSelect}
+    on:add={handleGestureAdd}
+    on:config={handleGestureConfig}
+  />
+</div>
 
 <!-- Panel Select (tap/click) - File Tree -->
 <FloatingPanel bind:open={selectorOpen} title="📁 Archivos">
@@ -594,86 +453,8 @@
 />
 
 <style>
-  .filebrowser-btn {
-    /* === SKINNABLE VARIABLES === */
-    --_bg: var(--filebrowser-btn-bg, hsl(142 71% 45% / 0.15));
-    --_bg-hover: var(--filebrowser-btn-bg-hover, hsl(142 71% 45% / 0.25));
-    --_bg-active: var(--filebrowser-btn-bg-active, hsl(142 71% 45% / 0.35));
-    --_color: var(--filebrowser-btn-color, var(--color-text, #ffffff));
-    --_color-muted: var(--filebrowser-btn-color-muted, var(--color-text-muted, #9ca3af));
-    --_border: var(--filebrowser-btn-border, transparent);
-    --_border-focus: var(--filebrowser-btn-border-focus, hsl(142 71% 45%));
-    --_radius: var(--filebrowser-btn-radius, var(--radius-lg, 12px));
-    --_shadow: var(--filebrowser-btn-shadow, none);
-    --_transition: var(--filebrowser-btn-transition, var(--transition-fast, 150ms));
-
-    /* === LAYOUT === */
-    width: var(--_size);
-    height: var(--_size);
-    min-width: var(--_size);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-
-    /* === APPEARANCE === */
-    background: var(--_bg);
-    color: var(--_color);
-    border: 1px solid var(--_border);
-    border-radius: var(--_radius);
-    box-shadow: var(--_shadow);
-
-    /* === INTERACTION === */
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-
-    /* === ANIMATION === */
-    transition:
-      background var(--_transition) ease,
-      transform var(--_transition) ease,
-      border-color var(--_transition) ease,
-      box-shadow var(--_transition) ease;
-  }
-
-  /* === STATES === */
-  .filebrowser-btn:hover:not(.filebrowser-btn--disabled) {
-    background: var(--_bg-hover);
-  }
-
-  .filebrowser-btn:active:not(.filebrowser-btn--disabled) {
-    background: var(--_bg-active);
-    transform: scale(0.95);
-  }
-
-  .filebrowser-btn:focus-visible {
-    outline: none;
-    border-color: var(--_border-focus);
-    box-shadow: 0 0 0 3px hsl(142 71% 45% / 0.3);
-  }
-
-  .filebrowser-btn--disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* === ICON === */
-  .filebrowser-btn__icon {
-    font-size: var(--_icon-size);
-    line-height: 1;
-  }
-
-  /* === LABEL === */
-  .filebrowser-btn__label {
-    font-size: var(--_label-size);
-    font-weight: var(--font-weight-medium, 500);
-    color: var(--_color-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: calc(var(--_size) - 8px);
+  .filebrowser-btn-wrapper {
+    display: contents;
   }
 
   /* === FILE SELECTOR === */
@@ -820,10 +601,6 @@
 
   /* === TOUCH DEVICES === */
   @media (hover: none) {
-    .filebrowser-btn:active:not(.filebrowser-btn--disabled) {
-      background: var(--_bg-active);
-    }
-
     .file-tree__node:active {
       background: var(--color-bg-active, #3a3f4a);
     }
@@ -831,7 +608,6 @@
 
   /* === REDUCED MOTION === */
   @media (prefers-reduced-motion: reduce) {
-    .filebrowser-btn,
     .file-tree__node {
       transition: none;
     }

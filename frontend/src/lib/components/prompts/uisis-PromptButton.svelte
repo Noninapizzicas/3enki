@@ -214,25 +214,28 @@
   function handleMouseUp(e: MouseEvent): void {
     if (disabled || e.button !== 0) return;
 
-    clearTimeout(longPressTimeout!);
-    longPressTimeout = null;
-
+    // Si fue long press, ignorar
     if (isLongPress) {
       isLongPress = false;
       return;
     }
 
-    // Usar e.detail para detectar doble click nativo
-    if (e.detail >= 2) {
-      clearTimeout(tapTimeout!);
-      tapTimeout = null;
-      doAdd();
-    } else if (e.detail === 1) {
-      // Esperar para ver si viene segundo click
-      clearTimeout(tapTimeout!);
+    clearTimers();
+    tapCount++;
+
+    if (tapCount === 1) {
+      // Esperar posible segundo click
       tapTimeout = setTimeout(() => {
-        doSelect();
-      }, TIMING.doubleTapMax);
+        if (tapCount === 1) {
+          doSelect();
+        }
+        tapCount = 0;
+      }, TIMING.tapDelay);
+    } else if (tapCount >= 2) {
+      // Doble click detectado
+      clearTimers();
+      tapCount = 0;
+      doAdd();
     }
   }
 

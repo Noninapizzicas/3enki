@@ -962,29 +962,30 @@ class ConversationManagerModule {
   }
 
   // ==================== HTTP API HANDLERS ====================
+  // Handlers use new gateway API style: return { status, data } instead of res.json()
 
-  async handleCreateConversation(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { project_id, user_id, ...options } = req.body;
+  async handleCreateConversation(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { project_id, user_id, ...options } = req.body || {};
 
     this.logger.info({ correlationId, projectId: project_id }, 'HTTP: Create conversation');
 
     if (!project_id) {
-      return res.status(400).json({ success: false, error: 'project_id is required' });
+      return { status: 400, data: { success: false, error: 'project_id is required' } };
     }
 
     try {
       const conversation = await this.createConversation(project_id, user_id, options, correlationId);
-      res.status(201).json({ success: true, conversation });
+      return { status: 201, data: { success: true, conversation } };
     } catch (error) {
       this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to create conversation');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleListConversations(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { project_id } = req.query;
+  async handleListConversations(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { project_id } = req.query || {};
 
     this.logger.debug({ correlationId, projectId: project_id }, 'HTTP: List conversations');
 
@@ -1003,111 +1004,114 @@ class ConversationManagerModule {
       // Sort by updated_at descending
       conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
-      res.json({ success: true, conversations, count: conversations.length });
+      return { status: 200, data: { success: true, conversations, count: conversations.length } };
     } catch (error) {
       this.logger.error({ correlationId, error: error.message }, 'HTTP: Failed to list conversations');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleGetConversation(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
+  async handleGetConversation(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
 
     this.logger.debug({ correlationId, conversationId: id }, 'HTTP: Get conversation');
 
     try {
       const conversation = this.conversations.get(id);
       if (!conversation) {
-        return res.status(404).json({ success: false, error: 'Conversation not found' });
+        return { status: 404, data: { success: false, error: 'Conversation not found' } };
       }
 
       const messages = await this.getMessages(id, 100, 0, correlationId);
       const projectContext = await this.loadProjectContext(conversation.project_id, correlationId);
 
-      res.json({
-        success: true,
-        conversation,
-        messages,
-        project_context: projectContext
-      });
+      return {
+        status: 200,
+        data: {
+          success: true,
+          conversation,
+          messages,
+          project_context: projectContext
+        }
+      };
     } catch (error) {
       this.logger.error({ correlationId, conversationId: id, error: error.message },
         'HTTP: Failed to get conversation');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleUpdateConversation(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
-    const updates = req.body;
+  async handleUpdateConversation(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+    const updates = req.body || {};
 
     this.logger.info({ correlationId, conversationId: id }, 'HTTP: Update conversation');
 
     try {
       const conversation = await this.updateConversation(id, updates, correlationId);
-      res.json({ success: true, conversation });
+      return { status: 200, data: { success: true, conversation } };
     } catch (error) {
       this.logger.error({ correlationId, conversationId: id, error: error.message },
         'HTTP: Failed to update conversation');
 
       if (error.message.includes('not found')) {
-        return res.status(404).json({ success: false, error: error.message });
+        return { status: 404, data: { success: false, error: error.message } };
       }
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleDeleteConversation(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
+  async handleDeleteConversation(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
 
     this.logger.info({ correlationId, conversationId: id }, 'HTTP: Delete conversation');
 
     try {
       const result = await this.deleteConversation(id, correlationId);
-      res.json({ success: true, ...result, message: 'Conversation deleted successfully' });
+      return { status: 200, data: { success: true, ...result, message: 'Conversation deleted successfully' } };
     } catch (error) {
       this.logger.error({ correlationId, conversationId: id, error: error.message },
         'HTTP: Failed to delete conversation');
 
       if (error.message.includes('not found')) {
-        return res.status(404).json({ success: false, error: error.message });
+        return { status: 404, data: { success: false, error: error.message } };
       }
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleSendMessage(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
-    const { content, user_id, attachments, metadata } = req.body;
+  async handleSendMessage(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+    const { content, user_id, attachments, metadata } = req.body || {};
 
     this.logger.info({ correlationId, conversationId: id }, 'HTTP: Send message');
 
     if (!content || content.trim().length === 0) {
-      return res.status(400).json({ success: false, error: 'content is required' });
+      return { status: 400, data: { success: false, error: 'content is required' } };
     }
 
     try {
       const result = await this.sendMessage(id, content, user_id, attachments || [], metadata || {}, correlationId);
-      res.json({ success: true, ...result });
+      return { status: 200, data: { success: true, ...result } };
     } catch (error) {
       this.logger.error({ correlationId, conversationId: id, error: error.message },
         'HTTP: Failed to send message');
 
       if (error.message.includes('not found')) {
-        return res.status(404).json({ success: false, error: error.message });
+        return { status: 404, data: { success: false, error: error.message } };
       }
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleGetMessages(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
-    const { limit = 100, offset = 0 } = req.query;
+  async handleGetMessages(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+    const { limit = 100, offset = 0 } = req.query || {};
 
     this.logger.debug({ correlationId, conversationId: id }, 'HTTP: Get messages');
 
@@ -1117,44 +1121,50 @@ class ConversationManagerModule {
       const totalTokens = messages.reduce((sum, m) => sum + (m.tokens || 0), 0);
       const totalCost = messages.reduce((sum, m) => sum + (m.cost || 0), 0);
 
-      res.json({
-        success: true,
-        messages,
-        count: messages.length,
-        total_tokens: totalTokens,
-        total_cost: totalCost
-      });
+      return {
+        status: 200,
+        data: {
+          success: true,
+          messages,
+          count: messages.length,
+          total_tokens: totalTokens,
+          total_cost: totalCost
+        }
+      };
     } catch (error) {
       this.logger.error({ correlationId, conversationId: id, error: error.message },
         'HTTP: Failed to get messages');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
-  async handleGetContext(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { id } = req.params;
+  async handleGetContext(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
 
     this.logger.debug({ correlationId, conversationId: id }, 'HTTP: Get context');
 
     try {
       const conversation = this.conversations.get(id);
       if (!conversation) {
-        return res.status(404).json({ success: false, error: 'Conversation not found' });
+        return { status: 404, data: { success: false, error: 'Conversation not found' } };
       }
 
       const projectContext = await this.loadProjectContext(conversation.project_id, correlationId);
       const conversationContext = await this.loadConversationContext(id, correlationId);
 
-      res.json({
-        success: true,
-        project_context: projectContext,
-        conversation_context: conversationContext
-      });
+      return {
+        status: 200,
+        data: {
+          success: true,
+          project_context: projectContext,
+          conversation_context: conversationContext
+        }
+      };
     } catch (error) {
       this.logger.error({ correlationId, conversationId: id, error: error.message },
         'HTTP: Failed to get context');
-      res.status(500).json({ success: false, error: error.message });
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
@@ -1162,14 +1172,14 @@ class ConversationManagerModule {
    * GET /ui/state - UI-ready endpoint for conversation management
    * Returns data structured for direct UI consumption
    */
-  async handleUIState(req, res) {
-    const correlationId = crypto.randomUUID();
-    const { project_id } = req.query;
+  async handleUIState(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { project_id } = req.query || {};
 
     this.logger.debug({ correlationId, projectId: project_id }, 'HTTP: Get UI state');
 
     if (!project_id) {
-      return res.status(400).json({ success: false, error: 'project_id is required' });
+      return { status: 400, data: { success: false, error: 'project_id is required' } };
     }
 
     try {
@@ -1250,55 +1260,67 @@ class ConversationManagerModule {
           conversations: grouped[key]
         }));
 
-      res.json({
-        success: true,
-        project_id,
-        sections: uiSections,
-        conversations: conversations.map(c => ({
-          id: c.id,
-          title: c.title,
-          displayTitle: c.title || 'New Conversation',
-          message_count: c.message_count,
-          model: c.model,
-          provider: c.provider,
-          updated_at: c.updated_at,
-          created_at: c.created_at
-        })),
-        stats: {
-          total_conversations: conversations.length,
-          total_messages: totalMessages,
-          active_today: activeToday
+      return {
+        status: 200,
+        data: {
+          success: true,
+          project_id,
+          sections: uiSections,
+          conversations: conversations.map(c => ({
+            id: c.id,
+            title: c.title,
+            displayTitle: c.title || 'New Conversation',
+            message_count: c.message_count,
+            model: c.model,
+            provider: c.provider,
+            updated_at: c.updated_at,
+            created_at: c.created_at
+          })),
+          stats: {
+            total_conversations: conversations.length,
+            total_messages: totalMessages,
+            active_today: activeToday
+          }
         }
-      });
+      };
     } catch (error) {
       this.logger.error({ correlationId, error: error.message, stack: error.stack }, 'HTTP: Failed to get UI state');
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        details: 'Check server logs for more info'
-      });
+      return {
+        status: 500,
+        data: {
+          success: false,
+          error: error.message,
+          details: 'Check server logs for more info'
+        }
+      };
     }
   }
 
-  async handleHealthCheck(req, res) {
-    res.json({
-      status: 'healthy',
-      module: 'conversation-manager',
-      conversations_count: this.conversations.size,
-      pending_requests: this.pendingDbRequests.size + this.pendingAIRequests.size,
-      uptime: process.uptime()
-    });
+  async handleHealthCheck(req, context) {
+    return {
+      status: 200,
+      data: {
+        status: 'healthy',
+        module: 'conversation-manager',
+        conversations_count: this.conversations.size,
+        pending_requests: this.pendingDbRequests.size + this.pendingAIRequests.size,
+        uptime: process.uptime()
+      }
+    };
   }
 
-  async handleGetMetrics(req, res) {
-    res.json({
-      module: 'conversation-manager',
-      metrics: {
-        conversations_count: this.conversations.size,
-        pending_db_requests: this.pendingDbRequests.size,
-        pending_ai_requests: this.pendingAIRequests.size
+  async handleGetMetrics(req, context) {
+    return {
+      status: 200,
+      data: {
+        module: 'conversation-manager',
+        metrics: {
+          conversations_count: this.conversations.size,
+          pending_db_requests: this.pendingDbRequests.size,
+          pending_ai_requests: this.pendingAIRequests.size
+        }
       }
-    });
+    };
   }
 }
 

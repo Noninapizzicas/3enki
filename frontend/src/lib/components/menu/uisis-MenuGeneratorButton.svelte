@@ -1,6 +1,8 @@
 <!--
   MenuGeneratorButton.svelte
+  ==========================
   Botón con triple interacción para gestión de menús generados.
+  Usa GestureButton como base para el manejo de gestos.
 
   Interacciones:
   - tap: Selector de menús/conversaciones
@@ -14,18 +16,23 @@
   - export: { menuId, format }
   - applyPos: { menuId }
   - delete: { menuId }
+
+  @version 2.0.0
+  @author Event Core Team
 -->
 <script lang="ts">
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
+  import { GestureButton } from '$components/ui';
   import FloatingPanel from '../feedback/FloatingPanel.svelte';
   import MenuGeneratorAddPanel from './uisis-MenuGeneratorAddPanel.svelte';
   import MenuGeneratorConfigPanel from './uisis-MenuGeneratorConfigPanel.svelte';
   import { api } from '$lib/config';
 
-  // Props
-  export let size: 'sm' | 'md' | 'lg' = 'md';
-  export let showLabel = true;
-  export let disabled = false;
+  // ============================================================================
+  // TYPES
+  // ============================================================================
+
+  type Size = 'sm' | 'md' | 'lg';
 
   interface MenuItem {
     id: string;
@@ -37,6 +44,45 @@
     conversationId?: string;
   }
 
+  // ============================================================================
+  // PROPS
+  // ============================================================================
+
+  export let size: Size = 'md';
+  export let showLabel = true;
+  export let disabled = false;
+
+  // ============================================================================
+  // STATE
+  // ============================================================================
+
+  // Panel states
+  let selectorOpen = false;
+  let addOpen = false;
+  let configOpen = false;
+
+  // Selection state
+  let selectedMenuId: string | null = null;
+  let selectedConversationId: string | null = null;
+
+  // Items list
+  let items: MenuItem[] = [];
+  let loading = false;
+  let error = '';
+
+  const currentIcon = '🍽️';
+  const currentLabel = 'Menú';
+
+  // ============================================================================
+  // COMPUTED
+  // ============================================================================
+
+  $: hasSelection = selectedMenuId !== null;
+
+  // ============================================================================
+  // EVENTS
+  // ============================================================================
+
   const dispatch = createEventDispatcher<{
     select: { menuId: string | null; conversationId: string | null };
     create: { title: string; templateId: string | null; aiConfig: any };
@@ -46,31 +92,30 @@
     delete: { menuId: string };
   }>();
 
-  // Estado de paneles
-  let selectorOpen = false;
-  let addOpen = false;
-  let configOpen = false;
+  // ============================================================================
+  // GESTURE HANDLERS
+  // ============================================================================
 
-  // Estado de selección
-  let selectedMenuId: string | null = null;
-  let selectedConversationId: string | null = null;
+  function handleGestureSelect(): void {
+    selectorOpen = true;
+  }
 
-  // Lista de items
-  let items: MenuItem[] = [];
-  let loading = false;
-  let error = '';
+  function handleGestureAdd(): void {
+    addOpen = true;
+  }
 
-  // Gesture handling
-  const TIMING = {
-    tapDelay: 250,
-    doubleTapMax: 300,
-    longPressDuration: 500
-  };
+  function handleGestureConfig(): void {
+    if (selectedMenuId) {
+      configOpen = true;
+    } else {
+      // Si no hay menú seleccionado, mostrar selector primero
+      selectorOpen = true;
+    }
+  }
 
-  let tapCount = 0;
-  let tapTimer: ReturnType<typeof setTimeout> | null = null;
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let isLongPress = false;
+  // ============================================================================
+  // DATA LOADING
+  // ============================================================================
 
   // Cargar items cuando se abre el selector
   $: if (selectorOpen) {
@@ -122,81 +167,9 @@
     }
   }
 
-  // Gesture handlers
-  function handlePointerDown(e: PointerEvent) {
-    if (disabled) return;
-
-    isLongPress = false;
-
-    longPressTimer = setTimeout(() => {
-      isLongPress = true;
-      doConfig();
-    }, TIMING.longPressDuration);
-  }
-
-  function handlePointerUp(e: PointerEvent) {
-    if (disabled) return;
-
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-
-    if (isLongPress) {
-      isLongPress = false;
-      return;
-    }
-
-    tapCount++;
-
-    if (tapCount === 1) {
-      tapTimer = setTimeout(() => {
-        if (tapCount === 1) {
-          doSelect();
-        }
-        tapCount = 0;
-      }, TIMING.doubleTapMax);
-    } else if (tapCount === 2) {
-      if (tapTimer) {
-        clearTimeout(tapTimer);
-        tapTimer = null;
-      }
-      tapCount = 0;
-      doAdd();
-    }
-  }
-
-  function handlePointerLeave() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  }
-
-  function handleContextMenu(e: MouseEvent) {
-    e.preventDefault();
-    if (!disabled) {
-      doConfig();
-    }
-  }
-
-  // Actions
-  function doSelect() {
-    selectorOpen = true;
-  }
-
-  function doAdd() {
-    addOpen = true;
-  }
-
-  function doConfig() {
-    if (selectedMenuId) {
-      configOpen = true;
-    } else {
-      // Si no hay menú seleccionado, mostrar selector primero
-      selectorOpen = true;
-    }
-  }
+  // ============================================================================
+  // PANEL HANDLERS
+  // ============================================================================
 
   function handleItemSelect(item: MenuItem) {
     selectedMenuId = item.type === 'menu' ? item.id : item.id;
@@ -232,6 +205,10 @@
     selectedConversationId = null;
   }
 
+  // ============================================================================
+  // HELPERS
+  // ============================================================================
+
   function getEstadoEmoji(estado?: string) {
     const emojis: Record<string, string> = {
       generando: '⏳',
@@ -243,43 +220,33 @@
     };
     return emojis[estado || ''] || '📄';
   }
-
-  // Cleanup
-  onDestroy(() => {
-    if (tapTimer) clearTimeout(tapTimer);
-    if (longPressTimer) clearTimeout(longPressTimer);
-  });
-
-  // Tamaños
-  const sizes = {
-    sm: { button: '44px', icon: '1.25rem', font: '0.625rem' },
-    md: { button: '56px', icon: '1.5rem', font: '0.75rem' },
-    lg: { button: '72px', icon: '2rem', font: '0.875rem' }
-  };
-
-  $: currentSize = sizes[size];
 </script>
 
-<!-- Botón principal -->
-<button
-  class="menu-btn"
-  class:selected={!!selectedMenuId}
-  class:disabled
-  style="--btn-size: {currentSize.button}; --icon-size: {currentSize.icon}; --font-size: {currentSize.font}"
-  on:pointerdown={handlePointerDown}
-  on:pointerup={handlePointerUp}
-  on:pointerleave={handlePointerLeave}
-  on:contextmenu={handleContextMenu}
-  {disabled}
+<!-- Button con GestureButton base -->
+<div
+  class="menu-btn-wrapper"
+  class:menu-btn-wrapper--selected={hasSelection}
+  style:--gesture-btn-bg="hsl(25 95% 53% / 0.15)"
+  style:--gesture-btn-bg-hover="hsl(25 95% 53% / 0.25)"
+  style:--gesture-btn-bg-active="hsl(25 95% 53% / 0.35)"
+  style:--gesture-btn-border-focus="var(--color-warning, #f97316)"
 >
-  <span class="btn-icon">🍽️</span>
-  {#if showLabel}
-    <span class="btn-label">Menú</span>
+  <GestureButton
+    {size}
+    icon={currentIcon}
+    label={currentLabel}
+    {showLabel}
+    {disabled}
+    enableAdd={true}
+    ariaLabel="Gestión de menús"
+    on:select={handleGestureSelect}
+    on:add={handleGestureAdd}
+    on:config={handleGestureConfig}
+  />
+  {#if hasSelection}
+    <span class="menu-btn__indicator" />
   {/if}
-  {#if selectedMenuId}
-    <span class="selected-indicator" />
-  {/if}
-</button>
+</div>
 
 <!-- Panel Selector -->
 <FloatingPanel bind:open={selectorOpen}>
@@ -352,69 +319,29 @@
 />
 
 <style>
-  .menu-btn {
-    --_accent: var(--menu-accent, var(--color-warning, #f97316));
-    --_bg: var(--menu-bg, var(--color-bg-elevated, #1a1d24));
-    --_text: var(--menu-text, var(--color-text, #e5e7eb));
-    --_border: var(--menu-border, var(--color-border, #374151));
-
+  .menu-btn-wrapper {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    width: var(--btn-size);
-    height: var(--btn-size);
-    padding: 0.25rem;
-    background: var(--_bg);
-    border: 2px solid var(--_border);
-    border-radius: var(--radius-lg, 12px);
-    color: var(--_text);
-    cursor: pointer;
-    user-select: none;
-    touch-action: manipulation;
-    transition: all 0.15s ease;
+    display: contents;
   }
 
-  .menu-btn:hover:not(.disabled) {
-    border-color: var(--_accent);
-    background: rgb(249 115 22 / 0.1);
+  .menu-btn-wrapper--selected :global(.gesture-btn) {
+    --gesture-btn-bg: hsl(25 95% 53% / 0.25);
+    border-color: hsl(25 95% 53% / 0.3);
   }
 
-  .menu-btn.selected {
-    border-color: var(--_accent);
-    background: rgb(249 115 22 / 0.15);
-  }
-
-  .menu-btn.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-icon {
-    font-size: var(--icon-size);
-    line-height: 1;
-  }
-
-  .btn-label {
-    font-size: var(--font-size);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-
-  .selected-indicator {
+  /* === SELECTION INDICATOR === */
+  .menu-btn__indicator {
     position: absolute;
-    top: 4px;
-    right: 4px;
+    top: 6px;
+    right: 6px;
     width: 8px;
     height: 8px;
-    background: var(--_accent);
+    background: var(--color-warning, #f97316);
     border-radius: 50%;
+    pointer-events: none;
   }
 
-  /* Selector Panel */
+  /* === SELECTOR PANEL === */
   .selector-panel {
     width: min(320px, 90vw);
     background: var(--color-bg-card, #1a1d24);

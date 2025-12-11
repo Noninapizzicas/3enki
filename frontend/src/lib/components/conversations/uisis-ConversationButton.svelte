@@ -156,7 +156,9 @@
 
   function handleTouchStart(e: TouchEvent): void {
     if (disabled) return;
+    e.preventDefault(); // Prevenir eventos mouse duplicados
 
+    clearTimers();
     longPressTimeout = setTimeout(() => {
       isLongPress = true;
       doConfig();
@@ -165,8 +167,10 @@
 
   function handleTouchEnd(e: TouchEvent): void {
     if (disabled) return;
+    e.preventDefault();
 
     clearTimeout(longPressTimeout!);
+    longPressTimeout = null;
 
     if (isLongPress) {
       isLongPress = false;
@@ -182,8 +186,9 @@
         }
         tapCount = 0;
       }, TIMING.tapDelay);
-    } else if (tapCount === 2) {
+    } else if (tapCount >= 2) {
       clearTimeout(tapTimeout!);
+      tapTimeout = null;
       tapCount = 0;
       doAdd();
     }
@@ -200,6 +205,7 @@
   function handleMouseDown(e: MouseEvent): void {
     if (disabled || e.button !== 0) return;
 
+    clearTimers();
     longPressTimeout = setTimeout(() => {
       isLongPress = true;
       doConfig();
@@ -210,15 +216,21 @@
     if (disabled || e.button !== 0) return;
 
     clearTimeout(longPressTimeout!);
+    longPressTimeout = null;
 
     if (isLongPress) {
       isLongPress = false;
       return;
     }
 
-    if (e.detail === 2) {
+    // Usar e.detail para detectar doble click nativo
+    if (e.detail >= 2) {
+      clearTimeout(tapTimeout!);
+      tapTimeout = null;
       doAdd();
     } else if (e.detail === 1) {
+      // Esperar para ver si viene segundo click
+      clearTimeout(tapTimeout!);
       tapTimeout = setTimeout(() => {
         doSelect();
       }, TIMING.doubleTapMax);
@@ -226,12 +238,15 @@
   }
 
   function handleMouseLeave(): void {
-    clearTimers();
+    clearTimeout(longPressTimeout!);
+    longPressTimeout = null;
+    isLongPress = false;
   }
 
   function handleContextMenu(e: MouseEvent): void {
     if (disabled) return;
     e.preventDefault();
+    resetGestureState();
     doConfig();
   }
 

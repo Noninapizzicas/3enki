@@ -66,8 +66,8 @@
   };
 
   const TIMING = {
-    tapDelay: 250,
-    doubleTapMax: 300,
+    tapDelay: 350,      // Aumentado para dar más tiempo al doble tap
+    doubleTapMax: 400,  // Aumentado para mejor detección
     longPressDuration: 500
   };
 
@@ -250,6 +250,14 @@
     doConfig();
   }
 
+  /** Handler nativo para doble click (fallback más fiable) */
+  function handleDblClick(e: MouseEvent): void {
+    if (disabled) return;
+    e.preventDefault();
+    clearTimers();
+    doAdd();
+  }
+
   // ============================================================================
   // PANEL HANDLERS
   // ============================================================================
@@ -297,6 +305,7 @@
   on:mousedown={handleMouseDown}
   on:mouseup={handleMouseUp}
   on:mouseleave={handleMouseLeave}
+  on:dblclick={handleDblClick}
   on:contextmenu={handleContextMenu}
   aria-label="Gestión de conversaciones"
   aria-disabled={disabled}

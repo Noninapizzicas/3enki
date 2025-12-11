@@ -341,9 +341,11 @@
 
   function handleMouseDown(e: MouseEvent): void {
     if (disabled || e.button !== 0) return;
+    isLongPress = false;
 
     longPressTimeout = setTimeout(() => {
       isLongPress = true;
+      clearTimers();
       doConfig();
     }, TIMING.longPressDuration);
   }
@@ -351,29 +353,39 @@
   function handleMouseUp(e: MouseEvent): void {
     if (disabled || e.button !== 0) return;
 
-    clearTimeout(longPressTimeout!);
-
     if (isLongPress) {
       isLongPress = false;
       return;
     }
 
-    if (e.detail === 2) {
-      doAdd();
-    } else if (e.detail === 1) {
+    clearTimers();
+    tapCount++;
+
+    if (tapCount === 1) {
       tapTimeout = setTimeout(() => {
-        doSelect();
-      }, TIMING.doubleTapMax);
+        if (tapCount === 1) {
+          doSelect();
+        }
+        tapCount = 0;
+      }, TIMING.tapDelay);
+    } else if (tapCount >= 2) {
+      clearTimers();
+      tapCount = 0;
+      doAdd();
     }
   }
 
   function handleMouseLeave(): void {
-    clearTimers();
+    if (longPressTimeout) {
+      clearTimeout(longPressTimeout);
+      longPressTimeout = null;
+    }
   }
 
   function handleContextMenu(e: MouseEvent): void {
     if (disabled) return;
     e.preventDefault();
+    resetGestureState();
     doConfig();
   }
 

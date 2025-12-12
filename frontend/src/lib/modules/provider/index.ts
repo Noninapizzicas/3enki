@@ -1,25 +1,65 @@
 /**
  * Provider Module - Gestión de proveedores IA
  *
- * Módulo UI que sigue el patrón modular:
- * - Manifest declarativo
- * - Eventos que emite/escucha
- * - Panel para selección
+ * Permite seleccionar proveedor y modelo de IA.
+ * Publica eventos MQTT cuando cambia la selección.
  */
 
-import type { UIModule, UIEvent } from '$ui-core';
+import type { UIModule } from '$ui-core';
 import ProviderPanel from './ProviderPanel.svelte';
 
-// Datos del módulo
-export const providers = [
-  { id: 'deepseek', name: 'DeepSeek', icon: '🔮', models: ['deepseek-chat', 'deepseek-coder'] },
-  { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
-  { id: 'anthropic', name: 'Anthropic', icon: '🧠', models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'] },
-  { id: 'ollama', name: 'Ollama', icon: '🦙', models: ['llama2', 'mistral', 'codellama'] }
+// =============================================================================
+// DATOS
+// =============================================================================
+
+export interface Provider {
+  id: string;
+  name: string;
+  icon: string;
+  models: string[];
+}
+
+export const providers: Provider[] = [
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    icon: '🔮',
+    models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner']
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    icon: '🤖',
+    models: ['gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo']
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    icon: '🧠',
+    models: ['claude-sonnet-4-5-20250929', 'claude-opus-4-5-20251101', 'claude-3-5-haiku-20241022']
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    icon: '🦙',
+    models: ['llama3.2', 'mistral', 'codellama', 'phi3']
+  }
 ];
 
-let currentProvider = providers[0];
-let currentModel = providers[0].models[0];
+// =============================================================================
+// TOPICS MQTT
+// =============================================================================
+
+export const PROVIDER_TOPICS = {
+  SELECTED: 'provider/selected',
+  MODEL_SELECTED: 'provider/model/selected',
+  REFRESH: 'provider/refresh',
+  STATE: 'provider/state'
+} as const;
+
+// =============================================================================
+// MÓDULO
+// =============================================================================
 
 export const providerModule: UIModule = {
   manifest: {
@@ -33,30 +73,15 @@ export const providerModule: UIModule = {
         {
           id: 'provider-btn',
           emoji: '🔌',
-          label: 'Provider',
-          badge: undefined,
-          primary: {
-            type: 'panel',
-            panel: 'provider-selector',
-            label: 'Seleccionar proveedor'
-          },
-          secondary: {
-            type: 'emit',
-            event: 'provider.refresh',
-            label: 'Refrescar proveedores'
-          },
+          label: 'Seleccionar proveedor',
+          action: { type: 'panel', panelId: 'provider-selector' },
           order: 1
         },
         {
           id: 'model-btn',
           emoji: '🤖',
-          label: 'Model',
-          badge: undefined,
-          primary: {
-            type: 'panel',
-            panel: 'model-selector',
-            label: 'Seleccionar modelo'
-          },
+          label: 'Seleccionar modelo',
+          action: { type: 'panel', panelId: 'model-selector' },
           order: 2
         }
       ]
@@ -67,43 +92,44 @@ export const providerModule: UIModule = {
       { id: 'model-selector', title: 'Seleccionar Modelo', size: 'md' }
     ],
 
-    events: {
-      emits: ['provider.selected', 'model.selected', 'provider.refresh'],
-      listens: ['credential.selected']
+    mqtt: {
+      publishes: [
+        PROVIDER_TOPICS.SELECTED,
+        PROVIDER_TOPICS.MODEL_SELECTED,
+        PROVIDER_TOPICS.STATE
+      ],
+      subscribes: [
+        PROVIDER_TOPICS.REFRESH,
+        'credential/resolved'
+      ]
     }
   },
 
   onMount(ctx) {
     console.log('[Provider] Module mounted');
 
-    // Emitir estado inicial
-    ctx.emit('provider.selected', { provider: currentProvider });
-    ctx.emit('model.selected', { model: currentModel, provider: currentProvider.id });
+    // Publicar estado inicial
+    const defaultProvider = providers[0];
+    ctx.publish(PROVIDER_TOPICS.STATE, {
+      providerId: defaultProvider.id,
+      providerName: defaultProvider.name,
+      modelId: defaultProvider.models[0]
+    });
   },
 
   onUnmount() {
     console.log('[Provider] Module unmounted');
   },
 
-  onEvent: {
-    'credential.selected': (event: UIEvent) => {
-      console.log('[Provider] Credential selected:', event.data);
-      // Aquí podríamos filtrar modelos según credencial
-    }
-  },
-
-  onAction: {
-    'selectProvider': (payload) => {
-      const p = payload as { providerId: string };
-      const provider = providers.find(pr => pr.id === p.providerId);
-      if (provider) {
-        currentProvider = provider;
-        currentModel = provider.models[0];
-      }
+  onMessage: {
+    [PROVIDER_TOPICS.REFRESH]: (_topic, _payload) => {
+      console.log('[Provider] Refresh requested');
+      // Aquí podríamos recargar proveedores desde el backend
     },
-    'selectModel': (payload) => {
-      const m = payload as { modelId: string };
-      currentModel = m.modelId;
+
+    'credential/resolved': (_topic, payload) => {
+      console.log('[Provider] Credential resolved:', payload);
+      // Aquí podríamos filtrar modelos según credenciales disponibles
     }
   },
 

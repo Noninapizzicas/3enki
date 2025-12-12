@@ -1,107 +1,206 @@
 /**
- * UI Module Types - Contrato para módulos UI
- * Sigue el mismo patrón que los módulos backend
+ * UI Core Types - Contratos para el sistema de UI modular
+ *
+ * Principios:
+ * - Tipos estrictos, sin 'unknown' donde se pueda evitar
+ * - Compatibles con el backend (misma estructura de eventos)
+ * - Documentación inline
  */
 
-// ============================================================================
-// ZONAS
-// ============================================================================
+import type { SvelteComponent, ComponentType } from 'svelte';
 
-export type UIZone = 'topbar' | 'sidebar' | 'bottombar' | 'chat-top' | 'chat-bottom';
+// =============================================================================
+// MQTT TOPICS
+// =============================================================================
 
-// ============================================================================
+/**
+ * Estructura de topics MQTT usados por la UI
+ * Sigue la convención del backend: core/{coreId}/{category}/{...}
+ */
+export const TOPICS = {
+  // Eventos de UI
+  UI_PANEL_OPEN: 'ui/panel/open',
+  UI_PANEL_CLOSE: 'ui/panel/close',
+  UI_MODULE_REGISTERED: 'ui/module/registered',
+  UI_MODULE_UNREGISTERED: 'ui/module/unregistered',
+
+  // Eventos de dominio (ejemplos)
+  PROVIDER_SELECTED: 'provider/selected',
+  MODEL_SELECTED: 'model/selected',
+  CREDENTIAL_RESOLVED: 'credential/resolved'
+} as const;
+
+export type Topic = typeof TOPICS[keyof typeof TOPICS] | string;
+
+// =============================================================================
+// ZONAS DE UI
+// =============================================================================
+
+/**
+ * Zonas donde los módulos pueden renderizar botones
+ */
+export type UIZone =
+  | 'topbar'      // Barra superior
+  | 'sidebar'     // Barra lateral derecha
+  | 'bottombar'   // Barra inferior
+  | 'chat-top'    // Encima del input de chat
+  | 'chat-bottom'; // Debajo del input de chat
+
+// =============================================================================
+// ACCIONES DE BOTÓN
+// =============================================================================
+
+/**
+ * Acción que ejecuta un botón al hacer click
+ */
+export type UIButtonAction =
+  | { type: 'panel'; panelId: string }
+  | { type: 'publish'; topic: string; payload?: Record<string, unknown> }
+  | { type: 'navigate'; route: string };
+
+// =============================================================================
 // BOTONES
-// ============================================================================
+// =============================================================================
 
-export interface UIButtonAction {
-  type: 'panel' | 'emit' | 'navigate';
-  panel?: string;
-  event?: string;
-  payload?: unknown;
-  route?: string;
-  label: string;
-}
-
+/**
+ * Botón que un módulo registra en una zona
+ */
 export interface UIButton {
+  /** Identificador único del botón */
   id: string;
+
+  /** Emoji o icono a mostrar */
   emoji: string;
-  label?: string;
+
+  /** Texto accesible (aria-label y tooltip) */
+  label: string;
+
+  /** Badge opcional (notificaciones, contadores) */
   badge?: string | number;
-  primary: UIButtonAction;
-  secondary?: UIButtonAction;
-  tertiary?: UIButtonAction;
+
+  /** Acción al hacer click */
+  action: UIButtonAction;
+
+  /** Orden de aparición (menor = primero) */
   order?: number;
 }
 
-// ============================================================================
+// =============================================================================
 // PANELES
-// ============================================================================
+// =============================================================================
 
+/**
+ * Tamaños de panel disponibles
+ */
+export type PanelSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+
+/**
+ * Panel que un módulo puede abrir
+ */
 export interface UIPanel {
+  /** Identificador único del panel */
   id: string;
+
+  /** Título mostrado en el header */
   title: string;
-  size?: 'sm' | 'md' | 'lg' | 'full';
+
+  /** Tamaño del panel */
+  size: PanelSize;
 }
 
-// ============================================================================
-// EVENTOS
-// ============================================================================
+// =============================================================================
+// MÓDULOS
+// =============================================================================
 
-export interface UIEvent {
-  id: string;
-  type: string;
-  timestamp: number;
-  source: string;
-  data: unknown;
-}
-
-export type UIEventHandler = (event: UIEvent) => void;
-
-// ============================================================================
-// MÓDULO UI
-// ============================================================================
-
+/**
+ * Manifest declarativo de un módulo UI
+ */
 export interface UIModuleManifest {
+  /** Identificador único del módulo */
   id: string;
+
+  /** Nombre para mostrar */
   name: string;
+
+  /** Versión semver */
   version: string;
+
+  /** Icono del módulo */
   icon?: string;
 
-  // Zonas donde renderiza
+  /** Botones a registrar por zona */
   zones?: Partial<Record<UIZone, UIButton[]>>;
 
-  // Paneles que expone
+  /** Paneles que expone este módulo */
   panels?: UIPanel[];
 
-  // Eventos
-  events?: {
-    emits?: string[];
-    listens?: string[];
+  /** Topics MQTT que usa */
+  mqtt?: {
+    /** Topics a los que publica */
+    publishes?: string[];
+    /** Topics a los que se suscribe */
+    subscribes?: string[];
   };
 }
 
-export interface UIModule {
-  manifest: UIModuleManifest;
+/**
+ * Contexto disponible para módulos
+ */
+export interface UIModuleContext {
+  /** Publicar a un topic MQTT */
+  publish: (topic: string, payload: Record<string, unknown>) => void;
 
-  // Lifecycle
-  onMount?: (ctx: UIContext) => void;
-  onUnmount?: () => void;
+  /** Suscribirse a un topic MQTT (retorna unsub) */
+  subscribe: (topic: string, handler: (payload: unknown) => void) => () => void;
 
-  // Handlers
-  onEvent?: Record<string, UIEventHandler>;
-  onAction?: Record<string, (payload?: unknown) => void>;
+  /** Abrir un panel por ID */
+  openPanel: (panelId: string) => void;
 
-  // Componente del panel (Svelte)
-  PanelComponent?: unknown;
+  /** Cerrar el panel actual */
+  closePanel: () => void;
 }
 
-// ============================================================================
-// CONTEXTO
-// ============================================================================
+/**
+ * Handler de mensaje MQTT
+ */
+export type MqttHandler = (topic: string, payload: unknown) => void;
 
-export interface UIContext {
-  emit: (type: string, data: unknown) => void;
-  on: (type: string, handler: UIEventHandler) => () => void;
-  openPanel: (panelId: string) => void;
-  closePanel: () => void;
+/**
+ * Módulo UI completo
+ */
+export interface UIModule {
+  /** Manifest declarativo */
+  manifest: UIModuleManifest;
+
+  /** Callback al registrar el módulo */
+  onMount?: (ctx: UIModuleContext) => void;
+
+  /** Callback al desregistrar el módulo */
+  onUnmount?: () => void;
+
+  /** Handlers para topics MQTT específicos */
+  onMessage?: Record<string, MqttHandler>;
+
+  /** Componente Svelte para renderizar paneles */
+  PanelComponent?: ComponentType<SvelteComponent<{ panelId: string }>>;
+}
+
+// =============================================================================
+// ESTADO DEL REGISTRY
+// =============================================================================
+
+/**
+ * Estado del panel activo
+ */
+export interface ActivePanel {
+  panelId: string;
+  moduleId: string;
+}
+
+/**
+ * Panel con su módulo asociado
+ */
+export interface PanelWithModule {
+  panel: UIPanel;
+  moduleId: string;
 }

@@ -551,15 +551,17 @@
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     z-index: 100;
-    padding: 1rem;
+    padding: 0.5rem;
+    padding-top: 0.5rem;
   }
 
   .shell__panel {
     width: 100%;
-    max-height: 85vh;
+    max-height: 33vh;
+    min-height: 120px;
     background: var(--shell-zone-bg, #111);
     border: 1px solid var(--shell-border, #333);
     border-radius: 12px;

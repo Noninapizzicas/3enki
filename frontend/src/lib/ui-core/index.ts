@@ -2,12 +2,12 @@
  * UI Core - Sistema modular de UI sobre MQTT
  *
  * Arquitectura:
- * - MQTT: Toda comunicación pasa por el broker (mismo que backend)
- * - Shell: Renderiza zonas dinámicamente
- * - Registry: Gestiona módulos y sus suscripciones
- * - Módulos: Plugins UI que se auto-registran
+ * - MQTT: Toda comunicación pasa por el broker
+ * - Registry: Gestiona módulos por zona
+ * - Stores: Estado reactivo compartido
+ * - Layout: Componentes de estructura
  *
- * El frontend es simplemente otro "core" conectado al broker MQTT.
+ * El frontend es otro "core" conectado al broker MQTT.
  */
 
 // Tipos
@@ -30,12 +30,19 @@ export {
 export {
   register,
   unregister,
+  unregisterZone,
   getModule,
-  hasModule,
-  buttonsByZone,
-  panels,
+  openPanel,
+  closePanel,
+  getPanelComponent,
+  getPanelConfig,
+  updateAppState,
+  getAppState,
+  workBarModules,
+  chatConfigModules,
+  chatToolsModules,
+  systemBarModules,
+  activePanel,
+  appState,
   modules
 } from './registry';
-
-// Componentes
-export { default as Shell } from './Shell.svelte';

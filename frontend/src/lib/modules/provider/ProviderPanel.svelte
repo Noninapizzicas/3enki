@@ -1,227 +1,241 @@
 <script lang="ts">
   /**
-   * ProviderPanel - Panel para seleccionar proveedor y modelo
+   * ProviderPanel - Panel de selección de provider y modelo
    *
-   * Renderiza contenido diferente según panelId:
-   * - provider-selector: Lista de proveedores
-   * - model-selector: Lista de modelos del proveedor actual
+   * Features:
+   * - Lista de providers disponibles
+   * - Modelos por provider
+   * - Integración con stores
    */
 
-  import { writable } from 'svelte/store';
-  import { publish } from '$ui-core';
-  import { providers, PROVIDER_TOPICS, type Provider } from './index';
-
-  // ===========================================================================
-  // PROPS
-  // ===========================================================================
+  import { PROVIDER_ICONS } from '$lib/ui-core';
+  import { activeProvider, activeModel, selectProvider } from '$lib/stores';
+  import { closePanel } from '$lib/stores/ui';
+  import type { Provider } from '$lib/ui-core';
 
   export let panelId: string;
 
-  // ===========================================================================
-  // ESTADO (store local compartido entre instancias)
-  // ===========================================================================
+  // Demo providers - en producción vendrían del backend
+  const providers: Provider[] = [
+    { id: 'deepseek', name: 'DeepSeek', icon: '🔮', models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'] },
+    { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] },
+    { id: 'anthropic', name: 'Anthropic', icon: '🧠', models: ['claude-3-5-sonnet', 'claude-3-opus', 'claude-3-haiku'] },
+    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama3.2', 'mistral', 'codellama', 'phi3'] },
+  ];
 
-  // Usamos un store para que el estado persista entre aperturas del panel
-  const selectedProvider = writable<Provider>(providers[0]);
-  const selectedModel = writable<string>(providers[0].models[0]);
+  let selectedProvider: Provider | null = $activeProvider || providers[0];
+  let selectedModel: string | null = $activeModel || providers[0].models[0];
 
-  // Reactivos para el template
-  $: currentProvider = $selectedProvider;
-  $: currentModel = $selectedModel;
-  $: availableModels = currentProvider.models;
-
-  // ===========================================================================
-  // ACCIONES
-  // ===========================================================================
-
-  function selectProvider(provider: Provider): void {
-    selectedProvider.set(provider);
-    selectedModel.set(provider.models[0]);
-
-    publish(PROVIDER_TOPICS.SELECTED, {
-      providerId: provider.id,
-      providerName: provider.name
-    });
-
-    publish(PROVIDER_TOPICS.STATE, {
-      providerId: provider.id,
-      providerName: provider.name,
-      modelId: provider.models[0]
-    });
+  function handleProviderSelect(provider: Provider) {
+    selectedProvider = provider;
+    selectedModel = provider.models[0];
   }
 
-  function selectModel(model: string): void {
-    selectedModel.set(model);
+  function handleModelSelect(model: string) {
+    selectedModel = model;
+  }
 
-    publish(PROVIDER_TOPICS.MODEL_SELECTED, {
-      modelId: model,
-      providerId: currentProvider.id,
-      providerName: currentProvider.name
-    });
-
-    publish(PROVIDER_TOPICS.STATE, {
-      providerId: currentProvider.id,
-      providerName: currentProvider.name,
-      modelId: model
-    });
-
-    // Cerrar panel después de seleccionar modelo
-    publish('ui/panel/close', {});
+  function handleConfirm() {
+    if (selectedProvider && selectedModel) {
+      selectProvider(selectedProvider, selectedModel);
+      closePanel();
+    }
   }
 </script>
 
-<div class="panel">
-  {#if panelId === 'provider-selector'}
-    <!-- SELECTOR DE PROVEEDOR -->
-    <ul class="list" role="listbox" aria-label="Proveedores disponibles">
+<div class="provider-panel">
+  <div class="section">
+    <h4>Provider</h4>
+    <div class="provider-list">
       {#each providers as provider (provider.id)}
-        <li>
+        <button
+          class="provider-item"
+          class:active={selectedProvider?.id === provider.id}
+          on:click={() => handleProviderSelect(provider)}
+        >
+          <span class="icon">{provider.icon}</span>
+          <span class="info">
+            <span class="name">{provider.name}</span>
+            <span class="meta">{provider.models.length} modelos</span>
+          </span>
+          {#if selectedProvider?.id === provider.id}
+            <span class="check">✓</span>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  {#if selectedProvider}
+    <div class="section">
+      <h4>Modelo</h4>
+      <div class="model-list">
+        {#each selectedProvider.models as model (model)}
           <button
-            class="list-item"
-            class:active={provider.id === currentProvider.id}
-            on:click={() => selectProvider(provider)}
-            role="option"
-            aria-selected={provider.id === currentProvider.id}
+            class="model-item"
+            class:active={selectedModel === model}
+            on:click={() => handleModelSelect(model)}
           >
-            <span class="list-item__icon" aria-hidden="true">{provider.icon}</span>
-            <span class="list-item__content">
-              <span class="list-item__name">{provider.name}</span>
-              <span class="list-item__meta">{provider.models.length} modelos</span>
-            </span>
-            {#if provider.id === currentProvider.id}
-              <span class="list-item__check" aria-hidden="true">✓</span>
+            {model}
+            {#if selectedModel === model}
+              <span class="check">✓</span>
             {/if}
           </button>
-        </li>
-      {/each}
-    </ul>
-
-  {:else if panelId === 'model-selector'}
-    <!-- SELECTOR DE MODELO -->
-    <header class="header">
-      <span class="header__icon" aria-hidden="true">{currentProvider.icon}</span>
-      <span class="header__name">{currentProvider.name}</span>
-    </header>
-
-    <ul class="list" role="listbox" aria-label="Modelos disponibles">
-      {#each availableModels as model (model)}
-        <li>
-          <button
-            class="list-item"
-            class:active={model === currentModel}
-            on:click={() => selectModel(model)}
-            role="option"
-            aria-selected={model === currentModel}
-          >
-            <span class="list-item__name">{model}</span>
-            {#if model === currentModel}
-              <span class="list-item__check" aria-hidden="true">✓</span>
-            {/if}
-          </button>
-        </li>
-      {/each}
-    </ul>
-
-  {:else}
-    <p class="error">Panel desconocido: {panelId}</p>
+        {/each}
+      </div>
+    </div>
   {/if}
+
+  <div class="actions">
+    <button
+      class="confirm-btn"
+      disabled={!selectedProvider || !selectedModel}
+      on:click={handleConfirm}
+    >
+      Confirmar
+    </button>
+  </div>
 </div>
 
 <style>
-  .panel {
-    padding: 0.75rem;
-  }
-
-  /* Header (para model selector) */
-  .header {
+  .provider-panel {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    margin-bottom: 0.75rem;
-    border-bottom: 1px solid var(--shell-border, #333);
+    flex-direction: column;
+    gap: 1.25rem;
+    height: 100%;
   }
 
-  .header__icon {
-    font-size: 1.25rem;
-  }
-
-  .header__name {
-    font-weight: 500;
-  }
-
-  /* Lista */
-  .list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .section {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
 
-  /* Items */
-  .list-item {
+  h4 {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted, #a3a3a3);
+  }
+
+  .provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .provider-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    width: 100%;
     padding: 0.75rem 1rem;
-    border: 1px solid var(--shell-btn-border, #333);
-    border-radius: 8px;
-    background: var(--shell-btn-bg, #1a1a1a);
-    color: var(--shell-text, #fff);
-    font-size: 0.9rem;
-    text-align: left;
+    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.5rem;
+    color: var(--color-text, #e5e5e5);
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background-color 0.15s, border-color 0.15s;
+    text-align: left;
   }
 
-  .list-item:hover {
-    background: var(--shell-btn-hover, #2a2a2a);
-    border-color: var(--shell-btn-border-hover, #444);
+  .provider-item:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.1));
   }
 
-  .list-item:focus-visible {
-    outline: 2px solid var(--shell-focus, #3b82f6);
-    outline-offset: 2px;
+  .provider-item.active {
+    background: var(--color-active, rgba(59, 130, 246, 0.15));
+    border-color: var(--color-primary, #3b82f6);
   }
 
-  .list-item.active {
-    border-color: var(--shell-primary, #3b82f6);
-    background: rgba(59, 130, 246, 0.1);
-  }
-
-  .list-item__icon {
+  .icon {
     font-size: 1.5rem;
     flex-shrink: 0;
   }
 
-  .list-item__content {
+  .info {
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: 0.125rem;
   }
 
-  .list-item__name {
+  .name {
     font-weight: 500;
   }
 
-  .list-item__meta {
+  .meta {
     font-size: 0.75rem;
-    color: var(--shell-text-secondary, #888);
+    color: var(--color-text-muted, #a3a3a3);
   }
 
-  .list-item__check {
-    color: var(--shell-primary, #3b82f6);
+  .check {
+    color: var(--color-primary, #3b82f6);
     font-weight: bold;
   }
 
-  /* Error */
-  .error {
-    padding: 1rem;
-    color: var(--shell-badge, #ef4444);
-    text-align: center;
+  .model-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .model-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 9999px;
+    color: var(--color-text, #e5e5e5);
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+    font-size: 0.8125rem;
+    font-family: ui-monospace, monospace;
+  }
+
+  .model-item:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.1));
+  }
+
+  .model-item.active {
+    background: var(--color-primary, #3b82f6);
+    border-color: var(--color-primary, #3b82f6);
+    color: white;
+  }
+
+  .model-item .check {
+    color: white;
+    font-size: 0.75rem;
+  }
+
+  .actions {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  }
+
+  .confirm-btn {
+    width: 100%;
+    padding: 0.625rem 1rem;
+    background: var(--color-primary, #3b82f6);
+    border: none;
+    border-radius: 0.375rem;
+    color: white;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 0.15s;
+  }
+
+  .confirm-btn:hover:not(:disabled) {
+    background: var(--color-primary-hover, #2563eb);
+  }
+
+  .confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

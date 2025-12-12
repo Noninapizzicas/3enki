@@ -1,46 +1,52 @@
 /**
- * UI Module Registry - Registro y gestión de módulos UI
+ * UI Module Registry - Registro y coordinación de módulos
  *
  * Responsabilidades:
  * - Registrar/desregistrar módulos
- * - Agregar botones por zona (derived store)
- * - Agregar paneles disponibles (derived store)
+ * - Agrupar módulos por zona (derived stores)
  * - Gestionar suscripciones MQTT de módulos
  * - Proporcionar contexto a módulos
+ * - Obtener componentes de panel
  */
 
 import { writable, derived, get } from 'svelte/store';
 import { publish, subscribe as mqttSubscribe } from './mqtt';
-import type {
-  UIModule,
-  UIButton,
-  UIZone,
-  UIModuleContext,
-  PanelWithModule,
-  TOPICS
-} from './types';
+import type { UIModule, UIZone, ModuleContext, AppState } from './types';
 
-// =============================================================================
+// ============================================================================
 // ESTADO INTERNO
-// =============================================================================
+// ============================================================================
 
 const modulesStore = writable<Map<string, UIModule>>(new Map());
 
-// Almacena funciones de cleanup de suscripciones MQTT por módulo
+// Cleanup functions de suscripciones MQTT por módulo
 const moduleSubscriptions = new Map<string, Array<() => void>>();
 
-// =============================================================================
-// CONTEXTO PARA MÓDULOS
-// =============================================================================
+// Estado de la app para iconos/badges dinámicos
+const appStateStore = writable<AppState>({
+  project: null,
+  provider: null,
+  model: null,
+  prompt: null,
+  credentials: { valid: false, providers: [] },
+  conversationCount: 0
+});
 
-function createModuleContext(moduleId: string): UIModuleContext {
+// Panel activo
+const activePanelStore = writable<string | null>(null);
+
+// ============================================================================
+// CONTEXTO PARA MÓDULOS
+// ============================================================================
+
+function createModuleContext(moduleId: string): ModuleContext {
   return {
-    publish: (topic: string, payload: Record<string, unknown>) => {
-      publish(topic, { ...payload, _source: moduleId });
+    publish: (topic: string, payload: unknown) => {
+      publish(topic, payload);
     },
 
-    subscribe: (topic: string, handler: (payload: unknown) => void) => {
-      const unsub = mqttSubscribe(topic, (_topic, payload) => handler(payload));
+    subscribe: (pattern: string, handler: (topic: string, payload: unknown) => void) => {
+      const unsub = mqttSubscribe(pattern, handler);
 
       // Guardar para cleanup automático
       if (!moduleSubscriptions.has(moduleId)) {
@@ -52,39 +58,50 @@ function createModuleContext(moduleId: string): UIModuleContext {
     },
 
     openPanel: (panelId: string) => {
-      publish('ui/panel/open', { panelId, moduleId });
+      activePanelStore.set(panelId);
     },
 
     closePanel: () => {
-      publish('ui/panel/close', {});
+      activePanelStore.set(null);
     }
   };
 }
 
-// =============================================================================
-// FUNCIONES PÚBLICAS
-// =============================================================================
+// ============================================================================
+// FUNCIONES DE FILTRADO POR ZONA
+// ============================================================================
+
+function filterByZone(modules: Map<string, UIModule>, zone: UIZone): UIModule[] {
+  return [...modules.values()]
+    .filter(m => m.manifest.zone === zone)
+    .sort((a, b) => (a.manifest.button.order ?? 99) - (b.manifest.button.order ?? 99));
+}
+
+// ============================================================================
+// API PÚBLICA - REGISTRO
+// ============================================================================
 
 /**
  * Registrar un módulo UI
  */
-export function register(module: UIModule): void {
+export function register(module: UIModule): () => void {
   const { id } = module.manifest;
 
   // Verificar duplicado
   if (get(modulesStore).has(id)) {
     console.warn(`[Registry] Module "${id}" already registered, skipping`);
-    return;
+    return () => {};
   }
 
   // Añadir al store
   modulesStore.update((m) => {
     m.set(id, module);
-    return new Map(m); // Nueva referencia para reactividad
+    return new Map(m);
   });
 
   // Crear contexto y llamar onMount
   const ctx = createModuleContext(id);
+
   if (module.onMount) {
     try {
       module.onMount(ctx);
@@ -107,10 +124,10 @@ export function register(module: UIModule): void {
     }
   }
 
-  // Publicar evento de registro
-  publish('ui/module/registered', { moduleId: id, name: module.manifest.name });
+  console.log(`[Registry] Module "${id}" registered in zone "${module.manifest.zone}"`);
 
-  console.log(`[Registry] Module "${id}" registered`);
+  // Retornar función de cleanup
+  return () => unregister(id);
 }
 
 /**
@@ -148,10 +165,20 @@ export function unregister(moduleId: string): void {
     return new Map(m);
   });
 
-  // Publicar evento
-  publish('ui/module/unregistered', { moduleId });
-
   console.log(`[Registry] Module "${moduleId}" unregistered`);
+}
+
+/**
+ * Desregistrar todos los módulos de una zona
+ */
+export function unregisterZone(zone: UIZone): void {
+  const modules = get(modulesStore);
+
+  for (const [id, module] of modules) {
+    if (module.manifest.zone === zone) {
+      unregister(id);
+    }
+  }
 }
 
 /**
@@ -161,67 +188,112 @@ export function getModule(moduleId: string): UIModule | undefined {
   return get(modulesStore).get(moduleId);
 }
 
+// ============================================================================
+// API PÚBLICA - PANELES
+// ============================================================================
+
 /**
- * Verificar si un módulo está registrado
+ * Abrir un panel
  */
-export function hasModule(moduleId: string): boolean {
-  return get(modulesStore).has(moduleId);
+export function openPanel(panelId: string): void {
+  activePanelStore.set(panelId);
 }
 
-// =============================================================================
-// STORES DERIVADOS
-// =============================================================================
+/**
+ * Cerrar el panel activo
+ */
+export function closePanel(): void {
+  activePanelStore.set(null);
+}
 
 /**
- * Store derivado: botones agrupados por zona
+ * Obtener componente de un panel por ID
  */
-export const buttonsByZone = derived(modulesStore, ($modules) => {
-  const zones: Record<UIZone, UIButton[]> = {
-    topbar: [],
-    sidebar: [],
-    bottombar: [],
-    'chat-top': [],
-    'chat-bottom': []
-  };
+export function getPanelComponent(panelId: string) {
+  const modules = get(modulesStore);
 
-  for (const module of $modules.values()) {
-    const moduleZones = module.manifest.zones;
-    if (!moduleZones) continue;
-
-    for (const [zone, buttons] of Object.entries(moduleZones)) {
-      if (buttons && zone in zones) {
-        zones[zone as UIZone].push(...buttons);
-      }
+  for (const module of modules.values()) {
+    const panel = module.manifest.panels?.find(p => p.id === panelId);
+    if (panel) {
+      return module.PanelComponent || null;
     }
   }
 
-  // Ordenar por 'order' (menor primero, default 99)
-  for (const zone of Object.keys(zones) as UIZone[]) {
-    zones[zone].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-  }
-
-  return zones;
-});
+  return null;
+}
 
 /**
- * Store derivado: todos los paneles con su módulo
+ * Obtener config de un panel por ID
  */
-export const panels = derived(modulesStore, ($modules) => {
-  const allPanels: PanelWithModule[] = [];
+export function getPanelConfig(panelId: string) {
+  const modules = get(modulesStore);
 
-  for (const [moduleId, module] of $modules.entries()) {
-    const modulePanels = module.manifest.panels;
-    if (!modulePanels) continue;
-
-    for (const panel of modulePanels) {
-      allPanels.push({ panel, moduleId });
+  for (const module of modules.values()) {
+    const panel = module.manifest.panels?.find(p => p.id === panelId);
+    if (panel) {
+      return panel;
     }
   }
 
-  return allPanels;
-});
+  return null;
+}
+
+// ============================================================================
+// API PÚBLICA - APP STATE
+// ============================================================================
 
 /**
- * Store de módulos (readonly para componentes)
+ * Actualizar estado de la app (para iconos dinámicos)
+ */
+export function updateAppState(partial: Partial<AppState>): void {
+  appStateStore.update(state => ({ ...state, ...partial }));
+}
+
+/**
+ * Obtener estado actual de la app
+ */
+export function getAppState(): AppState {
+  return get(appStateStore);
+}
+
+// ============================================================================
+// STORES DERIVADOS POR ZONA
+// ============================================================================
+
+/**
+ * Módulos de la barra de trabajo (plegable, arriba)
+ */
+export const workBarModules = derived(modulesStore, ($m) => filterByZone($m, 'work-bar'));
+
+/**
+ * Módulos de la barra config del chat
+ */
+export const chatConfigModules = derived(modulesStore, ($m) => filterByZone($m, 'chat-config'));
+
+/**
+ * Módulos de la barra de herramientas del chat
+ */
+export const chatToolsModules = derived(modulesStore, ($m) => filterByZone($m, 'chat-tools'));
+
+/**
+ * Módulos de la barra lateral sistema
+ */
+export const systemBarModules = derived(modulesStore, ($m) => filterByZone($m, 'system-bar'));
+
+/**
+ * Panel activo
+ */
+export const activePanel = {
+  subscribe: activePanelStore.subscribe,
+  set: activePanelStore.set
+};
+
+/**
+ * Estado de la app (readonly para componentes)
+ */
+export const appState = { subscribe: appStateStore.subscribe };
+
+/**
+ * Todos los módulos (readonly)
  */
 export const modules = { subscribe: modulesStore.subscribe };

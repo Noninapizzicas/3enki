@@ -14,52 +14,104 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┬───┐
-│ BARRA SUPERIOR (plegable)                                    [▼]│   │
-│ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                              │   │
-│ │proj│ │prov│ │prmp│ │cred│ │hist│  ← se oculta/muestra        │   │
-│ └────┘ └────┘ └────┘ └────┘ └────┘                              │   │
+│ 1. BARRA MÓDULOS DE TRABAJO (plegable)                       [▼]│   │
+│    🍕menu  📦productos  💰ventas  📊stats   ← cambia x proyecto │   │
 ├─────────────────────────────────────────────────────────────────┤ B │
 │                                                                  │ A │
+│ 2. ÁREA CHAT (scroll vertical, casi toda la pantalla)           │ R │
 │                                                                  │ R │
-│                     ÁREA DE CHAT                                 │ R │
-│                   (scroll vertical)                              │ A │
-│                                                                  │   │
-│  ┌─────────────────────────────────────────────────────────┐    │ L │
-│  │ 🤖 Respuesta AI...                                      │    │ A │
-│  └─────────────────────────────────────────────────────────┘    │ T │
-│                                                                  │ E │
-│  ┌─────────────────────────────────────────────────────────┐    │ R │
-│  │ 👤 Tu mensaje...                                        │    │ A │
-│  └─────────────────────────────────────────────────────────┘    │ L │
-│                                                                  │   │
-├─────────────────────────────────────────────────────────────────┤ D │
-│ INPUT                                                            │ E │
-│ ┌─────────────────────────────────────────────────────┐ ┌────┐  │ R │
-│ │ Escribe tu mensaje...                               │ │ ➤  │  │   │
-│ └─────────────────────────────────────────────────────┘ └────┘  │ ⚙ │
+│    ┌─────────────────────────────────────────────────────┐      │ A │
+│    │ 🤖 Respuesta AI...                                  │      │   │
+│    └─────────────────────────────────────────────────────┘      │ L │
+│                                                                  │ A │
+│    ┌─────────────────────────────────────────────────────┐      │ T │
+│    │ 👤 Tu mensaje...                                    │      │ E │
+│    └─────────────────────────────────────────────────────┘      │ R │
+│                                                                  │ A │
+├─────────────────────────────────────────────────────────────────┤ L │
+│ 3. BARRA CHAT SUPERIOR (config del chat)                        │   │
+│    🟢proj  🤖prov  📝prmp  🔐cred  💬hist                       │ ⚙ │
 ├─────────────────────────────────────────────────────────────────┤ 🔔│
-│ BARRA INFERIOR (siempre visible)                                 │ 👤│
-│ ┌────┐ ┌────┐ ┌────┐      [adjuntos: file.pdf ✕]                │ ❓│
-│ │file│ │edit│ │ pdf│                                            │   │
-│ └────┘ └────┘ └────┘                                            │   │
+│ 4. INPUT CHAT                                                    │ 👤│
+│    [_________________________ mensaje ________________] [➤]     │ ❓│
+├─────────────────────────────────────────────────────────────────┤   │
+│ 5. BARRA CHAT INFERIOR (herramientas)                           │   │
+│    📂files  📄editor  📕pdf     [doc.pdf ✕] [img.png ✕]         │   │
 └─────────────────────────────────────────────────────────────────┴───┘
 ```
 
-### Zonas
+### Zonas (de arriba a abajo)
 
-| Zona | Comportamiento | Contenido |
-|------|----------------|-----------|
-| **Barra superior** | Plegable (toggle con icono ▼/▲) | Módulos específicos: proyecto, provider, prompts, etc. |
-| **Área chat** | Scroll vertical, ocupa mayor espacio | Mensajes de conversación |
-| **Input** | Fijo abajo del chat | Campo texto + botón enviar |
-| **Barra inferior** | Siempre visible | Herramientas: archivos, editor, PDF, adjuntos |
-| **Barra lateral derecha** | Flotante, semi-transparente, iconos pequeños (~1cm) | Sistema: config, notificaciones, perfil, ayuda |
+| # | Zona | Comportamiento | Contenido |
+|---|------|----------------|-----------|
+| 1 | **Barra módulos trabajo** | Plegable (toggle ▼/▲) | Módulos del proyecto activo (configurable) |
+| 2 | **Área chat** | Scroll vertical, mayor espacio | Mensajes de conversación |
+| 3 | **Barra chat superior** | Fija | Config: proyecto, provider, prompts, creds, history |
+| 4 | **Input chat** | Fija | Campo texto + botón enviar |
+| 5 | **Barra chat inferior** | Fija | Herramientas: files, editor, PDF + chips adjuntos |
+| → | **Barra lateral derecha** | Flotante, semi-transparente | Sistema: ⚙️🔔👤❓ |
+
+### El "Sandwich" del Chat
+
+Todo lo necesario para enviar un mensaje está junto en la parte inferior:
+
+```
+┌─────────────────────────────────────────┐
+│ BARRA CHAT SUPERIOR                     │  ← Con qué AI/proyecto/prompt
+│ 🟢proj  🤖prov  📝prmp  🔐cred  💬hist  │
+├─────────────────────────────────────────┤
+│ INPUT                                   │  ← Qué escribo
+│ [__________________] [➤]                │
+├─────────────────────────────────────────┤
+│ BARRA CHAT INFERIOR                     │  ← Qué adjunto/herramientas
+│ 📂 📄 📕   [file.pdf ✕]                 │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Workspaces (Barra Módulos de Trabajo)
+
+La barra superior cambia según el proyecto/contexto:
+
+```typescript
+const workspaces = {
+  'pos-pizzeria': {
+    modules: ['menu-generator', 'productos', 'ventas', 'stats'],
+    icon: '🍕'
+  },
+  'desarrollo': {
+    modules: ['build', 'test', 'deploy', 'git'],
+    icon: '💻'
+  },
+  'general': {
+    modules: ['notas', 'tareas', 'calendario'],
+    icon: '📋'
+  }
+};
+```
+
+**Características:**
+- Se pliega cuando no se necesita → más espacio para chat
+- Configurable por proyecto
+- No interfiere con el flujo del chat
 
 ---
 
 ## Módulos por Zona
 
-### Barra Superior (plegable) - Módulos Específicos
+### 1. Barra Módulos de Trabajo (plegable)
+
+Cambia según el workspace/proyecto activo. Ejemplo POS:
+
+| Módulo | Icono | Backend |
+|--------|-------|---------|
+| menu-generator | 🍕 | menu-generator |
+| productos | 📦 | productos |
+| ventas | 💰 | ventas |
+| stats | 📊 | metricas |
+
+### 3. Barra Chat Superior (config)
 
 | Módulo | Icono Base | Icono Dinámico | Backend |
 |--------|------------|----------------|---------|
@@ -69,13 +121,7 @@
 | credentials | 🔐 | ✓ ok / ⚠️ falta | credential-manager |
 | history | 💬 | badge con número | conversation-manager |
 
-### Área Central - Chat
-
-| Módulo | Función | Backend |
-|--------|---------|---------|
-| chat | Mensajes + input + envío + scroll | conversation-manager, ai-gateway |
-
-### Barra Inferior (siempre visible) - Herramientas
+### 5. Barra Chat Inferior (herramientas)
 
 | Módulo | Icono | Función | Backend |
 |--------|-------|---------|---------|
@@ -204,6 +250,8 @@ pdf/extract/response     → texto extraído de PDF
 4. ✅ Iconos dinámicos que reflejan estado actual
 5. ✅ Colores como identidad de proyecto
 6. ✅ Todo en una pantalla, paneles superpuestos
+7. ✅ Barra de trabajo configurable por proyecto/workspace
+8. ✅ Chat con "sandwich" (config arriba, input medio, herramientas abajo)
 
 ---
 

@@ -165,3 +165,29 @@ pdf/extract/response     → texto extraído de PDF
 4. ✅ Iconos dinámicos que reflejan estado actual
 5. ✅ Colores como identidad de proyecto
 6. ✅ Todo en una pantalla, paneles superpuestos
+
+---
+
+## Ideas Futuras (Agentes AI)
+
+### Agente: project-assistant
+
+Asistente inteligente para crear proyectos:
+- Escucha: `project.create.assist`
+- Sugiere: nombre, color, icono
+- Basado en descripción del usuario
+- UX: muestra sugerencias, usuario elige
+
+```javascript
+// Flujo
+1. Usuario: "Nuevo proyecto sobre mi restaurante"
+2. Agente sugiere: { names: ["La Cocina", ...], color: "🟠", icon: "🍽️" }
+3. Usuario elige o modifica
+```
+
+### Agente: file-organizer (futuro)
+
+Organizador de archivos por contexto:
+- Sugiere dónde guardar archivos
+- Por proyecto, conversación, fecha
+- Modo sugerencia (no automático)

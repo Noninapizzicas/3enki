@@ -8,6 +8,12 @@ const config = {
   kit: {
     adapter: adapter(),
     alias: {
+      '$lib': 'src/lib',
+      '$lib/ui-core': 'src/lib/ui-core',
+      '$lib/stores': 'src/lib/stores',
+      '$lib/components': 'src/lib/components',
+      '$lib/modules': 'src/lib/modules',
+      // Legacy aliases (compatibilidad)
       '$ui-core': 'src/lib/ui-core',
       '$modules': 'src/lib/modules'
     }

@@ -2,25 +2,30 @@
  * UI Store - Estado de la interfaz
  *
  * Gestiona:
- * - Panel activo
+ * - Panel activo (re-exportado del registry)
  * - WorkBar expandida/colapsada
  * - Notificaciones
  */
 
 import { writable, derived } from 'svelte/store';
+import {
+  activePanel as registryActivePanel,
+  openPanel as registryOpenPanel,
+  closePanel as registryClosePanel
+} from '$lib/ui-core/registry';
 
 // ============================================================================
-// PANEL ACTIVO
+// PANEL ACTIVO (delegado al registry para consistencia)
 // ============================================================================
 
-export const activePanel = writable<string | null>(null);
+export const activePanel = registryActivePanel;
 
 export function openPanel(panelId: string): void {
-  activePanel.set(panelId);
+  registryOpenPanel(panelId);
 }
 
 export function closePanel(): void {
-  activePanel.set(null);
+  registryClosePanel();
 }
 
 export const isPanelOpen = derived(activePanel, ($panel) => $panel !== null);

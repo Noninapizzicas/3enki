@@ -1,0 +1,280 @@
+# Diseño UI - Event Core Frontend
+
+## Principios Fundamentales
+
+1. **Pantalla única** - Todo el trabajo fluye en una sola vista, sin navegación
+2. **Lenguaje visual** - Mínimo texto, máximo uso de iconos y colores
+3. **Iconos dinámicos** - Los botones reflejan el estado actual (no genéricos)
+4. **Colores = identidad** - Cada proyecto tiene un color distintivo
+5. **1 clic = 1 panel** - Sin doble-clic ni long-press
+
+---
+
+## Layout de Pantalla
+
+```
+┌─────────────────────────────────────────────────────────────────┬───┐
+│ 1. BARRA MÓDULOS DE TRABAJO (plegable)                       [▼]│   │
+│    🍕menu  📦productos  💰ventas  📊stats   ← cambia x proyecto │   │
+├─────────────────────────────────────────────────────────────────┤ B │
+│                                                                  │ A │
+│ 2. ÁREA CHAT (scroll vertical, casi toda la pantalla)           │ R │
+│                                                                  │ R │
+│    ┌─────────────────────────────────────────────────────┐      │ A │
+│    │ 🤖 Respuesta AI...                                  │      │   │
+│    └─────────────────────────────────────────────────────┘      │ L │
+│                                                                  │ A │
+│    ┌─────────────────────────────────────────────────────┐      │ T │
+│    │ 👤 Tu mensaje...                                    │      │ E │
+│    └─────────────────────────────────────────────────────┘      │ R │
+│                                                                  │ A │
+├─────────────────────────────────────────────────────────────────┤ L │
+│ 3. BARRA CHAT SUPERIOR (config del chat)                        │   │
+│    🟢proj  🤖prov  📝prmp  🔐cred  💬hist                       │ ⚙ │
+├─────────────────────────────────────────────────────────────────┤ 🔔│
+│ 4. INPUT CHAT                                                    │ 👤│
+│    [_________________________ mensaje ________________] [➤]     │ ❓│
+├─────────────────────────────────────────────────────────────────┤   │
+│ 5. BARRA CHAT INFERIOR (herramientas)                           │   │
+│    📂files  📄editor  📕pdf     [doc.pdf ✕] [img.png ✕]         │   │
+└─────────────────────────────────────────────────────────────────┴───┘
+```
+
+### Zonas (de arriba a abajo)
+
+| # | Zona | Comportamiento | Contenido |
+|---|------|----------------|-----------|
+| 1 | **Barra módulos trabajo** | Plegable (toggle ▼/▲) | Módulos del proyecto activo (configurable) |
+| 2 | **Área chat** | Scroll vertical, mayor espacio | Mensajes de conversación |
+| 3 | **Barra chat superior** | Fija | Config: proyecto, provider, prompts, creds, history |
+| 4 | **Input chat** | Fija | Campo texto + botón enviar |
+| 5 | **Barra chat inferior** | Fija | Herramientas: files, editor, PDF + chips adjuntos |
+| → | **Barra lateral derecha** | Flotante, semi-transparente | Sistema: ⚙️🔔👤❓ |
+
+### El "Sandwich" del Chat
+
+Todo lo necesario para enviar un mensaje está junto en la parte inferior:
+
+```
+┌─────────────────────────────────────────┐
+│ BARRA CHAT SUPERIOR                     │  ← Con qué AI/proyecto/prompt
+│ 🟢proj  🤖prov  📝prmp  🔐cred  💬hist  │
+├─────────────────────────────────────────┤
+│ INPUT                                   │  ← Qué escribo
+│ [__________________] [➤]                │
+├─────────────────────────────────────────┤
+│ BARRA CHAT INFERIOR                     │  ← Qué adjunto/herramientas
+│ 📂 📄 📕   [file.pdf ✕]                 │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Workspaces (Barra Módulos de Trabajo)
+
+La barra superior cambia según el proyecto/contexto:
+
+```typescript
+const workspaces = {
+  'pos-pizzeria': {
+    modules: ['menu-generator', 'productos', 'ventas', 'stats'],
+    icon: '🍕'
+  },
+  'desarrollo': {
+    modules: ['build', 'test', 'deploy', 'git'],
+    icon: '💻'
+  },
+  'general': {
+    modules: ['notas', 'tareas', 'calendario'],
+    icon: '📋'
+  }
+};
+```
+
+**Características:**
+- Se pliega cuando no se necesita → más espacio para chat
+- Configurable por proyecto
+- No interfiere con el flujo del chat
+
+---
+
+## Módulos por Zona
+
+### 1. Barra Módulos de Trabajo (plegable)
+
+Cambia según el workspace/proyecto activo. Ejemplo POS:
+
+| Módulo | Icono | Backend |
+|--------|-------|---------|
+| menu-generator | 🍕 | menu-generator |
+| productos | 📦 | productos |
+| ventas | 💰 | ventas |
+| stats | 📊 | metricas |
+
+### 3. Barra Chat Superior (config)
+
+| Módulo | Icono Base | Icono Dinámico | Backend |
+|--------|------------|----------------|---------|
+| project | 📁 | 🟢🔵🟣🟠 (color del proyecto) | project-manager |
+| provider | 🔌 | 🤖🧠🔮🦙 (icono del provider) | ai-gateway |
+| prompts | 📝 | ✨ si hay preset activo | prompt-manager |
+| credentials | 🔐 | ✓ ok / ⚠️ falta | credential-manager |
+| history | 💬 | badge con número | conversation-manager |
+
+### 5. Barra Chat Inferior (herramientas)
+
+| Módulo | Icono | Función | Backend |
+|--------|-------|---------|---------|
+| files | 📂 | Explorador, adjuntar archivos | file-browser |
+| editor | 📄 | Editor texto/código (Monaco) | text-editor |
+| pdf | 📕 | Visor PDF | pdf-viewer |
+| adjuntos | - | Chips de archivos adjuntos [file.pdf ✕] | - |
+
+### Barra Lateral Derecha (flotante) - Sistema
+
+| Icono | Función | Descripción |
+|-------|---------|-------------|
+| ⚙️ | Config | Ajustes del sistema |
+| 🔔 | Notificaciones | Alertas y eventos |
+| 👤 | Perfil | Usuario actual |
+| ❓ | Ayuda | Documentación, atajos |
+
+**Características de la barra lateral:**
+- Flotante sobre el contenido
+- Semi-transparente (no bloquea visualmente)
+- Iconos pequeños (~1cm o menos)
+- Ancho mínimo, alto según número de iconos
+- Siempre visible pero discreta
+
+---
+
+## Sistema Visual
+
+### Colores de Proyecto
+
+```typescript
+const projectColors = [
+  { id: 'green',  hex: '#22c55e', emoji: '🟢' },
+  { id: 'blue',   hex: '#3b82f6', emoji: '🔵' },
+  { id: 'purple', hex: '#a855f7', emoji: '🟣' },
+  { id: 'orange', hex: '#f97316', emoji: '🟠' },
+  { id: 'red',    hex: '#ef4444', emoji: '🔴' },
+  { id: 'yellow', hex: '#eab308', emoji: '🟡' },
+  { id: 'cyan',   hex: '#06b6d4', emoji: '🩵' },
+  { id: 'pink',   hex: '#ec4899', emoji: '🩷' },
+];
+```
+
+### Iconos de Provider
+
+```typescript
+const providerIcons = {
+  openai:    '🤖',  // ChatGPT, GPT-4
+  anthropic: '🧠',  // Claude
+  deepseek:  '🔮',  // DeepSeek
+  ollama:    '🦙',  // Modelos locales
+};
+```
+
+### Badges y Estados
+
+- **Número**: cantidad (ej: 5 conversaciones)
+- **✓**: estado OK
+- **⚠️**: requiere atención
+- **Barra de color**: indicador visual del proyecto activo
+
+---
+
+## Comunicación MQTT
+
+### Frontend Publica
+
+```
+provider/selected        → { providerId, modelId }
+project/activate         → { projectId }
+conversation/send        → { conversationId, content, attachments }
+ui/panel/open            → { panelId }
+ui/panel/close           → {}
+```
+
+### Frontend Suscribe
+
+```
+provider/state           → estado actual del provider
+project/activated        → proyecto activo cambió
+conversation/+/message   → mensajes nuevos
+ai/chat/stream/+         → streaming de respuestas
+credential/resolved      → credenciales disponibles
+file/list/response       → lista de archivos
+editor/saved             → archivo guardado
+pdf/extract/response     → texto extraído de PDF
+```
+
+---
+
+## Flujo de Adjuntar Archivos
+
+1. Usuario clica 📂 (files)
+2. Panel muestra explorador del proyecto
+3. Selecciona archivo(s)
+4. Aparecen en barra inferior: `[doc.pdf ✕] [code.js ✕]`
+5. Al enviar mensaje, archivos van incluidos
+6. Backend procesa según tipo (extrae texto de PDF, incluye código, etc.)
+
+---
+
+## Paneles
+
+- Posición: **parte superior**
+- Tamaño: **max 33vh** (1/3 de pantalla)
+- Contenido: lista de opciones o tabs si es complejo
+- Cierre: clic fuera o selección
+
+---
+
+## Tecnologías Frontend
+
+- **Framework**: SvelteKit
+- **Estado**: Svelte stores (writable, derived)
+- **Comunicación**: MQTT sobre WebSocket (puerto 9001)
+- **Editor**: Monaco Editor (para text-editor)
+- **PDF**: PDF.js (para pdf-viewer)
+
+---
+
+## Decisiones de Arquitectura
+
+1. ❌ NO fallback local - solo MQTT directo al broker
+2. ❌ NO endpoints /ui/* adicionales - frontend transforma datos
+3. ❌ NO doble-clic ni long-press - solo clic simple
+4. ✅ Iconos dinámicos que reflejan estado actual
+5. ✅ Colores como identidad de proyecto
+6. ✅ Todo en una pantalla, paneles superpuestos
+7. ✅ Barra de trabajo configurable por proyecto/workspace
+8. ✅ Chat con "sandwich" (config arriba, input medio, herramientas abajo)
+
+---
+
+## Ideas Futuras (Agentes AI)
+
+### Agente: project-assistant
+
+Asistente inteligente para crear proyectos:
+- Escucha: `project.create.assist`
+- Sugiere: nombre, color, icono
+- Basado en descripción del usuario
+- UX: muestra sugerencias, usuario elige
+
+```javascript
+// Flujo
+1. Usuario: "Nuevo proyecto sobre mi restaurante"
+2. Agente sugiere: { names: ["La Cocina", ...], color: "🟠", icon: "🍽️" }
+3. Usuario elige o modifica
+```
+
+### Agente: file-organizer (futuro)
+
+Organizador de archivos por contexto:
+- Sugiere dónde guardar archivos
+- Por proyecto, conversación, fecha
+- Modo sugerencia (no automático)

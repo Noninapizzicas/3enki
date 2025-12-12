@@ -1,128 +1,241 @@
 <script lang="ts">
-  import { eventBus } from '$ui-core';
-  import { providers } from './index';
+  /**
+   * ProviderPanel - Panel de selección de provider y modelo
+   *
+   * Features:
+   * - Lista de providers disponibles
+   * - Modelos por provider
+   * - Integración con stores
+   */
+
+  import { PROVIDER_ICONS } from '$lib/ui-core';
+  import { activeProvider, activeModel, selectProvider } from '$lib/stores';
+  import { closePanel } from '$lib/stores/ui';
+  import type { Provider } from '$lib/ui-core';
 
   export let panelId: string;
-  export let currentProviderId: string = 'deepseek';
-  export let currentModelId: string = 'deepseek-chat';
 
-  $: currentProvider = providers.find(p => p.id === currentProviderId) || providers[0];
-  $: availableModels = currentProvider.models;
+  // Demo providers - en producción vendrían del backend
+  const providers: Provider[] = [
+    { id: 'deepseek', name: 'DeepSeek', icon: '🔮', models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'] },
+    { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] },
+    { id: 'anthropic', name: 'Anthropic', icon: '🧠', models: ['claude-3-5-sonnet', 'claude-3-opus', 'claude-3-haiku'] },
+    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama3.2', 'mistral', 'codellama', 'phi3'] },
+  ];
 
-  function selectProvider(providerId: string) {
-    currentProviderId = providerId;
-    const provider = providers.find(p => p.id === providerId)!;
-    currentModelId = provider.models[0];
+  let selectedProvider: Provider | null = $activeProvider || providers[0];
+  let selectedModel: string | null = $activeModel || providers[0].models[0];
 
-    eventBus.emit('provider.selected', {
-      providerId,
-      providerName: provider.name
-    }, 'provider');
+  function handleProviderSelect(provider: Provider) {
+    selectedProvider = provider;
+    selectedModel = provider.models[0];
   }
 
-  function selectModel(modelId: string) {
-    currentModelId = modelId;
+  function handleModelSelect(model: string) {
+    selectedModel = model;
+  }
 
-    eventBus.emit('model.selected', {
-      modelId,
-      providerId: currentProviderId
-    }, 'provider');
-
-    // Cerrar panel
-    eventBus.emit('ui.panel.close', {});
+  function handleConfirm() {
+    if (selectedProvider && selectedModel) {
+      selectProvider(selectedProvider, selectedModel);
+      closePanel();
+    }
   }
 </script>
 
 <div class="provider-panel">
-  {#if panelId === 'provider-selector'}
+  <div class="section">
+    <h4>Provider</h4>
     <div class="provider-list">
-      {#each providers as provider}
+      {#each providers as provider (provider.id)}
         <button
           class="provider-item"
-          class:active={provider.id === currentProviderId}
-          on:click={() => selectProvider(provider.id)}
+          class:active={selectedProvider?.id === provider.id}
+          on:click={() => handleProviderSelect(provider)}
         >
-          <span class="provider-icon">{provider.icon}</span>
-          <span class="provider-name">{provider.name}</span>
-          <span class="provider-models">{provider.models.length} modelos</span>
+          <span class="icon">{provider.icon}</span>
+          <span class="info">
+            <span class="name">{provider.name}</span>
+            <span class="meta">{provider.models.length} modelos</span>
+          </span>
+          {#if selectedProvider?.id === provider.id}
+            <span class="check">✓</span>
+          {/if}
         </button>
       {/each}
     </div>
+  </div>
 
-  {:else if panelId === 'model-selector'}
-    <div class="model-header">
-      <span class="provider-icon">{currentProvider.icon}</span>
-      <span>{currentProvider.name}</span>
-    </div>
-    <div class="model-list">
-      {#each availableModels as model}
-        <button
-          class="model-item"
-          class:active={model === currentModelId}
-          on:click={() => selectModel(model)}
-        >
-          <span class="model-name">{model}</span>
-        </button>
-      {/each}
+  {#if selectedProvider}
+    <div class="section">
+      <h4>Modelo</h4>
+      <div class="model-list">
+        {#each selectedProvider.models as model (model)}
+          <button
+            class="model-item"
+            class:active={selectedModel === model}
+            on:click={() => handleModelSelect(model)}
+          >
+            {model}
+            {#if selectedModel === model}
+              <span class="check">✓</span>
+            {/if}
+          </button>
+        {/each}
+      </div>
     </div>
   {/if}
+
+  <div class="actions">
+    <button
+      class="confirm-btn"
+      disabled={!selectedProvider || !selectedModel}
+      on:click={handleConfirm}
+    >
+      Confirmar
+    </button>
+  </div>
 </div>
 
 <style>
   .provider-panel {
-    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    height: 100%;
   }
 
-  .provider-list, .model-list {
+  .section {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
 
-  .provider-item, .model-item {
+  h4 {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted, #a3a3a3);
+  }
+
+  .provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .provider-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    border: 1px solid #333;
-    border-radius: 8px;
-    background: #1a1a1a;
-    color: #fff;
+    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.5rem;
+    color: var(--color-text, #e5e5e5);
     cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .provider-item:hover, .model-item:hover {
-    background: #2a2a2a;
-    border-color: #444;
-  }
-
-  .provider-item.active, .model-item.active {
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
-  }
-
-  .provider-icon {
-    font-size: 1.5rem;
-  }
-
-  .provider-name, .model-name {
-    flex: 1;
+    transition: background-color 0.15s, border-color 0.15s;
     text-align: left;
   }
 
-  .provider-models {
-    font-size: 0.75rem;
-    color: #888;
+  .provider-item:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.1));
   }
 
-  .model-header {
+  .provider-item.active {
+    background: var(--color-active, rgba(59, 130, 246, 0.15));
+    border-color: var(--color-primary, #3b82f6);
+  }
+
+  .icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .name {
+    font-weight: 500;
+  }
+
+  .meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #a3a3a3);
+  }
+
+  .check {
+    color: var(--color-primary, #3b82f6);
+    font-weight: bold;
+  }
+
+  .model-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .model-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding-bottom: 0.75rem;
-    margin-bottom: 0.75rem;
-    border-bottom: 1px solid #333;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 9999px;
+    color: var(--color-text, #e5e5e5);
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+    font-size: 0.8125rem;
+    font-family: ui-monospace, monospace;
+  }
+
+  .model-item:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.1));
+  }
+
+  .model-item.active {
+    background: var(--color-primary, #3b82f6);
+    border-color: var(--color-primary, #3b82f6);
+    color: white;
+  }
+
+  .model-item .check {
+    color: white;
+    font-size: 0.75rem;
+  }
+
+  .actions {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  }
+
+  .confirm-btn {
+    width: 100%;
+    padding: 0.625rem 1rem;
+    background: var(--color-primary, #3b82f6);
+    border: none;
+    border-radius: 0.375rem;
+    color: white;
+    cursor: pointer;
+    font-size: 0.875rem;
     font-weight: 500;
+    transition: background-color 0.15s;
+  }
+
+  .confirm-btn:hover:not(:disabled) {
+    background: var(--color-primary-hover, #2563eb);
+  }
+
+  .confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

@@ -32,6 +32,7 @@
   import ChatTools from './ChatTools.svelte';
   import SystemBar from './SystemBar.svelte';
   import Panel from './Panel.svelte';
+  import { ToastContainer } from '$lib/components/base';
 
   let cleanupWorkspace: (() => void) | null = null;
   let cleanupChat: (() => void) | null = null;
@@ -104,6 +105,9 @@
 
   <!-- System Bar (floating right) -->
   <SystemBar />
+
+  <!-- Toast notifications -->
+  <ToastContainer />
 
   <!-- Active Panel -->
   {#if $activePanel && panelConfig}

@@ -6,11 +6,15 @@
    * - Scroll vertical
    * - Auto-scroll al nuevo mensaje
    * - Mensaje vacío cuando no hay conversación
+   * - Indicador de typing/streaming
+   * - Indicador de conexión
    */
 
-  import { messages, hasConversation } from '$lib/stores';
-  import { Message } from '$lib/components/base';
+  import { messages, hasConversation, isStreaming } from '$lib/stores';
+  import { Message, ConnectionStatus } from '$lib/components/base';
+  import { connected } from '$lib/ui-core';
   import { afterUpdate } from 'svelte';
+  import { fade } from 'svelte/transition';
 
   let containerEl: HTMLDivElement;
   let shouldAutoScroll = true;
@@ -37,11 +41,28 @@
   bind:this={containerEl}
   on:scroll={handleScroll}
 >
+  <!-- Status bar -->
+  <div class="status-bar">
+    <ConnectionStatus showLabel={!$connected} />
+  </div>
+
   {#if $messages.length > 0}
     <div class="messages">
       {#each $messages as message (message.id)}
         <Message {message} />
       {/each}
+
+      <!-- Typing indicator -->
+      {#if $isStreaming}
+        <div class="typing-indicator" transition:fade={{ duration: 150 }}>
+          <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span class="typing-text">Escribiendo...</span>
+        </div>
+      {/if}
     </div>
   {:else if $hasConversation}
     <div class="empty">
@@ -67,11 +88,69 @@
     flex-direction: column;
   }
 
+  /* Status bar */
+  .status-bar {
+    position: sticky;
+    top: 0;
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.25rem 0.5rem;
+    z-index: 5;
+  }
+
   .messages {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     width: 100%;
+  }
+
+  /* Typing indicator */
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    border-radius: 1rem;
+    width: fit-content;
+  }
+
+  .typing-dots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .typing-dots span {
+    width: 6px;
+    height: 6px;
+    background: var(--color-primary, #3b82f6);
+    border-radius: 50%;
+    animation: typing-bounce 1.4s ease-in-out infinite;
+  }
+
+  .typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes typing-bounce {
+    0%, 60%, 100% {
+      transform: translateY(0);
+      opacity: 0.6;
+    }
+    30% {
+      transform: translateY(-4px);
+      opacity: 1;
+    }
+  }
+
+  .typing-text {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #a3a3a3);
   }
 
   .empty {

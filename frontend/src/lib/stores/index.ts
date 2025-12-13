@@ -4,7 +4,9 @@
  * Agrupa todos los stores de la aplicación:
  * - UI: panel activo, workbar, notificaciones
  * - Workspace: proyecto, provider, modelo, prompt
+ * - Chat: mensajes, conversación
  * - Attachments: archivos adjuntos
+ * - Persistence: guardar/cargar estado
  */
 
 // UI Store
@@ -50,7 +52,8 @@ export {
   initWorkspaceSubscriptions,
   getActiveProject,
   getActiveProvider,
-  getActiveModel
+  getActiveModel,
+  getPersistedWorkspace
 } from './workspace';
 
 // Chat Store
@@ -95,3 +98,27 @@ export {
   getAttachments,
   getAttachmentCount
 } from './attachments';
+
+// Persistence Store
+export {
+  loadState,
+  saveState,
+  getState,
+  clearState,
+  saveWorkspace,
+  saveUI,
+  savePanelSize,
+  getPanelSize,
+  saveConversation
+} from './persistence';
+
+// Theme Store
+export {
+  themeMode,
+  effectiveTheme,
+  themeColors,
+  setTheme,
+  toggleTheme,
+  applyTheme
+} from './theme';
+export type { ThemeMode, ThemeColors } from './theme';

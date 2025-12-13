@@ -49,10 +49,15 @@ export interface UIModuleButton {
   order?: number;
 }
 
+export type PanelPosition = 'top' | 'bottom' | 'left' | 'right' | 'center';
+
 export interface UIModulePanel {
   id: string;
   title: string;
   size: 'sm' | 'md' | 'lg';
+  position?: PanelPosition;
+  resizable?: boolean;
+  draggable?: boolean;
 }
 
 export interface UIModuleManifest {

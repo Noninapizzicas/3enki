@@ -110,6 +110,9 @@
     <Panel
       title={panelConfig.title}
       size={panelConfig.size}
+      position={panelConfig.position || 'top'}
+      resizable={panelConfig.resizable !== false}
+      draggable={panelConfig.draggable || false}
       open={true}
       on:close={handlePanelClose}
     >

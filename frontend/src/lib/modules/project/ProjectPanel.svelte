@@ -1,14 +1,15 @@
 <script lang="ts">
   /**
-   * ProjectPanel - Panel de selección de proyecto
+   * ProjectPanel - Panel de gestión de proyectos
    *
-   * Features:
-   * - Lista de proyectos disponibles
-   * - Colores distintivos
-   * - Crear nuevo proyecto (futuro)
+   * Patrón UI:
+   * - 1 clic = 1 panel (sin tabs)
+   * - Acciones inline (editar, eliminar)
+   * - Form expandible para crear nuevo
+   * - Conectado a backend via HTTP
    */
 
-  import { publish } from '$lib/ui-core';
+  import { onMount } from 'svelte';
   import { activeProject, selectProject } from '$lib/stores';
   import { closePanel } from '$lib/stores/ui';
   import type { Project } from '$lib/ui-core';
@@ -16,44 +17,267 @@
 
   export let panelId: string;
 
-  // Demo projects - en producción vendrían del backend
-  const demoProjects: Project[] = [
-    { id: '1', name: 'POS Pizzería', color: 'orange', icon: '🍕', workspaceType: 'pos-pizzeria' },
-    { id: '2', name: 'Desarrollo', color: 'blue', icon: '💻', workspaceType: 'desarrollo' },
-    { id: '3', name: 'General', color: 'green', icon: '📋', workspaceType: 'general' },
-  ];
+  // Estado
+  let projects: Project[] = [];
+  let loading = true;
+  let error: string | null = null;
+  let searchQuery = '';
+  let showAddForm = false;
+  let editingId: string | null = null;
+
+  // Form nuevo proyecto
+  let newProject = { name: '', description: '', color: 'blue' };
+
+  // Form editar
+  let editForm = { name: '', description: '' };
+
+  // API base URL
+  const API_BASE = '/api/modules/project-manager';
+
+  // Cargar proyectos al montar
+  onMount(async () => {
+    await loadProjects();
+  });
+
+  async function loadProjects() {
+    loading = true;
+    error = null;
+
+    try {
+      const res = await fetch(`${API_BASE}/projects`);
+      const data = await res.json();
+
+      if (data.success) {
+        projects = data.projects.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description || '',
+          color: p.metadata?.color || 'blue',
+          icon: p.metadata?.icon || '📁',
+          workspaceType: p.metadata?.workspaceType || 'general',
+          isActive: p.is_active
+        }));
+      } else {
+        error = data.error || 'Error al cargar proyectos';
+      }
+    } catch (e) {
+      error = 'No se pudo conectar con el servidor';
+      console.error('[ProjectPanel] Error:', e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleCreate() {
+    if (!newProject.name.trim()) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newProject.name,
+          description: newProject.description,
+          metadata: { color: newProject.color, icon: '📁', workspaceType: 'general' }
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        await loadProjects();
+        newProject = { name: '', description: '', color: 'blue' };
+        showAddForm = false;
+      } else {
+        error = data.error || 'Error al crear proyecto';
+      }
+    } catch (e) {
+      error = 'No se pudo crear el proyecto';
+    }
+  }
+
+  async function handleSelect(project: Project) {
+    // Activar en backend
+    try {
+      await fetch(`${API_BASE}/projects/${project.id}/activate`, { method: 'POST' });
+    } catch (e) {
+      console.error('[ProjectPanel] Error activating:', e);
+    }
+
+    selectProject(project);
+    closePanel();
+  }
+
+  function startEdit(project: Project, event: MouseEvent) {
+    event.stopPropagation();
+    editingId = project.id;
+    editForm = { name: project.name, description: project.description || '' };
+  }
+
+  async function handleUpdate(projectId: string) {
+    if (!editForm.name.trim()) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name,
+          description: editForm.description
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        await loadProjects();
+        editingId = null;
+      } else {
+        error = data.error || 'Error al actualizar';
+      }
+    } catch (e) {
+      error = 'No se pudo actualizar el proyecto';
+    }
+  }
+
+  async function handleDelete(projectId: string, event: MouseEvent) {
+    event.stopPropagation();
+
+    if (!confirm('¿Eliminar este proyecto?')) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+        method: 'DELETE'
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        await loadProjects();
+      } else {
+        error = data.error || 'Error al eliminar';
+      }
+    } catch (e) {
+      error = 'No se pudo eliminar el proyecto';
+    }
+  }
+
+  function cancelEdit() {
+    editingId = null;
+  }
 
   function getColorHex(colorId: string): string {
     const color = PROJECT_COLORS.find(c => c.id === colorId);
     return color?.hex || '#3b82f6';
   }
 
-  function handleSelect(project: Project) {
-    selectProject(project);
-    closePanel();
-  }
+  // Filtrar por búsqueda
+  $: filteredProjects = projects.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 </script>
 
 <div class="project-panel">
-  <div class="projects-list">
-    {#each demoProjects as project (project.id)}
-      <button
-        class="project-item"
-        class:active={$activeProject?.id === project.id}
-        style="--project-color: {getColorHex(project.color)}"
-        on:click={() => handleSelect(project)}
-      >
-        <span class="project-icon">{project.icon}</span>
-        <span class="project-name">{project.name}</span>
-        <span class="project-color" style="background: {getColorHex(project.color)}"></span>
-      </button>
-    {/each}
+  <!-- Header: Búsqueda + Añadir -->
+  <div class="header">
+    <input
+      type="text"
+      class="search"
+      placeholder="🔍 Buscar proyecto..."
+      bind:value={searchQuery}
+    />
+    <button
+      class="add-btn"
+      class:active={showAddForm}
+      on:click={() => showAddForm = !showAddForm}
+      title="Nuevo proyecto"
+    >
+      {showAddForm ? '✕' : '+'}
+    </button>
   </div>
 
-  <div class="actions">
-    <button class="new-project" disabled>
-      ➕ Nuevo proyecto
-    </button>
+  <!-- Form crear (expandible) -->
+  {#if showAddForm}
+    <div class="add-form">
+      <input
+        type="text"
+        placeholder="Nombre del proyecto"
+        bind:value={newProject.name}
+        on:keydown={(e) => e.key === 'Enter' && handleCreate()}
+      />
+      <input
+        type="text"
+        placeholder="Descripción (opcional)"
+        bind:value={newProject.description}
+      />
+      <div class="color-picker">
+        {#each PROJECT_COLORS as color (color.id)}
+          <button
+            class="color-option"
+            class:selected={newProject.color === color.id}
+            style="background: {color.hex}"
+            on:click={() => newProject.color = color.id}
+            title={color.id}
+          />
+        {/each}
+      </div>
+      <button class="create-btn" on:click={handleCreate} disabled={!newProject.name.trim()}>
+        Crear proyecto
+      </button>
+    </div>
+  {/if}
+
+  <!-- Error -->
+  {#if error}
+    <div class="error">
+      ⚠️ {error}
+      <button class="retry" on:click={loadProjects}>Reintentar</button>
+    </div>
+  {/if}
+
+  <!-- Lista -->
+  <div class="projects-list">
+    {#if loading}
+      <div class="loading">Cargando proyectos...</div>
+    {:else if filteredProjects.length === 0}
+      <div class="empty">
+        {searchQuery ? 'No hay resultados' : 'Sin proyectos'}
+      </div>
+    {:else}
+      {#each filteredProjects as project (project.id)}
+        {#if editingId === project.id}
+          <!-- Modo edición inline -->
+          <div class="project-item editing">
+            <input
+              type="text"
+              class="edit-input"
+              bind:value={editForm.name}
+              on:keydown={(e) => e.key === 'Enter' && handleUpdate(project.id)}
+              on:keydown={(e) => e.key === 'Escape' && cancelEdit()}
+            />
+            <button class="action-btn save" on:click={() => handleUpdate(project.id)}>✓</button>
+            <button class="action-btn cancel" on:click={cancelEdit}>✕</button>
+          </div>
+        {:else}
+          <!-- Item normal -->
+          <button
+            class="project-item"
+            class:active={$activeProject?.id === project.id}
+            style="--project-color: {getColorHex(project.color)}"
+            on:click={() => handleSelect(project)}
+          >
+            <span class="project-indicator" style="background: {getColorHex(project.color)}"></span>
+            <span class="project-icon">{project.icon}</span>
+            <span class="project-name">{project.name}</span>
+            {#if project.isActive}
+              <span class="active-badge">activo</span>
+            {/if}
+            <button class="action-btn edit" on:click={(e) => startEdit(project, e)} title="Editar">✏️</button>
+            <button class="action-btn delete" on:click={(e) => handleDelete(project.id, e)} title="Eliminar">🗑️</button>
+          </button>
+        {/if}
+      {/each}
+    {/if}
   </div>
 </div>
 
@@ -61,30 +285,179 @@
   .project-panel {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
     height: 100%;
   }
 
-  .projects-list {
+  /* Header */
+  .header {
     display: flex;
-    flex-direction: column;
     gap: 0.5rem;
   }
 
+  .search {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg, #0a0a0a);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
+    border-radius: 0.375rem;
+    color: var(--color-text, #e5e5e5);
+    font-size: 0.875rem;
+  }
+
+  .search:focus {
+    outline: none;
+    border-color: var(--color-primary, #3b82f6);
+  }
+
+  .add-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary, #3b82f6);
+    border: none;
+    border-radius: 0.375rem;
+    color: white;
+    font-size: 1.25rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+
+  .add-btn:hover {
+    background: var(--color-primary-hover, #2563eb);
+  }
+
+  .add-btn.active {
+    background: var(--color-error, #ef4444);
+  }
+
+  /* Form crear */
+  .add-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.375rem;
+  }
+
+  .add-form input {
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg, #0a0a0a);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
+    border-radius: 0.25rem;
+    color: var(--color-text, #e5e5e5);
+    font-size: 0.875rem;
+  }
+
+  .add-form input:focus {
+    outline: none;
+    border-color: var(--color-primary, #3b82f6);
+  }
+
+  .color-picker {
+    display: flex;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+  }
+
+  .color-option {
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+
+  .color-option:hover {
+    transform: scale(1.1);
+  }
+
+  .color-option.selected {
+    border-color: white;
+  }
+
+  .create-btn {
+    padding: 0.5rem;
+    background: var(--color-primary, #3b82f6);
+    border: none;
+    border-radius: 0.25rem;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+
+  .create-btn:hover:not(:disabled) {
+    background: var(--color-primary-hover, #2563eb);
+  }
+
+  .create-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Error */
+  .error {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 0.375rem;
+    color: #ef4444;
+    font-size: 0.875rem;
+  }
+
+  .retry {
+    margin-left: auto;
+    padding: 0.25rem 0.5rem;
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 0.25rem;
+    color: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+
+  /* Lista */
+  .projects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .loading, .empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--color-text-muted, #a3a3a3);
+    font-size: 0.875rem;
+  }
+
+  /* Item */
   .project-item {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
     background: var(--color-surface, rgba(255, 255, 255, 0.05));
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-    border-left: 3px solid var(--project-color, #3b82f6);
     border-radius: 0.375rem;
     color: var(--color-text, #e5e5e5);
     cursor: pointer;
-    transition: background-color 0.15s, border-color 0.15s;
+    transition: all 0.15s;
     text-align: left;
     font-size: 0.9375rem;
+    width: 100%;
   }
 
   .project-item:hover {
@@ -92,49 +465,90 @@
   }
 
   .project-item.active {
-    background: var(--color-active, rgba(255, 255, 255, 0.15));
-    border-color: var(--project-color, #3b82f6);
+    background: var(--color-active, rgba(59, 130, 246, 0.15));
+    border-color: var(--color-primary, #3b82f6);
+  }
+
+  .project-item.editing {
+    cursor: default;
+  }
+
+  .project-indicator {
+    width: 4px;
+    height: 1.5rem;
+    border-radius: 2px;
+    flex-shrink: 0;
   }
 
   .project-icon {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
+    flex-shrink: 0;
   }
 
   .project-name {
     flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .project-color {
-    width: 0.75rem;
-    height: 0.75rem;
-    border-radius: 50%;
+  .active-badge {
+    padding: 0.125rem 0.375rem;
+    background: var(--color-success, #22c55e);
+    border-radius: 0.25rem;
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
   }
 
-  .actions {
-    margin-top: auto;
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-  }
-
-  .new-project {
-    width: 100%;
-    padding: 0.625rem 1rem;
+  /* Acciones inline */
+  .action-btn {
+    padding: 0.25rem;
     background: transparent;
-    border: 1px dashed var(--color-border, rgba(255, 255, 255, 0.2));
-    border-radius: 0.375rem;
-    color: var(--color-text-muted, #a3a3a3);
+    border: none;
+    border-radius: 0.25rem;
     cursor: pointer;
     font-size: 0.875rem;
-    transition: background-color 0.15s, border-color 0.15s;
+    opacity: 0;
+    transition: opacity 0.15s, background-color 0.15s;
   }
 
-  .new-project:hover:not(:disabled) {
-    background: var(--color-hover, rgba(255, 255, 255, 0.05));
-    border-color: var(--color-text-muted, #a3a3a3);
+  .project-item:hover .action-btn {
+    opacity: 0.7;
   }
 
-  .new-project:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .action-btn:hover {
+    opacity: 1 !important;
+    background: var(--color-hover, rgba(255, 255, 255, 0.1));
+  }
+
+  .action-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  .action-btn.save {
+    opacity: 1;
+    color: var(--color-success, #22c55e);
+  }
+
+  .action-btn.cancel {
+    opacity: 1;
+    color: var(--color-text-muted, #a3a3a3);
+  }
+
+  /* Edit input */
+  .edit-input {
+    flex: 1;
+    padding: 0.375rem 0.5rem;
+    background: var(--color-bg, #0a0a0a);
+    border: 1px solid var(--color-primary, #3b82f6);
+    border-radius: 0.25rem;
+    color: var(--color-text, #e5e5e5);
+    font-size: 0.875rem;
+  }
+
+  .edit-input:focus {
+    outline: none;
   }
 </style>

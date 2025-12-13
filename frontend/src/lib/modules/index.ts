@@ -9,6 +9,7 @@ import { projectModule } from './project';
 import { providerModule } from './provider';
 import { promptsModule } from './prompts';
 import { credentialsModule } from './credentials';
+import { historyModule } from './history';
 import { filesModule } from './files';
 
 // Exportar módulos individuales
@@ -16,6 +17,7 @@ export { projectModule } from './project';
 export { providerModule } from './provider';
 export { promptsModule } from './prompts';
 export { credentialsModule } from './credentials';
+export { historyModule } from './history';
 export { filesModule } from './files';
 
 // Lista de todos los módulos
@@ -24,6 +26,7 @@ export const allModules = [
   providerModule,
   promptsModule,
   credentialsModule,
+  historyModule,
   filesModule,
 ];
 

@@ -37,8 +37,8 @@ const DEFAULT_CONFIG: MqttConfig = {
   clientId: `ui-${Date.now().toString(36)}`,
   options: {
     keepalive: 30,
-    reconnectPeriod: 3000,
-    connectTimeout: 10000,
+    reconnectPeriod: 1000,
+    connectTimeout: 2000,
     clean: true
   }
 };

@@ -6,11 +6,11 @@
    * - Textarea auto-resize
    * - Botón enviar
    * - Enter para enviar (Shift+Enter para nueva línea)
-   * - Deshabilitado durante streaming
+   * - Integración con chat store via MQTT
    */
 
-  import { sendMessage, isStreaming } from '$lib/stores';
   import { hasAttachments } from '$lib/stores/attachments';
+  import { sendMessage, isStreaming } from '$lib/stores';
 
   let inputValue = '';
   let textareaEl: HTMLTextAreaElement;
@@ -21,6 +21,9 @@
     if (!canSend) return;
 
     const content = inputValue.trim();
+    console.log('[ChatInput] Sending:', content);
+
+    // Limpiar input inmediatamente
     inputValue = '';
 
     // Reset textarea height
@@ -28,6 +31,7 @@
       textareaEl.style.height = 'auto';
     }
 
+    // Enviar via chat store (que publica a MQTT)
     await sendMessage(content);
   }
 
@@ -47,14 +51,13 @@
   }
 </script>
 
-<div class="chat-input" class:streaming={$isStreaming}>
+<div class="chat-input">
   <textarea
     bind:this={textareaEl}
     bind:value={inputValue}
     on:keydown={handleKeydown}
     on:input={handleInput}
-    placeholder={$isStreaming ? 'Esperando respuesta...' : 'Escribe un mensaje...'}
-    disabled={$isStreaming}
+    placeholder="Escribe un mensaje..."
     rows="1"
   ></textarea>
 
@@ -75,10 +78,6 @@
     gap: 0.5rem;
     padding: 0.75rem 1rem;
     background: var(--color-input-bg, rgba(0, 0, 0, 0.2));
-  }
-
-  .chat-input.streaming {
-    opacity: 0.7;
   }
 
   textarea {
@@ -104,10 +103,6 @@
   textarea:focus {
     outline: none;
     border-color: var(--color-primary, #3b82f6);
-  }
-
-  textarea:disabled {
-    cursor: not-allowed;
   }
 
   .send-btn {

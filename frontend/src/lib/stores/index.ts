@@ -4,7 +4,6 @@
  * Agrupa todos los stores de la aplicación:
  * - UI: panel activo, workbar, notificaciones
  * - Workspace: proyecto, provider, modelo, prompt
- * - Chat: mensajes, conversación, streaming
  * - Attachments: archivos adjuntos
  */
 
@@ -14,7 +13,7 @@ export {
   workBarExpanded,
   notifications,
   notificationCount,
-  hasNotifications,
+  isPanelOpen,
   openPanel,
   closePanel,
   toggleWorkBar,
@@ -23,28 +22,31 @@ export {
   addNotification,
   removeNotification,
   clearNotifications,
-  getActivePanel,
-  getWorkBarExpanded
+  notifySuccess,
+  notifyError,
+  notifyWarning,
+  notifyInfo
 } from './ui';
 
 // Workspace Store
 export {
+  WORKSPACES,
   activeProject,
   activeProvider,
   activeModel,
   activePrompt,
   credentialStatus,
   activeWorkspace,
-  workspaceModules,
+  workspaceConfig,
   hasProject,
   hasProvider,
-  hasPrompt,
-  credentialsValid,
+  hasValidCredentials,
   selectProject,
+  clearProject,
   selectProvider,
+  clearProvider,
   selectPrompt,
-  updateCredentials,
-  clearWorkspace,
+  clearPrompt,
   initWorkspaceSubscriptions,
   getActiveProject,
   getActiveProvider,

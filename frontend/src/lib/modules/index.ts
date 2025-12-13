@@ -7,18 +7,33 @@
 import { register } from '$lib/ui-core';
 import { projectModule } from './project';
 import { providerModule } from './provider';
+import { promptsModule } from './prompts';
+import { credentialsModule } from './credentials';
+import { historyModule } from './history';
 import { filesModule } from './files';
+import { editorModule } from './editor';
+import { pdfModule } from './pdf';
 
 // Exportar módulos individuales
 export { projectModule } from './project';
 export { providerModule } from './provider';
+export { promptsModule } from './prompts';
+export { credentialsModule } from './credentials';
+export { historyModule } from './history';
 export { filesModule } from './files';
+export { editorModule } from './editor';
+export { pdfModule } from './pdf';
 
 // Lista de todos los módulos
 export const allModules = [
   projectModule,
   providerModule,
+  promptsModule,
+  credentialsModule,
+  historyModule,
   filesModule,
+  editorModule,
+  pdfModule,
 ];
 
 /**

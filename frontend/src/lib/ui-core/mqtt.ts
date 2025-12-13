@@ -3,19 +3,37 @@
  *
  * El frontend es un "core" más conectado al broker MQTT.
  * Toda comunicación pasa por aquí.
+ *
+ * OPTIMIZACIÓN: La librería mqtt se carga de forma LAZY para no
+ * bloquear la carga inicial de la página (~2MB -> 0 en bundle inicial).
  */
 
-import mqtt, { type MqttClient, type IClientOptions } from 'mqtt';
 import { writable, readonly, derived } from 'svelte/store';
 
 // =============================================================================
 // TIPOS
 // =============================================================================
 
+// Tipos mínimos para evitar importar mqtt en tiempo de compilación
+interface MqttClientLike {
+  connected: boolean;
+  disconnected: boolean;
+  on(event: string, callback: (...args: unknown[]) => void): void;
+  subscribe(topic: string): void;
+  unsubscribe(topic: string): void;
+  publish(topic: string, message: string, options?: { qos?: number; retain?: boolean }): void;
+  end(force?: boolean): void;
+}
+
 export interface MqttConfig {
   url: string;
   clientId: string;
-  options?: Partial<IClientOptions>;
+  options?: {
+    keepalive?: number;
+    reconnectPeriod?: number;
+    connectTimeout?: number;
+    clean?: boolean;
+  };
 }
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -51,7 +69,7 @@ const statusStore = writable<ConnectionStatus>('disconnected');
 const errorStore = writable<string | null>(null);
 const lastMessageStore = writable<MqttMessage | null>(null);
 
-let client: MqttClient | null = null;
+let client: MqttClientLike | null = null;
 const handlers = new Map<string, Set<MessageHandler>>();
 const topicSubscriptions = new Map<string, number>(); // topic -> refcount
 
@@ -59,7 +77,7 @@ const topicSubscriptions = new Map<string, number>(); // topic -> refcount
 // FUNCIONES INTERNAS
 // =============================================================================
 
-function parsePayload(buffer: Buffer): unknown {
+function parsePayload(buffer: { toString(encoding: string): string }): unknown {
   try {
     const str = buffer.toString('utf-8');
     return JSON.parse(str);
@@ -103,8 +121,9 @@ function notifyHandlers(topic: string, payload: unknown): void {
 
 /**
  * Conectar al broker MQTT
+ * NOTA: Carga la librería mqtt de forma lazy (primer uso)
  */
-export function connect(config: Partial<MqttConfig> = {}): void {
+export async function connect(config: Partial<MqttConfig> = {}): Promise<void> {
   if (client) {
     console.warn('[MQTT] Already connected or connecting');
     return;
@@ -115,43 +134,54 @@ export function connect(config: Partial<MqttConfig> = {}): void {
   statusStore.set('connecting');
   errorStore.set(null);
 
-  client = mqtt.connect(finalConfig.url, {
-    ...finalConfig.options,
-    clientId: finalConfig.clientId
-  });
+  try {
+    // Lazy load de la librería mqtt (~2MB)
+    console.log('[MQTT] Loading mqtt library...');
+    const mqtt = await import('mqtt');
+    console.log('[MQTT] Library loaded');
 
-  client.on('connect', () => {
-    statusStore.set('connected');
-    errorStore.set(null);
-    console.log('[MQTT] Connected to', finalConfig.url);
+    client = mqtt.default.connect(finalConfig.url, {
+      ...finalConfig.options,
+      clientId: finalConfig.clientId
+    }) as MqttClientLike;
 
-    // Re-suscribir a todos los topics activos
-    for (const topic of topicSubscriptions.keys()) {
-      client?.subscribe(topic);
-    }
-  });
+    client.on('connect', () => {
+      statusStore.set('connected');
+      errorStore.set(null);
+      console.log('[MQTT] Connected to', finalConfig.url);
 
-  client.on('message', (topic, buffer) => {
-    const payload = parsePayload(buffer);
-    const message: MqttMessage = { topic, payload, timestamp: Date.now() };
+      // Re-suscribir a todos los topics activos
+      for (const topic of topicSubscriptions.keys()) {
+        client?.subscribe(topic);
+      }
+    });
 
-    lastMessageStore.set(message);
-    notifyHandlers(topic, payload);
-  });
+    client.on('message', (topic: string, buffer: { toString(encoding: string): string }) => {
+      const payload = parsePayload(buffer);
+      const message: MqttMessage = { topic, payload, timestamp: Date.now() };
 
-  client.on('error', (err) => {
+      lastMessageStore.set(message);
+      notifyHandlers(topic, payload);
+    });
+
+    client.on('error', (err: Error) => {
+      statusStore.set('error');
+      errorStore.set(err.message);
+      console.error('[MQTT] Error:', err.message);
+    });
+
+    client.on('close', () => {
+      statusStore.set('disconnected');
+    });
+
+    client.on('reconnect', () => {
+      statusStore.set('connecting');
+    });
+  } catch (err) {
+    console.error('[MQTT] Failed to load library:', err);
     statusStore.set('error');
-    errorStore.set(err.message);
-    console.error('[MQTT] Error:', err.message);
-  });
-
-  client.on('close', () => {
-    statusStore.set('disconnected');
-  });
-
-  client.on('reconnect', () => {
-    statusStore.set('connecting');
-  });
+    errorStore.set('Failed to load MQTT library');
+  }
 }
 
 /**

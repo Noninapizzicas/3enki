@@ -21,8 +21,8 @@
 
   import { onMount, onDestroy } from 'svelte';
   import { connect, disconnect, activePanel, getPanelConfig, getPanelComponent } from '$lib/ui-core';
-  import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
   import { closePanel } from '$lib/stores/ui';
+  import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
   import { registerAllModules } from '$lib/modules';
 
   import WorkBar from './WorkBar.svelte';
@@ -33,28 +33,47 @@
   import SystemBar from './SystemBar.svelte';
   import Panel from './Panel.svelte';
 
-  let cleanupWorkspace: () => void;
-  let cleanupChat: () => void;
+  let cleanupWorkspace: (() => void) | null = null;
+  let cleanupChat: (() => void) | null = null;
 
-  onMount(() => {
-    // Registrar módulos
+  onMount(async () => {
+    console.log('[Shell] Mounting...');
+
+    // 1. Registrar módulos UI
+    console.log('[Shell] Registering modules...');
     registerAllModules();
+    console.log('[Shell] Modules registered');
 
-    // Conectar MQTT
-    connect();
+    // 2. Conectar a MQTT
+    console.log('[Shell] Connecting to MQTT...');
+    try {
+      await connect();
+      console.log('[Shell] MQTT connected');
 
-    // Inicializar suscripciones
-    cleanupWorkspace = initWorkspaceSubscriptions();
-    cleanupChat = initChatSubscriptions();
+      // 3. Inicializar subscripciones a topics MQTT
+      console.log('[Shell] Initializing subscriptions...');
+      cleanupWorkspace = initWorkspaceSubscriptions();
+      cleanupChat = initChatSubscriptions();
+      console.log('[Shell] Subscriptions initialized');
+    } catch (error) {
+      console.error('[Shell] Failed to connect to MQTT:', error);
+    }
   });
 
   onDestroy(() => {
-    // Limpiar suscripciones
-    cleanupWorkspace?.();
-    cleanupChat?.();
+    console.log('[Shell] Destroying...');
+
+    // Limpiar subscripciones
+    if (cleanupWorkspace) {
+      cleanupWorkspace();
+    }
+    if (cleanupChat) {
+      cleanupChat();
+    }
 
     // Desconectar MQTT
     disconnect();
+    console.log('[Shell] Disconnected');
   });
 
   // Panel activo

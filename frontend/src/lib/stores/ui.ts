@@ -61,6 +61,9 @@ export interface Notification {
 
 export const notifications = writable<Notification[]>([]);
 
+// Derived: contador de notificaciones
+export const notificationCount = derived(notifications, ($notifications) => $notifications.length);
+
 export function addNotification(type: Notification['type'], message: string): void {
   const notification: Notification = {
     id: crypto.randomUUID(),

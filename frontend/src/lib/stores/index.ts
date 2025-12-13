@@ -111,3 +111,14 @@ export {
   getPanelSize,
   saveConversation
 } from './persistence';
+
+// Theme Store
+export {
+  themeMode,
+  effectiveTheme,
+  themeColors,
+  setTheme,
+  toggleTheme,
+  applyTheme
+} from './theme';
+export type { ThemeMode, ThemeColors } from './theme';

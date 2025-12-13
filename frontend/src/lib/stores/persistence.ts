@@ -23,6 +23,7 @@ export interface PersistedState {
   ui: {
     workBarExpanded: boolean;
     panelSizes: Record<string, { width?: number; height?: number }>;
+    theme: 'dark' | 'light' | 'system';
   };
   chat: {
     conversationId: string | null;
@@ -45,7 +46,8 @@ const defaultState: PersistedState = {
   },
   ui: {
     workBarExpanded: true,
-    panelSizes: {}
+    panelSizes: {},
+    theme: 'dark'
   },
   chat: {
     conversationId: null

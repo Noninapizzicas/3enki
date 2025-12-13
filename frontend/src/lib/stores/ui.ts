@@ -5,6 +5,7 @@
  * - Panel activo (re-exportado del registry)
  * - WorkBar expandida/colapsada
  * - Notificaciones
+ * - Persistencia automática
  */
 
 import { writable, derived } from 'svelte/store';
@@ -13,6 +14,7 @@ import {
   openPanel as registryOpenPanel,
   closePanel as registryClosePanel
 } from '$lib/ui-core/registry';
+import { saveUI, getState } from './persistence';
 
 // ============================================================================
 // PANEL ACTIVO (delegado al registry para consistencia)
@@ -34,18 +36,26 @@ export const isPanelOpen = derived(activePanel, ($panel) => $panel !== null);
 // WORK BAR
 // ============================================================================
 
-export const workBarExpanded = writable<boolean>(true);
+// Inicializar desde persistencia
+const persistedUI = getState().ui;
+export const workBarExpanded = writable<boolean>(persistedUI.workBarExpanded);
 
 export function toggleWorkBar(): void {
-  workBarExpanded.update(v => !v);
+  workBarExpanded.update(v => {
+    const newValue = !v;
+    saveUI({ workBarExpanded: newValue });
+    return newValue;
+  });
 }
 
 export function expandWorkBar(): void {
   workBarExpanded.set(true);
+  saveUI({ workBarExpanded: true });
 }
 
 export function collapseWorkBar(): void {
   workBarExpanded.set(false);
+  saveUI({ workBarExpanded: false });
 }
 
 // ============================================================================

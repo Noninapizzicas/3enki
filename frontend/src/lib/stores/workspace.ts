@@ -7,11 +7,13 @@
  * - Prompt activo
  * - Estado de credenciales
  * - Workspace derivado del proyecto
+ * - Persistencia automática
  */
 
 import { writable, derived, get } from 'svelte/store';
 import { publish, subscribe } from '$lib/ui-core';
 import type { Project, Provider, Prompt, CredentialStatus, WorkspacesMap } from '$lib/ui-core';
+import { saveWorkspace, getState } from './persistence';
 
 // ============================================================================
 // WORKSPACES CONFIGURACIÓN
@@ -88,6 +90,7 @@ export const hasValidCredentials = derived(credentialStatus, ($status) => $statu
 export function selectProject(project: Project): void {
   activeProject.set(project);
   publish('project/activate', { projectId: project.id });
+  saveWorkspace({ projectId: project.id });
 }
 
 /**
@@ -95,6 +98,7 @@ export function selectProject(project: Project): void {
  */
 export function clearProject(): void {
   activeProject.set(null);
+  saveWorkspace({ projectId: null });
 }
 
 /**
@@ -107,6 +111,7 @@ export function selectProvider(provider: Provider, model: string): void {
     providerId: provider.id,
     modelId: model
   });
+  saveWorkspace({ providerId: provider.id, modelId: model });
 }
 
 /**
@@ -115,6 +120,7 @@ export function selectProvider(provider: Provider, model: string): void {
 export function clearProvider(): void {
   activeProvider.set(null);
   activeModel.set(null);
+  saveWorkspace({ providerId: null, modelId: null });
 }
 
 /**
@@ -123,6 +129,7 @@ export function clearProvider(): void {
 export function selectPrompt(prompt: Prompt): void {
   activePrompt.set(prompt);
   publish('prompt/selected', { promptId: prompt.id });
+  saveWorkspace({ promptId: prompt.id });
 }
 
 /**
@@ -130,6 +137,21 @@ export function selectPrompt(prompt: Prompt): void {
  */
 export function clearPrompt(): void {
   activePrompt.set(null);
+  saveWorkspace({ promptId: null });
+}
+
+/**
+ * Restaurar estado desde persistencia
+ * Retorna IDs guardados para que la app los resuelva
+ */
+export function getPersistedWorkspace(): {
+  projectId: string | null;
+  providerId: string | null;
+  modelId: string | null;
+  promptId: string | null;
+} {
+  const state = getState();
+  return state.workspace;
 }
 
 // ============================================================================

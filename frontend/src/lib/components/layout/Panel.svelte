@@ -36,12 +36,16 @@
   let currentWidth = 0;
   let panelEl: HTMLDivElement;
 
-  // Tamaños base según size prop
-  $: baseHeight = parseInt(PANEL_SIZES[size]) || 33;
+  // Tamaños base según size prop (convertir vh a pixeles)
+  function vhToPixels(vh: number): number {
+    return (vh / 100) * window.innerHeight;
+  }
+
+  $: baseHeightVh = parseInt(PANEL_SIZES[size]) || 33;
   $: baseWidth = position === 'left' || position === 'right' ? 320 : 0;
 
   onMount(() => {
-    currentHeight = baseHeight;
+    currentHeight = vhToPixels(baseHeightVh);
     currentWidth = baseWidth || 400;
   });
 

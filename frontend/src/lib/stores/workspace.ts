@@ -11,7 +11,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { publish, subscribe } from '$lib/ui-core';
+import { publish, subscribe, updateAppState } from '$lib/ui-core';
 import type { Project, Provider, Prompt, CredentialStatus, WorkspacesMap } from '$lib/ui-core';
 import { saveWorkspace, getState } from './persistence';
 
@@ -89,6 +89,7 @@ export const hasValidCredentials = derived(credentialStatus, ($status) => $statu
  */
 export function selectProject(project: Project): void {
   activeProject.set(project);
+  updateAppState({ project });
   publish('project/activate', { projectId: project.id });
   saveWorkspace({ projectId: project.id });
 }
@@ -98,6 +99,7 @@ export function selectProject(project: Project): void {
  */
 export function clearProject(): void {
   activeProject.set(null);
+  updateAppState({ project: null });
   saveWorkspace({ projectId: null });
 }
 
@@ -107,6 +109,7 @@ export function clearProject(): void {
 export function selectProvider(provider: Provider, model: string): void {
   activeProvider.set(provider);
   activeModel.set(model);
+  updateAppState({ provider, model });
   publish('provider/selected', {
     providerId: provider.id,
     modelId: model
@@ -120,6 +123,7 @@ export function selectProvider(provider: Provider, model: string): void {
 export function clearProvider(): void {
   activeProvider.set(null);
   activeModel.set(null);
+  updateAppState({ provider: null, model: null });
   saveWorkspace({ providerId: null, modelId: null });
 }
 
@@ -128,6 +132,7 @@ export function clearProvider(): void {
  */
 export function selectPrompt(prompt: Prompt): void {
   activePrompt.set(prompt);
+  updateAppState({ prompt });
   publish('prompt/selected', { promptId: prompt.id });
   saveWorkspace({ promptId: prompt.id });
 }
@@ -137,6 +142,7 @@ export function selectPrompt(prompt: Prompt): void {
  */
 export function clearPrompt(): void {
   activePrompt.set(null);
+  updateAppState({ prompt: null });
   saveWorkspace({ promptId: null });
 }
 
@@ -169,6 +175,7 @@ export function initWorkspaceSubscriptions(): () => void {
   unsubs.push(subscribe('project/activated', (_, payload) => {
     const data = payload as { project: Project };
     activeProject.set(data.project);
+    updateAppState({ project: data.project });
   }));
 
   // Estado del provider
@@ -176,12 +183,14 @@ export function initWorkspaceSubscriptions(): () => void {
     const data = payload as { provider: Provider; model: string };
     activeProvider.set(data.provider);
     activeModel.set(data.model);
+    updateAppState({ provider: data.provider, model: data.model });
   }));
 
   // Credenciales resueltas
   unsubs.push(subscribe('credential/resolved', (_, payload) => {
     const data = payload as CredentialStatus;
     credentialStatus.set(data);
+    updateAppState({ credentials: data });
   }));
 
   // Retornar cleanup

@@ -33,7 +33,7 @@
     display: flex;
     flex-direction: column-reverse;
     gap: 0.5rem;
-    z-index: 100;
+    z-index: 500;
     pointer-events: none;
   }
 

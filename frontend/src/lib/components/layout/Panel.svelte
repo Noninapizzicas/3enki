@@ -200,7 +200,7 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 40;
+    z-index: 200;
   }
 
   /* ========== BASE PANEL ========== */
@@ -208,7 +208,7 @@
     position: fixed;
     background: var(--color-panel-bg, #1e1e1e);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-    z-index: 50;
+    z-index: 250;
     display: flex;
     flex-direction: column;
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));

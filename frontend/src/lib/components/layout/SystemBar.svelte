@@ -71,7 +71,7 @@
     background: var(--color-system-bar-bg, rgba(0, 0, 0, 0.6));
     border-radius: 0.5rem;
     backdrop-filter: blur(8px);
-    z-index: 30;
+    z-index: 100;
     opacity: 0.7;
     transition: opacity 0.2s;
   }

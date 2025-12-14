@@ -50,8 +50,30 @@ type MessageHandler = (topic: string, payload: unknown) => void;
 // CONFIGURACIÓN POR DEFECTO
 // =============================================================================
 
+/**
+ * Detecta la URL de MQTT automáticamente basada en el entorno
+ * - En desarrollo (Vite): usa el proxy ws://localhost:5173/mqtt
+ * - En producción: usa ws://hostname:9001 directamente
+ */
+function getMqttUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:9001';
+  }
+
+  const { protocol, hostname, port } = window.location;
+  const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+
+  // En desarrollo con Vite (puerto 5173), usar el proxy
+  if (port === '5173') {
+    return `${wsProtocol}//${hostname}:${port}/mqtt`;
+  }
+
+  // En producción o con otro servidor, conectar directo al broker
+  return `${wsProtocol}//${hostname}:9001`;
+}
+
 const DEFAULT_CONFIG: MqttConfig = {
-  url: 'ws://localhost:9001',
+  url: getMqttUrl(),
   clientId: `ui-${Date.now().toString(36)}`,
   options: {
     keepalive: 30,

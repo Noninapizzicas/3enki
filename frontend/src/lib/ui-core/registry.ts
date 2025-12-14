@@ -137,7 +137,8 @@ export function unregister(moduleId: string): void {
   const module = get(modulesStore).get(moduleId);
 
   if (!module) {
-    console.warn(`[Registry] Module "${moduleId}" not found`);
+    // Silenciado: durante HMR los módulos pueden no existir
+    // console.warn(`[Registry] Module "${moduleId}" not found`);
     return;
   }
 

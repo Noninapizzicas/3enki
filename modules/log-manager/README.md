@@ -77,7 +77,7 @@ grep '"level":"error"' data/logs/current.jsonl | grep -o '"module":"[^"]*"' | so
 
 ## APIs REST
 
-### GET /modules/log-manager/api/logs
+### GET /modules/log-manager/logs
 
 Obtener logs con filtros.
 
@@ -93,10 +93,10 @@ Obtener logs con filtros.
 
 **Ejemplo:**
 ```bash
-curl "http://localhost:3000/modules/log-manager/api/logs?level=error&limit=50"
+curl "http://localhost:3000/modules/log-manager/logs?level=error&limit=50"
 ```
 
-### POST /modules/log-manager/api/logs
+### POST /modules/log-manager/logs
 
 Agregar un log (desde frontend).
 
@@ -110,7 +110,7 @@ Agregar un log (desde frontend).
 }
 ```
 
-### GET /modules/log-manager/api/stats
+### GET /modules/log-manager/stats
 
 Estadísticas de logs.
 
@@ -126,11 +126,11 @@ Estadísticas de logs.
 }
 ```
 
-### GET /modules/log-manager/api/files
+### GET /modules/log-manager/files
 
 Listar archivos de logs disponibles.
 
-### DELETE /modules/log-manager/api/logs
+### DELETE /modules/log-manager/logs
 
 Limpiar logs antiguos.
 

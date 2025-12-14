@@ -4,7 +4,7 @@
  * Exporta todos los módulos y una función para registrarlos.
  */
 
-import { register } from '$lib/ui-core';
+import { register, unregister } from '$lib/ui-core';
 import { projectModule } from './project';
 import { providerModule } from './provider';
 import { promptsModule } from './prompts';
@@ -55,4 +55,14 @@ export function registerModulesByZone(zone: string): void {
     register(module);
   }
   console.log(`[Modules] ${zoneModules.length} módulos registrados en zona ${zone}`);
+}
+
+/**
+ * Desregistrar todos los módulos (cleanup para HMR)
+ */
+export function unregisterAllModules(): void {
+  for (const module of allModules) {
+    unregister(module.manifest.id);
+  }
+  console.log(`[Modules] ${allModules.length} módulos desregistrados`);
 }

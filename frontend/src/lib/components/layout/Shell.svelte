@@ -23,7 +23,7 @@
   import { connect, disconnect, activePanel, getPanelConfig, getPanelComponent } from '$lib/ui-core';
   import { closePanel } from '$lib/stores/ui';
   import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
-  import { registerAllModules } from '$lib/modules';
+  import { registerAllModules, unregisterAllModules } from '$lib/modules';
 
   import WorkBar from './WorkBar.svelte';
   import ChatArea from './ChatArea.svelte';
@@ -64,7 +64,10 @@
   onDestroy(() => {
     console.log('[Shell] Destroying...');
 
-    // Limpiar subscripciones
+    // 1. Desregistrar módulos (cleanup HMR)
+    unregisterAllModules();
+
+    // 2. Limpiar subscripciones
     if (cleanupWorkspace) {
       cleanupWorkspace();
     }
@@ -72,7 +75,7 @@
       cleanupChat();
     }
 
-    // Desconectar MQTT
+    // 3. Desconectar MQTT
     disconnect();
     console.log('[Shell] Disconnected');
   });

@@ -73,6 +73,41 @@ let client: MqttClientLike | null = null;
 const handlers = new Map<string, Set<MessageHandler>>();
 const topicSubscriptions = new Map<string, number>(); // topic -> refcount
 
+// Log collector configuration
+let logCollectorEnabled = true;
+const LOG_ENDPOINT = '/modules/log-manager/logs';
+
+/**
+ * Envía log de interacción MQTT al log-manager
+ * @internal
+ */
+async function logMqttInteraction(action: string, topic: string, payload?: unknown): Promise<void> {
+  // No loguear topics de log (evitar loop infinito)
+  if (!logCollectorEnabled) return;
+  if (topic.startsWith('log/') || topic.startsWith('log.')) return;
+
+  try {
+    await fetch(LOG_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        level: 'debug',
+        source: 'frontend',
+        module: 'mqtt-client',
+        message: `mqtt.${action}`,
+        context: {
+          topic,
+          action,
+          payloadType: typeof payload,
+          payloadSize: typeof payload === 'string' ? payload.length : JSON.stringify(payload || {}).length
+        }
+      })
+    });
+  } catch {
+    // Silenciar errores de logging
+  }
+}
+
 // =============================================================================
 // FUNCIONES INTERNAS
 // =============================================================================
@@ -162,6 +197,9 @@ export async function connect(config: Partial<MqttConfig> = {}): Promise<void> {
 
       lastMessageStore.set(message);
       notifyHandlers(topic, payload);
+
+      // Log received message
+      logMqttInteraction('receive', topic, payload);
     });
 
     client.on('error', (err: Error) => {
@@ -211,6 +249,9 @@ export function publish(topic: string, payload: unknown, retain = false): void {
     : JSON.stringify(payload);
 
   client.publish(topic, message, { qos: 1, retain });
+
+  // Log interaction
+  logMqttInteraction('publish', topic, payload);
 }
 
 /**
@@ -228,6 +269,8 @@ export function subscribe(pattern: string, handler: MessageHandler): () => void 
   const refcount = topicSubscriptions.get(pattern) ?? 0;
   if (refcount === 0 && client?.connected) {
     client.subscribe(pattern);
+    // Log subscription
+    logMqttInteraction('subscribe', pattern);
   }
   topicSubscriptions.set(pattern, refcount + 1);
 
@@ -240,6 +283,8 @@ export function subscribe(pattern: string, handler: MessageHandler): () => void 
       topicSubscriptions.delete(pattern);
       if (client?.connected) {
         client.unsubscribe(pattern);
+        // Log unsubscription
+        logMqttInteraction('unsubscribe', pattern);
       }
     } else {
       topicSubscriptions.set(pattern, newRefcount);

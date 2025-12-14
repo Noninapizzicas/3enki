@@ -37,28 +37,28 @@
   let cleanupWorkspace: (() => void) | null = null;
   let cleanupChat: (() => void) | null = null;
 
-  onMount(async () => {
+  onMount(() => {
     console.log('[Shell] Mounting...');
 
-    // 1. Registrar módulos UI
+    // 1. Registrar módulos UI (síncrono - UI visible inmediatamente)
     console.log('[Shell] Registering modules...');
     registerAllModules();
-    console.log('[Shell] Modules registered');
+    console.log('[Shell] Modules registered - UI ready');
 
-    // 2. Conectar a MQTT
-    console.log('[Shell] Connecting to MQTT...');
-    try {
-      await connect();
-      console.log('[Shell] MQTT connected');
+    // 2. Conectar a MQTT en background (no bloquea UI)
+    console.log('[Shell] Connecting to MQTT (background)...');
+    connect()
+      .then(() => {
+        console.log('[Shell] MQTT connected');
 
-      // 3. Inicializar subscripciones a topics MQTT
-      console.log('[Shell] Initializing subscriptions...');
-      cleanupWorkspace = initWorkspaceSubscriptions();
-      cleanupChat = initChatSubscriptions();
-      console.log('[Shell] Subscriptions initialized');
-    } catch (error) {
-      console.error('[Shell] Failed to connect to MQTT:', error);
-    }
+        // 3. Inicializar subscripciones después de conectar
+        cleanupWorkspace = initWorkspaceSubscriptions();
+        cleanupChat = initChatSubscriptions();
+        console.log('[Shell] Subscriptions initialized');
+      })
+      .catch((error) => {
+        console.error('[Shell] Failed to connect to MQTT:', error);
+      });
   });
 
   onDestroy(() => {

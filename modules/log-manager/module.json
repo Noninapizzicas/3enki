@@ -1,0 +1,46 @@
+{
+  "name": "log-manager",
+  "version": "1.0.0",
+  "description": "Sistema centralizado de logs del sistema. Recolecta logs de todos los módulos (backend y frontend) y los almacena en formato JSONL para análisis por IA.",
+  "provides": ["logging", "observability", "log-storage", "log-analysis"],
+  "subscribes": ["core/+/logs/#"],
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/logs",
+      "handler": "getLogs",
+      "description": "Obtener logs con filtros opcionales"
+    },
+    {
+      "method": "POST",
+      "path": "/logs",
+      "handler": "addLog",
+      "description": "Agregar log (desde frontend u otros sistemas)"
+    },
+    {
+      "method": "GET",
+      "path": "/stats",
+      "handler": "getStats",
+      "description": "Estadísticas de logs"
+    },
+    {
+      "method": "GET",
+      "path": "/files",
+      "handler": "getFiles",
+      "description": "Listar archivos de logs disponibles"
+    },
+    {
+      "method": "DELETE",
+      "path": "/logs",
+      "handler": "clearLogs",
+      "description": "Limpiar logs antiguos"
+    }
+  ],
+  "config": {
+    "logsPath": "./data/logs",
+    "maxFileSize": 10485760,
+    "retentionDays": 30,
+    "rotateDaily": true
+  },
+  "tags": ["observability", "logging", "ai-friendly", "jsonl"]
+}

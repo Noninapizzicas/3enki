@@ -60,3 +60,5 @@ temp/
 
 # Claude Code (optional - descomentar si no quieres subir configuración)
 # .claude/
+data/logs/*.jsonl
+data/logs/index.json

@@ -77,14 +77,33 @@ const topicSubscriptions = new Map<string, number>(); // topic -> refcount
 let logCollectorEnabled = true;
 const LOG_ENDPOINT = '/modules/log-manager/logs';
 
+// =============================================================================
+// BATCH LOGGING - Reduce requests durante startup
+// =============================================================================
+
+interface LogEntry {
+  action: string;
+  topic: string;
+  payloadType: string;
+  payloadSize: number;
+  timestamp: number;
+}
+
+let pendingLogs: LogEntry[] = [];
+let logFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+const LOG_BATCH_DELAY = 500; // Esperar 500ms antes de enviar batch
+const LOG_BATCH_MAX_SIZE = 50; // Enviar si hay más de 50 logs pendientes
+
 /**
- * Envía log de interacción MQTT al log-manager
+ * Envía batch de logs al log-manager
  * @internal
  */
-async function logMqttInteraction(action: string, topic: string, payload?: unknown): Promise<void> {
-  // No loguear topics de log (evitar loop infinito)
-  if (!logCollectorEnabled) return;
-  if (topic.startsWith('log/') || topic.startsWith('log.')) return;
+async function flushLogs(): Promise<void> {
+  if (pendingLogs.length === 0) return;
+
+  const batch = [...pendingLogs];
+  pendingLogs = [];
+  logFlushTimeout = null;
 
   try {
     await fetch(LOG_ENDPOINT, {
@@ -94,17 +113,49 @@ async function logMqttInteraction(action: string, topic: string, payload?: unkno
         level: 'debug',
         source: 'frontend',
         module: 'mqtt-client',
-        message: `mqtt.${action}`,
+        message: `mqtt.batch (${batch.length} interactions)`,
         context: {
-          topic,
-          action,
-          payloadType: typeof payload,
-          payloadSize: typeof payload === 'string' ? payload.length : JSON.stringify(payload || {}).length
+          interactions: batch,
+          batchSize: batch.length
         }
       })
     });
   } catch {
     // Silenciar errores de logging
+  }
+}
+
+/**
+ * Encola log de interacción MQTT (batch para reducir requests)
+ * @internal
+ */
+function logMqttInteraction(action: string, topic: string, payload?: unknown): void {
+  // No loguear topics de log (evitar loop infinito)
+  if (!logCollectorEnabled) return;
+  if (topic.startsWith('log/') || topic.startsWith('log.')) return;
+
+  // Añadir a batch
+  pendingLogs.push({
+    action,
+    topic,
+    payloadType: typeof payload,
+    payloadSize: typeof payload === 'string' ? payload.length : JSON.stringify(payload || {}).length,
+    timestamp: Date.now()
+  });
+
+  // Flush inmediato si el batch es muy grande
+  if (pendingLogs.length >= LOG_BATCH_MAX_SIZE) {
+    if (logFlushTimeout) {
+      clearTimeout(logFlushTimeout);
+      logFlushTimeout = null;
+    }
+    flushLogs();
+    return;
+  }
+
+  // Programar flush con debounce
+  if (!logFlushTimeout) {
+    logFlushTimeout = setTimeout(flushLogs, LOG_BATCH_DELAY);
   }
 }
 
@@ -157,6 +208,7 @@ function notifyHandlers(topic: string, payload: unknown): void {
 /**
  * Conectar al broker MQTT
  * NOTA: Carga la librería mqtt de forma lazy (primer uso)
+ * OPTIMIZACIÓN: No bloquea la UI - resuelve inmediatamente y conecta en background
  */
 export async function connect(config: Partial<MqttConfig> = {}): Promise<void> {
   if (client) {
@@ -169,21 +221,45 @@ export async function connect(config: Partial<MqttConfig> = {}): Promise<void> {
   statusStore.set('connecting');
   errorStore.set(null);
 
+  // No bloquear - iniciar conexión en background
+  initMqttConnection(finalConfig).catch(err => {
+    console.error('[MQTT] Background connection failed:', err);
+  });
+
+  // Resolver inmediatamente para no bloquear la UI
+  return Promise.resolve();
+}
+
+/**
+ * Inicializa la conexión MQTT en background
+ * @internal
+ */
+async function initMqttConnection(config: MqttConfig): Promise<void> {
   try {
     // Lazy load de la librería mqtt (~2MB)
     console.log('[MQTT] Loading mqtt library...');
     const mqtt = await import('mqtt');
     console.log('[MQTT] Library loaded');
 
-    client = mqtt.default.connect(finalConfig.url, {
-      ...finalConfig.options,
-      clientId: finalConfig.clientId
+    client = mqtt.default.connect(config.url, {
+      ...config.options,
+      clientId: config.clientId
     }) as MqttClientLike;
 
+    // Timeout de seguridad - si no conecta en 5s, continuar sin MQTT
+    const connectionTimeout = setTimeout(() => {
+      if (!client?.connected) {
+        console.warn('[MQTT] Connection timeout - UI will work without real-time updates');
+        statusStore.set('error');
+        errorStore.set('Connection timeout - working offline');
+      }
+    }, 5000);
+
     client.on('connect', () => {
+      clearTimeout(connectionTimeout);
       statusStore.set('connected');
       errorStore.set(null);
-      console.log('[MQTT] Connected to', finalConfig.url);
+      console.log('[MQTT] Connected to', config.url);
 
       // Re-suscribir a todos los topics activos
       for (const topic of topicSubscriptions.keys()) {
@@ -203,6 +279,7 @@ export async function connect(config: Partial<MqttConfig> = {}): Promise<void> {
     });
 
     client.on('error', (err: Error) => {
+      clearTimeout(connectionTimeout);
       statusStore.set('error');
       errorStore.set(err.message);
       console.error('[MQTT] Error:', err.message);

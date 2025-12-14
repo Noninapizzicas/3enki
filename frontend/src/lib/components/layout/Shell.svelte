@@ -45,20 +45,18 @@
     registerAllModules();
     console.log('[Shell] Modules registered - UI ready');
 
-    // 2. Conectar a MQTT en background (no bloquea UI)
-    console.log('[Shell] Connecting to MQTT (background)...');
-    connect()
-      .then(() => {
-        console.log('[Shell] MQTT connected');
+    // 2. Inicializar subscripciones ANTES de conectar
+    // (se activarán automáticamente cuando MQTT conecte)
+    cleanupWorkspace = initWorkspaceSubscriptions();
+    cleanupChat = initChatSubscriptions();
+    console.log('[Shell] Subscriptions prepared');
 
-        // 3. Inicializar subscripciones después de conectar
-        cleanupWorkspace = initWorkspaceSubscriptions();
-        cleanupChat = initChatSubscriptions();
-        console.log('[Shell] Subscriptions initialized');
-      })
-      .catch((error) => {
-        console.error('[Shell] Failed to connect to MQTT:', error);
-      });
+    // 3. Conectar a MQTT en background (no bloquea UI)
+    console.log('[Shell] Connecting to MQTT (background)...');
+    connect().catch((error) => {
+      console.error('[Shell] Failed to connect to MQTT:', error);
+      // UI sigue funcionando sin MQTT
+    });
   });
 
   onDestroy(() => {

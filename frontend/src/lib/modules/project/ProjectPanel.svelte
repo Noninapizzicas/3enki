@@ -31,11 +31,31 @@
   // Form editar
   let editForm = { name: '', description: '' };
 
-  // API base URL
-  const API_BASE = '/api/modules/project-manager';
+  // API base URL - usa el proxy de Vite
+  const API_BASE = '/modules/project-manager';
+
+  // Logger helper
+  async function logAction(action: string, context: Record<string, unknown> = {}) {
+    try {
+      await fetch('/modules/log-manager/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level: 'info',
+          source: 'frontend',
+          module: 'project-panel',
+          message: `project.${action}`,
+          context
+        })
+      });
+    } catch {
+      // Silenciar errores de logging
+    }
+  }
 
   // Cargar proyectos al montar
   onMount(async () => {
+    logAction('panel.opened');
     await loadProjects();
   });
 
@@ -57,12 +77,15 @@
           workspaceType: p.metadata?.workspaceType || 'general',
           isActive: p.is_active
         }));
+        logAction('list.loaded', { count: projects.length });
       } else {
         error = data.error || 'Error al cargar proyectos';
+        logAction('list.error', { error });
       }
     } catch (e) {
       error = 'No se pudo conectar con el servidor';
       console.error('[ProjectPanel] Error:', e);
+      logAction('list.error', { error: 'connection_failed' });
     } finally {
       loading = false;
     }
@@ -70,6 +93,8 @@
 
   async function handleCreate() {
     if (!newProject.name.trim()) return;
+
+    logAction('create.started', { name: newProject.name });
 
     try {
       const res = await fetch(`${API_BASE}/projects`, {
@@ -85,23 +110,30 @@
       const data = await res.json();
 
       if (data.success) {
+        logAction('create.success', { projectId: data.project?.id, name: newProject.name });
         await loadProjects();
         newProject = { name: '', description: '', color: 'blue' };
         showAddForm = false;
       } else {
         error = data.error || 'Error al crear proyecto';
+        logAction('create.error', { error });
       }
     } catch (e) {
       error = 'No se pudo crear el proyecto';
+      logAction('create.error', { error: 'connection_failed' });
     }
   }
 
   async function handleSelect(project: Project) {
+    logAction('select', { projectId: project.id, name: project.name });
+
     // Activar en backend
     try {
       await fetch(`${API_BASE}/projects/${project.id}/activate`, { method: 'POST' });
+      logAction('activate.success', { projectId: project.id, name: project.name });
     } catch (e) {
       console.error('[ProjectPanel] Error activating:', e);
+      logAction('activate.error', { projectId: project.id, error: 'connection_failed' });
     }
 
     selectProject(project);
@@ -117,6 +149,8 @@
   async function handleUpdate(projectId: string) {
     if (!editForm.name.trim()) return;
 
+    logAction('update.started', { projectId, name: editForm.name });
+
     try {
       const res = await fetch(`${API_BASE}/projects/${projectId}`, {
         method: 'PUT',
@@ -130,13 +164,16 @@
       const data = await res.json();
 
       if (data.success) {
+        logAction('update.success', { projectId, name: editForm.name });
         await loadProjects();
         editingId = null;
       } else {
         error = data.error || 'Error al actualizar';
+        logAction('update.error', { projectId, error });
       }
     } catch (e) {
       error = 'No se pudo actualizar el proyecto';
+      logAction('update.error', { projectId, error: 'connection_failed' });
     }
   }
 
@@ -144,6 +181,8 @@
     event.stopPropagation();
 
     if (!confirm('¿Eliminar este proyecto?')) return;
+
+    logAction('delete.started', { projectId });
 
     try {
       const res = await fetch(`${API_BASE}/projects/${projectId}`, {
@@ -153,12 +192,15 @@
       const data = await res.json();
 
       if (data.success) {
+        logAction('delete.success', { projectId });
         await loadProjects();
       } else {
         error = data.error || 'Error al eliminar';
+        logAction('delete.error', { projectId, error });
       }
     } catch (e) {
       error = 'No se pudo eliminar el proyecto';
+      logAction('delete.error', { projectId, error: 'connection_failed' });
     }
   }
 

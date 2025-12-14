@@ -66,6 +66,18 @@ class LogCollector {
       }
     }
 
+    // Suscribir directamente al MQTT para capturar logs de interacciones
+    // Topic: log/# captura log/http-gateway, log/eventbus, etc.
+    if (this.eventBus?.mqtt) {
+      this.eventBus.mqtt.subscribe('log/#');
+      this.eventBus.mqtt.on('message', (topic, message) => {
+        if (topic.startsWith('log/')) {
+          this.handleInteractionLog(topic, message);
+        }
+      });
+      this.logger?.debug('log-collector.mqtt.subscribed', { topic: 'log/#' });
+    }
+
     // También escuchar eventos internos del sistema
     if (this.eventBus?.on) {
       const internalHandler = (eventType, data) => {
@@ -91,6 +103,24 @@ class LogCollector {
           this.collectInternalEvent(event, data);
         });
       }
+    }
+  }
+
+  /**
+   * Maneja logs de interacciones (HTTP Gateway, Event Bus, etc.)
+   */
+  handleInteractionLog(topic, message) {
+    try {
+      const logData = typeof message === 'string' ? JSON.parse(message) : message;
+
+      // Ya viene en formato normalizado, escribir directamente
+      if (logData.ts && logData.level && logData.source) {
+        this.storage.write(logData);
+        this.stats.collected++;
+        this.stats.fromMqtt++;
+      }
+    } catch (err) {
+      this.stats.errors++;
     }
   }
 

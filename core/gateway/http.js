@@ -135,6 +135,34 @@ class HTTPGateway {
       by_status: {},
       started_at: null
     };
+
+    /**
+     * Log collector - publica interacciones HTTP a log-manager via MQTT
+     */
+    this.logCollectorEnabled = true;
+  }
+
+  /**
+   * Envía log de interacción HTTP al log-manager via MQTT
+   * @private
+   */
+  _logInteraction(data) {
+    // No loguear requests al propio log-manager (evitar loop infinito)
+    if (!this.logCollectorEnabled || !this.eventBus) return;
+    if (data.path && data.path.includes('/log-manager/')) return;
+
+    try {
+      this.eventBus.mqtt.publish('log/http-gateway', JSON.stringify({
+        ts: new Date().toISOString(),
+        level: data.error ? 'error' : 'info',
+        source: 'backend',
+        module: 'http-gateway',
+        msg: data.error ? 'request.error' : 'request.completed',
+        ctx: data
+      }), { qos: 0 });
+    } catch (e) {
+      // Silenciar errores de logging
+    }
   }
 
   /**
@@ -537,6 +565,16 @@ class HTTPGateway {
         this.metrics.increment('gateway.request.success');
       }
 
+      // Log interaction to log-manager
+      this._logInteraction({
+        request_id: requestId,
+        method: req.method,
+        path: pathname,
+        module: apiData?.moduleName,
+        status: responseContext.status,
+        duration: Date.now() - startTime
+      });
+
     } catch (error) {
       this.stats.errors++;
 
@@ -550,6 +588,16 @@ class HTTPGateway {
       if (this.metrics) {
         this.metrics.increment('gateway.request.errors');
       }
+
+      // Log error interaction
+      this._logInteraction({
+        request_id: requestId,
+        method: req.method,
+        path: parsedUrl?.pathname,
+        status: 500,
+        duration: Date.now() - startTime,
+        error: error.message
+      });
 
       this.sendError(res, 500, 'Internal server error', {
         error: error.message

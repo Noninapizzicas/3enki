@@ -67,9 +67,40 @@ class EventBus extends EventEmitter {
     this.strictValidation = options.strictValidation || false;
     this.unknownEvents = new Set(); // Track eventos no registrados
 
+    // Log collector - captura eventos para log-manager
+    this.logCollectorEnabled = true;
+
     // Suscribirse a eventos de otros cores si MQTT está disponible
     if (this.mqtt) {
       this.setupMQTTSubscriptions();
+    }
+  }
+
+  /**
+   * Envía log de evento al log-manager via MQTT
+   * @private
+   */
+  _logEvent(eventType, envelope, direction = 'publish') {
+    // No loguear eventos de log (evitar loop infinito)
+    if (!this.logCollectorEnabled || !this.mqtt) return;
+    if (eventType.startsWith('log/') || eventType.startsWith('log.')) return;
+
+    try {
+      this.mqtt.publish('log/eventbus', JSON.stringify({
+        ts: new Date().toISOString(),
+        level: 'debug',
+        source: 'backend',
+        module: 'eventbus',
+        msg: `event.${direction}`,
+        ctx: {
+          event_type: eventType,
+          event_id: envelope?.event_id,
+          source_module: envelope?.source?.module_id,
+          direction
+        }
+      }), { qos: 0 });
+    } catch (e) {
+      // Silenciar errores de logging
     }
   }
 
@@ -145,6 +176,9 @@ class EventBus extends EventEmitter {
           } else {
             this.emitLocal(envelope.event_type, envelope);
           }
+
+          // Log received event to log-manager
+          this._logEvent(envelope.event_type, envelope, 'receive');
 
           if (this.metrics) {
             // REMOVED: this.metrics.increment('events.received');
@@ -325,6 +359,9 @@ class EventBus extends EventEmitter {
             target: options.targetCoreId || 'broadcast'
           });
         }
+
+        // Log to log-manager
+        this._logEvent(eventType, finalEnvelope, 'publish');
 
         if (this.metrics) {
           // REMOVED: this.metrics.increment('events.published');

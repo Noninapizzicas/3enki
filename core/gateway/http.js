@@ -44,6 +44,7 @@ class HTTPGateway {
    * @param {Object} options.validation - Validation config (optional)
    * @param {Object} options.compression - Compression config (optional)
    * @param {Object} options.cache - Cache config (optional)
+   * @param {number} options.maxBodySize - Max request body size in bytes (default: 1MB)
    */
   constructor(options = {}) {
     this.port = options.port || 3000;
@@ -56,6 +57,9 @@ class HTTPGateway {
     this.coreId = options.coreId || 'unknown';
     this.moduleLoader = options.moduleLoader || null;
     this.eventBus = options.eventBus || null;
+    this.activity = options.activity || null;  // ActivityLogger for centralized monitoring
+    this.maxBodySize = options.maxBodySize || 1024 * 1024; // 1MB default
+    this.requestTimeout = options.requestTimeout || 30000; // 30s default
 
     this.server = null;
     this.isRunning = false;
@@ -143,13 +147,26 @@ class HTTPGateway {
   }
 
   /**
-   * Envía log de interacción HTTP al log-manager via MQTT
+   * Envía log de interacción HTTP al log-manager via MQTT y ActivityLogger
    * @private
    */
   _logInteraction(data) {
     // No loguear requests al propio log-manager (evitar loop infinito)
-    if (!this.logCollectorEnabled || !this.eventBus) return;
     if (data.path && data.path.includes('/log-manager/')) return;
+
+    // Log to ActivityLogger if available
+    if (this.activity) {
+      const phase = data.error ? 'error' : 'response';
+      const targetModule = data.module || 'http-gateway';
+      this.activity.logApiOperation(phase, data.method, data.path, {
+        status: data.status,
+        duration_ms: data.duration_ms,
+        ...(data.error && { error: data.error })
+      }, { module: targetModule });
+    }
+
+    // Legacy MQTT logging
+    if (!this.logCollectorEnabled || !this.eventBus) return;
 
     try {
       this.eventBus.mqtt.publish('log/http-gateway', JSON.stringify({
@@ -257,6 +274,24 @@ class HTTPGateway {
     const startTime = Date.now();
     const requestId = this.generateRequestId();
 
+    // Request timeout handler
+    let timeoutId = null;
+    let timedOut = false;
+
+    if (this.requestTimeout > 0) {
+      timeoutId = setTimeout(() => {
+        if (!res.writableEnded) {
+          timedOut = true;
+          this.stats.by_status[408] = (this.stats.by_status[408] || 0) + 1;
+          res.writeHead(408, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { code: 408, message: 'Request Timeout' } }));
+          if (this.logger) {
+            this.logger.warn('gateway.request.timeout', { request_id: requestId, timeout_ms: this.requestTimeout });
+          }
+        }
+      }, this.requestTimeout);
+    }
+
     try {
       // Actualizar estadísticas
       this.stats.requests++;
@@ -320,6 +355,13 @@ class HTTPGateway {
         return;
       }
 
+      // Shortcut route /1 -> log-test module
+      if (pathname === '/1' || pathname === '/1/') {
+        res.writeHead(302, { 'Location': '/modules/log-test/api/' });
+        res.end();
+        return;
+      }
+
       // Blueprints API
       if (pathname === '/blueprints' && req.method === 'GET') {
         await this.handleListBlueprints(req, res);
@@ -352,7 +394,7 @@ class HTTPGateway {
         context = await this.hooks.execute('beforeRequest', context);
         if (context === null) {
           // Request bloqueado por hook
-          this.sendError(res, 403, 'Request blocked by hook');
+          await this.sendError(res, 403, 'Request blocked by hook');
           return;
         }
       }
@@ -389,14 +431,14 @@ class HTTPGateway {
 
       // Buscar handler en registry
       if (!this.registry) {
-        this.sendError(res, 500, 'Module registry not configured');
+        await this.sendError(res, 500, 'Module registry not configured');
         return;
       }
 
       const apiData = this.registry.findAPI(pathname, req.method);
 
       if (!apiData) {
-        this.sendError(res, 404, 'API endpoint not found');
+        await this.sendError(res, 404, 'API endpoint not found');
         return;
       }
 
@@ -441,7 +483,7 @@ class HTTPGateway {
               includeDetails: true
             });
 
-            this.sendError(res, 400, errorResponse.error, {
+            await this.sendError(res, 400, errorResponse.error, {
               validation_errors: errorResponse.validation_errors
             });
             return;
@@ -480,7 +522,7 @@ class HTTPGateway {
           }, handlerError);
         }
 
-        this.sendError(res, 500, 'Handler execution failed', {
+        await this.sendError(res, 500, 'Handler execution failed', {
           error: handlerError.message
         });
         return;
@@ -530,7 +572,7 @@ class HTTPGateway {
         responseContext = await this.hooks.execute('afterResponse', responseContext);
         if (responseContext === null) {
           // Response bloqueado por hook
-          this.sendError(res, 500, 'Response blocked by hook');
+          await this.sendError(res, 500, 'Response blocked by hook');
           return;
         }
       }
@@ -599,9 +641,15 @@ class HTTPGateway {
         error: error.message
       });
 
-      this.sendError(res, 500, 'Internal server error', {
-        error: error.message
-      });
+      if (!timedOut) {
+        await this.sendError(res, 500, 'Internal server error', {
+          error: error.message
+        });
+      }
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 
@@ -788,7 +836,7 @@ class HTTPGateway {
       }, req);
 
     } catch (error) {
-      this.sendError(res, 500, 'Error reading blueprints', {
+      await this.sendError(res, 500, 'Error reading blueprints', {
         error: error.message
       });
     }
@@ -811,7 +859,7 @@ class HTTPGateway {
 
     try {
       if (!fs.existsSync(filePath)) {
-        this.sendError(res, 404, 'Blueprint not found', {
+        await this.sendError(res, 404, 'Blueprint not found', {
           name: blueprintName
         });
         return;
@@ -829,7 +877,7 @@ class HTTPGateway {
       }, req);
 
     } catch (error) {
-      this.sendError(res, 500, 'Error reading blueprint', {
+      await this.sendError(res, 500, 'Error reading blueprint', {
         error: error.message
       });
     }
@@ -844,8 +892,15 @@ class HTTPGateway {
   async parseBody(req) {
     return new Promise((resolve, reject) => {
       let body = '';
+      let bodySize = 0;
 
       req.on('data', chunk => {
+        bodySize += chunk.length;
+        if (bodySize > this.maxBodySize) {
+          req.destroy();
+          reject(new Error(`Request body too large. Max size: ${this.maxBodySize} bytes`));
+          return;
+        }
         body += chunk.toString();
       });
 
@@ -986,8 +1041,8 @@ class HTTPGateway {
    * @param {string} message - Error message
    * @param {Object} details - Error details (opcional)
    */
-  sendError(res, statusCode, message, details = {}) {
-    this.sendResponse(res, statusCode, {
+  async sendError(res, statusCode, message, details = {}) {
+    await this.sendResponse(res, statusCode, {
       error: {
         code: statusCode,
         message,
@@ -1059,7 +1114,7 @@ class HTTPGateway {
         }, error);
       }
 
-      this.sendError(res, 500, 'UI Gateway error', {
+      await this.sendError(res, 500, 'UI Gateway error', {
         error: error.message
       });
     }

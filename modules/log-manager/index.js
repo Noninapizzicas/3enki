@@ -261,6 +261,233 @@ class LogManagerModule {
     };
   }
 
+  /**
+   * GET /activities - Obtener actividades con filtros
+   *
+   * Query params:
+   *   - type: Tipo de actividad (module_action, event_flow, api_operation, etc.)
+   *   - module: Filtrar por módulo
+   *   - action: Filtrar por acción (puede ser parcial)
+   *   - outcome: Filtrar por resultado (success, failure, pending, timeout)
+   *   - limit: Límite de resultados (default: 100)
+   *   - offset: Offset para paginación (default: 0)
+   *
+   * @example
+   * GET /modules/log-manager/api/activities?type=api_operation&module=file-browser&limit=50
+   */
+  async getActivities(req) {
+    const filters = {
+      source: 'activity',  // Only activity logs
+      module: req.query?.module,
+      search: req.query?.action,
+      limit: parseInt(req.query?.limit) || 100,
+      offset: parseInt(req.query?.offset) || 0
+    };
+
+    let logs = this.storage.read(filters);
+
+    // Additional filtering by activity type and outcome
+    const activityType = req.query?.type;
+    const outcome = req.query?.outcome;
+
+    if (activityType || outcome) {
+      logs = logs.filter(log => {
+        if (activityType && log.ctx?.type !== activityType) return false;
+        if (outcome && log.ctx?.outcome !== outcome) return false;
+        return true;
+      });
+    }
+
+    // Transform to cleaner activity format
+    const activities = logs.map(log => ({
+      id: log.ctx?.activityId,
+      ts: log.ts,
+      type: log.ctx?.type,
+      module: log.module,
+      action: log.ctx?.action,
+      outcome: log.ctx?.outcome,
+      duration_ms: log.ctx?.duration_ms,
+      context: log.ctx,
+      error: log.error
+    }));
+
+    return {
+      success: true,
+      count: activities.length,
+      filters: {
+        type: activityType,
+        module: req.query?.module,
+        action: req.query?.action,
+        outcome: outcome
+      },
+      activities
+    };
+  }
+
+  /**
+   * GET /activities/stats - Estadísticas de actividades
+   *
+   * Retorna:
+   *   - total: Total de actividades
+   *   - byType: Conteo por tipo de actividad
+   *   - byModule: Conteo por módulo
+   *   - byOutcome: Conteo por resultado
+   */
+  async getActivityStats(req) {
+    const logs = this.storage.read({ source: 'activity', limit: 10000 });
+
+    const stats = {
+      total: logs.length,
+      byType: {},
+      byModule: {},
+      byOutcome: {}
+    };
+
+    for (const log of logs) {
+      const type = log.ctx?.type || 'unknown';
+      const module = log.module || 'unknown';
+      const outcome = log.ctx?.outcome || 'unknown';
+
+      stats.byType[type] = (stats.byType[type] || 0) + 1;
+      stats.byModule[module] = (stats.byModule[module] || 0) + 1;
+      stats.byOutcome[outcome] = (stats.byOutcome[outcome] || 0) + 1;
+    }
+
+    return {
+      success: true,
+      stats
+    };
+  }
+
+  // ===========================================================================
+  // LOGS POR MÓDULO
+  // ===========================================================================
+
+  /**
+   * GET /modules - Listar todos los módulos con logs
+   *
+   * Retorna lista de módulos que tienen archivos de log,
+   * con estadísticas de cada uno.
+   *
+   * @example
+   * GET /modules/log-manager/api/modules
+   */
+  async getModules(req) {
+    const modules = this.storage.listModules();
+
+    return {
+      success: true,
+      count: modules.length,
+      modules,
+      tip: 'Usa GET /modules/log-manager/api/modules/{nombre}/logs para ver logs de un módulo'
+    };
+  }
+
+  /**
+   * GET /modules/:module/logs - Obtener logs de un módulo específico
+   *
+   * Query params:
+   *   - level: Filtrar por nivel (comma-separated: error,warn)
+   *   - source: Filtrar por fuente (backend/frontend/activity)
+   *   - search: Búsqueda en mensaje y contexto
+   *   - limit: Límite de resultados (default: 100)
+   *   - offset: Offset para paginación (default: 0)
+   *
+   * @example
+   * GET /modules/log-manager/api/modules/file-browser/logs?level=error&limit=50
+   */
+  async getModuleLogs(req) {
+    // Extraer nombre del módulo de la URL
+    // La URL será como: /modules/log-manager/api/modules/file-browser/logs
+    const pathParts = req.path.split('/');
+    const modulesIndex = pathParts.indexOf('modules');
+
+    // El nombre del módulo está después de 'modules' en la API path
+    // /api/modules/{moduleName}/logs
+    let moduleName = null;
+    for (let i = 0; i < pathParts.length; i++) {
+      if (pathParts[i] === 'modules' && pathParts[i + 2] === 'logs') {
+        moduleName = pathParts[i + 1];
+        break;
+      }
+    }
+
+    if (!moduleName) {
+      return {
+        success: false,
+        error: 'Module name not specified'
+      };
+    }
+
+    const filters = {
+      level: req.query?.level,
+      source: req.query?.source,
+      search: req.query?.search,
+      limit: parseInt(req.query?.limit) || 100,
+      offset: parseInt(req.query?.offset) || 0
+    };
+
+    const logs = this.storage.readByModule(moduleName, filters);
+
+    return {
+      success: true,
+      module: moduleName,
+      count: logs.length,
+      filters,
+      logs
+    };
+  }
+
+  /**
+   * GET /modules/:module/stats - Estadísticas de un módulo específico
+   *
+   * @example
+   * GET /modules/log-manager/api/modules/file-browser/stats
+   */
+  async getModuleStats(req) {
+    // Extraer nombre del módulo de la URL
+    const pathParts = req.path.split('/');
+    let moduleName = null;
+    for (let i = 0; i < pathParts.length; i++) {
+      if (pathParts[i] === 'modules' && pathParts[i + 2] === 'stats') {
+        moduleName = pathParts[i + 1];
+        break;
+      }
+    }
+
+    if (!moduleName) {
+      return {
+        success: false,
+        error: 'Module name not specified'
+      };
+    }
+
+    const logs = this.storage.readByModule(moduleName, { limit: 10000 });
+
+    const stats = {
+      module: moduleName,
+      total: logs.length,
+      byLevel: {},
+      bySource: {},
+      byType: {},
+      firstLog: logs.length > 0 ? logs[logs.length - 1].ts : null,
+      lastLog: logs.length > 0 ? logs[0].ts : null
+    };
+
+    for (const log of logs) {
+      stats.byLevel[log.level] = (stats.byLevel[log.level] || 0) + 1;
+      stats.bySource[log.source] = (stats.bySource[log.source] || 0) + 1;
+      if (log.ctx?.type) {
+        stats.byType[log.ctx.type] = (stats.byType[log.ctx.type] || 0) + 1;
+      }
+    }
+
+    return {
+      success: true,
+      stats
+    };
+  }
+
   // ===========================================================================
   // UTILIDADES PARA LA IA
   // ===========================================================================
@@ -272,6 +499,16 @@ class LogManagerModule {
    */
   query(filters = {}) {
     return this.storage.read(filters);
+  }
+
+  /**
+   * Método helper para obtener logs de un módulo
+   * @param {string} moduleName - Nombre del módulo
+   * @param {Object} filters - Filtros
+   * @returns {Array} Logs
+   */
+  queryModule(moduleName, filters = {}) {
+    return this.storage.readByModule(moduleName, filters);
   }
 
   /**

@@ -237,10 +237,17 @@ class ServiceManager {
 
       // Auto-restart si está habilitado
       if (definition.autoRestart && code !== 0) {
-        const restartState = this.autoRestartState.get(serviceId) || { enabled: true, restartCount: 0 };
+        const restartState = this.autoRestartState.get(serviceId) || { enabled: true, restartCount: 0, restarting: false };
+
+        // Prevent concurrent restart attempts
+        if (restartState.restarting) {
+          console.log(`[ServiceManager] ${serviceId} restart already in progress, skipping`);
+          return;
+        }
 
         if (restartState.enabled && restartState.restartCount < 3) {
           restartState.restartCount++;
+          restartState.restarting = true;
           this.autoRestartState.set(serviceId, restartState);
 
           console.log(`[ServiceManager] Auto-restarting ${serviceId} (attempt ${restartState.restartCount}/3) in 5s...`);
@@ -248,7 +255,11 @@ class ServiceManager {
           setTimeout(async () => {
             try {
               await this.startService(serviceId);
+              restartState.restarting = false;
+              this.autoRestartState.set(serviceId, restartState);
             } catch (error) {
+              restartState.restarting = false;
+              this.autoRestartState.set(serviceId, restartState);
               console.error(`[ServiceManager] Failed to restart ${serviceId}:`, error.message);
             }
           }, 5000);

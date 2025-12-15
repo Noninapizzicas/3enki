@@ -16,6 +16,9 @@ class FileBrowserModule {
 
     // State
     this.unsubscribes = [];
+
+    // Limits
+    this.maxFileSize = 50 * 1024 * 1024; // 50MB max file size for reading
   }
 
   async onLoad(core) {
@@ -67,13 +70,15 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, relativePath);
 
-      // Security: Ensure path is within project directory
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, relativePath);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied: Path outside project directory'
+          error: error.message
         });
       }
 
@@ -110,18 +115,28 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      // Security check
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
+        });
+      }
+
+      // Check file size before reading
+      const stats = await fs.stat(fullPath);
+      if (stats.size > this.maxFileSize) {
+        return res.status(413).json({
+          success: false,
+          error: `File too large. Max size: ${this.maxFileSize / (1024 * 1024)}MB`
         });
       }
 
       const content = await fs.readFile(fullPath, 'utf-8');
-      const stats = await fs.stat(fullPath);
 
       res.json({
         success: true,
@@ -154,13 +169,15 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      // Security check
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
         });
       }
 
@@ -213,13 +230,15 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      // Security check
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
         });
       }
 
@@ -230,8 +249,6 @@ class FileBrowserModule {
       } else {
         await fs.unlink(fullPath);
       }
-
-      // REMOVED: this.metrics.counter('files_deleted_total').inc();
 
       // Publish event
       await this.eventBus.publish(EVENTS.FILE.DELETED, {
@@ -296,7 +313,7 @@ class FileBrowserModule {
       const { request_id, project_id, path: relativePath, filter } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, relativePath || '/');
+      const fullPath = this.validatePath(projectPath, relativePath || '/');
       const files = await this.scanDirectory(fullPath, filter);
 
       await this.eventBus.publish(EVENTS.FILE.LIST_RESPONSE, {
@@ -318,7 +335,14 @@ class FileBrowserModule {
       const { request_id, project_id, file_path } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
+
+      // Check file size before reading
+      const stats = await fs.stat(fullPath);
+      if (stats.size > this.maxFileSize) {
+        throw new Error(`File too large. Max size: ${this.maxFileSize / (1024 * 1024)}MB`);
+      }
+
       const content = await fs.readFile(fullPath, 'utf-8');
 
       await this.eventBus.publish(EVENTS.FILE.CONTENT_RESPONSE, {
@@ -340,7 +364,7 @@ class FileBrowserModule {
       const { request_id, project_id, file_path, content, type } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
 
       const dirPath = path.dirname(fullPath);
       await fs.mkdir(dirPath, { recursive: true });
@@ -367,7 +391,7 @@ class FileBrowserModule {
       const { request_id, project_id, file_path } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
 
       const stats = await fs.stat(fullPath);
       if (stats.isDirectory()) {
@@ -413,6 +437,26 @@ class FileBrowserModule {
     // Get project path from project-manager
     const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
     return dataDir;
+  }
+
+  /**
+   * Validates that a path is within the allowed project directory
+   * Prevents path traversal attacks
+   * @param {string} projectPath - Base project directory
+   * @param {string} relativePath - User-provided relative path
+   * @returns {string} Validated full path
+   * @throws {Error} If path is outside project directory
+   */
+  validatePath(projectPath, relativePath) {
+    const normalizedProjectPath = path.resolve(projectPath);
+    const fullPath = path.resolve(projectPath, relativePath || '');
+
+    // Ensure the resolved path is within the project directory
+    if (!fullPath.startsWith(normalizedProjectPath + path.sep) && fullPath !== normalizedProjectPath) {
+      throw new Error('Access denied: Path outside project directory');
+    }
+
+    return fullPath;
   }
 
   async scanDirectory(dirPath, filter) {
@@ -486,12 +530,17 @@ class FileBrowserModule {
           if (searchContent && entry.isFile()) {
             const ext = path.extname(entry.name).toLowerCase();
             const textExts = ['.md', '.txt', '.json', '.js', '.html', '.css', '.xml', '.yaml', '.yml'];
+            const maxSearchFileSize = 5 * 1024 * 1024; // 5MB limit for content search
 
             if (textExts.includes(ext)) {
               try {
+                const stats = await fs.stat(fullPath);
+                // Skip files too large for content search
+                if (stats.size > maxSearchFileSize) {
+                  continue;
+                }
                 const content = await fs.readFile(fullPath, 'utf-8');
                 if (content.toLowerCase().includes(lowerQuery)) {
-                  const stats = await fs.stat(fullPath);
                   results.push({
                     name: entry.name,
                     path: fullPath.replace(dirPath, '').replace(/\\/g, '/'),

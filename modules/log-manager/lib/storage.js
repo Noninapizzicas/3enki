@@ -6,9 +6,14 @@
  *
  * Estructura:
  *   data/logs/
- *   ├── current.jsonl      # Logs del día actual
- *   ├── 2025-01-14.jsonl   # Histórico por día
- *   └── index.json         # Índice con metadata
+ *   ├── modules/              # Logs organizados por módulo
+ *   │   ├── file-browser.jsonl
+ *   │   ├── ai-gateway.jsonl
+ *   │   ├── http-gateway.jsonl
+ *   │   └── core.jsonl
+ *   ├── current.jsonl         # Logs del día actual (todos)
+ *   ├── 2025-01-14.jsonl      # Histórico por día
+ *   └── index.json            # Índice con metadata
  */
 
 const fs = require('fs');
@@ -21,16 +26,18 @@ class LogStorage {
    * @param {number} options.maxFileSize - Tamaño máximo por archivo (bytes)
    * @param {number} options.retentionDays - Días a retener logs
    * @param {boolean} options.rotateDaily - Rotar por día
+   * @param {boolean} options.organizeByModule - Organizar logs por módulo (default: true)
    */
   constructor(options = {}) {
     this.logsPath = options.logsPath || './data/logs';
     this.maxFileSize = options.maxFileSize || 10 * 1024 * 1024; // 10MB
     this.retentionDays = options.retentionDays || 30;
     this.rotateDaily = options.rotateDaily !== false;
+    this.organizeByModule = options.organizeByModule !== false;
 
     this.currentDate = this.getDateString();
     this.writeStream = null;
-    this.index = { files: {}, stats: { total: 0, byLevel: {}, byModule: {} } };
+    this.index = { files: {}, modules: {}, stats: { total: 0, byLevel: {}, byModule: {} } };
 
     this.ensureDirectory();
     this.loadIndex();
@@ -50,6 +57,26 @@ class LogStorage {
     if (!fs.existsSync(this.logsPath)) {
       fs.mkdirSync(this.logsPath, { recursive: true });
     }
+    // Crear directorio de módulos
+    const modulesPath = path.join(this.logsPath, 'modules');
+    if (!fs.existsSync(modulesPath)) {
+      fs.mkdirSync(modulesPath, { recursive: true });
+    }
+  }
+
+  /**
+   * Sanitiza nombre de módulo para usar como nombre de archivo
+   */
+  sanitizeModuleName(moduleName) {
+    return moduleName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+  }
+
+  /**
+   * Obtiene la ruta del archivo de un módulo específico
+   */
+  getModuleFilePath(moduleName) {
+    const safeName = this.sanitizeModuleName(moduleName);
+    return path.join(this.logsPath, 'modules', `${safeName}.jsonl`);
   }
 
   /**
@@ -136,7 +163,13 @@ class LogStorage {
     const line = JSON.stringify(entry) + '\n';
 
     try {
+      // Escribir al archivo general (current.jsonl)
       fs.appendFileSync(filePath, line);
+
+      // También escribir al archivo específico del módulo
+      if (this.organizeByModule && entry.module && entry.module !== 'unknown') {
+        this.writeToModule(entry.module, line);
+      }
 
       // Actualizar stats
       this.index.stats.total++;
@@ -150,6 +183,131 @@ class LogStorage {
     } catch (err) {
       console.error('[log-manager] Error writing log:', err.message);
     }
+  }
+
+  /**
+   * Escribe un log al archivo específico del módulo
+   * @param {string} moduleName - Nombre del módulo
+   * @param {string} line - Línea JSON a escribir
+   */
+  writeToModule(moduleName, line) {
+    try {
+      const moduleFilePath = this.getModuleFilePath(moduleName);
+      fs.appendFileSync(moduleFilePath, line);
+
+      // Actualizar índice de módulos
+      const safeName = this.sanitizeModuleName(moduleName);
+      if (!this.index.modules[safeName]) {
+        this.index.modules[safeName] = {
+          name: moduleName,
+          path: moduleFilePath,
+          entries: 0,
+          firstEntry: new Date().toISOString()
+        };
+      }
+      this.index.modules[safeName].entries++;
+      this.index.modules[safeName].lastEntry = new Date().toISOString();
+    } catch (err) {
+      // Silenciar errores de escritura a módulo (no crítico)
+    }
+  }
+
+  /**
+   * Lee logs de un módulo específico
+   * @param {string} moduleName - Nombre del módulo
+   * @param {Object} filters - Filtros adicionales
+   * @returns {Array} Logs del módulo
+   */
+  readByModule(moduleName, filters = {}) {
+    const moduleFilePath = this.getModuleFilePath(moduleName);
+    const results = [];
+
+    if (!fs.existsSync(moduleFilePath)) {
+      return results;
+    }
+
+    const {
+      level,
+      source,
+      search,
+      limit = 100,
+      offset = 0
+    } = filters;
+
+    const levels = level ? level.split(',') : null;
+
+    try {
+      const content = fs.readFileSync(moduleFilePath, 'utf-8');
+      const lines = content.trim().split('\n').filter(Boolean);
+
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+
+          // Aplicar filtros
+          if (levels && !levels.includes(entry.level)) continue;
+          if (source && entry.source !== source) continue;
+          if (search && !entry.msg.includes(search) && !JSON.stringify(entry.ctx).includes(search)) continue;
+
+          results.push(entry);
+        } catch (parseErr) {
+          // Línea inválida, ignorar
+        }
+      }
+    } catch (err) {
+      console.error(`[log-manager] Error reading module logs ${moduleName}:`, err.message);
+    }
+
+    // Ordenar por timestamp descendente
+    results.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+    return results.slice(offset, offset + limit);
+  }
+
+  /**
+   * Lista todos los módulos con logs
+   * @returns {Array} Lista de módulos
+   */
+  listModules() {
+    const modules = [];
+    const modulesPath = path.join(this.logsPath, 'modules');
+
+    try {
+      if (!fs.existsSync(modulesPath)) return modules;
+
+      const files = fs.readdirSync(modulesPath);
+
+      for (const file of files) {
+        if (file.endsWith('.jsonl')) {
+          const moduleName = file.replace('.jsonl', '');
+          const filePath = path.join(modulesPath, file);
+          const stats = fs.statSync(filePath);
+
+          // Contar líneas (entradas)
+          let entries = 0;
+          try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            entries = content.trim().split('\n').filter(Boolean).length;
+          } catch (e) { /* ignore */ }
+
+          modules.push({
+            name: moduleName,
+            file: file,
+            path: filePath,
+            size: stats.size,
+            entries,
+            modified: stats.mtime.toISOString()
+          });
+        }
+      }
+
+      // Ordenar por número de entradas
+      modules.sort((a, b) => b.entries - a.entries);
+    } catch (err) {
+      console.error('[log-manager] Error listing modules:', err.message);
+    }
+
+    return modules;
   }
 
   /**

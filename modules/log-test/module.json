@@ -1,0 +1,28 @@
+{
+  "name": "log-test",
+  "version": "1.0.0",
+  "description": "Módulo de prueba para el sistema de logging por módulo",
+  "provides": ["log-testing"],
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/",
+      "handler": "getTestPage",
+      "description": "Página de prueba con botón"
+    },
+    {
+      "method": "POST",
+      "path": "/test",
+      "handler": "runTest",
+      "description": "Ejecutar prueba de operaciones"
+    }
+  ],
+  "routes": [
+    {
+      "path": "/1",
+      "redirect": "/modules/log-test/api/"
+    }
+  ],
+  "config": {},
+  "tags": ["testing", "logging"]
+}

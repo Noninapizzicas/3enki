@@ -61,6 +61,7 @@ class EventBus extends EventEmitter {
     this.logger = options.logger || null;
     this.metrics = options.metrics || null;
     this.tracer = options.tracer || null;
+    this.activity = options.activity || null;  // ActivityLogger for event flow monitoring
 
     // Validación de eventos
     this.validateEvents = options.validateEvents || false;
@@ -77,13 +78,25 @@ class EventBus extends EventEmitter {
   }
 
   /**
-   * Envía log de evento al log-manager via MQTT
+   * Envía log de evento al log-manager via MQTT y ActivityLogger
    * @private
    */
   _logEvent(eventType, envelope, direction = 'publish') {
     // No loguear eventos de log (evitar loop infinito)
-    if (!this.logCollectorEnabled || !this.mqtt) return;
     if (eventType.startsWith('log/') || eventType.startsWith('log.')) return;
+    if (eventType.startsWith('activity.')) return;  // Avoid infinite loop
+
+    // Log to ActivityLogger if available
+    if (this.activity) {
+      this.activity.logEventFlow(direction, eventType, {
+        event_id: envelope?.event_id,
+        source_module: envelope?.source?.module_id,
+        source_core: envelope?.source?.core_id
+      }, { module: envelope?.source?.module_id || 'eventbus' });
+    }
+
+    // Legacy MQTT logging
+    if (!this.logCollectorEnabled || !this.mqtt) return;
 
     try {
       this.mqtt.publish('log/eventbus', JSON.stringify({

@@ -9,13 +9,15 @@ export default defineConfig({
     proxy: {
       // Proxy para APIs del backend
       '/modules': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false
       },
       // Proxy para WebSocket MQTT
       '/mqtt': {
-        target: 'ws://localhost:9001',
-        ws: true
+        target: 'ws://127.0.0.1:9001',
+        ws: true,
+        secure: false
       }
     }
   }

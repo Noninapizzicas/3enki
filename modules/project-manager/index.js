@@ -117,7 +117,7 @@ class ProjectManagerModule {
    * Handle database query responses
    */
   async onDbQueryResponse(event) {
-    const { request_id, success, rows, error } = event;
+    const { request_id, success, data, error } = event;
 
     const pending = this.pendingDbRequests.get(request_id);
     if (!pending) {
@@ -128,7 +128,7 @@ class ProjectManagerModule {
     this.pendingDbRequests.delete(request_id);
 
     if (success) {
-      pending.resolve(rows || []);
+      pending.resolve(data || []);
     } else {
       pending.reject(new Error(error || 'Database query failed'));
     }

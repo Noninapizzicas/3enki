@@ -1,23 +1,26 @@
 <script lang="ts">
   /**
-   * ChatTools - Barra de herramientas del chat
+   * ChatTools - Barra de herramientas (SIMPLIFICADO)
    *
-   * Zona: chat-tools
-   * Módulos: files, editor, pdf
-   *
-   * Features:
-   * - Botones de herramientas
-   * - Chips de adjuntos actuales
+   * Botones directos sin sistema de módulos
    */
 
-  import { chatToolsModules, appState, openPanel } from '$lib/ui-core';
+  import type { Writable } from 'svelte/store';
   import { attachments, removeAttachment } from '$lib/stores';
   import { Button, Chip } from '$lib/components/base';
 
-  function handleModuleClick(action: { type: string; panelId?: string; topic?: string; payload?: Record<string, unknown>; route?: string; handler?: () => void }) {
-    if (action.type === 'panel' && action.panelId) {
-      openPanel(action.panelId);
-    }
+  // Recibe el store de panel activo del padre
+  export let activePanel: Writable<string | null>;
+
+  // Botones estáticos
+  const buttons = [
+    { id: 'files-browser', icon: '📂', title: 'Archivos' },
+    { id: 'code-editor', icon: '📄', title: 'Editor' },
+    { id: 'pdf-viewer', icon: '📕', title: 'PDF' }
+  ];
+
+  function openPanel(panelId: string) {
+    activePanel.set(panelId);
   }
 
   function handleRemoveAttachment(event: CustomEvent<{ id: string }>) {
@@ -27,24 +30,14 @@
 
 <div class="chat-tools">
   <div class="tools">
-    {#each $chatToolsModules as module (module.manifest.id)}
-      {@const icon = module.getIcon ? module.getIcon($appState) : module.manifest.button.icon}
-      {@const badge = module.getBadge ? module.getBadge($appState) : null}
-
+    {#each buttons as btn (btn.id)}
       <Button
-        {icon}
-        {badge}
+        icon={btn.icon}
         size="sm"
-        on:click={() => handleModuleClick(module.manifest.button.action)}
-        title={module.manifest.name}
+        on:click={() => openPanel(btn.id)}
+        title={btn.title}
       />
     {/each}
-
-    {#if $chatToolsModules.length === 0}
-      <Button icon="📂" size="sm" disabled title="Archivos" />
-      <Button icon="📄" size="sm" disabled title="Editor" />
-      <Button icon="📕" size="sm" disabled title="PDF" />
-    {/if}
   </div>
 
   {#if $attachments.length > 0}

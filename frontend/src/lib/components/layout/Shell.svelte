@@ -1,29 +1,14 @@
 <script lang="ts">
   /**
-   * Shell - Contenedor principal de la aplicación
+   * Shell - Contenedor principal (SIMPLIFICADO)
    *
-   * Layout:
-   * ┌─────────────────────────────────────────┬───┐
-   * │ WorkBar (plegable)                    [▼]│   │
-   * ├─────────────────────────────────────────┤ S │
-   * │                                         │ y │
-   * │ ChatArea (scroll)                       │ s │
-   * │                                         │ t │
-   * │                                         │ e │
-   * ├─────────────────────────────────────────┤ m │
-   * │ ChatConfig                              │ B │
-   * ├─────────────────────────────────────────┤ a │
-   * │ ChatInput                               │ r │
-   * ├─────────────────────────────────────────┤   │
-   * │ ChatTools + Attachments                 │   │
-   * └─────────────────────────────────────────┴───┘
+   * Sin sistema de módulos - componentes cargados directamente
    */
 
   import { onMount, onDestroy } from 'svelte';
-  import { connect, disconnect, activePanel, getPanelConfig, getPanelComponent } from '$lib/ui-core';
-  import { closePanel } from '$lib/stores/ui';
+  import { writable } from 'svelte/store';
+  import { connect, disconnect } from '$lib/ui-core';
   import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
-  import { registerAllModules, unregisterAllModules } from '$lib/modules';
 
   import WorkBar from './WorkBar.svelte';
   import ChatArea from './ChatArea.svelte';
@@ -34,98 +19,79 @@
   import Panel from './Panel.svelte';
   import { ToastContainer } from '$lib/components/base';
 
+  // Paneles - importados directamente (sin lazy loading)
+  import ProjectPanel from '$lib/modules/project/ProjectPanel.svelte';
+  import ProviderPanel from '$lib/modules/provider/ProviderPanel.svelte';
+  import PromptsPanel from '$lib/modules/prompts/PromptsPanel.svelte';
+  import CredentialsPanel from '$lib/modules/credentials/CredentialsPanel.svelte';
+  import HistoryPanel from '$lib/modules/history/HistoryPanel.svelte';
+  import FilesPanel from '$lib/modules/files/FilesPanel.svelte';
+  import EditorPanel from '$lib/modules/editor/EditorPanel.svelte';
+  import PdfPanel from '$lib/modules/pdf/PdfPanel.svelte';
+
+  // Panel activo - store simple exportado para los hijos
+  export const activePanel = writable<string | null>(null);
+
+  // Configuración de paneles
+  const panelConfig: Record<string, { component: typeof ProjectPanel; title: string; size: string }> = {
+    'project-selector': { component: ProjectPanel, title: 'Seleccionar Proyecto', size: 'md' },
+    'provider-selector': { component: ProviderPanel, title: 'Seleccionar Provider', size: 'md' },
+    'prompts-manager': { component: PromptsPanel, title: 'Prompts', size: 'lg' },
+    'credentials-manager': { component: CredentialsPanel, title: 'Credenciales', size: 'md' },
+    'history-viewer': { component: HistoryPanel, title: 'Historial', size: 'lg' },
+    'files-browser': { component: FilesPanel, title: 'Archivos', size: 'md' },
+    'code-editor': { component: EditorPanel, title: 'Editor', size: 'lg' },
+    'pdf-viewer': { component: PdfPanel, title: 'PDF', size: 'lg' }
+  };
+
   let cleanupWorkspace: (() => void) | null = null;
   let cleanupChat: (() => void) | null = null;
 
   onMount(() => {
     console.log('[Shell] Mounting...');
-
-    // 1. Registrar módulos UI (síncrono - UI visible inmediatamente)
-    console.log('[Shell] Registering modules...');
-    registerAllModules();
-    console.log('[Shell] Modules registered - UI ready');
-
-    // 2. Inicializar subscripciones ANTES de conectar
-    // (se activarán automáticamente cuando MQTT conecte)
     cleanupWorkspace = initWorkspaceSubscriptions();
     cleanupChat = initChatSubscriptions();
-    console.log('[Shell] Subscriptions prepared');
-
-    // 3. Conectar a MQTT en background (no bloquea UI)
-    console.log('[Shell] Connecting to MQTT (background)...');
-    connect().catch((error) => {
-      console.error('[Shell] Failed to connect to MQTT:', error);
-      // UI sigue funcionando sin MQTT
-    });
+    connect().catch(e => console.error('[Shell] MQTT:', e));
+    console.log('[Shell] Ready');
   });
 
   onDestroy(() => {
-    console.log('[Shell] Destroying...');
-
-    // 1. Desregistrar módulos (cleanup HMR)
-    unregisterAllModules();
-
-    // 2. Limpiar subscripciones
-    if (cleanupWorkspace) {
-      cleanupWorkspace();
-    }
-    if (cleanupChat) {
-      cleanupChat();
-    }
-
-    // 3. Desconectar MQTT
+    cleanupWorkspace?.();
+    cleanupChat?.();
     disconnect();
-    console.log('[Shell] Disconnected');
   });
 
-  // Panel activo
-  $: panelConfig = $activePanel ? getPanelConfig($activePanel) : null;
-  $: PanelComponent = $activePanel ? getPanelComponent($activePanel) : null;
-
-  function handlePanelClose() {
-    closePanel();
+  function closePanel() {
+    activePanel.set(null);
   }
+
+  $: currentPanel = $activePanel ? panelConfig[$activePanel] : null;
 </script>
 
 <div class="shell">
-  <!-- Work Bar (top, collapsible) -->
   <WorkBar />
 
-  <!-- Main content area -->
   <main class="main">
-    <!-- Chat Area (scrollable) -->
     <ChatArea />
-
-    <!-- Chat "Sandwich" -->
     <div class="chat-controls">
-      <ChatConfig />
+      <ChatConfig {activePanel} />
       <ChatInput />
-      <ChatTools />
+      <ChatTools {activePanel} />
     </div>
   </main>
 
-  <!-- System Bar (floating right) -->
   <SystemBar />
-
-  <!-- Toast notifications -->
   <ToastContainer />
 
-  <!-- Active Panel -->
-  {#if $activePanel && panelConfig}
+  {#if $activePanel && currentPanel}
     <Panel
-      title={panelConfig.title}
-      size={panelConfig.size}
-      position={panelConfig.position || 'top'}
-      resizable={panelConfig.resizable !== false}
-      draggable={panelConfig.draggable || false}
+      title={currentPanel.title}
+      size={currentPanel.size}
+      position="top"
       open={true}
-      on:close={handlePanelClose}
+      on:close={closePanel}
     >
-      {#if PanelComponent}
-        <svelte:component this={PanelComponent} panelId={$activePanel} />
-      {:else}
-        <p>Panel sin contenido</p>
-      {/if}
+      <svelte:component this={currentPanel.component} />
     </Panel>
   {/if}
 </div>
@@ -146,7 +112,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* Leave space for system bar */
     margin-right: 3rem;
   }
 

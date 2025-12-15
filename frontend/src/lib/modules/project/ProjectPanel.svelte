@@ -60,8 +60,8 @@
         level: action.includes('error') ? 'error' : 'info',
         source: 'frontend',
         module: 'project-panel',
-        message: `project.${action}`,
-        context: { ...context, timestamp }
+        msg: `project.${action}`,
+        ctx: { ...context, timestamp }
       })
     }).catch(() => {});
   }

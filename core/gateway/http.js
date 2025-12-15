@@ -355,6 +355,13 @@ class HTTPGateway {
         return;
       }
 
+      // Shortcut route /1 -> log-test module
+      if (pathname === '/1' || pathname === '/1/') {
+        res.writeHead(302, { 'Location': '/modules/log-test/api/' });
+        res.end();
+        return;
+      }
+
       // Blueprints API
       if (pathname === '/blueprints' && req.method === 'GET') {
         await this.handleListBlueprints(req, res);

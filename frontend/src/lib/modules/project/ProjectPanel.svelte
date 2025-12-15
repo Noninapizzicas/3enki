@@ -34,23 +34,36 @@
   // API base URL - usa el proxy de Vite
   const API_BASE = '/modules/project-manager';
 
-  // Logger helper
-  async function logAction(action: string, context: Record<string, unknown> = {}) {
-    try {
-      await fetch('/modules/log-manager/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          level: 'info',
-          source: 'frontend',
-          module: 'project-panel',
-          message: `project.${action}`,
-          context
-        })
-      });
-    } catch {
-      // Silenciar errores de logging
+  // Logger helper - SIEMPRE muestra en consola + envía al servidor
+  function logAction(action: string, context: Record<string, unknown> = {}) {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      ts: timestamp,
+      action: `project.${action}`,
+      ...context
+    };
+
+    // 1. SIEMPRE mostrar en consola del navegador (F12 > Console)
+    if (action.includes('error') || action.includes('fail')) {
+      console.error(`[ProjectPanel] ❌ ${action}`, logEntry);
+    } else if (action.includes('success') || action.includes('loaded')) {
+      console.log(`[ProjectPanel] ✅ ${action}`, logEntry);
+    } else {
+      console.log(`[ProjectPanel] 🔄 ${action}`, logEntry);
     }
+
+    // 2. Enviar al servidor (no bloquea, fire-and-forget)
+    fetch('/modules/log-manager/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        level: action.includes('error') ? 'error' : 'info',
+        source: 'frontend',
+        module: 'project-panel',
+        msg: `project.${action}`,
+        ctx: { ...context, timestamp }
+      })
+    }).catch(() => {});
   }
 
   // Cargar proyectos al montar
@@ -142,6 +155,7 @@
 
   function startEdit(project: Project, event: MouseEvent) {
     event.stopPropagation();
+    logAction('edit.started', { projectId: project.id, name: project.name });
     editingId = project.id;
     editForm = { name: project.name, description: project.description || '' };
   }
@@ -205,6 +219,7 @@
   }
 
   function cancelEdit() {
+    logAction('edit.cancelled', { projectId: editingId });
     editingId = null;
   }
 
@@ -231,7 +246,7 @@
     <button
       class="add-btn"
       class:active={showAddForm}
-      on:click={() => showAddForm = !showAddForm}
+      on:click={() => { logAction(showAddForm ? 'form.closed' : 'form.opened'); showAddForm = !showAddForm; }}
       title="Nuevo proyecto"
     >
       {showAddForm ? '✕' : '+'}
@@ -258,12 +273,12 @@
             class="color-option"
             class:selected={newProject.color === color.id}
             style="background: {color.hex}"
-            on:click={() => newProject.color = color.id}
+            on:click={() => { logAction('color.selected', { color: color.id }); newProject.color = color.id; }}
             title={color.id}
           />
         {/each}
       </div>
-      <button class="create-btn" on:click={handleCreate} disabled={!newProject.name.trim()}>
+      <button class="create-btn" on:click={() => { logAction('button.create.clicked', { name: newProject.name }); handleCreate(); }} disabled={!newProject.name.trim()}>
         Crear proyecto
       </button>
     </div>
@@ -273,7 +288,7 @@
   {#if error}
     <div class="error">
       ⚠️ {error}
-      <button class="retry" on:click={loadProjects}>Reintentar</button>
+      <button class="retry" on:click={() => { logAction('retry.clicked'); loadProjects(); }}>Reintentar</button>
     </div>
   {/if}
 

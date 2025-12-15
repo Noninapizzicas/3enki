@@ -24,6 +24,7 @@
   import { closePanel } from '$lib/stores/ui';
   import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
   import { registerAllModules, unregisterAllModules } from '$lib/modules';
+  import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
   import WorkBar from './WorkBar.svelte';
   import ChatArea from './ChatArea.svelte';
@@ -38,29 +39,29 @@
   let cleanupChat: (() => void) | null = null;
 
   onMount(() => {
-    console.time('⏱️ Shell.onMount TOTAL');
-    console.log('[Shell] Mounting...');
+    perfStart('Shell.onMount.TOTAL');
+    logMsg('🚀 Shell mounting...');
 
-    // 1. Registrar módulos UI (síncrono - UI visible inmediatamente)
-    console.time('⏱️ registerAllModules');
+    // 1. Registrar módulos UI
+    perfStart('Shell.registerAllModules');
     registerAllModules();
-    console.timeEnd('⏱️ registerAllModules');
+    perfEnd('Shell.registerAllModules');
 
-    // 2. Inicializar subscripciones ANTES de conectar
-    console.time('⏱️ initSubscriptions');
+    // 2. Inicializar subscripciones
+    perfStart('Shell.initSubscriptions');
     cleanupWorkspace = initWorkspaceSubscriptions();
     cleanupChat = initChatSubscriptions();
-    console.timeEnd('⏱️ initSubscriptions');
+    perfEnd('Shell.initSubscriptions');
 
-    // 3. Conectar a MQTT en background (no bloquea UI)
-    console.time('⏱️ connect (async start)');
+    // 3. Conectar a MQTT en background
+    perfStart('Shell.connect.start');
     connect().catch((error) => {
-      console.error('[Shell] Failed to connect to MQTT:', error);
+      logMsg('❌ MQTT connection failed', { error: String(error) });
     });
-    console.timeEnd('⏱️ connect (async start)');
+    perfEnd('Shell.connect.start');
 
-    console.timeEnd('⏱️ Shell.onMount TOTAL');
-    console.log('[Shell] ✅ onMount completed - UI should be visible now');
+    perfEnd('Shell.onMount.TOTAL');
+    logMsg('✅ Shell.onMount completed - UI visible');
   });
 
   onDestroy(() => {

@@ -1,13 +1,14 @@
 <script>
-  // Layout raíz - timer de rendimiento
-  console.log('🚀 [Layout] Script executing...');
-  console.time('⏱️ TOTAL page load');
-
   import { onMount } from 'svelte';
+  import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
+
+  // Timer inicia cuando el script se ejecuta
+  perfStart('Page.totalLoad');
+  logMsg('🚀 Layout script executing');
 
   onMount(() => {
-    console.timeEnd('⏱️ TOTAL page load');
-    console.log('🏁 [Layout] Page fully mounted');
+    perfEnd('Page.totalLoad');
+    logMsg('🏁 Page fully mounted');
   });
 </script>
 

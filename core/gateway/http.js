@@ -166,20 +166,18 @@ class HTTPGateway {
     }
 
     // Legacy MQTT logging
-    if (!this.logCollectorEnabled || !this.eventBus) return;
+    if (!this.logCollectorEnabled || !this.eventBus || !this.eventBus.mqtt?.isConnected) return;
 
-    try {
-      this.eventBus.mqtt.publish('log/http-gateway', JSON.stringify({
-        ts: new Date().toISOString(),
-        level: data.error ? 'error' : 'info',
-        source: 'backend',
-        module: 'http-gateway',
-        msg: data.error ? 'request.error' : 'request.completed',
-        ctx: data
-      }), { qos: 0 });
-    } catch (e) {
-      // Silenciar errores de logging
-    }
+    this.eventBus.mqtt.publish('log/http-gateway', JSON.stringify({
+      ts: new Date().toISOString(),
+      level: data.error ? 'error' : 'info',
+      source: 'backend',
+      module: 'http-gateway',
+      msg: data.error ? 'request.error' : 'request.completed',
+      ctx: data
+    }), { qos: 0 }).catch(() => {
+      // Silenciar errores de logging MQTT
+    });
   }
 
   /**
@@ -357,7 +355,7 @@ class HTTPGateway {
 
       // Shortcut route /1 -> log-test module
       if (pathname === '/1' || pathname === '/1/') {
-        res.writeHead(302, { 'Location': '/modules/log-test/api/' });
+        res.writeHead(302, { 'Location': '/modules/log-test/' });
         res.end();
         return;
       }
@@ -559,6 +557,14 @@ class HTTPGateway {
           data: result.data,
           body: result.body,
           headers: result.headers
+        };
+      } else if (result && typeof result === 'object' && result._html !== undefined) {
+        // Convención _html para respuestas HTML desde módulos
+        responseContext = {
+          request_id: requestId,
+          status: 200,
+          body: result._html,
+          headers: { 'Content-Type': result._contentType || 'text/html; charset=utf-8' }
         };
       } else {
         responseContext = {

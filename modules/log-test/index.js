@@ -204,7 +204,7 @@ class LogTestModule {
 
       try {
         // Ejecutar test
-        const res = await fetch('/modules/log-test/api/test', { method: 'POST' });
+        const res = await fetch('/modules/log-test/test', { method: 'POST' });
         const data = await res.json();
 
         if (data.success) {
@@ -235,7 +235,7 @@ class LogTestModule {
       const container = document.getElementById('modules');
 
       try {
-        const res = await fetch('/modules/log-manager/api/modules');
+        const res = await fetch('/modules/log-manager/modules');
         const data = await res.json();
 
         if (data.modules && data.modules.length > 0) {
@@ -267,7 +267,7 @@ class LogTestModule {
       container.innerHTML = '<p style="color: #666;">Cargando logs...</p>';
 
       try {
-        const res = await fetch(\`/modules/log-manager/api/modules/\${moduleName}/logs?limit=50\`);
+        const res = await fetch(\`/modules/log-manager/modules/\${moduleName}/logs?limit=50\`);
         const data = await res.json();
 
         if (data.logs && data.logs.length > 0) {
@@ -312,7 +312,7 @@ class LogTestModule {
 
     // Simular logs de frontend
     async function logFrontend(msg, ctx = {}) {
-      await fetch('/modules/log-manager/api/logs', {
+      await fetch('/modules/log-manager/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

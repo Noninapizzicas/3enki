@@ -76,9 +76,9 @@ const DEFAULT_CONFIG: MqttConfig = {
   url: getMqttUrl(),
   clientId: `ui-${Date.now().toString(36)}`,
   options: {
-    keepalive: 30,
-    reconnectPeriod: 1000,
-    connectTimeout: 2000,
+    keepalive: 60,           // Aumentado de 30 a 60 segundos
+    reconnectPeriod: 2000,   // Aumentado para reducir reconexiones agresivas
+    connectTimeout: 5000,    // Aumentado para conexiones lentas
     clean: true
   }
 };

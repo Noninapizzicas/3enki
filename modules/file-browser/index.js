@@ -16,6 +16,9 @@ class FileBrowserModule {
 
     // State
     this.unsubscribes = [];
+
+    // Limits
+    this.maxFileSize = 50 * 1024 * 1024; // 50MB max file size for reading
   }
 
   async onLoad(core) {
@@ -120,8 +123,16 @@ class FileBrowserModule {
         });
       }
 
-      const content = await fs.readFile(fullPath, 'utf-8');
+      // Check file size before reading
       const stats = await fs.stat(fullPath);
+      if (stats.size > this.maxFileSize) {
+        return res.status(413).json({
+          success: false,
+          error: `File too large. Max size: ${this.maxFileSize / (1024 * 1024)}MB`
+        });
+      }
+
+      const content = await fs.readFile(fullPath, 'utf-8');
 
       res.json({
         success: true,
@@ -319,6 +330,13 @@ class FileBrowserModule {
 
       const projectPath = await this.getProjectPath(project_id);
       const fullPath = path.join(projectPath, file_path);
+
+      // Check file size before reading
+      const stats = await fs.stat(fullPath);
+      if (stats.size > this.maxFileSize) {
+        throw new Error(`File too large. Max size: ${this.maxFileSize / (1024 * 1024)}MB`);
+      }
+
       const content = await fs.readFile(fullPath, 'utf-8');
 
       await this.eventBus.publish(EVENTS.FILE.CONTENT_RESPONSE, {
@@ -486,12 +504,17 @@ class FileBrowserModule {
           if (searchContent && entry.isFile()) {
             const ext = path.extname(entry.name).toLowerCase();
             const textExts = ['.md', '.txt', '.json', '.js', '.html', '.css', '.xml', '.yaml', '.yml'];
+            const maxSearchFileSize = 5 * 1024 * 1024; // 5MB limit for content search
 
             if (textExts.includes(ext)) {
               try {
+                const stats = await fs.stat(fullPath);
+                // Skip files too large for content search
+                if (stats.size > maxSearchFileSize) {
+                  continue;
+                }
                 const content = await fs.readFile(fullPath, 'utf-8');
                 if (content.toLowerCase().includes(lowerQuery)) {
-                  const stats = await fs.stat(fullPath);
                   results.push({
                     name: entry.name,
                     path: fullPath.replace(dirPath, '').replace(/\\/g, '/'),

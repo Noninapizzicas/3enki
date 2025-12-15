@@ -58,6 +58,7 @@ class HTTPGateway {
     this.moduleLoader = options.moduleLoader || null;
     this.eventBus = options.eventBus || null;
     this.maxBodySize = options.maxBodySize || 1024 * 1024; // 1MB default
+    this.requestTimeout = options.requestTimeout || 30000; // 30s default
 
     this.server = null;
     this.isRunning = false;
@@ -258,6 +259,24 @@ class HTTPGateway {
   async handleRequest(req, res) {
     const startTime = Date.now();
     const requestId = this.generateRequestId();
+
+    // Request timeout handler
+    let timeoutId = null;
+    let timedOut = false;
+
+    if (this.requestTimeout > 0) {
+      timeoutId = setTimeout(() => {
+        if (!res.writableEnded) {
+          timedOut = true;
+          this.stats.by_status[408] = (this.stats.by_status[408] || 0) + 1;
+          res.writeHead(408, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { code: 408, message: 'Request Timeout' } }));
+          if (this.logger) {
+            this.logger.warn('gateway.request.timeout', { request_id: requestId, timeout_ms: this.requestTimeout });
+          }
+        }
+      }, this.requestTimeout);
+    }
 
     try {
       // Actualizar estadísticas
@@ -601,9 +620,15 @@ class HTTPGateway {
         error: error.message
       });
 
-      await this.sendError(res, 500, 'Internal server error', {
-        error: error.message
-      });
+      if (!timedOut) {
+        await this.sendError(res, 500, 'Internal server error', {
+          error: error.message
+        });
+      }
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 

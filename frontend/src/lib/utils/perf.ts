@@ -1,6 +1,7 @@
 /**
  * Performance logging utility - saves to files via log-manager
  */
+import { browser } from '$app/environment';
 
 const timers: Map<string, number> = new Map();
 const LOG_ENDPOINT = '/modules/log-manager/logs';
@@ -35,6 +36,9 @@ export function perfEnd(label: string): number {
  * Log a performance measurement to file
  */
 export function logPerf(label: string, durationMs: number): void {
+  // Only log in browser environment (not during SSR)
+  if (!browser) return;
+
   const entry = {
     level: 'info',
     source: 'frontend',
@@ -59,6 +63,9 @@ export function logPerf(label: string, durationMs: number): void {
  * Log a simple message to file
  */
 export function logMsg(msg: string, ctx: Record<string, unknown> = {}): void {
+  // Only log in browser environment (not during SSR)
+  if (!browser) return;
+
   fetch(LOG_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

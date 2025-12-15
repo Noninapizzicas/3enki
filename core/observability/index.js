@@ -24,9 +24,11 @@
 const Logger = require('./logger');
 const Tracer = require('./tracer');
 const Metrics = require('./metrics');
+const ActivityLogger = require('./activity-logger');
 
 module.exports = {
   Logger,
   Tracer,
-  Metrics
+  Metrics,
+  ActivityLogger
 };

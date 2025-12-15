@@ -34,6 +34,18 @@
       "path": "/logs",
       "handler": "clearLogs",
       "description": "Limpiar logs antiguos"
+    },
+    {
+      "method": "GET",
+      "path": "/activities",
+      "handler": "getActivities",
+      "description": "Obtener actividades del sistema con filtros (tipo, módulo, acción, resultado)"
+    },
+    {
+      "method": "GET",
+      "path": "/activities/stats",
+      "handler": "getActivityStats",
+      "description": "Estadísticas de actividades por tipo, módulo y resultado"
     }
   ],
   "config": {

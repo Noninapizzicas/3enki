@@ -57,6 +57,7 @@ class HTTPGateway {
     this.coreId = options.coreId || 'unknown';
     this.moduleLoader = options.moduleLoader || null;
     this.eventBus = options.eventBus || null;
+    this.activity = options.activity || null;  // ActivityLogger for centralized monitoring
     this.maxBodySize = options.maxBodySize || 1024 * 1024; // 1MB default
     this.requestTimeout = options.requestTimeout || 30000; // 30s default
 
@@ -146,13 +147,26 @@ class HTTPGateway {
   }
 
   /**
-   * Envía log de interacción HTTP al log-manager via MQTT
+   * Envía log de interacción HTTP al log-manager via MQTT y ActivityLogger
    * @private
    */
   _logInteraction(data) {
     // No loguear requests al propio log-manager (evitar loop infinito)
-    if (!this.logCollectorEnabled || !this.eventBus) return;
     if (data.path && data.path.includes('/log-manager/')) return;
+
+    // Log to ActivityLogger if available
+    if (this.activity) {
+      const phase = data.error ? 'error' : 'response';
+      const targetModule = data.module || 'http-gateway';
+      this.activity.logApiOperation(phase, data.method, data.path, {
+        status: data.status,
+        duration_ms: data.duration_ms,
+        ...(data.error && { error: data.error })
+      }, { module: targetModule });
+    }
+
+    // Legacy MQTT logging
+    if (!this.logCollectorEnabled || !this.eventBus) return;
 
     try {
       this.eventBus.mqtt.publish('log/http-gateway', JSON.stringify({

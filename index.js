@@ -34,7 +34,7 @@ const EventBus = require('./core/events/bus');
 const HookManager = require('./core/hooks');
 const { ModuleLoader, ModuleRegistry } = require('./core/modules');
 const HTTPGateway = require('./core/gateway/http');
-const { Logger, Tracer, Metrics } = require('./core/observability');
+const { Logger, Tracer, Metrics, ActivityLogger } = require('./core/observability');
 const { loadConfig, getConfigValue } = require('./core/config');
 const { ValidationManager, commonSchemas } = require('./core/validation');
 
@@ -145,6 +145,7 @@ async function main() {
     logger: null,
     tracer: null,
     metrics: null,
+    activity: null,  // ActivityLogger for centralized activity monitoring
     validationManager: null,
     serviceRegistry: null,
     heartbeatTimer: null
@@ -171,6 +172,8 @@ async function main() {
       log_level: config.observability.logging.level,
       core_id: config.core.id
     });
+
+    // Note: ActivityLogger will be fully initialized after EventBus is ready
 
     // ========================================================================
     // Step 2: Initialize Validation System
@@ -268,6 +271,26 @@ async function main() {
       core_id: config.core.id
     });
 
+    // Initialize ActivityLogger now that EventBus is ready
+    core.activity = new ActivityLogger({
+      coreId: config.core.id,
+      eventBus: core.eventBus,
+      logger: core.logger,
+      enabled: true,
+      minLevel: config.observability.logging.level
+    });
+
+    // Connect ActivityLogger back to EventBus for event flow monitoring
+    core.eventBus.activity = core.activity;
+
+    core.activity.logSystem('core.activity_logger.initialized', {
+      coreId: config.core.id
+    });
+
+    core.logger.info('core.activity.initialized', {
+      core_id: config.core.id
+    });
+
     // ========================================================================
     // Step 5: Load Modules
     // ========================================================================
@@ -289,7 +312,8 @@ async function main() {
         metrics: core.metrics,
         hooks: core.hooks,
         eventBus: core.eventBus,
-        tracer: core.tracer
+        tracer: core.tracer,
+        activity: core.activity  // ActivityLogger for centralized monitoring
       };
 
       // Create Module Registry
@@ -360,6 +384,7 @@ async function main() {
       logger: core.logger,
       metrics: core.metrics,
       eventBus: core.eventBus,
+      activity: core.activity,  // ActivityLogger for API monitoring
       moduleLoader: core.moduleLoader,
       registry: core.moduleRegistry,
       validationManager: core.validationManager,
@@ -458,23 +483,31 @@ async function main() {
           core.logger.info('core.registry.unregistered');
         }
 
-        // Step 3: Stop HTTP Gateway
+        // Step 3: Flush ActivityLogger
+        if (core.activity) {
+          console.log('   [2/6] Flushing Activity Logs...');
+          core.activity.logSystem('core.shutdown.started', { signal });
+          core.activity.close();
+          core.logger.info('core.activity.closed');
+        }
+
+        // Step 4: Stop HTTP Gateway
         if (core.httpGateway) {
-          console.log('   [2/5] Stopping HTTP Gateway...');
+          console.log('   [3/6] Stopping HTTP Gateway...');
           await core.httpGateway.stop();
           core.logger.info('core.gateway.stopped');
         }
 
-        // Step 4: Unload Modules
+        // Step 5: Unload Modules
         if (core.moduleLoader) {
-          console.log('   [3/5] Unloading modules...');
+          console.log('   [4/6] Unloading modules...');
           await core.moduleLoader.unloadAll();
           core.logger.info('core.modules.unloaded');
         }
 
-        // Step 5: Disconnect MQTT Client (also stops embedded broker if used)
+        // Step 6: Disconnect MQTT Client (also stops embedded broker if used)
         if (core.mqttClient) {
-          console.log('   [4/5] Disconnecting MQTT Client...');
+          console.log('   [5/6] Disconnecting MQTT Client...');
           await core.mqttClient.disconnect();
           core.logger.info('core.mqtt.disconnected');
         }

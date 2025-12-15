@@ -103,7 +103,47 @@ class LogCollector {
           this.collectInternalEvent(event, data);
         });
       }
+
+      // Suscribir a eventos de ActivityLogger
+      this.eventBus.on('activity.logged', (data) => {
+        this.collectActivityLog(data);
+      });
+
+      this.eventBus.on('activity.batch', (data) => {
+        if (data.entries && Array.isArray(data.entries)) {
+          for (const entry of data.entries) {
+            this.collectActivityLog(entry);
+          }
+        }
+      });
     }
+  }
+
+  /**
+   * Recolecta un log de actividad del ActivityLogger
+   */
+  collectActivityLog(activity) {
+    const entry = {
+      ts: activity.ts || new Date().toISOString(),
+      level: activity.level || 'info',
+      source: 'activity',
+      module: activity.module,
+      msg: `${activity.type}:${activity.action}`,
+      ctx: {
+        activityId: activity.id,
+        type: activity.type,
+        action: activity.action,
+        outcome: activity.outcome,
+        ...(activity.duration_ms && { duration_ms: activity.duration_ms }),
+        ...(activity.traceId && { traceId: activity.traceId }),
+        ...activity.ctx
+      },
+      ...(activity.error && { error: activity.error })
+    };
+
+    this.storage.write(entry);
+    this.stats.collected++;
+    this.stats.fromActivity = (this.stats.fromActivity || 0) + 1;
   }
 
   /**

@@ -261,6 +261,104 @@ class LogManagerModule {
     };
   }
 
+  /**
+   * GET /activities - Obtener actividades con filtros
+   *
+   * Query params:
+   *   - type: Tipo de actividad (module_action, event_flow, api_operation, etc.)
+   *   - module: Filtrar por módulo
+   *   - action: Filtrar por acción (puede ser parcial)
+   *   - outcome: Filtrar por resultado (success, failure, pending, timeout)
+   *   - limit: Límite de resultados (default: 100)
+   *   - offset: Offset para paginación (default: 0)
+   *
+   * @example
+   * GET /modules/log-manager/api/activities?type=api_operation&module=file-browser&limit=50
+   */
+  async getActivities(req) {
+    const filters = {
+      source: 'activity',  // Only activity logs
+      module: req.query?.module,
+      search: req.query?.action,
+      limit: parseInt(req.query?.limit) || 100,
+      offset: parseInt(req.query?.offset) || 0
+    };
+
+    let logs = this.storage.read(filters);
+
+    // Additional filtering by activity type and outcome
+    const activityType = req.query?.type;
+    const outcome = req.query?.outcome;
+
+    if (activityType || outcome) {
+      logs = logs.filter(log => {
+        if (activityType && log.ctx?.type !== activityType) return false;
+        if (outcome && log.ctx?.outcome !== outcome) return false;
+        return true;
+      });
+    }
+
+    // Transform to cleaner activity format
+    const activities = logs.map(log => ({
+      id: log.ctx?.activityId,
+      ts: log.ts,
+      type: log.ctx?.type,
+      module: log.module,
+      action: log.ctx?.action,
+      outcome: log.ctx?.outcome,
+      duration_ms: log.ctx?.duration_ms,
+      context: log.ctx,
+      error: log.error
+    }));
+
+    return {
+      success: true,
+      count: activities.length,
+      filters: {
+        type: activityType,
+        module: req.query?.module,
+        action: req.query?.action,
+        outcome: outcome
+      },
+      activities
+    };
+  }
+
+  /**
+   * GET /activities/stats - Estadísticas de actividades
+   *
+   * Retorna:
+   *   - total: Total de actividades
+   *   - byType: Conteo por tipo de actividad
+   *   - byModule: Conteo por módulo
+   *   - byOutcome: Conteo por resultado
+   */
+  async getActivityStats(req) {
+    const logs = this.storage.read({ source: 'activity', limit: 10000 });
+
+    const stats = {
+      total: logs.length,
+      byType: {},
+      byModule: {},
+      byOutcome: {}
+    };
+
+    for (const log of logs) {
+      const type = log.ctx?.type || 'unknown';
+      const module = log.module || 'unknown';
+      const outcome = log.ctx?.outcome || 'unknown';
+
+      stats.byType[type] = (stats.byType[type] || 0) + 1;
+      stats.byModule[module] = (stats.byModule[module] || 0) + 1;
+      stats.byOutcome[outcome] = (stats.byOutcome[outcome] || 0) + 1;
+    }
+
+    return {
+      success: true,
+      stats
+    };
+  }
+
   // ===========================================================================
   // UTILIDADES PARA LA IA
   // ===========================================================================

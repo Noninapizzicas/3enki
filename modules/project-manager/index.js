@@ -117,7 +117,9 @@ class ProjectManagerModule {
    * Handle database query responses
    */
   async onDbQueryResponse(event) {
-    const { request_id, success, data, error } = event;
+    // El EventBus envía un envelope, los datos están en event.data
+    const eventData = event.data || event;
+    const { request_id, success, data, error } = eventData;
 
     const pending = this.pendingDbRequests.get(request_id);
     if (!pending) {

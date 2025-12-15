@@ -44,6 +44,7 @@ class HTTPGateway {
    * @param {Object} options.validation - Validation config (optional)
    * @param {Object} options.compression - Compression config (optional)
    * @param {Object} options.cache - Cache config (optional)
+   * @param {number} options.maxBodySize - Max request body size in bytes (default: 1MB)
    */
   constructor(options = {}) {
     this.port = options.port || 3000;
@@ -56,6 +57,7 @@ class HTTPGateway {
     this.coreId = options.coreId || 'unknown';
     this.moduleLoader = options.moduleLoader || null;
     this.eventBus = options.eventBus || null;
+    this.maxBodySize = options.maxBodySize || 1024 * 1024; // 1MB default
 
     this.server = null;
     this.isRunning = false;
@@ -352,7 +354,7 @@ class HTTPGateway {
         context = await this.hooks.execute('beforeRequest', context);
         if (context === null) {
           // Request bloqueado por hook
-          this.sendError(res, 403, 'Request blocked by hook');
+          await this.sendError(res, 403, 'Request blocked by hook');
           return;
         }
       }
@@ -389,14 +391,14 @@ class HTTPGateway {
 
       // Buscar handler en registry
       if (!this.registry) {
-        this.sendError(res, 500, 'Module registry not configured');
+        await this.sendError(res, 500, 'Module registry not configured');
         return;
       }
 
       const apiData = this.registry.findAPI(pathname, req.method);
 
       if (!apiData) {
-        this.sendError(res, 404, 'API endpoint not found');
+        await this.sendError(res, 404, 'API endpoint not found');
         return;
       }
 
@@ -441,7 +443,7 @@ class HTTPGateway {
               includeDetails: true
             });
 
-            this.sendError(res, 400, errorResponse.error, {
+            await this.sendError(res, 400, errorResponse.error, {
               validation_errors: errorResponse.validation_errors
             });
             return;
@@ -480,7 +482,7 @@ class HTTPGateway {
           }, handlerError);
         }
 
-        this.sendError(res, 500, 'Handler execution failed', {
+        await this.sendError(res, 500, 'Handler execution failed', {
           error: handlerError.message
         });
         return;
@@ -530,7 +532,7 @@ class HTTPGateway {
         responseContext = await this.hooks.execute('afterResponse', responseContext);
         if (responseContext === null) {
           // Response bloqueado por hook
-          this.sendError(res, 500, 'Response blocked by hook');
+          await this.sendError(res, 500, 'Response blocked by hook');
           return;
         }
       }
@@ -599,7 +601,7 @@ class HTTPGateway {
         error: error.message
       });
 
-      this.sendError(res, 500, 'Internal server error', {
+      await this.sendError(res, 500, 'Internal server error', {
         error: error.message
       });
     }
@@ -788,7 +790,7 @@ class HTTPGateway {
       }, req);
 
     } catch (error) {
-      this.sendError(res, 500, 'Error reading blueprints', {
+      await this.sendError(res, 500, 'Error reading blueprints', {
         error: error.message
       });
     }
@@ -811,7 +813,7 @@ class HTTPGateway {
 
     try {
       if (!fs.existsSync(filePath)) {
-        this.sendError(res, 404, 'Blueprint not found', {
+        await this.sendError(res, 404, 'Blueprint not found', {
           name: blueprintName
         });
         return;
@@ -829,7 +831,7 @@ class HTTPGateway {
       }, req);
 
     } catch (error) {
-      this.sendError(res, 500, 'Error reading blueprint', {
+      await this.sendError(res, 500, 'Error reading blueprint', {
         error: error.message
       });
     }
@@ -844,8 +846,15 @@ class HTTPGateway {
   async parseBody(req) {
     return new Promise((resolve, reject) => {
       let body = '';
+      let bodySize = 0;
 
       req.on('data', chunk => {
+        bodySize += chunk.length;
+        if (bodySize > this.maxBodySize) {
+          req.destroy();
+          reject(new Error(`Request body too large. Max size: ${this.maxBodySize} bytes`));
+          return;
+        }
         body += chunk.toString();
       });
 
@@ -986,8 +995,8 @@ class HTTPGateway {
    * @param {string} message - Error message
    * @param {Object} details - Error details (opcional)
    */
-  sendError(res, statusCode, message, details = {}) {
-    this.sendResponse(res, statusCode, {
+  async sendError(res, statusCode, message, details = {}) {
+    await this.sendResponse(res, statusCode, {
       error: {
         code: statusCode,
         message,
@@ -1059,7 +1068,7 @@ class HTTPGateway {
         }, error);
       }
 
-      this.sendError(res, 500, 'UI Gateway error', {
+      await this.sendError(res, 500, 'UI Gateway error', {
         error: error.message
       });
     }

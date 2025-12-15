@@ -1,34 +1,61 @@
 <script lang="ts">
   /**
-   * SystemBar - Barra lateral sistema (SIMPLIFICADO)
+   * SystemBar - Barra lateral de sistema (flotante)
+   *
+   * Zona: system-bar
+   * Módulos: config, notifications, profile, help
+   *
+   * Features:
+   * - Flotante sobre el contenido
+   * - Semi-transparente
+   * - Iconos pequeños
+   * - Siempre visible pero discreta
    */
 
+  import { systemBarModules, appState, openPanel } from '$lib/ui-core';
+  import { notificationCount } from '$lib/stores';
   import { Button } from '$lib/components/base';
-  import { status } from '$lib/ui-core';
 
-  // Iconos de sistema simples
-  const items = [
-    { icon: '⚙️', title: 'Config' },
-    { icon: '🔔', title: 'Notificaciones' },
-    { icon: '❓', title: 'Ayuda' }
+  function handleModuleClick(action: { type: string; panelId?: string; topic?: string; payload?: Record<string, unknown>; route?: string; handler?: () => void }) {
+    if (action.type === 'panel' && action.panelId) {
+      openPanel(action.panelId);
+    }
+  }
+
+  // Default system icons when no modules registered
+  const defaultItems = [
+    { icon: '⚙️', title: 'Configuración', id: 'config' },
+    { icon: '🔔', title: 'Notificaciones', id: 'notifications' },
+    { icon: '👤', title: 'Perfil', id: 'profile' },
+    { icon: '❓', title: 'Ayuda', id: 'help' }
   ];
 </script>
 
 <div class="system-bar">
-  <!-- Indicador de conexión MQTT -->
-  <Button
-    icon={$status === 'connected' ? '🟢' : $status === 'connecting' ? '🟡' : '🔴'}
-    size="sm"
-    title={$status === 'connected' ? 'Conectado' : $status === 'connecting' ? 'Conectando...' : 'Desconectado'}
-  />
+  {#if $systemBarModules.length > 0}
+    {#each $systemBarModules as module (module.manifest.id)}
+      {@const icon = module.getIcon ? module.getIcon($appState) : module.manifest.button.icon}
+      {@const badge = module.getBadge ? module.getBadge($appState) : null}
 
-  {#each items as item}
-    <Button
-      icon={item.icon}
-      size="sm"
-      title={item.title}
-    />
-  {/each}
+      <Button
+        {icon}
+        {badge}
+        size="sm"
+        on:click={() => handleModuleClick(module.manifest.button.action)}
+        title={module.manifest.name}
+      />
+    {/each}
+  {:else}
+    {#each defaultItems as item (item.id)}
+      <Button
+        icon={item.icon}
+        size="sm"
+        badge={item.id === 'notifications' ? ($notificationCount > 0 ? $notificationCount : null) : null}
+        disabled
+        title={item.title}
+      />
+    {/each}
+  {/if}
 </div>
 
 <style>

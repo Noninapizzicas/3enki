@@ -1,15 +1,44 @@
 <script lang="ts">
   /**
-   * WorkBar - Barra superior plegable (SIMPLIFICADO)
+   * WorkBar - Barra superior de módulos de trabajo (plegable)
+   *
+   * Features:
+   * - Se pliega/despliega con toggle
+   * - Muestra módulos del workspace activo
+   * - Iconos dinámicos por módulo
    */
 
   import { workBarExpanded, toggleWorkBar } from '$lib/stores';
+  import { workBarModules, appState, openPanel } from '$lib/ui-core';
+  import { Button } from '$lib/components/base';
+
+  function handleModuleClick(action: { type: string; panelId?: string; topic?: string; payload?: Record<string, unknown>; route?: string; handler?: () => void }) {
+    if (action.type === 'panel' && action.panelId) {
+      openPanel(action.panelId);
+    }
+    // Otros tipos de acciones se pueden manejar aquí
+  }
 </script>
 
 <div class="workbar" class:collapsed={!$workBarExpanded}>
   {#if $workBarExpanded}
-    <div class="content">
-      <span class="title">Event Core</span>
+    <div class="modules">
+      {#each $workBarModules as module (module.manifest.id)}
+        {@const icon = module.getIcon ? module.getIcon($appState) : module.manifest.button.icon}
+        {@const badge = module.getBadge ? module.getBadge($appState) : null}
+
+        <Button
+          {icon}
+          label={module.manifest.button.label}
+          {badge}
+          on:click={() => handleModuleClick(module.manifest.button.action)}
+          title={module.manifest.name}
+        />
+      {/each}
+
+      {#if $workBarModules.length === 0}
+        <span class="empty">Sin módulos de trabajo</span>
+      {/if}
     </div>
   {/if}
 
@@ -35,16 +64,17 @@
     padding: 0.25rem 1rem;
   }
 
-  .content {
+  .modules {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
-  .title {
-    font-size: 0.875rem;
-    font-weight: 500;
+  .empty {
+    font-size: 0.75rem;
     color: var(--color-text-muted, #a3a3a3);
+    font-style: italic;
   }
 
   .toggle {

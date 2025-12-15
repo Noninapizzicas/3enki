@@ -1,39 +1,48 @@
 <script lang="ts">
   /**
-   * ChatConfig - Barra de configuración (SIMPLIFICADO)
+   * ChatConfig - Barra de configuración del chat
    *
-   * Botones directos sin sistema de módulos
+   * Zona: chat-config
+   * Módulos: project, provider, prompts, credentials, history
+   *
+   * Features:
+   * - Iconos dinámicos según estado (color proyecto, icono provider, etc.)
+   * - Badges para contadores/estados
    */
 
-  import type { Writable } from 'svelte/store';
+  import { chatConfigModules, appState, openPanel } from '$lib/ui-core';
   import { Button } from '$lib/components/base';
 
-  // Recibe el store de panel activo del padre
-  export let activePanel: Writable<string | null>;
-
-  // Botones estáticos - orden fijo
-  const buttons = [
-    { id: 'project-selector', icon: '📁', title: 'Proyecto' },
-    { id: 'provider-selector', icon: '🤖', title: 'Provider' },
-    { id: 'prompts-manager', icon: '📝', title: 'Prompts' },
-    { id: 'credentials-manager', icon: '🔐', title: 'Credenciales' },
-    { id: 'history-viewer', icon: '💬', title: 'Historial' }
-  ];
-
-  function openPanel(panelId: string) {
-    activePanel.set(panelId);
+  function handleModuleClick(action: { type: string; panelId?: string; topic?: string; payload?: Record<string, unknown>; route?: string; handler?: () => void }) {
+    if (action.type === 'panel' && action.panelId) {
+      openPanel(action.panelId);
+    }
   }
 </script>
 
 <div class="chat-config">
-  {#each buttons as btn (btn.id)}
+  {#each $chatConfigModules as module (module.manifest.id)}
+    {@const icon = module.getIcon ? module.getIcon($appState) : module.manifest.button.icon}
+    {@const badge = module.getBadge ? module.getBadge($appState) : null}
+
     <Button
-      icon={btn.icon}
+      {icon}
+      {badge}
       size="sm"
-      on:click={() => openPanel(btn.id)}
-      title={btn.title}
+      on:click={() => handleModuleClick(module.manifest.button.action)}
+      title={module.manifest.name}
     />
   {/each}
+
+  {#if $chatConfigModules.length === 0}
+    <span class="placeholder">
+      <Button icon="🟢" size="sm" disabled title="Proyecto" />
+      <Button icon="🤖" size="sm" disabled title="Provider" />
+      <Button icon="📝" size="sm" disabled title="Prompts" />
+      <Button icon="🔐" size="sm" disabled title="Credenciales" />
+      <Button icon="💬" size="sm" disabled title="Historial" />
+    </span>
+  {/if}
 </div>
 
 <style>
@@ -44,5 +53,9 @@
     padding: 0.5rem 1rem;
     background: var(--color-bar-bg, rgba(0, 0, 0, 0.2));
     border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  }
+
+  .placeholder {
+    display: contents;
   }
 </style>

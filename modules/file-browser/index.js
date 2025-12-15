@@ -70,13 +70,15 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, relativePath);
 
-      // Security: Ensure path is within project directory
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, relativePath);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied: Path outside project directory'
+          error: error.message
         });
       }
 
@@ -113,13 +115,15 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      // Security check
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
         });
       }
 
@@ -165,13 +169,15 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      // Security check
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
         });
       }
 
@@ -224,13 +230,15 @@ class FileBrowserModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      // Security check
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
         });
       }
 
@@ -241,8 +249,6 @@ class FileBrowserModule {
       } else {
         await fs.unlink(fullPath);
       }
-
-      // REMOVED: this.metrics.counter('files_deleted_total').inc();
 
       // Publish event
       await this.eventBus.publish(EVENTS.FILE.DELETED, {
@@ -307,7 +313,7 @@ class FileBrowserModule {
       const { request_id, project_id, path: relativePath, filter } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, relativePath || '/');
+      const fullPath = this.validatePath(projectPath, relativePath || '/');
       const files = await this.scanDirectory(fullPath, filter);
 
       await this.eventBus.publish(EVENTS.FILE.LIST_RESPONSE, {
@@ -329,7 +335,7 @@ class FileBrowserModule {
       const { request_id, project_id, file_path } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
 
       // Check file size before reading
       const stats = await fs.stat(fullPath);
@@ -358,7 +364,7 @@ class FileBrowserModule {
       const { request_id, project_id, file_path, content, type } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
 
       const dirPath = path.dirname(fullPath);
       await fs.mkdir(dirPath, { recursive: true });
@@ -385,7 +391,7 @@ class FileBrowserModule {
       const { request_id, project_id, file_path } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
 
       const stats = await fs.stat(fullPath);
       if (stats.isDirectory()) {
@@ -431,6 +437,26 @@ class FileBrowserModule {
     // Get project path from project-manager
     const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
     return dataDir;
+  }
+
+  /**
+   * Validates that a path is within the allowed project directory
+   * Prevents path traversal attacks
+   * @param {string} projectPath - Base project directory
+   * @param {string} relativePath - User-provided relative path
+   * @returns {string} Validated full path
+   * @throws {Error} If path is outside project directory
+   */
+  validatePath(projectPath, relativePath) {
+    const normalizedProjectPath = path.resolve(projectPath);
+    const fullPath = path.resolve(projectPath, relativePath || '');
+
+    // Ensure the resolved path is within the project directory
+    if (!fullPath.startsWith(normalizedProjectPath + path.sep) && fullPath !== normalizedProjectPath) {
+      throw new Error('Access denied: Path outside project directory');
+    }
+
+    return fullPath;
   }
 
   async scanDirectory(dirPath, filter) {

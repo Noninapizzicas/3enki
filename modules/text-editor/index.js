@@ -63,12 +63,15 @@ class TextEditorModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
         });
       }
 
@@ -124,12 +127,15 @@ class TextEditorModule {
       }
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
 
-      if (!fullPath.startsWith(projectPath)) {
+      // Security: Validate path is within project directory
+      let fullPath;
+      try {
+        fullPath = this.validatePath(projectPath, file_path);
+      } catch (error) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: error.message
         });
       }
 
@@ -241,7 +247,7 @@ class TextEditorModule {
       const { request_id, project_id, file_path } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
 
       const content = await fs.readFile(fullPath, 'utf-8');
       const stats = await fs.stat(fullPath);
@@ -271,7 +277,7 @@ class TextEditorModule {
       const { request_id, project_id, file_path, content } = event.data;
 
       const projectPath = await this.getProjectPath(project_id);
-      const fullPath = path.join(projectPath, file_path);
+      const fullPath = this.validatePath(projectPath, file_path);
 
       const dirPath = path.dirname(fullPath);
       await fs.mkdir(dirPath, { recursive: true });
@@ -337,6 +343,24 @@ class TextEditorModule {
   async getProjectPath(project_id) {
     const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
     return dataDir;
+  }
+
+  /**
+   * Validates that a path is within the allowed project directory
+   * @param {string} projectPath - Base project directory
+   * @param {string} relativePath - User-provided relative path
+   * @returns {string} Validated full path
+   * @throws {Error} If path is outside project directory
+   */
+  validatePath(projectPath, relativePath) {
+    const normalizedProjectPath = path.resolve(projectPath);
+    const fullPath = path.resolve(projectPath, relativePath || '');
+
+    if (!fullPath.startsWith(normalizedProjectPath + path.sep) && fullPath !== normalizedProjectPath) {
+      throw new Error('Access denied: Path outside project directory');
+    }
+
+    return fullPath;
   }
 
   validateByFormat(content, format) {

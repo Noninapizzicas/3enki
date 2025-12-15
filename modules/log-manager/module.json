@@ -46,6 +46,24 @@
       "path": "/activities/stats",
       "handler": "getActivityStats",
       "description": "Estadísticas de actividades por tipo, módulo y resultado"
+    },
+    {
+      "method": "GET",
+      "path": "/modules",
+      "handler": "getModules",
+      "description": "Listar todos los módulos con archivos de log"
+    },
+    {
+      "method": "GET",
+      "path": "/modules/*/logs",
+      "handler": "getModuleLogs",
+      "description": "Obtener logs de un módulo específico (backend + frontend juntos)"
+    },
+    {
+      "method": "GET",
+      "path": "/modules/*/stats",
+      "handler": "getModuleStats",
+      "description": "Estadísticas de un módulo específico"
     }
   ],
   "config": {

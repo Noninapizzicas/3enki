@@ -360,6 +360,135 @@ class LogManagerModule {
   }
 
   // ===========================================================================
+  // LOGS POR MÓDULO
+  // ===========================================================================
+
+  /**
+   * GET /modules - Listar todos los módulos con logs
+   *
+   * Retorna lista de módulos que tienen archivos de log,
+   * con estadísticas de cada uno.
+   *
+   * @example
+   * GET /modules/log-manager/api/modules
+   */
+  async getModules(req) {
+    const modules = this.storage.listModules();
+
+    return {
+      success: true,
+      count: modules.length,
+      modules,
+      tip: 'Usa GET /modules/log-manager/api/modules/{nombre}/logs para ver logs de un módulo'
+    };
+  }
+
+  /**
+   * GET /modules/:module/logs - Obtener logs de un módulo específico
+   *
+   * Query params:
+   *   - level: Filtrar por nivel (comma-separated: error,warn)
+   *   - source: Filtrar por fuente (backend/frontend/activity)
+   *   - search: Búsqueda en mensaje y contexto
+   *   - limit: Límite de resultados (default: 100)
+   *   - offset: Offset para paginación (default: 0)
+   *
+   * @example
+   * GET /modules/log-manager/api/modules/file-browser/logs?level=error&limit=50
+   */
+  async getModuleLogs(req) {
+    // Extraer nombre del módulo de la URL
+    // La URL será como: /modules/log-manager/api/modules/file-browser/logs
+    const pathParts = req.path.split('/');
+    const modulesIndex = pathParts.indexOf('modules');
+
+    // El nombre del módulo está después de 'modules' en la API path
+    // /api/modules/{moduleName}/logs
+    let moduleName = null;
+    for (let i = 0; i < pathParts.length; i++) {
+      if (pathParts[i] === 'modules' && pathParts[i + 2] === 'logs') {
+        moduleName = pathParts[i + 1];
+        break;
+      }
+    }
+
+    if (!moduleName) {
+      return {
+        success: false,
+        error: 'Module name not specified'
+      };
+    }
+
+    const filters = {
+      level: req.query?.level,
+      source: req.query?.source,
+      search: req.query?.search,
+      limit: parseInt(req.query?.limit) || 100,
+      offset: parseInt(req.query?.offset) || 0
+    };
+
+    const logs = this.storage.readByModule(moduleName, filters);
+
+    return {
+      success: true,
+      module: moduleName,
+      count: logs.length,
+      filters,
+      logs
+    };
+  }
+
+  /**
+   * GET /modules/:module/stats - Estadísticas de un módulo específico
+   *
+   * @example
+   * GET /modules/log-manager/api/modules/file-browser/stats
+   */
+  async getModuleStats(req) {
+    // Extraer nombre del módulo de la URL
+    const pathParts = req.path.split('/');
+    let moduleName = null;
+    for (let i = 0; i < pathParts.length; i++) {
+      if (pathParts[i] === 'modules' && pathParts[i + 2] === 'stats') {
+        moduleName = pathParts[i + 1];
+        break;
+      }
+    }
+
+    if (!moduleName) {
+      return {
+        success: false,
+        error: 'Module name not specified'
+      };
+    }
+
+    const logs = this.storage.readByModule(moduleName, { limit: 10000 });
+
+    const stats = {
+      module: moduleName,
+      total: logs.length,
+      byLevel: {},
+      bySource: {},
+      byType: {},
+      firstLog: logs.length > 0 ? logs[logs.length - 1].ts : null,
+      lastLog: logs.length > 0 ? logs[0].ts : null
+    };
+
+    for (const log of logs) {
+      stats.byLevel[log.level] = (stats.byLevel[log.level] || 0) + 1;
+      stats.bySource[log.source] = (stats.bySource[log.source] || 0) + 1;
+      if (log.ctx?.type) {
+        stats.byType[log.ctx.type] = (stats.byType[log.ctx.type] || 0) + 1;
+      }
+    }
+
+    return {
+      success: true,
+      stats
+    };
+  }
+
+  // ===========================================================================
   // UTILIDADES PARA LA IA
   // ===========================================================================
 
@@ -370,6 +499,16 @@ class LogManagerModule {
    */
   query(filters = {}) {
     return this.storage.read(filters);
+  }
+
+  /**
+   * Método helper para obtener logs de un módulo
+   * @param {string} moduleName - Nombre del módulo
+   * @param {Object} filters - Filtros
+   * @returns {Array} Logs
+   */
+  queryModule(moduleName, filters = {}) {
+    return this.storage.readByModule(moduleName, filters);
   }
 
   /**

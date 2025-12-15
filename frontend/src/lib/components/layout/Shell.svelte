@@ -38,25 +38,29 @@
   let cleanupChat: (() => void) | null = null;
 
   onMount(() => {
+    console.time('⏱️ Shell.onMount TOTAL');
     console.log('[Shell] Mounting...');
 
     // 1. Registrar módulos UI (síncrono - UI visible inmediatamente)
-    console.log('[Shell] Registering modules...');
+    console.time('⏱️ registerAllModules');
     registerAllModules();
-    console.log('[Shell] Modules registered - UI ready');
+    console.timeEnd('⏱️ registerAllModules');
 
     // 2. Inicializar subscripciones ANTES de conectar
-    // (se activarán automáticamente cuando MQTT conecte)
+    console.time('⏱️ initSubscriptions');
     cleanupWorkspace = initWorkspaceSubscriptions();
     cleanupChat = initChatSubscriptions();
-    console.log('[Shell] Subscriptions prepared');
+    console.timeEnd('⏱️ initSubscriptions');
 
     // 3. Conectar a MQTT en background (no bloquea UI)
-    console.log('[Shell] Connecting to MQTT (background)...');
+    console.time('⏱️ connect (async start)');
     connect().catch((error) => {
       console.error('[Shell] Failed to connect to MQTT:', error);
-      // UI sigue funcionando sin MQTT
     });
+    console.timeEnd('⏱️ connect (async start)');
+
+    console.timeEnd('⏱️ Shell.onMount TOTAL');
+    console.log('[Shell] ✅ onMount completed - UI should be visible now');
   });
 
   onDestroy(() => {

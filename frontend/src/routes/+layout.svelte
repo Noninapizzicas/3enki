@@ -1,5 +1,14 @@
 <script>
-  // Layout raíz - sin estilos globales para mantener simplicidad
+  // Layout raíz - timer de rendimiento
+  console.log('🚀 [Layout] Script executing...');
+  console.time('⏱️ TOTAL page load');
+
+  import { onMount } from 'svelte';
+
+  onMount(() => {
+    console.timeEnd('⏱️ TOTAL page load');
+    console.log('🏁 [Layout] Page fully mounted');
+  });
 </script>
 
 <slot />

@@ -244,6 +244,7 @@ export async function connect(config: Partial<MqttConfig> = {}): Promise<void> {
   errorStore.set(null);
 
   // No bloquear - iniciar conexión en background
+  console.time('⏱️ MQTT total connection');
   initMqttConnection(finalConfig).catch(err => {
     console.error('[MQTT] Background connection failed:', err);
   });
@@ -259,9 +260,9 @@ export async function connect(config: Partial<MqttConfig> = {}): Promise<void> {
 async function initMqttConnection(config: MqttConfig): Promise<void> {
   try {
     // Lazy load de la librería mqtt (~2MB)
-    console.log('[MQTT] Loading mqtt library...');
+    console.time('⏱️ MQTT import library');
     const mqtt = await import('mqtt');
-    console.log('[MQTT] Library loaded');
+    console.timeEnd('⏱️ MQTT import library');
 
     client = mqtt.default.connect(config.url, {
       ...config.options,
@@ -281,7 +282,8 @@ async function initMqttConnection(config: MqttConfig): Promise<void> {
       clearTimeout(connectionTimeout);
       statusStore.set('connected');
       errorStore.set(null);
-      console.log('[MQTT] Connected to', config.url);
+      console.log('[MQTT] ✅ Connected to', config.url);
+      console.timeEnd('⏱️ MQTT total connection');
 
       // Re-suscribir a todos los topics activos
       for (const topic of topicSubscriptions.keys()) {

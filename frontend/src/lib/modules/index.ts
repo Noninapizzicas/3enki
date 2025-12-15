@@ -56,15 +56,21 @@ export const allModules = coreModules;
  */
 export function registerAllModules(): void {
   // 1. Registrar módulos esenciales inmediatamente (UI visible rápido)
+  console.time('⏱️ register core modules');
   for (const module of coreModules) {
+    console.time(`⏱️ register ${module.manifest.id}`);
     register(module);
+    console.timeEnd(`⏱️ register ${module.manifest.id}`);
   }
+  console.timeEnd('⏱️ register core modules');
   console.log(`[Modules] ${coreModules.length} módulos core registrados`);
 
   // 2. Cargar módulos pesados en background (no bloquea UI)
   setTimeout(() => {
+    console.time('⏱️ load heavy modules');
     Promise.all(heavyModuleLoaders.map(loader => loader()))
       .then(heavyModules => {
+        console.timeEnd('⏱️ load heavy modules');
         for (const module of heavyModules) {
           register(module);
         }
@@ -73,7 +79,7 @@ export function registerAllModules(): void {
       .catch(err => {
         console.warn('[Modules] Error cargando módulos pesados:', err);
       });
-  }, 100); // Pequeño delay para priorizar renderizado inicial
+  }, 100);
 }
 
 /**

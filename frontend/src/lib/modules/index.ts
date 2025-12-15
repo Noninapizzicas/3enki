@@ -8,6 +8,7 @@
  */
 
 import { register, unregister } from '$lib/ui-core';
+import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
 // Módulos ligeros - se cargan inmediatamente (necesarios para UI)
 import { projectModule } from './project';
@@ -55,25 +56,31 @@ export const allModules = coreModules;
  * OPTIMIZADO: Carga módulos core inmediatamente, pesados en background
  */
 export function registerAllModules(): void {
-  // 1. Registrar módulos esenciales inmediatamente (UI visible rápido)
+  // 1. Registrar módulos esenciales inmediatamente
+  perfStart('Modules.registerCore');
   for (const module of coreModules) {
+    perfStart(`Module.${module.manifest.id}`);
     register(module);
+    perfEnd(`Module.${module.manifest.id}`);
   }
-  console.log(`[Modules] ${coreModules.length} módulos core registrados`);
+  perfEnd('Modules.registerCore');
+  logMsg(`📦 ${coreModules.length} módulos core registrados`);
 
-  // 2. Cargar módulos pesados en background (no bloquea UI)
+  // 2. Cargar módulos pesados en background
   setTimeout(() => {
+    perfStart('Modules.loadHeavy');
     Promise.all(heavyModuleLoaders.map(loader => loader()))
       .then(heavyModules => {
+        perfEnd('Modules.loadHeavy');
         for (const module of heavyModules) {
           register(module);
         }
-        console.log(`[Modules] ${heavyModules.length} módulos pesados cargados en background`);
+        logMsg(`📦 ${heavyModules.length} módulos pesados cargados`);
       })
       .catch(err => {
-        console.warn('[Modules] Error cargando módulos pesados:', err);
+        logMsg('❌ Error cargando módulos pesados', { error: String(err) });
       });
-  }, 100); // Pequeño delay para priorizar renderizado inicial
+  }, 100);
 }
 
 /**

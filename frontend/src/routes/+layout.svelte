@@ -1,5 +1,15 @@
 <script>
-  // Layout raíz - sin estilos globales para mantener simplicidad
+  import { onMount } from 'svelte';
+  import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
+
+  // Timer inicia cuando el script se ejecuta
+  perfStart('Page.totalLoad');
+  logMsg('🚀 Layout script executing');
+
+  onMount(() => {
+    perfEnd('Page.totalLoad');
+    logMsg('🏁 Page fully mounted');
+  });
 </script>
 
 <slot />

@@ -36,9 +36,17 @@ class StorageManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
 
-    this.logger.info('storage-manager.loading', { module: this.name });
+    // Load config from module.json (core.config may not include module-specific config)
+    try {
+      const moduleJsonPath = path.join(__dirname, 'module.json');
+      const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
+      this.config = { ...moduleJson.config, ...(core.config || {}) };
+    } catch (err) {
+      this.config = core.config || {};
+    }
+
+    this.logger.info('storage-manager.loading', { module: this.name, configLoaded: !!this.config.directories });
 
     // Ensure base storage directory exists
     this.basePath = path.resolve(this.config.basePath || 'data/storage');

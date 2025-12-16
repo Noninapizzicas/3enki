@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
 
@@ -37,9 +39,17 @@ class ProjectManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
 
-    this.logger.info('project-manager.loading', { module: this.name });
+    // Load config from module.json (core.config may not include module-specific config)
+    try {
+      const moduleJsonPath = path.join(__dirname, 'module.json');
+      const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
+      this.config = { ...moduleJson.config, ...(core.config || {}) };
+    } catch (err) {
+      this.config = core.config || {};
+    }
+
+    this.logger.info('project-manager.loading', { module: this.name, configLoaded: !!this.config.defaultSchema });
 
     // Subscribe to database responses
     const unsubDbResponse = await this.eventBus.subscribe(EVENTS.DB.QUERY_RESPONSE,

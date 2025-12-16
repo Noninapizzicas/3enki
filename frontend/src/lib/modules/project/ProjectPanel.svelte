@@ -25,6 +25,10 @@
   let showAddForm = false;
   let editingId: string | null = null;
 
+  // Loading states for async operations (prevent double-clicks)
+  let creating = false;
+  let deletingId: string | null = null;
+
   // Form nuevo proyecto
   let newProject = { name: '', description: '', color: 'blue' };
 
@@ -105,8 +109,9 @@
   }
 
   async function handleCreate() {
-    if (!newProject.name.trim()) return;
+    if (!newProject.name.trim() || creating) return;
 
+    creating = true;
     logAction('create.started', { name: newProject.name });
 
     try {
@@ -134,6 +139,8 @@
     } catch (e) {
       error = 'No se pudo crear el proyecto';
       logAction('create.error', { error: 'connection_failed' });
+    } finally {
+      creating = false;
     }
   }
 
@@ -194,8 +201,12 @@
   async function handleDelete(projectId: string, event: MouseEvent) {
     event.stopPropagation();
 
+    // Prevent double-click on delete
+    if (deletingId === projectId) return;
+
     if (!confirm('¿Eliminar este proyecto?')) return;
 
+    deletingId = projectId;
     logAction('delete.started', { projectId });
 
     try {
@@ -215,6 +226,8 @@
     } catch (e) {
       error = 'No se pudo eliminar el proyecto';
       logAction('delete.error', { projectId, error: 'connection_failed' });
+    } finally {
+      deletingId = null;
     }
   }
 
@@ -278,8 +291,8 @@
           />
         {/each}
       </div>
-      <button class="create-btn" on:click={() => { logAction('button.create.clicked', { name: newProject.name }); handleCreate(); }} disabled={!newProject.name.trim()}>
-        Crear proyecto
+      <button class="create-btn" on:click={() => { logAction('button.create.clicked', { name: newProject.name }); handleCreate(); }} disabled={!newProject.name.trim() || creating}>
+        {creating ? 'Creando...' : 'Crear proyecto'}
       </button>
     </div>
   {/if}
@@ -329,8 +342,10 @@
             {#if project.isActive}
               <span class="active-badge">activo</span>
             {/if}
-            <button class="action-btn edit" on:click={(e) => startEdit(project, e)} title="Editar">✏️</button>
-            <button class="action-btn delete" on:click={(e) => handleDelete(project.id, e)} title="Eliminar">🗑️</button>
+            <button class="action-btn edit" on:click={(e) => startEdit(project, e)} title="Editar" disabled={deletingId === project.id}>✏️</button>
+            <button class="action-btn delete" on:click={(e) => handleDelete(project.id, e)} title="Eliminar" disabled={deletingId === project.id}>
+              {deletingId === project.id ? '⏳' : '🗑️'}
+            </button>
           </button>
         {/if}
       {/each}
@@ -582,6 +597,12 @@
 
   .action-btn.delete:hover {
     background: rgba(239, 68, 68, 0.2);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
   }
 
   .action-btn.save {

@@ -105,11 +105,14 @@ class LogCollector {
       }
 
       // Suscribir a eventos de ActivityLogger
-      this.eventBus.on('activity.logged', (data) => {
-        this.collectActivityLog(data);
+      // Note: EventBus wraps data in envelope, actual activity is in envelope.data
+      this.eventBus.on('activity.logged', (envelope) => {
+        const activity = envelope.data || envelope;
+        this.collectActivityLog(activity);
       });
 
-      this.eventBus.on('activity.batch', (data) => {
+      this.eventBus.on('activity.batch', (envelope) => {
+        const data = envelope.data || envelope;
         if (data.entries && Array.isArray(data.entries)) {
           for (const entry of data.entries) {
             this.collectActivityLog(entry);

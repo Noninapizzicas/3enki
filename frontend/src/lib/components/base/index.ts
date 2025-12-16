@@ -24,3 +24,4 @@ export { default as ToastContainer } from './ToastContainer.svelte';
 export { default as CodeEditor } from './CodeEditor.svelte';
 export { default as FileViewer } from './FileViewer.svelte';
 export { default as Terminal } from './Terminal.svelte';
+export { default as LazyButton } from './LazyButton.svelte';

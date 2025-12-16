@@ -20,3 +20,7 @@ export { default as ChatInput } from './ChatInput.svelte';
 export { default as ChatTools } from './ChatTools.svelte';
 export { default as SystemBar } from './SystemBar.svelte';
 export { default as Panel } from './Panel.svelte';
+
+// Lazy loading versions
+export { default as LazyShell } from './LazyShell.svelte';
+export { default as LazyWorkBar } from './LazyWorkBar.svelte';

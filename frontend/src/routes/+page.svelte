@@ -1,8 +1,15 @@
 <script lang="ts">
   /**
-   * Página principal - Usa el nuevo sistema de UI modular
+   * Página principal - Sistema de UI modular con lazy loading
+   *
+   * Bootstrap mínimo:
+   * - Core (MQTT)
+   * - Shell UI
+   * - Definiciones de módulos (sin cargar)
+   *
+   * Módulos se cargan bajo demanda al navegar.
    */
-  import { Shell } from '$lib/components/layout';
+  import { LazyShell } from '$lib/components/layout';
 </script>
 
-<Shell />
+<LazyShell />

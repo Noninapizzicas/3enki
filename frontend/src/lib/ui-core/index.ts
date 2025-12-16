@@ -4,6 +4,7 @@
  * Arquitectura:
  * - MQTT: Toda comunicación pasa por el broker
  * - Registry: Gestiona módulos por zona
+ * - LazyRegistry: Carga módulos bajo demanda
  * - Stores: Estado reactivo compartido
  * - Layout: Componentes de estructura
  *
@@ -26,7 +27,7 @@ export {
   lastMessage
 } from './mqtt';
 
-// Registry
+// Registry (legacy - compatibilidad)
 export {
   register,
   unregister,
@@ -46,3 +47,23 @@ export {
   appState,
   modules
 } from './registry';
+
+// Lazy Registry (nuevo sistema)
+export {
+  defineModule,
+  loadModule,
+  mountModule,
+  unmountModule,
+  preloadModules,
+  getLoadedModule,
+  isModuleLoaded,
+  isModuleMounted,
+  setActiveModule,
+  workBarDefinitions,
+  chatConfigDefinitions,
+  chatToolsDefinitions,
+  systemBarDefinitions,
+  moduleLoadState,
+  loadedModules,
+  activeModule
+} from './lazy-registry';

@@ -80,10 +80,16 @@ export interface UIModuleManifest {
 export type MessageHandler = (topic: string, payload: unknown) => void;
 
 export interface ModuleContext {
+  /** Publish con scope automático: ui.{module}.{topic} */
   publish: (topic: string, payload: unknown) => void;
+  /** Subscribe con scope automático: ui.{module}.{pattern} */
   subscribe: (pattern: string, handler: MessageHandler) => () => void;
+  /** Subscribe global sin scope (para eventos del sistema) */
+  subscribeGlobal?: (pattern: string, handler: MessageHandler) => () => void;
   openPanel: (panelId: string) => void;
   closePanel: () => void;
+  /** Cleanup de todas las subscripciones del módulo */
+  cleanup?: () => void;
 }
 
 // ============================================================================

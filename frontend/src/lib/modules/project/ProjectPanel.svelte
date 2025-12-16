@@ -27,6 +27,7 @@
 
   // Loading states for async operations (prevent double-clicks)
   let creating = false;
+  let updating = false;
   let deletingId: string | null = null;
 
   // Form nuevo proyecto
@@ -71,9 +72,15 @@
   }
 
   // Cargar proyectos al montar
-  onMount(async () => {
+  onMount(() => {
     logAction('panel.opened');
-    await loadProjects();
+    // Use setTimeout to ensure the component is fully mounted
+    // and give backend a moment to be ready
+    const timer = setTimeout(() => {
+      loadProjects();
+    }, 100);
+
+    return () => clearTimeout(timer);
   });
 
   async function loadProjects() {
@@ -81,7 +88,19 @@
     error = null;
 
     try {
-      const res = await fetch(`${API_BASE}/projects`);
+      // Add timeout to prevent hanging forever
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(`${API_BASE}/projects`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
       const data = await res.json();
 
       if (data.success) {
@@ -99,10 +118,15 @@
         error = data.error || 'Error al cargar proyectos';
         logAction('list.error', { error });
       }
-    } catch (e) {
-      error = 'No se pudo conectar con el servidor';
-      console.error('[ProjectPanel] Error:', e);
-      logAction('list.error', { error: 'connection_failed' });
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        error = 'Tiempo de espera agotado. El servidor no responde.';
+        logAction('list.error', { error: 'timeout' });
+      } else {
+        error = 'No se pudo conectar con el servidor';
+        console.error('[ProjectPanel] Error:', e);
+        logAction('list.error', { error: e.message || 'connection_failed' });
+      }
     } finally {
       loading = false;
     }
@@ -168,8 +192,9 @@
   }
 
   async function handleUpdate(projectId: string) {
-    if (!editForm.name.trim()) return;
+    if (!editForm.name.trim() || updating) return;
 
+    updating = true;
     logAction('update.started', { projectId, name: editForm.name });
 
     try {
@@ -195,6 +220,8 @@
     } catch (e) {
       error = 'No se pudo actualizar el proyecto';
       logAction('update.error', { projectId, error: 'connection_failed' });
+    } finally {
+      updating = false;
     }
   }
 
@@ -337,9 +364,12 @@
               bind:value={editForm.name}
               on:keydown={(e) => e.key === 'Enter' && handleUpdate(project.id)}
               on:keydown={(e) => e.key === 'Escape' && cancelEdit()}
+              disabled={updating}
             />
-            <button class="action-btn save" on:click={() => handleUpdate(project.id)}>✓</button>
-            <button class="action-btn cancel" on:click={cancelEdit}>✕</button>
+            <button class="action-btn save" on:click={() => handleUpdate(project.id)} disabled={updating || !editForm.name.trim()}>
+              {updating ? '⏳' : '✓'}
+            </button>
+            <button class="action-btn cancel" on:click={cancelEdit} disabled={updating}>✕</button>
           </div>
         {:else}
           <!-- Item normal -->

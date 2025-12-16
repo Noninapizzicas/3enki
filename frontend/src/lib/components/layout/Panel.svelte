@@ -320,6 +320,7 @@
   /* ========== CONTENT ========== */
   .panel-content {
     flex: 1;
+    min-height: 0; /* Required for nested flex children to size properly */
     overflow-y: auto;
     padding: 1rem;
   }

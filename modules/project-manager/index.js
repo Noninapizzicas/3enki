@@ -266,31 +266,25 @@ class ProjectManagerModule {
 
   /**
    * Initialize database schema for new project
+   * Note: This is fire-and-forget - we don't wait for completion
+   * since the project can be used immediately with default schema
    */
   async initializeProjectSchema(projectId, correlationId) {
     this.logger.debug({ correlationId, projectId }, 'Initializing project database schema');
 
-    const requestId = crypto.randomUUID();
-
-    const initPromise = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingDbRequests.delete(requestId);
-        reject(new Error('Schema initialization timeout'));
-      }, this.config.dbTimeout || 10000);
-
-      this.pendingDbRequests.set(requestId, { resolve, reject, timeout });
-    });
-
-    await this.eventBus.publish('db.schema.init.request', {
-      project_id: projectId,
-      schema: this.config.defaultSchema,
-      request_id: requestId,
-      correlation_id: correlationId
-    });
-
-    // Wait for db.schema.init.response (handled via db.query.response)
-    // For simplicity, we'll assume success if no error thrown
-    this.logger.debug({ correlationId, projectId }, 'Project schema initialization requested');
+    // Fire-and-forget: publish schema init request without waiting
+    // The database manager will handle it asynchronously
+    try {
+      await this.eventBus.publish('db.schema.init.request', {
+        project_id: projectId,
+        schema: this.config.defaultSchema,
+        correlation_id: correlationId
+      });
+      this.logger.debug({ correlationId, projectId }, 'Project schema initialization requested');
+    } catch (err) {
+      // Log but don't fail - schema init is optional
+      this.logger.warn({ correlationId, projectId, error: err.message }, 'Schema init request failed (non-fatal)');
+    }
   }
 
   /**

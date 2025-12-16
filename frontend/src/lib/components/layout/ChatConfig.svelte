@@ -3,46 +3,34 @@
    * ChatConfig - Barra de configuración del chat
    *
    * Zona: chat-config
-   * Módulos: project, provider, prompts, credentials, history
+   * Paneles: provider, prompts
    *
    * Features:
-   * - Iconos dinámicos según estado (color proyecto, icono provider, etc.)
-   * - Badges para contadores/estados
+   * - Iconos desde metadata centralizada
+   * - Carga lazy de componentes
    */
 
-  import { chatConfigModules, appState, openPanel } from '$lib/ui-core';
+  import { openPanel } from '$lib/ui-core';
   import { Button } from '$lib/components/base';
+  import { getPanelsByZone } from '$lib/modules/panels';
 
-  function handleModuleClick(action: { type: string; panelId?: string; topic?: string; payload?: Record<string, unknown>; route?: string; handler?: () => void }) {
-    if (action.type === 'panel' && action.panelId) {
-      openPanel(action.panelId);
-    }
+  // Obtener paneles de chat-config desde metadata
+  $: configPanels = getPanelsByZone('chat-config');
+
+  function handlePanelClick(panelId: string) {
+    openPanel(panelId);
   }
 </script>
 
 <div class="chat-config">
-  {#each $chatConfigModules as module (module.manifest.id)}
-    {@const icon = module.getIcon ? module.getIcon($appState) : module.manifest.button.icon}
-    {@const badge = module.getBadge ? module.getBadge($appState) : null}
-
+  {#each configPanels as panel (panel.id)}
     <Button
-      {icon}
-      {badge}
+      icon={panel.icon}
       size="sm"
-      on:click={() => handleModuleClick(module.manifest.button.action)}
-      title={module.manifest.name}
+      on:click={() => handlePanelClick(panel.id)}
+      title={panel.title}
     />
   {/each}
-
-  {#if $chatConfigModules.length === 0}
-    <span class="placeholder">
-      <Button icon="🟢" size="sm" disabled title="Proyecto" />
-      <Button icon="🤖" size="sm" disabled title="Provider" />
-      <Button icon="📝" size="sm" disabled title="Prompts" />
-      <Button icon="🔐" size="sm" disabled title="Credenciales" />
-      <Button icon="💬" size="sm" disabled title="Historial" />
-    </span>
-  {/if}
 </div>
 
 <style>
@@ -53,9 +41,5 @@
     padding: 0.5rem 1rem;
     background: var(--color-bar-bg, rgba(0, 0, 0, 0.2));
     border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-  }
-
-  .placeholder {
-    display: contents;
   }
 </style>

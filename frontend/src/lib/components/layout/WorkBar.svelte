@@ -4,39 +4,36 @@
    *
    * Features:
    * - Se pliega/despliega con toggle
-   * - Muestra módulos del workspace activo
-   * - Iconos dinámicos por módulo
+   * - Muestra paneles de trabajo desde metadata centralizada
+   * - Carga lazy de componentes al abrir panel
    */
 
   import { workBarExpanded, toggleWorkBar } from '$lib/stores';
-  import { workBarModules, appState, openPanel } from '$lib/ui-core';
+  import { openPanel } from '$lib/ui-core';
   import { Button } from '$lib/components/base';
+  import { getPanelsByZone, isPanelLoaded } from '$lib/modules/panels';
 
-  function handleModuleClick(action: { type: string; panelId?: string; topic?: string; payload?: Record<string, unknown>; route?: string; handler?: () => void }) {
-    if (action.type === 'panel' && action.panelId) {
-      openPanel(action.panelId);
-    }
-    // Otros tipos de acciones se pueden manejar aquí
+  // Obtener paneles de work-bar desde metadata (sin importar componentes)
+  $: workPanels = getPanelsByZone('work-bar');
+
+  function handlePanelClick(panelId: string) {
+    openPanel(panelId);
   }
 </script>
 
 <div class="workbar" class:collapsed={!$workBarExpanded}>
   {#if $workBarExpanded}
     <div class="modules">
-      {#each $workBarModules as module (module.manifest.id)}
-        {@const icon = module.getIcon ? module.getIcon($appState) : module.manifest.button.icon}
-        {@const badge = module.getBadge ? module.getBadge($appState) : null}
-
+      {#each workPanels as panel (panel.id)}
         <Button
-          {icon}
-          label={module.manifest.button.label}
-          {badge}
-          on:click={() => handleModuleClick(module.manifest.button.action)}
-          title={module.manifest.name}
+          icon={panel.icon}
+          label={panel.title}
+          on:click={() => handlePanelClick(panel.id)}
+          title={panel.title}
         />
       {/each}
 
-      {#if $workBarModules.length === 0}
+      {#if workPanels.length === 0}
         <span class="empty">Sin módulos de trabajo</span>
       {/if}
     </div>

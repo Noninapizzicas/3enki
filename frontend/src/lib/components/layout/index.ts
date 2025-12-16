@@ -24,3 +24,4 @@ export { default as Panel } from './Panel.svelte';
 // Lazy loading versions
 export { default as LazyShell } from './LazyShell.svelte';
 export { default as LazyWorkBar } from './LazyWorkBar.svelte';
+export { default as LazyPanel } from './LazyPanel.svelte';

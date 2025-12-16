@@ -17,10 +17,12 @@
    * ├─────────────────────────────────────────┤   │
    * │ ChatTools + Attachments                 │   │
    * └─────────────────────────────────────────┴───┘
+   *
+   * Paneles se cargan BAJO DEMANDA al abrirlos.
    */
 
   import { onMount, onDestroy } from 'svelte';
-  import { connect, disconnect, activePanel, getPanelConfig, getPanelComponent } from '$lib/ui-core';
+  import { connect, disconnect, activePanel } from '$lib/ui-core';
   import { closePanel } from '$lib/stores/ui';
   import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
   import { registerAllModules, unregisterAllModules } from '$lib/modules';
@@ -32,7 +34,7 @@
   import ChatInput from './ChatInput.svelte';
   import ChatTools from './ChatTools.svelte';
   import SystemBar from './SystemBar.svelte';
-  import Panel from './Panel.svelte';
+  import LazyPanel from './LazyPanel.svelte';
   import { ToastContainer } from '$lib/components/base';
 
   let cleanupWorkspace: (() => void) | null = null;
@@ -42,7 +44,7 @@
     perfStart('Shell.onMount.TOTAL');
     logMsg('🚀 Shell mounting...');
 
-    // 1. Registrar módulos UI
+    // 1. Registrar módulos UI (para botones, no carga componentes)
     perfStart('Shell.registerAllModules');
     registerAllModules();
     perfEnd('Shell.registerAllModules');
@@ -83,10 +85,6 @@
     console.log('[Shell] Disconnected');
   });
 
-  // Panel activo
-  $: panelConfig = $activePanel ? getPanelConfig($activePanel) : null;
-  $: PanelComponent = $activePanel ? getPanelComponent($activePanel) : null;
-
   function handlePanelClose() {
     closePanel();
   }
@@ -115,23 +113,13 @@
   <!-- Toast notifications -->
   <ToastContainer />
 
-  <!-- Active Panel -->
-  {#if $activePanel && panelConfig}
-    <Panel
-      title={panelConfig.title}
-      size={panelConfig.size}
-      position={panelConfig.position || 'top'}
-      resizable={panelConfig.resizable !== false}
-      draggable={panelConfig.draggable || false}
+  <!-- Active Panel (LAZY LOADED) -->
+  {#if $activePanel}
+    <LazyPanel
+      panelId={$activePanel}
       open={true}
       on:close={handlePanelClose}
-    >
-      {#if PanelComponent}
-        <svelte:component this={PanelComponent} panelId={$activePanel} />
-      {:else}
-        <p>Panel sin contenido</p>
-      {/if}
-    </Panel>
+    />
   {/if}
 </div>
 

@@ -10,7 +10,7 @@
    */
 
   import { onMount } from 'svelte';
-  import { activeProject, selectProject } from '$lib/stores';
+  import { activeProject, selectProject, clearProject } from '$lib/stores';
   import { closePanel } from '$lib/stores/ui';
   import type { Project } from '$lib/ui-core';
   import { PROJECT_COLORS } from '$lib/ui-core';
@@ -204,6 +204,14 @@
     // Prevent double-click on delete
     if (deletingId === projectId) return;
 
+    // Check if trying to delete active project
+    const isActiveProject = $activeProject?.id === projectId;
+    if (isActiveProject) {
+      error = 'No se puede eliminar el proyecto activo. Selecciona otro proyecto primero.';
+      logAction('delete.blocked', { projectId, reason: 'is_active' });
+      return;
+    }
+
     if (!confirm('¿Eliminar este proyecto?')) return;
 
     deletingId = projectId;
@@ -220,8 +228,13 @@
         logAction('delete.success', { projectId });
         await loadProjects();
       } else {
-        error = data.error || 'Error al eliminar';
-        logAction('delete.error', { projectId, error });
+        // Handle specific backend errors with user-friendly messages
+        if (data.error?.includes('Cannot delete active')) {
+          error = 'No se puede eliminar el proyecto activo. Selecciona otro proyecto primero.';
+        } else {
+          error = data.error || 'Error al eliminar';
+        }
+        logAction('delete.error', { projectId, error: data.error });
       }
     } catch (e) {
       error = 'No se pudo eliminar el proyecto';
@@ -343,7 +356,11 @@
               <span class="active-badge">activo</span>
             {/if}
             <button class="action-btn edit" on:click={(e) => startEdit(project, e)} title="Editar" disabled={deletingId === project.id}>✏️</button>
-            <button class="action-btn delete" on:click={(e) => handleDelete(project.id, e)} title="Eliminar" disabled={deletingId === project.id}>
+            <button
+              class="action-btn delete"
+              on:click={(e) => handleDelete(project.id, e)}
+              title={$activeProject?.id === project.id ? 'No se puede eliminar el proyecto activo' : 'Eliminar'}
+              disabled={deletingId === project.id || $activeProject?.id === project.id}>
               {deletingId === project.id ? '⏳' : '🗑️'}
             </button>
           </button>
@@ -358,7 +375,10 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    height: 100%;
+    /* Use flex sizing instead of height: 100% - percentage heights don't work
+       when parent uses flex: 1 without explicit height */
+    flex: 1;
+    min-height: 0;
   }
 
   /* Header */
@@ -505,6 +525,7 @@
     flex-direction: column;
     gap: 0.375rem;
     flex: 1;
+    min-height: 0; /* Required for flex child to scroll properly */
     overflow-y: auto;
   }
 

@@ -358,7 +358,10 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    height: 100%;
+    /* Use flex sizing instead of height: 100% - percentage heights don't work
+       when parent uses flex: 1 without explicit height */
+    flex: 1;
+    min-height: 0;
   }
 
   /* Header */
@@ -505,6 +508,7 @@
     flex-direction: column;
     gap: 0.375rem;
     flex: 1;
+    min-height: 0; /* Required for flex child to scroll properly */
     overflow-y: auto;
   }
 

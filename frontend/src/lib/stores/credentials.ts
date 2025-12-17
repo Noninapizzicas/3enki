@@ -94,10 +94,12 @@ export async function fetchCredentials(): Promise<void> {
     const data = await res.json();
 
     if (data.success) {
-      // Flatten credentials from grouped structure
+      // Flatten credentials from all levels
       const allCredentials: Credential[] = [
         ...(data.credentials.GLOBAL || []),
-        ...Object.values(data.credentials.projects || {}).flat() as Credential[]
+        ...(data.credentials.PROJECT || []),
+        ...(data.credentials.CLIENT || []),
+        ...(data.credentials.CUSTOM || [])
       ];
 
       credentialsStore.update(s => ({

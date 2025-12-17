@@ -1,104 +1,81 @@
 <script lang="ts">
   /**
-   * ProjectPanel - Panel de gestión de proyectos
+   * ProjectPanel - Panel único de gestión de proyectos
    *
-   * Patrón UI:
-   * - 1 clic = 1 panel (sin tabs)
-   * - Acciones inline (editar, eliminar)
-   * - Form expandible para crear nuevo
-   * - Conectado a backend via HTTP
+   * Funcionalidades:
+   * - Lista de proyectos con búsqueda
+   * - Crear nuevo proyecto (form expandible)
+   * - Editar proyecto (inline)
+   * - Eliminar proyecto
+   * - Seleccionar/activar proyecto
    */
 
   import { onMount } from 'svelte';
-  import { activeProject, selectProject, clearProject } from '$lib/stores';
-  import { closePanel } from '$lib/stores/ui';
-  import type { Project } from '$lib/ui-core';
+  import { activeProject, selectProject, closePanel } from '$lib/stores';
   import { PROJECT_COLORS } from '$lib/ui-core';
 
-  export let panelId: string;
+  // Props
+  export let panelId: string = '';
 
-  // Estado
-  let projects: Project[] = [];
+  // ============================================================================
+  // TIPOS
+  // ============================================================================
+
+  interface ProjectData {
+    id: string;
+    name: string;
+    description: string;
+    color: string;
+    icon: string;
+    workspaceType: string;
+    isActive: boolean;
+  }
+
+  // ============================================================================
+  // ESTADO
+  // ============================================================================
+
+  // Lista
+  let projects: ProjectData[] = [];
   let loading = true;
   let error: string | null = null;
   let searchQuery = '';
-  let showAddForm = false;
-  let editingId: string | null = null;
 
-  // Loading states for async operations (prevent double-clicks)
+  // Form crear
+  let showCreateForm = false;
+  let createForm = {
+    name: '',
+    description: '',
+    color: 'blue'
+  };
   let creating = false;
-  let updating = false;
+
+  // Edición inline
+  let editingId: string | null = null;
+  let editForm = {
+    name: '',
+    description: ''
+  };
+  let saving = false;
+
+  // Eliminar
   let deletingId: string | null = null;
 
-  // Form nuevo proyecto
-  let newProject = { name: '', description: '', color: 'blue' };
+  // ============================================================================
+  // API
+  // ============================================================================
 
-  // Form editar
-  let editForm = { name: '', description: '' };
+  const API = '/modules/project-manager';
 
-  // API base URL - usa el proxy de Vite
-  const API_BASE = '/modules/project-manager';
-
-  // Logger helper - SIEMPRE muestra en consola + envía al servidor
-  function logAction(action: string, context: Record<string, unknown> = {}) {
-    const timestamp = new Date().toISOString();
-    const logEntry = {
-      ts: timestamp,
-      action: `project.${action}`,
-      ...context
-    };
-
-    // 1. SIEMPRE mostrar en consola del navegador (F12 > Console)
-    if (action.includes('error') || action.includes('fail')) {
-      console.error(`[ProjectPanel] ❌ ${action}`, logEntry);
-    } else if (action.includes('success') || action.includes('loaded')) {
-      console.log(`[ProjectPanel] ✅ ${action}`, logEntry);
-    } else {
-      console.log(`[ProjectPanel] 🔄 ${action}`, logEntry);
-    }
-
-    // 2. Enviar al servidor (no bloquea, fire-and-forget)
-    fetch('/modules/log-manager/logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        level: action.includes('error') ? 'error' : 'info',
-        source: 'frontend',
-        module: 'project-panel',
-        msg: `project.${action}`,
-        ctx: { ...context, timestamp }
-      })
-    }).catch(() => {});
-  }
-
-  // Cargar proyectos al montar
-  onMount(() => {
-    logAction('panel.opened');
-    // Use setTimeout to ensure the component is fully mounted
-    // and give backend a moment to be ready
-    const timer = setTimeout(() => {
-      loadProjects();
-    }, 100);
-
-    return () => clearTimeout(timer);
-  });
-
-  async function loadProjects() {
+  async function fetchProjects(): Promise<void> {
     loading = true;
     error = null;
 
     try {
-      // Add timeout to prevent hanging forever
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(`${API_BASE}/projects`, {
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+      const res = await fetch(`${API}/projects`);
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw new Error(`Error ${res.status}`);
       }
 
       const data = await res.json();
@@ -111,287 +88,319 @@
           color: p.metadata?.color || 'blue',
           icon: p.metadata?.icon || '📁',
           workspaceType: p.metadata?.workspaceType || 'general',
-          isActive: p.is_active
+          isActive: p.is_active === true || p.is_active === 1
         }));
-        logAction('list.loaded', { count: projects.length });
       } else {
-        error = data.error || 'Error al cargar proyectos';
-        logAction('list.error', { error });
+        error = data.error || 'Error al cargar';
       }
     } catch (e: any) {
-      if (e.name === 'AbortError') {
-        error = 'Tiempo de espera agotado. El servidor no responde.';
-        logAction('list.error', { error: 'timeout' });
-      } else {
-        error = 'No se pudo conectar con el servidor';
-        console.error('[ProjectPanel] Error:', e);
-        logAction('list.error', { error: e.message || 'connection_failed' });
-      }
+      error = 'No se pudo conectar al servidor';
+      console.error('[ProjectPanel] Fetch error:', e);
     } finally {
       loading = false;
     }
   }
 
-  async function handleCreate() {
-    if (!newProject.name.trim() || creating) return;
+  async function createProject(): Promise<void> {
+    if (!createForm.name.trim() || creating) return;
 
     creating = true;
-    logAction('create.started', { name: newProject.name });
+    error = null;
 
     try {
-      const res = await fetch(`${API_BASE}/projects`, {
+      const res = await fetch(`${API}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newProject.name,
-          description: newProject.description,
-          metadata: { color: newProject.color, icon: '📁', workspaceType: 'general' }
+          name: createForm.name.trim(),
+          description: createForm.description.trim(),
+          metadata: {
+            color: createForm.color,
+            icon: '📁',
+            workspaceType: 'general'
+          }
         })
       });
 
       const data = await res.json();
 
       if (data.success) {
-        logAction('create.success', { projectId: data.project?.id, name: newProject.name });
-        await loadProjects();
-        newProject = { name: '', description: '', color: 'blue' };
-        showAddForm = false;
+        // Resetear form
+        createForm = { name: '', description: '', color: 'blue' };
+        showCreateForm = false;
+        // Recargar lista
+        await fetchProjects();
       } else {
-        error = data.error || 'Error al crear proyecto';
-        logAction('create.error', { error });
+        error = data.error || 'Error al crear';
       }
-    } catch (e) {
-      error = 'No se pudo crear el proyecto';
-      logAction('create.error', { error: 'connection_failed' });
+    } catch (e: any) {
+      error = 'Error de conexión';
+      console.error('[ProjectPanel] Create error:', e);
     } finally {
       creating = false;
     }
   }
 
-  async function handleSelect(project: Project) {
-    logAction('select', { projectId: project.id, name: project.name });
+  async function updateProject(id: string): Promise<void> {
+    if (!editForm.name.trim() || saving) return;
 
-    // Activar en backend
-    try {
-      await fetch(`${API_BASE}/projects/${project.id}/activate`, { method: 'POST' });
-      logAction('activate.success', { projectId: project.id, name: project.name });
-    } catch (e) {
-      console.error('[ProjectPanel] Error activating:', e);
-      logAction('activate.error', { projectId: project.id, error: 'connection_failed' });
-    }
-
-    selectProject(project);
-    closePanel();
-  }
-
-  function startEdit(project: Project, event: MouseEvent) {
-    event.stopPropagation();
-    logAction('edit.started', { projectId: project.id, name: project.name });
-    editingId = project.id;
-    editForm = { name: project.name, description: project.description || '' };
-  }
-
-  async function handleUpdate(projectId: string) {
-    if (!editForm.name.trim() || updating) return;
-
-    updating = true;
-    logAction('update.started', { projectId, name: editForm.name });
+    saving = true;
+    error = null;
 
     try {
-      const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const res = await fetch(`${API}/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: editForm.name,
-          description: editForm.description
+          name: editForm.name.trim(),
+          description: editForm.description.trim()
         })
       });
 
       const data = await res.json();
 
       if (data.success) {
-        logAction('update.success', { projectId, name: editForm.name });
-        await loadProjects();
         editingId = null;
+        await fetchProjects();
       } else {
         error = data.error || 'Error al actualizar';
-        logAction('update.error', { projectId, error });
       }
-    } catch (e) {
-      error = 'No se pudo actualizar el proyecto';
-      logAction('update.error', { projectId, error: 'connection_failed' });
+    } catch (e: any) {
+      error = 'Error de conexión';
+      console.error('[ProjectPanel] Update error:', e);
     } finally {
-      updating = false;
+      saving = false;
     }
   }
 
-  async function handleDelete(projectId: string, event: MouseEvent) {
-    event.stopPropagation();
+  async function deleteProject(id: string): Promise<void> {
+    if (deletingId) return;
 
-    // Prevent double-click on delete
-    if (deletingId === projectId) return;
-
-    // Check if trying to delete active project
-    const isActiveProject = $activeProject?.id === projectId;
-    if (isActiveProject) {
-      error = 'No se puede eliminar el proyecto activo. Selecciona otro proyecto primero.';
-      logAction('delete.blocked', { projectId, reason: 'is_active' });
+    // No permitir eliminar proyecto activo
+    if ($activeProject?.id === id) {
+      error = 'No puedes eliminar el proyecto activo';
       return;
     }
 
     if (!confirm('¿Eliminar este proyecto?')) return;
 
-    deletingId = projectId;
-    logAction('delete.started', { projectId });
+    deletingId = id;
+    error = null;
 
     try {
-      const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const res = await fetch(`${API}/projects/${id}`, {
         method: 'DELETE'
       });
 
       const data = await res.json();
 
       if (data.success) {
-        logAction('delete.success', { projectId });
-        await loadProjects();
+        await fetchProjects();
       } else {
-        // Handle specific backend errors with user-friendly messages
-        if (data.error?.includes('Cannot delete active')) {
-          error = 'No se puede eliminar el proyecto activo. Selecciona otro proyecto primero.';
-        } else {
-          error = data.error || 'Error al eliminar';
-        }
-        logAction('delete.error', { projectId, error: data.error });
+        error = data.error || 'Error al eliminar';
       }
-    } catch (e) {
-      error = 'No se pudo eliminar el proyecto';
-      logAction('delete.error', { projectId, error: 'connection_failed' });
+    } catch (e: any) {
+      error = 'Error de conexión';
+      console.error('[ProjectPanel] Delete error:', e);
     } finally {
       deletingId = null;
     }
   }
 
-  function cancelEdit() {
-    logAction('edit.cancelled', { projectId: editingId });
+  async function activateProject(project: ProjectData): Promise<void> {
+    // Activar en backend
+    try {
+      await fetch(`${API}/projects/${project.id}/activate`, {
+        method: 'POST'
+      });
+    } catch (e) {
+      console.error('[ProjectPanel] Activate error:', e);
+    }
+
+    // Actualizar store y cerrar panel
+    selectProject({
+      id: project.id,
+      name: project.name,
+      color: project.color,
+      icon: project.icon,
+      workspaceType: project.workspaceType
+    });
+
+    closePanel();
+  }
+
+  // ============================================================================
+  // HELPERS
+  // ============================================================================
+
+  function startEdit(project: ProjectData, event: MouseEvent): void {
+    event.stopPropagation();
+    editingId = project.id;
+    editForm = {
+      name: project.name,
+      description: project.description
+    };
+  }
+
+  function cancelEdit(): void {
     editingId = null;
   }
 
   function getColorHex(colorId: string): string {
-    const color = PROJECT_COLORS.find(c => c.id === colorId);
-    return color?.hex || '#3b82f6';
+    return PROJECT_COLORS.find(c => c.id === colorId)?.hex || '#3b82f6';
   }
 
-  // Filtrar por búsqueda
-  $: filteredProjects = projects.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  function getColorEmoji(colorId: string): string {
+    return PROJECT_COLORS.find(c => c.id === colorId)?.emoji || '📁';
+  }
+
+  // Filtrar proyectos
+  $: filteredProjects = searchQuery
+    ? projects.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : projects;
+
+  // Cargar al montar
+  onMount(() => {
+    fetchProjects();
+  });
 </script>
 
 <div class="project-panel">
-  <!-- Header: Búsqueda + Añadir -->
-  <div class="header">
+  <!-- ===== HEADER ===== -->
+  <header class="panel-header">
     <input
       type="text"
-      class="search"
-      placeholder="🔍 Buscar proyecto..."
+      class="search-input"
+      placeholder="Buscar proyecto..."
       bind:value={searchQuery}
     />
     <button
-      class="add-btn"
-      class:active={showAddForm}
-      on:click={() => { logAction(showAddForm ? 'form.closed' : 'form.opened'); showAddForm = !showAddForm; }}
-      title="Nuevo proyecto"
+      class="btn-add"
+      class:active={showCreateForm}
+      on:click={() => showCreateForm = !showCreateForm}
+      title={showCreateForm ? 'Cancelar' : 'Nuevo proyecto'}
     >
-      {showAddForm ? '✕' : '+'}
+      {showCreateForm ? '✕' : '+'}
     </button>
-  </div>
+  </header>
 
-  <!-- Form crear (expandible) -->
-  {#if showAddForm}
-    <div class="add-form">
+  <!-- ===== FORM CREAR ===== -->
+  {#if showCreateForm}
+    <form class="create-form" on:submit|preventDefault={createProject}>
       <input
         type="text"
+        class="input"
         placeholder="Nombre del proyecto"
-        bind:value={newProject.name}
-        on:keydown={(e) => e.key === 'Enter' && handleCreate()}
+        bind:value={createForm.name}
+        disabled={creating}
       />
       <input
         type="text"
+        class="input"
         placeholder="Descripción (opcional)"
-        bind:value={newProject.description}
+        bind:value={createForm.description}
+        disabled={creating}
       />
-      <div class="color-picker">
-        {#each PROJECT_COLORS as color (color.id)}
-          <button
-            class="color-option"
-            class:selected={newProject.color === color.id}
-            style="background: {color.hex}"
-            on:click={() => { logAction('color.selected', { color: color.id }); newProject.color = color.id; }}
-            title={color.id}
-          />
-        {/each}
+      <div class="color-row">
+        <span class="color-label">Color:</span>
+        <div class="color-options">
+          {#each PROJECT_COLORS as color (color.id)}
+            <button
+              type="button"
+              class="color-btn"
+              class:selected={createForm.color === color.id}
+              style="background-color: {color.hex}"
+              on:click={() => createForm.color = color.id}
+              title={color.id}
+            />
+          {/each}
+        </div>
       </div>
-      <button class="create-btn" on:click={() => { logAction('button.create.clicked', { name: newProject.name }); handleCreate(); }} disabled={!newProject.name.trim() || creating}>
+      <button
+        type="submit"
+        class="btn-create"
+        disabled={!createForm.name.trim() || creating}
+      >
         {creating ? 'Creando...' : 'Crear proyecto'}
       </button>
-    </div>
+    </form>
   {/if}
 
-  <!-- Error -->
+  <!-- ===== ERROR ===== -->
   {#if error}
-    <div class="error">
-      ⚠️ {error}
-      <button class="retry" on:click={() => { logAction('retry.clicked'); loadProjects(); }}>Reintentar</button>
+    <div class="error-box">
+      <span>{error}</span>
+      <button class="btn-retry" on:click={fetchProjects}>Reintentar</button>
     </div>
   {/if}
 
-  <!-- Lista -->
+  <!-- ===== LISTA ===== -->
   <div class="projects-list">
     {#if loading}
-      <div class="loading">Cargando proyectos...</div>
+      <div class="empty-state">Cargando...</div>
     {:else if filteredProjects.length === 0}
-      <div class="empty">
-        {searchQuery ? 'No hay resultados' : 'Sin proyectos'}
+      <div class="empty-state">
+        {searchQuery ? 'Sin resultados' : 'No hay proyectos'}
       </div>
     {:else}
       {#each filteredProjects as project (project.id)}
         {#if editingId === project.id}
-          <!-- Modo edición inline -->
+          <!-- MODO EDICIÓN -->
           <div class="project-item editing">
             <input
               type="text"
               class="edit-input"
               bind:value={editForm.name}
-              on:keydown={(e) => e.key === 'Enter' && handleUpdate(project.id)}
+              on:keydown={(e) => e.key === 'Enter' && updateProject(project.id)}
               on:keydown={(e) => e.key === 'Escape' && cancelEdit()}
-              disabled={updating}
+              disabled={saving}
             />
-            <button class="action-btn save" on:click={() => handleUpdate(project.id)} disabled={updating || !editForm.name.trim()}>
-              {updating ? '⏳' : '✓'}
+            <button
+              class="btn-icon save"
+              on:click={() => updateProject(project.id)}
+              disabled={saving || !editForm.name.trim()}
+              title="Guardar"
+            >
+              ✓
             </button>
-            <button class="action-btn cancel" on:click={cancelEdit} disabled={updating}>✕</button>
+            <button
+              class="btn-icon cancel"
+              on:click={cancelEdit}
+              disabled={saving}
+              title="Cancelar"
+            >
+              ✕
+            </button>
           </div>
         {:else}
-          <!-- Item normal -->
+          <!-- MODO NORMAL -->
           <button
             class="project-item"
             class:active={$activeProject?.id === project.id}
-            style="--project-color: {getColorHex(project.color)}"
-            on:click={() => handleSelect(project)}
+            on:click={() => activateProject(project)}
           >
-            <span class="project-indicator" style="background: {getColorHex(project.color)}"></span>
-            <span class="project-icon">{project.icon}</span>
+            <span class="color-indicator" style="background: {getColorHex(project.color)}"></span>
+            <span class="project-icon">{getColorEmoji(project.color)}</span>
             <span class="project-name">{project.name}</span>
-            {#if project.isActive}
+
+            {#if $activeProject?.id === project.id}
               <span class="active-badge">activo</span>
             {/if}
-            <button class="action-btn edit" on:click={(e) => startEdit(project, e)} title="Editar" disabled={deletingId === project.id}>✏️</button>
+
             <button
-              class="action-btn delete"
-              on:click={(e) => handleDelete(project.id, e)}
-              title={$activeProject?.id === project.id ? 'No se puede eliminar el proyecto activo' : 'Eliminar'}
-              disabled={deletingId === project.id || $activeProject?.id === project.id}>
-              {deletingId === project.id ? '⏳' : '🗑️'}
+              class="btn-icon edit"
+              on:click={(e) => startEdit(project, e)}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              class="btn-icon delete"
+              on:click|stopPropagation={() => deleteProject(project.id)}
+              disabled={$activeProject?.id === project.id || deletingId === project.id}
+              title={$activeProject?.id === project.id ? 'No puedes eliminar el proyecto activo' : 'Eliminar'}
+            >
+              {deletingId === project.id ? '...' : '🗑️'}
             </button>
           </button>
         {/if}
@@ -405,89 +414,104 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    /* Use flex sizing instead of height: 100% - percentage heights don't work
-       when parent uses flex: 1 without explicit height */
-    flex: 1;
+    height: 100%;
     min-height: 0;
   }
 
-  /* Header */
-  .header {
+  /* ===== HEADER ===== */
+  .panel-header {
     display: flex;
     gap: 0.5rem;
+    flex-shrink: 0;
   }
 
-  .search {
+  .search-input {
     flex: 1;
-    padding: 0.5rem 0.75rem;
-    background: var(--color-bg, #0a0a0a);
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
-    border-radius: 0.375rem;
+    padding: 0.625rem 0.75rem;
+    background: var(--color-bg, #0d0d0d);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+    border-radius: 0.5rem;
     color: var(--color-text, #e5e5e5);
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
   }
 
-  .search:focus {
+  .search-input:focus {
     outline: none;
     border-color: var(--color-primary, #3b82f6);
   }
 
-  .add-btn {
-    width: 2.25rem;
-    height: 2.25rem;
+  .btn-add {
+    width: 2.5rem;
+    height: 2.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--color-primary, #3b82f6);
     border: none;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
     color: white;
     font-size: 1.25rem;
-    font-weight: bold;
+    font-weight: 600;
     cursor: pointer;
     transition: background-color 0.15s;
   }
 
-  .add-btn:hover {
-    background: var(--color-primary-hover, #2563eb);
+  .btn-add:hover {
+    background: #2563eb;
   }
 
-  .add-btn.active {
+  .btn-add.active {
     background: var(--color-error, #ef4444);
   }
 
-  /* Form crear */
-  .add-form {
+  /* ===== FORM CREAR ===== */
+  .create-form {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.75rem;
-    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    background: var(--color-surface, rgba(255, 255, 255, 0.04));
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
+    flex-shrink: 0;
   }
 
-  .add-form input {
+  .input {
     padding: 0.5rem 0.75rem;
-    background: var(--color-bg, #0a0a0a);
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
-    border-radius: 0.25rem;
+    background: var(--color-bg, #0d0d0d);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+    border-radius: 0.375rem;
     color: var(--color-text, #e5e5e5);
     font-size: 0.875rem;
   }
 
-  .add-form input:focus {
+  .input:focus {
     outline: none;
     border-color: var(--color-primary, #3b82f6);
   }
 
-  .color-picker {
+  .input:disabled {
+    opacity: 0.6;
+  }
+
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .color-label {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted, #888);
+  }
+
+  .color-options {
     display: flex;
     gap: 0.375rem;
     flex-wrap: wrap;
   }
 
-  .color-option {
+  .color-btn {
     width: 1.5rem;
     height: 1.5rem;
     border: 2px solid transparent;
@@ -496,19 +520,19 @@
     transition: transform 0.15s, border-color 0.15s;
   }
 
-  .color-option:hover {
-    transform: scale(1.1);
+  .color-btn:hover {
+    transform: scale(1.15);
   }
 
-  .color-option.selected {
+  .color-btn.selected {
     border-color: white;
   }
 
-  .create-btn {
-    padding: 0.5rem;
+  .btn-create {
+    padding: 0.625rem;
     background: var(--color-primary, #3b82f6);
     border: none;
-    border-radius: 0.25rem;
+    border-radius: 0.375rem;
     color: white;
     font-size: 0.875rem;
     font-weight: 500;
@@ -516,30 +540,31 @@
     transition: background-color 0.15s;
   }
 
-  .create-btn:hover:not(:disabled) {
-    background: var(--color-primary-hover, #2563eb);
+  .btn-create:hover:not(:disabled) {
+    background: #2563eb;
   }
 
-  .create-btn:disabled {
+  .btn-create:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  /* Error */
-  .error {
+  /* ===== ERROR ===== */
+  .error-box {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.625rem 0.75rem;
     background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 0.375rem;
-    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 0.5rem;
+    color: #f87171;
     font-size: 0.875rem;
+    flex-shrink: 0;
   }
 
-  .retry {
-    margin-left: auto;
+  .btn-retry {
     padding: 0.25rem 0.5rem;
     background: transparent;
     border: 1px solid currentColor;
@@ -549,46 +574,50 @@
     cursor: pointer;
   }
 
-  /* Lista */
+  .btn-retry:hover {
+    background: rgba(239, 68, 68, 0.15);
+  }
+
+  /* ===== LISTA ===== */
   .projects-list {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
-    flex: 1;
-    min-height: 0; /* Required for flex child to scroll properly */
     overflow-y: auto;
+    min-height: 0;
   }
 
-  .loading, .empty {
-    padding: 2rem;
+  .empty-state {
+    padding: 2rem 1rem;
     text-align: center;
-    color: var(--color-text-muted, #a3a3a3);
-    font-size: 0.875rem;
+    color: var(--color-text-muted, #666);
+    font-size: 0.9375rem;
   }
 
-  /* Item */
+  /* ===== ITEM ===== */
   .project-item {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.625rem 0.75rem;
-    background: var(--color-surface, rgba(255, 255, 255, 0.05));
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-    border-radius: 0.375rem;
+    padding: 0.75rem;
+    background: var(--color-surface, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+    border-radius: 0.5rem;
     color: var(--color-text, #e5e5e5);
-    cursor: pointer;
-    transition: all 0.15s;
-    text-align: left;
     font-size: 0.9375rem;
-    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
   }
 
   .project-item:hover {
-    background: var(--color-hover, rgba(255, 255, 255, 0.1));
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
   }
 
   .project-item.active {
-    background: var(--color-active, rgba(59, 130, 246, 0.15));
+    background: rgba(59, 130, 246, 0.12);
     border-color: var(--color-primary, #3b82f6);
   }
 
@@ -596,7 +625,7 @@
     cursor: default;
   }
 
-  .project-indicator {
+  .color-indicator {
     width: 4px;
     height: 1.5rem;
     border-radius: 2px;
@@ -623,54 +652,58 @@
     font-size: 0.625rem;
     font-weight: 600;
     text-transform: uppercase;
+    flex-shrink: 0;
   }
 
-  /* Acciones inline */
-  .action-btn {
+  /* ===== BOTONES INLINE ===== */
+  .btn-icon {
     padding: 0.25rem;
     background: transparent;
     border: none;
     border-radius: 0.25rem;
-    cursor: pointer;
     font-size: 0.875rem;
+    cursor: pointer;
     opacity: 0;
     transition: opacity 0.15s, background-color 0.15s;
   }
 
-  .project-item:hover .action-btn {
+  .project-item:hover .btn-icon {
     opacity: 0.7;
   }
 
-  .action-btn:hover {
+  .btn-icon:hover {
     opacity: 1 !important;
-    background: var(--color-hover, rgba(255, 255, 255, 0.1));
+    background: rgba(255, 255, 255, 0.1);
   }
 
-  .action-btn.delete:hover {
+  .btn-icon.delete:hover {
     background: rgba(239, 68, 68, 0.2);
   }
 
-  .action-btn:disabled {
-    opacity: 0.5;
+  .btn-icon:disabled {
+    opacity: 0.3 !important;
     cursor: not-allowed;
-    pointer-events: none;
   }
 
-  .action-btn.save {
+  /* Edición: mostrar siempre */
+  .btn-icon.save,
+  .btn-icon.cancel {
     opacity: 1;
+  }
+
+  .btn-icon.save {
     color: var(--color-success, #22c55e);
   }
 
-  .action-btn.cancel {
-    opacity: 1;
-    color: var(--color-text-muted, #a3a3a3);
+  .btn-icon.cancel {
+    color: var(--color-text-muted, #888);
   }
 
-  /* Edit input */
+  /* ===== INPUT EDICIÓN ===== */
   .edit-input {
     flex: 1;
     padding: 0.375rem 0.5rem;
-    background: var(--color-bg, #0a0a0a);
+    background: var(--color-bg, #0d0d0d);
     border: 1px solid var(--color-primary, #3b82f6);
     border-radius: 0.25rem;
     color: var(--color-text, #e5e5e5);
@@ -679,5 +712,9 @@
 
   .edit-input:focus {
     outline: none;
+  }
+
+  .edit-input:disabled {
+    opacity: 0.6;
   }
 </style>

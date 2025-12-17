@@ -122,3 +122,25 @@ export {
   applyTheme
 } from './theme';
 export type { ThemeMode, ThemeColors } from './theme';
+
+// Credentials Store
+export {
+  credentialsStore,
+  editingCredential,
+  fetchCredentials,
+  testCredential,
+  saveCredential,
+  updateCredential,
+  deleteCredential,
+  setEditingCredential,
+  clearEditingCredential,
+  globalCredentials,
+  projectCredentials,
+  clientCredentials,
+  customCredentials,
+  isLoading,
+  hasError,
+  credentialError,
+  credentialCount
+} from './credentials';
+export type { Credential, ProviderOption, LevelOption, CredentialsState } from './credentials';

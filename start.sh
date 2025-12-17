@@ -41,6 +41,19 @@ DEFAULT_MQTT_WS_PORT=9001
 # Crear directorios necesarios
 mkdir -p "$PID_DIR" "$LOG_DIR"
 
+# Verificar que Node.js y npm estén instalados
+check_dependencies() {
+    if ! command -v node &> /dev/null; then
+        log_error "Node.js no está instalado. Por favor instala Node.js >= 18"
+        exit 1
+    fi
+    if ! command -v npm &> /dev/null; then
+        log_error "npm no está instalado. Por favor instala npm"
+        exit 1
+    fi
+    log_info "Node $(node -v) / npm $(npm -v)"
+}
+
 ###############################################################################
 # Funciones de utilidad
 ###############################################################################
@@ -130,6 +143,13 @@ EOF
 
 start_backend() {
     log_info "Iniciando Backend (Event-Core)..."
+
+    # Verificar dependencias del backend
+    if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
+        log_info "Instalando dependencias del backend..."
+        cd "$SCRIPT_DIR"
+        npm install
+    fi
 
     # Determinar puerto
     local port=${BACKEND_PORT:-$DEFAULT_BACKEND_PORT}
@@ -265,9 +285,11 @@ show_status() {
 
 case "${1:-all}" in
     backend)
+        check_dependencies
         start_backend
         ;;
     frontend)
+        check_dependencies
         start_frontend
         ;;
     status)
@@ -281,6 +303,8 @@ case "${1:-all}" in
         echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
         echo -e "${BLUE}              Event-Core - Iniciando Servicios              ${NC}"
         echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo ""
+        check_dependencies
         echo ""
         start_backend
         echo ""

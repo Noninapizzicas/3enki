@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * Página principal - Sistema de UI modular
+   * Página principal - Sistema de UI modular con lazy loading
    */
-  import { Shell } from '$lib/components/layout';
+  import { LazyShell } from '$lib/components/layout';
 </script>
 
-<Shell />
+<LazyShell />

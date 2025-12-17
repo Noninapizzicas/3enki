@@ -14,6 +14,8 @@ export interface PanelDef {
   position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
   zone: 'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar';
   order: number;
+  // Si false, no muestra botón en la barra (solo accesible via openPanel)
+  showInBar?: boolean;
   // Loader - importa el componente bajo demanda
   loader: () => Promise<{ default: ComponentType }>;
 }
@@ -88,6 +90,38 @@ export const panels: Record<string, PanelDef> = {
     order: 2,
     loader: () => import('$lib/modules/prompts/PromptsPanel.svelte')
   },
+  'credentials-list': {
+    id: 'credentials-list',
+    title: 'Credenciales',
+    icon: '🔐',
+    size: 'md',
+    position: 'top',
+    zone: 'chat-config',
+    order: 3,
+    loader: () => import('$lib/modules/credentials/CredentialsListPanel.svelte')
+  },
+  'credentials-add': {
+    id: 'credentials-add',
+    title: 'Nueva Credencial',
+    icon: '➕',
+    size: 'md',
+    position: 'top',
+    zone: 'chat-config',
+    order: 4,
+    showInBar: false,
+    loader: () => import('$lib/modules/credentials/CredentialAddPanel.svelte')
+  },
+  'credentials-edit': {
+    id: 'credentials-edit',
+    title: 'Editar Credencial',
+    icon: '✏️',
+    size: 'md',
+    position: 'top',
+    zone: 'chat-config',
+    order: 5,
+    showInBar: false,
+    loader: () => import('$lib/modules/credentials/CredentialEditPanel.svelte')
+  },
 
   // === SYSTEM BAR ===
   history: {
@@ -99,25 +133,15 @@ export const panels: Record<string, PanelDef> = {
     zone: 'system-bar',
     order: 1,
     loader: () => import('$lib/modules/history/HistoryPanel.svelte')
-  },
-  credentials: {
-    id: 'credentials',
-    title: 'Credenciales',
-    icon: '🔑',
-    size: 'sm',
-    position: 'top',
-    zone: 'system-bar',
-    order: 2,
-    loader: () => import('$lib/modules/credentials/CredentialsPanel.svelte')
   }
 };
 
 /**
- * Obtener paneles por zona
+ * Obtener paneles por zona (solo los que muestran botón)
  */
 export function getPanelsByZone(zone: PanelDef['zone']): PanelDef[] {
   return Object.values(panels)
-    .filter(p => p.zone === zone)
+    .filter(p => p.zone === zone && p.showInBar !== false)
     .sort((a, b) => a.order - b.order);
 }
 

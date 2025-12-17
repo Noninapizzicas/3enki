@@ -7,8 +7,8 @@ const BaseProvider = require('./base-provider');
  * Priority: 3
  */
 class OpenAIProvider extends BaseProvider {
-  constructor(config, logger) {
-    super(config, logger);
+  constructor(config, logger, credentialResolver) {
+    super(config, logger, credentialResolver);
     this.name = 'openai';
   }
 
@@ -16,11 +16,11 @@ class OpenAIProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    this.refreshApiKey();
+    await this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('openai.no-api-key', {
-        message: 'OPENAI_API_KEY or OPENAI_API_KEY_GLOBAL not found in environment'
+        message: 'No OpenAI API key found (checked credential-manager and environment)'
       });
     }
 
@@ -31,9 +31,9 @@ class OpenAIProvider extends BaseProvider {
   }
 
   /**
-   * Refresh API key from environment (supports dynamic credential updates)
+   * Refresh API key from environment (fallback when credential resolver unavailable)
    */
-  refreshApiKey() {
+  refreshApiKeyFromEnv() {
     this.apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_GLOBAL || null;
   }
 

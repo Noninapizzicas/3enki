@@ -7,8 +7,8 @@ const BaseProvider = require('./base-provider');
  * Priority: 1 (primera opción por costo/performance)
  */
 class DeepSeekProvider extends BaseProvider {
-  constructor(config, logger) {
-    super(config, logger);
+  constructor(config, logger, credentialResolver) {
+    super(config, logger, credentialResolver);
     this.name = 'deepseek';
   }
 
@@ -16,11 +16,11 @@ class DeepSeekProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    this.refreshApiKey();
+    await this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('deepseek.no-api-key', {
-        message: 'DEEPSEEK_API_KEY or DEEPSEEK_API_KEY_GLOBAL not found in environment'
+        message: 'No DeepSeek API key found (checked credential-manager and environment)'
       });
     }
 
@@ -31,9 +31,9 @@ class DeepSeekProvider extends BaseProvider {
   }
 
   /**
-   * Refresh API key from environment (supports dynamic credential updates)
+   * Refresh API key from environment (fallback when credential resolver unavailable)
    */
-  refreshApiKey() {
+  refreshApiKeyFromEnv() {
     this.apiKey = process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY_GLOBAL || null;
   }
 

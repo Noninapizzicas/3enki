@@ -7,8 +7,8 @@ const BaseProvider = require('./base-provider');
  * Priority: 2
  */
 class AnthropicProvider extends BaseProvider {
-  constructor(config, logger) {
-    super(config, logger);
+  constructor(config, logger, credentialResolver) {
+    super(config, logger, credentialResolver);
     this.name = 'anthropic';
     this.apiVersion = '2023-06-01';
   }
@@ -17,11 +17,11 @@ class AnthropicProvider extends BaseProvider {
    * Initialize
    */
   async initialize() {
-    this.refreshApiKey();
+    await this.refreshApiKey();
 
     if (!this.apiKey) {
       this.logger.warn('anthropic.no-api-key', {
-        message: 'ANTHROPIC_API_KEY or ANTHROPIC_API_KEY_GLOBAL not found in environment'
+        message: 'No Anthropic API key found (checked credential-manager and environment)'
       });
     }
 
@@ -32,9 +32,9 @@ class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Refresh API key from environment (supports dynamic credential updates)
+   * Refresh API key from environment (fallback when credential resolver unavailable)
    */
-  refreshApiKey() {
+  refreshApiKeyFromEnv() {
     this.apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY_GLOBAL || null;
   }
 

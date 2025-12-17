@@ -7,7 +7,7 @@ const http = require('http');
  * Todos los proveedores LLM deben extender esta clase
  */
 class BaseProvider {
-  constructor(config, logger) {
+  constructor(config, logger, credentialResolver = null) {
     this.config = config;
     this.logger = logger;
     this.name = 'base';
@@ -17,8 +17,13 @@ class BaseProvider {
     this.tokenCount = 0;
     this.lastResetTime = Date.now();
 
-    // API key from environment
+    // API key management
     this.apiKey = null;
+    this.credentialResolver = credentialResolver; // Function to resolve credentials via events
+
+    // Context for credential resolution (can be set per-request)
+    this.currentProjectId = null;
+    this.currentClientId = null;
   }
 
   /**
@@ -30,22 +35,56 @@ class BaseProvider {
 
   /**
    * Check if provider is available
-   * Re-checks environment at runtime for dynamically added credentials
+   * Resolves credentials via credential-manager if resolver is available
    */
   async isAvailable() {
-    // Re-check environment for API key (supports dynamic credential updates)
+    // Try to refresh API key if not set
     if (!this.apiKey) {
-      this.refreshApiKey();
+      await this.refreshApiKey();
     }
     return this.apiKey !== null && this.config.enabled;
   }
 
   /**
-   * Refresh API key from environment
+   * Refresh API key - uses credential resolver if available, falls back to env
+   * Override in subclasses to specify the provider name for resolution
+   */
+  async refreshApiKey() {
+    // If we have a credential resolver, use it (event-based resolution)
+    if (this.credentialResolver) {
+      try {
+        this.apiKey = await this.credentialResolver(this.name, {
+          projectId: this.currentProjectId,
+          clientId: this.currentClientId
+        });
+        return;
+      } catch (error) {
+        this.logger.debug(`${this.name}.credential.resolver.failed`, {
+          error: error.message,
+          fallback: 'environment'
+        });
+        // Fall through to environment check
+      }
+    }
+
+    // Fallback: check environment directly (legacy support)
+    this.refreshApiKeyFromEnv();
+  }
+
+  /**
+   * Refresh API key from environment variables
    * Override in subclasses to check specific env vars
    */
-  refreshApiKey() {
-    // Subclasses should implement this
+  refreshApiKeyFromEnv() {
+    // Subclasses should implement this for fallback
+  }
+
+  /**
+   * Set context for credential resolution (projectId, clientId for cascade)
+   */
+  setContext({ projectId, clientId } = {}) {
+    this.currentProjectId = projectId;
+    this.currentClientId = clientId;
   }
 
   /**

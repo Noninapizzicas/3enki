@@ -27,6 +27,10 @@ class AIGatewayModule {
     this.currentProvider = 'auto';
     this.currentModel = null;
 
+    // Credential resolution
+    this.pendingCredentialRequests = new Map(); // requestId -> {resolve, reject, timeout}
+    this.credentialCache = new Map(); // provider -> {apiKey, resolvedAt, projectId}
+
     // Configuración de parámetros LLM
     this.chatConfig = {
       temperature: 0.7,
@@ -128,12 +132,97 @@ class AIGatewayModule {
    */
   async subscribeToEvents() {
     // Handler para solicitudes de AI desde otros módulos via eventos
-    // Suscribirse a 'ai.request' (publicado por menu-generator y otros módulos)
     await this.eventBus.subscribe('ai.request', this.onAIRequestCreated.bind(this));
 
+    // Handler para respuestas de credential-manager
+    await this.eventBus.subscribe('credential.resolve.response', this.onCredentialResponse.bind(this));
+
     this.logger.info('ai-gateway.events.subscribed', {
-      events: ['ai.request']
+      events: ['ai.request', 'credential.resolve.response']
     });
+  }
+
+  /**
+   * Resolve credential from credential-manager via events
+   * Supports cascade: CUSTOM → CLIENT → PROJECT → GLOBAL
+   */
+  async resolveCredential(providerName, { projectId, clientId, customId } = {}) {
+    // Check cache first (valid for 5 minutes)
+    const cacheKey = `${providerName}:${projectId || 'global'}:${clientId || ''}:${customId || ''}`;
+    const cached = this.credentialCache.get(cacheKey);
+    if (cached && (Date.now() - cached.resolvedAt) < 300000) {
+      return cached.apiKey;
+    }
+
+    const requestId = `cred-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      // Set timeout for credential resolution
+      const timeout = setTimeout(() => {
+        this.pendingCredentialRequests.delete(requestId);
+        reject(new Error(`Credential resolution timeout for ${providerName}`));
+      }, 5000);
+
+      // Store pending request
+      this.pendingCredentialRequests.set(requestId, { resolve, reject, timeout, providerName, cacheKey });
+
+      // Publish request to credential-manager
+      this.eventBus.publish('credential.resolve.request', {
+        provider: providerName.toUpperCase(),
+        project_id: projectId,
+        client_id: clientId,
+        custom_id: customId,
+        request_id: requestId
+      });
+
+      this.logger.debug('ai-gateway.credential.request', {
+        request_id: requestId,
+        provider: providerName,
+        project_id: projectId
+      });
+    });
+  }
+
+  /**
+   * Handle credential resolution response from credential-manager
+   */
+  async onCredentialResponse(event) {
+    const { request_id, success, api_key, resolved_from, error } = event.payload || event;
+
+    const pending = this.pendingCredentialRequests.get(request_id);
+    if (!pending) {
+      // Not our request or already timed out
+      return;
+    }
+
+    // Clean up
+    clearTimeout(pending.timeout);
+    this.pendingCredentialRequests.delete(request_id);
+
+    if (success && api_key) {
+      // Cache the credential
+      this.credentialCache.set(pending.cacheKey, {
+        apiKey: api_key,
+        resolvedAt: Date.now(),
+        resolvedFrom: resolved_from
+      });
+
+      this.logger.info('ai-gateway.credential.resolved', {
+        provider: pending.providerName,
+        resolved_from,
+        request_id
+      });
+
+      pending.resolve(api_key);
+    } else {
+      this.logger.warn('ai-gateway.credential.failed', {
+        provider: pending.providerName,
+        error,
+        request_id
+      });
+
+      pending.reject(new Error(error || `No credential found for ${pending.providerName}`));
+    }
   }
 
   /**
@@ -245,11 +334,14 @@ class AIGatewayModule {
       ollama: OllamaProvider
     };
 
+    // Create credential resolver bound to this gateway
+    const credentialResolver = this.resolveCredential.bind(this);
+
     for (const [name, ProviderClass] of Object.entries(providerClasses)) {
       const providerConfig = this.config.providers?.[name];
 
       if (providerConfig && providerConfig.enabled) {
-        const provider = new ProviderClass(providerConfig, this.logger);
+        const provider = new ProviderClass(providerConfig, this.logger, credentialResolver);
         await provider.initialize();
 
         this.providers.set(name, provider);

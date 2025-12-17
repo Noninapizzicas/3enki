@@ -782,7 +782,9 @@ class CredentialManagerModule {
     // Credenciales agrupadas y enriquecidas
     const credentialsGrouped = {
       GLOBAL: [],
-      projects: {}
+      PROJECT: [],
+      CLIENT: [],
+      CUSTOM: []
     };
 
     for (const [key, value] of this.credentials.entries()) {
@@ -800,13 +802,9 @@ class CredentialManagerModule {
         preview: this.maskApiKey(value)
       };
 
-      if (parsed.level === 'GLOBAL') {
-        credentialsGrouped.GLOBAL.push(credential);
-      } else if (parsed.level === 'PROJECT' && parsed.identifier) {
-        if (!credentialsGrouped.projects[parsed.identifier]) {
-          credentialsGrouped.projects[parsed.identifier] = [];
-        }
-        credentialsGrouped.projects[parsed.identifier].push(credential);
+      // Group by level
+      if (credentialsGrouped[parsed.level]) {
+        credentialsGrouped[parsed.level].push(credential);
       }
     }
 

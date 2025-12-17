@@ -8,8 +8,8 @@ const BaseProvider = require('./base-provider');
  * Cost: $0 (local)
  */
 class OllamaProvider extends BaseProvider {
-  constructor(config, logger) {
-    super(config, logger);
+  constructor(config, logger, credentialResolver) {
+    super(config, logger, credentialResolver);
     this.name = 'ollama';
   }
 

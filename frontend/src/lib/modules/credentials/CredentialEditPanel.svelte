@@ -137,13 +137,23 @@
     <div class="field">
       <label class="label">Nueva API Key</label>
       <div class="password-wrapper">
-        <input
-          type={showPassword ? 'text' : 'password'}
-          class="input password-input"
-          placeholder="sk-..."
-          bind:value={newApiKey}
-          on:input={() => testResult = null}
-        />
+        {#if showPassword}
+          <input
+            type="text"
+            class="input password-input"
+            placeholder="sk-..."
+            bind:value={newApiKey}
+            on:input={() => testResult = null}
+          />
+        {:else}
+          <input
+            type="password"
+            class="input password-input"
+            placeholder="sk-..."
+            bind:value={newApiKey}
+            on:input={() => testResult = null}
+          />
+        {/if}
         <button
           type="button"
           class="toggle-password"

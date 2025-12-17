@@ -41,8 +41,19 @@ class StorageManagerModule {
     try {
       const moduleJsonPath = path.join(__dirname, 'module.json');
       const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
-      this.config = { ...moduleJson.config, ...(core.config || {}) };
+      const moduleConfig = moduleJson.config || {};
+
+      // Merge configs, but only use core.config values that are actually defined
+      // This prevents undefined values from overwriting module.json defaults
+      const coreConfig = core.config || {};
+      this.config = { ...moduleConfig };
+      for (const [key, value] of Object.entries(coreConfig)) {
+        if (value !== undefined && value !== null) {
+          this.config[key] = value;
+        }
+      }
     } catch (err) {
+      this.logger.warn('storage-manager.config.load.error', { error: err.message });
       this.config = core.config || {};
     }
 

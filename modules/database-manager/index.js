@@ -37,11 +37,31 @@ class DatabaseManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
+
+    // Load config from module.json (core.config may not include module-specific config)
+    try {
+      const moduleJsonPath = path.join(__dirname, 'module.json');
+      const moduleJson = JSON.parse(fsSync.readFileSync(moduleJsonPath, 'utf-8'));
+      const moduleConfig = moduleJson.config || {};
+
+      // Merge configs, but only use core.config values that are actually defined
+      // This prevents undefined values from overwriting module.json defaults
+      const coreConfig = core.config || {};
+      this.config = { ...moduleConfig };
+      for (const [key, value] of Object.entries(coreConfig)) {
+        if (value !== undefined && value !== null) {
+          this.config[key] = value;
+        }
+      }
+    } catch (err) {
+      this.logger.warn('database-manager.config.load.error', { error: err.message });
+      this.config = core.config || {};
+    }
 
     this.logger.info('module.loading', {
       module: this.name,
-      version: this.version
+      version: this.version,
+      configLoaded: !!this.config.projectsPath
     });
 
     // Configure projects path
@@ -262,8 +282,30 @@ class DatabaseManagerModule {
     this.logger.info('schema.init.request.received', {
       project_id,
       request_id,
-      correlation_id
+      correlation_id,
+      has_schema: !!schema,
+      schema_length: schema ? schema.length : 0
     });
+
+    // Validate schema before attempting to execute
+    if (!schema || typeof schema !== 'string' || schema.trim().length === 0) {
+      const errorMsg = 'Schema is required and must be a non-empty string';
+      this.logger.error('schema.init.request.invalid', {
+        project_id,
+        error: errorMsg,
+        schema_type: typeof schema,
+        correlation_id
+      });
+
+      await this.publishSchemaInitResponse(
+        project_id,
+        request_id,
+        false,
+        errorMsg,
+        correlation_id
+      );
+      return;
+    }
 
     try {
       const db = await this.getDatabase(project_id);

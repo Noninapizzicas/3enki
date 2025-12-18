@@ -204,17 +204,23 @@ class CredentialManagerModule {
     );
 
     // MQTT direct subscriptions for UI (no topic transformation)
-    if (this.mqtt) {
-      await this.mqtt.subscribe('credential/state/request');
-      await this.mqtt.subscribe('credential/create');
-      await this.mqtt.subscribe('credential/update');
-      await this.mqtt.subscribe('credential/delete');
+    if (this.mqtt && this.mqtt.isConnected) {
+      try {
+        await this.mqtt.subscribe('credential/state/request');
+        await this.mqtt.subscribe('credential/create');
+        await this.mqtt.subscribe('credential/update');
+        await this.mqtt.subscribe('credential/delete');
 
-      this.mqtt.on('message', this.handleMqttMessage.bind(this));
+        this.mqtt.on('message', this.handleMqttMessage.bind(this));
 
-      this.logger.info('credential-manager.mqtt.subscribed', {
-        topics: ['credential/state/request', 'credential/create', 'credential/update', 'credential/delete']
-      });
+        this.logger.info('credential-manager.mqtt.subscribed', {
+          topics: ['credential/state/request', 'credential/create', 'credential/update', 'credential/delete']
+        });
+      } catch (err) {
+        this.logger.warn('credential-manager.mqtt.subscribe.failed', { error: err.message });
+      }
+    } else {
+      this.logger.warn('credential-manager.mqtt.not.connected', { mqttExists: !!this.mqtt, isConnected: this.mqtt?.isConnected });
     }
 
     this.logger.info('events.subscribed', {

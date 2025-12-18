@@ -85,15 +85,21 @@ class ProjectManagerModule {
     // Comunicación directa frontend ↔ backend via MQTT (sin transformación de topics)
     // El eventBus transforma topics, pero UI necesita topics directos
 
-    if (this.mqtt) {
-      await this.mqtt.subscribe('project/state/request');
-      await this.mqtt.subscribe('project/create');
-      await this.mqtt.subscribe('project/update');
-      await this.mqtt.subscribe('project/delete');
-      await this.mqtt.subscribe('project/activate');
+    if (this.mqtt && this.mqtt.isConnected) {
+      try {
+        await this.mqtt.subscribe('project/state/request');
+        await this.mqtt.subscribe('project/create');
+        await this.mqtt.subscribe('project/update');
+        await this.mqtt.subscribe('project/delete');
+        await this.mqtt.subscribe('project/activate');
 
-      this.mqtt.on('message', this.handleMqttMessage.bind(this));
-      this.logger.info('project-manager.mqtt.subscribed', { topics: ['project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate'] });
+        this.mqtt.on('message', this.handleMqttMessage.bind(this));
+        this.logger.info('project-manager.mqtt.subscribed', { topics: ['project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate'] });
+      } catch (err) {
+        this.logger.warn('project-manager.mqtt.subscribe.failed', { error: err.message });
+      }
+    } else {
+      this.logger.warn('project-manager.mqtt.not.connected', { mqttExists: !!this.mqtt, isConnected: this.mqtt?.isConnected });
     }
 
     // Load existing projects from database

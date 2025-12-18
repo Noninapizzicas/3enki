@@ -689,6 +689,21 @@ export function addNotification(type: Notification['type'], message: string) {
 
 ### 6.1 Cliente MQTT
 
+#### Principio Clave: Cola de Mensajes
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  IMPORTANTE: Los mensajes NUNCA se descartan                    │
+│                                                                 │
+│  Si MQTT no está conectado:                                     │
+│    → publish() ENCOLA el mensaje                                │
+│    → Al conectar, flushPendingMessages() envía la cola          │
+│                                                                 │
+│  Beneficio: Los módulos NO necesitan verificar conexión         │
+│  Pueden llamar publish() en cualquier momento                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ```typescript
 // ui-core/mqtt.ts
 import mqtt from 'mqtt';
@@ -719,6 +734,30 @@ const handlers = new Map<string, Set<MessageHandler>>();
 
 type MessageHandler = (topic: string, payload: unknown) => void;
 
+// ============ COLA DE MENSAJES PENDIENTES ============
+// Mensajes encolados cuando no hay conexión
+interface PendingMessage {
+  topic: string;
+  payload: unknown;
+  retain: boolean;
+}
+
+const pendingMessages: PendingMessage[] = [];
+const MAX_PENDING_MESSAGES = 100;
+
+// Envía todos los mensajes pendientes al conectar
+function flushPendingMessages(): void {
+  if (pendingMessages.length === 0) return;
+  console.log(`[MQTT] Flushing ${pendingMessages.length} pending messages`);
+
+  while (pendingMessages.length > 0) {
+    const msg = pendingMessages.shift()!;
+    if (client?.connected) {
+      client.publish(msg.topic, JSON.stringify(msg.payload), { retain: msg.retain });
+    }
+  }
+}
+
 // Conexión
 export function connect(config: Partial<MqttConfig> = {}): void {
   const cfg = { ...defaultConfig, ...config };
@@ -738,6 +777,9 @@ export function connect(config: Partial<MqttConfig> = {}): void {
     handlers.forEach((_, pattern) => {
       client?.subscribe(pattern);
     });
+
+    // IMPORTANTE: Enviar mensajes que estaban esperando conexión
+    flushPendingMessages();
   });
 
   client.on('message', (topic, message) => {
@@ -772,9 +814,14 @@ export function disconnect(): void {
 }
 
 // Publicar
+// IMPORTANTE: Si no está conectado, el mensaje se ENCOLA y se envía al conectar
 export function publish(topic: string, payload: unknown, retain = false): void {
-  if (!client || client.connected === false) {
-    console.warn('[MQTT] Not connected, cannot publish');
+  // Si no está conectado, encolar mensaje (NO descartar!)
+  if (!client || !client.connected) {
+    if (pendingMessages.length < MAX_PENDING_MESSAGES) {
+      pendingMessages.push({ topic, payload, retain });
+      console.log(`[MQTT] Queued message for ${topic}`);
+    }
     return;
   }
 
@@ -842,6 +889,145 @@ function topicMatches(pattern: string, topic: string): boolean {
 | `conversation/loaded` | `{ messages }` | Conversación cargada |
 | `credential/resolved` | `{ provider, valid }` | Estado credenciales |
 | `file/list/response` | `{ files }` | Lista de archivos |
+
+### 6.3 Patrón de Implementación para Módulos
+
+#### Reglas Obligatorias
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  TODOS los módulos DEBEN seguir este patrón:                    │
+│                                                                 │
+│  1. DATOS via MQTT (NO endpoints REST /ui/state)                │
+│  2. Store con datos DEFAULT para que UI funcione inmediatamente │
+│  3. Llamar publish() directamente (cola maneja reconexión)      │
+│  4. Suscribirse a eventos de estado del backend                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Plantilla de Store para Módulos
+
+```typescript
+// stores/mi-modulo.ts
+import { writable, derived } from 'svelte/store';
+import { subscribe as mqttSubscribe, publish } from '$lib/ui-core/mqtt';
+
+// 1. DATOS DEFAULT - UI funciona sin esperar MQTT
+const DEFAULT_ITEMS = [
+  { id: 'default1', name: 'Item 1' },
+  { id: 'default2', name: 'Item 2' }
+];
+
+// 2. ESTADO INICIAL con defaults
+const initialState = {
+  items: DEFAULT_ITEMS,  // ← Tiene datos desde el inicio
+  loading: false,
+  error: null
+};
+
+export const store = writable(initialState);
+
+// 3. SUSCRIPCIONES MQTT
+let unsubscribeState: (() => void) | null = null;
+
+export function initSubscriptions(): () => void {
+  // Recibir estado del backend
+  unsubscribeState = mqttSubscribe('mi-modulo/state', (_topic, payload) => {
+    store.update(s => ({
+      ...s,
+      items: payload.items?.length > 0 ? payload.items : DEFAULT_ITEMS,
+      loading: false
+    }));
+  });
+
+  // Solicitar estado inicial
+  // (si MQTT no está conectado, se encola automáticamente)
+  requestState();
+
+  return () => {
+    unsubscribeState?.();
+  };
+}
+
+// 4. ACCIONES - Solo publish, sin verificar conexión
+export function requestState(): void {
+  store.update(s => ({ ...s, loading: true }));
+  publish('mi-modulo/state/request', {});  // ← Se encola si no hay conexión
+}
+
+export function createItem(data: any): void {
+  publish('mi-modulo/create', data);  // ← Se encola si no hay conexión
+}
+
+export function deleteItem(id: string): void {
+  publish('mi-modulo/delete', { id });  // ← Se encola si no hay conexión
+}
+```
+
+#### Flujo de Datos Garantizado
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   UI Monta   │────>│ requestState │────>│  publish()   │
+└──────────────┘     └──────────────┘     └──────┬───────┘
+                                                  │
+                     ┌────────────────────────────┤
+                     │                            │
+              MQTT Conectado?              MQTT Desconectado?
+                     │                            │
+                     ▼                            ▼
+              ┌──────────────┐           ┌──────────────┐
+              │ Envía ahora  │           │ Encola msg   │
+              └──────────────┘           └──────────────┘
+                     │                            │
+                     │                    Cuando conecta:
+                     │                            │
+                     │                   ┌──────────────┐
+                     │                   │ flush queue  │
+                     │                   └──────────────┘
+                     │                            │
+                     └────────────┬───────────────┘
+                                  │
+                                  ▼
+                     ┌────────────────────────────┐
+                     │ Backend recibe y responde  │
+                     │ via mi-modulo/state        │
+                     └────────────────────────────┘
+                                  │
+                                  ▼
+                     ┌────────────────────────────┐
+                     │ Store actualiza con datos  │
+                     │ UI re-renderiza            │
+                     └────────────────────────────┘
+```
+
+#### Anti-patrones (NO HACER)
+
+```typescript
+// ❌ INCORRECTO: Verificar conexión antes de publicar
+import { connected } from '$lib/ui-core/mqtt';
+import { get } from 'svelte/store';
+
+if (get(connected)) {
+  publish('topic', data);  // ← NO! La cola ya maneja esto
+}
+
+// ❌ INCORRECTO: Esperar conexión manualmente
+status.subscribe(($status) => {
+  if ($status === 'connected') {
+    requestState();  // ← NO! Solo llama requestState() directamente
+  }
+});
+
+// ❌ INCORRECTO: Usar REST para datos de UI
+async function fetchData() {
+  const res = await fetch('/modules/mi-modulo/ui/state');  // ← NO! Usa MQTT
+  return res.json();
+}
+
+// ✅ CORRECTO: Llamar publish() directamente
+requestState();  // Se encola automáticamente si no hay conexión
+```
 
 ---
 

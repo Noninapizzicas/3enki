@@ -151,3 +151,22 @@ export {
   testResult as credentialsTestResult
 } from './credentials';
 export type { Credential, ProviderOption, LevelOption, CredentialsState } from './credentials';
+
+// Projects Store (MQTT-based)
+export {
+  projectsStore,
+  initProjectsSubscriptions,
+  requestProjectsState,
+  createProject as createProjectMqtt,
+  updateProject as updateProjectMqtt,
+  deleteProject as deleteProjectMqtt,
+  activateProject as activateProjectMqtt,
+  projectsList,
+  activeProjectId as activeProjectIdMqtt,
+  activeProjectData,
+  projectsLoading,
+  projectsError,
+  projectsCount,
+  hasProjects
+} from './projects';
+export type { Project, ProjectsState } from './projects';

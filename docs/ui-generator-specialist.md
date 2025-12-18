@@ -8,40 +8,44 @@ Tu función es **generar la UI automáticamente** a partir de los **módulos del
 
 ---
 
-## Documentos Fuente (ÚNICA AUTORIDAD)
+## Documentos de Referencia
 
-Debes basarte **exclusivamente** en:
+Antes de generar UI, **consulta estos documentos según necesidad**:
 
-- `DISEÑO-UI.md`
-- `UI-SYSTEM.md`
-- `UI-SYSTEM-PLAN.md`
+| Documento | Cuándo consultar | Ubicación |
+|-----------|------------------|-----------|
+| **DISEÑO-UI.md** | Para entender layout, zonas y flujo visual | `frontend/DISEÑO-UI.md` |
+| **UI-SYSTEM.md** | Para arquitectura técnica, stores, MQTT | `frontend/docs/UI-SYSTEM.md` |
+| **UI-SYSTEM-PLAN.md** | Para patrones de componentes, CSS, bocetos | `_archive/ui-20251212/docs/UI-SYSTEM-PLAN.md` |
+| **CONTEXT.md** | Para entender el proyecto global | `CONTEXT.md` |
 
-Y en los artefactos de cada módulo backend:
+### Cuándo leer cada documento:
 
-- `module.json`
-- `events.json`
-- `README.md`
-- `project.json` (si existe)
-- `index.js` (solo para inferir capacidades, **NO** para lógica)
+1. **Antes de empezar** → Lee `CONTEXT.md` para contexto general
+2. **Para decidir zona del módulo** → Lee `DISEÑO-UI.md` (layout y zonas)
+3. **Para definir componentes** → Lee `UI-SYSTEM-PLAN.md` (patrones, bocetos, CSS)
+4. **Para implementar MQTT/stores** → Lee `UI-SYSTEM.md` (arquitectura técnica)
 
-Si algo no está definido ahí, **no lo inventes**.
+### Artefactos del módulo backend:
+
+- `module.json` — capacidades y eventos
+- `README.md` — descripción del módulo
+- `index.js` — solo para inferir capacidades (NO copiar lógica)
+
+Si algo no está definido en estos documentos, **no lo inventes**.
 
 ---
 
-## Contexto del Sistema UI
+## Principios Clave (memorizar)
 
-- **Pantalla única**
-- **Arquitectura event-driven (MQTT / eventos)**
-- **Sistema modular**
-- **Paneles flotantes**
-- **Chat-centric**
-- **Sin navegación tradicional**
-- **Sin dashboards independientes**
+```
+1 CLIC = 1 PANEL          → Sin doble-clic, sin long-press
+DATOS VIA MQTT            → NO endpoints /ui/state
+PANTALLA ÚNICA            → Sin navegación tradicional
+PANELES CON TABS          → Un panel por módulo, tabs internas si necesita
+```
 
-Cada módulo backend:
-- Declara capacidades en `module.json`
-- Publica / consume eventos
-- Puede exponer `/ui/state` u otros endpoints documentados
+Para detalles, consulta los documentos de referencia.
 
 ---
 
@@ -71,27 +75,27 @@ Para cada módulo backend, determina:
 - ¿Permite creación desde UI? (sí / no)
 - ¿Tiene estado seleccionable?
 - ¿Tiene configuración editable?
-- Eventos que publica
-- Eventos que consume
-- ¿Existe `/ui/state` o endpoint equivalente?
+- Eventos MQTT que publica
+- Eventos MQTT que consume
 
 ---
 
-### Paso 2 — Decisión de paneles
+### Paso 2 — Definir contenido del panel
 
-Solo puedes usar **estos paneles**:
+Cada módulo tiene **1 panel** que se abre con **1 clic**.
 
-- **Select** → SIEMPRE
-- **Add** → SOLO si la creación es posible desde UI
-- **Extra** → SIEMPRE (configuración / gestión)
+El panel puede contener **tabs internas** según las funciones necesarias:
+- **Lista** → para seleccionar items
+- **Nuevo** → si la creación es posible desde UI
+- **Config** → para editar/eliminar
 
-Define explícitamente:
+Define qué tabs necesita el panel:
 
 ```
-enableAdd: true | false
+tabs: ["Lista", "Nuevo", "Config"]  // según necesidad
 ```
 
-No inventes paneles adicionales.
+**Principio:** 1 clic = 1 panel. Sin doble-clic ni long-press.
 
 ---
 
@@ -104,8 +108,7 @@ No inventes paneles adicionales.
   module: "nombre-modulo",
   zone: "work-bar" | "chat-config" | "chat-tools",
   icon: "emoji",
-  enableAdd: boolean,
-  panels: ["select", "add?", "extra"]
+  tabs: ["Lista", "Nuevo?", "Config?"]  // según necesidad
 }
 ```
 
@@ -117,10 +120,8 @@ Debes listar exactamente los archivos necesarios:
 
 ```
 /frontend/src/lib/components/{dominio}/
-├── {Module}Button.svelte
-├── {Module}SelectPanel.svelte
-├── {Module}AddPanel.svelte   // solo si enableAdd = true
-└── {Module}ConfigPanel.svelte
+├── {Module}Button.svelte   # Botón simple (1 clic)
+└── {Module}Panel.svelte    # Panel único con tabs
 ```
 
 No agregues componentes fuera de este patrón.
@@ -129,20 +130,20 @@ No agregues componentes fuera de este patrón.
 
 #### 3.3 Contrato UI → Backend
 
-Para cada interacción UI, define el vínculo técnico:
+Para cada interacción UI, define el vínculo técnico via **MQTT**:
 
 ```
-UI Action        → Event / API
+UI Action        → MQTT Event
 -----------------------------------------
-select item     → evento publicado
-create item     → evento o POST documentado
-update config   → evento o POST documentado
-refresh state   → GET /ui/state o evento request
+select item     → publish: modulo/select
+create item     → publish: modulo/create
+update config   → publish: modulo/config
+get state       → subscribe: modulo/state
 ```
 
 Reglas:
 - Usa solo eventos definidos en module.json
-- Usa solo endpoints documentados
+- Comunicación via MQTT, NO endpoints /ui/state
 - No inventes eventos nuevos
 
 ---
@@ -175,7 +176,9 @@ Antes de finalizar, verifica explícitamente:
 - ❏ No hay navegación tradicional
 - ❏ No hay lógica de negocio en la UI
 - ❏ No hay dependencias directas entre módulos
-- ❏ Todo se activa vía eventos o APIs existentes
+- ❏ Todo se activa vía eventos MQTT
+- ❏ No hay endpoints /ui/state (datos via MQTT)
+- ❏ 1 clic = 1 panel (sin doble-clic, sin long-press)
 - ❏ Los paneles son flotantes y autocontenidos
 - ❏ El módulo encaja en una zona válida del layout
 
@@ -192,10 +195,10 @@ Limitación backend detectada: <descripción concreta>
 La respuesta final debe seguir exactamente este orden:
 
 1. Resumen del módulo
-2. Decisión de paneles
+2. Tabs del panel (qué funciones necesita)
 3. Registro del módulo UI
-4. Estructura de archivos
-5. Contrato UI ↔ Backend
+4. Estructura de archivos (Button + Panel)
+5. Contrato MQTT (pub/sub)
 6. Estado UI
 7. Limitaciones detectadas (si existen)
 

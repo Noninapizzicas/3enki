@@ -24,20 +24,22 @@ COMPONENT-FIRST         → Máxima reutilización UI
 
 ### Estructura por módulo
 
-Cada módulo tiene **2-3 paneles** según necesidad:
+Cada módulo tiene **1 panel** que se abre con **1 clic**:
 
-| Panel | Propósito | Invocación PC | Invocación Móvil | ¿Obligatorio? |
-|-------|-----------|---------------|------------------|---------------|
-| **Select** | Ver/elegir items | Click | Tap | ✅ Sí |
-| **Add** | Crear nuevo | Doble click | Doble tap | ⚠️ Opcional |
-| **Extra** | Config/avanzado | Click derecho | Long press | ✅ Sí |
+| Panel | Propósito | Invocación | ¿Obligatorio? |
+|-------|-----------|------------|---------------|
+| **Panel único** | Ver/elegir/configurar | 1 clic / 1 tap | ✅ Sí |
 
-**Nota:** El panel **Add** solo es necesario si el módulo permite crear nuevos elementos desde la UI.
-Si crear un nuevo elemento requiere modificar archivos o configuración backend, Add NO aplica.
+**Principio:** 1 clic = 1 panel. Sin doble-clic, sin long-press.
+
+El panel único contiene tabs o secciones internas si el módulo necesita:
+- Selección de items
+- Creación de nuevos elementos
+- Configuración/gestión
 
 Ejemplos:
-- `credential-manager`: Add ✅ (crear API key desde UI)
-- `ai-gateway`: Add ❌ (añadir provider requiere archivos backend)
+- `credential-manager`: Panel con tabs [Seleccionar | Añadir | Config]
+- `ai-gateway`: Panel con [Seleccionar Provider | Seleccionar Modelo]
 
 ### Comportamiento
 
@@ -52,37 +54,29 @@ Ejemplos:
 
 ### 1. ModuleButton
 
-Botón que detecta tipo de interacción:
+Botón simple que abre un panel con 1 clic:
 
 ```svelte
-<!-- 2 interacciones (sin Add) - default -->
 <ModuleButton
   module="ai-gateway"
   icon="🤖"
   label="AI"
-  on:select={openSelectPanel}
-  on:extra={openExtraPanel}
+  on:click={openPanel}
 />
 
-<!-- 3 interacciones (con Add) -->
 <ModuleButton
   module="credential-manager"
   icon="🔐"
   label="Creds"
-  enableAdd={true}
-  on:select={openSelectPanel}
-  on:add={openAddPanel}
-  on:extra={openExtraPanel}
+  on:click={openPanel}
 />
 ```
 
 Interacciones:
-- PC: click / doble click (si `enableAdd=true`) / click derecho
-- Móvil: tap / doble tap (si `enableAdd=true`) / long press
+- PC: 1 click → abre panel
+- Móvil: 1 tap → abre panel
 
-**Prop `enableAdd`:**
-- `false` (default): Doble tap/click no hace nada
-- `true`: Doble tap/click emite evento `on:add`
+**Principio:** Sin doble-clic, sin long-press, sin click derecho.
 
 ### 2. ChatInputBar
 
@@ -207,27 +201,25 @@ Antes de implementar cada módulo, responder:
 |----------|-----------|
 | ¿Qué hace? | Gateway unificado para LLMs |
 | ¿Persistencia? | Config en JSON, selección en memoria |
-| ¿Endpoints? | GET /ui/state, POST /ui/select |
-| ¿Endpoint UI? | Ya existe /ui/state |
+| ¿Comunicación? | MQTT pub/sub para estado y selección |
 | ¿Elementos UI? | Lista proveedores, lista modelos, badges estado |
-| ¿Paneles? | Select (elegir), Config (parámetros LLM) |
-| ¿enableAdd? | ❌ No - añadir provider requiere archivos backend |
+| ¿Panel? | Panel único con tabs [Providers | Modelos | Config] |
 
 ---
 
 ## Módulos Principales
 
-| Módulo | Paneles | enableAdd | Prioridad |
-|--------|---------|-----------|-----------|
-| `ai-gateway` | Select, Config | ❌ No | Alta |
-| `credential-manager` | Select, Add, Config | ✅ Sí | Alta |
-| `prompt-manager` | Select, Add, Config | ✅ Sí | Alta |
-| `conversation-manager` | Select, Add, Config | ✅ Sí | Media |
-| `project-manager` | Select, Add, Config | ✅ Sí | Media |
-| `menu-generator` | Select, Add, Config | ✅ Sí | Media |
-| `file-browser` | Select, Add, Config | ✅ Sí | Media |
-| `text-editor` | Select, Config | ❌ No | Media |
-| `pdf-viewer` | Select, Config | ❌ No | Media |
+| Módulo | Panel | Contenido | Prioridad |
+|--------|-------|-----------|-----------|
+| `ai-gateway` | AIPanel | Providers, Modelos, Config | Alta |
+| `credential-manager` | CredentialPanel | Lista, Añadir, Config | Alta |
+| `prompt-manager` | PromptPanel | Lista, Añadir, Config | Alta |
+| `conversation-manager` | ConversationPanel | Lista, Nueva, Config | Media |
+| `project-manager` | ProjectPanel | Lista, Nuevo, Config | Media |
+| `menu-generator` | MenuPanel | Lista, Nuevo, Config | Media |
+| `file-browser` | FilesPanel | Explorador, Nuevo, Config | Media |
+| `text-editor` | EditorPanel | Editor, Config | Media |
+| `pdf-viewer` | PdfPanel | Visor, Config | Media |
 
 ---
 
@@ -238,18 +230,18 @@ Workspace
     │
     ├── TopToolbar (módulos de workspace)
     │       │
-    │       ├── [📁 Files] ────► FileBrowserPanel
-    │       ├── [📝 Editor] ───► TextEditorPanel
-    │       └── [📄 PDF] ──────► PdfViewerPanel
+    │       ├── [📁 Files] ───► FilesPanel (1 clic)
+    │       ├── [📝 Editor] ──► EditorPanel (1 clic)
+    │       └── [📄 PDF] ─────► PdfPanel (1 clic)
     │
     └── ChatInputBar (módulos de chat)
             │
-            ├── [🤖 AI] ──────► AIConfigPanel
-            ├── [🔐 Creds] ───► CredentialPanel (Select/Add/Config)
-            ├── [📝 Prompts] ─► PromptPanel (Select/Add/Config)
-            ├── [💬 Conv] ────► ConversationPanel (Select/Add/Config)
-            ├── [📂 Project] ─► ProjectPanel (Select/Add/Config)
-            └── [🍔 Menu] ────► MenuGeneratorPanel (Select/Add/Config)
+            ├── [🤖 AI] ──────► AIPanel (1 clic)
+            ├── [🔐 Creds] ───► CredentialPanel (1 clic)
+            ├── [📝 Prompts] ─► PromptPanel (1 clic)
+            ├── [💬 Conv] ────► ConversationPanel (1 clic)
+            ├── [📂 Project] ─► ProjectPanel (1 clic)
+            └── [🍔 Menu] ────► MenuPanel (1 clic)
                     │
                     └── FloatingPanel
                           │
@@ -282,15 +274,15 @@ frontend/src/lib/components/
 ├── layout/           # Layouts (Sidebar, Header...)
 ├── toolbar/          # Barras y botones (ToolbarIcon, TopToolbar...)
 ├── chat/             # ChatInputBar con módulos integrados
-├── ai/               # Componentes IA (AIButton, AIConfigPanel)
-├── credentials/      # CredentialButton, AddPanel, ConfigPanel
-├── prompts/          # PromptButton, AddPanel, ConfigPanel
-├── projects/         # ProjectButton, AddPanel, ConfigPanel
-├── conversations/    # ConversationButton, AddPanel, ConfigPanel
-├── menu/             # MenuGeneratorButton, AddPanel, ConfigPanel
-├── files/            # FileBrowserButton, AddPanel, ConfigPanel
-├── editor/           # TextEditorButton, ConfigPanel, Panel
-├── pdf/              # PdfViewerButton, ConfigPanel, Panel
+├── ai/               # AIButton, AIPanel
+├── credentials/      # CredentialButton, CredentialPanel
+├── prompts/          # PromptButton, PromptPanel
+├── projects/         # ProjectButton, ProjectPanel
+├── conversations/    # ConversationButton, ConversationPanel
+├── menu/             # MenuButton, MenuPanel
+├── files/            # FilesButton, FilesPanel
+├── editor/           # EditorButton, EditorPanel
+├── pdf/              # PdfButton, PdfPanel
 └── {dominio}/        # Componentes específicos de dominio
 ```
 
@@ -313,7 +305,6 @@ frontend/src/routes/
 | Módulo backend | kebab-case | `ai-gateway` |
 | Archivo JS | kebab-case | `context-manager.js` |
 | Componente Svelte | PascalCase | `FloatingPanel.svelte` |
-| **Componente UI-SYSTEM-PLAN** | **uisis-PascalCase** | `uisis-ToolbarIcon.svelte` |
 | Store Svelte | camelCase | `mqttStore.ts` |
 | Evento MQTT | dot.notation | `ai.model.selected` |
 | Constante | UPPER_SNAKE | `EVENTS.AI.MODEL_SELECTED` |
@@ -321,27 +312,12 @@ frontend/src/routes/
 | Prop Svelte | camelCase | `selectedModelId` |
 | CSS class | kebab-case | `floating-panel` |
 
-### Prefijo uisis- (UI System)
-
-Los componentes que cumplen con UI-SYSTEM-PLAN llevan prefijo `uisis-` para identificación rápida:
-
-```
-uisis-ToolbarIcon.svelte     ✅ Cumple UI-SYSTEM-PLAN
-ToolbarIcon.svelte           ❌ Versión legacy (deprecated)
-```
-
-**Beneficios:**
-- Identificación inmediata de componentes alineados
-- Migración gradual sin romper código existente
-- Los exports mantienen nombres limpios: `export { default as ToolbarIcon } from './uisis-ToolbarIcon.svelte'`
-
-**Componentes con prefijo uisis-:**
-- toolbar/: FloatingToolbar, ToolbarIcon, TopToolbar, ModuleToolbar, ChatToolbar, EcosystemToolbar, MobileChatWorkspace
+**Componentes por carpeta:**
+- toolbar/: FloatingToolbar, ToolbarIcon, TopToolbar, ModuleToolbar, ChatToolbar
 - layout/: MobileWorkspaceLayout
 - chat/: ChatInputBar
-- ecosystem/: EcosystemToolbar
-- ai/: AIButton, AIConfigPanel, ChatInput
-- Todos los módulos: {Module}Button, {Module}AddPanel, {Module}ConfigPanel
+- ai/: AIButton, AIPanel, ChatInput
+- Todos los módulos: {Module}Button, {Module}Panel
 
 ---
 
@@ -454,17 +430,13 @@ module.exports = NombreModulo;
 
 ## Reglas de Paneles Flotantes
 
-### Patrón: 2-3 paneles por módulo
+### Patrón: 1 panel por módulo
 
-| Panel | Invocación | Propósito | ¿Obligatorio? |
-|-------|------------|-----------|---------------|
-| Select | 1 tap / click | Ver y elegir | ✅ Siempre |
-| Add | 2 taps / doble click | Crear nuevo | ⚠️ Si enableAdd=true |
-| Extra | Long press / click derecho | Config/gestión | ✅ Siempre |
+| Panel | Invocación | Propósito |
+|-------|------------|-----------|
+| Panel único | 1 clic / 1 tap | Ver, elegir, crear, configurar |
 
-**Decidir si Add aplica:**
-- ¿Se puede crear desde UI? → enableAdd=true
-- ¿Requiere archivos/backend? → enableAdd=false (default)
+**Principio:** 1 clic = 1 panel. El panel puede tener tabs internas si necesita múltiples funciones.
 
 ### Implementación
 
@@ -484,31 +456,20 @@ module.exports = NombreModulo;
 
 ---
 
-## Reglas de APIs
+## Reglas de Comunicación
 
-### Endpoint UI State
+### MQTT como fuente de datos
 
-Cada módulo con UI **DEBE** tener:
+El frontend obtiene datos via **MQTT**, no via endpoints `/ui/state`:
 
 ```
-GET /modules/{nombre}/ui/state
-```
-
-Respuesta normalizada:
-
-```json
-{
-  "items": [...],
-  "selected": "id_actual",
-  "stats": { ... },
-  "config": { ... }
-}
+Frontend suscribe → topic MQTT → transforma datos → renderiza
 ```
 
 ### Reglas:
-- **UI State es read-only** (para mostrar)
-- **Acciones via POST** a endpoints específicos
-- **Respuestas consistentes** entre módulos
+- **NO hay endpoints `/ui/state`** - frontend transforma datos MQTT
+- **Acciones via eventos MQTT** publicados al backend
+- **Estado reactivo** en Svelte stores sincronizados con MQTT
 - **Sin lógica de UI** en el backend
 
 ---
@@ -970,10 +931,9 @@ Antes de escribir código SIEMPRE:
 - Un módulo NO importa otro módulo (solo eventos)
 
 ## Paneles Flotantes
-- 2-3 paneles por módulo (Select + Config obligatorios, Add opcional)
-- enableAdd=true → 3 interacciones (tap/doble tap/long press)
-- enableAdd=false → 2 interacciones (tap/long press)
-- Tap fuera = cerrar (siempre)
+- 1 panel por módulo (con tabs internas si necesita)
+- 1 clic = 1 panel (sin doble-clic, sin long-press)
+- Tap/clic fuera = cerrar (siempre)
 - Sin navegación tradicional
 
 ## Carácter
@@ -1005,19 +965,20 @@ CÓDIGO = Mínimo necesario + Máxima reutilización
 
 UI:
 - Paneles flotantes (no páginas)
-- 2-3 paneles por módulo (Select + Config obligatorios, Add opcional)
-- ModuleButton con enableAdd prop (2 o 3 interacciones)
+- 1 panel por módulo (con tabs internas si necesita)
+- 1 clic = 1 panel (sin doble-clic, sin long-press)
 - Click fuera = cerrar
 
 BACKEND:
 - Módulos independientes
-- Comunicación por eventos
-- APIs con /ui/state
+- Comunicación por eventos MQTT
+- NO endpoints /ui/state
 
 FRONTEND:
 - Componentes base reutilizables
 - Tailwind desde tokens.json
 - TypeScript tipado
+- Datos via MQTT, no REST
 
 SIEMPRE:
 - Tipado
@@ -1049,30 +1010,34 @@ Antes de escribir código, responder estas 6 preguntas:
 
 ---
 
-## PASO 2: Decisión enableAdd
+## PASO 2: Definir contenido del panel
 
 ```
-¿Se puede CREAR un nuevo elemento desde la UI?
+¿Qué funciones necesita el panel?
     │
-    ├── SÍ → enableAdd = true (3 interacciones)
-    │        Ejemplos: credential-manager, prompt-manager
+    ├── Solo selección → Panel simple con lista
     │
-    └── NO → enableAdd = false (2 interacciones)
-             Requiere archivos/config backend
-             Ejemplos: ai-gateway (providers en JSON)
+    ├── Selección + Creación → Panel con tabs [Lista | Nuevo]
+    │
+    └── Selección + Creación + Config → Panel con tabs [Lista | Nuevo | Config]
+
+Principio: 1 clic = 1 panel con tabs internas
 ```
 
 ---
 
 ## PASO 3: Bocetos ASCII
 
-Crear bocetos para cada panel ANTES de codificar:
+Crear boceto del panel único ANTES de codificar:
 
-### Panel Select (tap/click)
+### Panel único con tabs (1 clic)
 ```
 ┌─────────────────────────────────────────┐
-│  🔐 Seleccionar [Entidad]               │
+│  🔐 [Módulo]                        [×] │
 │  ───────────────────────────────────────│
+│  [Lista] [Nuevo] [Config]    ← tabs     │
+│  ───────────────────────────────────────│
+│                                         │
 │  ┌─────────────────────────────────┐    │
 │  │ 🔍 Buscar...                    │    │
 │  └─────────────────────────────────┘    │
@@ -1084,49 +1049,30 @@ Crear bocetos para cada panel ANTES de codificar:
 │  ┌─────────────────────────────────┐    │
 │  │ 📄 Item 2                       │    │
 │  └─────────────────────────────────┘    │
+│                                         │
 └─────────────────────────────────────────┘
 ```
 
-### Panel Add (doble tap) - Solo si enableAdd=true
+### Contenido tab "Nuevo"
 ```
-┌─────────────────────────────────────────┐
-│  ➕ Nueva [Entidad]                     │
-│  ───────────────────────────────────────│
-│                                         │
 │  Campo 1                                │
 │  ┌─────────────────────────────────┐    │
 │  │ valor...                        │    │
 │  └─────────────────────────────────┘    │
 │                                         │
-│  Campo 2 (si depende de otro módulo)    │
-│  ┌─────────────────────────────────┐    │
-│  │ 📁 Selector de otro módulo   ▼  │    │
-│  └─────────────────────────────────┘    │
-│                                         │
 │  ┌──────────┐  ┌──────────────────┐     │
 │  │ Cancelar │  │     ✓ Guardar   │     │
 │  └──────────┘  └──────────────────┘     │
-└─────────────────────────────────────────┘
 ```
 
-### Panel Config (long press/click derecho)
+### Contenido tab "Config"
 ```
-┌─────────────────────────────────────────┐
-│  ⚙️ Configurar [Entidad]                │
-│  ───────────────────────────────────────│
-│                                         │
 │  📄 [Nombre del item seleccionado]      │
-│                                         │
 │  [Campos editables]                     │
-│                                         │
-│  ┌──────────────────────────────────┐   │
-│  │  🧪 Probar / Validar             │   │
-│  └──────────────────────────────────┘   │
 │                                         │
 │  ┌─────────┐ ┌────────┐ ┌─────────┐    │
 │  │ 🗑️ Del. │ │ Cancel │ │  Save   │    │
 │  └─────────┘ └────────┘ └─────────┘    │
-└─────────────────────────────────────────┘
 ```
 
 ---
@@ -1134,11 +1080,11 @@ Crear bocetos para cada panel ANTES de codificar:
 ## PASO 4: Checklist Pre-Código
 
 ```
-[ ] SelectorPanel tiene adapter para este módulo
-[ ] Panel Add necesario? (enableAdd=true)
-[ ] Panel Config necesario? (siempre sí)
-[ ] Button unificado con gestos
+[ ] Panel único diseñado con tabs necesarias
+[ ] Button simple (1 clic = abre panel)
+[ ] Comunicación MQTT definida (topics pub/sub)
 [ ] Integración con otros módulos identificada
+[ ] Sin endpoints /ui/state (datos via MQTT)
 ```
 
 ---
@@ -1147,17 +1093,15 @@ Crear bocetos para cada panel ANTES de codificar:
 
 ```
 frontend/src/lib/components/{modulo}/
-├── {Modulo}Button.svelte      # Botón con 2-3 interacciones
-├── {Modulo}AddPanel.svelte    # Solo si enableAdd=true
-├── {Modulo}ConfigPanel.svelte # Siempre
+├── {Modulo}Button.svelte      # Botón simple (1 clic)
+├── {Modulo}Panel.svelte       # Panel único con tabs
 └── index.ts                   # Exports
 ```
 
-El **SelectorPanel** es genérico y vive en `feedback/`:
+El **FloatingPanel** es genérico y vive en `feedback/`:
 ```
 frontend/src/lib/components/feedback/
-├── FloatingPanel.svelte       # Panel base
-├── SelectorPanel.svelte       # Selector genérico con adapters
+├── FloatingPanel.svelte       # Panel base flotante
 └── index.ts
 ```
 
@@ -1170,56 +1114,58 @@ frontend/src/lib/components/feedback/
 ```svelte
 <!--
   {Modulo}Button.svelte
-  Botón con interacción dual/triple según enableAdd
+  Botón simple: 1 clic = abre panel
 -->
 <script lang="ts">
-  // Props
-  export let size: 'sm' | 'md' | 'lg' = 'md';
-  export let projectId: string | null = null;
+  import { createEventDispatcher } from 'svelte';
+
+  export let icon: string;
+  export let label: string;
   export let disabled = false;
 
-  // Paneles
-  let selectorOpen = false;
-  let addOpen = false;      // Solo si enableAdd
-  let configOpen = false;
+  const dispatch = createEventDispatcher();
 
-  // Gestos
-  const TIMING = {
-    tapDelay: 250,
-    doubleTapMax: 300,
-    longPressDuration: 500
-  };
-
-  // Acciones
-  function doSelect() { selectorOpen = true; }
-  function doAdd() { addOpen = true; }     // Solo si enableAdd
-  function doConfig() { configOpen = true; }
-</script>
-```
-
-### 6.2 {Modulo}AddPanel.svelte (si enableAdd=true)
-
-```svelte
-<!--
-  Integración con otros módulos:
-  Si un campo depende de otro módulo, hacer fetch:
-
-  $: if (needsOtherModule) {
-    fetch(api.moduleApi('otro-modulo', '/endpoint'));
+  function handleClick() {
+    dispatch('click');
   }
--->
+</script>
+
+<button
+  class="module-btn"
+  {disabled}
+  aria-label={label}
+  on:click={handleClick}
+>
+  {icon}
+</button>
 ```
 
-### 6.3 {Modulo}ConfigPanel.svelte
+### 6.2 {Modulo}Panel.svelte
 
 ```svelte
 <!--
-  Siempre incluir:
-  - Vista del item seleccionado
-  - Campos editables
-  - Botón test/validar (si aplica)
-  - Acciones: Eliminar, Cancelar, Guardar
+  Panel único con tabs internas si necesita múltiples funciones.
+  Comunicación via MQTT, no endpoints /ui/state.
+
+  Estructura:
+  - Tab "Lista": selección de items
+  - Tab "Nuevo": formulario de creación (si aplica)
+  - Tab "Config": edición/eliminación (si aplica)
 -->
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { subscribe, publish } from '$lib/mqtt';
+
+  let activeTab = 'lista';
+  let items = [];
+
+  onMount(() => {
+    // Suscribir a MQTT para obtener datos
+    return subscribe('modulo/state', (_, data) => {
+      items = data.items;
+    });
+  });
+</script>
 ```
 
 ---
@@ -1229,7 +1175,7 @@ frontend/src/lib/components/feedback/
 | Área | Verificación |
 |------|--------------|
 | **CSS** | Variables de tokens.json con fallbacks |
-| **API** | Usar `api.moduleApi(module, path)` |
+| **Datos** | Via MQTT, NO endpoints /ui/state |
 | **Eventos** | Svelte createEventDispatcher |
 | **Naming** | BEM para CSS, camelCase para props |
 | **Types** | TypeScript interfaces para datos |
@@ -1243,15 +1189,20 @@ frontend/src/lib/components/feedback/
 }
 ```
 
-### API Pattern
+### MQTT Pattern
 ```typescript
-import { api } from '$lib/config';
+import { subscribe, publish } from '$lib/mqtt';
 
-// ✅ Correcto
-const res = await fetch(api.moduleApi('mi-modulo', '/ui/state'));
+// ✅ Correcto - obtener datos via MQTT
+subscribe('modulo/state', (_, data) => {
+  items = data.items;
+});
 
-// ❌ Incorrecto
-const res = await fetch(`/api/modules/mi-modulo/ui/state`);
+// ✅ Correcto - publicar acción
+publish('modulo/select', { id: selectedId });
+
+// ❌ Incorrecto - NO usar endpoints /ui/state
+// const res = await fetch('/api/modules/mi-modulo/ui/state');
 ```
 
 ---
@@ -1261,13 +1212,8 @@ const res = await fetch(`/api/modules/mi-modulo/ui/state`);
 ```typescript
 // frontend/src/lib/components/{modulo}/index.ts
 
-/** @deprecated Use {Modulo}Button instead */
-export { default as {Modulo}Selector } from './{Modulo}Selector.svelte';
-
-// Nuevos componentes (UI-SYSTEM-PLAN compliant)
 export { default as {Modulo}Button } from './{Modulo}Button.svelte';
-export { default as {Modulo}AddPanel } from './{Modulo}AddPanel.svelte';
-export { default as {Modulo}ConfigPanel } from './{Modulo}ConfigPanel.svelte';
+export { default as {Modulo}Panel } from './{Modulo}Panel.svelte';
 ```
 
 ---
@@ -1275,14 +1221,11 @@ export { default as {Modulo}ConfigPanel } from './{Modulo}ConfigPanel.svelte';
 ## PASO 9: Commit Pattern
 
 ```bash
-# Primer commit: componentes principales
-feat(ui): add {Modulo}AddPanel, {Modulo}ConfigPanel and deprecate {Modulo}Selector
-
-# Segundo commit: botón unificado
-feat(ui): complete {modulo} UI with triple interaction
+# Componentes del módulo
+feat(ui): add {Modulo}Button and {Modulo}Panel
 
 # Fix de compliance
-fix(ui): use api.moduleApi() helper instead of hardcoded paths
+fix(ui): use MQTT instead of REST endpoints
 ```
 
 ---
@@ -1295,31 +1238,31 @@ fix(ui): use api.moduleApi() helper instead of hardcoded paths
 | ¿Selecciona? | Credencial (provider + level + identifier) |
 | ¿Añade? | Nueva API key |
 | ¿Configura? | Editar key, test, eliminar |
-| ¿Datos? | GET /ui/state → credentials, providers, levels |
+| ¿Datos? | Via MQTT: credential/state |
 | ¿Eventos? | credential.saved, credential.deleted |
 | ¿Integración? | project-manager (para nivel PROJECT) |
 
-### enableAdd = true
-Porque se puede crear API key desde UI sin modificar archivos.
+### Panel con tabs
+Panel único con tabs: [Lista | Nuevo | Config]
 
 ### Integración con project-manager
 ```typescript
-// En CredentialAddPanel.svelte
-$: if (form.level === 'PROJECT' && projects.length === 0) {
-  loadProjects();
-}
+// En CredentialPanel.svelte - tab "Nuevo"
+import { subscribe } from '$lib/mqtt';
 
-async function loadProjects() {
-  const res = await fetch(api.moduleApi('project-manager', '/projects'));
-  const data = await res.json();
-  projects = data.projects;
-}
+let projects = [];
+
+onMount(() => {
+  // Obtener proyectos via MQTT
+  subscribe('project/list', (_, data) => {
+    projects = data.projects;
+  });
+});
 ```
 
 ### Componentes creados
-- `CredentialButton.svelte` - 3 interacciones
-- `CredentialAddPanel.svelte` - Con selector de proyectos
-- `CredentialConfigPanel.svelte` - Edit/test/delete
+- `CredentialButton.svelte` - 1 clic abre panel
+- `CredentialPanel.svelte` - Panel con tabs [Lista | Nuevo | Config]
 
 ---
 
@@ -1329,16 +1272,15 @@ Para un nuevo módulo, copiar y adaptar:
 
 ```
 1. Leer module.json del módulo
-2. Responder 6 preguntas
-3. Decidir enableAdd (true/false)
-4. Crear bocetos ASCII
-5. Verificar SelectorPanel adapter
-6. Crear {Modulo}Button.svelte
-7. Crear {Modulo}AddPanel.svelte (si enableAdd)
-8. Crear {Modulo}ConfigPanel.svelte
-9. Actualizar index.ts
-10. Pasar compliance checklist
-11. Commit y push
+2. Responder 6 preguntas del análisis
+3. Definir tabs necesarias del panel
+4. Crear boceto ASCII del panel
+5. Crear {Modulo}Button.svelte
+6. Crear {Modulo}Panel.svelte con tabs
+7. Configurar MQTT pub/sub
+8. Actualizar index.ts
+9. Pasar compliance checklist
+10. Commit y push
 ```
 
 ---
@@ -1353,39 +1295,39 @@ Los módulos de workspace permiten trabajar con archivos y contenido directament
 | ¿Selecciona? | Archivo/carpeta del proyecto |
 | ¿Añade? | Nueva carpeta, nuevo archivo |
 | ¿Configura? | Renombrar, eliminar, mover |
-| ¿enableAdd? | ✅ Sí |
+| Panel | FilesPanel con tabs [Explorar | Nuevo | Config] |
 
 ### text-editor
 | Pregunta | Respuesta |
 |----------|-----------|
 | ¿Selecciona? | Archivo abierto (de file-browser) |
-| ¿Añade? | ❌ No (depende de file-browser) |
+| ¿Añade? | No (depende de file-browser) |
 | ¿Configura? | Opciones de editor (theme, font size) |
-| ¿enableAdd? | ❌ No |
+| Panel | EditorPanel con tabs [Editor | Config] |
 
 ### pdf-viewer
 | Pregunta | Respuesta |
 |----------|-----------|
 | ¿Selecciona? | PDF abierto (de file-browser) |
-| ¿Añade? | ❌ No (depende de file-browser) |
+| ¿Añade? | No (depende de file-browser) |
 | ¿Configura? | Opciones de visualización (zoom, modo) |
-| ¿enableAdd? | ❌ No |
+| Panel | PdfPanel con tabs [Visor | Config] |
 
 ---
 
 ## ESTADO DE MÓDULOS
 
-| Módulo | enableAdd | Integración | Estado |
-|--------|-----------|-------------|--------|
-| ai-gateway | ❌ | - | ✅ Completo |
-| credential-manager | ✅ | project-manager | ✅ Completo |
-| prompt-manager | ✅ | - | ✅ Completo |
-| conversation-manager | ✅ | project-manager | ✅ Completo |
-| project-manager | ✅ | - | ✅ Completo |
-| menu-generator | ✅ | - | ✅ Completo |
-| file-browser | ✅ | project-manager | ✅ Completo |
-| text-editor | ❌ | file-browser | ✅ Completo |
-| pdf-viewer | ❌ | file-browser | ✅ Completo |
+| Módulo | Panel | Tabs | Integración |
+|--------|-------|------|-------------|
+| ai-gateway | AIPanel | Providers, Modelos | - |
+| credential-manager | CredentialPanel | Lista, Nuevo, Config | project-manager |
+| prompt-manager | PromptPanel | Lista, Nuevo, Config | - |
+| conversation-manager | ConversationPanel | Lista, Nueva, Config | project-manager |
+| project-manager | ProjectPanel | Lista, Nuevo, Config | - |
+| menu-generator | MenuPanel | Lista, Nuevo, Config | - |
+| file-browser | FilesPanel | Explorar, Nuevo, Config | project-manager |
+| text-editor | EditorPanel | Editor, Config | file-browser |
+| pdf-viewer | PdfPanel | Visor, Config | file-browser |
 
 ---
 
@@ -1401,20 +1343,20 @@ Los módulos de workspace permiten trabajar con archivos y contenido directament
 | ModuleToolbar | `toolbar/` | ✅ | ✅ Completo |
 | ChatToolbar | `toolbar/` | ✅ | ✅ Completo |
 
-### Componentes de Ecosistema
+### Componentes de Sistema
 
-| Componente | Ubicación | Interacción | enableAdd | Estado |
-|------------|-----------|-------------|-----------|--------|
-| EcosystemToolbar | `ecosystem/` | Triple | Parcial | ✅ Completo |
+| Componente | Ubicación | Interacción | Estado |
+|------------|-----------|-------------|--------|
+| SystemBar | `layout/` | 1 clic | ✅ Completo |
 
-**EcosystemToolbar** incluye 4 botones con paneles integrados:
+**SystemBar** incluye 4 botones (1 clic = 1 panel):
 
-| Botón | TAP (Select) | DOUBLE TAP (Add) | LONG PRESS (Config) |
-|-------|--------------|------------------|---------------------|
-| 🧩 Módulos | Lista módulos | Marketplace | Gestionar módulo |
-| ⚙️ Sistema | Config rápida | - | Sistema completo |
-| 🔔 Alertas | Notificaciones | - | Config alertas |
-| 👤 Usuario | Menú perfil | - | Config cuenta |
+| Botón | Clic → Panel |
+|-------|--------------|
+| 🧩 Módulos | ModulesPanel |
+| ⚙️ Sistema | SystemPanel |
+| 🔔 Alertas | AlertsPanel |
+| 👤 Usuario | UserPanel |
 
 ### Componentes Mobile
 
@@ -1430,17 +1372,17 @@ Los módulos de workspace permiten trabajar con archivos y contenido directament
 | ChatInputBar | `chat/` | ✅ | ✅ Completo |
 | ChatInput | `ai/` | ✅ | ✅ Completo |
 
-### Componentes de Módulos (Button + Panels)
+### Componentes de Módulos (Button + Panel)
 
-| Módulo | Button | AddPanel | ConfigPanel | CSS Tokens |
-|--------|--------|----------|-------------|------------|
-| menu-generator | ✅ | ✅ | ✅ | ✅ |
-| credential-manager | ✅ | ✅ | ✅ | ✅ |
-| prompt-manager | ✅ | ✅ | ✅ | ✅ |
-| conversation-manager | ✅ | ✅ | ✅ | ✅ |
-| project-manager | ✅ | ✅ | ✅ | ✅ |
-| file-browser | ✅ | ✅ | ✅ | ✅ |
-| ai-gateway | ✅ | ❌ | ✅ | ✅ |
+| Módulo | Button | Panel | CSS Tokens |
+|--------|--------|-------|------------|
+| menu-generator | ✅ | ✅ | ✅ |
+| credential-manager | ✅ | ✅ | ✅ |
+| prompt-manager | ✅ | ✅ | ✅ |
+| conversation-manager | ✅ | ✅ | ✅ |
+| project-manager | ✅ | ✅ | ✅ |
+| file-browser | ✅ | ✅ | ✅ |
+| ai-gateway | ✅ | ✅ | ✅ |
 
 ---
 

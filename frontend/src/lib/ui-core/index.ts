@@ -24,7 +24,9 @@ export {
   status,
   error,
   connected,
-  lastMessage
+  lastMessage,
+  setupVisibilityHandler,
+  removeVisibilityHandler
 } from './mqtt';
 
 // Registry (legacy - compatibilidad)

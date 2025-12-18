@@ -188,6 +188,7 @@ class MQTTClient extends EventEmitter {
           clientId: this.coreId,
           clean: true,
           connectTimeout: this.connectTimeout,
+          keepalive: 30, // 30s keepalive para evitar timeouts en conexiones inestables
           reconnectPeriod: 0 // Disable auto-reconnect for initial attempt
         });
 
@@ -233,7 +234,8 @@ class MQTTClient extends EventEmitter {
     const mqtt = require('mqtt');
     this.mqtt = mqtt.connect(`mqtt://localhost:${this.brokerPort}`, {
       clientId: this.coreId,
-      clean: true
+      clean: true,
+      keepalive: 30 // 30s keepalive para evitar timeouts
     });
 
     await new Promise((resolve, reject) => {

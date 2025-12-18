@@ -22,7 +22,7 @@
    */
 
   import { onMount, onDestroy } from 'svelte';
-  import { connect, disconnect, activePanel } from '$lib/ui-core';
+  import { connect, disconnect, activePanel, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import { closePanel } from '$lib/stores/ui';
   import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
   import { registerAllModules, unregisterAllModules } from '$lib/modules';
@@ -62,6 +62,9 @@
     });
     perfEnd('Shell.connect.start');
 
+    // 4. Registrar handler de visibilidad (HyperOS/MIUI fix)
+    setupVisibilityHandler();
+
     perfEnd('Shell.onMount.TOTAL');
     logMsg('✅ Shell.onMount completed - UI visible');
   });
@@ -82,6 +85,10 @@
 
     // 3. Desconectar MQTT
     disconnect();
+
+    // 4. Remover handler de visibilidad
+    removeVisibilityHandler();
+
     console.log('[Shell] Disconnected');
   });
 

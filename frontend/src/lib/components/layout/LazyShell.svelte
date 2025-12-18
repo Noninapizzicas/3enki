@@ -11,7 +11,7 @@
    */
 
   import { onMount, onDestroy } from 'svelte';
-  import { connect, disconnect } from '$lib/ui-core';
+  import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import {
     defineModule,
     preloadModules,
@@ -63,6 +63,9 @@
     });
     perfEnd('LazyShell.connect.start');
 
+    // 3b. Registrar handler de visibilidad (HyperOS/MIUI fix)
+    setupVisibilityHandler();
+
     perfEnd('LazyShell.onMount.TOTAL');
     logMsg('✅ LazyShell.onMount completed - UI visible');
 
@@ -82,6 +85,10 @@
 
     // Desconectar MQTT
     disconnect();
+
+    // Remover handler de visibilidad
+    removeVisibilityHandler();
+
     console.log('[LazyShell] Disconnected');
   });
 

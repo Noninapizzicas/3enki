@@ -60,12 +60,30 @@ export interface CredentialsState {
 }
 
 // =============================================================================
+// DEFAULT DATA (fallback si MQTT no responde)
+// =============================================================================
+
+const DEFAULT_PROVIDERS: ProviderOption[] = [
+  { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
+  { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
+  { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
+  { id: 'OLLAMA', name: 'Ollama', icon: '🦙' }
+];
+
+const DEFAULT_LEVELS: LevelOption[] = [
+  { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },
+  { id: 'PROJECT', name: 'Proyecto', icon: '🔵', requiresIdentifier: true },
+  { id: 'CLIENT', name: 'Cliente', icon: '🟡', requiresIdentifier: true },
+  { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true }
+];
+
+// =============================================================================
 // INITIAL STATE
 // =============================================================================
 
 const initialState: CredentialsState = {
-  providers: [],
-  levels: [],
+  providers: DEFAULT_PROVIDERS,
+  levels: DEFAULT_LEVELS,
   credentials: {
     GLOBAL: [],
     PROJECT: [],
@@ -98,6 +116,9 @@ let unsubscribeDeleted: (() => void) | null = null;
 /**
  * Inicializa suscripciones MQTT para credenciales
  * Llamar una vez al montar el componente principal
+ *
+ * NOTA: No necesita esperar conexión MQTT porque mqtt.ts
+ * encola mensajes automáticamente y los envía al conectar.
  */
 export function initCredentialsSubscriptions(): () => void {
   // Recibir estado completo
@@ -109,10 +130,13 @@ export function initCredentialsSubscriptions(): () => void {
       stats: CredentialsState['stats'];
     };
 
+    console.log('[Credentials] State received:', data.stats?.total || 0, 'credentials');
+
     credentialsStore.update(s => ({
       ...s,
-      providers: data.providers || [],
-      levels: data.levels || [],
+      // Usar datos de MQTT o mantener defaults
+      providers: data.providers?.length > 0 ? data.providers : DEFAULT_PROVIDERS,
+      levels: data.levels?.length > 0 ? data.levels : DEFAULT_LEVELS,
       credentials: data.credentials || { GLOBAL: [], PROJECT: [], CLIENT: [], CUSTOM: [] },
       stats: data.stats || { total: 0, byLevel: {} },
       loading: false,
@@ -145,6 +169,7 @@ export function initCredentialsSubscriptions(): () => void {
   });
 
   // Solicitar estado inicial
+  // (si MQTT no está conectado, el mensaje se encola automáticamente)
   requestState();
 
   // Retornar cleanup

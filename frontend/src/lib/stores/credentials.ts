@@ -8,8 +8,7 @@
  * - CRUD operations
  */
 
-import { writable, derived, get } from 'svelte/store';
-import { browser } from '$app/environment';
+import { writable, derived } from 'svelte/store';
 
 // ============================================================================
 // TYPES
@@ -72,10 +71,7 @@ export const editingCredential = writable<Credential | null>(null);
 // API HELPERS
 // ============================================================================
 
-function getApiBase(): string {
-  if (!browser) return '';
-  return `http://${window.location.hostname}:3000/modules/credential-manager/api`;
-}
+const API_BASE = '/modules/credential-manager';
 
 // ============================================================================
 // ACTIONS
@@ -88,7 +84,7 @@ export async function fetchCredentials(): Promise<void> {
   credentialsStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const res = await fetch(`${getApiBase()}/ui/state`);
+    const res = await fetch(`${API_BASE}/ui/state`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
@@ -124,7 +120,7 @@ export async function fetchCredentials(): Promise<void> {
  */
 export async function testCredential(provider: string, apiKey: string): Promise<{ valid: boolean; message: string }> {
   try {
-    const res = await fetch(`${getApiBase()}/ui/test`, {
+    const res = await fetch(`${API_BASE}/ui/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, api_key: apiKey })
@@ -152,7 +148,7 @@ export async function saveCredential(
   apiKey: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${getApiBase()}/credentials`, {
+    const res = await fetch(`${API_BASE}/credentials`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -184,7 +180,7 @@ export async function saveCredential(
  */
 export async function updateCredential(key: string, apiKey: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${getApiBase()}/credentials/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${API_BASE}/credentials/${encodeURIComponent(key)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ api_key: apiKey })
@@ -211,7 +207,7 @@ export async function updateCredential(key: string, apiKey: string): Promise<{ s
  */
 export async function deleteCredential(key: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${getApiBase()}/credentials/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${API_BASE}/credentials/${encodeURIComponent(key)}`, {
       method: 'DELETE'
     });
 

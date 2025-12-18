@@ -96,8 +96,15 @@ class MetricasModule {
     // Persistir métricas antes de cerrar
     await this.persistToJSON();
 
-    // Publicar último snapshot antes de cerrar
-    await this.publishSnapshot();
+    // Publicar último snapshot antes de cerrar (si está conectado)
+    try {
+      await this.publishSnapshot();
+    } catch (error) {
+      // Ignorar errores en shutdown
+      this.logger.debug('metricas.unload.snapshot.skipped', {
+        reason: error.message
+      });
+    }
 
     this.logger.info('metricas.unloaded', {
       module: this.name,
@@ -565,6 +572,14 @@ class MetricasModule {
 
   async publishSnapshot() {
     try {
+      // Verificar conexión antes de publicar (evita crashes por MQTT desconectado)
+      if (!this.eventBus || !this.eventBus.isConnected()) {
+        this.logger.debug('metricas.snapshot.skipped', {
+          reason: 'mqtt_not_connected'
+        });
+        return;
+      }
+
       this.updateSystemGauges();
 
       await this.eventBus.publish('metricas.snapshot', {
@@ -582,9 +597,9 @@ class MetricasModule {
       });
 
     } catch (error) {
+      // No relanzar - evita crashes por errores de publicación
       this.logger.error('metricas.snapshot.error', {
-        error: error.message,
-        stack: error.stack
+        error: error.message
       });
     }
   }

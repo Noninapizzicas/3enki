@@ -95,8 +95,8 @@ class EventBus extends EventEmitter {
       }, { module: envelope?.source?.module_id || 'eventbus' });
     }
 
-    // Legacy MQTT logging
-    if (!this.logCollectorEnabled || !this.mqtt) return;
+    // Legacy MQTT logging - solo si está conectado
+    if (!this.logCollectorEnabled || !this.isConnected()) return;
 
     try {
       this.mqtt.publish('log/eventbus', JSON.stringify({
@@ -489,6 +489,15 @@ class EventBus extends EventEmitter {
   }
 
   /**
+   * Verifica si el EventBus está conectado a MQTT
+   *
+   * @returns {boolean} true si está conectado
+   */
+  isConnected() {
+    return !!(this.mqtt && this.mqtt.isConnected);
+  }
+
+  /**
    * Obtiene estadísticas del event bus
    *
    * @returns {Object} Estadísticas
@@ -500,7 +509,7 @@ class EventBus extends EventEmitter {
         acc[eventType] = this.listenerCount(eventType);
         return acc;
       }, {}),
-      mqtt_connected: this.mqtt ? this.mqtt.isConnected : false,
+      mqtt_connected: this.isConnected(),
       validation: {
         enabled: this.validateEvents,
         strict: this.strictValidation,

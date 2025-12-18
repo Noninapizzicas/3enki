@@ -558,13 +558,23 @@
         <div class="field">
           <label class="label">API Key</label>
           <div class="password-wrapper">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              class="input password-input"
-              placeholder="sk-..."
-              bind:value={newForm.apiKey}
-              on:input={() => clearTestResult()}
-            />
+            {#if showPassword}
+              <input
+                type="text"
+                class="input password-input"
+                placeholder="sk-..."
+                bind:value={newForm.apiKey}
+                on:input={() => clearTestResult()}
+              />
+            {:else}
+              <input
+                type="password"
+                class="input password-input"
+                placeholder="sk-..."
+                bind:value={newForm.apiKey}
+                on:input={() => clearTestResult()}
+              />
+            {/if}
             <button
               type="button"
               class="toggle-password"
@@ -647,13 +657,23 @@
           <div class="field">
             <label class="label">Nueva API Key</label>
             <div class="password-wrapper">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                class="input password-input"
-                placeholder="sk-..."
-                bind:value={editApiKey}
-                on:input={() => clearTestResult()}
-              />
+              {#if showPassword}
+                <input
+                  type="text"
+                  class="input password-input"
+                  placeholder="sk-..."
+                  bind:value={editApiKey}
+                  on:input={() => clearTestResult()}
+                />
+              {:else}
+                <input
+                  type="password"
+                  class="input password-input"
+                  placeholder="sk-..."
+                  bind:value={editApiKey}
+                  on:input={() => clearTestResult()}
+                />
+              {/if}
               <button
                 type="button"
                 class="toggle-password"

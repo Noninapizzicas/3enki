@@ -102,6 +102,42 @@ let client: MqttClientLike | null = null;
 const handlers = new Map<string, Set<MessageHandler>>();
 const topicSubscriptions = new Map<string, number>(); // topic -> refcount
 
+// =============================================================================
+// PENDING MESSAGES QUEUE - Mensajes encolados antes de conexión
+// =============================================================================
+
+interface PendingMessage {
+  topic: string;
+  payload: unknown;
+  retain: boolean;
+}
+
+const pendingMessages: PendingMessage[] = [];
+const MAX_PENDING_MESSAGES = 100; // Límite para evitar memory leak
+
+/**
+ * Envía todos los mensajes pendientes cuando se conecta
+ * @internal
+ */
+function flushPendingMessages(): void {
+  if (pendingMessages.length === 0) return;
+
+  console.log(`[MQTT] Flushing ${pendingMessages.length} pending messages`);
+
+  while (pendingMessages.length > 0) {
+    const msg = pendingMessages.shift()!;
+
+    if (client?.connected) {
+      const message = typeof msg.payload === 'string'
+        ? msg.payload
+        : JSON.stringify(msg.payload);
+
+      client.publish(msg.topic, message, { qos: 1, retain: msg.retain });
+      logMqttInteraction('publish', msg.topic, msg.payload);
+    }
+  }
+}
+
 // Log collector configuration
 let logCollectorEnabled = true;
 const LOG_ENDPOINT = '/modules/log-manager/logs';
@@ -296,6 +332,9 @@ async function initMqttConnection(config: MqttConfig): Promise<void> {
       for (const topic of topicSubscriptions.keys()) {
         client?.subscribe(topic);
       }
+
+      // Enviar mensajes que estaban encolados esperando conexión
+      flushPendingMessages();
     });
 
     client.on('message', (topic: string, buffer: { toString(encoding: string): string }) => {
@@ -345,10 +384,17 @@ export function disconnect(): void {
 
 /**
  * Publicar mensaje a un topic
+ * Si no está conectado, encola el mensaje para enviarlo cuando se conecte
  */
 export function publish(topic: string, payload: unknown, retain = false): void {
-  if (!client || client.disconnected) {
-    console.warn('[MQTT] Not connected, cannot publish to', topic);
+  // Si no está conectado, encolar mensaje
+  if (!client || !client.connected) {
+    if (pendingMessages.length < MAX_PENDING_MESSAGES) {
+      pendingMessages.push({ topic, payload, retain });
+      console.log(`[MQTT] Queued message for ${topic} (${pendingMessages.length} pending)`);
+    } else {
+      console.warn(`[MQTT] Pending queue full, dropping message for ${topic}`);
+    }
     return;
   }
 

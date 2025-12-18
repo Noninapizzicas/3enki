@@ -9,8 +9,8 @@
  * NO usa endpoints REST para datos UI.
  */
 
-import { writable, derived, get } from 'svelte/store';
-import { subscribe as mqttSubscribe, publish, connected, status } from '$lib/ui-core/mqtt';
+import { writable, derived } from 'svelte/store';
+import { subscribe as mqttSubscribe, publish } from '$lib/ui-core/mqtt';
 
 // =============================================================================
 // TYPES
@@ -112,11 +112,13 @@ let unsubscribeState: (() => void) | null = null;
 let unsubscribeSaved: (() => void) | null = null;
 let unsubscribeUpdated: (() => void) | null = null;
 let unsubscribeDeleted: (() => void) | null = null;
-let unsubscribeConnection: (() => void) | null = null;
 
 /**
  * Inicializa suscripciones MQTT para credenciales
  * Llamar una vez al montar el componente principal
+ *
+ * NOTA: No necesita esperar conexión MQTT porque mqtt.ts
+ * encola mensajes automáticamente y los envía al conectar.
  */
 export function initCredentialsSubscriptions(): () => void {
   // Recibir estado completo
@@ -166,23 +168,9 @@ export function initCredentialsSubscriptions(): () => void {
     }));
   });
 
-  // Esperar conexión MQTT antes de solicitar estado
-  const isConnected = get(connected);
-  if (isConnected) {
-    console.log('[Credentials] MQTT connected, requesting state');
-    requestState();
-  } else {
-    console.log('[Credentials] MQTT not connected, waiting...');
-    credentialsStore.update(s => ({ ...s, loading: true }));
-
-    // Suscribirse a cambios de conexión
-    unsubscribeConnection = status.subscribe(($status) => {
-      if ($status === 'connected') {
-        console.log('[Credentials] MQTT now connected, requesting state');
-        requestState();
-      }
-    });
-  }
+  // Solicitar estado inicial
+  // (si MQTT no está conectado, el mensaje se encola automáticamente)
+  requestState();
 
   // Retornar cleanup
   return () => {
@@ -190,7 +178,6 @@ export function initCredentialsSubscriptions(): () => void {
     unsubscribeSaved?.();
     unsubscribeUpdated?.();
     unsubscribeDeleted?.();
-    unsubscribeConnection?.();
   };
 }
 

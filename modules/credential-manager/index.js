@@ -225,17 +225,29 @@ class CredentialManagerModule {
 
   /**
    * Enruta mensajes MQTT a los handlers correctos
+   * Nota: El MQTTClient ya parsea JSON, message puede ser objeto o string
    */
   async handleMqttMessage(topic, message) {
     // Solo procesar topics de credential
     if (!topic.startsWith('credential/')) return;
 
+    // El cliente MQTT ya parsea JSON, así que message puede ser:
+    // - Un objeto (ya parseado)
+    // - Un string (si no era JSON válido)
     let payload;
-    try {
-      payload = typeof message === 'string' ? JSON.parse(message) : JSON.parse(message.toString());
-    } catch (e) {
+    if (typeof message === 'object' && message !== null) {
+      payload = message;
+    } else if (typeof message === 'string') {
+      try {
+        payload = JSON.parse(message);
+      } catch (e) {
+        payload = {};
+      }
+    } else {
       payload = {};
     }
+
+    this.logger.debug('credential-manager.mqtt.message', { topic, payloadType: typeof payload });
 
     switch (topic) {
       case 'credential/state/request':

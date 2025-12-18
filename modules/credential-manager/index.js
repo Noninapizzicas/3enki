@@ -70,6 +70,9 @@ class CredentialManagerModule {
       env_file: this.envFilePath,
       credentials_count: this.credentials.size
     });
+
+    // Publicar estado inicial via MQTT
+    await this.publishState();
   }
 
   async onUnload() {
@@ -198,9 +201,24 @@ class CredentialManagerModule {
       this.onResolveRequest.bind(this)
     );
 
+    // Suscribirse a solicitudes de estado desde el frontend
+    await this.eventBus.subscribe(
+      'credential/state/request',
+      this.onStateRequest.bind(this)
+    );
+
     this.logger.info('events.subscribed', {
-      events: ['credential.resolve.request']
+      events: ['credential.resolve.request', 'credential/state/request']
     });
+  }
+
+  /**
+   * Handler para solicitudes de estado desde el frontend
+   */
+  async onStateRequest(event) {
+    const correlationId = event?.correlation_id || event?.correlationId;
+    this.logger.info('credential.state.request.received', { correlation_id: correlationId });
+    await this.publishState(correlationId);
   }
 
   // ==========================================
@@ -364,6 +382,9 @@ class CredentialManagerModule {
         duration: Date.now() - startTime,
         correlation_id: context.correlationId
       });
+
+      // Publicar estado actualizado via MQTT
+      await this.publishState(context.correlationId);
 
       return {
         status: isNew ? 201 : 200,
@@ -605,6 +626,9 @@ class CredentialManagerModule {
         correlation_id: context.correlationId
       });
 
+      // Publicar estado actualizado via MQTT
+      await this.publishState(context.correlationId);
+
       return {
         status: 200,
         data: { success: true, key, updated: true }
@@ -667,6 +691,9 @@ class CredentialManagerModule {
         key,
         correlation_id: context.correlationId
       });
+
+      // Publicar estado actualizado via MQTT
+      await this.publishState(context.correlationId);
 
       return {
         status: 200,
@@ -755,14 +782,13 @@ class CredentialManagerModule {
   }
 
   // ==========================================
-  // UI State Endpoint - Datos listos para pintar
+  // MQTT State Publisher - Estado via eventos
   // ==========================================
 
-  async handleGetUIState(req, context) {
-    this.logger.info('ui.state.request', {
-      correlation_id: context.correlationId
-    });
-
+  /**
+   * Genera el estado UI completo para publicar via MQTT
+   */
+  getUIState() {
     // Proveedores disponibles con metadata UI
     const providers = [
       { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
@@ -821,15 +847,23 @@ class CredentialManagerModule {
     }
 
     return {
-      status: 200,
-      data: {
-        success: true,
-        providers,
-        levels,
-        credentials: credentialsGrouped,
-        stats
-      }
+      providers,
+      levels,
+      credentials: credentialsGrouped,
+      stats
     };
+  }
+
+  /**
+   * Publica el estado actual via MQTT
+   */
+  async publishState(correlationId = null) {
+    const state = this.getUIState();
+    await this.eventBus.publish('credential/state', state, { correlationId });
+    this.logger.info('credential.state.published', {
+      total: state.stats.total,
+      correlation_id: correlationId
+    });
   }
 
   // ==========================================

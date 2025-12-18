@@ -49,6 +49,10 @@
         "event": "credential.resolve.response",
         "description": "Response to credential resolve request",
         "schema": { "$ref": "./schemas/events.json#/definitions/credential_resolve_response" }
+      },
+      {
+        "event": "credential/state",
+        "description": "Full UI state with providers, levels, and grouped credentials"
       }
     ],
     "subscribes": [
@@ -56,6 +60,11 @@
         "event": "credential.resolve.request",
         "description": "Handle credential resolution requests from other modules",
         "handler": "onResolveRequest"
+      },
+      {
+        "event": "credential/state/request",
+        "description": "Frontend requests current state via MQTT",
+        "handler": "onStateRequest"
       }
     ]
   },
@@ -391,12 +400,6 @@
       "path": "/credentials/levels",
       "handler": "handleGetLevels",
       "description": "Get available credential levels"
-    },
-    {
-      "method": "GET",
-      "path": "/ui/state",
-      "handler": "handleGetUIState",
-      "description": "Get UI-ready state with providers, levels, and grouped credentials"
     },
     {
       "method": "POST",

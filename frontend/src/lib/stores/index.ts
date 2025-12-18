@@ -123,24 +123,31 @@ export {
 } from './theme';
 export type { ThemeMode, ThemeColors } from './theme';
 
-// Credentials Store
+// Credentials Store (MQTT-based)
 export {
   credentialsStore,
-  editingCredential,
-  fetchCredentials,
-  testCredential,
-  saveCredential,
+  initCredentialsSubscriptions,
+  requestState as requestCredentialsState,
+  createCredential,
   updateCredential,
   deleteCredential,
-  setEditingCredential,
-  clearEditingCredential,
+  testCredential,
+  selectCredential,
+  setActiveTab as setCredentialsTab,
+  clearTestResult,
+  allCredentials,
   globalCredentials,
   projectCredentials,
   clientCredentials,
   customCredentials,
-  isLoading,
-  hasError,
+  selectedCredential,
+  providers as credentialProviders,
+  levels as credentialLevels,
+  isLoading as credentialsLoading,
+  hasError as credentialsHasError,
   credentialError,
-  credentialCount
+  credentialCount,
+  activeTab as credentialsActiveTab,
+  testResult as credentialsTestResult
 } from './credentials';
 export type { Credential, ProviderOption, LevelOption, CredentialsState } from './credentials';

@@ -1,84 +1,78 @@
 /**
- * Credentials Module - Gestion completa de credenciales/API keys
+ * Credentials Module - Gestión de credenciales/API keys
+ *
+ * Arquitectura:
+ * - 1 panel único con tabs [Lista | Nuevo | Config]
+ * - Datos via MQTT (no REST /ui/state)
+ * - 1 clic = 1 panel
  *
  * Zona: chat-config
- * Paneles:
- *   - credentials-list: Lista de credenciales (principal)
- *   - credentials-add: Agregar nueva credencial
- *   - credentials-edit: Editar credencial existente
+ * Icono dinámico: ✅ (ok) | ⚠️ (falta) | 🔐 (base)
  *
- * Features:
- * - CRUD completo de credenciales
- * - Soporte para niveles: GLOBAL, PROJECT, CLIENT, CUSTOM
- * - Test de API key antes de guardar
- * - Almacenamiento en .env del servidor
+ * MQTT:
+ * - Publica: credential/state/request, credential/create, credential/update, credential/delete
+ * - Suscribe: credential/state, credential.saved, credential.updated, credential.deleted
  */
 
 import type { UIModule, AppState } from '$lib/ui-core';
-import CredentialsPanelRouter from './CredentialsPanelRouter.svelte';
+import CredentialsPanel from './CredentialsPanel.svelte';
 
 export const credentialsModule: UIModule = {
   manifest: {
     id: 'credentials',
     name: 'Credenciales',
-    version: '2.0.0',
+    version: '3.0.0',
     zone: 'chat-config',
     button: {
       id: 'credentials-btn',
       icon: '🔐',
       dynamicIcon: true,
       label: 'Credenciales',
-      action: { type: 'panel', panelId: 'credentials-list' },
+      action: { type: 'panel', panelId: 'credentials' },
       order: 4
     },
     panels: [
       {
-        id: 'credentials-list',
+        id: 'credentials',
         title: 'Credenciales',
-        size: 'md'
-      },
-      {
-        id: 'credentials-add',
-        title: 'Nueva Credencial',
-        size: 'md'
-      },
-      {
-        id: 'credentials-edit',
-        title: 'Editar Credencial',
         size: 'md'
       }
     ],
     mqtt: {
-      publishes: ['credential/save', 'credential/update', 'credential/delete'],
-      subscribes: ['credential/saved', 'credential/updated', 'credential/deleted']
+      publishes: [
+        'credential/state/request',
+        'credential/create',
+        'credential/update',
+        'credential/delete'
+      ],
+      subscribes: [
+        'credential/state',
+        'credential.saved',
+        'credential.updated',
+        'credential.deleted'
+      ]
     }
   },
 
   getIcon(state: AppState): string {
-    if (state.credentials.valid && state.credentials.providers.length > 0) {
+    if (state.credentials?.valid && state.credentials?.total > 0) {
       return '✅';
     }
-    if (state.credentials.providers.length > 0) {
+    if (state.credentials?.total > 0) {
       return '⚠️';
     }
     return '🔐';
   },
 
   getBadge(state: AppState): string | number | null {
-    const count = state.credentials.providers.length;
+    const count = state.credentials?.total ?? 0;
     return count > 0 ? count : null;
   },
 
-  PanelComponent: CredentialsPanelRouter
+  PanelComponent: CredentialsPanel
 };
 
 export default credentialsModule;
 
-// Re-export components for direct use if needed
-export { default as CredentialsListPanel } from './CredentialsListPanel.svelte';
-export { default as CredentialAddPanel } from './CredentialAddPanel.svelte';
-export { default as CredentialEditPanel } from './CredentialEditPanel.svelte';
-export { default as CredentialsPanelRouter } from './CredentialsPanelRouter.svelte';
-
-// Keep old panel for backwards compatibility
+// Export panel component
 export { default as CredentialsPanel } from './CredentialsPanel.svelte';

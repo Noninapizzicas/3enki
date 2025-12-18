@@ -1,18 +1,20 @@
 /**
- * Credentials Store - Gestión de credenciales
+ * Credentials Store - MQTT Event-Driven
  *
- * Gestiona:
- * - Lista de credenciales
- * - Credencial en edición
- * - Estado de carga/error
- * - CRUD operations
+ * Comunicación 100% via MQTT:
+ * - Solicita estado: publish('credential/state/request')
+ * - Recibe estado: subscribe('credential/state')
+ * - Acciones: publish('credential/create|update|delete|test')
+ *
+ * NO usa endpoints REST para datos UI.
  */
 
 import { writable, derived } from 'svelte/store';
+import { subscribe as mqttSubscribe, publish } from '$lib/ui-core/mqtt';
 
-// ============================================================================
+// =============================================================================
 // TYPES
-// ============================================================================
+// =============================================================================
 
 export interface Credential {
   key: string;
@@ -38,89 +40,178 @@ export interface LevelOption {
 }
 
 export interface CredentialsState {
-  credentials: Credential[];
   providers: ProviderOption[];
   levels: LevelOption[];
+  credentials: {
+    GLOBAL: Credential[];
+    PROJECT: Credential[];
+    CLIENT: Credential[];
+    CUSTOM: Credential[];
+  };
   stats: {
     total: number;
     byLevel: Record<string, number>;
   };
   loading: boolean;
   error: string | null;
+  selectedKey: string | null;
+  activeTab: 'lista' | 'nuevo' | 'config';
+  testResult: { valid: boolean; message: string } | null;
 }
 
-// ============================================================================
-// STORE
-// ============================================================================
+// =============================================================================
+// INITIAL STATE
+// =============================================================================
 
 const initialState: CredentialsState = {
-  credentials: [],
   providers: [],
   levels: [],
+  credentials: {
+    GLOBAL: [],
+    PROJECT: [],
+    CLIENT: [],
+    CUSTOM: []
+  },
   stats: { total: 0, byLevel: {} },
   loading: false,
-  error: null
+  error: null,
+  selectedKey: null,
+  activeTab: 'lista',
+  testResult: null
 };
+
+// =============================================================================
+// STORE
+// =============================================================================
 
 export const credentialsStore = writable<CredentialsState>(initialState);
 
-// Credential being edited
-export const editingCredential = writable<Credential | null>(null);
+// =============================================================================
+// MQTT SUBSCRIPTIONS
+// =============================================================================
 
-// ============================================================================
-// API HELPERS
-// ============================================================================
-
-const API_BASE = '/modules/credential-manager';
-
-// ============================================================================
-// ACTIONS
-// ============================================================================
+let unsubscribeState: (() => void) | null = null;
+let unsubscribeSaved: (() => void) | null = null;
+let unsubscribeUpdated: (() => void) | null = null;
+let unsubscribeDeleted: (() => void) | null = null;
 
 /**
- * Fetch UI state (providers, levels, credentials)
+ * Inicializa suscripciones MQTT para credenciales
+ * Llamar una vez al montar el componente principal
  */
-export async function fetchCredentials(): Promise<void> {
-  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+export function initCredentialsSubscriptions(): () => void {
+  // Recibir estado completo
+  unsubscribeState = mqttSubscribe('credential/state', (_topic, payload) => {
+    const data = payload as {
+      providers: ProviderOption[];
+      levels: LevelOption[];
+      credentials: CredentialsState['credentials'];
+      stats: CredentialsState['stats'];
+    };
 
-  try {
-    const res = await fetch(`${API_BASE}/ui/state`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    credentialsStore.update(s => ({
+      ...s,
+      providers: data.providers || [],
+      levels: data.levels || [],
+      credentials: data.credentials || { GLOBAL: [], PROJECT: [], CLIENT: [], CUSTOM: [] },
+      stats: data.stats || { total: 0, byLevel: {} },
+      loading: false,
+      error: null
+    }));
+  });
 
-    const data = await res.json();
+  // Notificación de credencial guardada
+  unsubscribeSaved = mqttSubscribe('credential.saved', (_topic, payload) => {
+    const data = payload as { key: string; created: boolean };
+    console.log('[Credentials] Saved:', data.key, data.created ? '(new)' : '(updated)');
+  });
 
-    if (data.success) {
-      // Flatten credentials from all levels
-      const allCredentials: Credential[] = [
-        ...(data.credentials.GLOBAL || []),
-        ...(data.credentials.PROJECT || []),
-        ...(data.credentials.CLIENT || []),
-        ...(data.credentials.CUSTOM || [])
-      ];
+  // Notificación de credencial actualizada
+  unsubscribeUpdated = mqttSubscribe('credential.updated', (_topic, payload) => {
+    const data = payload as { key: string };
+    console.log('[Credentials] Updated:', data.key);
+  });
 
-      credentialsStore.update(s => ({
-        ...s,
-        credentials: allCredentials,
-        providers: data.providers || [],
-        levels: data.levels || [],
-        stats: data.stats || { total: 0, byLevel: {} },
-        loading: false
-      }));
-    } else {
-      throw new Error(data.error || 'Error loading credentials');
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Error loading credentials';
-    credentialsStore.update(s => ({ ...s, loading: false, error: message }));
-  }
+  // Notificación de credencial eliminada
+  unsubscribeDeleted = mqttSubscribe('credential.deleted', (_topic, payload) => {
+    const data = payload as { key: string };
+    console.log('[Credentials] Deleted:', data.key);
+
+    // Limpiar selección si era la credencial eliminada
+    credentialsStore.update(s => ({
+      ...s,
+      selectedKey: s.selectedKey === data.key ? null : s.selectedKey
+    }));
+  });
+
+  // Solicitar estado inicial
+  requestState();
+
+  // Retornar cleanup
+  return () => {
+    unsubscribeState?.();
+    unsubscribeSaved?.();
+    unsubscribeUpdated?.();
+    unsubscribeDeleted?.();
+  };
+}
+
+// =============================================================================
+// ACTIONS
+// =============================================================================
+
+/**
+ * Solicita el estado actual via MQTT
+ */
+export function requestState(): void {
+  credentialsStore.update(s => ({ ...s, loading: true }));
+  publish('credential/state/request', {});
 }
 
 /**
- * Test a credential before saving
+ * Crea una nueva credencial
  */
-export async function testCredential(provider: string, apiKey: string): Promise<{ valid: boolean; message: string }> {
+export function createCredential(
+  provider: string,
+  level: string,
+  identifier: string | null,
+  apiKey: string
+): void {
+  publish('credential/create', {
+    provider,
+    level,
+    identifier,
+    api_key: apiKey
+  });
+}
+
+/**
+ * Actualiza una credencial existente
+ */
+export function updateCredential(key: string, apiKey: string): void {
+  publish('credential/update', {
+    key,
+    api_key: apiKey
+  });
+}
+
+/**
+ * Elimina una credencial
+ */
+export function deleteCredential(key: string): void {
+  publish('credential/delete', { key });
+}
+
+/**
+ * Testea una API key antes de guardar
+ * Nota: Test usa REST porque necesita respuesta síncrona
+ */
+export async function testCredential(
+  provider: string,
+  apiKey: string
+): Promise<{ valid: boolean; message: string }> {
   try {
-    const res = await fetch(`${API_BASE}/ui/test`, {
+    const res = await fetch('/modules/credential-manager/ui/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, api_key: apiKey })
@@ -129,139 +220,91 @@ export async function testCredential(provider: string, apiKey: string): Promise<
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-    return {
+    const result = {
       valid: data.valid || false,
       message: data.message || (data.valid ? 'Valid' : 'Invalid')
     };
+
+    credentialsStore.update(s => ({ ...s, testResult: result }));
+    return result;
   } catch (err) {
-    return { valid: false, message: 'Connection error' };
+    const result = { valid: false, message: 'Connection error' };
+    credentialsStore.update(s => ({ ...s, testResult: result }));
+    return result;
   }
 }
 
 /**
- * Save a new credential
+ * Selecciona una credencial
  */
-export async function saveCredential(
-  provider: string,
-  level: string,
-  identifier: string | null,
-  apiKey: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const res = await fetch(`${API_BASE}/credentials`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider,
-        level,
-        identifier: identifier || null,
-        api_key: apiKey
-      })
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
-
-    if (data.success) {
-      await fetchCredentials(); // Refresh list
-      return { success: true };
-    } else {
-      return { success: false, error: data.error || 'Failed to save' };
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection error';
-    return { success: false, error: message };
-  }
+export function selectCredential(key: string | null): void {
+  credentialsStore.update(s => ({ ...s, selectedKey: key }));
 }
 
 /**
- * Update an existing credential
+ * Cambia la tab activa
  */
-export async function updateCredential(key: string, apiKey: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const res = await fetch(`${API_BASE}/credentials/${encodeURIComponent(key)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: apiKey })
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
-
-    if (data.success) {
-      await fetchCredentials(); // Refresh list
-      return { success: true };
-    } else {
-      return { success: false, error: data.error || 'Failed to update' };
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection error';
-    return { success: false, error: message };
-  }
+export function setActiveTab(tab: 'lista' | 'nuevo' | 'config'): void {
+  credentialsStore.update(s => ({ ...s, activeTab: tab, testResult: null }));
 }
 
 /**
- * Delete a credential
+ * Limpia el resultado del test
  */
-export async function deleteCredential(key: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const res = await fetch(`${API_BASE}/credentials/${encodeURIComponent(key)}`, {
-      method: 'DELETE'
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
-
-    if (data.success) {
-      await fetchCredentials(); // Refresh list
-      return { success: true };
-    } else {
-      return { success: false, error: data.error || 'Failed to delete' };
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection error';
-    return { success: false, error: message };
-  }
+export function clearTestResult(): void {
+  credentialsStore.update(s => ({ ...s, testResult: null }));
 }
 
-/**
- * Set credential for editing
- */
-export function setEditingCredential(credential: Credential | null): void {
-  editingCredential.set(credential);
-}
-
-/**
- * Clear editing state
- */
-export function clearEditingCredential(): void {
-  editingCredential.set(null);
-}
-
-// ============================================================================
+// =============================================================================
 // DERIVED STORES
-// ============================================================================
+// =============================================================================
 
-export const globalCredentials = derived(credentialsStore, $s =>
-  $s.credentials.filter(c => c.level === 'GLOBAL')
+/** Todas las credenciales en lista plana */
+export const allCredentials = derived(credentialsStore, $s => [
+  ...$s.credentials.GLOBAL,
+  ...$s.credentials.PROJECT,
+  ...$s.credentials.CLIENT,
+  ...$s.credentials.CUSTOM
+]);
+
+/** Credenciales globales */
+export const globalCredentials = derived(credentialsStore, $s => $s.credentials.GLOBAL);
+
+/** Credenciales de proyecto */
+export const projectCredentials = derived(credentialsStore, $s => $s.credentials.PROJECT);
+
+/** Credenciales de cliente */
+export const clientCredentials = derived(credentialsStore, $s => $s.credentials.CLIENT);
+
+/** Credenciales custom */
+export const customCredentials = derived(credentialsStore, $s => $s.credentials.CUSTOM);
+
+/** Credencial seleccionada actual */
+export const selectedCredential = derived(
+  [credentialsStore, allCredentials],
+  ([$store, $all]) => $all.find(c => c.key === $store.selectedKey) || null
 );
 
-export const projectCredentials = derived(credentialsStore, $s =>
-  $s.credentials.filter(c => c.level === 'PROJECT')
-);
+/** Providers disponibles */
+export const providers = derived(credentialsStore, $s => $s.providers);
 
-export const clientCredentials = derived(credentialsStore, $s =>
-  $s.credentials.filter(c => c.level === 'CLIENT')
-);
+/** Levels disponibles */
+export const levels = derived(credentialsStore, $s => $s.levels);
 
-export const customCredentials = derived(credentialsStore, $s =>
-  $s.credentials.filter(c => c.level === 'CUSTOM')
-);
-
+/** Estado de carga */
 export const isLoading = derived(credentialsStore, $s => $s.loading);
-export const hasError = derived(credentialsStore, $s => $s.error !== null);
+
+/** Error actual */
 export const credentialError = derived(credentialsStore, $s => $s.error);
+
+/** Tiene error */
+export const hasError = derived(credentialsStore, $s => $s.error !== null);
+
+/** Total de credenciales */
 export const credentialCount = derived(credentialsStore, $s => $s.stats.total);
+
+/** Tab activa */
+export const activeTab = derived(credentialsStore, $s => $s.activeTab);
+
+/** Resultado del test */
+export const testResult = derived(credentialsStore, $s => $s.testResult);

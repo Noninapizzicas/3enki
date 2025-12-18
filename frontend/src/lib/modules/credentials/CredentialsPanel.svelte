@@ -1,228 +1,1232 @@
 <script lang="ts">
   /**
-   * CredentialsPanel - Panel de estado de credenciales
+   * CredentialsPanel - Panel único con tabs [Lista | Nuevo | Config]
    *
-   * Features:
-   * - Lista de providers con estado de API key
-   * - Indicador visual de válido/inválido
-   * - Información de último check
+   * Arquitectura:
+   * - 1 panel = 1 clic (sin navegación a otros paneles)
+   * - Datos via MQTT (no REST /ui/state)
+   * - CSS variables con fallbacks
+   *
+   * Tabs:
+   * - Lista: Ver y seleccionar credenciales existentes
+   * - Nuevo: Crear nueva credencial
+   * - Config: Editar/eliminar credencial seleccionada
    */
 
-  import { credentialStatus } from '$lib/stores';
-  import { publish } from '$lib/ui-core';
+  import { onMount, onDestroy } from 'svelte';
+  import {
+    credentialsStore,
+    initCredentialsSubscriptions,
+    createCredential,
+    updateCredential,
+    deleteCredential,
+    testCredential,
+    selectCredential,
+    setActiveTab,
+    clearTestResult,
+    globalCredentials,
+    projectCredentials,
+    clientCredentials,
+    customCredentials,
+    selectedCredential
+  } from '$lib/stores/credentials';
+  import { closePanel } from '$lib/stores';
 
   export let panelId: string;
 
-  // Providers disponibles con sus iconos
-  const providers = [
-    { id: 'openai', name: 'OpenAI', icon: '🤖', description: 'GPT-4, GPT-3.5' },
-    { id: 'anthropic', name: 'Anthropic', icon: '🧠', description: 'Claude 3, Claude 2' },
-    { id: 'deepseek', name: 'DeepSeek', icon: '🔮', description: 'DeepSeek Coder' },
-    { id: 'ollama', name: 'Ollama', icon: '🦙', description: 'Local models' }
-  ];
+  // ==========================================================================
+  // STATE
+  // ==========================================================================
 
-  function isProviderValid(providerId: string): boolean {
-    return $credentialStatus.providers.includes(providerId);
+  let cleanup: (() => void) | null = null;
+
+  // Form state for "Nuevo" tab
+  let newForm = {
+    provider: '',
+    level: 'GLOBAL',
+    identifier: '',
+    apiKey: ''
+  };
+
+  // Form state for "Config" tab
+  let editApiKey = '';
+
+  // UI state
+  let showPassword = false;
+  let saving = false;
+  let testing = false;
+  let deleting = false;
+  let error: string | null = null;
+
+  // Expanded groups
+  let expandedGroups = {
+    GLOBAL: true,
+    PROJECT: false,
+    CLIENT: false,
+    CUSTOM: false
+  };
+
+  // ==========================================================================
+  // COMPUTED
+  // ==========================================================================
+
+  $: activeTab = $credentialsStore.activeTab;
+  $: providers = $credentialsStore.providers;
+  $: levels = $credentialsStore.levels;
+  $: loading = $credentialsStore.loading;
+  $: testResult = $credentialsStore.testResult;
+  $: selected = $selectedCredential;
+  $: stats = $credentialsStore.stats;
+
+  // Form validation
+  $: selectedLevel = levels.find(l => l.id === newForm.level);
+  $: requiresIdentifier = selectedLevel?.requiresIdentifier ?? false;
+  $: canSaveNew = newForm.provider && newForm.apiKey.length > 0 &&
+    (!requiresIdentifier || newForm.identifier.length > 0);
+  $: canSaveEdit = editApiKey.length > 0;
+
+  // ==========================================================================
+  // LIFECYCLE
+  // ==========================================================================
+
+  onMount(() => {
+    cleanup = initCredentialsSubscriptions();
+
+    // Set default provider
+    if (providers.length > 0 && !newForm.provider) {
+      newForm.provider = providers[0].id;
+    }
+  });
+
+  onDestroy(() => {
+    cleanup?.();
+  });
+
+  // Update default provider when providers load
+  $: if (providers.length > 0 && !newForm.provider) {
+    newForm.provider = providers[0].id;
   }
 
-  function handleValidate(providerId: string) {
-    publish('credential/validate', { providerId });
+  // ==========================================================================
+  // HANDLERS - TABS
+  // ==========================================================================
+
+  function handleTabChange(tab: 'lista' | 'nuevo' | 'config') {
+    setActiveTab(tab);
+    error = null;
+    clearTestResult();
   }
 
-  function handleValidateAll() {
-    publish('credential/validate', { all: true });
+  // ==========================================================================
+  // HANDLERS - LISTA
+  // ==========================================================================
+
+  function handleSelectCredential(key: string) {
+    selectCredential(key);
+    closePanel();
   }
 
-  // Calcular estadísticas
-  $: validCount = $credentialStatus.providers.length;
-  $: totalCount = providers.length;
+  function handleEditCredential(key: string) {
+    selectCredential(key);
+    setActiveTab('config');
+    editApiKey = '';
+    error = null;
+  }
+
+  function toggleGroup(level: string) {
+    expandedGroups = {
+      ...expandedGroups,
+      [level]: !expandedGroups[level as keyof typeof expandedGroups]
+    };
+  }
+
+  // ==========================================================================
+  // HANDLERS - NUEVO
+  // ==========================================================================
+
+  async function handleTestNew() {
+    if (!newForm.apiKey || !newForm.provider) return;
+
+    testing = true;
+    error = null;
+
+    await testCredential(newForm.provider, newForm.apiKey);
+    testing = false;
+  }
+
+  async function handleSaveNew() {
+    if (!canSaveNew || saving) return;
+
+    // Test first if not tested
+    if (!testResult) {
+      await handleTestNew();
+      if (!$credentialsStore.testResult?.valid) {
+        error = $credentialsStore.testResult?.message || 'API key no válida';
+        return;
+      }
+    } else if (!testResult.valid) {
+      error = 'API key no válida, corrige antes de guardar';
+      return;
+    }
+
+    saving = true;
+    error = null;
+
+    createCredential(
+      newForm.provider,
+      newForm.level,
+      requiresIdentifier ? newForm.identifier : null,
+      newForm.apiKey
+    );
+
+    // Reset form
+    newForm = {
+      provider: providers[0]?.id || '',
+      level: 'GLOBAL',
+      identifier: '',
+      apiKey: ''
+    };
+    clearTestResult();
+    saving = false;
+
+    // Go to list
+    setActiveTab('lista');
+  }
+
+  function handleCancelNew() {
+    newForm = {
+      provider: providers[0]?.id || '',
+      level: 'GLOBAL',
+      identifier: '',
+      apiKey: ''
+    };
+    clearTestResult();
+    error = null;
+    setActiveTab('lista');
+  }
+
+  // ==========================================================================
+  // HANDLERS - CONFIG
+  // ==========================================================================
+
+  async function handleTestEdit() {
+    if (!editApiKey || !selected) return;
+
+    testing = true;
+    error = null;
+
+    await testCredential(selected.provider, editApiKey);
+    testing = false;
+  }
+
+  async function handleSaveEdit() {
+    if (!canSaveEdit || !selected || saving) return;
+
+    // Test first if not tested
+    if (!testResult) {
+      await handleTestEdit();
+      if (!$credentialsStore.testResult?.valid) {
+        error = $credentialsStore.testResult?.message || 'API key no válida';
+        return;
+      }
+    } else if (!testResult.valid) {
+      error = 'API key no válida, corrige antes de guardar';
+      return;
+    }
+
+    saving = true;
+    error = null;
+
+    updateCredential(selected.key, editApiKey);
+
+    editApiKey = '';
+    clearTestResult();
+    saving = false;
+
+    // Go to list
+    setActiveTab('lista');
+  }
+
+  function handleDelete() {
+    if (!selected || deleting) return;
+
+    if (!confirm(`¿Eliminar credencial ${selected.providerName} (${selected.level})?`)) {
+      return;
+    }
+
+    deleting = true;
+    deleteCredential(selected.key);
+    deleting = false;
+
+    selectCredential(null);
+    setActiveTab('lista');
+  }
+
+  function handleCancelEdit() {
+    editApiKey = '';
+    clearTestResult();
+    error = null;
+    selectCredential(null);
+    setActiveTab('lista');
+  }
+
+  // ==========================================================================
+  // HELPERS
+  // ==========================================================================
+
+  function togglePassword() {
+    showPassword = !showPassword;
+  }
+
+  function getLevelIcon(level: string): string {
+    const icons: Record<string, string> = {
+      GLOBAL: '🟢',
+      PROJECT: '🔵',
+      CLIENT: '🟡',
+      CUSTOM: '🔴'
+    };
+    return icons[level] || '🔑';
+  }
+
+  function getLevelLabel(level: string): string {
+    const labels: Record<string, string> = {
+      GLOBAL: 'Global',
+      PROJECT: 'Proyecto',
+      CLIENT: 'Cliente',
+      CUSTOM: 'Custom'
+    };
+    return labels[level] || level;
+  }
 </script>
 
 <div class="credentials-panel">
-  <div class="summary">
-    <div class="summary-icon" class:valid={$credentialStatus.valid}>
-      {$credentialStatus.valid ? '✅' : '⚠️'}
+  <!-- Header with tabs -->
+  <div class="panel-header">
+    <div class="tabs">
+      <button
+        class="tab"
+        class:active={activeTab === 'lista'}
+        on:click={() => handleTabChange('lista')}
+      >
+        Lista
+      </button>
+      <button
+        class="tab"
+        class:active={activeTab === 'nuevo'}
+        on:click={() => handleTabChange('nuevo')}
+      >
+        Nuevo
+      </button>
+      <button
+        class="tab"
+        class:active={activeTab === 'config'}
+        on:click={() => handleTabChange('config')}
+        disabled={!selected}
+      >
+        Config
+      </button>
     </div>
-    <div class="summary-text">
-      <span class="summary-title">
-        {#if $credentialStatus.valid}
-          Credenciales válidas
-        {:else if validCount > 0}
-          Algunas credenciales configuradas
-        {:else}
-          Sin credenciales configuradas
-        {/if}
-      </span>
-      <span class="summary-subtitle">
-        {validCount} de {totalCount} providers
-      </span>
-    </div>
-    <button class="validate-all-btn" on:click={handleValidateAll}>
-      🔄 Validar
-    </button>
+    <span class="stats">{stats.total} credenciales</span>
   </div>
 
-  <div class="providers-list">
-    {#each providers as provider (provider.id)}
-      {@const isValid = isProviderValid(provider.id)}
-      <div class="provider-item" class:valid={isValid}>
-        <span class="provider-icon">{provider.icon}</span>
-        <div class="provider-info">
-          <span class="provider-name">{provider.name}</span>
-          <span class="provider-desc">{provider.description}</span>
+  <!-- Content -->
+  <div class="panel-content">
+    <!-- ================================================================== -->
+    <!-- TAB: LISTA -->
+    <!-- ================================================================== -->
+    {#if activeTab === 'lista'}
+      {#if loading}
+        <div class="loading">
+          <span class="loading-icon">⏳</span>
+          <span>Cargando...</span>
         </div>
-        <div class="provider-status">
-          {#if isValid}
-            <span class="status-badge valid">✓ Válido</span>
-          {:else}
-            <span class="status-badge invalid">No configurado</span>
+      {:else if stats.total === 0}
+        <div class="empty">
+          <span class="empty-icon">🔑</span>
+          <span class="empty-title">Sin credenciales</span>
+          <span class="empty-text">Agrega tu primera API key</span>
+          <button class="btn primary" on:click={() => handleTabChange('nuevo')}>
+            ➕ Agregar
+          </button>
+        </div>
+      {:else}
+        <div class="credentials-list">
+          <!-- GLOBAL -->
+          {#if $globalCredentials.length > 0}
+            <div class="group">
+              <button class="group-header" on:click={() => toggleGroup('GLOBAL')}>
+                <span class="group-icon">{expandedGroups.GLOBAL ? '▼' : '▶'}</span>
+                <span class="group-level">{getLevelIcon('GLOBAL')} Global</span>
+                <span class="group-count">{$globalCredentials.length}</span>
+              </button>
+              {#if expandedGroups.GLOBAL}
+                <div class="group-items">
+                  {#each $globalCredentials as cred (cred.key)}
+                    <div
+                      class="credential-item"
+                      class:selected={selected?.key === cred.key}
+                    >
+                      <button class="cred-main" on:click={() => handleSelectCredential(cred.key)}>
+                        <span class="cred-icon">{cred.providerIcon}</span>
+                        <div class="cred-info">
+                          <span class="cred-name">{cred.providerName}</span>
+                          <span class="cred-preview">{cred.preview}</span>
+                        </div>
+                      </button>
+                      <button
+                        class="cred-edit"
+                        on:click|stopPropagation={() => handleEditCredential(cred.key)}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- PROJECT -->
+          {#if $projectCredentials.length > 0}
+            <div class="group">
+              <button class="group-header" on:click={() => toggleGroup('PROJECT')}>
+                <span class="group-icon">{expandedGroups.PROJECT ? '▼' : '▶'}</span>
+                <span class="group-level">{getLevelIcon('PROJECT')} Proyecto</span>
+                <span class="group-count">{$projectCredentials.length}</span>
+              </button>
+              {#if expandedGroups.PROJECT}
+                <div class="group-items">
+                  {#each $projectCredentials as cred (cred.key)}
+                    <div
+                      class="credential-item"
+                      class:selected={selected?.key === cred.key}
+                    >
+                      <button class="cred-main" on:click={() => handleSelectCredential(cred.key)}>
+                        <span class="cred-icon">{cred.providerIcon}</span>
+                        <div class="cred-info">
+                          <span class="cred-name">{cred.providerName}</span>
+                          <span class="cred-identifier">📁 {cred.identifier}</span>
+                          <span class="cred-preview">{cred.preview}</span>
+                        </div>
+                      </button>
+                      <button
+                        class="cred-edit"
+                        on:click|stopPropagation={() => handleEditCredential(cred.key)}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- CLIENT -->
+          {#if $clientCredentials.length > 0}
+            <div class="group">
+              <button class="group-header" on:click={() => toggleGroup('CLIENT')}>
+                <span class="group-icon">{expandedGroups.CLIENT ? '▼' : '▶'}</span>
+                <span class="group-level">{getLevelIcon('CLIENT')} Cliente</span>
+                <span class="group-count">{$clientCredentials.length}</span>
+              </button>
+              {#if expandedGroups.CLIENT}
+                <div class="group-items">
+                  {#each $clientCredentials as cred (cred.key)}
+                    <div
+                      class="credential-item"
+                      class:selected={selected?.key === cred.key}
+                    >
+                      <button class="cred-main" on:click={() => handleSelectCredential(cred.key)}>
+                        <span class="cred-icon">{cred.providerIcon}</span>
+                        <div class="cred-info">
+                          <span class="cred-name">{cred.providerName}</span>
+                          <span class="cred-identifier">👤 {cred.identifier}</span>
+                          <span class="cred-preview">{cred.preview}</span>
+                        </div>
+                      </button>
+                      <button
+                        class="cred-edit"
+                        on:click|stopPropagation={() => handleEditCredential(cred.key)}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- CUSTOM -->
+          {#if $customCredentials.length > 0}
+            <div class="group">
+              <button class="group-header" on:click={() => toggleGroup('CUSTOM')}>
+                <span class="group-icon">{expandedGroups.CUSTOM ? '▼' : '▶'}</span>
+                <span class="group-level">{getLevelIcon('CUSTOM')} Custom</span>
+                <span class="group-count">{$customCredentials.length}</span>
+              </button>
+              {#if expandedGroups.CUSTOM}
+                <div class="group-items">
+                  {#each $customCredentials as cred (cred.key)}
+                    <div
+                      class="credential-item"
+                      class:selected={selected?.key === cred.key}
+                    >
+                      <button class="cred-main" on:click={() => handleSelectCredential(cred.key)}>
+                        <span class="cred-icon">{cred.providerIcon}</span>
+                        <div class="cred-info">
+                          <span class="cred-name">{cred.providerName}</span>
+                          <span class="cred-identifier">⚙️ {cred.identifier}</span>
+                          <span class="cred-preview">{cred.preview}</span>
+                        </div>
+                      </button>
+                      <button
+                        class="cred-edit"
+                        on:click|stopPropagation={() => handleEditCredential(cred.key)}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
           {/if}
         </div>
-      </div>
-    {/each}
-  </div>
+      {/if}
 
-  <div class="actions">
-    <p class="hint">
-      💡 Las API keys se configuran via variables de entorno en el backend.
-    </p>
+    <!-- ================================================================== -->
+    <!-- TAB: NUEVO -->
+    <!-- ================================================================== -->
+    {:else if activeTab === 'nuevo'}
+      <div class="form">
+        <!-- Provider -->
+        <div class="field">
+          <label class="label">Proveedor</label>
+          <div class="providers-grid">
+            {#each providers as p (p.id)}
+              <button
+                type="button"
+                class="provider-btn"
+                class:active={newForm.provider === p.id}
+                on:click={() => { newForm.provider = p.id; clearTestResult(); }}
+              >
+                <span class="provider-icon">{p.icon}</span>
+                <span class="provider-name">{p.name}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Level -->
+        <div class="field">
+          <label class="label">Nivel</label>
+          <div class="levels-grid">
+            {#each levels as l (l.id)}
+              <button
+                type="button"
+                class="level-btn"
+                class:active={newForm.level === l.id}
+                on:click={() => { newForm.level = l.id; newForm.identifier = ''; }}
+              >
+                <span>{l.icon}</span>
+                <span>{l.name}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Identifier -->
+        {#if requiresIdentifier}
+          <div class="field">
+            <label class="label">Identificador</label>
+            <input
+              type="text"
+              class="input"
+              placeholder={newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
+              bind:value={newForm.identifier}
+            />
+          </div>
+        {/if}
+
+        <!-- API Key -->
+        <div class="field">
+          <label class="label">API Key</label>
+          <div class="password-wrapper">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              class="input password-input"
+              placeholder="sk-..."
+              bind:value={newForm.apiKey}
+              on:input={() => clearTestResult()}
+            />
+            <button
+              type="button"
+              class="toggle-password"
+              on:click={togglePassword}
+            >
+              {showPassword ? '🙈' : '👁'}
+            </button>
+          </div>
+        </div>
+
+        <!-- Test Result -->
+        {#if testResult}
+          <div class="test-result" class:valid={testResult.valid} class:invalid={!testResult.valid}>
+            {testResult.valid ? '✅' : '❌'} {testResult.message}
+          </div>
+        {/if}
+
+        <!-- Error -->
+        {#if error}
+          <div class="error-msg">{error}</div>
+        {/if}
+
+        <!-- Actions -->
+        <div class="actions">
+          <button class="btn secondary" on:click={handleCancelNew} disabled={saving || testing}>
+            Cancelar
+          </button>
+          <button
+            class="btn secondary"
+            on:click={handleTestNew}
+            disabled={!newForm.apiKey || testing || saving}
+          >
+            {testing ? '🔍...' : '🧪 Test'}
+          </button>
+          <button
+            class="btn primary"
+            on:click={handleSaveNew}
+            disabled={!canSaveNew || saving || testing}
+          >
+            {saving ? '⏳...' : '💾 Guardar'}
+          </button>
+        </div>
+      </div>
+
+    <!-- ================================================================== -->
+    <!-- TAB: CONFIG -->
+    <!-- ================================================================== -->
+    {:else if activeTab === 'config'}
+      {#if selected}
+        <div class="form">
+          <!-- Current credential info -->
+          <div class="current-info">
+            <div class="info-row">
+              <span class="info-label">Proveedor</span>
+              <span class="info-value">
+                <span>{selected.providerIcon}</span>
+                {selected.providerName}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Nivel</span>
+              <span class="info-value">
+                <span>{getLevelIcon(selected.level)}</span>
+                {getLevelLabel(selected.level)}
+              </span>
+            </div>
+            {#if selected.identifier}
+              <div class="info-row">
+                <span class="info-label">Identificador</span>
+                <span class="info-value">{selected.identifier}</span>
+              </div>
+            {/if}
+            <div class="info-row">
+              <span class="info-label">Key actual</span>
+              <span class="info-value mono">{selected.preview}</span>
+            </div>
+          </div>
+
+          <!-- New API Key -->
+          <div class="field">
+            <label class="label">Nueva API Key</label>
+            <div class="password-wrapper">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                class="input password-input"
+                placeholder="sk-..."
+                bind:value={editApiKey}
+                on:input={() => clearTestResult()}
+              />
+              <button
+                type="button"
+                class="toggle-password"
+                on:click={togglePassword}
+              >
+                {showPassword ? '🙈' : '👁'}
+              </button>
+            </div>
+          </div>
+
+          <!-- Test Result -->
+          {#if testResult}
+            <div class="test-result" class:valid={testResult.valid} class:invalid={!testResult.valid}>
+              {testResult.valid ? '✅' : '❌'} {testResult.message}
+            </div>
+          {/if}
+
+          <!-- Error -->
+          {#if error}
+            <div class="error-msg">{error}</div>
+          {/if}
+
+          <!-- Actions -->
+          <div class="actions">
+            <button
+              class="btn danger"
+              on:click={handleDelete}
+              disabled={deleting || saving || testing}
+            >
+              {deleting ? '⏳...' : '🗑️'}
+            </button>
+            <button class="btn secondary" on:click={handleCancelEdit} disabled={saving || testing}>
+              Cancelar
+            </button>
+            <button
+              class="btn secondary"
+              on:click={handleTestEdit}
+              disabled={!editApiKey || testing || saving}
+            >
+              {testing ? '🔍...' : '🧪 Test'}
+            </button>
+            <button
+              class="btn primary"
+              on:click={handleSaveEdit}
+              disabled={!canSaveEdit || saving || testing}
+            >
+              {saving ? '⏳...' : '💾 Guardar'}
+            </button>
+          </div>
+        </div>
+      {:else}
+        <div class="empty">
+          <span class="empty-icon">🔑</span>
+          <span class="empty-text">Selecciona una credencial en Lista</span>
+          <button class="btn secondary" on:click={() => handleTabChange('lista')}>
+            Ir a Lista
+          </button>
+        </div>
+      {/if}
+    {/if}
   </div>
 </div>
 
 <style>
+  /* ==========================================================================
+     CSS Variables with fallbacks
+     ========================================================================== */
   .credentials-panel {
+    --_bg: var(--panel-bg, var(--color-bg-card, #1a1d24));
+    --_bg-surface: var(--panel-bg-surface, rgba(255, 255, 255, 0.05));
+    --_text: var(--panel-text, var(--color-text, #e5e5e5));
+    --_text-muted: var(--panel-text-muted, var(--color-text-muted, #a3a3a3));
+    --_border: var(--panel-border, rgba(255, 255, 255, 0.1));
+    --_primary: var(--panel-primary, var(--color-primary, #3b82f6));
+    --_success: var(--panel-success, var(--color-success, #22c55e));
+    --_danger: var(--panel-danger, var(--color-danger, #ef4444));
+    --_radius: var(--panel-radius, 0.5rem);
+
     display: flex;
     flex-direction: column;
-    gap: 1rem;
     height: 100%;
+    color: var(--_text);
   }
 
-  .summary {
+  /* ==========================================================================
+     Header & Tabs
+     ========================================================================== */
+  .panel-header {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1rem;
-    background: var(--color-surface, rgba(255, 255, 255, 0.05));
-    border-radius: 0.5rem;
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    justify-content: space-between;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--_border);
   }
 
-  .summary-icon {
-    font-size: 2rem;
-    opacity: 0.5;
-  }
-
-  .summary-icon.valid {
-    opacity: 1;
-  }
-
-  .summary-text {
-    flex: 1;
+  .tabs {
     display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
+    gap: 0.25rem;
   }
 
-  .summary-title {
-    font-weight: 600;
-    color: var(--color-text, #e5e5e5);
-  }
-
-  .summary-subtitle {
-    font-size: 0.875rem;
-    color: var(--color-text-muted, #a3a3a3);
-  }
-
-  .validate-all-btn {
+  .tab {
     padding: 0.5rem 0.75rem;
-    background: var(--color-surface, rgba(255, 255, 255, 0.05));
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
-    border-radius: 0.375rem;
-    color: var(--color-text, #e5e5e5);
+    background: transparent;
+    border: none;
+    border-radius: var(--_radius);
+    color: var(--_text-muted);
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.15s;
   }
 
-  .validate-all-btn:hover {
-    background: var(--color-hover, rgba(255, 255, 255, 0.1));
+  .tab:hover:not(:disabled) {
+    background: var(--_bg-surface);
+    color: var(--_text);
   }
 
-  .providers-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+  .tab.active {
+    background: var(--_primary);
+    color: white;
+  }
+
+  .tab:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .stats {
+    font-size: 0.75rem;
+    color: var(--_text-muted);
+  }
+
+  /* ==========================================================================
+     Content
+     ========================================================================== */
+  .panel-content {
     flex: 1;
     overflow-y: auto;
+    padding: 0.75rem;
   }
 
-  .provider-item {
+  /* ==========================================================================
+     Loading & Empty
+     ========================================================================== */
+  .loading, .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .loading-icon {
+    font-size: 2rem;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    opacity: 0.5;
+  }
+
+  .empty-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--_text);
+  }
+
+  .empty-text {
+    font-size: 0.875rem;
+    color: var(--_text-muted);
+  }
+
+  /* ==========================================================================
+     Credentials List
+     ========================================================================== */
+  .credentials-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .group-header {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    background: var(--color-surface, rgba(255, 255, 255, 0.03));
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-    border-radius: 0.375rem;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: transparent;
+    border: none;
+    border-radius: var(--_radius);
+    color: var(--_text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+    width: 100%;
+  }
+
+  .group-header:hover {
+    background: var(--_bg-surface);
+  }
+
+  .group-icon {
+    font-size: 0.625rem;
+    width: 1rem;
+  }
+
+  .group-level {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .group-count {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+    background: var(--_bg-surface);
+    border-radius: 9999px;
+    margin-left: auto;
+  }
+
+  .group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding-left: 1.5rem;
+    margin-top: 0.375rem;
+  }
+
+  .credential-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: var(--_bg-surface);
+    border: 1px solid var(--_border);
+    border-radius: var(--_radius);
     transition: all 0.15s;
   }
 
-  .provider-item.valid {
-    border-left: 3px solid var(--color-success, #22c55e);
+  .credential-item:hover {
+    border-color: var(--_primary);
+  }
+
+  .credential-item.selected {
+    border-color: var(--_primary);
+    background: rgb(59 130 246 / 0.1);
+  }
+
+  .cred-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    padding: 0;
+  }
+
+  .cred-icon {
+    font-size: 1.25rem;
+  }
+
+  .cred-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+  }
+
+  .cred-name {
+    font-weight: 500;
+    color: var(--_text);
+  }
+
+  .cred-identifier {
+    font-size: 0.75rem;
+    color: var(--_primary);
+  }
+
+  .cred-preview {
+    font-size: 0.75rem;
+    color: var(--_text-muted);
+    font-family: monospace;
+  }
+
+  .cred-edit {
+    padding: 0.25rem;
+    background: transparent;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+  }
+
+  .credential-item:hover .cred-edit {
+    opacity: 1;
+  }
+
+  .cred-edit:hover {
+    background: var(--_bg-surface);
+  }
+
+  /* ==========================================================================
+     Form
+     ========================================================================== */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--_text-muted);
+  }
+
+  .input {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    background: var(--_bg-surface);
+    color: var(--_text);
+    border: 1px solid var(--_border);
+    border-radius: var(--_radius);
+    transition: border-color 0.15s;
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--_primary);
+  }
+
+  .input::placeholder {
+    color: var(--_text-muted);
+  }
+
+  /* Providers Grid */
+  .providers-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .provider-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    background: var(--_bg-surface);
+    border: 2px solid var(--_border);
+    border-radius: var(--_radius);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .provider-btn:hover {
+    border-color: var(--_primary);
+  }
+
+  .provider-btn.active {
+    border-color: var(--_primary);
+    background: rgb(59 130 246 / 0.1);
   }
 
   .provider-icon {
     font-size: 1.5rem;
   }
 
-  .provider-info {
-    flex: 1;
+  .provider-name {
+    font-size: 0.75rem;
+    color: var(--_text-muted);
+  }
+
+  /* Levels Grid */
+  .levels-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.25rem;
+  }
+
+  .level-btn {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 0.125rem;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.625rem;
+    background: var(--_bg-surface);
+    border: 2px solid var(--_border);
+    border-radius: var(--_radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--_text-muted);
   }
 
-  .provider-name {
-    font-weight: 500;
-    color: var(--color-text, #e5e5e5);
+  .level-btn:hover {
+    border-color: var(--_primary);
   }
 
-  .provider-desc {
-    font-size: 0.75rem;
-    color: var(--color-text-muted, #a3a3a3);
+  .level-btn.active {
+    border-color: var(--_primary);
+    background: rgb(59 130 246 / 0.1);
+    color: var(--_text);
   }
 
-  .provider-status {
+  /* Password wrapper */
+  .password-wrapper {
+    position: relative;
     display: flex;
     align-items: center;
   }
 
-  .status-badge {
-    padding: 0.25rem 0.5rem;
+  .password-input {
+    padding-right: 3rem;
+  }
+
+  .toggle-password {
+    position: absolute;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+
+  .toggle-password:hover {
+    opacity: 1;
+  }
+
+  /* Current info */
+  .current-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: var(--_bg-surface);
+    border: 1px solid var(--_border);
+    border-radius: var(--_radius);
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .info-label {
     font-size: 0.75rem;
-    border-radius: 0.25rem;
+    color: var(--_text-muted);
   }
 
-  .status-badge.valid {
-    background: rgba(34, 197, 94, 0.2);
-    color: var(--color-success, #22c55e);
+  .info-value {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--_text);
+    font-weight: 500;
   }
 
-  .status-badge.invalid {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--color-text-muted, #a3a3a3);
+  .info-value.mono {
+    font-family: monospace;
+    font-weight: 400;
   }
 
-  .actions {
-    margin-top: auto;
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-  }
-
-  .hint {
-    margin: 0;
-    font-size: 0.8125rem;
-    color: var(--color-text-muted, #a3a3a3);
+  /* Test result */
+  .test-result {
+    padding: 0.75rem;
+    border-radius: var(--_radius);
+    font-size: 0.875rem;
     text-align: center;
+  }
+
+  .test-result.valid {
+    background: rgb(34 197 94 / 0.15);
+    color: var(--_success);
+  }
+
+  .test-result.invalid {
+    background: rgb(239 68 68 / 0.15);
+    color: var(--_danger);
+  }
+
+  /* Error message */
+  .error-msg {
+    padding: 0.75rem;
+    background: rgb(239 68 68 / 0.15);
+    color: var(--_danger);
+    border-radius: var(--_radius);
+    font-size: 0.875rem;
+    text-align: center;
+  }
+
+  /* ==========================================================================
+     Actions & Buttons
+     ========================================================================== */
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: none;
+    border-radius: var(--_radius);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn.primary {
+    background: var(--_success);
+    color: white;
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
+  .btn.secondary {
+    background: var(--_bg-surface);
+    color: var(--_text-muted);
+  }
+
+  .btn.secondary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--_text);
+  }
+
+  .btn.danger {
+    background: var(--_danger);
+    color: white;
+    flex: 0 0 auto;
+    padding: 0.75rem 1rem;
+  }
+
+  .btn.danger:hover:not(:disabled) {
+    filter: brightness(1.1);
   }
 </style>

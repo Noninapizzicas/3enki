@@ -98,29 +98,7 @@ export const panels: Record<string, PanelDef> = {
     position: 'top',
     zone: 'chat-config',
     order: 3,
-    loader: () => import('$lib/modules/credentials/CredentialsListPanel.svelte')
-  },
-  'credentials-add': {
-    id: 'credentials-add',
-    title: 'Nueva Credencial',
-    icon: '➕',
-    size: 'md',
-    position: 'top',
-    zone: 'chat-config',
-    order: 4,
-    showInBar: false,
-    loader: () => import('$lib/modules/credentials/CredentialAddPanel.svelte')
-  },
-  'credentials-edit': {
-    id: 'credentials-edit',
-    title: 'Editar Credencial',
-    icon: '✏️',
-    size: 'md',
-    position: 'top',
-    zone: 'chat-config',
-    order: 5,
-    showInBar: false,
-    loader: () => import('$lib/modules/credentials/CredentialEditPanel.svelte')
+    loader: () => import('$lib/modules/credentials/CredentialsPanel.svelte')
   },
 
   // === SYSTEM BAR ===

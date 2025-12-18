@@ -65,6 +65,21 @@
         "event": "credential/state/request",
         "description": "Frontend requests current state via MQTT",
         "handler": "onStateRequest"
+      },
+      {
+        "event": "credential/create",
+        "description": "Frontend creates a new credential via MQTT",
+        "handler": "onCreateCredential"
+      },
+      {
+        "event": "credential/update",
+        "description": "Frontend updates a credential via MQTT",
+        "handler": "onUpdateCredential"
+      },
+      {
+        "event": "credential/delete",
+        "description": "Frontend deletes a credential via MQTT",
+        "handler": "onDeleteCredential"
       }
     ]
   },

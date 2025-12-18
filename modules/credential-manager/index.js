@@ -207,8 +207,30 @@ class CredentialManagerModule {
       this.onStateRequest.bind(this)
     );
 
+    // MQTT CRUD operations from frontend
+    await this.eventBus.subscribe(
+      'credential/create',
+      this.onCreateCredential.bind(this)
+    );
+
+    await this.eventBus.subscribe(
+      'credential/update',
+      this.onUpdateCredential.bind(this)
+    );
+
+    await this.eventBus.subscribe(
+      'credential/delete',
+      this.onDeleteCredential.bind(this)
+    );
+
     this.logger.info('events.subscribed', {
-      events: ['credential.resolve.request', 'credential/state/request']
+      events: [
+        'credential.resolve.request',
+        'credential/state/request',
+        'credential/create',
+        'credential/update',
+        'credential/delete'
+      ]
     });
   }
 
@@ -219,6 +241,173 @@ class CredentialManagerModule {
     const correlationId = event?.correlation_id || event?.correlationId;
     this.logger.info('credential.state.request.received', { correlation_id: correlationId });
     await this.publishState(correlationId);
+  }
+
+  /**
+   * Handler MQTT para crear credencial desde frontend
+   */
+  async onCreateCredential(event) {
+    const payload = event?.payload || event;
+    const { provider, level, identifier, api_key } = payload;
+    const correlationId = event?.correlation_id || event?.correlationId;
+
+    this.logger.info('credential.create.mqtt.received', {
+      provider,
+      level,
+      correlation_id: correlationId
+    });
+
+    try {
+      // Validate
+      const validation = this.validateLevel(level, identifier);
+      if (!validation.valid) {
+        this.logger.warn('credential.create.mqtt.validation_failed', {
+          error: validation.error,
+          correlation_id: correlationId
+        });
+        return;
+      }
+
+      // Build key and save
+      const key = this.buildKey(provider, level, identifier);
+      const isNew = !this.credentials.has(key);
+
+      this.credentials.set(key, api_key);
+      await this.saveEnvFile();
+      process.env[key] = api_key;
+
+      // Metrics
+      if (isNew) {
+        this.metrics.increment('credential.saved.total');
+      } else {
+        this.metrics.increment('credential.updated.total');
+      }
+      this.updateCredentialMetrics();
+
+      // Publish notification event
+      await this.eventBus.publish('credential.saved', {
+        key,
+        provider,
+        level,
+        identifier: identifier || null,
+        created: isNew,
+        updated: !isNew
+      }, { correlationId });
+
+      this.logger.info('credential.create.mqtt.success', {
+        key,
+        created: isNew,
+        correlation_id: correlationId
+      });
+
+      // Publish updated state
+      await this.publishState(correlationId);
+    } catch (error) {
+      this.logger.error('credential.create.mqtt.error', {
+        error: error.message,
+        correlation_id: correlationId
+      });
+      this.metrics.increment('credential.errors.total');
+    }
+  }
+
+  /**
+   * Handler MQTT para actualizar credencial desde frontend
+   */
+  async onUpdateCredential(event) {
+    const payload = event?.payload || event;
+    const { key, api_key } = payload;
+    const correlationId = event?.correlation_id || event?.correlationId;
+
+    this.logger.info('credential.update.mqtt.received', {
+      key,
+      correlation_id: correlationId
+    });
+
+    if (!this.credentials.has(key)) {
+      this.logger.warn('credential.update.mqtt.not_found', {
+        key,
+        correlation_id: correlationId
+      });
+      return;
+    }
+
+    try {
+      this.credentials.set(key, api_key);
+      await this.saveEnvFile();
+      process.env[key] = api_key;
+
+      this.metrics.increment('credential.updated.total');
+
+      await this.eventBus.publish('credential.updated', {
+        key,
+        updated_at: new Date().toISOString()
+      }, { correlationId });
+
+      this.logger.info('credential.update.mqtt.success', {
+        key,
+        correlation_id: correlationId
+      });
+
+      // Publish updated state
+      await this.publishState(correlationId);
+    } catch (error) {
+      this.logger.error('credential.update.mqtt.error', {
+        error: error.message,
+        correlation_id: correlationId
+      });
+      this.metrics.increment('credential.errors.total');
+    }
+  }
+
+  /**
+   * Handler MQTT para eliminar credencial desde frontend
+   */
+  async onDeleteCredential(event) {
+    const payload = event?.payload || event;
+    const { key } = payload;
+    const correlationId = event?.correlation_id || event?.correlationId;
+
+    this.logger.info('credential.delete.mqtt.received', {
+      key,
+      correlation_id: correlationId
+    });
+
+    if (!this.credentials.has(key)) {
+      this.logger.warn('credential.delete.mqtt.not_found', {
+        key,
+        correlation_id: correlationId
+      });
+      return;
+    }
+
+    try {
+      this.credentials.delete(key);
+      await this.saveEnvFile();
+      delete process.env[key];
+
+      this.metrics.increment('credential.deleted.total');
+      this.updateCredentialMetrics();
+
+      await this.eventBus.publish('credential.deleted', {
+        key,
+        deleted_at: new Date().toISOString()
+      }, { correlationId });
+
+      this.logger.info('credential.delete.mqtt.success', {
+        key,
+        correlation_id: correlationId
+      });
+
+      // Publish updated state
+      await this.publishState(correlationId);
+    } catch (error) {
+      this.logger.error('credential.delete.mqtt.error', {
+        error: error.message,
+        correlation_id: correlationId
+      });
+      this.metrics.increment('credential.errors.total');
+    }
   }
 
   // ==========================================

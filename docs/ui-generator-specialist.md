@@ -33,15 +33,17 @@ Si algo no está definido ahí, **no lo inventes**.
 - **Pantalla única**
 - **Arquitectura event-driven (MQTT / eventos)**
 - **Sistema modular**
-- **Paneles flotantes**
+- **Paneles flotantes** (1 clic = 1 panel)
 - **Chat-centric**
 - **Sin navegación tradicional**
 - **Sin dashboards independientes**
+- **Sin doble-clic ni long-press**
+- **Datos via MQTT** (NO endpoints /ui/state)
 
 Cada módulo backend:
 - Declara capacidades en `module.json`
-- Publica / consume eventos
-- Puede exponer `/ui/state` u otros endpoints documentados
+- Publica / consume eventos MQTT
+- NO expone endpoints `/ui/state` (frontend obtiene datos via MQTT)
 
 ---
 
@@ -71,27 +73,27 @@ Para cada módulo backend, determina:
 - ¿Permite creación desde UI? (sí / no)
 - ¿Tiene estado seleccionable?
 - ¿Tiene configuración editable?
-- Eventos que publica
-- Eventos que consume
-- ¿Existe `/ui/state` o endpoint equivalente?
+- Eventos MQTT que publica
+- Eventos MQTT que consume
 
 ---
 
-### Paso 2 — Decisión de paneles
+### Paso 2 — Definir contenido del panel
 
-Solo puedes usar **estos paneles**:
+Cada módulo tiene **1 panel** que se abre con **1 clic**.
 
-- **Select** → SIEMPRE
-- **Add** → SOLO si la creación es posible desde UI
-- **Extra** → SIEMPRE (configuración / gestión)
+El panel puede contener **tabs internas** según las funciones necesarias:
+- **Lista** → para seleccionar items
+- **Nuevo** → si la creación es posible desde UI
+- **Config** → para editar/eliminar
 
-Define explícitamente:
+Define qué tabs necesita el panel:
 
 ```
-enableAdd: true | false
+tabs: ["Lista", "Nuevo", "Config"]  // según necesidad
 ```
 
-No inventes paneles adicionales.
+**Principio:** 1 clic = 1 panel. Sin doble-clic ni long-press.
 
 ---
 
@@ -104,8 +106,7 @@ No inventes paneles adicionales.
   module: "nombre-modulo",
   zone: "work-bar" | "chat-config" | "chat-tools",
   icon: "emoji",
-  enableAdd: boolean,
-  panels: ["select", "add?", "extra"]
+  tabs: ["Lista", "Nuevo?", "Config?"]  // según necesidad
 }
 ```
 
@@ -117,10 +118,8 @@ Debes listar exactamente los archivos necesarios:
 
 ```
 /frontend/src/lib/components/{dominio}/
-├── {Module}Button.svelte
-├── {Module}SelectPanel.svelte
-├── {Module}AddPanel.svelte   // solo si enableAdd = true
-└── {Module}ConfigPanel.svelte
+├── {Module}Button.svelte   # Botón simple (1 clic)
+└── {Module}Panel.svelte    # Panel único con tabs
 ```
 
 No agregues componentes fuera de este patrón.
@@ -129,20 +128,20 @@ No agregues componentes fuera de este patrón.
 
 #### 3.3 Contrato UI → Backend
 
-Para cada interacción UI, define el vínculo técnico:
+Para cada interacción UI, define el vínculo técnico via **MQTT**:
 
 ```
-UI Action        → Event / API
+UI Action        → MQTT Event
 -----------------------------------------
-select item     → evento publicado
-create item     → evento o POST documentado
-update config   → evento o POST documentado
-refresh state   → GET /ui/state o evento request
+select item     → publish: modulo/select
+create item     → publish: modulo/create
+update config   → publish: modulo/config
+get state       → subscribe: modulo/state
 ```
 
 Reglas:
 - Usa solo eventos definidos en module.json
-- Usa solo endpoints documentados
+- Comunicación via MQTT, NO endpoints /ui/state
 - No inventes eventos nuevos
 
 ---
@@ -175,7 +174,9 @@ Antes de finalizar, verifica explícitamente:
 - ❏ No hay navegación tradicional
 - ❏ No hay lógica de negocio en la UI
 - ❏ No hay dependencias directas entre módulos
-- ❏ Todo se activa vía eventos o APIs existentes
+- ❏ Todo se activa vía eventos MQTT
+- ❏ No hay endpoints /ui/state (datos via MQTT)
+- ❏ 1 clic = 1 panel (sin doble-clic, sin long-press)
 - ❏ Los paneles son flotantes y autocontenidos
 - ❏ El módulo encaja en una zona válida del layout
 
@@ -192,10 +193,10 @@ Limitación backend detectada: <descripción concreta>
 La respuesta final debe seguir exactamente este orden:
 
 1. Resumen del módulo
-2. Decisión de paneles
+2. Tabs del panel (qué funciones necesita)
 3. Registro del módulo UI
-4. Estructura de archivos
-5. Contrato UI ↔ Backend
+4. Estructura de archivos (Button + Panel)
+5. Contrato MQTT (pub/sub)
 6. Estado UI
 7. Limitaciones detectadas (si existen)
 

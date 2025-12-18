@@ -163,6 +163,12 @@ Aplicación SvelteKit 2:
 - MQTT.js (real-time)
 - Componentes: Button, Input, Card, Table, Modal
 
+**Principios UI:**
+- Pantalla única (sin navegación tradicional)
+- 1 clic = 1 panel (sin doble-clic, sin long-press)
+- Datos via MQTT (NO endpoints /ui/state)
+- Paneles flotantes con tabs internas
+
 ### 5. BLUEPRINTS
 Sistema de scaffolding YAML → módulos completos:
 ```yaml

@@ -8,42 +8,44 @@ Tu función es **generar la UI automáticamente** a partir de los **módulos del
 
 ---
 
-## Documentos Fuente (ÚNICA AUTORIDAD)
+## Documentos de Referencia
 
-Debes basarte **exclusivamente** en:
+Antes de generar UI, **consulta estos documentos según necesidad**:
 
-- `DISEÑO-UI.md`
-- `UI-SYSTEM.md`
-- `UI-SYSTEM-PLAN.md`
+| Documento | Cuándo consultar | Ubicación |
+|-----------|------------------|-----------|
+| **DISEÑO-UI.md** | Para entender layout, zonas y flujo visual | `frontend/DISEÑO-UI.md` |
+| **UI-SYSTEM.md** | Para arquitectura técnica, stores, MQTT | `frontend/docs/UI-SYSTEM.md` |
+| **UI-SYSTEM-PLAN.md** | Para patrones de componentes, CSS, bocetos | `_archive/ui-20251212/docs/UI-SYSTEM-PLAN.md` |
+| **CONTEXT.md** | Para entender el proyecto global | `CONTEXT.md` |
 
-Y en los artefactos de cada módulo backend:
+### Cuándo leer cada documento:
 
-- `module.json`
-- `events.json`
-- `README.md`
-- `project.json` (si existe)
-- `index.js` (solo para inferir capacidades, **NO** para lógica)
+1. **Antes de empezar** → Lee `CONTEXT.md` para contexto general
+2. **Para decidir zona del módulo** → Lee `DISEÑO-UI.md` (layout y zonas)
+3. **Para definir componentes** → Lee `UI-SYSTEM-PLAN.md` (patrones, bocetos, CSS)
+4. **Para implementar MQTT/stores** → Lee `UI-SYSTEM.md` (arquitectura técnica)
 
-Si algo no está definido ahí, **no lo inventes**.
+### Artefactos del módulo backend:
+
+- `module.json` — capacidades y eventos
+- `README.md` — descripción del módulo
+- `index.js` — solo para inferir capacidades (NO copiar lógica)
+
+Si algo no está definido en estos documentos, **no lo inventes**.
 
 ---
 
-## Contexto del Sistema UI
+## Principios Clave (memorizar)
 
-- **Pantalla única**
-- **Arquitectura event-driven (MQTT / eventos)**
-- **Sistema modular**
-- **Paneles flotantes** (1 clic = 1 panel)
-- **Chat-centric**
-- **Sin navegación tradicional**
-- **Sin dashboards independientes**
-- **Sin doble-clic ni long-press**
-- **Datos via MQTT** (NO endpoints /ui/state)
+```
+1 CLIC = 1 PANEL          → Sin doble-clic, sin long-press
+DATOS VIA MQTT            → NO endpoints /ui/state
+PANTALLA ÚNICA            → Sin navegación tradicional
+PANELES CON TABS          → Un panel por módulo, tabs internas si necesita
+```
 
-Cada módulo backend:
-- Declara capacidades en `module.json`
-- Publica / consume eventos MQTT
-- NO expone endpoints `/ui/state` (frontend obtiene datos via MQTT)
+Para detalles, consulta los documentos de referencia.
 
 ---
 

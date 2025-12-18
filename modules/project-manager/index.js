@@ -39,6 +39,7 @@ class ProjectManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.mqtt = core.mqttClient; // Cliente MQTT directo para topics UI
 
     // Load config from module.json (core.config may not include module-specific config)
     try {
@@ -81,27 +82,19 @@ class ProjectManagerModule {
     this.unsubscribes.push(unsubActive);
 
     // ==================== MQTT UI HANDLERS ====================
-    // Estos handlers permiten comunicación directa frontend ↔ backend via MQTT
+    // Comunicación directa frontend ↔ backend via MQTT (sin transformación de topics)
+    // El eventBus transforma topics, pero UI necesita topics directos
 
-    const unsubStateRequest = await this.eventBus.subscribe('project/state/request',
-      this.onProjectStateRequest.bind(this));
-    this.unsubscribes.push(unsubStateRequest);
+    if (this.mqtt) {
+      await this.mqtt.subscribe('project/state/request');
+      await this.mqtt.subscribe('project/create');
+      await this.mqtt.subscribe('project/update');
+      await this.mqtt.subscribe('project/delete');
+      await this.mqtt.subscribe('project/activate');
 
-    const unsubCreate = await this.eventBus.subscribe('project/create',
-      this.onProjectCreate.bind(this));
-    this.unsubscribes.push(unsubCreate);
-
-    const unsubUpdate = await this.eventBus.subscribe('project/update',
-      this.onProjectUpdate.bind(this));
-    this.unsubscribes.push(unsubUpdate);
-
-    const unsubDelete = await this.eventBus.subscribe('project/delete',
-      this.onProjectDelete.bind(this));
-    this.unsubscribes.push(unsubDelete);
-
-    const unsubActivate = await this.eventBus.subscribe('project/activate',
-      this.onProjectActivate.bind(this));
-    this.unsubscribes.push(unsubActivate);
+      this.mqtt.on('message', this.handleMqttMessage.bind(this));
+      this.logger.info('project-manager.mqtt.subscribed', { topics: ['project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate'] });
+    }
 
     // Load existing projects from database
     await this.loadExistingProjects();
@@ -605,14 +598,54 @@ class ProjectManagerModule {
     });
   }
 
+  // ==================== MQTT MESSAGE ROUTER ====================
+
+  /**
+   * Enruta mensajes MQTT a los handlers correctos
+   */
+  async handleMqttMessage(topic, message) {
+    // Solo procesar topics de project
+    if (!topic.startsWith('project/')) return;
+
+    let payload;
+    try {
+      payload = typeof message === 'string' ? JSON.parse(message) : JSON.parse(message.toString());
+    } catch (e) {
+      payload = {};
+    }
+
+    switch (topic) {
+      case 'project/state/request':
+        await this.onProjectStateRequest({ data: payload });
+        break;
+      case 'project/create':
+        await this.onProjectCreate({ data: payload });
+        break;
+      case 'project/update':
+        await this.onProjectUpdate({ data: payload });
+        break;
+      case 'project/delete':
+        await this.onProjectDelete({ data: payload });
+        break;
+      case 'project/activate':
+        await this.onProjectActivate({ data: payload });
+        break;
+    }
+  }
+
   // ==================== MQTT UI HANDLERS ====================
   // Comunicación directa frontend ↔ backend via MQTT para UI
 
   /**
-   * Publica estado completo para UI
+   * Publica estado completo para UI via MQTT directo
    * @private
    */
   async publishUIState() {
+    if (!this.mqtt) {
+      this.logger.warn('project-manager.mqtt.not.available');
+      return;
+    }
+
     const projects = this.listProjects().map(p => ({
       id: p.id,
       name: p.name,
@@ -625,11 +658,15 @@ class ProjectManagerModule {
       updatedAt: p.updated_at
     }));
 
-    await this.eventBus.publish('project/state', {
+    const state = {
       projects,
       activeProjectId: this.activeProjectId,
       count: projects.length
-    });
+    };
+
+    // Publicar directamente al broker MQTT (sin transformación de topic)
+    await this.mqtt.publish('project/state', state);
+    this.logger.debug('project-manager.state.published', { count: projects.length });
   }
 
   /**

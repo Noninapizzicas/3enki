@@ -61,6 +61,11 @@
         "event": "project.active.response",
         "description": "Response with active project ID",
         "schema": { "$ref": "./schemas/events.json#/definitions/project_active_response" }
+      },
+      {
+        "event": "project/state",
+        "description": "UI state: list of projects with active project",
+        "handler": "publishUIState"
       }
     ],
     "subscribes": [
@@ -83,6 +88,31 @@
         "event": "db.query.response",
         "description": "Database query responses",
         "handler": "onDbQueryResponse"
+      },
+      {
+        "event": "project/state/request",
+        "description": "UI requests project state",
+        "handler": "onProjectStateRequest"
+      },
+      {
+        "event": "project/create",
+        "description": "UI creates project via MQTT",
+        "handler": "onProjectCreate"
+      },
+      {
+        "event": "project/update",
+        "description": "UI updates project via MQTT",
+        "handler": "onProjectUpdate"
+      },
+      {
+        "event": "project/delete",
+        "description": "UI deletes project via MQTT",
+        "handler": "onProjectDelete"
+      },
+      {
+        "event": "project/activate",
+        "description": "UI activates project via MQTT",
+        "handler": "onProjectActivate"
       }
     ]
   },

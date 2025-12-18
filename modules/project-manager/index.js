@@ -80,6 +80,29 @@ class ProjectManagerModule {
       this.onGetActiveProjectRequest.bind(this));
     this.unsubscribes.push(unsubActive);
 
+    // ==================== MQTT UI HANDLERS ====================
+    // Estos handlers permiten comunicación directa frontend ↔ backend via MQTT
+
+    const unsubStateRequest = await this.eventBus.subscribe('project/state/request',
+      this.onProjectStateRequest.bind(this));
+    this.unsubscribes.push(unsubStateRequest);
+
+    const unsubCreate = await this.eventBus.subscribe('project/create',
+      this.onProjectCreate.bind(this));
+    this.unsubscribes.push(unsubCreate);
+
+    const unsubUpdate = await this.eventBus.subscribe('project/update',
+      this.onProjectUpdate.bind(this));
+    this.unsubscribes.push(unsubUpdate);
+
+    const unsubDelete = await this.eventBus.subscribe('project/delete',
+      this.onProjectDelete.bind(this));
+    this.unsubscribes.push(unsubDelete);
+
+    const unsubActivate = await this.eventBus.subscribe('project/activate',
+      this.onProjectActivate.bind(this));
+    this.unsubscribes.push(unsubActivate);
+
     // Load existing projects from database
     await this.loadExistingProjects();
 
@@ -580,6 +603,164 @@ class ProjectManagerModule {
       success: true,
       active_project_id: this.activeProjectId
     });
+  }
+
+  // ==================== MQTT UI HANDLERS ====================
+  // Comunicación directa frontend ↔ backend via MQTT para UI
+
+  /**
+   * Publica estado completo para UI
+   * @private
+   */
+  async publishUIState() {
+    const projects = this.listProjects().map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      color: p.metadata?.color || 'blue',
+      icon: p.metadata?.icon || '📁',
+      workspaceType: p.metadata?.workspaceType || 'general',
+      isActive: p.is_active === true || p.is_active === 1,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at
+    }));
+
+    await this.eventBus.publish('project/state', {
+      projects,
+      activeProjectId: this.activeProjectId,
+      count: projects.length
+    });
+  }
+
+  /**
+   * Handle project/state/request - UI solicita estado
+   */
+  async onProjectStateRequest(event) {
+    this.logger.debug('MQTT: project/state/request received');
+    await this.publishUIState();
+  }
+
+  /**
+   * Handle project/create - UI crea proyecto
+   */
+  async onProjectCreate(event) {
+    const eventData = event.data || event;
+    const { name, description, color, icon, workspaceType } = eventData;
+    const correlationId = crypto.randomUUID();
+
+    this.logger.info({ correlationId, name }, 'MQTT: project/create');
+
+    if (!name || name.trim().length === 0) {
+      this.logger.warn({ correlationId }, 'MQTT: project/create - name required');
+      return;
+    }
+
+    try {
+      await this.createProject(
+        name.trim(),
+        description?.trim() || '',
+        {
+          color: color || 'blue',
+          icon: icon || '📁',
+          workspaceType: workspaceType || 'general'
+        },
+        correlationId
+      );
+
+      // Publicar estado actualizado
+      await this.publishUIState();
+    } catch (error) {
+      this.logger.error({ correlationId, error: error.message }, 'MQTT: project/create failed');
+    }
+  }
+
+  /**
+   * Handle project/update - UI actualiza proyecto
+   */
+  async onProjectUpdate(event) {
+    const eventData = event.data || event;
+    const { id, name, description, color, icon, workspaceType } = eventData;
+    const correlationId = crypto.randomUUID();
+
+    this.logger.info({ correlationId, id }, 'MQTT: project/update');
+
+    if (!id) {
+      this.logger.warn({ correlationId }, 'MQTT: project/update - id required');
+      return;
+    }
+
+    try {
+      const updates = {};
+      if (name !== undefined) updates.name = name.trim();
+      if (description !== undefined) updates.description = description.trim();
+
+      // Metadata updates
+      const project = this.getProject(id);
+      if (project) {
+        const metadata = { ...(project.metadata || {}) };
+        if (color !== undefined) metadata.color = color;
+        if (icon !== undefined) metadata.icon = icon;
+        if (workspaceType !== undefined) metadata.workspaceType = workspaceType;
+        updates.metadata = metadata;
+      }
+
+      await this.updateProject(id, updates, correlationId);
+
+      // Publicar estado actualizado
+      await this.publishUIState();
+    } catch (error) {
+      this.logger.error({ correlationId, id, error: error.message }, 'MQTT: project/update failed');
+    }
+  }
+
+  /**
+   * Handle project/delete - UI elimina proyecto
+   */
+  async onProjectDelete(event) {
+    const eventData = event.data || event;
+    const { id } = eventData;
+    const correlationId = crypto.randomUUID();
+
+    this.logger.info({ correlationId, id }, 'MQTT: project/delete');
+
+    if (!id) {
+      this.logger.warn({ correlationId }, 'MQTT: project/delete - id required');
+      return;
+    }
+
+    try {
+      await this.deleteProject(id, correlationId);
+
+      // Publicar estado actualizado
+      await this.publishUIState();
+    } catch (error) {
+      this.logger.error({ correlationId, id, error: error.message }, 'MQTT: project/delete failed');
+    }
+  }
+
+  /**
+   * Handle project/activate - UI activa proyecto
+   */
+  async onProjectActivate(event) {
+    const eventData = event.data || event;
+    const { id } = eventData;
+    const correlationId = crypto.randomUUID();
+
+    this.logger.info({ correlationId, id }, 'MQTT: project/activate');
+
+    if (!id) {
+      this.logger.warn({ correlationId }, 'MQTT: project/activate - id required');
+      return;
+    }
+
+    try {
+      await this.activateProject(id, correlationId);
+
+      // Publicar estado actualizado
+      await this.publishUIState();
+    } catch (error) {
+      this.logger.error({ correlationId, id, error: error.message }, 'MQTT: project/activate failed');
+    }
   }
 
   // ==================== HTTP API HANDLERS ====================

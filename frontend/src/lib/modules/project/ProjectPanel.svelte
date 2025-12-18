@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * ProjectPanel - Panel único de gestión de proyectos
+   * ProjectPanel - Panel único de gestión de proyectos (MQTT)
    *
    * Funcionalidades:
    * - Lista de proyectos con búsqueda
@@ -8,37 +8,35 @@
    * - Editar proyecto (inline)
    * - Eliminar proyecto
    * - Seleccionar/activar proyecto
+   *
+   * Comunicación via MQTT (NO REST):
+   * - project/state/request → solicita lista
+   * - project/state → recibe lista
+   * - project/create → crea proyecto
+   * - project/update → actualiza proyecto
+   * - project/delete → elimina proyecto
+   * - project/activate → activa proyecto
    */
 
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { activeProject, selectProject, closePanel } from '$lib/stores';
+  import {
+    projectsStore,
+    initProjectsSubscriptions,
+    createProjectMqtt,
+    updateProjectMqtt,
+    deleteProjectMqtt,
+    activateProjectMqtt
+  } from '$lib/stores';
   import { PROJECT_COLORS } from '$lib/ui-core';
 
   // Props
   export let panelId: string = '';
 
   // ============================================================================
-  // TIPOS
+  // ESTADO LOCAL
   // ============================================================================
 
-  interface ProjectData {
-    id: string;
-    name: string;
-    description: string;
-    color: string;
-    icon: string;
-    workspaceType: string;
-    isActive: boolean;
-  }
-
-  // ============================================================================
-  // ESTADO
-  // ============================================================================
-
-  // Lista
-  let projects: ProjectData[] = [];
-  let loading = true;
-  let error: string | null = null;
   let searchQuery = '';
 
   // Form crear
@@ -61,163 +59,83 @@
   // Eliminar
   let deletingId: string | null = null;
 
+  // Cleanup
+  let cleanup: (() => void) | null = null;
+
   // ============================================================================
-  // API
+  // SUSCRIPCIÓN MQTT
   // ============================================================================
 
-  const API = '/modules/project-manager';
+  onMount(() => {
+    cleanup = initProjectsSubscriptions();
+  });
 
-  async function fetchProjects(): Promise<void> {
-    loading = true;
-    error = null;
+  onDestroy(() => {
+    cleanup?.();
+  });
 
-    try {
-      const res = await fetch(`${API}/projects`);
+  // ============================================================================
+  // ACCIONES
+  // ============================================================================
 
-      if (!res.ok) {
-        throw new Error(`Error ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      if (data.success) {
-        projects = data.projects.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          description: p.description || '',
-          color: p.metadata?.color || 'blue',
-          icon: p.metadata?.icon || '📁',
-          workspaceType: p.metadata?.workspaceType || 'general',
-          isActive: p.is_active === true || p.is_active === 1
-        }));
-      } else {
-        error = data.error || 'Error al cargar';
-      }
-    } catch (e: any) {
-      error = 'No se pudo conectar al servidor';
-      console.error('[ProjectPanel] Fetch error:', e);
-    } finally {
-      loading = false;
-    }
-  }
-
-  async function createProject(): Promise<void> {
+  function handleCreate(): void {
     if (!createForm.name.trim() || creating) return;
 
     creating = true;
-    error = null;
+    createProjectMqtt(
+      createForm.name.trim(),
+      createForm.description.trim(),
+      createForm.color
+    );
 
-    try {
-      const res = await fetch(`${API}/projects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: createForm.name.trim(),
-          description: createForm.description.trim(),
-          metadata: {
-            color: createForm.color,
-            icon: '📁',
-            workspaceType: 'general'
-          }
-        })
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        // Resetear form
-        createForm = { name: '', description: '', color: 'blue' };
-        showCreateForm = false;
-        // Recargar lista
-        await fetchProjects();
-      } else {
-        error = data.error || 'Error al crear';
-      }
-    } catch (e: any) {
-      error = 'Error de conexión';
-      console.error('[ProjectPanel] Create error:', e);
-    } finally {
+    // Reset form después de un momento (el store se actualiza via MQTT)
+    setTimeout(() => {
+      createForm = { name: '', description: '', color: 'blue' };
+      showCreateForm = false;
       creating = false;
-    }
+    }, 300);
   }
 
-  async function updateProject(id: string): Promise<void> {
+  function handleUpdate(id: string): void {
     if (!editForm.name.trim() || saving) return;
 
     saving = true;
-    error = null;
+    updateProjectMqtt(id, {
+      name: editForm.name.trim(),
+      description: editForm.description.trim()
+    });
 
-    try {
-      const res = await fetch(`${API}/projects/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editForm.name.trim(),
-          description: editForm.description.trim()
-        })
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        editingId = null;
-        await fetchProjects();
-      } else {
-        error = data.error || 'Error al actualizar';
-      }
-    } catch (e: any) {
-      error = 'Error de conexión';
-      console.error('[ProjectPanel] Update error:', e);
-    } finally {
+    // Reset edit después de un momento
+    setTimeout(() => {
+      editingId = null;
       saving = false;
-    }
+    }, 300);
   }
 
-  async function deleteProject(id: string): Promise<void> {
+  function handleDelete(id: string): void {
     if (deletingId) return;
 
     // No permitir eliminar proyecto activo
     if ($activeProject?.id === id) {
-      error = 'No puedes eliminar el proyecto activo';
       return;
     }
 
     if (!confirm('¿Eliminar este proyecto?')) return;
 
     deletingId = id;
-    error = null;
+    deleteProjectMqtt(id);
 
-    try {
-      const res = await fetch(`${API}/projects/${id}`, {
-        method: 'DELETE'
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        await fetchProjects();
-      } else {
-        error = data.error || 'Error al eliminar';
-      }
-    } catch (e: any) {
-      error = 'Error de conexión';
-      console.error('[ProjectPanel] Delete error:', e);
-    } finally {
+    // Reset después de un momento
+    setTimeout(() => {
       deletingId = null;
-    }
+    }, 300);
   }
 
-  async function activateProject(project: ProjectData): Promise<void> {
-    // Activar en backend
-    try {
-      await fetch(`${API}/projects/${project.id}/activate`, {
-        method: 'POST'
-      });
-    } catch (e) {
-      console.error('[ProjectPanel] Activate error:', e);
-    }
+  function handleActivate(project: typeof $projectsStore.projects[0]): void {
+    // Activar via MQTT
+    activateProjectMqtt(project.id);
 
-    // Actualizar store y cerrar panel
+    // Actualizar store local inmediatamente para feedback
     selectProject({
       id: project.id,
       name: project.name,
@@ -233,7 +151,7 @@
   // HELPERS
   // ============================================================================
 
-  function startEdit(project: ProjectData, event: MouseEvent): void {
+  function startEdit(project: typeof $projectsStore.projects[0], event: MouseEvent): void {
     event.stopPropagation();
     editingId = project.id;
     editForm = {
@@ -256,13 +174,8 @@
 
   // Filtrar proyectos
   $: filteredProjects = searchQuery
-    ? projects.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : projects;
-
-  // Cargar al montar
-  onMount(() => {
-    fetchProjects();
-  });
+    ? $projectsStore.projects.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : $projectsStore.projects;
 </script>
 
 <div class="project-panel">
@@ -286,7 +199,7 @@
 
   <!-- ===== FORM CREAR ===== -->
   {#if showCreateForm}
-    <form class="create-form" on:submit|preventDefault={createProject}>
+    <form class="create-form" on:submit|preventDefault={handleCreate}>
       <input
         type="text"
         class="input"
@@ -327,16 +240,15 @@
   {/if}
 
   <!-- ===== ERROR ===== -->
-  {#if error}
+  {#if $projectsStore.error}
     <div class="error-box">
-      <span>{error}</span>
-      <button class="btn-retry" on:click={fetchProjects}>Reintentar</button>
+      <span>{$projectsStore.error}</span>
     </div>
   {/if}
 
   <!-- ===== LISTA ===== -->
   <div class="projects-list">
-    {#if loading}
+    {#if $projectsStore.loading}
       <div class="empty-state">Cargando...</div>
     {:else if filteredProjects.length === 0}
       <div class="empty-state">
@@ -351,13 +263,13 @@
               type="text"
               class="edit-input"
               bind:value={editForm.name}
-              on:keydown={(e) => e.key === 'Enter' && updateProject(project.id)}
+              on:keydown={(e) => e.key === 'Enter' && handleUpdate(project.id)}
               on:keydown={(e) => e.key === 'Escape' && cancelEdit()}
               disabled={saving}
             />
             <button
               class="btn-icon save"
-              on:click={() => updateProject(project.id)}
+              on:click={() => handleUpdate(project.id)}
               disabled={saving || !editForm.name.trim()}
               title="Guardar"
             >
@@ -377,7 +289,7 @@
           <button
             class="project-item"
             class:active={$activeProject?.id === project.id}
-            on:click={() => activateProject(project)}
+            on:click={() => handleActivate(project)}
           >
             <span class="color-indicator" style="background: {getColorHex(project.color)}"></span>
             <span class="project-icon">{getColorEmoji(project.color)}</span>
@@ -396,7 +308,7 @@
             </button>
             <button
               class="btn-icon delete"
-              on:click|stopPropagation={() => deleteProject(project.id)}
+              on:click|stopPropagation={() => handleDelete(project.id)}
               disabled={$activeProject?.id === project.id || deletingId === project.id}
               title={$activeProject?.id === project.id ? 'No puedes eliminar el proyecto activo' : 'Eliminar'}
             >
@@ -562,20 +474,6 @@
     color: #f87171;
     font-size: 0.875rem;
     flex-shrink: 0;
-  }
-
-  .btn-retry {
-    padding: 0.25rem 0.5rem;
-    background: transparent;
-    border: 1px solid currentColor;
-    border-radius: 0.25rem;
-    color: inherit;
-    font-size: 0.75rem;
-    cursor: pointer;
-  }
-
-  .btn-retry:hover {
-    background: rgba(239, 68, 68, 0.15);
   }
 
   /* ===== LISTA ===== */

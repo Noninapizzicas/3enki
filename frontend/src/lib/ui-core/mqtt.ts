@@ -77,9 +77,9 @@ const DEFAULT_CONFIG: MqttConfig = {
   url: getMqttUrl(),
   clientId: `ui-${Date.now().toString(36)}`,
   options: {
-    keepalive: 60,           // Aumentado de 30 a 60 segundos
-    reconnectPeriod: 2000,   // Aumentado para reducir reconexiones agresivas
-    connectTimeout: 5000,    // Aumentado para conexiones lentas
+    keepalive: 30,           // Reducido a 30s para evitar keep alive timeout
+    reconnectPeriod: 2000,   // Reconexión automática
+    connectTimeout: 5000,    // Timeout de conexión
     clean: true
   }
 };
@@ -409,3 +409,100 @@ export const status = readonly(statusStore);
 export const error = readonly(errorStore);
 export const lastMessage = readonly(lastMessageStore);
 export const connected = derived(status, ($status) => $status === 'connected');
+
+// =============================================================================
+// VISIBILITY CHANGE HANDLER - Para HyperOS/MIUI y tabs en background
+// =============================================================================
+
+let visibilityHandlerRegistered = false;
+let lastVisibilityState: DocumentVisibilityState = 'visible';
+let backgroundSince: number | null = null;
+
+/**
+ * Maneja cambios de visibilidad del tab
+ * HyperOS/MIUI y otros sistemas agresivos pueden matar conexiones WebSocket
+ * cuando el tab está en background
+ */
+function handleVisibilityChange(): void {
+  if (typeof document === 'undefined') return;
+
+  const isHidden = document.hidden;
+  const currentState = document.visibilityState;
+
+  if (isHidden && lastVisibilityState === 'visible') {
+    // Tab va a background - guardar timestamp
+    backgroundSince = Date.now();
+    console.log('[MQTT] Tab going to background');
+  } else if (!isHidden && lastVisibilityState === 'hidden') {
+    // Tab vuelve a foreground - verificar conexión
+    const wasBackgroundFor = backgroundSince ? Date.now() - backgroundSince : 0;
+    backgroundSince = null;
+
+    console.log(`[MQTT] Tab returning from background (was hidden for ${wasBackgroundFor}ms)`);
+
+    // Si estuvo en background más de 30s, verificar conexión
+    if (wasBackgroundFor > 30000) {
+      checkAndReconnect();
+    }
+  }
+
+  lastVisibilityState = currentState;
+}
+
+/**
+ * Verifica el estado de la conexión y reconecta si es necesario
+ */
+function checkAndReconnect(): void {
+  if (!client) {
+    console.log('[MQTT] No client, nothing to reconnect');
+    return;
+  }
+
+  if (client.disconnected || !client.connected) {
+    console.log('[MQTT] Connection lost while in background, reconnecting...');
+    statusStore.set('connecting');
+
+    // Forzar reconexión
+    try {
+      client.end(true);
+    } catch (e) {
+      // Ignorar errores al cerrar
+    }
+
+    client = null;
+
+    // Reconectar con un pequeño delay
+    setTimeout(() => {
+      connect().catch(err => {
+        console.error('[MQTT] Reconnection failed:', err);
+      });
+    }, 500);
+  } else {
+    console.log('[MQTT] Connection still alive after background');
+  }
+}
+
+/**
+ * Registra el handler de visibilidad (llamar una vez al iniciar)
+ */
+export function setupVisibilityHandler(): void {
+  if (visibilityHandlerRegistered || typeof document === 'undefined') return;
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  visibilityHandlerRegistered = true;
+  lastVisibilityState = document.visibilityState;
+
+  console.log('[MQTT] Visibility handler registered');
+}
+
+/**
+ * Elimina el handler de visibilidad (para cleanup)
+ */
+export function removeVisibilityHandler(): void {
+  if (!visibilityHandlerRegistered || typeof document === 'undefined') return;
+
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  visibilityHandlerRegistered = false;
+
+  console.log('[MQTT] Visibility handler removed');
+}

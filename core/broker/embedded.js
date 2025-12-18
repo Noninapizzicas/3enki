@@ -69,7 +69,10 @@ class EmbeddedBroker extends EventEmitter {
     try {
       // Lazy load Aedes (solo si se necesita)
       const Aedes = require('aedes');
-      this.aedes = new Aedes();
+      this.aedes = new Aedes({
+        heartbeatInterval: 30000, // 30s heartbeat para detectar clientes inactivos
+        connectTimeout: 60000    // 60s timeout de conexión
+      });
 
       // Configurar event handlers de Aedes
       this.setupAedesHandlers();

@@ -10,6 +10,7 @@
 
 import { writable, readonly, derived } from 'svelte/store';
 import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
+import { _setMqttClient } from './mqtt-request';
 
 // =============================================================================
 // TIPOS
@@ -328,6 +329,13 @@ async function initMqttConnection(config: MqttConfig): Promise<void> {
       perfEnd('MQTT.totalConnection');
       logMsg('✅ MQTT connected', { url: config.url });
 
+      // Registrar cliente para mqtt-request
+      _setMqttClient({
+        publish: (topic: string, message: string, options?: { qos?: number }) => {
+          client?.publish(topic, message, { qos: options?.qos ?? 1 });
+        }
+      });
+
       // Re-suscribir a todos los topics activos
       for (const topic of topicSubscriptions.keys()) {
         client?.subscribe(topic);
@@ -379,6 +387,8 @@ export function disconnect(): void {
     statusStore.set('disconnected');
     handlers.clear();
     topicSubscriptions.clear();
+    // Limpiar referencia para mqtt-request
+    _setMqttClient(null);
   }
 }
 

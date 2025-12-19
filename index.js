@@ -37,6 +37,7 @@ const HTTPGateway = require('./core/gateway/http');
 const { Logger, Tracer, Metrics, ActivityLogger } = require('./core/observability');
 const { loadConfig, getConfigValue } = require('./core/config');
 const { ValidationManager, commonSchemas } = require('./core/validation');
+const { UIRequestHandler } = require('./core/ui');
 
 // Port Management & Service Registry
 const { ServiceRegistry } = require('./core/utils');
@@ -148,7 +149,8 @@ async function main() {
     activity: null,  // ActivityLogger for centralized activity monitoring
     validationManager: null,
     serviceRegistry: null,
-    heartbeatTimer: null
+    heartbeatTimer: null,
+    uiHandler: null  // UI Request/Response handler
   };
 
   try {
@@ -292,7 +294,24 @@ async function main() {
     });
 
     // ========================================================================
-    // Step 5: Load Modules
+    // Step 5.5: Initialize UI Request Handler
+    // ========================================================================
+    console.log('🖥️  [5.5/8] Initializing UI Request Handler...');
+
+    core.uiHandler = new UIRequestHandler({
+      mqttClient: core.mqttClient,
+      logger: core.logger,
+      metrics: core.metrics
+    });
+
+    await core.uiHandler.start();
+
+    core.logger.info('core.ui_handler.initialized', {
+      topic: 'ui/request/#'
+    });
+
+    // ========================================================================
+    // Step 6: Load Modules
     // ========================================================================
     console.log('📦 [6/8] Loading Modules...');
 
@@ -313,7 +332,8 @@ async function main() {
         hooks: core.hooks,
         eventBus: core.eventBus,
         tracer: core.tracer,
-        activity: core.activity  // ActivityLogger for centralized monitoring
+        activity: core.activity,  // ActivityLogger for centralized monitoring
+        uiHandler: core.uiHandler  // UI Request/Response handler for modules
       };
 
       // Create Module Registry
@@ -493,9 +513,16 @@ async function main() {
 
         // Step 4: Stop HTTP Gateway
         if (core.httpGateway) {
-          console.log('   [3/6] Stopping HTTP Gateway...');
+          console.log('   [3/7] Stopping HTTP Gateway...');
           await core.httpGateway.stop();
           core.logger.info('core.gateway.stopped');
+        }
+
+        // Step 4.5: Stop UI Request Handler
+        if (core.uiHandler) {
+          console.log('   [4/7] Stopping UI Request Handler...');
+          await core.uiHandler.stop();
+          core.logger.info('core.ui_handler.stopped');
         }
 
         // Step 5: Unload Modules

@@ -1,19 +1,20 @@
 /**
- * Credentials Store - MQTT Event-Driven
+ * Credentials Store - MQTT Request/Response
  *
- * Comunicación 100% via MQTT con topics transformados por EventBus:
- * - Solicita estado: publish(core/star/events/credential/state/request)
- * - Recibe estado: subscribe(core/star/events/credential/state)
- * - Acciones: publish(core/star/events/credential/create|update|delete)
+ * Comunicación via MQTT con patrón Request/Response:
+ * - Requests garantizados con timeout y status codes
+ * - Manejo de errores estructurado
+ * - Async/await natural
  *
- * Los topics usan el patrón core/star/events/domain/action que el
- * EventBus del backend entiende y transforma correctamente.
- *
- * NO usa endpoints REST para datos UI.
+ * @see docs/architecture/mqtt-request-response.md
  */
 
 import { writable, derived } from 'svelte/store';
-import { subscribe as mqttSubscribe, publish } from '$lib/ui-core/mqtt';
+import {
+  mqttRequest,
+  MqttTimeoutError,
+  MqttRequestError
+} from '$lib/ui-core/mqtt-request';
 
 // =============================================================================
 // TYPES
@@ -62,6 +63,35 @@ export interface CredentialsState {
   testResult: { valid: boolean; message: string } | null;
 }
 
+interface ListResponse {
+  providers: ProviderOption[];
+  levels: LevelOption[];
+  credentials: CredentialsState['credentials'];
+  stats: CredentialsState['stats'];
+}
+
+interface CreateResponse {
+  key: string;
+  created: boolean;
+  updated: boolean;
+}
+
+interface UpdateResponse {
+  key: string;
+  updated: boolean;
+}
+
+interface DeleteResponse {
+  key: string;
+  deleted: boolean;
+}
+
+interface TestResponse {
+  valid: boolean;
+  provider: string;
+  message: string;
+}
+
 // =============================================================================
 // DEFAULT DATA (fallback si MQTT no responde)
 // =============================================================================
@@ -108,165 +138,151 @@ const initialState: CredentialsState = {
 export const credentialsStore = writable<CredentialsState>(initialState);
 
 // =============================================================================
-// MQTT SUBSCRIPTIONS
+// ACTIONS - Request/Response Pattern
 // =============================================================================
 
-let unsubscribeState: (() => void) | null = null;
-let unsubscribeSaved: (() => void) | null = null;
-let unsubscribeUpdated: (() => void) | null = null;
-let unsubscribeDeleted: (() => void) | null = null;
-
 /**
- * Inicializa suscripciones MQTT para credenciales
- * Llamar una vez al montar el componente principal
- *
- * NOTA: No necesita esperar conexión MQTT porque mqtt.ts
- * encola mensajes automáticamente y los envía al conectar.
+ * Carga la lista de credenciales
+ * Usa mqttRequest para garantizar respuesta
  */
-export function initCredentialsSubscriptions(): () => void {
-  // Recibir estado completo via topic transformado por EventBus
-  // Backend publica a: core/*/events/credential/state
-  unsubscribeState = mqttSubscribe('core/*/events/credential/state', (_topic, payload) => {
-    // EventBus envía un envelope, los datos están en payload.data
-    const envelope = payload as { data?: unknown } | null;
-    const data = (envelope?.data || payload) as {
-      providers: ProviderOption[];
-      levels: LevelOption[];
-      credentials: CredentialsState['credentials'];
-      stats: CredentialsState['stats'];
-    };
+export async function loadCredentials(): Promise<void> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
 
-    console.log('[Credentials] State received:', data.stats?.total || 0, 'credentials');
+  try {
+    const response = await mqttRequest<ListResponse>('credential', 'list');
 
     credentialsStore.update(s => ({
       ...s,
-      // Usar datos de MQTT o mantener defaults
-      providers: data.providers?.length > 0 ? data.providers : DEFAULT_PROVIDERS,
-      levels: data.levels?.length > 0 ? data.levels : DEFAULT_LEVELS,
-      credentials: data.credentials || { GLOBAL: [], PROJECT: [], CLIENT: [], CUSTOM: [] },
-      stats: data.stats || { total: 0, byLevel: {} },
+      providers: response.data.providers?.length > 0 ? response.data.providers : DEFAULT_PROVIDERS,
+      levels: response.data.levels?.length > 0 ? response.data.levels : DEFAULT_LEVELS,
+      credentials: response.data.credentials || { GLOBAL: [], PROJECT: [], CLIENT: [], CUSTOM: [] },
+      stats: response.data.stats || { total: 0, byLevel: {} },
       loading: false,
       error: null
     }));
-  });
 
-  // Notificación de credencial guardada
-  unsubscribeSaved = mqttSubscribe('core/*/events/credential/saved', (_topic, payload) => {
-    const envelope = payload as { data?: { key: string; created: boolean } } | null;
-    const data = (envelope?.data || payload) as { key: string; created: boolean };
-    console.log('[Credentials] Saved:', data.key, data.created ? '(new)' : '(updated)');
-  });
-
-  // Notificación de credencial actualizada
-  unsubscribeUpdated = mqttSubscribe('core/*/events/credential/updated', (_topic, payload) => {
-    const envelope = payload as { data?: { key: string } } | null;
-    const data = (envelope?.data || payload) as { key: string };
-    console.log('[Credentials] Updated:', data.key);
-  });
-
-  // Notificación de credencial eliminada
-  unsubscribeDeleted = mqttSubscribe('core/*/events/credential/deleted', (_topic, payload) => {
-    const envelope = payload as { data?: { key: string } } | null;
-    const data = (envelope?.data || payload) as { key: string };
-    console.log('[Credentials] Deleted:', data.key);
-
-    // Limpiar selección si era la credencial eliminada
-    credentialsStore.update(s => ({
-      ...s,
-      selectedKey: s.selectedKey === data.key ? null : s.selectedKey
-    }));
-  });
-
-  // Solicitar estado inicial
-  // (si MQTT no está conectado, el mensaje se encola automáticamente)
-  requestState();
-
-  // Retornar cleanup
-  return () => {
-    unsubscribeState?.();
-    unsubscribeSaved?.();
-    unsubscribeUpdated?.();
-    unsubscribeDeleted?.();
-  };
-}
-
-// =============================================================================
-// ACTIONS
-// =============================================================================
-
-/**
- * Solicita el estado actual via MQTT
- */
-export function requestState(): void {
-  credentialsStore.update(s => ({ ...s, loading: true }));
-  publish('core/*/events/credential/state/request', {});
+    console.log('[Credentials] Loaded:', response.data.stats?.total || 0, 'credentials');
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Load failed:', errorMessage);
+  }
 }
 
 /**
  * Crea una nueva credencial
  */
-export function createCredential(
+export async function createCredential(
   provider: string,
   level: string,
   identifier: string | null,
   apiKey: string
-): void {
-  publish('core/*/events/credential/create', {
-    provider,
-    level,
-    identifier,
-    api_key: apiKey
-  });
+): Promise<CreateResponse> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const response = await mqttRequest<CreateResponse>('credential', 'create', {
+      provider,
+      level,
+      identifier,
+      api_key: apiKey
+    });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] Created:', response.data.key);
+    return response.data;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Create failed:', errorMessage);
+    throw error;
+  }
 }
 
 /**
  * Actualiza una credencial existente
  */
-export function updateCredential(key: string, apiKey: string): void {
-  publish('core/*/events/credential/update', {
-    key,
-    api_key: apiKey
-  });
+export async function updateCredential(key: string, apiKey: string): Promise<void> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<UpdateResponse>('credential', 'update', {
+      key,
+      api_key: apiKey
+    });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] Updated:', key);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Update failed:', errorMessage);
+    throw error;
+  }
 }
 
 /**
  * Elimina una credencial
  */
-export function deleteCredential(key: string): void {
-  publish('core/*/events/credential/delete', { key });
+export async function deleteCredential(key: string): Promise<void> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<DeleteResponse>('credential', 'delete', { key });
+
+    // Limpiar selección si era la credencial eliminada
+    credentialsStore.update(s => ({
+      ...s,
+      selectedKey: s.selectedKey === key ? null : s.selectedKey
+    }));
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] Deleted:', key);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Delete failed:', errorMessage);
+    throw error;
+  }
 }
 
 /**
- * Testea una API key antes de guardar
- * Nota: Test usa REST porque necesita respuesta síncrona
+ * Testea una API key
+ * Ahora usa MQTT Request/Response en lugar de REST
  */
 export async function testCredential(
   provider: string,
   apiKey: string
 ): Promise<{ valid: boolean; message: string }> {
   try {
-    const res = await fetch('/modules/credential-manager/ui/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, api_key: apiKey })
+    const response = await mqttRequest<TestResponse>('credential', 'test', {
+      provider,
+      api_key: apiKey
     });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
     const result = {
-      valid: data.valid || false,
-      message: data.message || (data.valid ? 'Valid' : 'Invalid')
+      valid: response.data.valid,
+      message: response.data.message
     };
 
     credentialsStore.update(s => ({ ...s, testResult: result }));
     return result;
-  } catch (err) {
-    const result = { valid: false, message: 'Connection error' };
+  } catch (error) {
+    const result = { valid: false, message: getErrorMessage(error) };
     credentialsStore.update(s => ({ ...s, testResult: result }));
     return result;
   }
 }
+
+// =============================================================================
+// UI STATE ACTIONS
+// =============================================================================
 
 /**
  * Selecciona una credencial
@@ -287,6 +303,39 @@ export function setActiveTab(tab: 'lista' | 'nuevo' | 'config'): void {
  */
 export function clearTestResult(): void {
   credentialsStore.update(s => ({ ...s, testResult: null }));
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof MqttTimeoutError) {
+    return 'Request timeout - server did not respond';
+  }
+  if (error instanceof MqttRequestError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'Unknown error';
+}
+
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
+
+/**
+ * Inicializa el store de credenciales
+ * Carga la lista inicial
+ */
+export function initCredentials(): () => void {
+  // Cargar credenciales al inicializar
+  loadCredentials();
+
+  // Retornar cleanup (no-op por ahora)
+  return () => {};
 }
 
 // =============================================================================
@@ -342,3 +391,17 @@ export const activeTab = derived(credentialsStore, $s => $s.activeTab);
 
 /** Resultado del test */
 export const testResult = derived(credentialsStore, $s => $s.testResult);
+
+// =============================================================================
+// BACKWARD COMPATIBILITY
+// =============================================================================
+
+/**
+ * @deprecated Use loadCredentials() instead
+ */
+export const requestState = loadCredentials;
+
+/**
+ * @deprecated Use initCredentials() instead
+ */
+export const initCredentialsSubscriptions = initCredentials;

@@ -22,6 +22,7 @@ class ProjectManagerModule {
     this.logger = null;
     this.metrics = null;
     this.eventBus = null;
+    this.uiHandler = null;  // UI Request/Response handler
     this.config = null;
 
     // State
@@ -39,6 +40,7 @@ class ProjectManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
 
     // Load config from module.json (core.config may not include module-specific config)
     try {
@@ -108,6 +110,22 @@ class ProjectManagerModule {
       topics: ['project.state.request', 'project.create', 'project.update', 'project.delete', 'project.activate']
     });
 
+    // ==================== UI REQUEST/RESPONSE HANDLERS ====================
+    // Patrón Request/Response sobre MQTT para comunicación frontend
+    // Frontend usa: await mqttRequest('project', 'list')
+    if (this.uiHandler) {
+      this.uiHandler.register('project', 'list', this.handleUIList.bind(this));
+      this.uiHandler.register('project', 'get', this.handleUIGet.bind(this));
+      this.uiHandler.register('project', 'create', this.handleUICreate.bind(this));
+      this.uiHandler.register('project', 'update', this.handleUIUpdate.bind(this));
+      this.uiHandler.register('project', 'delete', this.handleUIDelete.bind(this));
+      this.uiHandler.register('project', 'activate', this.handleUIActivate.bind(this));
+
+      this.logger.info('project-manager.ui_handlers.registered', {
+        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate']
+      });
+    }
+
     // Load existing projects from database
     await this.loadExistingProjects();
 
@@ -117,7 +135,17 @@ class ProjectManagerModule {
   async onUnload() {
     this.logger.info({ correlationId: 'system' }, 'Project Manager module unloading');
 
-    // Unsubscribe all
+    // Unregister UI handlers
+    if (this.uiHandler) {
+      this.uiHandler.unregister('project', 'list');
+      this.uiHandler.unregister('project', 'get');
+      this.uiHandler.unregister('project', 'create');
+      this.uiHandler.unregister('project', 'update');
+      this.uiHandler.unregister('project', 'delete');
+      this.uiHandler.unregister('project', 'activate');
+    }
+
+    // Unsubscribe all eventBus subscriptions
     for (const unsub of this.unsubscribes) {
       await unsub();
     }
@@ -773,6 +801,198 @@ class ProjectManagerModule {
     } catch (error) {
       this.logger.error({ correlationId, id, error: error.message }, 'MQTT: project/activate failed');
     }
+  }
+
+  // ==================== UI REQUEST/RESPONSE HANDLERS ====================
+  // Patrón Request/Response sobre MQTT
+  // Frontend usa: await mqttRequest('project', 'list')
+  // Retornan datos directamente, errores via throw { status, code, message }
+
+  /**
+   * UI Handler: Listar proyectos
+   * Request: mqttRequest('project', 'list')
+   */
+  async handleUIList(data, request) {
+    const projects = this.listProjects().map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      color: p.metadata?.color || 'blue',
+      icon: p.metadata?.icon || '📁',
+      workspaceType: p.metadata?.workspaceType || 'general',
+      isActive: p.is_active === true || p.is_active === 1,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at
+    }));
+
+    return {
+      projects,
+      activeProjectId: this.activeProjectId,
+      count: projects.length
+    };
+  }
+
+  /**
+   * UI Handler: Obtener proyecto por ID
+   * Request: mqttRequest('project', 'get', { id: '...' })
+   */
+  async handleUIGet(data, request) {
+    const { id } = data;
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(id);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    return {
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description || '',
+        color: project.metadata?.color || 'blue',
+        icon: project.metadata?.icon || '📁',
+        workspaceType: project.metadata?.workspaceType || 'general',
+        isActive: project.is_active === true || project.is_active === 1,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at
+      }
+    };
+  }
+
+  /**
+   * UI Handler: Crear proyecto
+   * Request: mqttRequest('project', 'create', { name, description, color, icon, workspaceType })
+   */
+  async handleUICreate(data, request) {
+    const { name, description, color, icon, workspaceType } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!name || name.trim().length === 0) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project name is required' };
+    }
+
+    const project = await this.createProject(
+      name.trim(),
+      description?.trim() || '',
+      {
+        color: color || 'blue',
+        icon: icon || '📁',
+        workspaceType: workspaceType || 'general'
+      },
+      correlationId
+    );
+
+    return {
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description || '',
+        color: project.metadata?.color || 'blue',
+        icon: project.metadata?.icon || '📁',
+        workspaceType: project.metadata?.workspaceType || 'general',
+        isActive: project.is_active === true || project.is_active === 1,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at
+      },
+      created: true
+    };
+  }
+
+  /**
+   * UI Handler: Actualizar proyecto
+   * Request: mqttRequest('project', 'update', { id, name?, description?, color?, icon?, workspaceType? })
+   */
+  async handleUIUpdate(data, request) {
+    const { id, name, description, color, icon, workspaceType } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const existing = this.getProject(id);
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const updates = {};
+    if (name !== undefined) updates.name = name.trim();
+    if (description !== undefined) updates.description = description.trim();
+
+    // Metadata updates
+    const metadata = { ...(existing.metadata || {}) };
+    if (color !== undefined) metadata.color = color;
+    if (icon !== undefined) metadata.icon = icon;
+    if (workspaceType !== undefined) metadata.workspaceType = workspaceType;
+    updates.metadata = metadata;
+
+    const project = await this.updateProject(id, updates, correlationId);
+
+    return {
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description || '',
+        color: project.metadata?.color || 'blue',
+        icon: project.metadata?.icon || '📁',
+        workspaceType: project.metadata?.workspaceType || 'general',
+        isActive: project.is_active === true || project.is_active === 1,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at
+      },
+      updated: true
+    };
+  }
+
+  /**
+   * UI Handler: Eliminar proyecto
+   * Request: mqttRequest('project', 'delete', { id })
+   */
+  async handleUIDelete(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const existing = this.getProject(id);
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    await this.deleteProject(id, correlationId);
+
+    return { deleted: true, id };
+  }
+
+  /**
+   * UI Handler: Activar proyecto
+   * Request: mqttRequest('project', 'activate', { id })
+   */
+  async handleUIActivate(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const existing = this.getProject(id);
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    await this.activateProject(id, correlationId);
+
+    return {
+      activated: true,
+      activeProjectId: id
+    };
   }
 
   // ==================== HTTP API HANDLERS ====================

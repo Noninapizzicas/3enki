@@ -1,30 +1,58 @@
 {
-  "name": "event-core",
-  "version": "0.1.0",
-  "description": "Meta-Core Event-Driven Framework",
-  "context_version": "1.0.0",
-  "files": [
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANT": "This is your primary context source. ALWAYS check here before generating anything.",
+    "rule_1": "NEVER invent patterns, conventions, or structures not defined in these files",
+    "rule_2": "If you don't know something, search in these files FIRST",
+    "rule_3": "If it's not here, ASK the user before inventing",
+    "how_to_use": {
+      "architecture_questions": "Read system.json",
+      "ui_questions": "Read ui.json",
+      "mqtt_questions": "Read mqtt.json",
+      "module_questions": "Read modules.json",
+      "generate_ui": "Read ui-generator.json"
+    },
+    "fallback_sources": [
+      "contexto/*.json (this directory)",
+      "modules/{name}/module.json (module capabilities)",
+      "frontend/src/lib/ (existing implementations)",
+      "ASK USER (last resort)"
+    ]
+  },
+
+  "project": {
+    "name": "event-core",
+    "version": "0.1.0",
+    "description": "Meta-Core Event-Driven Framework"
+  },
+
+  "context_files": [
     {
       "file": "system.json",
-      "purpose": "Core architecture, patterns, conventions"
+      "purpose": "Core architecture, patterns, conventions",
+      "when": "Questions about backend, startup, directories, naming"
     },
     {
       "file": "ui.json",
-      "purpose": "UI system, components, stores, layout"
+      "purpose": "UI system, components, stores, layout",
+      "when": "Questions about frontend, Svelte, stores, CSS"
     },
     {
       "file": "mqtt.json",
-      "purpose": "MQTT patterns, topics, request/response"
+      "purpose": "MQTT patterns, topics, request/response",
+      "when": "Questions about communication, events, handlers"
     },
     {
       "file": "modules.json",
-      "purpose": "Module system, APIs, lifecycle"
+      "purpose": "Module system, APIs, lifecycle",
+      "when": "Questions about creating/modifying modules"
     },
     {
       "file": "ui-generator.json",
-      "purpose": "Prompt: generate UI from backend modules"
+      "purpose": "Prompt: generate UI from backend modules",
+      "when": "Task is to generate UI for a module"
     }
   ],
+
   "quick_reference": {
     "stack": {
       "backend": "Node.js + MQTT (Aedes)",

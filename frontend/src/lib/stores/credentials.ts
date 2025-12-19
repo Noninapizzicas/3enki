@@ -1,10 +1,13 @@
 /**
  * Credentials Store - MQTT Event-Driven
  *
- * Comunicación 100% via MQTT:
- * - Solicita estado: publish('credential/state/request')
- * - Recibe estado: subscribe('credential/state')
- * - Acciones: publish('credential/create|update|delete|test')
+ * Comunicación 100% via MQTT con topics transformados por EventBus:
+ * - Solicita estado: publish('core/*/events/credential/state/request')
+ * - Recibe estado: subscribe('core/*/events/credential/state')
+ * - Acciones: publish('core/*/events/credential/create|update|delete')
+ *
+ * Los topics usan el patrón 'core/*/events/{domain}/{action}' que el
+ * EventBus del backend entiende y transforma correctamente.
  *
  * NO usa endpoints REST para datos UI.
  */
@@ -121,9 +124,12 @@ let unsubscribeDeleted: (() => void) | null = null;
  * encola mensajes automáticamente y los envía al conectar.
  */
 export function initCredentialsSubscriptions(): () => void {
-  // Recibir estado completo
-  unsubscribeState = mqttSubscribe('credential/state', (_topic, payload) => {
-    const data = payload as {
+  // Recibir estado completo via topic transformado por EventBus
+  // Backend publica a: core/*/events/credential/state
+  unsubscribeState = mqttSubscribe('core/*/events/credential/state', (_topic, payload) => {
+    // EventBus envía un envelope, los datos están en payload.data
+    const envelope = payload as { data?: unknown } | null;
+    const data = (envelope?.data || payload) as {
       providers: ProviderOption[];
       levels: LevelOption[];
       credentials: CredentialsState['credentials'];
@@ -145,20 +151,23 @@ export function initCredentialsSubscriptions(): () => void {
   });
 
   // Notificación de credencial guardada
-  unsubscribeSaved = mqttSubscribe('credential.saved', (_topic, payload) => {
-    const data = payload as { key: string; created: boolean };
+  unsubscribeSaved = mqttSubscribe('core/*/events/credential/saved', (_topic, payload) => {
+    const envelope = payload as { data?: { key: string; created: boolean } } | null;
+    const data = (envelope?.data || payload) as { key: string; created: boolean };
     console.log('[Credentials] Saved:', data.key, data.created ? '(new)' : '(updated)');
   });
 
   // Notificación de credencial actualizada
-  unsubscribeUpdated = mqttSubscribe('credential.updated', (_topic, payload) => {
-    const data = payload as { key: string };
+  unsubscribeUpdated = mqttSubscribe('core/*/events/credential/updated', (_topic, payload) => {
+    const envelope = payload as { data?: { key: string } } | null;
+    const data = (envelope?.data || payload) as { key: string };
     console.log('[Credentials] Updated:', data.key);
   });
 
   // Notificación de credencial eliminada
-  unsubscribeDeleted = mqttSubscribe('credential.deleted', (_topic, payload) => {
-    const data = payload as { key: string };
+  unsubscribeDeleted = mqttSubscribe('core/*/events/credential/deleted', (_topic, payload) => {
+    const envelope = payload as { data?: { key: string } } | null;
+    const data = (envelope?.data || payload) as { key: string };
     console.log('[Credentials] Deleted:', data.key);
 
     // Limpiar selección si era la credencial eliminada
@@ -187,14 +196,16 @@ export function initCredentialsSubscriptions(): () => void {
 
 /**
  * Solicita el estado actual via MQTT
+ * Publica a: core/*/events/credential/state/request
  */
 export function requestState(): void {
   credentialsStore.update(s => ({ ...s, loading: true }));
-  publish('credential/state/request', {});
+  publish('core/*/events/credential/state/request', {});
 }
 
 /**
  * Crea una nueva credencial
+ * Publica a: core/*/events/credential/create
  */
 export function createCredential(
   provider: string,
@@ -202,7 +213,7 @@ export function createCredential(
   identifier: string | null,
   apiKey: string
 ): void {
-  publish('credential/create', {
+  publish('core/*/events/credential/create', {
     provider,
     level,
     identifier,
@@ -212,9 +223,10 @@ export function createCredential(
 
 /**
  * Actualiza una credencial existente
+ * Publica a: core/*/events/credential/update
  */
 export function updateCredential(key: string, apiKey: string): void {
-  publish('credential/update', {
+  publish('core/*/events/credential/update', {
     key,
     api_key: apiKey
   });
@@ -222,9 +234,10 @@ export function updateCredential(key: string, apiKey: string): void {
 
 /**
  * Elimina una credencial
+ * Publica a: core/*/events/credential/delete
  */
 export function deleteCredential(key: string): void {
-  publish('credential/delete', { key });
+  publish('core/*/events/credential/delete', { key });
 }
 
 /**

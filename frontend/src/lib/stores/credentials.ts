@@ -196,7 +196,6 @@ export function initCredentialsSubscriptions(): () => void {
 
 /**
  * Solicita el estado actual via MQTT
- * Publica a: core/*/events/credential/state/request
  */
 export function requestState(): void {
   credentialsStore.update(s => ({ ...s, loading: true }));
@@ -205,7 +204,6 @@ export function requestState(): void {
 
 /**
  * Crea una nueva credencial
- * Publica a: core/*/events/credential/create
  */
 export function createCredential(
   provider: string,
@@ -223,7 +221,6 @@ export function createCredential(
 
 /**
  * Actualiza una credencial existente
- * Publica a: core/*/events/credential/update
  */
 export function updateCredential(key: string, apiKey: string): void {
   publish('core/*/events/credential/update', {
@@ -234,7 +231,6 @@ export function updateCredential(key: string, apiKey: string): void {
 
 /**
  * Elimina una credencial
- * Publica a: core/*/events/credential/delete
  */
 export function deleteCredential(key: string): void {
   publish('core/*/events/credential/delete', { key });

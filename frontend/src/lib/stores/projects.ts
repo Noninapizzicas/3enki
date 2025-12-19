@@ -110,7 +110,6 @@ export function initProjectsSubscriptions(): () => void {
 
 /**
  * Solicita el estado actual via MQTT
- * Publica a: core/*/events/project/state/request
  */
 export function requestProjectsState(): void {
   projectsStore.update(s => ({ ...s, loading: true }));
@@ -119,7 +118,6 @@ export function requestProjectsState(): void {
 
 /**
  * Crea un nuevo proyecto
- * Publica a: core/*/events/project/create
  */
 export function createProject(
   name: string,
@@ -139,7 +137,6 @@ export function createProject(
 
 /**
  * Actualiza un proyecto existente
- * Publica a: core/*/events/project/update
  */
 export function updateProject(
   id: string,
@@ -159,7 +156,6 @@ export function updateProject(
 
 /**
  * Elimina un proyecto
- * Publica a: core/*/events/project/delete
  */
 export function deleteProject(id: string): void {
   publish('core/*/events/project/delete', { id });
@@ -167,7 +163,6 @@ export function deleteProject(id: string): void {
 
 /**
  * Activa un proyecto
- * Publica a: core/*/events/project/activate
  */
 export function activateProject(id: string): void {
   publish('core/*/events/project/activate', { id });

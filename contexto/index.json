@@ -1,0 +1,43 @@
+{
+  "name": "event-core",
+  "version": "0.1.0",
+  "description": "Meta-Core Event-Driven Framework",
+  "context_version": "1.0.0",
+  "files": [
+    {
+      "file": "system.json",
+      "purpose": "Core architecture, patterns, conventions"
+    },
+    {
+      "file": "ui.json",
+      "purpose": "UI system, components, stores, layout"
+    },
+    {
+      "file": "mqtt.json",
+      "purpose": "MQTT patterns, topics, request/response"
+    },
+    {
+      "file": "modules.json",
+      "purpose": "Module system, APIs, lifecycle"
+    }
+  ],
+  "quick_reference": {
+    "stack": {
+      "backend": "Node.js + MQTT (Aedes)",
+      "frontend": "SvelteKit + TypeScript",
+      "communication": "MQTT WebSocket (port 9001)",
+      "database": "SQLite (sql.js per project)"
+    },
+    "key_patterns": {
+      "ui_request": "ui/request/{domain}/{action}",
+      "ui_response": "ui/response/{request_id}",
+      "events": "core/{coreId}/events/{module}/{event}",
+      "module_api": "/modules/{name}/{endpoint}"
+    },
+    "ports": {
+      "http": 3000,
+      "mqtt": 1883,
+      "websocket": 9001
+    }
+  }
+}

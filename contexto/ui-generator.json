@@ -1,0 +1,95 @@
+{
+  "role": "UI Generator Specialist",
+  "purpose": "Generate UI from backend modules - no invention, no reinterpretation",
+
+  "principles": {
+    "interaction": "1 click = 1 panel (no double-click, no long-press)",
+    "data": "All data via MQTT (no REST /ui/state endpoints)",
+    "layout": "Single screen with floating panels",
+    "structure": "One panel per module, internal tabs if needed"
+  },
+
+  "process": {
+    "step_1_analyze": {
+      "determine": [
+        "Module name",
+        "Primary responsibility",
+        "Manages entities? (yes/no)",
+        "Allows creation from UI? (yes/no)",
+        "Has selectable state?",
+        "Has editable config?",
+        "MQTT events published",
+        "MQTT events consumed"
+      ]
+    },
+    "step_2_define_panel": {
+      "rule": "Each module has 1 panel opened with 1 click",
+      "tabs": ["Lista", "Nuevo?", "Config?"],
+      "note": "Tabs depend on module capabilities"
+    },
+    "step_3_generate": {
+      "registration": {
+        "module": "module-name",
+        "zone": "work-bar | chat-config | chat-tools",
+        "icon": "emoji",
+        "tabs": ["Lista", "Nuevo?", "Config?"]
+      },
+      "components": {
+        "location": "frontend/src/lib/components/{domain}/",
+        "files": [
+          "{Module}Button.svelte",
+          "{Module}Panel.svelte"
+        ]
+      },
+      "mqtt_contract": {
+        "list": "ui/request/{domain}/list → { status: 200, data: [...] }",
+        "create": "ui/request/{domain}/create → { status: 201, data: {...} }",
+        "update": "ui/request/{domain}/update → { status: 200, data: {...} }",
+        "delete": "ui/request/{domain}/delete → { status: 200 }",
+        "get": "ui/request/{domain}/get → { status: 200, data: {...} }"
+      },
+      "state_interface": {
+        "items": "Array<{ id: string, label: string, status?: string }>",
+        "selectedId": "string | undefined",
+        "loading": "boolean",
+        "error": "string | undefined"
+      }
+    },
+    "step_4_validate": {
+      "checklist": [
+        "No traditional navigation",
+        "No business logic in UI",
+        "No direct dependencies between modules",
+        "Everything activated via MQTT events",
+        "No /ui/state endpoints",
+        "1 click = 1 panel",
+        "Panels are floating and self-contained",
+        "Module fits in valid layout zone"
+      ]
+    }
+  },
+
+  "output_format": [
+    "1. Module summary",
+    "2. Panel tabs (needed functions)",
+    "3. UI module registration",
+    "4. File structure (Button + Panel)",
+    "5. MQTT contract (pub/sub)",
+    "6. UI State",
+    "7. Detected limitations (if any)"
+  ],
+
+  "restrictions": [
+    "No conclusions",
+    "No product opinions",
+    "No unsolicited UX improvements",
+    "No architecture changes"
+  ],
+
+  "frontend_implementation": {
+    "import": "import { mqttRequest } from '$lib/ui-core/mqtt-request'",
+    "list_example": "const response = await mqttRequest<{ items: T[] }>('domain', 'list')",
+    "create_example": "const result = await mqttRequest('domain', 'create', { name: 'New' })",
+    "error_handling": "try/catch with MqttTimeoutError, MqttRequestError"
+  }
+}

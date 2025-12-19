@@ -383,14 +383,59 @@ export function disconnect(): void {
 }
 
 /**
+ * Genera un UUID v4 simple
+ */
+function generateEventId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Extrae el event_type del topic MQTT
+ * Ejemplo: core/star/events/project/state/request -> project.state.request
+ */
+function extractEventType(topic: string): string {
+  // Si el topic tiene formato core/star/events/...
+  const match = topic.match(/^core\/\*\/events\/(.+)$/);
+  if (match) {
+    // Convertir slashes a dots: project/state/request -> project.state.request
+    return match[1].replace(/\//g, '.');
+  }
+  // Fallback: convertir slashes a dots
+  return topic.replace(/\//g, '.');
+}
+
+/**
+ * Crea un EventEnvelope válido para el backend
+ */
+function createEnvelope(topic: string, data: unknown): object {
+  return {
+    event_id: generateEventId(),
+    event_type: extractEventType(topic),
+    timestamp: new Date().toISOString(),
+    source: {
+      core_id: 'ui-frontend'
+    },
+    data: data,
+    metadata: {}
+  };
+}
+
+/**
  * Publicar mensaje a un topic
  * Si no está conectado, encola el mensaje para enviarlo cuando se conecte
  */
 export function publish(topic: string, payload: unknown, retain = false): void {
+  // Crear envelope válido para el backend
+  const envelope = createEnvelope(topic, payload);
+
   // Si no está conectado, encolar mensaje
   if (!client || !client.connected) {
     if (pendingMessages.length < MAX_PENDING_MESSAGES) {
-      pendingMessages.push({ topic, payload, retain });
+      pendingMessages.push({ topic, payload: envelope, retain });
       console.log(`[MQTT] Queued message for ${topic} (${pendingMessages.length} pending)`);
     } else {
       console.warn(`[MQTT] Pending queue full, dropping message for ${topic}`);
@@ -398,9 +443,7 @@ export function publish(topic: string, payload: unknown, retain = false): void {
     return;
   }
 
-  const message = typeof payload === 'string'
-    ? payload
-    : JSON.stringify(payload);
+  const message = JSON.stringify(envelope);
 
   client.publish(topic, message, { qos: 1, retain });
 

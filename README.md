@@ -126,17 +126,23 @@ event-core/
 │   ├── events/           # Event bus local + routing
 │   ├── modules/          # Module system (loader, manager, registry)
 │   ├── hooks/            # Hook system para módulos
-│   ├── api/              # HTTP Gateway + Request-Reply pattern
+│   ├── gateway/          # HTTP Gateway + Request-Reply pattern
+│   ├── ui/               # UI Request/Response handler
 │   ├── discovery/        # Discovery de cores + heartbeat
 │   ├── observability/    # Logs, traces, métricas
-│   └── schemas/          # JSON Schemas para validación
+│   └── validation/       # JSON Schemas para validación
 ├── modules/              # Módulos (features como plugins)
-│   ├── echo/            # Módulo de ejemplo
-│   ├── security-p2p/    # Security como módulo (no en core)
-│   └── file-watcher/    # Otro módulo de ejemplo
+│   ├── project-manager/ # Gestión de proyectos
+│   ├── credential-manager/ # Gestión de credenciales
+│   └── ...              # Otros módulos
+├── frontend/             # SvelteKit UI
+│   └── src/lib/
+│       ├── ui-core/     # MQTT client + request utilities
+│       └── stores/      # Svelte stores (projects, credentials)
 ├── cli/                  # CLI puro (cliente HTTP, sin lógica)
 ├── tests/                # Tests de integración y unitarios
 └── docs/                 # Documentación completa
+    └── architecture/    # Documentación arquitectónica
 ```
 
 ---
@@ -209,6 +215,8 @@ El Core provee solo infraestructura. Todo feature es un módulo:
 │  ├── core/+/events/#    (eventos)      │
 │  ├── core/+/api/#       (APIs)         │
 │  ├── core/+/status      (discovery)    │
+│  ├── ui/request/#       (UI requests)  │
+│  ├── ui/response/#      (UI responses) │
 │  └── core/+/heartbeat   (health)       │
 └────────┬───────────────────┬────────────┘
          │                   │
@@ -228,15 +236,52 @@ El Core provee solo infraestructura. Todo feature es un módulo:
       └───────┘          └───────┘
 ```
 
+### **UI Communication - Request/Response Pattern**
+
+El frontend usa un patrón Request/Response sobre MQTT que combina:
+- **Respuestas garantizadas** (o timeout)
+- **Status codes** HTTP-like (200, 400, 404, 500)
+- **Una sola conexión** MQTT para todo
+
+```typescript
+// Frontend - Async/await natural
+const response = await mqttRequest('project', 'list');
+console.log(response.data.projects);
+
+// Con manejo de errores
+try {
+  await mqttRequest('project', 'create', { name: 'Mi Proyecto' });
+} catch (error) {
+  if (error instanceof MqttTimeoutError) {
+    console.error('Server did not respond');
+  } else if (error instanceof MqttRequestError) {
+    console.error(error.code, error.message); // 400, "Name required"
+  }
+}
+```
+
+**Topics:**
+```
+Request:  ui/request/{domain}/{action}  → ui/request/project/list
+Response: ui/response/{request_id}      → ui/response/req_abc123
+```
+
+📖 **Ver [MQTT Request/Response Pattern](./docs/architecture/mqtt-request-response.md)** para documentación completa.
+
 ### **Topic Structure**
 
 ```
-core/{core-id}/events/{domain}/{action}    # Eventos
+# Core internos
+core/{core-id}/events/{domain}/{action}    # Eventos internos
 core/{core-id}/api/request/{service}       # API requests
 core/{core-id}/api/response/{requestId}    # API responses
 core/{core-id}/status                      # Discovery (retained)
 core/{core-id}/heartbeat                   # Health check
 core/{core-id}/logs/{level}                # Logs
+
+# UI Communication (Request/Response)
+ui/request/{domain}/{action}               # Frontend → Backend
+ui/response/{request_id}                   # Backend → Frontend
 ```
 
 ### **QoS Strategy**
@@ -256,6 +301,7 @@ El Core provee SOLO infraestructura, NUNCA features:
 - MQTT Broker (Aedes)
 - Event Bus (EventEmitter)
 - HTTP API Gateway
+- UI Request Handler (MQTT Request/Response)
 - Module Loader
 - Hook System
 - Observability (logs, traces, métricas)
@@ -418,10 +464,10 @@ npm run test:coverage
 ## 📚 Documentación
 
 Ver `/docs/` para:
-- `architecture.md` - Arquitectura completa
-- `mqtt-protocol.md` - Protocolo MQTT en detalle
-- `modules.md` - Cómo crear módulos
-- `examples/` - Ejemplos ejecutables
+- `architecture/mqtt-request-response.md` - Patrón Request/Response UI
+- `DASHBOARD_GUIDE.md` - Guía del dashboard
+- `QUICK_START.md` - Inicio rápido
+- `DEPLOYMENT_GUIDE.md` - Despliegue multi-máquina
 
 ---
 

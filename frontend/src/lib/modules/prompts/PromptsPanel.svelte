@@ -206,8 +206,8 @@
     setActiveTab('editor');
   }
 
-  async function handleViewVersions(prompt: Prompt) {
-    const result = await getPromptVersions(prompt.id);
+  async function handleViewVersions(promptId: string) {
+    const result = await getPromptVersions(promptId);
     if (result) {
       versions = result.versions;
       showVersions = true;
@@ -681,7 +681,7 @@ Puedes usar variables como {{nombre}} o {{contexto}}"
           {#if editorForm.id}
             <button
               class="btn secondary small"
-              on:click={() => handleViewVersions({ id: editorForm.id } as Prompt)}
+              on:click={() => editorForm.id && handleViewVersions(editorForm.id)}
             >
               📜 Ver versiones
             </button>

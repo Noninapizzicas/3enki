@@ -39,7 +39,6 @@ class CredentialManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.mqtt = core.mqttClient; // Cliente MQTT directo para topics UI
 
     // Load module config from module.json
     const moduleJsonPath = path.join(__dirname, 'module.json');
@@ -197,82 +196,48 @@ class CredentialManagerModule {
   // ==========================================
 
   async subscribeToEvents() {
-    // EventBus subscriptions (internal events with topic transformation)
+    // Internal event subscriptions
     await this.eventBus.subscribe(
       'credential.resolve.request',
       this.onResolveRequest.bind(this)
     );
 
-    // MQTT direct subscriptions for UI (no topic transformation)
-    if (this.mqtt && this.mqtt.isConnected) {
-      try {
-        await this.mqtt.subscribe('credential/state/request');
-        await this.mqtt.subscribe('credential/create');
-        await this.mqtt.subscribe('credential/update');
-        await this.mqtt.subscribe('credential/delete');
+    // UI event subscriptions via eventBus (topics transformados)
+    // Frontend publica a core/*/events/credential/state/request, etc.
+    await this.eventBus.subscribe(
+      'credential.state.request',
+      this.onStateRequest.bind(this)
+    );
 
-        this.mqtt.on('message', this.handleMqttMessage.bind(this));
+    await this.eventBus.subscribe(
+      'credential.create',
+      this.onCreateCredential.bind(this)
+    );
 
-        this.logger.info('credential-manager.mqtt.subscribed', {
-          topics: ['credential/state/request', 'credential/create', 'credential/update', 'credential/delete']
-        });
-      } catch (err) {
-        this.logger.warn('credential-manager.mqtt.subscribe.failed', { error: err.message });
-      }
-    } else {
-      this.logger.warn('credential-manager.mqtt.not.connected', { mqttExists: !!this.mqtt, isConnected: this.mqtt?.isConnected });
-    }
+    await this.eventBus.subscribe(
+      'credential.update',
+      this.onUpdateCredential.bind(this)
+    );
 
-    this.logger.info('events.subscribed', {
-      events: ['credential.resolve.request'],
-      mqtt_topics: ['credential/state/request', 'credential/create', 'credential/update', 'credential/delete']
+    await this.eventBus.subscribe(
+      'credential.delete',
+      this.onDeleteCredential.bind(this)
+    );
+
+    this.logger.info('credential-manager.eventbus.subscribed', {
+      events: [
+        'credential.resolve.request',
+        'credential.state.request',
+        'credential.create',
+        'credential.update',
+        'credential.delete'
+      ]
     });
   }
 
   /**
-   * Enruta mensajes MQTT a los handlers correctos
-   * Nota: El MQTTClient ya parsea JSON, message puede ser objeto o string
-   */
-  async handleMqttMessage(topic, message) {
-    // Solo procesar topics de credential
-    if (!topic.startsWith('credential/')) return;
-
-    // El cliente MQTT ya parsea JSON, así que message puede ser:
-    // - Un objeto (ya parseado)
-    // - Un string (si no era JSON válido)
-    let payload;
-    if (typeof message === 'object' && message !== null) {
-      payload = message;
-    } else if (typeof message === 'string') {
-      try {
-        payload = JSON.parse(message);
-      } catch (e) {
-        payload = {};
-      }
-    } else {
-      payload = {};
-    }
-
-    this.logger.debug('credential-manager.mqtt.message', { topic, payloadType: typeof payload });
-
-    switch (topic) {
-      case 'credential/state/request':
-        await this.onStateRequest({ payload });
-        break;
-      case 'credential/create':
-        await this.onCreateCredential({ payload });
-        break;
-      case 'credential/update':
-        await this.onUpdateCredential({ payload });
-        break;
-      case 'credential/delete':
-        await this.onDeleteCredential({ payload });
-        break;
-    }
-  }
-
-  /**
    * Handler para solicitudes de estado desde el frontend
+   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/state/request)
    */
   async onStateRequest(event) {
     const correlationId = event?.correlation_id || event?.correlationId;
@@ -281,10 +246,12 @@ class CredentialManagerModule {
   }
 
   /**
-   * Handler MQTT para crear credencial desde frontend
+   * Handler para crear credencial desde frontend
+   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/create)
    */
   async onCreateCredential(event) {
-    const payload = event?.payload || event;
+    // EventBus envía envelope con .data, MQTT directo envía .payload
+    const payload = event?.data || event?.payload || event;
     const { provider, level, identifier, api_key } = payload;
     const correlationId = event?.correlation_id || event?.correlationId;
 
@@ -349,10 +316,12 @@ class CredentialManagerModule {
   }
 
   /**
-   * Handler MQTT para actualizar credencial desde frontend
+   * Handler para actualizar credencial desde frontend
+   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/update)
    */
   async onUpdateCredential(event) {
-    const payload = event?.payload || event;
+    // EventBus envía envelope con .data, MQTT directo envía .payload
+    const payload = event?.data || event?.payload || event;
     const { key, api_key } = payload;
     const correlationId = event?.correlation_id || event?.correlationId;
 
@@ -398,10 +367,12 @@ class CredentialManagerModule {
   }
 
   /**
-   * Handler MQTT para eliminar credencial desde frontend
+   * Handler para eliminar credencial desde frontend
+   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/delete)
    */
   async onDeleteCredential(event) {
-    const payload = event?.payload || event;
+    // EventBus envía envelope con .data, MQTT directo envía .payload
+    const payload = event?.data || event?.payload || event;
     const { key } = payload;
     const correlationId = event?.correlation_id || event?.correlationId;
 
@@ -1081,18 +1052,15 @@ class CredentialManagerModule {
   }
 
   /**
-   * Publica el estado actual via MQTT directo
+   * Publica el estado actual via eventBus
+   * EventBus transforma 'credential.state' → 'core/*/events/credential/state'
+   * Frontend suscribe a 'core/*/events/credential/state'
    */
   async publishState(correlationId = null) {
-    if (!this.mqtt) {
-      this.logger.warn('credential-manager.mqtt.not.available');
-      return;
-    }
-
     const state = this.getUIState();
 
-    // Publicar directamente al broker MQTT (sin transformación de topic)
-    await this.mqtt.publish('credential/state', state);
+    // Publicar via eventBus → MQTT topic: core/*/events/credential/state
+    await this.eventBus.emit('credential.state', state);
     this.logger.info('credential.state.published', {
       total: state.stats.total,
       correlation_id: correlationId

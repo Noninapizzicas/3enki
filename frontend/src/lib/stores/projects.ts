@@ -1,10 +1,13 @@
 /**
  * Projects Store - MQTT Event-Driven
  *
- * Comunicación 100% via MQTT:
- * - Solicita estado: publish('project/state/request')
- * - Recibe estado: subscribe('project/state')
- * - Acciones: publish('project/create|update|delete|activate')
+ * Comunicación 100% via MQTT con topics transformados por EventBus:
+ * - Solicita estado: publish('core/*/events/project/state/request')
+ * - Recibe estado: subscribe('core/*/events/project/state')
+ * - Acciones: publish('core/*/events/project/create|update|delete|activate')
+ *
+ * Los topics usan el patrón 'core/*/events/{domain}/{action}' que el
+ * EventBus del backend entiende y transforma correctamente.
  *
  * NO usa endpoints REST para datos UI.
  */
@@ -68,9 +71,12 @@ let unsubscribeState: (() => void) | null = null;
  * encola mensajes automáticamente y los envía al conectar.
  */
 export function initProjectsSubscriptions(): () => void {
-  // Recibir estado completo
-  unsubscribeState = mqttSubscribe('project/state', (_topic, payload) => {
-    const data = payload as {
+  // Recibir estado completo via topic transformado por EventBus
+  // Backend publica a: core/*/events/project/state
+  unsubscribeState = mqttSubscribe('core/*/events/project/state', (_topic, payload) => {
+    // EventBus envía un envelope, los datos están en payload.data
+    const envelope = payload as { data?: unknown } | null;
+    const data = (envelope?.data || payload) as {
       projects: Project[];
       activeProjectId: string | null;
       count: number;
@@ -104,14 +110,16 @@ export function initProjectsSubscriptions(): () => void {
 
 /**
  * Solicita el estado actual via MQTT
+ * Publica a: core/*/events/project/state/request
  */
 export function requestProjectsState(): void {
   projectsStore.update(s => ({ ...s, loading: true }));
-  publish('project/state/request', {});
+  publish('core/*/events/project/state/request', {});
 }
 
 /**
  * Crea un nuevo proyecto
+ * Publica a: core/*/events/project/create
  */
 export function createProject(
   name: string,
@@ -120,7 +128,7 @@ export function createProject(
   icon: string = '📁',
   workspaceType: string = 'general'
 ): void {
-  publish('project/create', {
+  publish('core/*/events/project/create', {
     name,
     description,
     color,
@@ -131,6 +139,7 @@ export function createProject(
 
 /**
  * Actualiza un proyecto existente
+ * Publica a: core/*/events/project/update
  */
 export function updateProject(
   id: string,
@@ -142,7 +151,7 @@ export function updateProject(
     workspaceType?: string;
   }
 ): void {
-  publish('project/update', {
+  publish('core/*/events/project/update', {
     id,
     ...updates
   });
@@ -150,16 +159,18 @@ export function updateProject(
 
 /**
  * Elimina un proyecto
+ * Publica a: core/*/events/project/delete
  */
 export function deleteProject(id: string): void {
-  publish('project/delete', { id });
+  publish('core/*/events/project/delete', { id });
 }
 
 /**
  * Activa un proyecto
+ * Publica a: core/*/events/project/activate
  */
 export function activateProject(id: string): void {
-  publish('project/activate', { id });
+  publish('core/*/events/project/activate', { id });
 }
 
 // =============================================================================

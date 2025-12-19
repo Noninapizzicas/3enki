@@ -2,11 +2,11 @@
  * Credentials Store - MQTT Event-Driven
  *
  * Comunicación 100% via MQTT con topics transformados por EventBus:
- * - Solicita estado: publish('core/*/events/credential/state/request')
- * - Recibe estado: subscribe('core/*/events/credential/state')
- * - Acciones: publish('core/*/events/credential/create|update|delete')
+ * - Solicita estado: publish(core/star/events/credential/state/request)
+ * - Recibe estado: subscribe(core/star/events/credential/state)
+ * - Acciones: publish(core/star/events/credential/create|update|delete)
  *
- * Los topics usan el patrón 'core/*/events/{domain}/{action}' que el
+ * Los topics usan el patrón core/star/events/domain/action que el
  * EventBus del backend entiende y transforma correctamente.
  *
  * NO usa endpoints REST para datos UI.

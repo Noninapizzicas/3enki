@@ -1,13 +1,20 @@
 /**
- * Prompts Module - Gestión de prompts/presets
+ * Prompts Module - Sistema avanzado de gestión de prompts
  *
  * Zona: chat-config
- * Panel: prompts-selector
+ * Icono: 🧘
  *
  * Features:
- * - Selección de prompt del sistema
- * - Icono dinámico (✨ cuando hay prompt activo)
- * - Diferentes tipos de prompts por contexto
+ * - Composer: Armar prompt final desde slots
+ * - Librería: Ver/buscar todos los prompts
+ * - Editor: Crear/editar prompts
+ * - Presets: Guardar/aplicar combinaciones
+ * - Versionado automático
+ * - Variables con templates {{var}}
+ *
+ * MQTT:
+ * - Publica: prompt/list, prompt/get, prompt/create, prompt/update, prompt/delete
+ * - Suscribe: prompt/state, preset/state
  */
 
 import type { UIModule, AppState } from '$lib/ui-core';
@@ -17,43 +24,64 @@ export const promptsModule: UIModule = {
   manifest: {
     id: 'prompts',
     name: 'Prompts',
-    version: '1.0.0',
+    version: '2.0.0',
     zone: 'chat-config',
     button: {
       id: 'prompts-btn',
-      icon: '📝',
+      icon: '🧘',
       dynamicIcon: true,
       label: 'Prompts',
-      action: { type: 'panel', panelId: 'prompts-selector' },
-      order: 3
+      action: { type: 'panel', panelId: 'prompts' },
+      order: 2
     },
     panels: [
       {
-        id: 'prompts-selector',
-        title: 'Seleccionar Prompt',
-        size: 'md'
+        id: 'prompts',
+        title: 'Prompts',
+        size: 'lg'
       }
     ],
     mqtt: {
-      publishes: ['prompt/selected'],
-      subscribes: ['prompt/list', 'prompt/state']
+      publishes: [
+        'prompt/list',
+        'prompt/get',
+        'prompt/create',
+        'prompt/update',
+        'prompt/delete',
+        'preset/list',
+        'preset/create',
+        'preset/apply',
+        'preset/delete',
+        'composer/render'
+      ],
+      subscribes: [
+        'prompt.created',
+        'prompt.updated',
+        'prompt.deleted',
+        'preset.created',
+        'preset.deleted'
+      ]
     }
   },
 
   getIcon(state: AppState): string {
-    return state.prompt ? '✨' : '📝';
+    // Icono dinámico basado en si hay prompts en el composer
+    if (state.prompts?.composerActive) {
+      return '✨';
+    }
+    return '🧘';
   },
 
-  getBadge(state: AppState): string | null {
-    // Mostrar nombre corto del prompt activo
-    if (state.prompt) {
-      const name = state.prompt.name;
-      return name.length > 8 ? name.slice(0, 8) + '…' : name;
-    }
-    return null;
+  getBadge(state: AppState): string | number | null {
+    // Mostrar total de prompts
+    const count = state.prompts?.total ?? 0;
+    return count > 0 ? count : null;
   },
 
   PanelComponent: PromptsPanel
 };
 
 export default promptsModule;
+
+// Export panel component
+export { default as PromptsPanel } from './PromptsPanel.svelte';

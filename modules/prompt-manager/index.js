@@ -24,6 +24,7 @@ class PromptManagerModule {
     this.config = null;
     this.logger = null;
     this.eventBus = null;
+    this.uiHandler = null;
     this.schemaInitialized = false;
 
     // Constants
@@ -45,6 +46,7 @@ class PromptManagerModule {
   async onLoad(context) {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
+    this.uiHandler = context.uiHandler;
     this.config = context.moduleConfig || {};
 
     // Subscribe to DB response events
@@ -55,6 +57,9 @@ class PromptManagerModule {
 
     // Load prompts and presets into cache
     await this.loadFromDatabase();
+
+    // Register UI Request/Response handlers (MQTT)
+    this.registerUIHandlers();
 
     this.logger.info('prompt-manager.loaded', {
       prompts_count: this.prompts.size,
@@ -620,6 +625,640 @@ class PromptManagerModule {
         status: 500,
         data: { error: 'DELETE_FAILED', message: error.message }
       };
+    }
+  }
+
+  // ==========================================
+  // UI Request/Response Handlers (MQTT)
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('prompt-manager.ui_handlers.no_handler');
+      return;
+    }
+
+    // Prompt CRUD
+    this.uiHandler.register('prompt', 'list', this.handleUIList.bind(this));
+    this.uiHandler.register('prompt', 'get', this.handleUIGet.bind(this));
+    this.uiHandler.register('prompt', 'create', this.handleUICreate.bind(this));
+    this.uiHandler.register('prompt', 'update', this.handleUIUpdate.bind(this));
+    this.uiHandler.register('prompt', 'delete', this.handleUIDelete.bind(this));
+    this.uiHandler.register('prompt', 'versions', this.handleUIVersions.bind(this));
+
+    // Presets
+    this.uiHandler.register('preset', 'list', this.handleUIPresetList.bind(this));
+    this.uiHandler.register('preset', 'get', this.handleUIPresetGet.bind(this));
+    this.uiHandler.register('preset', 'create', this.handleUIPresetCreate.bind(this));
+    this.uiHandler.register('preset', 'delete', this.handleUIPresetDelete.bind(this));
+    this.uiHandler.register('preset', 'apply', this.handleUIPresetApply.bind(this));
+
+    // Composer
+    this.uiHandler.register('composer', 'render', this.handleUIComposerRender.bind(this));
+
+    // Analytics
+    this.uiHandler.register('prompt', 'analytics', this.handleUIAnalytics.bind(this));
+
+    this.logger.info('prompt-manager.ui_handlers.registered', {
+      handlers: [
+        'prompt/list', 'prompt/get', 'prompt/create', 'prompt/update', 'prompt/delete', 'prompt/versions',
+        'preset/list', 'preset/get', 'preset/create', 'preset/delete', 'preset/apply',
+        'composer/render', 'prompt/analytics'
+      ]
+    });
+  }
+
+  // --- Prompt UI Handlers ---
+
+  async handleUIList(data) {
+    try {
+      const { slot_type, tag, search, project_id } = data || {};
+
+      let prompts = Array.from(this.prompts.values());
+
+      // Filter by slot_type
+      if (slot_type && this.SLOT_TYPES.includes(slot_type)) {
+        prompts = prompts.filter(p => p.slot_type === slot_type);
+      }
+
+      // Filter by tag
+      if (tag) {
+        prompts = prompts.filter(p => p.tags && p.tags.includes(tag));
+      }
+
+      // Filter by project
+      if (project_id) {
+        prompts = prompts.filter(p =>
+          p.project_id === project_id || p.project_id === this.GLOBAL_PROJECT_ID
+        );
+      }
+
+      // Search
+      if (search) {
+        const s = search.toLowerCase();
+        prompts = prompts.filter(p =>
+          p.name.toLowerCase().includes(s) ||
+          (p.title && p.title.toLowerCase().includes(s)) ||
+          (p.description && p.description.toLowerCase().includes(s))
+        );
+      }
+
+      // Group by slot_type for UI
+      const promptsBySlot = {};
+      for (const slotType of this.SLOT_TYPES) {
+        promptsBySlot[slotType] = [];
+      }
+
+      const promptsList = prompts.map(p => ({
+        id: p.id,
+        name: p.name,
+        title: p.title,
+        description: p.description,
+        content: p.content,
+        slot_type: p.slot_type,
+        slot_icon: this.SLOT_ICONS[p.slot_type] || '📝',
+        variables: p.variables,
+        tags: p.tags,
+        level: p.level || 'GLOBAL',
+        level_icon: p.level === 'PROJECT' ? '🔵' : '🟢',
+        current_version: p.current_version,
+        created_at: p.created_at,
+        updated_at: p.updated_at
+      }));
+
+      for (const prompt of promptsList) {
+        if (promptsBySlot[prompt.slot_type]) {
+          promptsBySlot[prompt.slot_type].push(prompt);
+        }
+      }
+
+      // Slot types metadata
+      const slotTypes = this.SLOT_TYPES.map(type => ({
+        id: type,
+        name: type.charAt(0).toUpperCase() + type.slice(1),
+        icon: this.SLOT_ICONS[type],
+        count: promptsBySlot[type].length
+      }));
+
+      // Stats
+      const stats = {
+        total: prompts.length,
+        by_slot: Object.fromEntries(
+          this.SLOT_TYPES.map(type => [type, promptsBySlot[type].length])
+        )
+      };
+
+      return { status: 200, data: { prompts: promptsList, promptsBySlot, slotTypes, stats } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.list.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIGet(data) {
+    try {
+      const { id } = data || {};
+
+      if (!id) {
+        return { status: 400, error: 'id is required' };
+      }
+
+      const prompt = this.prompts.get(id);
+      if (!prompt) {
+        return { status: 404, error: `Prompt '${id}' not found` };
+      }
+
+      return { status: 200, data: { prompt } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.get.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUICreate(data) {
+    try {
+      const { name, title, description, content, slot_type, variables, tags, metadata, project_id } = data || {};
+
+      if (!name || !content) {
+        return { status: 400, error: 'name and content are required' };
+      }
+
+      const validSlotType = this.SLOT_TYPES.includes(slot_type) ? slot_type : 'system';
+      const id = this.generateId();
+      const now = new Date().toISOString();
+      const targetProject = project_id || this.GLOBAL_PROJECT_ID;
+
+      const prompt = {
+        id,
+        name,
+        title: title || name,
+        description: description || '',
+        slot_type: validSlotType,
+        content,
+        variables: variables || [],
+        tags: tags || [],
+        metadata: metadata || {},
+        current_version: '1.0.0',
+        level: targetProject === this.GLOBAL_PROJECT_ID ? 'GLOBAL' : 'PROJECT',
+        project_id: targetProject,
+        created_at: now,
+        updated_at: now
+      };
+
+      // Insert into DB
+      await this.dbQuery(
+        `INSERT INTO prompts (id, name, title, description, slot_type, content, variables, tags, metadata, current_version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, name, prompt.title, prompt.description, validSlotType, content,
+         JSON.stringify(prompt.variables), JSON.stringify(prompt.tags), JSON.stringify(prompt.metadata),
+         '1.0.0', now, now],
+        targetProject
+      );
+
+      // Insert first version
+      await this.dbQuery(
+        `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, '1.0.0', content, JSON.stringify(prompt.variables), now, 'user'],
+        targetProject
+      );
+
+      // Update cache
+      this.prompts.set(id, prompt);
+
+      // Publish event
+      await this.eventBus.publish('prompt.created', { id, name, slot_type: validSlotType });
+
+      this.logger.info('prompt-manager.ui.created', { id, name, slot_type: validSlotType });
+
+      return { status: 201, data: { prompt } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.create.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIUpdate(data) {
+    try {
+      const { id, ...updates } = data || {};
+
+      if (!id) {
+        return { status: 400, error: 'id is required' };
+      }
+
+      const prompt = this.prompts.get(id);
+      if (!prompt) {
+        return { status: 404, error: `Prompt '${id}' not found` };
+      }
+
+      const now = new Date().toISOString();
+      const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
+
+      // Check if content changed (new version)
+      if (updates.content && updates.content !== prompt.content) {
+        const newVersion = this.bumpVersion(prompt.current_version);
+
+        await this.dbQuery(
+          `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [id, newVersion, updates.content, JSON.stringify(updates.variables || prompt.variables), now, 'user'],
+          projectId
+        );
+
+        prompt.current_version = newVersion;
+        prompt.content = updates.content;
+      }
+
+      // Update fields
+      if (updates.title !== undefined) prompt.title = updates.title;
+      if (updates.description !== undefined) prompt.description = updates.description;
+      if (updates.slot_type && this.SLOT_TYPES.includes(updates.slot_type)) {
+        prompt.slot_type = updates.slot_type;
+      }
+      if (updates.variables) prompt.variables = updates.variables;
+      if (updates.tags) prompt.tags = updates.tags;
+      if (updates.metadata) prompt.metadata = { ...prompt.metadata, ...updates.metadata };
+
+      prompt.updated_at = now;
+
+      // Update DB
+      await this.dbQuery(
+        `UPDATE prompts SET title=?, description=?, slot_type=?, content=?, variables=?, tags=?, metadata=?, current_version=?, updated_at=?
+         WHERE id=?`,
+        [prompt.title, prompt.description, prompt.slot_type, prompt.content,
+         JSON.stringify(prompt.variables), JSON.stringify(prompt.tags), JSON.stringify(prompt.metadata),
+         prompt.current_version, prompt.updated_at, id],
+        projectId
+      );
+
+      // Publish event
+      await this.eventBus.publish('prompt.updated', { id, version: prompt.current_version });
+
+      this.logger.info('prompt-manager.ui.updated', { id, version: prompt.current_version });
+
+      return { status: 200, data: { prompt } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.update.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIDelete(data) {
+    try {
+      const { id } = data || {};
+
+      if (!id) {
+        return { status: 400, error: 'id is required' };
+      }
+
+      const prompt = this.prompts.get(id);
+      if (!prompt) {
+        return { status: 404, error: `Prompt '${id}' not found` };
+      }
+
+      const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
+
+      // Delete from DB
+      await this.dbQuery('DELETE FROM prompts WHERE id = ?', [id], projectId);
+
+      // Update cache
+      this.prompts.delete(id);
+
+      // Publish event
+      await this.eventBus.publish('prompt.deleted', { id });
+
+      this.logger.info('prompt-manager.ui.deleted', { id });
+
+      return { status: 200, data: { deleted: true } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.delete.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIVersions(data) {
+    try {
+      const { id } = data || {};
+
+      if (!id) {
+        return { status: 400, error: 'id is required' };
+      }
+
+      const prompt = this.prompts.get(id);
+      if (!prompt) {
+        return { status: 404, error: `Prompt '${id}' not found` };
+      }
+
+      const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
+      const versions = await this.dbQuery(
+        'SELECT version, content, variables, created_at, created_by FROM prompt_versions WHERE prompt_id = ? ORDER BY created_at DESC',
+        [id],
+        projectId
+      );
+
+      return {
+        status: 200,
+        data: {
+          prompt_id: id,
+          current_version: prompt.current_version,
+          versions
+        }
+      };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.versions.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  // --- Preset UI Handlers ---
+
+  async handleUIPresetList(data) {
+    try {
+      const presets = Array.from(this.presets.values()).map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        created_at: p.created_at,
+        updated_at: p.updated_at
+      }));
+
+      return { status: 200, data: { presets, total: presets.length } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.preset.list.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIPresetGet(data) {
+    try {
+      const { id } = data || {};
+
+      if (!id) {
+        return { status: 400, error: 'id is required' };
+      }
+
+      const preset = this.presets.get(id);
+      if (!preset) {
+        return { status: 404, error: `Preset '${id}' not found` };
+      }
+
+      // Load slot-prompt relationships
+      const relations = await this.dbQuery(
+        `SELECT slot_type, prompt_id, position FROM slot_preset_prompts
+         WHERE preset_id = ? ORDER BY slot_type, position`,
+        [id]
+      );
+
+      const slots = {};
+      for (const rel of relations) {
+        if (!slots[rel.slot_type]) slots[rel.slot_type] = [];
+        slots[rel.slot_type].push(rel.prompt_id);
+      }
+
+      return { status: 200, data: { preset: { ...preset, slots } } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.preset.get.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIPresetCreate(data) {
+    try {
+      const { name, description, slots } = data || {};
+
+      if (!name) {
+        return { status: 400, error: 'name is required' };
+      }
+
+      const id = this.generateId();
+      const now = new Date().toISOString();
+
+      // Insert preset
+      await this.dbQuery(
+        `INSERT INTO slot_presets (id, name, description, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id, name, description || '', now, now]
+      );
+
+      // Insert slot-prompt relationships
+      if (slots) {
+        for (const [slotType, promptIds] of Object.entries(slots)) {
+          if (!this.SLOT_TYPES.includes(slotType)) continue;
+
+          const ids = Array.isArray(promptIds) ? promptIds : [promptIds];
+          for (let i = 0; i < ids.length; i++) {
+            await this.dbQuery(
+              `INSERT INTO slot_preset_prompts (preset_id, slot_type, prompt_id, position, created_at)
+               VALUES (?, ?, ?, ?, ?)`,
+              [id, slotType, ids[i], i, now]
+            );
+          }
+        }
+      }
+
+      const preset = { id, name, description: description || '', slots, created_at: now, updated_at: now };
+      this.presets.set(id, preset);
+
+      // Publish event
+      await this.eventBus.publish('preset.created', { id, name });
+
+      this.logger.info('prompt-manager.ui.preset.created', { id, name });
+
+      return { status: 201, data: { preset } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.preset.create.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIPresetDelete(data) {
+    try {
+      const { id } = data || {};
+
+      if (!id) {
+        return { status: 400, error: 'id is required' };
+      }
+
+      if (!this.presets.has(id)) {
+        return { status: 404, error: `Preset '${id}' not found` };
+      }
+
+      await this.dbQuery('DELETE FROM slot_presets WHERE id = ?', [id]);
+      this.presets.delete(id);
+
+      await this.eventBus.publish('preset.deleted', { id });
+
+      this.logger.info('prompt-manager.ui.preset.deleted', { id });
+
+      return { status: 200, data: { deleted: true } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.preset.delete.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleUIPresetApply(data) {
+    try {
+      const { id } = data || {};
+
+      if (!id) {
+        return { status: 400, error: 'id is required' };
+      }
+
+      const preset = this.presets.get(id);
+      if (!preset) {
+        return { status: 404, error: `Preset '${id}' not found` };
+      }
+
+      // Load slot-prompt relationships with full prompt data
+      const relations = await this.dbQuery(
+        `SELECT slot_type, prompt_id, position FROM slot_preset_prompts
+         WHERE preset_id = ? ORDER BY slot_type, position`,
+        [id]
+      );
+
+      const composerState = {};
+      for (const slotType of this.SLOT_TYPES) {
+        composerState[slotType] = [];
+      }
+
+      for (const rel of relations) {
+        const prompt = this.prompts.get(rel.prompt_id);
+        if (prompt && composerState[rel.slot_type]) {
+          composerState[rel.slot_type].push({
+            id: prompt.id,
+            name: prompt.name,
+            title: prompt.title,
+            content: prompt.content,
+            variables: prompt.variables
+          });
+        }
+      }
+
+      return { status: 200, data: { preset: { id, name: preset.name }, composerState } };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.preset.apply.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  // --- Composer UI Handlers ---
+
+  async handleUIComposerRender(data) {
+    try {
+      const { slots, variables } = data || {};
+
+      if (!slots) {
+        return { status: 400, error: 'slots is required' };
+      }
+
+      // Build final prompt from slots
+      const parts = [];
+      let totalVariables = new Set();
+
+      for (const slotType of this.SLOT_TYPES) {
+        const slotPromptIds = slots[slotType] || [];
+        for (const promptId of slotPromptIds) {
+          const prompt = this.prompts.get(promptId);
+          if (prompt) {
+            // Collect variables
+            if (prompt.variables) {
+              prompt.variables.forEach(v => totalVariables.add(v.name || v));
+            }
+
+            // Render template with provided variables
+            let content = prompt.content;
+            if (variables) {
+              content = this.renderTemplateString(content, variables);
+            }
+
+            parts.push({
+              slot_type: slotType,
+              slot_icon: this.SLOT_ICONS[slotType],
+              prompt_id: prompt.id,
+              prompt_name: prompt.name,
+              content
+            });
+          }
+        }
+      }
+
+      // Combine all parts
+      const finalPrompt = parts.map(p => p.content).join('\n\n');
+
+      // Estimate tokens (rough: ~4 chars per token)
+      const estimatedTokens = Math.ceil(finalPrompt.length / 4);
+
+      return {
+        status: 200,
+        data: {
+          parts,
+          finalPrompt,
+          estimatedTokens,
+          variables: Array.from(totalVariables),
+          variablesProvided: variables || {}
+        }
+      };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.composer.render.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  // --- Analytics UI Handler ---
+
+  async handleUIAnalytics(data) {
+    try {
+      const { prompt_id } = data || {};
+
+      let analytics = await this.dbQuery(
+        'SELECT * FROM prompt_analytics' + (prompt_id ? ' WHERE prompt_id = ?' : ''),
+        prompt_id ? [prompt_id] : []
+      );
+
+      // Get top prompts by usage
+      const topPrompts = [...analytics]
+        .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
+        .slice(0, 10)
+        .map(a => {
+          const prompt = this.prompts.get(a.prompt_id);
+          return {
+            prompt_id: a.prompt_id,
+            prompt_name: prompt?.name || 'Unknown',
+            slot_type: prompt?.slot_type || 'system',
+            slot_icon: this.SLOT_ICONS[prompt?.slot_type] || '📝',
+            usage_count: a.usage_count || 0,
+            last_used: a.last_used
+          };
+        });
+
+      // Stats by slot
+      const bySlot = {};
+      for (const slotType of this.SLOT_TYPES) {
+        const slotPromptIds = Array.from(this.prompts.values())
+          .filter(p => p.slot_type === slotType)
+          .map(p => p.id);
+
+        const slotAnalytics = analytics.filter(a => slotPromptIds.includes(a.prompt_id));
+        bySlot[slotType] = {
+          count: slotPromptIds.length,
+          total_usage: slotAnalytics.reduce((sum, a) => sum + (a.usage_count || 0), 0)
+        };
+      }
+
+      return {
+        status: 200,
+        data: {
+          total_prompts: this.prompts.size,
+          total_presets: this.presets.size,
+          topPrompts,
+          bySlot,
+          analytics
+        }
+      };
+    } catch (error) {
+      this.logger.error('prompt-manager.ui.analytics.error', { error: error.message });
+      return { status: 500, error: error.message };
     }
   }
 

@@ -83,8 +83,8 @@ export const panels: Record<string, PanelDef> = {
   prompts: {
     id: 'prompts',
     title: 'Prompts',
-    icon: '💬',
-    size: 'md',
+    icon: '🧘',
+    size: 'lg',
     position: 'top',
     zone: 'chat-config',
     order: 2,

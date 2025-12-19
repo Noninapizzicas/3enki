@@ -264,7 +264,7 @@ class CredentialManagerModule {
 
   /**
    * Handler para solicitudes de estado desde el frontend
-   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/state/request)
+   * Recibe eventos via eventBus (frontend publica a core/{coreId}/events/credential/state/request)
    */
   async onStateRequest(event) {
     const correlationId = event?.correlation_id || event?.correlationId;
@@ -274,7 +274,7 @@ class CredentialManagerModule {
 
   /**
    * Handler para crear credencial desde frontend
-   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/create)
+   * Recibe eventos via eventBus (frontend publica a core/{coreId}/events/credential/create)
    */
   async onCreateCredential(event) {
     // EventBus envía envelope con .data, MQTT directo envía .payload
@@ -344,7 +344,7 @@ class CredentialManagerModule {
 
   /**
    * Handler para actualizar credencial desde frontend
-   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/update)
+   * Recibe eventos via eventBus (frontend publica a core/{coreId}/events/credential/update)
    */
   async onUpdateCredential(event) {
     // EventBus envía envelope con .data, MQTT directo envía .payload
@@ -395,7 +395,7 @@ class CredentialManagerModule {
 
   /**
    * Handler para eliminar credencial desde frontend
-   * Recibe eventos via eventBus (frontend publica a core/*/events/credential/delete)
+   * Recibe eventos via eventBus (frontend publica a core/{coreId}/events/credential/delete)
    */
   async onDeleteCredential(event) {
     // EventBus envía envelope con .data, MQTT directo envía .payload
@@ -1080,8 +1080,8 @@ class CredentialManagerModule {
 
   /**
    * Publica el estado actual via eventBus
-   * EventBus transforma 'credential.state' → 'core/*/events/credential/state'
-   * Frontend suscribe a 'core/*/events/credential/state'
+   * EventBus transforma 'credential.state' → 'core/{coreId}/events/credential/state'
+   * Frontend suscribe a 'core/{coreId}/events/credential/state'
    */
   async publishState(correlationId = null) {
     const state = this.getUIState();

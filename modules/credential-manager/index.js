@@ -28,6 +28,7 @@ class CredentialManagerModule {
     this.logger = null;
     this.metrics = null;
     this.eventBus = null;
+    this.uiHandler = null;  // UI Request/Response handler
     this.config = null;
   }
 
@@ -39,6 +40,7 @@ class CredentialManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
 
     // Load module config from module.json
     const moduleJsonPath = path.join(__dirname, 'module.json');
@@ -61,6 +63,20 @@ class CredentialManagerModule {
     // Subscribe to events
     await this.subscribeToEvents();
 
+    // Register UI Request/Response handlers
+    if (this.uiHandler) {
+      this.uiHandler.register('credential', 'list', this.handleUIList.bind(this));
+      this.uiHandler.register('credential', 'get', this.handleUIGet.bind(this));
+      this.uiHandler.register('credential', 'create', this.handleUICreate.bind(this));
+      this.uiHandler.register('credential', 'update', this.handleUIUpdate.bind(this));
+      this.uiHandler.register('credential', 'delete', this.handleUIDelete.bind(this));
+      this.uiHandler.register('credential', 'test', this.handleUITest.bind(this));
+
+      this.logger.info('credential-manager.ui_handlers.registered', {
+        handlers: ['list', 'get', 'create', 'update', 'delete', 'test']
+      });
+    }
+
     // Update metrics
     this.updateCredentialMetrics();
 
@@ -77,6 +93,17 @@ class CredentialManagerModule {
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
+
+    // Unregister UI handlers
+    if (this.uiHandler) {
+      this.uiHandler.unregister('credential', 'list');
+      this.uiHandler.unregister('credential', 'get');
+      this.uiHandler.unregister('credential', 'create');
+      this.uiHandler.unregister('credential', 'update');
+      this.uiHandler.unregister('credential', 'delete');
+      this.uiHandler.unregister('credential', 'test');
+    }
+
     this.credentials.clear();
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -1068,7 +1095,189 @@ class CredentialManagerModule {
   }
 
   // ==========================================
-  // UI Test Endpoint - Validar API key antes de guardar
+  // UI Request/Response Handlers
+  // Patrón Request/Response sobre MQTT
+  // Frontend usa: await mqttRequest('credential', 'list')
+  // ==========================================
+
+  /**
+   * UI Handler: Listar credenciales
+   * Request: mqttRequest('credential', 'list')
+   */
+  async handleUIList(data, request) {
+    return this.getUIState();
+  }
+
+  /**
+   * UI Handler: Obtener credencial por key
+   * Request: mqttRequest('credential', 'get', { key })
+   */
+  async handleUIGet(data, request) {
+    const { key } = data;
+
+    if (!key) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Credential key is required' };
+    }
+
+    const value = this.credentials.get(key);
+    if (!value) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Credential not found' };
+    }
+
+    const provider = this.extractProvider(key);
+    const level = this.extractLevel(key);
+    const identifier = this.extractIdentifier(key);
+
+    return {
+      credential: {
+        key,
+        provider,
+        providerName: provider,
+        providerIcon: this.getProviderIcon(provider),
+        level,
+        identifier,
+        preview: this.maskValue(value)
+      }
+    };
+  }
+
+  /**
+   * UI Handler: Crear credencial
+   * Request: mqttRequest('credential', 'create', { provider, level, identifier?, api_key })
+   */
+  async handleUICreate(data, request) {
+    const { provider, level, identifier, api_key } = data;
+
+    if (!provider) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Provider is required' };
+    }
+    if (!level) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Level is required' };
+    }
+    if (!api_key) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'API key is required' };
+    }
+
+    // Generar key
+    const key = this.generateKey(provider, level, identifier);
+
+    // Verificar si ya existe
+    const existed = this.credentials.has(key);
+
+    // Guardar
+    this.credentials.set(key, api_key);
+    process.env[key] = api_key;
+    await this.saveEnvFile();
+    this.updateCredentialMetrics();
+
+    return {
+      key,
+      created: !existed,
+      updated: existed
+    };
+  }
+
+  /**
+   * UI Handler: Actualizar credencial
+   * Request: mqttRequest('credential', 'update', { key, api_key })
+   */
+  async handleUIUpdate(data, request) {
+    const { key, api_key } = data;
+
+    if (!key) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Credential key is required' };
+    }
+    if (!api_key) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'API key is required' };
+    }
+
+    if (!this.credentials.has(key)) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Credential not found' };
+    }
+
+    this.credentials.set(key, api_key);
+    process.env[key] = api_key;
+    await this.saveEnvFile();
+    this.updateCredentialMetrics();
+
+    return { key, updated: true };
+  }
+
+  /**
+   * UI Handler: Eliminar credencial
+   * Request: mqttRequest('credential', 'delete', { key })
+   */
+  async handleUIDelete(data, request) {
+    const { key } = data;
+
+    if (!key) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Credential key is required' };
+    }
+
+    if (!this.credentials.has(key)) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Credential not found' };
+    }
+
+    this.credentials.delete(key);
+    delete process.env[key];
+    await this.saveEnvFile();
+    this.updateCredentialMetrics();
+
+    return { key, deleted: true };
+  }
+
+  /**
+   * UI Handler: Testear API key
+   * Request: mqttRequest('credential', 'test', { provider, api_key })
+   */
+  async handleUITest(data, request) {
+    const { provider, api_key } = data;
+
+    if (!provider) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Provider is required' };
+    }
+    if (!api_key) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'API key is required' };
+    }
+
+    let valid = false;
+    let message = '';
+
+    try {
+      switch (provider.toUpperCase()) {
+        case 'DEEPSEEK':
+          valid = await this.testDeepSeek(api_key);
+          message = valid ? 'API key válida' : 'API key inválida o sin créditos';
+          break;
+
+        case 'OPENAI':
+          valid = await this.testOpenAI(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
+        case 'ANTHROPIC':
+          valid = await this.testAnthropic(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
+        case 'OLLAMA':
+          valid = api_key && api_key.length > 0;
+          message = 'Ollama es local - no requiere validación';
+          break;
+
+        default:
+          valid = api_key && api_key.length > 10;
+          message = 'Provider no reconocido - validación básica';
+      }
+    } catch (error) {
+      message = `Error al validar: ${error.message}`;
+    }
+
+    return { valid, provider, message };
+  }
+
+  // ==========================================
+  // UI Test Endpoint (HTTP) - Validar API key antes de guardar
   // ==========================================
 
   async handleTestCredential(req, context) {

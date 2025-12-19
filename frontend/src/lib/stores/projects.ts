@@ -1,19 +1,21 @@
 /**
- * Projects Store - MQTT Event-Driven
+ * Projects Store - MQTT Request/Response
  *
- * Comunicación 100% via MQTT con topics transformados por EventBus:
- * - Solicita estado: publish(core/star/events/project/state/request)
- * - Recibe estado: subscribe(core/star/events/project/state)
- * - Acciones: publish(core/star/events/project/create|update|delete|activate)
+ * Comunicación via MQTT con patrón Request/Response:
+ * - Requests garantizados con timeout y status codes
+ * - Manejo de errores estructurado
+ * - Async/await natural
  *
- * Los topics usan el patrón core/star/events/domain/action que el
- * EventBus del backend entiende y transforma correctamente.
- *
- * NO usa endpoints REST para datos UI.
+ * @see docs/architecture/mqtt-request-response.md
  */
 
 import { writable, derived } from 'svelte/store';
-import { subscribe as mqttSubscribe, publish } from '$lib/ui-core/mqtt';
+import {
+  mqttRequest,
+  MqttTimeoutError,
+  MqttRequestError,
+  type UIResponse
+} from '$lib/ui-core/mqtt-request';
 
 // =============================================================================
 // TYPES
@@ -39,6 +41,28 @@ export interface ProjectsState {
   error: string | null;
 }
 
+interface ListResponse {
+  projects: Project[];
+  activeProjectId: string | null;
+  count: number;
+}
+
+interface ProjectResponse {
+  project: Project;
+  created?: boolean;
+  updated?: boolean;
+}
+
+interface DeleteResponse {
+  deleted: boolean;
+  id: string;
+}
+
+interface ActivateResponse {
+  activated: boolean;
+  activeProjectId: string;
+}
+
 // =============================================================================
 // INITIAL STATE
 // =============================================================================
@@ -58,87 +82,76 @@ const initialState: ProjectsState = {
 export const projectsStore = writable<ProjectsState>(initialState);
 
 // =============================================================================
-// MQTT SUBSCRIPTIONS
+// ACTIONS - Request/Response Pattern
 // =============================================================================
 
-let unsubscribeState: (() => void) | null = null;
-
 /**
- * Inicializa suscripciones MQTT para proyectos
- * Llamar una vez al montar el componente principal
- *
- * NOTA: No necesita esperar conexión MQTT porque mqtt.ts
- * encola mensajes automáticamente y los envía al conectar.
+ * Carga la lista de proyectos
+ * Usa mqttRequest para garantizar respuesta
  */
-export function initProjectsSubscriptions(): () => void {
-  // Recibir estado completo via topic transformado por EventBus
-  // Backend publica a: core/*/events/project/state
-  unsubscribeState = mqttSubscribe('core/*/events/project/state', (_topic, payload) => {
-    // EventBus envía un envelope, los datos están en payload.data
-    const envelope = payload as { data?: unknown } | null;
-    const data = (envelope?.data || payload) as {
-      projects: Project[];
-      activeProjectId: string | null;
-      count: number;
-    };
+export async function loadProjects(): Promise<void> {
+  projectsStore.update(s => ({ ...s, loading: true, error: null }));
 
-    console.log('[Projects] State received:', data.count || 0, 'projects');
+  try {
+    const response = await mqttRequest<ListResponse>('project', 'list');
 
     projectsStore.update(s => ({
       ...s,
-      projects: data.projects || [],
-      activeProjectId: data.activeProjectId || null,
-      count: data.count || 0,
+      projects: response.data.projects || [],
+      activeProjectId: response.data.activeProjectId || null,
+      count: response.data.count || 0,
       loading: false,
       error: null
     }));
-  });
 
-  // Solicitar estado inicial
-  // (si MQTT no está conectado, el mensaje se encola automáticamente)
-  requestProjectsState();
-
-  // Retornar cleanup
-  return () => {
-    unsubscribeState?.();
-  };
-}
-
-// =============================================================================
-// ACTIONS
-// =============================================================================
-
-/**
- * Solicita el estado actual via MQTT
- */
-export function requestProjectsState(): void {
-  projectsStore.update(s => ({ ...s, loading: true }));
-  publish('core/*/events/project/state/request', {});
+    console.log('[Projects] Loaded:', response.data.count, 'projects');
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Projects] Load failed:', errorMessage);
+  }
 }
 
 /**
  * Crea un nuevo proyecto
+ * Retorna el proyecto creado o throw error
  */
-export function createProject(
+export async function createProject(
   name: string,
   description: string = '',
   color: string = 'blue',
   icon: string = '📁',
   workspaceType: string = 'general'
-): void {
-  publish('core/*/events/project/create', {
-    name,
-    description,
-    color,
-    icon,
-    workspaceType
-  });
+): Promise<Project> {
+  projectsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const response = await mqttRequest<ProjectResponse>('project', 'create', {
+      name,
+      description,
+      color,
+      icon,
+      workspaceType
+    });
+
+    // Recargar lista para tener estado actualizado
+    await loadProjects();
+
+    console.log('[Projects] Created:', response.data.project.name);
+    return response.data.project;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Projects] Create failed:', errorMessage);
+    throw error;
+  }
 }
 
 /**
  * Actualiza un proyecto existente
+ * Retorna el proyecto actualizado o throw error
  */
-export function updateProject(
+export async function updateProject(
   id: string,
   updates: {
     name?: string;
@@ -147,25 +160,119 @@ export function updateProject(
     icon?: string;
     workspaceType?: string;
   }
-): void {
-  publish('core/*/events/project/update', {
-    id,
-    ...updates
-  });
+): Promise<Project> {
+  projectsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const response = await mqttRequest<ProjectResponse>('project', 'update', {
+      id,
+      ...updates
+    });
+
+    // Recargar lista para tener estado actualizado
+    await loadProjects();
+
+    console.log('[Projects] Updated:', id);
+    return response.data.project;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Projects] Update failed:', errorMessage);
+    throw error;
+  }
 }
 
 /**
  * Elimina un proyecto
  */
-export function deleteProject(id: string): void {
-  publish('core/*/events/project/delete', { id });
+export async function deleteProject(id: string): Promise<void> {
+  projectsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<DeleteResponse>('project', 'delete', { id });
+
+    // Recargar lista para tener estado actualizado
+    await loadProjects();
+
+    console.log('[Projects] Deleted:', id);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Projects] Delete failed:', errorMessage);
+    throw error;
+  }
 }
 
 /**
  * Activa un proyecto
  */
-export function activateProject(id: string): void {
-  publish('core/*/events/project/activate', { id });
+export async function activateProject(id: string): Promise<void> {
+  projectsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<ActivateResponse>('project', 'activate', { id });
+
+    // Actualizar estado local
+    projectsStore.update(s => ({
+      ...s,
+      activeProjectId: id,
+      loading: false,
+      error: null
+    }));
+
+    console.log('[Projects] Activated:', id);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Projects] Activate failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
+ * Obtiene un proyecto por ID
+ */
+export async function getProject(id: string): Promise<Project> {
+  try {
+    const response = await mqttRequest<{ project: Project }>('project', 'get', { id });
+    return response.data.project;
+  } catch (error) {
+    console.error('[Projects] Get failed:', getErrorMessage(error));
+    throw error;
+  }
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof MqttTimeoutError) {
+    return 'Request timeout - server did not respond';
+  }
+  if (error instanceof MqttRequestError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'Unknown error';
+}
+
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
+
+/**
+ * Inicializa el store de proyectos
+ * Carga la lista inicial
+ */
+export function initProjects(): () => void {
+  // Cargar proyectos al inicializar
+  loadProjects();
+
+  // Retornar cleanup (no-op por ahora)
+  return () => {};
 }
 
 // =============================================================================
@@ -194,3 +301,17 @@ export const projectsCount = derived(projectsStore, $s => $s.count);
 
 /** Tiene proyectos */
 export const hasProjects = derived(projectsStore, $s => $s.projects.length > 0);
+
+// =============================================================================
+// BACKWARD COMPATIBILITY
+// =============================================================================
+
+/**
+ * @deprecated Use loadProjects() instead
+ */
+export const requestProjectsState = loadProjects;
+
+/**
+ * @deprecated Use initProjects() instead
+ */
+export const initProjectsSubscriptions = initProjects;

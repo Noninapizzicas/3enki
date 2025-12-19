@@ -1,0 +1,56 @@
+{
+  "framework": "SvelteKit",
+  "typescript": true,
+  "layout": {
+    "type": "single-page with floating panels",
+    "zones": {
+      "work-bar": "Left sidebar - main module buttons",
+      "chat-config": "Right sidebar - configuration panels",
+      "chat-tools": "Bottom - tool panels",
+      "main": "Center - primary content area"
+    },
+    "principles": [
+      "1 click = 1 panel (no double-click, no long-press)",
+      "Single screen (no traditional navigation)",
+      "Panels are floating and self-contained",
+      "Data via MQTT (no REST /ui/state endpoints)"
+    ]
+  },
+  "component_structure": {
+    "pattern": "{Module}Button.svelte + {Module}Panel.svelte",
+    "location": "frontend/src/lib/components/{domain}/",
+    "panel_features": ["tabs if needed", "loading states", "error handling"]
+  },
+  "stores": {
+    "location": "frontend/src/lib/stores/",
+    "pattern": "Svelte writable stores + async functions",
+    "examples": {
+      "projects.ts": {
+        "store": "projectsStore",
+        "functions": ["loadProjects()", "createProject()", "updateProject()", "deleteProject()"]
+      },
+      "credentials.ts": {
+        "store": "credentialsStore",
+        "functions": ["loadCredentials()", "createCredential()", "updateCredential()", "deleteCredential()"]
+      }
+    }
+  },
+  "mqtt_integration": {
+    "client_location": "frontend/src/lib/ui-core/mqtt.ts",
+    "request_utility": "frontend/src/lib/ui-core/mqtt-request.ts",
+    "connection": "WebSocket on port 9001",
+    "auto_reconnect": true
+  },
+  "css": {
+    "approach": "Tailwind CSS",
+    "dark_mode": "supported",
+    "responsive": "mobile-first"
+  },
+  "generation_rules": [
+    "Never invent UX not defined in backend",
+    "Never add screens or flows not specified",
+    "Read module.json to understand capabilities",
+    "Use mqttRequest() for all CRUD operations",
+    "Keep state minimal"
+  ]
+}

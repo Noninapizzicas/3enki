@@ -17,6 +17,7 @@ Antes de generar UI, **consulta estos documentos según necesidad**:
 | **DISEÑO-UI.md** | Para entender layout, zonas y flujo visual | `frontend/DISEÑO-UI.md` |
 | **UI-SYSTEM.md** | Para arquitectura técnica, stores, MQTT | `frontend/docs/UI-SYSTEM.md` |
 | **UI-SYSTEM-PLAN.md** | Para patrones de componentes, CSS, bocetos | `_archive/ui-20251212/docs/UI-SYSTEM-PLAN.md` |
+| **mqtt-request-response.md** | Para comunicación Request/Response UI↔Backend | `docs/architecture/mqtt-request-response.md` |
 | **CONTEXT.md** | Para entender el proyecto global | `CONTEXT.md` |
 
 ### Cuándo leer cada documento:
@@ -25,6 +26,7 @@ Antes de generar UI, **consulta estos documentos según necesidad**:
 2. **Para decidir zona del módulo** → Lee `DISEÑO-UI.md` (layout y zonas)
 3. **Para definir componentes** → Lee `UI-SYSTEM-PLAN.md` (patrones, bocetos, CSS)
 4. **Para implementar MQTT/stores** → Lee `UI-SYSTEM.md` (arquitectura técnica)
+5. **Para comunicación UI↔Backend** → Lee `mqtt-request-response.md` (patrón Request/Response)
 
 ### Artefactos del módulo backend:
 
@@ -128,23 +130,43 @@ No agregues componentes fuera de este patrón.
 
 ---
 
-#### 3.3 Contrato UI → Backend
+#### 3.3 Contrato UI → Backend (MQTT Request/Response)
 
-Para cada interacción UI, define el vínculo técnico via **MQTT**:
+Para cada interacción UI, usa el **patrón Request/Response** via MQTT:
 
 ```
-UI Action        → MQTT Event
------------------------------------------
-select item     → publish: modulo/select
-create item     → publish: modulo/create
-update config   → publish: modulo/config
-get state       → subscribe: modulo/state
+UI Action        → MQTT Request                    → Response
+--------------------------------------------------------------------------------
+list items      → ui/request/{domain}/list        → { status: 200, data: [...] }
+create item     → ui/request/{domain}/create      → { status: 201, data: {...} }
+update item     → ui/request/{domain}/update      → { status: 200, data: {...} }
+delete item     → ui/request/{domain}/delete      → { status: 200 }
+get item        → ui/request/{domain}/get         → { status: 200, data: {...} }
 ```
 
-Reglas:
-- Usa solo eventos definidos en module.json
-- Comunicación via MQTT, NO endpoints /ui/state
-- No inventes eventos nuevos
+**Implementación Frontend (TypeScript):**
+```typescript
+import { mqttRequest } from '$lib/ui-core/mqtt-request';
+
+// Ejemplo: listar proyectos
+const response = await mqttRequest<{ projects: Project[] }>('project', 'list');
+if (response.status === 200) {
+  projects = response.data.projects;
+}
+
+// Ejemplo: crear proyecto
+const result = await mqttRequest('project', 'create', {
+  name: 'Nuevo',
+  description: 'Desc'
+});
+```
+
+**Reglas:**
+- Usa `mqttRequest()` para todas las operaciones CRUD
+- Timeout por defecto: 10 segundos
+- Status codes HTTP: 200, 201, 400, 404, 500
+- Manejo de errores con try/catch (MqttTimeoutError, MqttRequestError)
+- Ver documentación completa: `docs/architecture/mqtt-request-response.md`
 
 ---
 

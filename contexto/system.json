@@ -1,0 +1,50 @@
+{
+  "architecture": {
+    "type": "event-driven",
+    "pattern": "pub/sub with request/response",
+    "core_components": [
+      "EventBus",
+      "MQTTClient",
+      "ModuleLoader",
+      "UIRequestHandler",
+      "Logger",
+      "Metrics"
+    ]
+  },
+  "startup_sequence": [
+    { "step": 1, "name": "Observability", "component": "Logger + Metrics" },
+    { "step": 2, "name": "Validation", "component": "JSON Schema validator" },
+    { "step": 3, "name": "MQTT", "component": "Aedes broker + client" },
+    { "step": 4, "name": "Hooks", "component": "Lifecycle hooks system" },
+    { "step": 5, "name": "EventBus", "component": "Event routing" },
+    { "step": 5.5, "name": "UIRequestHandler", "component": "UI request/response" },
+    { "step": 6, "name": "Modules", "component": "Dynamic module loading" },
+    { "step": 7, "name": "HTTP", "component": "Express server" }
+  ],
+  "directories": {
+    "core": "Core framework code",
+    "modules": "Loadable modules (each with module.json + index.js)",
+    "frontend": "SvelteKit app",
+    "data": "Runtime data (projects, logs, etc)",
+    "contexto": "AI context files (this directory)",
+    "docs": "Human documentation",
+    "prompts": "AI prompts and tutorials"
+  },
+  "conventions": {
+    "naming": {
+      "modules": "kebab-case (e.g., project-manager)",
+      "events": "dot.notation (e.g., project.created)",
+      "topics": "slash/notation (e.g., ui/request/project/list)",
+      "files": "kebab-case.js or PascalCase.svelte"
+    },
+    "logging": {
+      "format": "structured JSON",
+      "levels": ["debug", "info", "warn", "error"],
+      "required_fields": ["module", "action", "outcome"]
+    },
+    "errors": {
+      "always_include": ["error.message", "correlationId"],
+      "never_throw": "in event handlers (catch and log)"
+    }
+  }
+}

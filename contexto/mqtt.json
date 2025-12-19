@@ -1,0 +1,61 @@
+{
+  "broker": {
+    "type": "Aedes (embedded)",
+    "ports": {
+      "tcp": 1883,
+      "websocket": 9001
+    }
+  },
+  "patterns": {
+    "ui_request_response": {
+      "description": "Guaranteed request/response for UI↔Backend",
+      "request_topic": "ui/request/{domain}/{action}",
+      "response_topic": "ui/response/{request_id}",
+      "timeout_ms": 10000,
+      "status_codes": {
+        "200": "Success",
+        "201": "Created",
+        "400": "Bad Request",
+        "404": "Not Found / No Handler",
+        "500": "Internal Error"
+      },
+      "frontend_usage": {
+        "import": "import { mqttRequest } from '$lib/ui-core/mqtt-request'",
+        "example": "const response = await mqttRequest<T>('domain', 'action', data)"
+      },
+      "backend_usage": {
+        "register": "context.uiHandler.register('domain', 'action', handler)",
+        "handler_signature": "async handler(data, context) => { status, data?, error? }"
+      },
+      "actions": ["list", "get", "create", "update", "delete", "activate"]
+    },
+    "events": {
+      "description": "Fire-and-forget events for module communication",
+      "topic_pattern": "core/{coreId}/events/{module}/{event}",
+      "examples": [
+        "core/core-a/events/project/created",
+        "core/core-a/events/credential/state"
+      ]
+    },
+    "broadcast": {
+      "description": "System-wide notifications",
+      "topic_pattern": "system/{event}",
+      "examples": ["system/shutdown", "system/config.changed"]
+    }
+  },
+  "current_handlers": {
+    "project-manager": {
+      "domain": "project",
+      "actions": ["list", "get", "create", "update", "delete", "activate"]
+    },
+    "credential-manager": {
+      "domain": "credential",
+      "actions": ["list", "get", "create", "update", "delete"]
+    }
+  },
+  "error_classes": {
+    "MqttTimeoutError": "Backend did not respond within timeout",
+    "MqttRequestError": "Backend returned error status",
+    "MqttNotConnectedError": "MQTT client not connected"
+  }
+}

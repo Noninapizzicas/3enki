@@ -1,0 +1,76 @@
+{
+  "system": {
+    "location": "modules/",
+    "loader": "core/modules/loader.js",
+    "discovery": "automatic (scans modules/ directory)"
+  },
+  "module_structure": {
+    "required_files": {
+      "module.json": "Module metadata, APIs, events",
+      "index.js": "Module class with lifecycle hooks"
+    },
+    "optional_files": {
+      "README.md": "Human documentation",
+      "static/": "Static files served at /modules/{name}/"
+    }
+  },
+  "module_json_schema": {
+    "name": "string (kebab-case)",
+    "version": "string (semver)",
+    "description": "string",
+    "apis": [
+      {
+        "name": "string",
+        "method": "GET|POST|PUT|DELETE",
+        "path": "string (e.g., /items)",
+        "handler": "string (method name)"
+      }
+    ],
+    "events": {
+      "publishes": ["event.name"],
+      "subscribes": ["event.name"]
+    },
+    "ui": {
+      "zone": "work-bar|chat-config|chat-tools",
+      "icon": "emoji"
+    }
+  },
+  "lifecycle_hooks": {
+    "onLoad": {
+      "signature": "async onLoad(context)",
+      "context_properties": [
+        "eventBus",
+        "logger",
+        "metrics",
+        "uiHandler",
+        "config"
+      ],
+      "purpose": "Initialize module, register handlers"
+    },
+    "onUnload": {
+      "signature": "async onUnload()",
+      "purpose": "Cleanup resources"
+    }
+  },
+  "ui_handler_registration": {
+    "in_onLoad": true,
+    "pattern": "context.uiHandler.register('domain', 'action', this.handler.bind(this))",
+    "handler_return": "{ status: number, data?: any, error?: string }"
+  },
+  "active_modules": [
+    "admin-panel",
+    "ai-gateway",
+    "credential-manager",
+    "dashboard",
+    "database-manager",
+    "file-browser",
+    "log-manager",
+    "menu-generator",
+    "metricas",
+    "notas",
+    "project-manager",
+    "prompt-manager",
+    "storage-manager",
+    "ui-designer"
+  ]
+}

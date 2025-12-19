@@ -2,11 +2,11 @@
  * Projects Store - MQTT Event-Driven
  *
  * Comunicación 100% via MQTT con topics transformados por EventBus:
- * - Solicita estado: publish('core/*/events/project/state/request')
- * - Recibe estado: subscribe('core/*/events/project/state')
- * - Acciones: publish('core/*/events/project/create|update|delete|activate')
+ * - Solicita estado: publish(core/star/events/project/state/request)
+ * - Recibe estado: subscribe(core/star/events/project/state)
+ * - Acciones: publish(core/star/events/project/create|update|delete|activate)
  *
- * Los topics usan el patrón 'core/*/events/{domain}/{action}' que el
+ * Los topics usan el patrón core/star/events/domain/action que el
  * EventBus del backend entiende y transforma correctamente.
  *
  * NO usa endpoints REST para datos UI.

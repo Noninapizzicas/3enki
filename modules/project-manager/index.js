@@ -644,8 +644,8 @@ class ProjectManagerModule {
 
   /**
    * Publica estado completo para UI via eventBus
-   * EventBus transforma 'project.state' → 'core/*/events/project/state'
-   * Frontend suscribe a 'core/*/events/project/state'
+   * EventBus transforma 'project.state' → 'core/{coreId}/events/project/state'
+   * Frontend suscribe a 'core/{coreId}/events/project/state'
    * @private
    */
   async publishUIState() {

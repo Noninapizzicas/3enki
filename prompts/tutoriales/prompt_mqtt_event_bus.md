@@ -120,7 +120,56 @@ core/event-bus/
 
 Implementar al menos uno de estos patrones:
 
-#### **A) Request/Response (RPC sobre MQTT)**
+#### **A) Request/Response para UI (RECOMENDADO)**
+
+El patrón estándar para comunicación UI↔Backend. Ver documentación completa en `docs/architecture/mqtt-request-response.md`.
+
+**Backend (registrar handlers en el módulo):**
+```javascript
+async onLoad(context) {
+  // Registrar handlers para UI
+  context.uiHandler.register('midominio', 'list', this.handleUIList.bind(this));
+  context.uiHandler.register('midominio', 'create', this.handleUICreate.bind(this));
+  context.uiHandler.register('midominio', 'update', this.handleUIUpdate.bind(this));
+  context.uiHandler.register('midominio', 'delete', this.handleUIDelete.bind(this));
+}
+
+async handleUIList(data, context) {
+  const items = this.listItems();
+  return { status: 200, data: { items } };
+}
+
+async handleUICreate(data, context) {
+  const item = this.createItem(data);
+  return { status: 201, data: { item } };
+}
+```
+
+**Frontend (TypeScript):**
+```typescript
+import { mqttRequest } from '$lib/ui-core/mqtt-request';
+
+// Listar items
+const response = await mqttRequest<{ items: Item[] }>('midominio', 'list');
+
+// Crear item
+const result = await mqttRequest('midominio', 'create', { name: 'Nuevo' });
+
+// Con manejo de errores
+try {
+  const response = await mqttRequest('midominio', 'delete', { id: '123' });
+} catch (error) {
+  if (error instanceof MqttTimeoutError) {
+    console.error('Backend no responde');
+  }
+}
+```
+
+**Topics MQTT:**
+- Request: `ui/request/{domain}/{action}`
+- Response: `ui/response/{request_id}`
+
+#### **B) Request/Response genérico (RPC sobre MQTT)**
 ```javascript
 // Publisher (requester)
 const response = await this.eventBus.request('user.profile.get', {
@@ -136,7 +185,7 @@ await this.eventBus.onRequest('user.profile.get', async (request) => {
 });
 ```
 
-#### **B) Broadcast a múltiples servicios**
+#### **C) Broadcast a múltiples servicios**
 ```javascript
 await this.eventBus.broadcast('system.shutdown', {
   reason: 'Maintenance',
@@ -144,13 +193,13 @@ await this.eventBus.broadcast('system.shutdown', {
 });
 ```
 
-#### **C) Event Filtering (wildcards)**
+#### **D) Event Filtering (wildcards)**
 ```javascript
 await this.eventBus.subscribe('user.*', this.handleAnyUserEvent.bind(this));
 await this.eventBus.subscribe('order.*.failed', this.handleOrderFailure.bind(this));
 ```
 
-#### **D) Dead Letter Queue (DLQ)**
+#### **E) Dead Letter Queue (DLQ)**
 ```javascript
 async handleEvent(event) {
   try {

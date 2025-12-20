@@ -89,6 +89,7 @@
   let saving = false;
   let deleting = false;
   let searchQuery = '';
+  let fileInput: HTMLInputElement;
   let filterSlot: SlotType | 'all' = 'all';
   let showPreview = false;
   let expandedSlots: Record<SlotType, boolean> = {
@@ -302,6 +303,40 @@
   function handleCancelEdit() {
     resetEditorForm();
     setActiveTab('library');
+  }
+
+  function handleImportClick() {
+    fileInput?.click();
+  }
+
+  async function handleFileImport(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      const content = await file.text();
+
+      // Extraer nombre del archivo (sin extensión)
+      const fileName = file.name.replace(/\.(txt|md|markdown)$/i, '');
+      const kebabName = fileName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      editorForm.content = content;
+      if (!editorForm.name) {
+        editorForm.name = kebabName;
+        editorForm.title = fileName;
+      }
+
+      console.log('[Prompts] File imported:', file.name, content.length, 'chars');
+    } catch (error) {
+      console.error('[Prompts] Import failed:', error);
+    }
+
+    // Reset input para permitir reimportar mismo archivo
+    input.value = '';
   }
 
   // ==========================================================================
@@ -587,6 +622,23 @@
     <!-- ================================================================== -->
     {:else if activeTab === 'editor'}
       <div class="editor">
+        <!-- Hidden file input -->
+        <input
+          type="file"
+          accept=".txt,.md,.markdown"
+          bind:this={fileInput}
+          on:change={handleFileImport}
+          style="display: none;"
+        />
+
+        <!-- Import button -->
+        <div class="import-section">
+          <button class="btn primary" on:click={handleImportClick}>
+            📄 Importar archivo (.txt, .md)
+          </button>
+          <span class="import-hint">o rellena manualmente:</span>
+        </div>
+
         <div class="form">
           <!-- Name (solo para nuevo) -->
           {#if !editorForm.id}
@@ -1322,6 +1374,22 @@ Puedes usar variables como {{nombre}} o {{contexto}}"
   .editor {
     display: flex;
     flex-direction: column;
+    gap: 1rem;
+  }
+
+  .import-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--_bg-surface);
+    border: 2px dashed var(--_border);
+    border-radius: var(--_radius);
+  }
+
+  .import-hint {
+    font-size: 0.875rem;
+    color: var(--_text-muted);
   }
 
   .form {

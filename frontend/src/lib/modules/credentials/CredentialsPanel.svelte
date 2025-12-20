@@ -506,9 +506,9 @@
     {:else if activeTab === 'nuevo'}
       <div class="form">
         <!-- Provider -->
-        <div class="field">
-          <label class="label">Proveedor</label>
-          <div class="providers-grid">
+        <fieldset class="field">
+          <legend class="label">Proveedor</legend>
+          <div class="providers-grid" role="group">
             {#each providers as p (p.id)}
               <button
                 type="button"
@@ -521,12 +521,12 @@
               </button>
             {/each}
           </div>
-        </div>
+        </fieldset>
 
         <!-- Level -->
-        <div class="field">
-          <label class="label">Nivel</label>
-          <div class="levels-grid">
+        <fieldset class="field">
+          <legend class="label">Nivel</legend>
+          <div class="levels-grid" role="group">
             {#each levels as l (l.id)}
               <button
                 type="button"
@@ -539,13 +539,14 @@
               </button>
             {/each}
           </div>
-        </div>
+        </fieldset>
 
         <!-- Identifier -->
         {#if requiresIdentifier}
           <div class="field">
-            <label class="label">Identificador</label>
+            <label class="label" for="new-identifier">Identificador</label>
             <input
+              id="new-identifier"
               type="text"
               class="input"
               placeholder={newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
@@ -556,10 +557,11 @@
 
         <!-- API Key -->
         <div class="field">
-          <label class="label">API Key</label>
+          <label class="label" for="new-apikey">API Key</label>
           <div class="password-wrapper">
             {#if showPassword}
               <input
+                id="new-apikey"
                 type="text"
                 class="input password-input"
                 placeholder="sk-..."
@@ -568,6 +570,7 @@
               />
             {:else}
               <input
+                id="new-apikey"
                 type="password"
                 class="input password-input"
                 placeholder="sk-..."
@@ -655,10 +658,11 @@
 
           <!-- New API Key -->
           <div class="field">
-            <label class="label">Nueva API Key</label>
+            <label class="label" for="edit-apikey">Nueva API Key</label>
             <div class="password-wrapper">
               {#if showPassword}
                 <input
+                  id="edit-apikey"
                   type="text"
                   class="input password-input"
                   placeholder="sk-..."
@@ -667,6 +671,7 @@
                 />
               {:else}
                 <input
+                  id="edit-apikey"
                   type="password"
                   class="input password-input"
                   placeholder="sk-..."
@@ -1007,7 +1012,13 @@
     gap: 0.5rem;
   }
 
-  .label {
+  fieldset.field {
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .label, legend.label {
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--_text-muted);

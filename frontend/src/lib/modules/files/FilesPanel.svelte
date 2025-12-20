@@ -236,10 +236,16 @@
               <button
                 class="file-item"
                 class:directory={item.type === 'directory'}
+                class:project={item.projectId}
                 on:click={() => handleItemClick(item)}
               >
                 <span class="file-icon">{getFileIcon(item)}</span>
-                <span class="file-name">{item.name}</span>
+                <span class="file-name">
+                  {item.displayName || item.name}
+                  {#if item.displayName}
+                    <span class="project-id">{item.name}</span>
+                  {/if}
+                </span>
                 {#if item.type === 'file'}
                   <span class="file-size">{formatFileSize(item.size)}</span>
                 {/if}
@@ -574,6 +580,19 @@
 
   .file-item.directory {
     color: var(--color-primary, #3b82f6);
+  }
+
+  .file-item.project {
+    background: var(--color-bg, rgba(59, 130, 246, 0.05));
+    border-left: 2px solid var(--color-primary, #3b82f6);
+  }
+
+  .project-id {
+    display: block;
+    font-size: 0.625rem;
+    color: var(--color-text-muted, #a3a3a3);
+    font-family: ui-monospace, monospace;
+    opacity: 0.7;
   }
 
   .file-icon {

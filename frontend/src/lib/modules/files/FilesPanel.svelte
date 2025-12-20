@@ -23,11 +23,9 @@
     searchFiles,
     clearSearch,
     formatContent,
-    setProject,
     getFileIcon,
     formatFileSize,
-    type FileItem,
-    type ViewType
+    type FileItem
   } from '$lib/stores/files';
 
   export let panelId: string;
@@ -43,11 +41,9 @@
   let showNewFileForm = false;
   let confirmDelete: string | null = null;
 
-  // Demo project ID - in production, this would come from project context
-  const DEMO_PROJECT_ID = 'demo-project';
-
+  // Start in root mode - navigate all projects
   onMount(() => {
-    setProject(DEMO_PROJECT_ID);
+    listFiles('/');
   });
 
   // Handlers

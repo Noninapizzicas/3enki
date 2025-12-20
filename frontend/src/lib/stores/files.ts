@@ -127,15 +127,16 @@ export const filesStore = writable<FilesStoreState>(initialState);
 // =============================================================================
 
 /**
- * Sets the current project context
+ * Sets the current project context (optional - can work in root mode)
  */
-export function setProject(projectId: string): void {
+export function setProject(projectId: string | null): void {
   filesStore.update(s => ({ ...s, projectId, currentPath: '/' }));
   listFiles('/');
 }
 
 /**
  * Lists files in a directory
+ * Works in root mode (no project) or project mode
  */
 export async function listFiles(path: string = '/'): Promise<void> {
   filesStore.update(s => ({ ...s, loading: true, error: null }));
@@ -144,14 +145,12 @@ export async function listFiles(path: string = '/'): Promise<void> {
     let projectId: string | null = null;
     filesStore.subscribe(s => { projectId = s.projectId; })();
 
-    if (!projectId) {
-      throw new Error('No project selected');
-    }
-
+    // Root mode: project_id is optional
     const response = await mqttRequest<{
-      project_id: string;
+      project_id: string | null;
       path: string;
       files: FileItem[];
+      root_mode: boolean;
     }>('files', 'list', { project_id: projectId, path });
 
     filesStore.update(s => ({
@@ -168,7 +167,7 @@ export async function listFiles(path: string = '/'): Promise<void> {
       searchActive: false
     }));
 
-    console.log('[Files] Listed:', response.data.files?.length || 0, 'items at', path);
+    console.log('[Files] Listed:', response.data.files?.length || 0, 'items at', path, response.data.root_mode ? '(root mode)' : '');
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     filesStore.update(s => ({ ...s, loading: false, error: errorMessage }));
@@ -205,6 +204,7 @@ export function navigateTo(path: string): void {
 
 /**
  * Opens a file for viewing/editing
+ * Works in root mode (no project) or project mode
  */
 export async function openFile(filePath: string): Promise<void> {
   filesStore.update(s => ({ ...s, loading: true, error: null }));
@@ -212,10 +212,6 @@ export async function openFile(filePath: string): Promise<void> {
   try {
     let projectId: string | null = null;
     filesStore.subscribe(s => { projectId = s.projectId; })();
-
-    if (!projectId) {
-      throw new Error('No project selected');
-    }
 
     // Determine file type by extension
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
@@ -315,7 +311,7 @@ export async function saveFile(): Promise<boolean> {
   let state: FilesStoreState = initialState;
   filesStore.subscribe(s => { state = s; })();
 
-  if (!state.projectId || !state.currentFilePath) {
+  if (!state.currentFilePath) {
     console.error('[Files] Cannot save: no file open');
     return false;
   }
@@ -362,11 +358,6 @@ export async function createFile(
   let state: FilesStoreState = initialState;
   filesStore.subscribe(s => { state = s; })();
 
-  if (!state.projectId) {
-    console.error('[Files] Cannot create: no project selected');
-    return false;
-  }
-
   filesStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
@@ -404,11 +395,6 @@ export async function createFile(
 export async function deleteFile(filePath: string): Promise<boolean> {
   let state: FilesStoreState = initialState;
   filesStore.subscribe(s => { state = s; })();
-
-  if (!state.projectId) {
-    console.error('[Files] Cannot delete: no project selected');
-    return false;
-  }
 
   filesStore.update(s => ({ ...s, loading: true, error: null }));
 
@@ -467,10 +453,6 @@ export async function searchFiles(query: string, searchContent: boolean = false)
   try {
     let projectId: string | null = null;
     filesStore.subscribe(s => { projectId = s.projectId; })();
-
-    if (!projectId) {
-      throw new Error('No project selected');
-    }
 
     const response = await mqttRequest<{
       query: string;

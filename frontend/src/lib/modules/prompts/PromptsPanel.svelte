@@ -487,8 +487,9 @@
               <div class="variables-grid">
                 {#each variables as varName}
                   <div class="variable-field">
-                    <label>{varName}</label>
+                    <label for="var-{varName}">{varName}</label>
                     <input
+                      id="var-{varName}"
                       type="text"
                       placeholder="Valor..."
                       value={$promptsStore.composerVariables[varName] || ''}
@@ -515,8 +516,10 @@
 
           <!-- Preview Modal -->
           {#if showPreview && previewResult}
-            <div class="preview-overlay" on:click={() => showPreview = false}>
-              <div class="preview-modal" on:click|stopPropagation>
+            <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+            <div class="preview-overlay" role="dialog" aria-modal="true" on:click={() => showPreview = false} on:keydown={(e) => e.key === 'Escape' && (showPreview = false)}>
+              <!-- svelte-ignore a11y-no-static-element-interactions -->
+              <div class="preview-modal" on:click|stopPropagation on:keydown|stopPropagation>
                 <div class="preview-header">
                   <h3>Preview del Prompt Final</h3>
                   <span class="token-count">~{previewResult.estimatedTokens} tokens</span>
@@ -585,7 +588,7 @@
           <div class="prompts-list">
             {#each filteredPrompts as prompt (prompt.id)}
               <div class="prompt-card" class:selected={selected?.id === prompt.id}>
-                <div class="prompt-main" on:click={() => handleSelectPrompt(prompt)}>
+                <button class="prompt-main" type="button" on:click={() => handleSelectPrompt(prompt)}>
                   <div class="prompt-header-row">
                     <span class="prompt-slot">{prompt.slot_icon}</span>
                     <span class="prompt-title">{prompt.title || prompt.name}</span>
@@ -598,7 +601,7 @@
                       <span class="prompt-tag">#{tag}</span>
                     {/each}
                   </div>
-                </div>
+                </button>
                 <div class="prompt-actions">
                   <button
                     class="action-btn"
@@ -646,8 +649,9 @@
         <div class="form">
           <!-- Name -->
           <div class="field">
-            <label class="label">Nombre* (kebab-case)</label>
+            <label class="label" for="editor-name">Nombre* (kebab-case)</label>
             <input
+              id="editor-name"
               type="text"
               class="input"
               placeholder="mi-prompt"
@@ -658,8 +662,8 @@
 
           <!-- Slot Type - Simplified select -->
           <div class="field">
-            <label class="label">Tipo de Slot</label>
-            <select class="input" bind:value={editorForm.slot_type}>
+            <label class="label" for="editor-slot">Tipo de Slot</label>
+            <select id="editor-slot" class="input" bind:value={editorForm.slot_type}>
               <option value="system">🧠 System</option>
               <option value="context">📋 Context</option>
               <option value="prefix">⬆️ Prefix</option>
@@ -670,8 +674,9 @@
 
           <!-- Content -->
           <div class="field">
-            <label class="label">Contenido*</label>
+            <label class="label" for="editor-content">Contenido*</label>
             <textarea
+              id="editor-content"
               class="textarea"
               rows="12"
               placeholder="Escribe tu prompt aquí..."
@@ -1213,6 +1218,11 @@
     padding: 0.625rem 0.75rem;
     cursor: pointer;
     min-width: 0;
+    background: transparent;
+    border: none;
+    text-align: left;
+    color: inherit;
+    font: inherit;
   }
 
   .prompt-header-row {
@@ -1350,110 +1360,6 @@
     resize: vertical;
     min-height: 120px;
     font-family: monospace;
-  }
-
-  .slot-types-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 0.25rem;
-  }
-
-  .slot-type-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.125rem;
-    padding: 0.5rem 0.25rem;
-    font-size: 0.625rem;
-    background: var(--_bg-surface);
-    border: 2px solid var(--_border);
-    border-radius: var(--_radius);
-    cursor: pointer;
-    transition: all 0.15s;
-    color: var(--_text-muted);
-  }
-
-  .slot-type-btn:hover {
-    border-color: var(--_primary);
-  }
-
-  .slot-type-btn.active {
-    border-color: var(--_primary);
-    background: rgba(59, 130, 246, 0.1);
-    color: var(--_text);
-  }
-
-  /* Tags */
-  .tags-input {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    padding: 0.375rem;
-    background: var(--_bg-surface);
-    border: 1px solid var(--_border);
-    border-radius: var(--_radius);
-  }
-
-  .tags-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-  }
-
-  .tag {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
-    background: var(--_primary);
-    color: white;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-  }
-
-  .tag-remove {
-    padding: 0;
-    background: transparent;
-    border: none;
-    color: white;
-    cursor: pointer;
-    font-size: 0.875rem;
-    line-height: 1;
-  }
-
-  .tag-input {
-    flex: 1;
-    min-width: 80px;
-    border: none !important;
-    background: transparent !important;
-    padding: 0.25rem !important;
-  }
-
-  /* Versions */
-  .versions-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    padding: 0.5rem;
-    background: var(--_bg-surface);
-    border-radius: var(--_radius);
-    margin-top: 0.5rem;
-  }
-
-  .version-item {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    padding: 0.25rem 0;
-  }
-
-  .version-number {
-    font-weight: 500;
-    color: var(--_primary);
-  }
-
-  .version-date {
-    color: var(--_text-muted);
   }
 
   /* ==========================================================================

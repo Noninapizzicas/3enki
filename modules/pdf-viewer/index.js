@@ -13,6 +13,7 @@ class PdfViewerModule {
     this.metrics = null;
     this.eventBus = null;
     this.config = null;
+    this.uiHandler = null;
 
     // State
     this.cache = new Map();
@@ -24,8 +25,12 @@ class PdfViewerModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.config = core.config || {};
+    this.uiHandler = core.uiHandler;
 
     this.logger.info('pdf-viewer.loading', { module: this.name });
+
+    // Register UI handlers
+    this.registerUIHandlers();
 
     // Subscribe to events
     const unsubView = await this.eventBus.subscribe(EVENTS.PDF.VIEW_REQUEST, this.handleViewRequest.bind(this));
@@ -427,6 +432,109 @@ class PdfViewerModule {
         }
       }
     }, this.config.cache_ttl);
+  }
+
+  // ==========================================
+  // UI Request/Response Handlers (MQTT)
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('pdf-viewer.ui_handlers.no_handler');
+      return;
+    }
+
+    this.uiHandler.register('pdf', 'view', this.handleUIView.bind(this));
+    this.uiHandler.register('pdf', 'metadata', this.handleUIMetadata.bind(this));
+    this.uiHandler.register('pdf', 'list', this.handleUIListPdfs.bind(this));
+
+    this.logger.info('pdf-viewer.ui_handlers.registered', {
+      handlers: ['pdf/view', 'pdf/metadata', 'pdf/list']
+    });
+  }
+
+  async handleUIView(data) {
+    const { project_id, file_path } = data || {};
+
+    if (!project_id || !file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, file_path);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    if (!fullPath.toLowerCase().endsWith('.pdf')) {
+      throw { status: 400, code: 'NOT_PDF', message: 'File must be a PDF' };
+    }
+
+    const stats = await fs.stat(fullPath);
+    if (this.config.max_pdf_size && stats.size > this.config.max_pdf_size) {
+      throw { status: 413, code: 'FILE_TOO_LARGE', message: `PDF too large. Maximum size: ${this.config.max_pdf_size} bytes` };
+    }
+
+    const buffer = await fs.readFile(fullPath);
+    const base64 = buffer.toString('base64');
+
+    return {
+      file_path,
+      size: stats.size,
+      size_formatted: this.formatBytes(stats.size),
+      modified: stats.mtime,
+      content: base64,
+      content_type: 'application/pdf'
+    };
+  }
+
+  async handleUIMetadata(data) {
+    const { project_id, file_path } = data || {};
+
+    if (!project_id || !file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, file_path);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    const stats = await fs.stat(fullPath);
+
+    return {
+      file_path,
+      filename: path.basename(file_path),
+      size: stats.size,
+      size_formatted: this.formatBytes(stats.size),
+      created: stats.birthtime,
+      modified: stats.mtime,
+      accessed: stats.atime
+    };
+  }
+
+  async handleUIListPdfs(data) {
+    const { project_id } = data || {};
+
+    if (!project_id) {
+      throw { status: 400, code: 'MISSING_PROJECT_ID', message: 'project_id is required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+    const pdfs = await this.findPdfsRecursive(projectPath);
+
+    return {
+      project_id,
+      pdfs,
+      count: pdfs.length
+    };
   }
 }
 

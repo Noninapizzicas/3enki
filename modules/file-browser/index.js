@@ -438,6 +438,29 @@ class FileBrowserModule {
 
   // Helper Methods
 
+  /**
+   * Gets the base path for file operations
+   * @param {string|null} project_id - Project ID or null for root mode
+   * @returns {string} Base path for file operations
+   */
+  async getBasePath(project_id) {
+    const projectsRoot = path.join(process.cwd(), 'data', 'projects');
+
+    // Ensure projects root exists
+    await fs.mkdir(projectsRoot, { recursive: true });
+
+    if (!project_id) {
+      // Root mode: return projects root directory
+      return projectsRoot;
+    }
+
+    // Project mode: return specific project directory
+    const projectDir = path.join(projectsRoot, project_id);
+    await fs.mkdir(projectDir, { recursive: true });
+
+    return projectDir;
+  }
+
   async getProjectPath(project_id) {
     // Get project path from project-manager
     const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
@@ -607,15 +630,12 @@ class FileBrowserModule {
   async handleUIList(data) {
     const { project_id, path: relativePath = '/', filter } = data || {};
 
-    if (!project_id) {
-      throw { status: 400, code: 'MISSING_PROJECT_ID', message: 'project_id is required' };
-    }
-
-    const projectPath = await this.getProjectPath(project_id);
+    // Root mode: navigate from data/projects/
+    const basePath = await this.getBasePath(project_id);
 
     let fullPath;
     try {
-      fullPath = this.validatePath(projectPath, relativePath);
+      fullPath = this.validatePath(basePath, relativePath);
     } catch (error) {
       throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
     }
@@ -623,24 +643,25 @@ class FileBrowserModule {
     const files = await this.scanDirectory(fullPath, filter);
 
     return {
-      project_id,
+      project_id: project_id || null,
       path: relativePath,
-      files
+      files,
+      root_mode: !project_id
     };
   }
 
   async handleUIRead(data) {
     const { project_id, file_path } = data || {};
 
-    if (!project_id || !file_path) {
-      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    if (!file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'file_path is required' };
     }
 
-    const projectPath = await this.getProjectPath(project_id);
+    const basePath = await this.getBasePath(project_id);
 
     let fullPath;
     try {
-      fullPath = this.validatePath(projectPath, file_path);
+      fullPath = this.validatePath(basePath, file_path);
     } catch (error) {
       throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
     }
@@ -690,15 +711,15 @@ class FileBrowserModule {
   async handleUICreate(data) {
     const { project_id, file_path, content = '', type = 'file' } = data || {};
 
-    if (!project_id || !file_path) {
-      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    if (!file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'file_path is required' };
     }
 
-    const projectPath = await this.getProjectPath(project_id);
+    const basePath = await this.getBasePath(project_id);
 
     let fullPath;
     try {
-      fullPath = this.validatePath(projectPath, file_path);
+      fullPath = this.validatePath(basePath, file_path);
     } catch (error) {
       throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
     }
@@ -713,7 +734,7 @@ class FileBrowserModule {
     }
 
     await this.eventBus.publish(EVENTS.FILE.CREATED, {
-      project_id,
+      project_id: project_id || null,
       file_path,
       type,
       timestamp: new Date().toISOString()
@@ -729,15 +750,15 @@ class FileBrowserModule {
   async handleUIDelete(data) {
     const { project_id, file_path } = data || {};
 
-    if (!project_id || !file_path) {
-      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    if (!file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'file_path is required' };
     }
 
-    const projectPath = await this.getProjectPath(project_id);
+    const basePath = await this.getBasePath(project_id);
 
     let fullPath;
     try {
-      fullPath = this.validatePath(projectPath, file_path);
+      fullPath = this.validatePath(basePath, file_path);
     } catch (error) {
       throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
     }
@@ -751,7 +772,7 @@ class FileBrowserModule {
     }
 
     await this.eventBus.publish(EVENTS.FILE.DELETED, {
-      project_id,
+      project_id: project_id || null,
       file_path,
       timestamp: new Date().toISOString()
     });
@@ -765,12 +786,12 @@ class FileBrowserModule {
   async handleUISearch(data) {
     const { project_id, query, search_content = false } = data || {};
 
-    if (!project_id || !query) {
-      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and query are required' };
+    if (!query) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'query is required' };
     }
 
-    const projectPath = await this.getProjectPath(project_id);
-    const results = await this.searchInDirectory(projectPath, query, search_content);
+    const basePath = await this.getBasePath(project_id);
+    const results = await this.searchInDirectory(basePath, query, search_content);
 
     return {
       query,

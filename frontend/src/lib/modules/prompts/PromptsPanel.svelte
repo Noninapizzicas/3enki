@@ -145,11 +145,15 @@
   // ==========================================================================
 
   function handleTabChange(tab: typeof activeTab) {
-    setActiveTab(tab);
+    // Reset editor when entering fresh (not from edit button)
+    if (tab === 'editor' && !editorForm.id) {
+      resetEditorForm();
+    }
     // Reset editor when switching away
     if (tab !== 'editor') {
       resetEditorForm();
     }
+    setActiveTab(tab);
   }
 
   // ==========================================================================
@@ -634,134 +638,50 @@
         <!-- Import button -->
         <div class="import-section">
           <button class="btn primary" on:click={handleImportClick}>
-            📄 Importar archivo (.txt, .md)
+            📄 Importar archivo
           </button>
-          <span class="import-hint">o rellena manualmente:</span>
+          <span class="import-hint">(.txt, .md) o escribe abajo</span>
         </div>
 
         <div class="form">
-          <!-- Name (solo para nuevo) -->
-          {#if !editorForm.id}
-            <div class="field">
-              <label class="label">Nombre* (kebab-case)</label>
-              <input
-                type="text"
-                class="input"
-                placeholder="mi-prompt-genial"
-                bind:value={editorForm.name}
-                pattern="^[a-z0-9-]+$"
-              />
-            </div>
-          {/if}
-
-          <!-- Title -->
+          <!-- Name -->
           <div class="field">
-            <label class="label">Título</label>
+            <label class="label">Nombre* (kebab-case)</label>
             <input
               type="text"
               class="input"
-              placeholder="Mi Prompt Genial"
-              bind:value={editorForm.title}
+              placeholder="mi-prompt"
+              bind:value={editorForm.name}
+              disabled={!!editorForm.id}
             />
           </div>
 
-          <!-- Slot Type -->
+          <!-- Slot Type - Simplified select -->
           <div class="field">
             <label class="label">Tipo de Slot</label>
-            <div class="slot-types-grid">
-              {#each SLOT_TYPES as slot}
-                <button
-                  type="button"
-                  class="slot-type-btn"
-                  class:active={editorForm.slot_type === slot}
-                  on:click={() => editorForm.slot_type = slot}
-                >
-                  <span>{getSlotIcon(slot)}</span>
-                  <span>{getSlotName(slot)}</span>
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          <!-- Description -->
-          <div class="field">
-            <label class="label">Descripción</label>
-            <input
-              type="text"
-              class="input"
-              placeholder="¿Qué hace este prompt?"
-              bind:value={editorForm.description}
-            />
+            <select class="input" bind:value={editorForm.slot_type}>
+              <option value="system">🧠 System</option>
+              <option value="context">📋 Context</option>
+              <option value="prefix">⬆️ Prefix</option>
+              <option value="suffix">⬇️ Suffix</option>
+              <option value="format">📄 Format</option>
+            </select>
           </div>
 
           <!-- Content -->
           <div class="field">
-            <label class="label">Contenido* (usa {"{{variable}}"} para variables)</label>
+            <label class="label">Contenido*</label>
             <textarea
               class="textarea"
-              rows="10"
-              placeholder="Escribe tu prompt aquí...
-
-Puedes usar variables como {{nombre}} o {{contexto}}"
+              rows="12"
+              placeholder="Escribe tu prompt aquí..."
               bind:value={editorForm.content}
             ></textarea>
           </div>
 
-          <!-- Tags -->
-          <div class="field">
-            <label class="label">Tags</label>
-            <div class="tags-input">
-              <div class="tags-list">
-                {#each editorForm.tags as tag}
-                  <span class="tag">
-                    #{tag}
-                    <button class="tag-remove" on:click={() => removeTag(tag)}>×</button>
-                  </span>
-                {/each}
-              </div>
-              <input
-                type="text"
-                class="input tag-input"
-                placeholder="Añadir tag..."
-                bind:value={editorForm.tagInput}
-                on:keydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-              />
-            </div>
-          </div>
-
-          <!-- Versions (solo si editando) -->
-          {#if editorForm.id}
-            <button
-              class="btn secondary small"
-              on:click={() => editorForm.id && handleViewVersions(editorForm.id)}
-            >
-              📜 Ver versiones
-            </button>
-
-            {#if showVersions && versions.length > 0}
-              <div class="versions-list">
-                {#each versions as v}
-                  <div class="version-item">
-                    <span class="version-number">v{v.version}</span>
-                    <span class="version-date">{new Date(v.created_at).toLocaleDateString()}</span>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          {/if}
-
           <!-- Actions -->
           <div class="actions">
-            {#if editorForm.id}
-              <button
-                class="btn danger"
-                on:click={handleDeletePrompt}
-                disabled={deleting || saving}
-              >
-                {deleting ? '⏳' : '🗑️'}
-              </button>
-            {/if}
-            <button class="btn secondary" on:click={handleCancelEdit} disabled={saving}>
+            <button class="btn secondary" on:click={handleCancelEdit}>
               Cancelar
             </button>
             <button
@@ -769,7 +689,7 @@ Puedes usar variables como {{nombre}} o {{contexto}}"
               on:click={handleSavePrompt}
               disabled={!editorForm.name || !editorForm.content || saving}
             >
-              {saving ? '⏳ Guardando...' : '💾 Guardar'}
+              {saving ? '⏳...' : '💾 Guardar'}
             </button>
           </div>
         </div>

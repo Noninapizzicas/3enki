@@ -359,6 +359,10 @@ class PdfViewerModule {
 
   async getProjectPath(project_id) {
     const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
+
+    // Ensure directory exists
+    await fs.mkdir(dataDir, { recursive: true });
+
     return dataDir;
   }
 
@@ -371,7 +375,11 @@ class PdfViewerModule {
    */
   validatePath(projectPath, relativePath) {
     const normalizedProjectPath = path.resolve(projectPath);
-    const fullPath = path.resolve(projectPath, relativePath || '');
+
+    // Strip leading slashes to prevent path.resolve from treating it as absolute
+    let safePath = (relativePath || '').replace(/^\/+/, '');
+
+    const fullPath = path.resolve(projectPath, safePath);
 
     if (!fullPath.startsWith(normalizedProjectPath + path.sep) && fullPath !== normalizedProjectPath) {
       throw new Error('Access denied: Path outside project directory');

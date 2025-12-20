@@ -441,6 +441,10 @@ class FileBrowserModule {
   async getProjectPath(project_id) {
     // Get project path from project-manager
     const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
+
+    // Ensure directory exists
+    await fs.mkdir(dataDir, { recursive: true });
+
     return dataDir;
   }
 
@@ -454,7 +458,11 @@ class FileBrowserModule {
    */
   validatePath(projectPath, relativePath) {
     const normalizedProjectPath = path.resolve(projectPath);
-    const fullPath = path.resolve(projectPath, relativePath || '');
+
+    // Strip leading slashes to prevent path.resolve from treating it as absolute
+    let safePath = (relativePath || '').replace(/^\/+/, '');
+
+    const fullPath = path.resolve(projectPath, safePath);
 
     // Ensure the resolved path is within the project directory
     if (!fullPath.startsWith(normalizedProjectPath + path.sep) && fullPath !== normalizedProjectPath) {

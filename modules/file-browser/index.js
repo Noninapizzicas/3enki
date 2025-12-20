@@ -13,6 +13,7 @@ class FileBrowserModule {
     this.metrics = null;
     this.eventBus = null;
     this.config = null;
+    this.uiHandler = null;
 
     // State
     this.unsubscribes = [];
@@ -26,8 +27,12 @@ class FileBrowserModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.config = core.config || {};  // Config viene del manifest
+    this.uiHandler = core.uiHandler;
 
     this.logger.info('file-browser.loading', { module: this.name });
+
+    // Register UI handlers
+    this.registerUIHandlers();
 
     // Subscribe to events
     const unsubList = await this.eventBus.subscribe(EVENTS.FILE.LIST_REQUEST, this.handleListRequest.bind(this));
@@ -568,6 +573,216 @@ class FileBrowserModule {
 
     await search(dirPath);
     return results;
+  }
+
+  // ==========================================
+  // UI Request/Response Handlers (MQTT)
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('file-browser.ui_handlers.no_handler');
+      return;
+    }
+
+    this.uiHandler.register('files', 'list', this.handleUIList.bind(this));
+    this.uiHandler.register('files', 'read', this.handleUIRead.bind(this));
+    this.uiHandler.register('files', 'create', this.handleUICreate.bind(this));
+    this.uiHandler.register('files', 'delete', this.handleUIDelete.bind(this));
+    this.uiHandler.register('files', 'search', this.handleUISearch.bind(this));
+
+    this.logger.info('file-browser.ui_handlers.registered', {
+      handlers: ['files/list', 'files/read', 'files/create', 'files/delete', 'files/search']
+    });
+  }
+
+  async handleUIList(data) {
+    const { project_id, path: relativePath = '/', filter } = data || {};
+
+    if (!project_id) {
+      throw { status: 400, code: 'MISSING_PROJECT_ID', message: 'project_id is required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, relativePath);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    const files = await this.scanDirectory(fullPath, filter);
+
+    return {
+      project_id,
+      path: relativePath,
+      files
+    };
+  }
+
+  async handleUIRead(data) {
+    const { project_id, file_path } = data || {};
+
+    if (!project_id || !file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, file_path);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    const stats = await fs.stat(fullPath);
+
+    // Check if it's an image
+    const ext = path.extname(file_path).toLowerCase();
+    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp'];
+
+    if (imageExts.includes(ext)) {
+      // Return image as base64
+      if (stats.size > 10 * 1024 * 1024) { // 10MB limit for images
+        throw { status: 413, code: 'FILE_TOO_LARGE', message: 'Image too large. Max size: 10MB' };
+      }
+      const buffer = await fs.readFile(fullPath);
+      const base64 = buffer.toString('base64');
+      const mimeType = this.getMimeType(ext);
+
+      return {
+        file_path,
+        type: 'image',
+        content: base64,
+        content_type: mimeType,
+        size: stats.size,
+        modified: stats.mtime
+      };
+    }
+
+    // Text file
+    if (stats.size > this.maxFileSize) {
+      throw { status: 413, code: 'FILE_TOO_LARGE', message: `File too large. Max size: ${this.maxFileSize / (1024 * 1024)}MB` };
+    }
+
+    const content = await fs.readFile(fullPath, 'utf-8');
+
+    return {
+      file_path,
+      type: 'text',
+      content,
+      extension: ext,
+      size: stats.size,
+      modified: stats.mtime
+    };
+  }
+
+  async handleUICreate(data) {
+    const { project_id, file_path, content = '', type = 'file' } = data || {};
+
+    if (!project_id || !file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, file_path);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    const dirPath = path.dirname(fullPath);
+    await fs.mkdir(dirPath, { recursive: true });
+
+    if (type === 'directory') {
+      await fs.mkdir(fullPath, { recursive: true });
+    } else {
+      await fs.writeFile(fullPath, content, 'utf-8');
+    }
+
+    await this.eventBus.publish(EVENTS.FILE.CREATED, {
+      project_id,
+      file_path,
+      type,
+      timestamp: new Date().toISOString()
+    });
+
+    return {
+      file_path,
+      type,
+      created: true
+    };
+  }
+
+  async handleUIDelete(data) {
+    const { project_id, file_path } = data || {};
+
+    if (!project_id || !file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, file_path);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    const stats = await fs.stat(fullPath);
+
+    if (stats.isDirectory()) {
+      await fs.rm(fullPath, { recursive: true, force: true });
+    } else {
+      await fs.unlink(fullPath);
+    }
+
+    await this.eventBus.publish(EVENTS.FILE.DELETED, {
+      project_id,
+      file_path,
+      timestamp: new Date().toISOString()
+    });
+
+    return {
+      file_path,
+      deleted: true
+    };
+  }
+
+  async handleUISearch(data) {
+    const { project_id, query, search_content = false } = data || {};
+
+    if (!project_id || !query) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and query are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+    const results = await this.searchInDirectory(projectPath, query, search_content);
+
+    return {
+      query,
+      results,
+      count: results.length
+    };
+  }
+
+  getMimeType(ext) {
+    const mimeTypes = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+      '.bmp': 'image/bmp'
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
   }
 }
 

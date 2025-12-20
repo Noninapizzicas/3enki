@@ -13,6 +13,7 @@ class TextEditorModule {
     this.metrics = null;
     this.eventBus = null;
     this.config = null;
+    this.uiHandler = null;
 
     // State
     this.unsubscribes = [];
@@ -23,8 +24,12 @@ class TextEditorModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.config = core.config || {};  // Config viene del manifest
+    this.uiHandler = core.uiHandler;
 
     this.logger.info('text-editor.loading', { module: this.name });
+
+    // Register UI handlers
+    this.registerUIHandlers();
 
     // Subscribe to events
     const unsubOpen = await this.eventBus.subscribe(EVENTS.EDITOR.OPEN_REQUEST, this.handleOpenRequest.bind(this));
@@ -434,6 +439,138 @@ class TextEditorModule {
     return {
       content: formatted,
       changed
+    };
+  }
+
+  // ==========================================
+  // UI Request/Response Handlers (MQTT)
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('text-editor.ui_handlers.no_handler');
+      return;
+    }
+
+    this.uiHandler.register('editor', 'open', this.handleUIOpen.bind(this));
+    this.uiHandler.register('editor', 'save', this.handleUISave.bind(this));
+    this.uiHandler.register('editor', 'validate', this.handleUIValidate.bind(this));
+    this.uiHandler.register('editor', 'format', this.handleUIFormat.bind(this));
+
+    this.logger.info('text-editor.ui_handlers.registered', {
+      handlers: ['editor/open', 'editor/save', 'editor/validate', 'editor/format']
+    });
+  }
+
+  async handleUIOpen(data) {
+    const { project_id, file_path } = data || {};
+
+    if (!project_id || !file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, file_path);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    const stats = await fs.stat(fullPath);
+    if (this.config.max_file_size && stats.size > this.config.max_file_size) {
+      throw { status: 413, code: 'FILE_TOO_LARGE', message: `File too large. Maximum size: ${this.config.max_file_size} bytes` };
+    }
+
+    const extension = path.extname(file_path).slice(1).toLowerCase();
+    if (this.config.supported_formats && !this.config.supported_formats.includes(extension)) {
+      throw { status: 400, code: 'UNSUPPORTED_FORMAT', message: `Unsupported format: ${extension}` };
+    }
+
+    const content = await fs.readFile(fullPath, 'utf-8');
+
+    return {
+      file_path,
+      content,
+      extension,
+      size: stats.size,
+      modified: stats.mtime,
+      readonly: false
+    };
+  }
+
+  async handleUISave(data) {
+    const { project_id, file_path, content } = data || {};
+
+    if (!project_id || !file_path || content === undefined) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id, file_path and content are required' };
+    }
+
+    const projectPath = await this.getProjectPath(project_id);
+
+    let fullPath;
+    try {
+      fullPath = this.validatePath(projectPath, file_path);
+    } catch (error) {
+      throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
+    }
+
+    // Validate JSON if applicable
+    const extension = path.extname(file_path).slice(1).toLowerCase();
+    if (extension === 'json') {
+      try {
+        JSON.parse(content);
+      } catch (error) {
+        throw { status: 400, code: 'INVALID_JSON', message: 'Invalid JSON: ' + error.message };
+      }
+    }
+
+    const dirPath = path.dirname(fullPath);
+    await fs.mkdir(dirPath, { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf-8');
+
+    const stats = await fs.stat(fullPath);
+
+    await this.eventBus.publish(EVENTS.EDITOR.SAVED, {
+      project_id,
+      file_path,
+      size: stats.size,
+      timestamp: new Date().toISOString()
+    });
+
+    return {
+      file_path,
+      saved: true,
+      size: stats.size,
+      modified: stats.mtime
+    };
+  }
+
+  async handleUIValidate(data) {
+    const { content, format } = data || {};
+
+    if (!content || !format) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'content and format are required' };
+    }
+
+    const validation = this.validateByFormat(content, format);
+
+    return validation;
+  }
+
+  async handleUIFormat(data) {
+    const { content, format } = data || {};
+
+    if (!content || !format) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'content and format are required' };
+    }
+
+    const formatted = this.formatByFormat(content, format);
+
+    return {
+      formatted: formatted.content,
+      changed: formatted.changed
     };
   }
 }

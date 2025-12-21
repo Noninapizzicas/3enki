@@ -54,10 +54,9 @@ class CredentialManagerModule {
       version: this.version
     });
 
-    // Configure env file path
-    this.envFilePath = path.resolve(
-      this.config.envFile || '.env'
-    );
+    // Configure env file path - use project root (2 levels up from module)
+    const projectRoot = path.resolve(__dirname, '..', '..');
+    this.envFilePath = path.join(projectRoot, this.config.envFile || '.env');
 
     // Load existing credentials
     await this.loadEnvFile();

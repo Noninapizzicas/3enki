@@ -94,7 +94,7 @@ class ConversationManagerModule {
       this.onListMessagesRequest.bind(this));
     this.unsubscribes.push(unsubMsgList);
 
-    const unsubSend = await this.eventBus.subscribe('conversation.send.request',
+    const unsubSend = await this.eventBus.subscribe(EVENTS.CONVERSATION.SEND_REQUEST,
       this.onSendMessageRequest.bind(this));
     this.unsubscribes.push(unsubSend);
 
@@ -1284,13 +1284,13 @@ class ConversationManagerModule {
         correlation_id
       );
 
-      await this.eventBus.publish('conversation.send.response', {
+      await this.eventBus.publish(EVENTS.CONVERSATION.SEND_RESPONSE, {
         request_id,
         success: true,
         ...result
       });
     } catch (error) {
-      await this.eventBus.publish('conversation.send.response', {
+      await this.eventBus.publish(EVENTS.CONVERSATION.SEND_RESPONSE, {
         request_id,
         success: false,
         error: error.message

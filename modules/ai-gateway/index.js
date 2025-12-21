@@ -5,6 +5,8 @@ const AnthropicProvider = require('./providers/anthropic-provider');
 const OpenAIProvider = require('./providers/openai-provider');
 const OllamaProvider = require('./providers/ollama-provider');
 
+const { EVENTS } = require('../../core/constants');
+
 /**
  * AI Gateway Module
  *
@@ -133,14 +135,14 @@ class AIGatewayModule {
   async subscribeToEvents() {
     // Handler para solicitudes de AI desde otros módulos via eventos
     // Escucha AMBOS eventos para compatibilidad
-    await this.eventBus.subscribe('ai.chat.request', this.onAIChatRequest.bind(this));
-    await this.eventBus.subscribe('ai.request', this.onAIRequestCreated.bind(this));
+    await this.eventBus.subscribe(EVENTS.AI.CHAT_REQUEST, this.onAIChatRequest.bind(this));
+    await this.eventBus.subscribe(EVENTS.AI.REQUEST, this.onAIRequestCreated.bind(this));
 
     // Handler para respuestas de credential-manager
-    await this.eventBus.subscribe('credential.resolve.response', this.onCredentialResponse.bind(this));
+    await this.eventBus.subscribe(EVENTS.CREDENTIAL.RESOLVE_RESPONSE, this.onCredentialResponse.bind(this));
 
     this.logger.info('ai-gateway.events.subscribed', {
-      events: ['ai.chat.request', 'ai.request', 'credential.resolve.response']
+      events: [EVENTS.AI.CHAT_REQUEST, EVENTS.AI.REQUEST, EVENTS.CREDENTIAL.RESOLVE_RESPONSE]
     });
   }
 
@@ -169,7 +171,7 @@ class AIGatewayModule {
       this.pendingCredentialRequests.set(requestId, { resolve, reject, timeout, providerName, cacheKey });
 
       // Publish request to credential-manager
-      this.eventBus.publish('credential.resolve.request', {
+      this.eventBus.publish(EVENTS.CREDENTIAL.RESOLVE_REQUEST, {
         provider: providerName.toUpperCase(),
         project_id: projectId,
         client_id: clientId,
@@ -272,7 +274,7 @@ class AIGatewayModule {
       }, { correlationId, projectId: project_id });
 
       // Publicar respuesta exitosa
-      await this.eventBus.publish('ai.chat.response', {
+      await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, {
         request_id,
         success: result.status === 200,
         message: result.data?.content,
@@ -300,7 +302,7 @@ class AIGatewayModule {
       });
 
       // Publicar error
-      await this.eventBus.publish('ai.chat.response', {
+      await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, {
         request_id,
         success: false,
         message: null,
@@ -353,7 +355,7 @@ class AIGatewayModule {
       }, { correlationId });
 
       // Publicar evento de completado con la respuesta
-      await this.eventBus.publish('ai.completion.completed', {
+      await this.eventBus.publish(EVENTS.AI.COMPLETION_COMPLETED, {
         provider: result.data?.provider || requestedProvider,
         model: result.data?.model,
         prompt_id: metadata?.prompt_id,
@@ -385,7 +387,7 @@ class AIGatewayModule {
       });
 
       // Publicar evento de error
-      await this.eventBus.publish('ai.completion.completed', {
+      await this.eventBus.publish(EVENTS.AI.COMPLETION_COMPLETED, {
         provider: requestedProvider,
         model,
         prompt_id: metadata?.prompt_id,
@@ -590,7 +592,7 @@ class AIGatewayModule {
 
       // Publish completion event
       if (this.config.analytics?.enabled && this.eventBus) {
-        this.eventBus.publish('ai.completion.completed', {
+        this.eventBus.publish(EVENTS.AI.COMPLETION_COMPLETED, {
           provider: providerName,
           model: result.model,
           prompt_id: metadata?.prompt_id,

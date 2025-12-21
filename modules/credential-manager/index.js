@@ -15,6 +15,8 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 
+const { EVENTS } = require('../../core/constants');
+
 class CredentialManagerModule {
   constructor() {
     this.name = 'credential-manager';
@@ -225,39 +227,39 @@ class CredentialManagerModule {
   async subscribeToEvents() {
     // Internal event subscriptions
     await this.eventBus.subscribe(
-      'credential.resolve.request',
+      EVENTS.CREDENTIAL.RESOLVE_REQUEST,
       this.onResolveRequest.bind(this)
     );
 
     // UI event subscriptions via eventBus (topics transformados)
     // Frontend publica a core/*/events/credential/state/request, etc.
     await this.eventBus.subscribe(
-      'credential.state.request',
+      EVENTS.CREDENTIAL.STATE_REQUEST,
       this.onStateRequest.bind(this)
     );
 
     await this.eventBus.subscribe(
-      'credential.create',
+      EVENTS.CREDENTIAL.CREATE,
       this.onCreateCredential.bind(this)
     );
 
     await this.eventBus.subscribe(
-      'credential.update',
+      EVENTS.CREDENTIAL.UPDATE,
       this.onUpdateCredential.bind(this)
     );
 
     await this.eventBus.subscribe(
-      'credential.delete',
+      EVENTS.CREDENTIAL.DELETE,
       this.onDeleteCredential.bind(this)
     );
 
     this.logger.info('credential-manager.eventbus.subscribed', {
       events: [
-        'credential.resolve.request',
-        'credential.state.request',
-        'credential.create',
-        'credential.update',
-        'credential.delete'
+        EVENTS.CREDENTIAL.RESOLVE_REQUEST,
+        EVENTS.CREDENTIAL.STATE_REQUEST,
+        EVENTS.CREDENTIAL.CREATE,
+        EVENTS.CREDENTIAL.UPDATE,
+        EVENTS.CREDENTIAL.DELETE
       ]
     });
   }
@@ -316,7 +318,7 @@ class CredentialManagerModule {
       this.updateCredentialMetrics();
 
       // Publish notification event
-      await this.eventBus.publish('credential.saved', {
+      await this.eventBus.publish(EVENTS.CREDENTIAL.SAVED, {
         key,
         provider,
         level,
@@ -372,7 +374,7 @@ class CredentialManagerModule {
 
       this.metrics.increment('credential.updated.total');
 
-      await this.eventBus.publish('credential.updated', {
+      await this.eventBus.publish(EVENTS.CREDENTIAL.UPDATED, {
         key,
         updated_at: new Date().toISOString()
       }, { correlationId });
@@ -424,7 +426,7 @@ class CredentialManagerModule {
       this.metrics.increment('credential.deleted.total');
       this.updateCredentialMetrics();
 
-      await this.eventBus.publish('credential.deleted', {
+      await this.eventBus.publish(EVENTS.CREDENTIAL.DELETED, {
         key,
         deleted_at: new Date().toISOString()
       }, { correlationId });
@@ -591,7 +593,7 @@ class CredentialManagerModule {
       this.updateCredentialMetrics();
 
       // Publish event
-      await this.eventBus.publish('credential.saved', {
+      await this.eventBus.publish(EVENTS.CREDENTIAL.SAVED, {
         key,
         provider,
         level,
@@ -674,7 +676,7 @@ class CredentialManagerModule {
       if (result.found) {
         this.metrics.increment('credential.resolved.total');
 
-        await this.eventBus.publish('credential.resolved', {
+        await this.eventBus.publish(EVENTS.CREDENTIAL.RESOLVED, {
           provider,
           resolved_from: result.resolvedFrom,
           key: result.key
@@ -705,7 +707,7 @@ class CredentialManagerModule {
       } else {
         this.metrics.increment('credential.resolve.failed.total');
 
-        await this.eventBus.publish('credential.resolve.failed', {
+        await this.eventBus.publish(EVENTS.CREDENTIAL.RESOLVE_FAILED, {
           provider,
           attempts: result.attempts
         }, { correlationId: context.correlationId });
@@ -840,7 +842,7 @@ class CredentialManagerModule {
 
       this.metrics.increment('credential.updated.total');
 
-      await this.eventBus.publish('credential.updated', {
+      await this.eventBus.publish(EVENTS.CREDENTIAL.UPDATED, {
         key,
         updated_at: new Date().toISOString()
       }, { correlationId: context.correlationId });
@@ -906,7 +908,7 @@ class CredentialManagerModule {
       this.metrics.increment('credential.deleted.total');
       this.updateCredentialMetrics();
 
-      await this.eventBus.publish('credential.deleted', {
+      await this.eventBus.publish(EVENTS.CREDENTIAL.DELETED, {
         key,
         deleted_at: new Date().toISOString()
       }, { correlationId: context.correlationId });
@@ -1087,7 +1089,7 @@ class CredentialManagerModule {
     const state = this.getUIState();
 
     // Publicar via eventBus → MQTT topic: core/*/events/credential/state
-    await this.eventBus.emit('credential.state', state);
+    await this.eventBus.emit(EVENTS.CREDENTIAL.STATE, state);
     this.logger.info('credential.state.published', {
       total: state.stats.total,
       correlation_id: correlationId
@@ -1541,7 +1543,7 @@ class CredentialManagerModule {
   // ==========================================
 
   async publishResolveResponse(requestId, success, provider, apiKey, resolvedFrom, error, correlationId) {
-    await this.eventBus.publish('credential.resolve.response', {
+    await this.eventBus.publish(EVENTS.CREDENTIAL.RESOLVE_RESPONSE, {
       request_id: requestId,
       success,
       provider,

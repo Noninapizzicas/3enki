@@ -30,22 +30,6 @@ export const moduleDefinitions: LazyModuleDefinition[] = [
     loader: () => import('./files').then(m => m.filesModule),
     dependencies: ['project']
   },
-  {
-    id: 'editor',
-    zone: 'work-bar',
-    order: 3,
-    icon: '✏️',
-    label: 'Editor',
-    loader: () => import('./editor').then(m => m.editorModule)
-  },
-  {
-    id: 'pdf',
-    zone: 'work-bar',
-    order: 4,
-    icon: '📄',
-    label: 'PDF',
-    loader: () => import('./pdf').then(m => m.pdfModule)
-  },
 
   // --- CHAT CONFIG (configuración del chat) ---
   {
@@ -112,4 +96,4 @@ export const criticalModules = ['project', 'provider'];
 /**
  * IDs de módulos pesados que se cargan en background
  */
-export const heavyModules = ['editor', 'pdf'];
+export const heavyModules: string[] = [];

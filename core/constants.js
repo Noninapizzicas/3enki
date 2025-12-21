@@ -52,38 +52,18 @@ const EVENTS = {
 
   // === CREDENTIAL ===
   CREDENTIAL: {
+    CREATE: 'credential/create',
+    DELETE: 'credential/delete',
     DELETED: 'credential.deleted',
     RESOLVED: 'credential.resolved',
     RESOLVE_FAILED: 'credential.resolve.failed',
     RESOLVE_REQUEST: 'credential.resolve.request',
     RESOLVE_RESPONSE: 'credential.resolve.response',
     SAVED: 'credential.saved',
+    STATE: 'credential/state',
+    STATE_REQUEST: 'credential/state/request',
+    UPDATE: 'credential/update',
     UPDATED: 'credential.updated',
-  },
-
-  // === CREDENTIAL/CREATE ===
-  CREDENTIAL/CREATE: {
-    : 'credential/create',
-  },
-
-  // === CREDENTIAL/DELETE ===
-  CREDENTIAL/DELETE: {
-    : 'credential/delete',
-  },
-
-  // === CREDENTIAL/STATE ===
-  CREDENTIAL/STATE: {
-    : 'credential/state',
-  },
-
-  // === CREDENTIAL/STATE/REQUEST ===
-  CREDENTIAL/STATE/REQUEST: {
-    : 'credential/state/request',
-  },
-
-  // === CREDENTIAL/UPDATE ===
-  CREDENTIAL/UPDATE: {
-    : 'credential/update',
   },
 
   // === DB ===
@@ -221,47 +201,23 @@ const EVENTS = {
 
   // === PROJECT ===
   PROJECT: {
+    ACTIVATE: 'project/activate',
     ACTIVATED: 'project.activated',
     ACTIVE_REQUEST: 'project.active.request',
     ACTIVE_RESPONSE: 'project.active.response',
+    CREATE: 'project/create',
     CREATED: 'project.created',
     DEACTIVATED: 'project.deactivated',
+    DELETE: 'project/delete',
     DELETED: 'project.deleted',
     GET_REQUEST: 'project.get.request',
     GET_RESPONSE: 'project.get.response',
     LIST_REQUEST: 'project.list.request',
     LIST_RESPONSE: 'project.list.response',
+    STATE: 'project/state',
+    STATE_REQUEST: 'project/state/request',
+    UPDATE: 'project/update',
     UPDATED: 'project.updated',
-  },
-
-  // === PROJECT/ACTIVATE ===
-  PROJECT/ACTIVATE: {
-    : 'project/activate',
-  },
-
-  // === PROJECT/CREATE ===
-  PROJECT/CREATE: {
-    : 'project/create',
-  },
-
-  // === PROJECT/DELETE ===
-  PROJECT/DELETE: {
-    : 'project/delete',
-  },
-
-  // === PROJECT/STATE ===
-  PROJECT/STATE: {
-    : 'project/state',
-  },
-
-  // === PROJECT/STATE/REQUEST ===
-  PROJECT/STATE/REQUEST: {
-    : 'project/state/request',
-  },
-
-  // === PROJECT/UPDATE ===
-  PROJECT/UPDATE: {
-    : 'project/update',
   },
 
   // === SCRATCH ===

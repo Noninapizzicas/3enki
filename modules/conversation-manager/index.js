@@ -466,6 +466,89 @@ class ConversationManagerModule {
     }));
   }
 
+  // ==================== PROMPT COMPOSER ====================
+
+  /**
+   * Compose a rich system prompt with all available context
+   * Supports template variables: {{project_name}}, {{tools_count}}, {{date}}, etc.
+   */
+  composeSystemPrompt(conversation, projectContext, tools) {
+    // Start with conversation's system prompt or default
+    let basePrompt = conversation.system_prompt || this.config.defaultSystemPrompt || '';
+
+    // Template variables available for substitution
+    const variables = {
+      project_name: projectContext?.project_name || 'Unknown Project',
+      project_description: projectContext?.project_description || '',
+      tools_count: tools?.length || 0,
+      file_count: projectContext?.storage_info?.file_count || 0,
+      date: new Date().toLocaleDateString(),
+      datetime: new Date().toISOString(),
+      conversation_title: conversation.title || 'Conversation'
+    };
+
+    // Substitute template variables {{variable_name}}
+    for (const [key, value] of Object.entries(variables)) {
+      const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
+      basePrompt = basePrompt.replace(regex, String(value));
+    }
+
+    // Build context sections
+    const sections = [];
+
+    // Add base prompt
+    if (basePrompt.trim()) {
+      sections.push(basePrompt.trim());
+    }
+
+    // Add project context if enabled
+    if (this.config.includeProjectContext && projectContext) {
+      const projectSection = [];
+      projectSection.push('## Project Context');
+      projectSection.push(`- **Project**: ${projectContext.project_name}`);
+
+      if (projectContext.project_description) {
+        projectSection.push(`- **Description**: ${projectContext.project_description}`);
+      }
+
+      if (this.config.includeStorageInfo && projectContext.storage_info) {
+        projectSection.push(`- **Files**: ${projectContext.storage_info.file_count} files (${this.formatBytes(projectContext.storage_info.total_size)})`);
+      }
+
+      sections.push(projectSection.join('\n'));
+    }
+
+    // Add tools info if enabled and tools are available
+    if (this.config.includeTools && tools && tools.length > 0) {
+      const toolsSection = [];
+      toolsSection.push('## Available Tools');
+      toolsSection.push(`You have access to ${tools.length} tool(s) that you can call to help the user:`);
+
+      for (const tool of tools) {
+        const name = tool.function?.name || tool.name;
+        const desc = tool.function?.description || tool.description || '';
+        toolsSection.push(`- **${name}**: ${desc}`);
+      }
+
+      toolsSection.push('\nUse these tools when appropriate to provide accurate and helpful responses.');
+      sections.push(toolsSection.join('\n'));
+    }
+
+    // Combine all sections
+    return sections.join('\n\n');
+  }
+
+  /**
+   * Format bytes to human readable string
+   */
+  formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
   // ==================== TOOL CALL EXECUTION ====================
 
   async onToolCallResponse(event) {
@@ -890,24 +973,10 @@ class ConversationManagerModule {
       // Build messages for AI
       const aiMessages = [];
 
-      // System prompt with project context
-      if (conversation.system_prompt) {
-        let systemContent = conversation.system_prompt;
-
-        if (this.config.includeProjectContext && projectContext) {
-          systemContent += `\n\nProject Context:\n- Project: ${projectContext.project_name}\n- Description: ${projectContext.project_description}`;
-
-          if (projectContext.storage_info) {
-            systemContent += `\n- Files: ${projectContext.storage_info.file_count} files, ${projectContext.storage_info.total_size} bytes`;
-          }
-        }
-
-        // Add tools info to system prompt
-        if (tools && tools.length > 0) {
-          systemContent += `\n\nYou have access to ${tools.length} tools/functions that you can call to help the user.`;
-        }
-
-        aiMessages.push({ role: 'system', content: systemContent });
+      // Compose rich system prompt with all context
+      const systemPrompt = this.composeSystemPrompt(conversation, projectContext, tools);
+      if (systemPrompt) {
+        aiMessages.push({ role: 'system', content: systemPrompt });
       }
 
       // Add conversation history

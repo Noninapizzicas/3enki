@@ -33,6 +33,12 @@ class ConversationManagerModule {
     this.pendingAIRequests = new Map();
     this.pendingProjectRequests = new Map();
     this.pendingStorageRequests = new Map();
+    this.pendingToolRequests = new Map();
+
+    // Tools cache (reloaded periodically)
+    this.toolsCache = null;
+    this.toolsCacheTime = 0;
+    this.toolsCacheTTL = 60000; // 1 minute
 
     // Unsubscribe functions
     this.unsubscribes = [];
@@ -62,6 +68,10 @@ class ConversationManagerModule {
     const unsubStorage = await this.eventBus.subscribe(EVENTS.STORAGE.INFO_RESPONSE,
       this.onStorageInfoResponse.bind(this));
     this.unsubscribes.push(unsubStorage);
+
+    const unsubTools = await this.eventBus.subscribe(EVENTS.TOOL.LIST_RESPONSE,
+      this.onToolListResponse.bind(this));
+    this.unsubscribes.push(unsubTools);
 
     // Subscribe to query events
     const unsubGet = await this.eventBus.subscribe(EVENTS.CONVERSATION.GET_REQUEST,
@@ -366,6 +376,86 @@ class ConversationManagerModule {
     } else {
       pending.resolve(null); // Optional
     }
+  }
+
+  async onToolListResponse(event) {
+    const { request_id, success, tools, count } = event;
+
+    const pending = this.pendingToolRequests.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingToolRequests.delete(request_id);
+
+    if (success) {
+      pending.resolve(tools || []);
+    } else {
+      pending.resolve([]); // Return empty array on failure
+    }
+  }
+
+  // ==================== TOOL LOADING ====================
+
+  /**
+   * Load available tools from tool-orchestrator
+   * Uses cache to avoid repeated requests
+   */
+  async loadAvailableTools(correlationId) {
+    // Check cache
+    if (this.toolsCache && (Date.now() - this.toolsCacheTime) < this.toolsCacheTTL) {
+      return this.toolsCache;
+    }
+
+    this.logger.debug({ correlationId }, 'Loading available tools from tool-orchestrator');
+
+    const requestId = crypto.randomUUID();
+
+    const toolsPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingToolRequests.delete(requestId);
+        this.logger.warn({ correlationId }, 'Tool list request timeout, continuing without tools');
+        resolve([]); // Don't fail, just return empty
+      }, this.config.toolTimeout || 5000);
+
+      this.pendingToolRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    await this.eventBus.publish(EVENTS.TOOL.LIST_REQUEST, {
+      request_id: requestId,
+      correlation_id: correlationId
+    });
+
+    const tools = await toolsPromise;
+
+    // Update cache
+    this.toolsCache = tools;
+    this.toolsCacheTime = Date.now();
+
+    this.logger.info({ correlationId, toolsCount: tools.length }, 'Tools loaded');
+
+    return tools;
+  }
+
+  /**
+   * Format tools for LLM (OpenAI function calling format)
+   */
+  formatToolsForLLM(tools) {
+    if (!tools || tools.length === 0) {
+      return null;
+    }
+
+    return tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.full_name,
+        description: tool.description || `Tool: ${tool.full_name}`,
+        parameters: tool.schema || {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }
+    }));
   }
 
   async loadConversationContext(conversationId, correlationId) {
@@ -678,6 +768,10 @@ class ConversationManagerModule {
       const conversationContext = await this.loadConversationContext(conversationId, correlationId);
       const projectContext = await this.loadProjectContext(conversation.project_id, correlationId);
 
+      // Load available tools
+      const rawTools = await this.loadAvailableTools(correlationId);
+      const tools = this.formatToolsForLLM(rawTools);
+
       // Build messages for AI
       const aiMessages = [];
 
@@ -693,6 +787,11 @@ class ConversationManagerModule {
           }
         }
 
+        // Add tools info to system prompt
+        if (tools && tools.length > 0) {
+          systemContent += `\n\nYou have access to ${tools.length} tools/functions that you can call to help the user.`;
+        }
+
         aiMessages.push({ role: 'system', content: systemContent });
       }
 
@@ -701,8 +800,8 @@ class ConversationManagerModule {
         aiMessages.push({ role: msg.role, content: msg.content });
       }
 
-      // Call AI
-      const aiResponse = await this.callAI(aiMessages, conversation, correlationId);
+      // Call AI with tools
+      const aiResponse = await this.callAI(aiMessages, conversation, tools, correlationId);
 
       // Create assistant message
       const assistantMessageId = crypto.randomUUID();
@@ -786,7 +885,7 @@ class ConversationManagerModule {
     }
   }
 
-  async callAI(messages, conversation, correlationId) {
+  async callAI(messages, conversation, tools, correlationId) {
     const requestId = crypto.randomUUID();
 
     const aiPromise = new Promise((resolve, reject) => {
@@ -798,10 +897,12 @@ class ConversationManagerModule {
       this.pendingAIRequests.set(requestId, { resolve, reject, timeout });
     });
 
+    this.logger.debug({ correlationId, requestId, toolsCount: tools?.length || 0 }, 'Calling AI with tools');
+
     await this.eventBus.publish(EVENTS.AI.CHAT_REQUEST, {
       request_id: requestId,
       messages,
-      tools: null, // TODO: Fase 2 - cargar tools disponibles
+      tools: tools || null,
       provider: conversation.provider || 'auto',
       model: conversation.model || null,
       temperature: conversation.temperature,

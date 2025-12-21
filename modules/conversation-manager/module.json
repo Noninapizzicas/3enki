@@ -78,6 +78,10 @@
         "event": "conversation.send.response",
         "description": "Response with AI message",
         "schema": { "$ref": "./schemas/events.json#/definitions/send_response" }
+      },
+      {
+        "event": "tool.list.request",
+        "description": "Request available tools from tool-orchestrator"
       }
     ],
     "subscribes": [
@@ -120,6 +124,11 @@
         "event": "storage.info.response",
         "description": "Storage info for project context",
         "handler": "onStorageInfoResponse"
+      },
+      {
+        "event": "tool.list.response",
+        "description": "Available tools list for function calling",
+        "handler": "onToolListResponse"
       }
     ]
   },
@@ -239,8 +248,10 @@
     "maxMessagesPerConversation": 10000,
     "dbTimeout": 10000,
     "aiTimeout": 60000,
+    "toolTimeout": 5000,
     "includeProjectContext": true,
     "includeStorageInfo": true,
+    "includeTools": true,
     "defaultSystemPrompt": "You are a helpful AI assistant. Answer questions accurately and concisely."
   }
 }

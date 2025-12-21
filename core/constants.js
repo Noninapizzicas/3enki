@@ -660,8 +660,8 @@ const MODULES = {
   'conversation-manager': {
     version: '1.0.0',
     events: {
-      publishes: ['ai.chat.request', 'conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response'],
-      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response'],
+      publishes: ['ai.chat.request', 'conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response', 'tool.list.request'],
+      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response', 'tool.list.response'],
     },
   },
   'credential-manager': {

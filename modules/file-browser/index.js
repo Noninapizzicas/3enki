@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -17,6 +18,9 @@ class FileBrowserModule {
 
     // State
     this.unsubscribes = [];
+
+    // Pending project list requests
+    this.pendingProjectRequests = new Map();
 
     // Limits
     this.maxFileSize = 50 * 1024 * 1024; // 50MB max file size for reading
@@ -49,6 +53,10 @@ class FileBrowserModule {
 
     const unsubSearch = await this.eventBus.subscribe(EVENTS.FILE.SEARCH_REQUEST, this.handleSearchRequest.bind(this));
     this.unsubscribes.push(unsubSearch);
+
+    // Subscribe to project list responses for enriching directory listings
+    const unsubProjectList = await this.eventBus.subscribe(EVENTS.PROJECT.LIST_RESPONSE, this.onProjectListResponse.bind(this));
+    this.unsubscribes.push(unsubProjectList);
 
     this.logger.info('file-browser.loaded', { module: this.name });
   }
@@ -632,6 +640,8 @@ class FileBrowserModule {
 
     // Root mode: navigate from data/projects/
     const basePath = await this.getBasePath(project_id);
+    const isRootMode = !project_id;
+    const isRootPath = relativePath === '/' || relativePath === '';
 
     let fullPath;
     try {
@@ -640,7 +650,12 @@ class FileBrowserModule {
       throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
     }
 
-    const files = await this.scanDirectory(fullPath, filter);
+    let files = await this.scanDirectory(fullPath, filter);
+
+    // In root mode at root path, enrich directories with project names
+    if (isRootMode && isRootPath) {
+      files = await this.enrichWithProjectNames(files);
+    }
 
     return {
       project_id: project_id || null,
@@ -812,6 +827,91 @@ class FileBrowserModule {
       '.bmp': 'image/bmp'
     };
     return mimeTypes[ext] || 'application/octet-stream';
+  }
+
+  // ==========================================
+  // Project Name Enrichment
+  // ==========================================
+
+  /**
+   * Handle project list responses from project-manager
+   */
+  onProjectListResponse(event) {
+    const eventData = event.data || event;
+    const { request_id, success, projects, error } = eventData;
+
+    const pending = this.pendingProjectRequests.get(request_id);
+    if (!pending) {
+      return; // Response for unknown/expired request
+    }
+
+    clearTimeout(pending.timeout);
+    this.pendingProjectRequests.delete(request_id);
+
+    if (success) {
+      pending.resolve(projects || []);
+    } else {
+      pending.reject(new Error(error || 'Failed to get project list'));
+    }
+  }
+
+  /**
+   * Request project list from project-manager via eventBus
+   */
+  async getProjectList() {
+    const requestId = crypto.randomUUID();
+
+    const projectPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingProjectRequests.delete(requestId);
+        reject(new Error('Project list request timeout'));
+      }, 5000);
+
+      this.pendingProjectRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    await this.eventBus.publish(EVENTS.PROJECT.LIST_REQUEST, {
+      request_id: requestId,
+      correlation_id: requestId
+    });
+
+    return await projectPromise;
+  }
+
+  /**
+   * Enriches directory listing with project names when in root mode
+   * @param {Array} files - List of file/directory items from scanDirectory
+   * @returns {Array} Files with displayName property added to directories that match project IDs
+   */
+  async enrichWithProjectNames(files) {
+    try {
+      const projects = await this.getProjectList();
+
+      // Create UUID → name mapping
+      const projectNameMap = new Map();
+      for (const project of projects) {
+        projectNameMap.set(project.id, project.name);
+      }
+
+      // Enrich directory items
+      return files.map(file => {
+        if (file.type === 'directory') {
+          const projectName = projectNameMap.get(file.name);
+          if (projectName) {
+            return {
+              ...file,
+              displayName: projectName,
+              projectId: file.name
+            };
+          }
+        }
+        return file;
+      });
+    } catch (error) {
+      this.logger.warn('file-browser.enrich-project-names.error', { error: error.message });
+      // Return files unchanged if we can't get project names
+      return files;
+    }
   }
 }
 

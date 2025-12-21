@@ -27,6 +27,9 @@ export interface FileItem {
   extension?: string | null;
   size: number;
   modified: string;
+  // Root mode enrichment for project directories
+  displayName?: string;
+  projectId?: string;
 }
 
 export interface FileContent {

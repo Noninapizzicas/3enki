@@ -345,6 +345,29 @@ class TextEditorModule {
 
   // Helper Methods
 
+  /**
+   * Gets the base path for file operations
+   * @param {string|null} project_id - Project ID or null for root mode
+   * @returns {string} Base path for file operations
+   */
+  async getBasePath(project_id) {
+    const projectsRoot = path.join(process.cwd(), 'data', 'projects');
+
+    // Ensure projects root exists
+    await fs.mkdir(projectsRoot, { recursive: true });
+
+    if (!project_id) {
+      // Root mode: return projects root directory
+      return projectsRoot;
+    }
+
+    // Project mode: return specific project directory
+    const projectDir = path.join(projectsRoot, project_id);
+    await fs.mkdir(projectDir, { recursive: true });
+
+    return projectDir;
+  }
+
   async getProjectPath(project_id) {
     const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
 
@@ -473,15 +496,15 @@ class TextEditorModule {
   async handleUIOpen(data) {
     const { project_id, file_path } = data || {};
 
-    if (!project_id || !file_path) {
-      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id and file_path are required' };
+    if (!file_path) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'file_path is required' };
     }
 
-    const projectPath = await this.getProjectPath(project_id);
+    const basePath = await this.getBasePath(project_id);
 
     let fullPath;
     try {
-      fullPath = this.validatePath(projectPath, file_path);
+      fullPath = this.validatePath(basePath, file_path);
     } catch (error) {
       throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
     }
@@ -511,15 +534,15 @@ class TextEditorModule {
   async handleUISave(data) {
     const { project_id, file_path, content } = data || {};
 
-    if (!project_id || !file_path || content === undefined) {
-      throw { status: 400, code: 'MISSING_PARAMS', message: 'project_id, file_path and content are required' };
+    if (!file_path || content === undefined) {
+      throw { status: 400, code: 'MISSING_PARAMS', message: 'file_path and content are required' };
     }
 
-    const projectPath = await this.getProjectPath(project_id);
+    const basePath = await this.getBasePath(project_id);
 
     let fullPath;
     try {
-      fullPath = this.validatePath(projectPath, file_path);
+      fullPath = this.validatePath(basePath, file_path);
     } catch (error) {
       throw { status: 403, code: 'ACCESS_DENIED', message: error.message };
     }

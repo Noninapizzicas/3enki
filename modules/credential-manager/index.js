@@ -1125,19 +1125,28 @@ class CredentialManagerModule {
       throw { status: 404, code: 'NOT_FOUND', message: 'Credential not found' };
     }
 
-    const provider = this.extractProvider(key);
-    const level = this.extractLevel(key);
-    const identifier = this.extractIdentifier(key);
+    const parsed = this.parseKey(key);
+    const provider = parsed?.provider || 'UNKNOWN';
+    const level = parsed?.level || 'UNKNOWN';
+    const identifier = parsed?.identifier || null;
+
+    // Provider icons
+    const providerIcons = {
+      'OPENAI': '🤖',
+      'DEEPSEEK': '🔮',
+      'ANTHROPIC': '🧠',
+      'OLLAMA': '🦙'
+    };
 
     return {
       credential: {
         key,
         provider,
         providerName: provider,
-        providerIcon: this.getProviderIcon(provider),
+        providerIcon: providerIcons[provider] || '🔑',
         level,
         identifier,
-        preview: this.maskValue(value)
+        preview: this.maskApiKey(value)
       }
     };
   }
@@ -1160,7 +1169,7 @@ class CredentialManagerModule {
     }
 
     // Generar key
-    const key = this.generateKey(provider, level, identifier);
+    const key = this.buildKey(provider, level, identifier);
 
     // Verificar si ya existe
     const existed = this.credentials.has(key);

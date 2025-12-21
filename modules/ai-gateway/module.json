@@ -7,10 +7,17 @@
     "ai-chat",
     "ai-completion",
     "streaming",
-    "cost-tracking"
+    "cost-tracking",
+    "function-calling"
+  ],
+  "publishes": [
+    "ai.chat.response",
+    "ai.completion.completed"
   ],
   "subscribes": [
-    "ai.request.created"
+    "ai.chat.request",
+    "ai.request",
+    "credential.resolve.response"
   ],
   "apis": [
     {

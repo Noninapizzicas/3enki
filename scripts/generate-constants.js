@@ -33,11 +33,18 @@ const moduleList = [];
 /**
  * Convierte nombre de evento a nombre de constante
  * 'tool.call.request' -> 'CALL_REQUEST'
+ * 'credential/create' -> 'CREATE' (eventos con /)
  */
 function eventToConstant(eventName) {
-  const parts = eventName.split('.');
+  // Normalizar: reemplazar "/" con "." para tratamiento uniforme
+  const normalized = eventName.replace(/\//g, '.');
+  const parts = normalized.split('.');
   // Quitar el primer segmento (dominio)
   const actionParts = parts.slice(1);
+  // Si no hay partes, usar el nombre completo
+  if (actionParts.length === 0 || actionParts.every(p => !p)) {
+    return normalized.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+  }
   return actionParts.join('_').toUpperCase();
 }
 
@@ -84,14 +91,17 @@ function moduleToDomain(moduleName) {
  * Extrae el dominio del nombre del evento
  * 'tool.call.request' -> 'TOOL'
  * 'menu-generator.conversation.created' -> 'MENU_GENERATOR'
+ * 'credential/create' -> 'CREDENTIAL' (eventos con /)
  */
 function getDomainFromEvent(eventName) {
-  const domain = eventName.split('.')[0];
+  // Normalizar: reemplazar "/" con "." para tratamiento uniforme
+  const normalized = eventName.replace(/\//g, '.');
+  const domain = normalized.split('.')[0];
   // Evitar dominios inválidos como identificadores JS
   if (domain === '*') return 'WILDCARD';
   if (/^\d/.test(domain)) return '_' + domain.toUpperCase();
-  // Convert hyphens to underscores for valid JS identifiers
-  return domain.replace(/-/g, '_').toUpperCase();
+  // Convert hyphens and slashes to underscores for valid JS identifiers
+  return domain.replace(/[-/]/g, '_').toUpperCase();
 }
 
 /**

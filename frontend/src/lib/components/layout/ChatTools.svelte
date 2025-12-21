@@ -3,21 +3,23 @@
    * ChatTools - Barra de herramientas del chat
    *
    * Zona: chat-tools
-   * Módulos: files, editor, pdf
+   * Módulos: files (unificado: explorador + editor + pdf + imágenes)
    *
    * Features:
-   * - Botones de herramientas
+   * - Botones de herramientas desde panels.ts
    * - Chips de adjuntos actuales
    */
 
-  import { chatToolsModules, appState, openPanel } from '$lib/ui-core';
+  import { openPanel } from '$lib/ui-core';
   import { attachments, removeAttachment } from '$lib/stores';
   import { Button, Chip } from '$lib/components/base';
+  import { getPanelsByZone } from '$lib/modules/panels';
 
-  function handleModuleClick(action: { type: string; panelId?: string; topic?: string; payload?: Record<string, unknown>; route?: string; handler?: () => void }) {
-    if (action.type === 'panel' && action.panelId) {
-      openPanel(action.panelId);
-    }
+  // Obtener paneles de chat-tools desde metadata
+  $: toolPanels = getPanelsByZone('chat-tools');
+
+  function handlePanelClick(panelId: string) {
+    openPanel(panelId);
   }
 
   function handleRemoveAttachment(event: CustomEvent<{ id: string }>) {
@@ -27,23 +29,17 @@
 
 <div class="chat-tools">
   <div class="tools">
-    {#each $chatToolsModules as module (module.manifest.id)}
-      {@const icon = module.getIcon ? module.getIcon($appState) : module.manifest.button.icon}
-      {@const badge = module.getBadge ? module.getBadge($appState) : null}
-
+    {#each toolPanels as panel (panel.id)}
       <Button
-        {icon}
-        {badge}
+        icon={panel.icon}
         size="sm"
-        on:click={() => handleModuleClick(module.manifest.button.action)}
-        title={module.manifest.name}
+        on:click={() => handlePanelClick(panel.id)}
+        title={panel.title}
       />
     {/each}
 
-    {#if $chatToolsModules.length === 0}
-      <Button icon="📂" size="sm" disabled title="Archivos" />
-      <Button icon="📄" size="sm" disabled title="Editor" />
-      <Button icon="📕" size="sm" disabled title="PDF" />
+    {#if toolPanels.length === 0}
+      <span class="empty">Sin herramientas</span>
     {/if}
   </div>
 
@@ -85,5 +81,11 @@
     flex-wrap: wrap;
     gap: 0.375rem;
     flex: 1;
+  }
+
+  .empty {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #a3a3a3);
+    font-style: italic;
   }
 </style>

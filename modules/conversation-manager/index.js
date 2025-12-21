@@ -33,6 +33,16 @@ class ConversationManagerModule {
     this.pendingAIRequests = new Map();
     this.pendingProjectRequests = new Map();
     this.pendingStorageRequests = new Map();
+    this.pendingToolRequests = new Map();
+    this.pendingToolCallRequests = new Map();
+
+    // Tools cache (reloaded periodically)
+    this.toolsCache = null;
+    this.toolsCacheTime = 0;
+    this.toolsCacheTTL = 60000; // 1 minute
+
+    // Tool call loop config
+    this.maxToolCallIterations = 10; // Prevent infinite loops
 
     // Unsubscribe functions
     this.unsubscribes = [];
@@ -63,6 +73,14 @@ class ConversationManagerModule {
       this.onStorageInfoResponse.bind(this));
     this.unsubscribes.push(unsubStorage);
 
+    const unsubTools = await this.eventBus.subscribe(EVENTS.TOOL.LIST_RESPONSE,
+      this.onToolListResponse.bind(this));
+    this.unsubscribes.push(unsubTools);
+
+    const unsubToolCall = await this.eventBus.subscribe(EVENTS.TOOL.CALL_RESPONSE,
+      this.onToolCallResponse.bind(this));
+    this.unsubscribes.push(unsubToolCall);
+
     // Subscribe to query events
     const unsubGet = await this.eventBus.subscribe(EVENTS.CONVERSATION.GET_REQUEST,
       this.onGetConversationRequest.bind(this));
@@ -76,7 +94,7 @@ class ConversationManagerModule {
       this.onListMessagesRequest.bind(this));
     this.unsubscribes.push(unsubMsgList);
 
-    const unsubSend = await this.eventBus.subscribe('conversation.send.request',
+    const unsubSend = await this.eventBus.subscribe(EVENTS.CONVERSATION.SEND_REQUEST,
       this.onSendMessageRequest.bind(this));
     this.unsubscribes.push(unsubSend);
 
@@ -366,6 +384,276 @@ class ConversationManagerModule {
     } else {
       pending.resolve(null); // Optional
     }
+  }
+
+  async onToolListResponse(event) {
+    const { request_id, success, tools, count } = event;
+
+    const pending = this.pendingToolRequests.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingToolRequests.delete(request_id);
+
+    if (success) {
+      pending.resolve(tools || []);
+    } else {
+      pending.resolve([]); // Return empty array on failure
+    }
+  }
+
+  // ==================== TOOL LOADING ====================
+
+  /**
+   * Load available tools from tool-orchestrator
+   * Uses cache to avoid repeated requests
+   */
+  async loadAvailableTools(correlationId) {
+    // Check cache
+    if (this.toolsCache && (Date.now() - this.toolsCacheTime) < this.toolsCacheTTL) {
+      return this.toolsCache;
+    }
+
+    this.logger.debug({ correlationId }, 'Loading available tools from tool-orchestrator');
+
+    const requestId = crypto.randomUUID();
+
+    const toolsPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingToolRequests.delete(requestId);
+        this.logger.warn({ correlationId }, 'Tool list request timeout, continuing without tools');
+        resolve([]); // Don't fail, just return empty
+      }, this.config.toolTimeout || 5000);
+
+      this.pendingToolRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    await this.eventBus.publish(EVENTS.TOOL.LIST_REQUEST, {
+      request_id: requestId,
+      correlation_id: correlationId
+    });
+
+    const tools = await toolsPromise;
+
+    // Update cache
+    this.toolsCache = tools;
+    this.toolsCacheTime = Date.now();
+
+    this.logger.info({ correlationId, toolsCount: tools.length }, 'Tools loaded');
+
+    return tools;
+  }
+
+  /**
+   * Format tools for LLM (OpenAI function calling format)
+   */
+  formatToolsForLLM(tools) {
+    if (!tools || tools.length === 0) {
+      return null;
+    }
+
+    return tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.full_name,
+        description: tool.description || `Tool: ${tool.full_name}`,
+        parameters: tool.schema || {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }
+    }));
+  }
+
+  // ==================== PROMPT COMPOSER ====================
+
+  /**
+   * Compose a rich system prompt with all available context
+   * Supports template variables: {{project_name}}, {{tools_count}}, {{date}}, etc.
+   */
+  composeSystemPrompt(conversation, projectContext, tools) {
+    // Start with conversation's system prompt or default
+    let basePrompt = conversation.system_prompt || this.config.defaultSystemPrompt || '';
+
+    // Template variables available for substitution
+    const variables = {
+      project_name: projectContext?.project_name || 'Unknown Project',
+      project_description: projectContext?.project_description || '',
+      tools_count: tools?.length || 0,
+      file_count: projectContext?.storage_info?.file_count || 0,
+      date: new Date().toLocaleDateString(),
+      datetime: new Date().toISOString(),
+      conversation_title: conversation.title || 'Conversation'
+    };
+
+    // Substitute template variables {{variable_name}}
+    for (const [key, value] of Object.entries(variables)) {
+      const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
+      basePrompt = basePrompt.replace(regex, String(value));
+    }
+
+    // Build context sections
+    const sections = [];
+
+    // Add base prompt
+    if (basePrompt.trim()) {
+      sections.push(basePrompt.trim());
+    }
+
+    // Add project context if enabled
+    if (this.config.includeProjectContext && projectContext) {
+      const projectSection = [];
+      projectSection.push('## Project Context');
+      projectSection.push(`- **Project**: ${projectContext.project_name}`);
+
+      if (projectContext.project_description) {
+        projectSection.push(`- **Description**: ${projectContext.project_description}`);
+      }
+
+      if (this.config.includeStorageInfo && projectContext.storage_info) {
+        projectSection.push(`- **Files**: ${projectContext.storage_info.file_count} files (${this.formatBytes(projectContext.storage_info.total_size)})`);
+      }
+
+      sections.push(projectSection.join('\n'));
+    }
+
+    // Add tools info if enabled and tools are available
+    if (this.config.includeTools && tools && tools.length > 0) {
+      const toolsSection = [];
+      toolsSection.push('## Available Tools');
+      toolsSection.push(`You have access to ${tools.length} tool(s) that you can call to help the user:`);
+
+      for (const tool of tools) {
+        const name = tool.function?.name || tool.name;
+        const desc = tool.function?.description || tool.description || '';
+        toolsSection.push(`- **${name}**: ${desc}`);
+      }
+
+      toolsSection.push('\nUse these tools when appropriate to provide accurate and helpful responses.');
+      sections.push(toolsSection.join('\n'));
+    }
+
+    // Combine all sections
+    return sections.join('\n\n');
+  }
+
+  /**
+   * Format bytes to human readable string
+   */
+  formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  // ==================== TOOL CALL EXECUTION ====================
+
+  async onToolCallResponse(event) {
+    const { request_id, success, result, error } = event;
+
+    const pending = this.pendingToolCallRequests.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingToolCallRequests.delete(request_id);
+
+    if (success) {
+      pending.resolve({ success: true, result });
+    } else {
+      pending.resolve({ success: false, error: error || 'Tool call failed' });
+    }
+  }
+
+  /**
+   * Execute a single tool call via tool-orchestrator
+   */
+  async executeToolCall(toolCall, correlationId) {
+    const requestId = crypto.randomUUID();
+    const toolName = toolCall.function?.name || toolCall.name;
+    let args = {};
+
+    try {
+      args = typeof toolCall.function?.arguments === 'string'
+        ? JSON.parse(toolCall.function.arguments)
+        : (toolCall.function?.arguments || toolCall.arguments || {});
+    } catch (e) {
+      this.logger.warn({ correlationId, toolName, error: e.message }, 'Failed to parse tool arguments');
+      return {
+        tool_call_id: toolCall.id,
+        success: false,
+        error: `Invalid arguments: ${e.message}`
+      };
+    }
+
+    this.logger.debug({ correlationId, toolName, requestId }, 'Executing tool call');
+
+    const toolPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingToolCallRequests.delete(requestId);
+        resolve({ success: false, error: 'Tool call timeout' });
+      }, this.config.toolCallTimeout || 30000);
+
+      this.pendingToolCallRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    await this.eventBus.publish(EVENTS.TOOL.CALL_REQUEST, {
+      request_id: requestId,
+      tool_name: toolName,
+      arguments: args,
+      correlation_id: correlationId
+    });
+
+    const result = await toolPromise;
+
+    this.logger.info({ correlationId, toolName, success: result.success }, 'Tool call completed');
+
+    return {
+      tool_call_id: toolCall.id,
+      ...result
+    };
+  }
+
+  /**
+   * Execute multiple tool calls in parallel
+   */
+  async executeToolCalls(toolCalls, correlationId) {
+    this.logger.info({ correlationId, count: toolCalls.length }, 'Executing tool calls');
+
+    const results = await Promise.all(
+      toolCalls.map(tc => this.executeToolCall(tc, correlationId))
+    );
+
+    return results;
+  }
+
+  /**
+   * Format tool results as messages for the LLM
+   */
+  formatToolResultsAsMessages(toolCalls, toolResults) {
+    const messages = [];
+
+    // First add the assistant message with tool_calls
+    messages.push({
+      role: 'assistant',
+      content: null,
+      tool_calls: toolCalls
+    });
+
+    // Then add tool results
+    for (const result of toolResults) {
+      messages.push({
+        role: 'tool',
+        tool_call_id: result.tool_call_id,
+        content: result.success
+          ? (typeof result.result === 'string' ? result.result : JSON.stringify(result.result))
+          : `Error: ${result.error}`
+      });
+    }
+
+    return messages;
   }
 
   async loadConversationContext(conversationId, correlationId) {
@@ -678,22 +966,17 @@ class ConversationManagerModule {
       const conversationContext = await this.loadConversationContext(conversationId, correlationId);
       const projectContext = await this.loadProjectContext(conversation.project_id, correlationId);
 
+      // Load available tools
+      const rawTools = await this.loadAvailableTools(correlationId);
+      const tools = this.formatToolsForLLM(rawTools);
+
       // Build messages for AI
       const aiMessages = [];
 
-      // System prompt with project context
-      if (conversation.system_prompt) {
-        let systemContent = conversation.system_prompt;
-
-        if (this.config.includeProjectContext && projectContext) {
-          systemContent += `\n\nProject Context:\n- Project: ${projectContext.project_name}\n- Description: ${projectContext.project_description}`;
-
-          if (projectContext.storage_info) {
-            systemContent += `\n- Files: ${projectContext.storage_info.file_count} files, ${projectContext.storage_info.total_size} bytes`;
-          }
-        }
-
-        aiMessages.push({ role: 'system', content: systemContent });
+      // Compose rich system prompt with all context
+      const systemPrompt = this.composeSystemPrompt(conversation, projectContext, tools);
+      if (systemPrompt) {
+        aiMessages.push({ role: 'system', content: systemPrompt });
       }
 
       // Add conversation history
@@ -701,10 +984,61 @@ class ConversationManagerModule {
         aiMessages.push({ role: msg.role, content: msg.content });
       }
 
-      // Call AI
-      const aiResponse = await this.callAI(aiMessages, conversation, correlationId);
+      // ==================== TOOL CALL LOOP ====================
+      let currentMessages = [...aiMessages];
+      let aiResponse = null;
+      let totalTokens = 0;
+      let totalCost = 0;
+      let iterations = 0;
+      const toolCallHistory = []; // Track all tool calls for metadata
 
-      // Create assistant message
+      while (iterations < this.maxToolCallIterations) {
+        iterations++;
+
+        // Call AI
+        aiResponse = await this.callAI(currentMessages, conversation, tools, correlationId);
+        totalTokens += aiResponse.tokens || 0;
+        totalCost += aiResponse.cost || 0;
+
+        // Check if AI wants to call tools
+        if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
+          this.logger.info({
+            correlationId,
+            iteration: iterations,
+            toolCallsCount: aiResponse.tool_calls.length,
+            tools: aiResponse.tool_calls.map(tc => tc.function?.name || tc.name)
+          }, 'AI requested tool calls');
+
+          // Execute all tool calls
+          const toolResults = await this.executeToolCalls(aiResponse.tool_calls, correlationId);
+
+          // Track tool calls for metadata
+          toolCallHistory.push({
+            iteration: iterations,
+            calls: aiResponse.tool_calls.map((tc, i) => ({
+              name: tc.function?.name || tc.name,
+              success: toolResults[i].success,
+              error: toolResults[i].error || null
+            }))
+          });
+
+          // Add tool call messages to conversation
+          const toolMessages = this.formatToolResultsAsMessages(aiResponse.tool_calls, toolResults);
+          currentMessages = [...currentMessages, ...toolMessages];
+
+          // Continue loop to get AI's response after tool execution
+          continue;
+        }
+
+        // AI provided final content, exit loop
+        break;
+      }
+
+      if (iterations >= this.maxToolCallIterations) {
+        this.logger.warn({ correlationId, conversationId }, 'Max tool call iterations reached');
+      }
+
+      // ==================== SAVE ASSISTANT MESSAGE ====================
       const assistantMessageId = crypto.randomUUID();
       const assistantNow = new Date().toISOString();
 
@@ -712,14 +1046,16 @@ class ConversationManagerModule {
         id: assistantMessageId,
         conversation_id: conversationId,
         role: 'assistant',
-        content: aiResponse.content,
+        content: aiResponse.content || '[No response content]',
         attachments: [],
-        tokens: aiResponse.tokens || null,
-        cost: aiResponse.cost || null,
+        tokens: totalTokens,
+        cost: totalCost,
         created_at: assistantNow,
         metadata: {
           model: aiResponse.model,
-          provider: aiResponse.provider
+          provider: aiResponse.provider,
+          tool_calls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
+          iterations: iterations > 1 ? iterations : undefined
         }
       };
 
@@ -731,10 +1067,10 @@ class ConversationManagerModule {
           assistantMessageId,
           conversationId,
           'assistant',
-          aiResponse.content,
+          assistantMessage.content,
           '[]',
-          aiResponse.tokens,
-          aiResponse.cost,
+          totalTokens,
+          totalCost,
           assistantNow,
           JSON.stringify(assistantMessage.metadata)
         ],
@@ -751,19 +1087,16 @@ class ConversationManagerModule {
         correlationId
       );
 
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('message.received.total');
-    // → Counter extracted from events
-      // REMOVED: this.metrics.timing('conversation.message.duration', Date.now() - startTime);
-
       await this.eventBus.publish(EVENTS.MESSAGE.RECEIVED, {
         message_id: assistantMessageId,
         conversation_id: conversationId,
         project_id: conversation.project_id,
-        content: aiResponse.content,
-        tokens: aiResponse.tokens,
-        cost: aiResponse.cost,
+        content: assistantMessage.content,
+        tokens: totalTokens,
+        cost: totalCost,
         model: aiResponse.model,
         provider: aiResponse.provider,
+        tool_calls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
         received_at: assistantNow
       });
 
@@ -786,7 +1119,7 @@ class ConversationManagerModule {
     }
   }
 
-  async callAI(messages, conversation, correlationId) {
+  async callAI(messages, conversation, tools, correlationId) {
     const requestId = crypto.randomUUID();
 
     const aiPromise = new Promise((resolve, reject) => {
@@ -798,9 +1131,12 @@ class ConversationManagerModule {
       this.pendingAIRequests.set(requestId, { resolve, reject, timeout });
     });
 
+    this.logger.debug({ correlationId, requestId, toolsCount: tools?.length || 0 }, 'Calling AI with tools');
+
     await this.eventBus.publish(EVENTS.AI.CHAT_REQUEST, {
       request_id: requestId,
       messages,
+      tools: tools || null,
       provider: conversation.provider || 'auto',
       model: conversation.model || null,
       temperature: conversation.temperature,
@@ -813,7 +1149,7 @@ class ConversationManagerModule {
   }
 
   async onAIChatResponse(event) {
-    const { request_id, success, message, tokens, cost, model, provider, error } = event;
+    const { request_id, success, message, content, tool_calls, tokens, cost, model, provider, error } = event;
 
     const pending = this.pendingAIRequests.get(request_id);
     if (!pending) return;
@@ -823,7 +1159,8 @@ class ConversationManagerModule {
 
     if (success) {
       pending.resolve({
-        content: message?.content || message,
+        content: content || message?.content || message,
+        tool_calls: tool_calls || null,
         tokens,
         cost,
         model,
@@ -947,13 +1284,13 @@ class ConversationManagerModule {
         correlation_id
       );
 
-      await this.eventBus.publish('conversation.send.response', {
+      await this.eventBus.publish(EVENTS.CONVERSATION.SEND_RESPONSE, {
         request_id,
         success: true,
         ...result
       });
     } catch (error) {
-      await this.eventBus.publish('conversation.send.response', {
+      await this.eventBus.publish(EVENTS.CONVERSATION.SEND_RESPONSE, {
         request_id,
         success: false,
         error: error.message

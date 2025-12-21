@@ -5,6 +5,8 @@ const AnthropicProvider = require('./providers/anthropic-provider');
 const OpenAIProvider = require('./providers/openai-provider');
 const OllamaProvider = require('./providers/ollama-provider');
 
+const { EVENTS } = require('../../core/constants');
+
 /**
  * AI Gateway Module
  *
@@ -132,13 +134,15 @@ class AIGatewayModule {
    */
   async subscribeToEvents() {
     // Handler para solicitudes de AI desde otros módulos via eventos
-    await this.eventBus.subscribe('ai.request', this.onAIRequestCreated.bind(this));
+    // Escucha AMBOS eventos para compatibilidad
+    await this.eventBus.subscribe(EVENTS.AI.CHAT_REQUEST, this.onAIChatRequest.bind(this));
+    await this.eventBus.subscribe(EVENTS.AI.REQUEST, this.onAIRequestCreated.bind(this));
 
     // Handler para respuestas de credential-manager
-    await this.eventBus.subscribe('credential.resolve.response', this.onCredentialResponse.bind(this));
+    await this.eventBus.subscribe(EVENTS.CREDENTIAL.RESOLVE_RESPONSE, this.onCredentialResponse.bind(this));
 
     this.logger.info('ai-gateway.events.subscribed', {
-      events: ['ai.request', 'credential.resolve.response']
+      events: [EVENTS.AI.CHAT_REQUEST, EVENTS.AI.REQUEST, EVENTS.CREDENTIAL.RESOLVE_RESPONSE]
     });
   }
 
@@ -167,7 +171,7 @@ class AIGatewayModule {
       this.pendingCredentialRequests.set(requestId, { resolve, reject, timeout, providerName, cacheKey });
 
       // Publish request to credential-manager
-      this.eventBus.publish('credential.resolve.request', {
+      this.eventBus.publish(EVENTS.CREDENTIAL.RESOLVE_REQUEST, {
         provider: providerName.toUpperCase(),
         project_id: projectId,
         client_id: clientId,
@@ -226,6 +230,94 @@ class AIGatewayModule {
   }
 
   /**
+   * Event Handler: ai.chat.request
+   * Handler principal para conversation-manager
+   * Publica ai.chat.response con el resultado
+   */
+  async onAIChatRequest(event) {
+    const {
+      request_id,
+      messages,
+      tools,
+      provider: requestedProvider,
+      model,
+      temperature,
+      max_tokens,
+      project_id,
+      correlation_id
+    } = event.payload || event;
+
+    const correlationId = correlation_id || event.correlationId;
+
+    this.logger.info('ai-gateway.chat.request.received', {
+      request_id,
+      provider: requestedProvider,
+      has_messages: !!messages,
+      has_tools: !!(tools && tools.length),
+      tools_count: tools?.length || 0,
+      project_id,
+      correlation_id: correlationId
+    });
+
+    try {
+      // Procesar la solicitud
+      const result = await this.handleChatCompletion({
+        body: {
+          messages,
+          tools,
+          provider: requestedProvider,
+          model,
+          temperature,
+          max_tokens,
+          metadata: { request_id, project_id }
+        }
+      }, { correlationId, projectId: project_id });
+
+      // Publicar respuesta exitosa
+      await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, {
+        request_id,
+        success: result.status === 200,
+        message: result.data?.content,
+        content: result.data?.content,
+        tool_calls: result.data?.tool_calls || null,
+        tokens: result.data?.usage?.total_tokens || 0,
+        cost: result.data?.cost || 0,
+        model: result.data?.model,
+        provider: result.data?.provider || requestedProvider,
+        error: result.status !== 200 ? result.data?.message : null
+      }, { correlationId });
+
+      this.logger.info('ai-gateway.chat.response.sent', {
+        request_id,
+        success: result.status === 200,
+        has_tool_calls: !!(result.data?.tool_calls),
+        correlation_id: correlationId
+      });
+
+    } catch (error) {
+      this.logger.error('ai-gateway.chat.request.error', {
+        request_id,
+        error: error.message,
+        correlation_id: correlationId
+      });
+
+      // Publicar error
+      await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, {
+        request_id,
+        success: false,
+        message: null,
+        content: null,
+        tool_calls: null,
+        tokens: 0,
+        cost: 0,
+        model: null,
+        provider: requestedProvider,
+        error: error.message
+      }, { correlationId });
+    }
+  }
+
+  /**
    * Event Handler: ai.request.created
    * Procesa solicitudes de IA enviadas por otros módulos via eventos
    */
@@ -263,7 +355,7 @@ class AIGatewayModule {
       }, { correlationId });
 
       // Publicar evento de completado con la respuesta
-      await this.eventBus.publish('ai.completion.completed', {
+      await this.eventBus.publish(EVENTS.AI.COMPLETION_COMPLETED, {
         provider: result.data?.provider || requestedProvider,
         model: result.data?.model,
         prompt_id: metadata?.prompt_id,
@@ -295,7 +387,7 @@ class AIGatewayModule {
       });
 
       // Publicar evento de error
-      await this.eventBus.publish('ai.completion.completed', {
+      await this.eventBus.publish(EVENTS.AI.COMPLETION_COMPLETED, {
         provider: requestedProvider,
         model,
         prompt_id: metadata?.prompt_id,
@@ -391,10 +483,12 @@ class AIGatewayModule {
   /**
    * API Handler: Chat Completion
    * Format: return { status, data }
+   * Supports tools for function calling
    */
   async handleChatCompletion(req, context) {
     try {
-      const { messages, provider: requestedProvider, model, temperature, max_tokens, top_p, metadata } = req.body || {};
+      const { messages, tools, provider: requestedProvider, model, temperature, max_tokens, top_p, metadata } = req.body || {};
+      const projectId = context?.projectId || metadata?.project_id;
 
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return {
@@ -404,6 +498,17 @@ class AIGatewayModule {
       }
 
       const startTime = Date.now();
+
+      // Opciones comunes para todos los providers
+      const chatOptions = {
+        model,
+        temperature,
+        max_tokens,
+        top_p,
+        tools: tools || null,
+        projectId,
+        retryConfig: this.config.retry
+      };
 
       // Determine provider
       let result;
@@ -420,7 +525,7 @@ class AIGatewayModule {
           };
         }
 
-        if (!await provider.isAvailable()) {
+        if (!await provider.isAvailable({ projectId })) {
           return {
             status: 503,
             data: { error: 'PROVIDER_NOT_AVAILABLE', message: `Provider '${requestedProvider}' not available` }
@@ -428,13 +533,7 @@ class AIGatewayModule {
         }
 
         providerName = requestedProvider;
-        result = await this.chatWithRetry(provider, messages, {
-          model,
-          temperature,
-          max_tokens,
-          top_p,
-          retryConfig: this.config.retry
-        });
+        result = await this.chatWithRetry(provider, messages, chatOptions);
       } else {
         // Auto fallback
         const providers = await this.getProvidersByPriority();
@@ -452,13 +551,7 @@ class AIGatewayModule {
         for (const { name, provider } of providers) {
           try {
             providerName = name;
-            result = await this.chatWithRetry(provider, messages, {
-              model,
-              temperature,
-              max_tokens,
-              top_p,
-              retryConfig: this.config.retry
-            });
+            result = await this.chatWithRetry(provider, messages, chatOptions);
 
             break; // Success, exit loop
           } catch (error) {
@@ -499,7 +592,7 @@ class AIGatewayModule {
 
       // Publish completion event
       if (this.config.analytics?.enabled && this.eventBus) {
-        this.eventBus.publish('ai.completion.completed', {
+        this.eventBus.publish(EVENTS.AI.COMPLETION_COMPLETED, {
           provider: providerName,
           model: result.model,
           prompt_id: metadata?.prompt_id,

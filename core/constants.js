@@ -52,12 +52,17 @@ const EVENTS = {
 
   // === CREDENTIAL ===
   CREDENTIAL: {
+    CREATE: 'credential/create',
+    DELETE: 'credential/delete',
     DELETED: 'credential.deleted',
     RESOLVED: 'credential.resolved',
     RESOLVE_FAILED: 'credential.resolve.failed',
     RESOLVE_REQUEST: 'credential.resolve.request',
     RESOLVE_RESPONSE: 'credential.resolve.response',
     SAVED: 'credential.saved',
+    STATE: 'credential/state',
+    STATE_REQUEST: 'credential/state/request',
+    UPDATE: 'credential/update',
     UPDATED: 'credential.updated',
   },
 
@@ -196,16 +201,22 @@ const EVENTS = {
 
   // === PROJECT ===
   PROJECT: {
+    ACTIVATE: 'project/activate',
     ACTIVATED: 'project.activated',
     ACTIVE_REQUEST: 'project.active.request',
     ACTIVE_RESPONSE: 'project.active.response',
+    CREATE: 'project/create',
     CREATED: 'project.created',
     DEACTIVATED: 'project.deactivated',
+    DELETE: 'project/delete',
     DELETED: 'project.deleted',
     GET_REQUEST: 'project.get.request',
     GET_RESPONSE: 'project.get.response',
     LIST_REQUEST: 'project.list.request',
     LIST_RESPONSE: 'project.list.response',
+    STATE: 'project/state',
+    STATE_REQUEST: 'project/state/request',
+    UPDATE: 'project/update',
     UPDATED: 'project.updated',
   },
 
@@ -352,7 +363,6 @@ const API_ROUTES = {
     UPDATE_CREDENTIAL: '/modules/credential-manager/credentials/:key',
     DELETE_CREDENTIAL: '/modules/credential-manager/credentials/:key',
     GET_LEVELS: '/modules/credential-manager/credentials/levels',
-    GET_U_I_STATE: '/modules/credential-manager/ui/state',
     TEST_CREDENTIAL: '/modules/credential-manager/ui/test',
     HEALTH_CHECK: '/modules/credential-manager/health',
     GET_METRICS: '/modules/credential-manager/metrics',
@@ -377,6 +387,22 @@ const API_ROUTES = {
     CREATE_FILE: '/modules/file-browser/files',
     DELETE_FILE: '/modules/file-browser/files',
     SEARCH_FILES: '/modules/file-browser/files/search',
+  },
+
+  LOG: {
+    BASE: '/modules/log-manager',
+    GET_LOGS: '/modules/log-manager/logs',
+    ADD_LOG: '/modules/log-manager/logs',
+    GET_STATS: '/modules/log-manager/stats',
+    GET_FILES: '/modules/log-manager/files',
+    CLEAR_LOGS: '/modules/log-manager/logs',
+    GET_ACTIVITIES: '/modules/log-manager/activities',
+    GET_ACTIVITY_STATS: '/modules/log-manager/activities/stats',
+    GET_MODULES: '/modules/log-manager/modules',
+    GET_MODULE_LOGS: '/modules/log-manager/modules/*/logs',
+    GET_MODULE_STATS: '/modules/log-manager/modules/*/stats',
+    GET_TEST_PAGE: '/modules/log-test/',
+    RUN_TEST: '/modules/log-test/test',
   },
 
   MENU: {
@@ -590,15 +616,15 @@ const MODULES = {
   'conversation-manager': {
     version: '1.0.0',
     events: {
-      publishes: ['ai.chat.request', 'conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response'],
-      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response'],
+      publishes: ['ai.chat.request', 'conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response', 'tool.list.request', 'tool.call.request'],
+      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response', 'tool.list.response', 'tool.call.response'],
     },
   },
   'credential-manager': {
     version: '2.0.0',
     events: {
-      publishes: ['credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolved', 'credential.resolve.failed', 'credential.resolve.response'],
-      subscribes: ['credential.resolve.request'],
+      publishes: ['credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolved', 'credential.resolve.failed', 'credential.resolve.response', 'credential/state'],
+      subscribes: ['credential.resolve.request', 'credential/state/request', 'credential/create', 'credential/update', 'credential/delete'],
     },
   },
   'dashboard': {
@@ -620,6 +646,20 @@ const MODULES = {
     events: {
       publishes: ['file.list.response', 'file.content.response', 'file.created', 'file.deleted', 'file.search.response'],
       subscribes: ['file.list.request', 'file.content.request', 'file.create.request', 'file.delete.request', 'file.search.request'],
+    },
+  },
+  'log-manager': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
+    },
+  },
+  'log-test': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
     },
   },
   'menu-generator': {
@@ -660,8 +700,8 @@ const MODULES = {
   'project-manager': {
     version: '2.0.0',
     events: {
-      publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response'],
-      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response'],
+      publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response', 'project/state'],
+      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response', 'project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate'],
     },
   },
   'prompt-manager': {

@@ -38,35 +38,17 @@ export const panels: Record<string, PanelDef> = {
     order: 1,
     loader: () => import('$lib/modules/project/ProjectPanel.svelte')
   },
+
+  // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',
     title: 'Archivos',
     icon: '🗂️',
     size: 'lg',
     position: 'left',
-    zone: 'work-bar',
-    order: 2,
+    zone: 'chat-tools',
+    order: 1,
     loader: () => import('$lib/modules/files/FilesPanel.svelte')
-  },
-  editor: {
-    id: 'editor',
-    title: 'Editor',
-    icon: '✏️',
-    size: 'lg',
-    position: 'center',
-    zone: 'work-bar',
-    order: 3,
-    loader: () => import('$lib/modules/editor/EditorPanel.svelte')
-  },
-  pdf: {
-    id: 'pdf',
-    title: 'PDF',
-    icon: '📄',
-    size: 'lg',
-    position: 'center',
-    zone: 'work-bar',
-    order: 4,
-    loader: () => import('$lib/modules/pdf/PdfPanel.svelte')
   },
 
   // === CHAT CONFIG ===

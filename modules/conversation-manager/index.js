@@ -801,6 +801,7 @@ class ConversationManagerModule {
     await this.eventBus.publish(EVENTS.AI.CHAT_REQUEST, {
       request_id: requestId,
       messages,
+      tools: null, // TODO: Fase 2 - cargar tools disponibles
       provider: conversation.provider || 'auto',
       model: conversation.model || null,
       temperature: conversation.temperature,

@@ -61,6 +61,31 @@ const EVENTS = {
     UPDATED: 'credential.updated',
   },
 
+  // === CREDENTIAL/CREATE ===
+  CREDENTIAL/CREATE: {
+    : 'credential/create',
+  },
+
+  // === CREDENTIAL/DELETE ===
+  CREDENTIAL/DELETE: {
+    : 'credential/delete',
+  },
+
+  // === CREDENTIAL/STATE ===
+  CREDENTIAL/STATE: {
+    : 'credential/state',
+  },
+
+  // === CREDENTIAL/STATE/REQUEST ===
+  CREDENTIAL/STATE/REQUEST: {
+    : 'credential/state/request',
+  },
+
+  // === CREDENTIAL/UPDATE ===
+  CREDENTIAL/UPDATE: {
+    : 'credential/update',
+  },
+
   // === DB ===
   DB: {
     CREATED: 'db.created',
@@ -209,6 +234,36 @@ const EVENTS = {
     UPDATED: 'project.updated',
   },
 
+  // === PROJECT/ACTIVATE ===
+  PROJECT/ACTIVATE: {
+    : 'project/activate',
+  },
+
+  // === PROJECT/CREATE ===
+  PROJECT/CREATE: {
+    : 'project/create',
+  },
+
+  // === PROJECT/DELETE ===
+  PROJECT/DELETE: {
+    : 'project/delete',
+  },
+
+  // === PROJECT/STATE ===
+  PROJECT/STATE: {
+    : 'project/state',
+  },
+
+  // === PROJECT/STATE/REQUEST ===
+  PROJECT/STATE/REQUEST: {
+    : 'project/state/request',
+  },
+
+  // === PROJECT/UPDATE ===
+  PROJECT/UPDATE: {
+    : 'project/update',
+  },
+
   // === SCRATCH ===
   SCRATCH: {
     DESIGN_CREATED: 'scratch.design.created',
@@ -352,7 +407,6 @@ const API_ROUTES = {
     UPDATE_CREDENTIAL: '/modules/credential-manager/credentials/:key',
     DELETE_CREDENTIAL: '/modules/credential-manager/credentials/:key',
     GET_LEVELS: '/modules/credential-manager/credentials/levels',
-    GET_U_I_STATE: '/modules/credential-manager/ui/state',
     TEST_CREDENTIAL: '/modules/credential-manager/ui/test',
     HEALTH_CHECK: '/modules/credential-manager/health',
     GET_METRICS: '/modules/credential-manager/metrics',
@@ -377,6 +431,22 @@ const API_ROUTES = {
     CREATE_FILE: '/modules/file-browser/files',
     DELETE_FILE: '/modules/file-browser/files',
     SEARCH_FILES: '/modules/file-browser/files/search',
+  },
+
+  LOG: {
+    BASE: '/modules/log-manager',
+    GET_LOGS: '/modules/log-manager/logs',
+    ADD_LOG: '/modules/log-manager/logs',
+    GET_STATS: '/modules/log-manager/stats',
+    GET_FILES: '/modules/log-manager/files',
+    CLEAR_LOGS: '/modules/log-manager/logs',
+    GET_ACTIVITIES: '/modules/log-manager/activities',
+    GET_ACTIVITY_STATS: '/modules/log-manager/activities/stats',
+    GET_MODULES: '/modules/log-manager/modules',
+    GET_MODULE_LOGS: '/modules/log-manager/modules/*/logs',
+    GET_MODULE_STATS: '/modules/log-manager/modules/*/stats',
+    GET_TEST_PAGE: '/modules/log-test/',
+    RUN_TEST: '/modules/log-test/test',
   },
 
   MENU: {
@@ -597,8 +667,8 @@ const MODULES = {
   'credential-manager': {
     version: '2.0.0',
     events: {
-      publishes: ['credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolved', 'credential.resolve.failed', 'credential.resolve.response'],
-      subscribes: ['credential.resolve.request'],
+      publishes: ['credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolved', 'credential.resolve.failed', 'credential.resolve.response', 'credential/state'],
+      subscribes: ['credential.resolve.request', 'credential/state/request', 'credential/create', 'credential/update', 'credential/delete'],
     },
   },
   'dashboard': {
@@ -620,6 +690,20 @@ const MODULES = {
     events: {
       publishes: ['file.list.response', 'file.content.response', 'file.created', 'file.deleted', 'file.search.response'],
       subscribes: ['file.list.request', 'file.content.request', 'file.create.request', 'file.delete.request', 'file.search.request'],
+    },
+  },
+  'log-manager': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
+    },
+  },
+  'log-test': {
+    version: '1.0.0',
+    events: {
+      publishes: [],
+      subscribes: [],
     },
   },
   'menu-generator': {
@@ -660,8 +744,8 @@ const MODULES = {
   'project-manager': {
     version: '2.0.0',
     events: {
-      publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response'],
-      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response'],
+      publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response', 'project/state'],
+      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response', 'project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate'],
     },
   },
   'prompt-manager': {

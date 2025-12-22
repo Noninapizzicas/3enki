@@ -1861,7 +1861,8 @@ class ConversationManagerModule {
     });
 
     const response = await projectPromise;
-    return response?.project?.id || null;
+    // project-manager returns active_project_id (not project.id)
+    return response?.active_project_id || null;
   }
 }
 

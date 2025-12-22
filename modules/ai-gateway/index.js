@@ -191,7 +191,7 @@ class AIGatewayModule {
    * Handle credential resolution response from credential-manager
    */
   async onCredentialResponse(event) {
-    const { request_id, success, api_key, resolved_from, error } = event.payload || event;
+    const { request_id, success, api_key, resolved_from, error } = event.data || event.payload || event;
 
     const pending = this.pendingCredentialRequests.get(request_id);
     if (!pending) {
@@ -235,6 +235,7 @@ class AIGatewayModule {
    * Publica ai.chat.response con el resultado
    */
   async onAIChatRequest(event) {
+    // EventEnvelope uses .data, legacy uses .payload
     const {
       request_id,
       messages,
@@ -245,7 +246,7 @@ class AIGatewayModule {
       max_tokens,
       project_id,
       correlation_id
-    } = event.payload || event;
+    } = event.data || event.payload || event;
 
     const correlationId = correlation_id || event.correlationId;
 
@@ -330,7 +331,7 @@ class AIGatewayModule {
       temperature,
       max_tokens,
       metadata
-    } = event.payload || {};
+    } = event.data || event.payload || {};
 
     const correlationId = event.correlationId || metadata?.correlationId;
 

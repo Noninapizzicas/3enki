@@ -458,7 +458,7 @@ class CredentialManagerModule {
       custom_id,
       request_id,
       correlation_id
-    } = event.payload || event;
+    } = event.data || event.payload || event;
 
     this.logger.info('credential.resolve.request.received', {
       provider,

@@ -13,7 +13,7 @@
   import { closePanel } from '$lib/stores/ui';
   import { publish } from '$lib/ui-core';
 
-  export let panelId: string;
+  export let _panelId: string;
 
   // Interfaz de conversación
   interface Conversation {

@@ -1699,17 +1699,28 @@ class ConversationManagerModule {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'Content is required' };
     }
 
+    // Get active project first
+    const projectId = await this.getActiveProjectId(correlationId);
+    if (!projectId) {
+      throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
+    }
+
     // If no conversationId, create a new conversation first
     let convId = conversationId;
     if (!convId) {
-      // Get active project
-      const projectId = await this.getActiveProjectId(correlationId);
-      if (!projectId) {
-        throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
-      }
-
       const conversation = await this.createConversation(projectId, null, {}, correlationId);
       convId = conversation.id;
+    } else {
+      // If conversationId provided, ensure it's loaded in memory
+      if (!this.conversations.has(convId)) {
+        this.logger.debug({ correlationId, conversationId: convId }, 'Conversation not in memory, loading from project');
+        await this.loadProjectConversations(projectId, correlationId);
+
+        // Verify it's now loaded
+        if (!this.conversations.has(convId)) {
+          throw { status: 404, code: 'CONVERSATION_NOT_FOUND', message: 'Conversation not found in active project' };
+        }
+      }
     }
 
     try {

@@ -1713,12 +1713,15 @@ class ConversationManagerModule {
     } else {
       // If conversationId provided, ensure it's loaded in memory
       if (!this.conversations.has(convId)) {
-        this.logger.debug({ correlationId, conversationId: convId }, 'Conversation not in memory, loading from project');
+        this.logger.debug({ correlationId, conversationId: convId }, 'Conversation not in memory, trying to load from project');
         await this.loadProjectConversations(projectId, correlationId);
 
-        // Verify it's now loaded
+        // If still not found, the frontend created a new ID that doesn't exist yet
+        // Create a new conversation with this ID
         if (!this.conversations.has(convId)) {
-          throw { status: 404, code: 'CONVERSATION_NOT_FOUND', message: 'Conversation not found in active project' };
+          this.logger.debug({ correlationId, conversationId: convId }, 'Conversation not in DB, creating new one');
+          const conversation = await this.createConversation(projectId, null, {}, correlationId);
+          convId = conversation.id;
         }
       }
     }

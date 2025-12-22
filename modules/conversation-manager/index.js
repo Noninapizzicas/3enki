@@ -21,6 +21,7 @@ class ConversationManagerModule {
     this.logger = null;
     this.metrics = null;
     this.eventBus = null;
+    this.uiHandler = null;  // UI Request/Response handler
     this.config = null;
 
     // In-memory state
@@ -52,9 +53,22 @@ class ConversationManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
     this.config = core.config || {};
 
     this.logger.info('conversation-manager.loading', { module: this.name });
+
+    // Register UI Request/Response handlers
+    if (this.uiHandler) {
+      this.uiHandler.register('conversation', 'send', this.handleUISend.bind(this));
+      this.uiHandler.register('conversation', 'load', this.handleUILoad.bind(this));
+      this.uiHandler.register('conversation', 'create', this.handleUICreate.bind(this));
+      this.uiHandler.register('conversation', 'list', this.handleUIList.bind(this));
+
+      this.logger.info('conversation-manager.ui_handlers.registered', {
+        handlers: ['send', 'load', 'create', 'list']
+      });
+    }
 
     // Subscribe to responses
     const unsubDb = await this.eventBus.subscribe(EVENTS.DB.QUERY_RESPONSE,
@@ -106,6 +120,14 @@ class ConversationManagerModule {
 
   async onUnload() {
     this.logger.info({ correlationId: 'system' }, 'Conversation Manager module unloading');
+
+    // Unregister UI handlers
+    if (this.uiHandler) {
+      this.uiHandler.unregister('conversation', 'send');
+      this.uiHandler.unregister('conversation', 'load');
+      this.uiHandler.unregister('conversation', 'create');
+      this.uiHandler.unregister('conversation', 'list');
+    }
 
     // Unsubscribe all
     for (const unsub of this.unsubscribes) {
@@ -1658,6 +1680,188 @@ class ConversationManagerModule {
         }
       }
     };
+  }
+
+  // ==================== UI REQUEST HANDLERS ====================
+  // These handle mqttRequest from frontend via ui/request/conversation/{action}
+
+  /**
+   * UI Handler: Send message
+   * Request: mqttRequest('conversation', 'send', { conversationId, content, attachments })
+   */
+  async handleUISend(data, request) {
+    const { conversationId, content, attachments } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, conversationId }, 'UI: Send message');
+
+    if (!content || content.trim().length === 0) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Content is required' };
+    }
+
+    // If no conversationId, create a new conversation first
+    let convId = conversationId;
+    if (!convId) {
+      // Get active project
+      const projectId = await this.getActiveProjectId(correlationId);
+      if (!projectId) {
+        throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
+      }
+
+      const conversation = await this.createConversation(projectId, null, {}, correlationId);
+      convId = conversation.id;
+    }
+
+    try {
+      const result = await this.sendMessage(
+        convId,
+        content,
+        null, // user_id
+        attachments || [],
+        {}, // metadata
+        correlationId
+      );
+
+      return {
+        conversationId: convId,
+        ...result
+      };
+    } catch (error) {
+      this.logger.error({ correlationId, conversationId: convId, error: error.message },
+        'UI: Failed to send message');
+      throw { status: 500, code: 'SEND_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Load conversation (get messages)
+   * Request: mqttRequest('conversation', 'load', { conversationId })
+   */
+  async handleUILoad(data, request) {
+    const { conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, conversationId }, 'UI: Load conversation');
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const messages = await this.getMessages(conversationId, 100, 0, correlationId);
+      const conversation = this.conversations.get(conversationId);
+
+      return {
+        conversationId,
+        messages,
+        conversation: conversation || null
+      };
+    } catch (error) {
+      this.logger.error({ correlationId, conversationId, error: error.message },
+        'UI: Failed to load conversation');
+      throw { status: 500, code: 'LOAD_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Create conversation
+   * Request: mqttRequest('conversation', 'create', { projectId?, title? })
+   */
+  async handleUICreate(data, request) {
+    const { projectId, title } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, projectId }, 'UI: Create conversation');
+
+    // Get project ID (use provided or active)
+    let projId = projectId;
+    if (!projId) {
+      projId = await this.getActiveProjectId(correlationId);
+      if (!projId) {
+        throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
+      }
+    }
+
+    try {
+      const conversation = await this.createConversation(
+        projId,
+        null, // user_id
+        { title: title || 'New Conversation' },
+        correlationId
+      );
+
+      return { conversation };
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: projId, error: error.message },
+        'UI: Failed to create conversation');
+      throw { status: 500, code: 'CREATE_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: List conversations
+   * Request: mqttRequest('conversation', 'list', { projectId? })
+   */
+  async handleUIList(data, request) {
+    const { projectId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, projectId }, 'UI: List conversations');
+
+    // Get project ID (use provided or active)
+    let projId = projectId;
+    if (!projId) {
+      projId = await this.getActiveProjectId(correlationId);
+      if (!projId) {
+        return { conversations: [], total: 0 };
+      }
+    }
+
+    try {
+      const conversations = await this.listConversations(projId, correlationId);
+
+      return {
+        conversations,
+        total: conversations.length
+      };
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: projId, error: error.message },
+        'UI: Failed to list conversations');
+      throw { status: 500, code: 'LIST_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * Helper: Get active project ID from project-manager
+   */
+  async getActiveProjectId(correlationId) {
+    const requestId = crypto.randomUUID();
+
+    // Subscribe to response first
+    let unsubActive;
+    const projectPromise = new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        if (unsubActive) unsubActive();
+        resolve(null);
+      }, 5000);
+
+      // Listen for active project response
+      this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE, (event) => {
+        if (event.request_id === requestId) {
+          clearTimeout(timeout);
+          if (unsubActive) unsubActive();
+          resolve(event);
+        }
+      }).then(unsub => { unsubActive = unsub; });
+    });
+
+    await this.eventBus.publish(EVENTS.PROJECT.ACTIVE_REQUEST, {
+      request_id: requestId,
+      correlation_id: correlationId
+    });
+
+    const response = await projectPromise;
+    return response?.project?.id || null;
   }
 }
 

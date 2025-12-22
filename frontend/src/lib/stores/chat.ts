@@ -9,7 +9,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { publish, subscribe } from '$lib/ui-core';
+import { publish, subscribe, mqttRequest } from '$lib/ui-core';
 import type { Message, Attachment } from '$lib/ui-core';
 import { attachments, clearAttachments } from './attachments';
 
@@ -87,19 +87,24 @@ export async function sendMessage(content: string): Promise<void> {
   // Limpiar adjuntos
   clearAttachments();
 
-  // Publicar via MQTT
-  publish('conversation/send', {
-    conversationId: convId,
-    content: userMessage.content,
-    attachments: currentAttachments.map(a => ({
-      type: a.type,
-      path: a.path,
-      name: a.name
-    }))
-  });
-
   // Marcar como streaming
   isStreaming.set(true);
+
+  // Enviar via mqttRequest (patrón ui/request/conversation/send)
+  try {
+    await mqttRequest('conversation', 'send', {
+      conversationId: convId,
+      content: userMessage.content,
+      attachments: currentAttachments.map(a => ({
+        type: a.type,
+        path: a.path,
+        name: a.name
+      }))
+    });
+  } catch (error) {
+    console.error('[chat] Error sending message:', error);
+    isStreaming.set(false);
+  }
 }
 
 /**
@@ -158,10 +163,20 @@ export function endStreaming(): void {
 /**
  * Cargar conversación
  */
-export function loadConversation(id: string): void {
+export async function loadConversation(id: string): Promise<void> {
   conversationId.set(id);
   messages.set([]);
-  publish('conversation/load', { conversationId: id });
+
+  try {
+    const response = await mqttRequest<{ messages: Message[] }>('conversation', 'load', {
+      conversationId: id
+    });
+    if (response?.messages) {
+      messages.set(response.messages);
+    }
+  } catch (error) {
+    console.error('[chat] Error loading conversation:', error);
+  }
 }
 
 /**

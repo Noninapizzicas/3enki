@@ -102,7 +102,7 @@ class DatabaseManagerModule {
       } catch (error) {
         this.logger.error('db.close.error', {
           project_id: projectId,
-          error: error.message
+          error: error?.message || String(error)
         });
       }
     }
@@ -124,8 +124,8 @@ class DatabaseManagerModule {
       });
     } catch (error) {
       this.logger.error('sql.js.init.failed', {
-        error: error.message,
-        stack: error.stack
+        error: error?.message || String(error),
+        stack: error?.stack
       });
       throw error;
     }
@@ -243,9 +243,10 @@ class DatabaseManagerModule {
         correlation_id
       );
     } catch (error) {
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('query.request.error', {
         project_id,
-        error: error.message,
+        error: errorMsg,
         correlation_id
       });
 
@@ -258,7 +259,7 @@ class DatabaseManagerModule {
         request_id,
         false,
         null,
-        error.message,
+        errorMsg,
         correlation_id
       );
     }
@@ -335,9 +336,10 @@ class DatabaseManagerModule {
         initialized_at: new Date().toISOString()
       }, { correlationId: correlation_id });
     } catch (error) {
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('schema.init.request.error', {
         project_id,
-        error: error.message,
+        error: errorMsg,
         correlation_id
       });
 
@@ -348,7 +350,7 @@ class DatabaseManagerModule {
         project_id,
         request_id,
         false,
-        error.message,
+        errorMsg,
         correlation_id
       );
     }
@@ -411,8 +413,9 @@ class DatabaseManagerModule {
         }
       };
     } catch (error) {
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('databases.list.error', {
-        error: error.message,
+        error: errorMsg,
         correlation_id: context.correlationId
       });
 
@@ -421,7 +424,7 @@ class DatabaseManagerModule {
         data: {
           success: false,
           error: 'Failed to list databases',
-          message: error.message
+          message: errorMsg
         }
       };
     }
@@ -490,9 +493,10 @@ class DatabaseManagerModule {
     // → Counter extracted from events
     // → Use error field in db.query.completed
 
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('query.execute.error', {
         project_id: projectId,
-        error: error.message,
+        error: errorMsg,
         correlation_id: context.correlationId
       });
 
@@ -502,7 +506,7 @@ class DatabaseManagerModule {
           success: false,
           project_id: projectId,
           error: 'Query execution failed',
-          message: error.message
+          message: errorMsg
         }
       };
     }
@@ -545,9 +549,10 @@ class DatabaseManagerModule {
         }
       };
     } catch (error) {
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('schema.get.error', {
         project_id: projectId,
-        error: error.message,
+        error: errorMsg,
         correlation_id: context.correlationId
       });
 
@@ -557,7 +562,7 @@ class DatabaseManagerModule {
           success: false,
           project_id: projectId,
           error: 'Failed to retrieve schema',
-          message: error.message
+          message: errorMsg
         }
       };
     }
@@ -604,9 +609,10 @@ class DatabaseManagerModule {
       // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.schema.init.errors');
     // → Counter extracted from events
 
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('schema.init.error', {
         project_id: projectId,
-        error: error.message,
+        error: errorMsg,
         correlation_id: context.correlationId
       });
 
@@ -616,7 +622,7 @@ class DatabaseManagerModule {
           success: false,
           project_id: projectId,
           error: 'Schema initialization failed',
-          message: error.message
+          message: errorMsg
         }
       };
     }
@@ -679,9 +685,10 @@ class DatabaseManagerModule {
         };
       }
     } catch (error) {
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('db.delete.error', {
         project_id: projectId,
-        error: error.message,
+        error: errorMsg,
         correlation_id: context.correlationId
       });
 
@@ -691,7 +698,7 @@ class DatabaseManagerModule {
           success: false,
           project_id: projectId,
           error: 'Failed to delete database',
-          message: error.message
+          message: errorMsg
         }
       };
     }
@@ -735,9 +742,10 @@ class DatabaseManagerModule {
         }
       };
     } catch (error) {
+      const errorMsg = error?.message || String(error) || 'Unknown database error';
       this.logger.error('tables.list.error', {
         project_id: projectId,
-        error: error.message,
+        error: errorMsg,
         correlation_id: context.correlationId
       });
 
@@ -747,7 +755,7 @@ class DatabaseManagerModule {
           success: false,
           project_id: projectId,
           error: 'Failed to list tables',
-          message: error.message
+          message: errorMsg
         }
       };
     }
@@ -843,7 +851,7 @@ class DatabaseManagerModule {
     } catch (error) {
       this.logger.error('db.load.error', {
         project_id: projectId,
-        error: error.message
+        error: error?.message || String(error)
       });
       throw error;
     }
@@ -884,7 +892,7 @@ class DatabaseManagerModule {
     } catch (error) {
       this.logger.error('db.save.error', {
         project_id: projectId,
-        error: error.message
+        error: error?.message || String(error)
       });
 
       // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.save.errors');

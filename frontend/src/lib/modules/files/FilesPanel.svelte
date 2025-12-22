@@ -28,7 +28,7 @@
     type FileItem
   } from '$lib/stores/files';
 
-  export let panelId: string;
+  export let _panelId: string;
 
   // Subscribe to store
   let state = $filesStore;

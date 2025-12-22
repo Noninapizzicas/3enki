@@ -32,7 +32,7 @@
   } from '$lib/stores/credentials';
   import { closePanel } from '$lib/stores';
 
-  export let panelId: string;
+  export let _panelId: string;
 
   // ==========================================================================
   // STATE

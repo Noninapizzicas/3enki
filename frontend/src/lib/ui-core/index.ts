@@ -69,3 +69,19 @@ export {
   loadedModules,
   activeModule
 } from './lazy-registry';
+
+// MQTT Request/Response
+export {
+  mqttRequest,
+  listRequest,
+  getRequest,
+  createRequest,
+  updateRequest,
+  deleteRequest,
+  cancelRequest,
+  cancelAllRequests,
+  getPendingCount,
+  MqttTimeoutError,
+  MqttRequestError,
+  MqttNotConnectedError
+} from './mqtt-request';

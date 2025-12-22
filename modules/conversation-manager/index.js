@@ -1699,17 +1699,31 @@ class ConversationManagerModule {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'Content is required' };
     }
 
+    // Get active project first
+    const projectId = await this.getActiveProjectId(correlationId);
+    if (!projectId) {
+      throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
+    }
+
     // If no conversationId, create a new conversation first
     let convId = conversationId;
     if (!convId) {
-      // Get active project
-      const projectId = await this.getActiveProjectId(correlationId);
-      if (!projectId) {
-        throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
-      }
-
       const conversation = await this.createConversation(projectId, null, {}, correlationId);
       convId = conversation.id;
+    } else {
+      // If conversationId provided, ensure it's loaded in memory
+      if (!this.conversations.has(convId)) {
+        this.logger.debug({ correlationId, conversationId: convId }, 'Conversation not in memory, trying to load from project');
+        await this.loadProjectConversations(projectId, correlationId);
+
+        // If still not found, the frontend created a new ID that doesn't exist yet
+        // Create a new conversation with this ID
+        if (!this.conversations.has(convId)) {
+          this.logger.debug({ correlationId, conversationId: convId }, 'Conversation not in DB, creating new one');
+          const conversation = await this.createConversation(projectId, null, {}, correlationId);
+          convId = conversation.id;
+        }
+      }
     }
 
     try {

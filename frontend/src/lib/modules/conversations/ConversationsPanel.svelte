@@ -16,7 +16,7 @@
     createConversation,
     selectConversation,
     hasActiveConversation,
-    activeProjectId
+    activeProjectIdMqtt
   } from '$lib/stores';
   import { openPanel } from '$lib/stores/ui';
 
@@ -38,7 +38,7 @@
   // ==========================================================================
 
   $: loading = $conversationsStore.loading;
-  $: projectId = $activeProjectId;
+  $: projectId = $activeProjectIdMqtt;
   $: hasProject = !!projectId;
   $: hasConversation = $hasActiveConversation;
 

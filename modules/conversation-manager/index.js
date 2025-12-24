@@ -64,9 +64,12 @@ class ConversationManagerModule {
       this.uiHandler.register('conversation', 'load', this.handleUILoad.bind(this));
       this.uiHandler.register('conversation', 'create', this.handleUICreate.bind(this));
       this.uiHandler.register('conversation', 'list', this.handleUIList.bind(this));
+      this.uiHandler.register('conversation', 'get', this.handleUIGet.bind(this));
+      this.uiHandler.register('conversation', 'update', this.handleUIUpdate.bind(this));
+      this.uiHandler.register('conversation', 'delete', this.handleUIDelete.bind(this));
 
       this.logger.info('conversation-manager.ui_handlers.registered', {
-        handlers: ['send', 'load', 'create', 'list']
+        handlers: ['send', 'load', 'create', 'list', 'get', 'update', 'delete']
       });
     }
 
@@ -127,6 +130,9 @@ class ConversationManagerModule {
       this.uiHandler.unregister('conversation', 'load');
       this.uiHandler.unregister('conversation', 'create');
       this.uiHandler.unregister('conversation', 'list');
+      this.uiHandler.unregister('conversation', 'get');
+      this.uiHandler.unregister('conversation', 'update');
+      this.uiHandler.unregister('conversation', 'delete');
     }
 
     // Unsubscribe all
@@ -1843,6 +1849,122 @@ class ConversationManagerModule {
         'UI: Failed to list conversations');
       throw { status: 500, code: 'LIST_ERROR', message: error.message };
     }
+  }
+
+  /**
+   * UI Handler: Get conversation with messages
+   * Request: mqttRequest('conversation', 'get', { conversationId })
+   */
+  async handleUIGet(data, request) {
+    const { conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, conversationId }, 'UI: Get conversation');
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      // Ensure conversation is loaded
+      const conversation = this.conversations.get(conversationId);
+      if (!conversation) {
+        // Try to load from project
+        const projectId = await this.getActiveProjectId(correlationId);
+        if (projectId) {
+          await this.loadProjectConversations(projectId, correlationId);
+        }
+
+        const conv = this.conversations.get(conversationId);
+        if (!conv) {
+          throw { status: 404, code: 'NOT_FOUND', message: 'Conversation not found' };
+        }
+      }
+
+      const conv = this.conversations.get(conversationId);
+      const messages = await this.getMessages(conversationId, 100, 0, correlationId);
+
+      return {
+        conversation: conv,
+        messages
+      };
+    } catch (error) {
+      if (error.status) throw error;
+      this.logger.error({ correlationId, conversationId, error: error.message },
+        'UI: Failed to get conversation');
+      throw { status: 500, code: 'GET_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Update conversation
+   * Request: mqttRequest('conversation', 'update', { conversationId, title?, system_prompt?, model?, temperature?, ... })
+   */
+  async handleUIUpdate(data, request) {
+    const { conversationId, ...updates } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, conversationId, updates: Object.keys(updates) }, 'UI: Update conversation');
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const conversation = await this.updateConversation(conversationId, updates, correlationId);
+      return { conversation };
+    } catch (error) {
+      if (error.message?.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      this.logger.error({ correlationId, conversationId, error: error.message },
+        'UI: Failed to update conversation');
+      throw { status: 500, code: 'UPDATE_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Delete conversation
+   * Request: mqttRequest('conversation', 'delete', { conversationId })
+   */
+  async handleUIDelete(data, request) {
+    const { conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, conversationId }, 'UI: Delete conversation');
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const result = await this.deleteConversation(conversationId, correlationId);
+      return {
+        success: true,
+        id: conversationId,
+        messagesDeleted: result.messages_deleted
+      };
+    } catch (error) {
+      if (error.message?.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      this.logger.error({ correlationId, conversationId, error: error.message },
+        'UI: Failed to delete conversation');
+      throw { status: 500, code: 'DELETE_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * Helper: List conversations for a project
+   */
+  async listConversations(projectId, correlationId) {
+    await this.loadProjectConversations(projectId, correlationId);
+
+    const conversations = Array.from(this.conversations.values())
+      .filter(c => c.project_id === projectId)
+      .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+    return conversations;
   }
 
   /**

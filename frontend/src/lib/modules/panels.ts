@@ -72,6 +72,16 @@ export const panels: Record<string, PanelDef> = {
     order: 2,
     loader: () => import('$lib/modules/prompts/PromptsPanel.svelte')
   },
+  conversations: {
+    id: 'conversations',
+    title: 'Conversaciones',
+    icon: '💬',
+    size: 'lg',
+    position: 'top',
+    zone: 'chat-config',
+    order: 2.5,
+    loader: () => import('$lib/modules/conversations/ConversationsPanel.svelte')
+  },
   'credentials-list': {
     id: 'credentials-list',
     title: 'Credenciales',

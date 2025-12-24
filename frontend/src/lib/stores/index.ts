@@ -170,3 +170,30 @@ export {
   hasProjects
 } from './projects';
 export type { Project, ProjectsState } from './projects';
+
+// Conversations Store (MQTT-based)
+export {
+  conversationsStore,
+  initConversations,
+  loadConversations,
+  loadConversation as loadConversationById,
+  createConversation,
+  updateConversation,
+  deleteConversation,
+  sendMessage as sendConversationMessage,
+  selectConversation,
+  clearActiveConversation,
+  clearError as clearConversationError,
+  resetConversations,
+  conversationsList,
+  conversationSections,
+  activeConversationId,
+  activeConversation,
+  conversationMessages,
+  conversationsLoading,
+  conversationsSending,
+  conversationsError,
+  hasConversations,
+  hasActiveConversation
+} from './conversations';
+export type { Conversation, Message, ConversationSection, ConversationsState } from './conversations';

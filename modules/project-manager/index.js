@@ -590,7 +590,9 @@ class ProjectManagerModule {
    * Handle project.get.request
    */
   async onGetProjectRequest(event) {
-    const { request_id, project_id, correlation_id } = event;
+    // Handle wrapped event format: event.data contains the actual payload
+    const eventData = event.data || event;
+    const { request_id, project_id, correlation_id } = eventData;
     this.logger.debug({ correlationId: correlation_id, requestId: request_id, projectId: project_id },
       'Received project.get.request');
 
@@ -608,7 +610,9 @@ class ProjectManagerModule {
    * Handle project.list.request
    */
   async onListProjectsRequest(event) {
-    const { request_id, correlation_id } = event;
+    // Handle wrapped event format: event.data contains the actual payload
+    const eventData = event.data || event;
+    const { request_id, correlation_id } = eventData;
     this.logger.debug({ correlationId: correlation_id, requestId: request_id },
       'Received project.list.request');
 
@@ -627,7 +631,9 @@ class ProjectManagerModule {
    * Handle project.active.request
    */
   async onGetActiveProjectRequest(event) {
-    const { request_id, correlation_id } = event;
+    // Handle wrapped event format: event.data contains the actual payload
+    const eventData = event.data || event;
+    const { request_id, correlation_id } = eventData;
     this.logger.debug({ correlationId: correlation_id, requestId: request_id },
       'Received project.active.request');
 

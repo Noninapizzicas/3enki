@@ -1974,21 +1974,22 @@ class ConversationManagerModule {
     const requestId = crypto.randomUUID();
 
     // Subscribe to response first
-    let unsubActive;
+    let resolvePromise;
+    let timeoutId;
+
     const projectPromise = new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        if (unsubActive) unsubActive();
+      resolvePromise = resolve;
+      timeoutId = setTimeout(() => {
         resolve(null);
       }, 5000);
+    });
 
-      // Listen for active project response
-      this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE, (event) => {
-        if (event.request_id === requestId) {
-          clearTimeout(timeout);
-          if (unsubActive) unsubActive();
-          resolve(event);
-        }
-      }).then(unsub => { unsubActive = unsub; });
+    // Listen for active project response
+    const unsubActive = await this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE, (event) => {
+      if (event.request_id === requestId) {
+        clearTimeout(timeoutId);
+        resolvePromise(event);
+      }
     });
 
     await this.eventBus.publish(EVENTS.PROJECT.ACTIVE_REQUEST, {
@@ -1997,6 +1998,10 @@ class ConversationManagerModule {
     });
 
     const response = await projectPromise;
+
+    // Cleanup subscription
+    if (unsubActive) unsubActive();
+
     // project-manager returns active_project_id (not project.id)
     return response?.active_project_id || null;
   }

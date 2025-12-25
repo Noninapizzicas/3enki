@@ -35,7 +35,9 @@ class CallingGenerator {
     this.eventBus = core.eventBus;
     this.config = core.config || {};
     this.moduleManager = core.moduleManager;
+    this.activity = core.activity?.forModule('calling-generator');
 
+    this.activity?.action('module.loading', {});
     this.logger.info('modulo.loading', { module: this.name });
 
     // Suscribirse a eventos

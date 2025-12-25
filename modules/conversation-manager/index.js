@@ -55,7 +55,9 @@ class ConversationManagerModule {
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
     this.config = core.config || {};
+    this.activity = core.activity?.forModule(this.name);
 
+    this.activity?.action('module.loading', { version: this.version });
     this.logger.info('conversation-manager.loading', { module: this.name });
 
     // Register UI Request/Response handlers
@@ -733,6 +735,7 @@ class ConversationManagerModule {
     const conversationId = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    this.activity?.action('conversation.creating', { conversationId, projectId, userId });
     this.logger.info({ correlationId, conversationId, projectId, userId }, 'Creating conversation');
 
     const conversation = {
@@ -925,10 +928,14 @@ class ConversationManagerModule {
 
   async sendMessage(conversationId, content, userId, attachments = [], metadata = {}, correlationId) {
     const startTime = Date.now();
+    const endTimer = this.activity?.timer('message.send');
+
+    this.activity?.action('message.sending', { conversationId, userId, contentLength: content?.length });
     this.logger.info({ correlationId, conversationId, userId }, 'Sending message');
 
     const conversation = this.conversations.get(conversationId);
     if (!conversation) {
+      this.activity?.error('message.send', new Error('Conversation not found'), { conversationId });
       throw new Error(`Conversation not found: ${conversationId}`);
     }
 
@@ -1131,6 +1138,16 @@ class ConversationManagerModule {
       this.logger.info({ correlationId, conversationId, tokens: aiResponse.tokens },
         'Message sent and AI response received');
 
+      // Log completion with timer
+      endTimer?.({ tokens: totalTokens, model: aiResponse.model, toolCalls: toolCallHistory.length });
+      this.activity?.action('message.sent', {
+        conversationId,
+        tokens: totalTokens,
+        cost: totalCost,
+        model: aiResponse.model,
+        duration: Date.now() - startTime
+      });
+
       return {
         user_message: userMessage,
         assistant_message: assistantMessage,
@@ -1150,9 +1167,18 @@ class ConversationManagerModule {
   async callAI(messages, conversation, tools, correlationId) {
     const requestId = crypto.randomUUID();
 
+    this.activity?.action('ai.calling', {
+      requestId,
+      model: conversation.model,
+      provider: conversation.provider,
+      messagesCount: messages.length,
+      toolsCount: tools?.length || 0
+    });
+
     const aiPromise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingAIRequests.delete(requestId);
+        this.activity?.error('ai.call', new Error('AI request timeout'), { requestId });
         reject(new Error('AI request timeout'));
       }, this.config.aiTimeout || 60000);
 

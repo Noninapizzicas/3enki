@@ -41,7 +41,9 @@ class ToolOrchestratorModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.config = core.config || {};
+    this.activity = core.activity?.forModule('tool-orchestrator');
 
+    this.activity?.action('module.loading', { version: this.version });
     this.logger.info('module.loading', {
       module: this.name,
       version: this.version
@@ -104,6 +106,13 @@ class ToolOrchestratorModule {
     } = event.payload || event;
 
     const reqId = request_id || crypto.randomUUID();
+    const endTimer = this.activity?.timer('tool.call');
+
+    this.activity?.action('tool.call.received', {
+      tool_name,
+      request_id: reqId,
+      has_args: !!args
+    });
 
     this.logger.info('tool.call.request.received', {
       tool_name,
@@ -187,6 +196,14 @@ class ToolOrchestratorModule {
         correlation_id
       );
 
+      endTimer?.({ success: true, tool_name, duration });
+      this.activity?.action('tool.call.success', {
+        tool_name,
+        request_id: reqId,
+        duration,
+        has_result: !!result
+      });
+
       this.logger.info(EVENTS.TOOL.CALL_SUCCESS, {
         tool_name,
         duration,
@@ -194,6 +211,9 @@ class ToolOrchestratorModule {
       });
     } catch (error) {
       const duration = Date.now() - startTime;
+
+      endTimer?.({ success: false, tool_name, error: error.message });
+      this.activity?.error('tool.call', error, { tool_name, request_id: reqId, duration });
 
       this.logger.error('tool.call.error', {
         tool_name,

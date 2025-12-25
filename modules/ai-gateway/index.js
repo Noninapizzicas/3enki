@@ -111,6 +111,9 @@ class AIGatewayModule {
   async onLoad(context) {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
+    this.activity = context.activity?.forModule('ai-gateway');
+
+    this.activity?.action('module.loading', {});
 
     // Load config from module.json
     const moduleJsonPath = path.join(__dirname, 'module.json');
@@ -122,6 +125,11 @@ class AIGatewayModule {
 
     // Subscribe to events
     await this.subscribeToEvents();
+
+    this.activity?.action('module.loaded', {
+      providers_count: this.providers.size,
+      providers_available: this.getAvailableProviderNames()
+    });
 
     this.logger.info('ai-gateway.loaded', {
       providers_count: this.providers.size,
@@ -249,6 +257,15 @@ class AIGatewayModule {
     } = event.data || event.payload || event;
 
     const correlationId = correlation_id || event.correlationId;
+    const endTimer = this.activity?.timer('chat.request');
+
+    this.activity?.action('chat.request.received', {
+      request_id,
+      provider: requestedProvider,
+      model,
+      messages_count: messages?.length || 0,
+      tools_count: tools?.length || 0
+    });
 
     this.logger.info('ai-gateway.chat.request.received', {
       request_id,
@@ -288,6 +305,22 @@ class AIGatewayModule {
         error: result.status !== 200 ? result.data?.message : null
       }, { correlationId });
 
+      endTimer?.({
+        success: result.status === 200,
+        provider: result.data?.provider,
+        model: result.data?.model,
+        tokens: result.data?.usage?.total_tokens || 0
+      });
+
+      this.activity?.action('chat.response.sent', {
+        request_id,
+        success: result.status === 200,
+        provider: result.data?.provider,
+        model: result.data?.model,
+        tokens: result.data?.usage?.total_tokens || 0,
+        has_tool_calls: !!(result.data?.tool_calls)
+      });
+
       this.logger.info('ai-gateway.chat.response.sent', {
         request_id,
         success: result.status === 200,
@@ -296,6 +329,9 @@ class AIGatewayModule {
       });
 
     } catch (error) {
+      endTimer?.({ success: false, error: error.message });
+      this.activity?.error('chat.request', error, { request_id, provider: requestedProvider });
+
       this.logger.error('ai-gateway.chat.request.error', {
         request_id,
         error: error.message,

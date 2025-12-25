@@ -37,6 +37,9 @@ class DatabaseManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.activity = core.activity?.forModule('database-manager');
+
+    this.activity?.action('module.loading', {});
 
     // Load config from module.json (core.config may not include module-specific config)
     try {
@@ -191,6 +194,14 @@ class DatabaseManagerModule {
       correlation_id
     } = event.data || event;
 
+    const endTimer = this.activity?.timer('query');
+    this.activity?.action('query.received', {
+      project_id,
+      query_preview: query ? query.substring(0, 50) : null,
+      read_only,
+      request_id
+    });
+
     this.logger.info('query.request.received', {
       project_id,
       query: query ? query.substring(0, 100) : '(no query)',
@@ -221,6 +232,15 @@ class DatabaseManagerModule {
 
       const duration = Date.now() - startTime;
 
+      endTimer?.({ success: true, project_id, result_count: results.length });
+      this.activity?.action('query.success', {
+        project_id,
+        request_id,
+        result_count: results.length,
+        duration,
+        read_only
+      });
+
       this.logger.info('query.request.success', {
         project_id,
         result_count: results.length,
@@ -244,6 +264,10 @@ class DatabaseManagerModule {
       );
     } catch (error) {
       const errorMsg = error?.message || String(error) || 'Unknown database error';
+
+      endTimer?.({ success: false, project_id, error: errorMsg });
+      this.activity?.error('query', new Error(errorMsg), { project_id, request_id });
+
       this.logger.error('query.request.error', {
         project_id,
         error: errorMsg,

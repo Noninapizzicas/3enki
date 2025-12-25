@@ -43,6 +43,9 @@ class CredentialManagerModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.activity = core.activity?.forModule('credential-manager');
+
+    this.activity?.action('module.loading', {});
 
     // Load module config from module.json
     const moduleJsonPath = path.join(__dirname, 'module.json');

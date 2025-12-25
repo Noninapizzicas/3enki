@@ -348,20 +348,78 @@ export async function sendMessage(
 
     const { user_message, assistant_message, conversationId } = response.data;
 
-    conversationsStore.update(s => ({
-      ...s,
-      messages: [
-        ...s.messages.filter(m => m.id !== tempUserMessage.id),
-        user_message,
-        assistant_message
-      ],
-      activeConversationId: conversationId,
-      sending: false
-    }));
+    // Si era una conversacion nueva, cargar los datos completos
+    const isNewConversation = !state.activeConversationId || state.activeConversationId !== conversationId;
 
-    // Si era una conversacion nueva, recargar lista
-    if (!state.activeConversationId || state.activeConversationId !== conversationId) {
-      loadConversations();
+    if (isNewConversation) {
+      // Cargar datos completos de la nueva conversacion
+      try {
+        const convResponse = await mqttRequest<{
+          conversation: Conversation;
+          messages: Message[];
+        }>('conversation', 'get', { conversationId });
+
+        conversationsStore.update(s => {
+          // Evitar duplicados en la lista
+          const existsInList = s.conversations.some(c => c.id === conversationId);
+          const newConversations = existsInList
+            ? s.conversations.map(c => c.id === conversationId ? convResponse.data.conversation : c)
+            : [convResponse.data.conversation, ...s.conversations];
+
+          return {
+            ...s,
+            messages: [
+              ...s.messages.filter(m => m.id !== tempUserMessage.id),
+              user_message,
+              assistant_message
+            ],
+            activeConversationId: conversationId,
+            activeConversation: convResponse.data.conversation,
+            conversations: newConversations,
+            sections: groupByDate(newConversations),
+            sending: false
+          };
+        });
+      } catch (err) {
+        // Si falla cargar la conversacion, al menos actualizar mensajes
+        console.warn('[Conversations] Failed to load new conversation details:', err);
+        conversationsStore.update(s => ({
+          ...s,
+          messages: [
+            ...s.messages.filter(m => m.id !== tempUserMessage.id),
+            user_message,
+            assistant_message
+          ],
+          activeConversationId: conversationId,
+          sending: false
+        }));
+        loadConversations(); // Intentar recargar lista
+      }
+    } else {
+      // Actualizar conversacion existente con nuevo message_count
+      conversationsStore.update(s => {
+        const newMessageCount = s.messages.filter(m => m.id !== tempUserMessage.id).length + 2;
+        const updatedConversation = s.activeConversation
+          ? { ...s.activeConversation, message_count: newMessageCount, updated_at: new Date().toISOString() }
+          : null;
+
+        return {
+          ...s,
+          messages: [
+            ...s.messages.filter(m => m.id !== tempUserMessage.id),
+            user_message,
+            assistant_message
+          ],
+          activeConversation: updatedConversation,
+          conversations: s.conversations.map(c =>
+            c.id === conversationId && updatedConversation
+              ? updatedConversation
+              : c
+          ),
+          activeConversationId: conversationId,
+          sending: false
+        };
+      });
     }
 
     console.log('[Conversations] Message sent, tokens:', response.data.tokens_used);

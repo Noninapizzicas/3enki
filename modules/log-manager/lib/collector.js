@@ -1,9 +1,10 @@
 /**
  * Log Collector
  *
- * Recolecta logs de múltiples fuentes:
+ * Recolecta logs de múltiples fuentes y los envía al SessionLogger:
  * - MQTT: Suscribe a core/+/logs/# para capturar todos los logs del backend
  * - HTTP: Recibe logs del frontend vía POST /api/logs
+ * - EventBus: Captura eventos activity.logged, activity.batch
  *
  * Normaliza todos los logs a un formato unificado antes de pasarlos al storage.
  */
@@ -11,12 +12,15 @@
 class LogCollector {
   /**
    * @param {Object} options
-   * @param {Object} options.storage - Instancia de LogStorage
+   * @param {Object} options.storage - Instancia de LogStorage (consolidado)
+   * @param {Object} options.session - Instancia de SessionLogger (por sesión)
    * @param {Object} options.eventBus - Event bus del core
    * @param {Object} options.logger - Logger del core
+   * @param {string} options.coreId - ID del core
    */
   constructor(options = {}) {
     this.storage = options.storage;
+    this.session = options.session;
     this.eventBus = options.eventBus;
     this.logger = options.logger;
     this.coreId = options.coreId || 'unknown';
@@ -25,6 +29,8 @@ class LogCollector {
       collected: 0,
       fromMqtt: 0,
       fromHttp: 0,
+      fromActivity: 0,
+      toSession: 0,
       errors: 0
     };
 
@@ -44,7 +50,6 @@ class LogCollector {
    */
   subscribeMqtt() {
     // Suscribir a todos los logs de todos los cores
-    // Patrón: core/+/logs/# captura core/core-a/logs/info, core/core-b/logs/error, etc.
     const patterns = [
       'core/+/logs/debug',
       'core/+/logs/info',
@@ -54,7 +59,6 @@ class LogCollector {
 
     for (const pattern of patterns) {
       if (this.eventBus?.on) {
-        // Usar el eventBus para escuchar mensajes MQTT
         const handler = (topic, message) => {
           if (this.matchesTopic(topic, pattern)) {
             this.handleMqttLog(topic, message);
@@ -67,7 +71,6 @@ class LogCollector {
     }
 
     // Suscribir directamente al MQTT para capturar logs de interacciones
-    // Topic: log/# captura log/http-gateway, log/eventbus, etc.
     if (this.eventBus?.mqtt) {
       this.eventBus.mqtt.subscribe('log/#');
       this.eventBus.mqtt.on('message', (topic, message) => {
@@ -75,20 +78,10 @@ class LogCollector {
           this.handleInteractionLog(topic, message);
         }
       });
-      this.logger?.debug('log-collector.mqtt.subscribed', { topic: 'log/#' });
     }
 
-    // También escuchar eventos internos del sistema
+    // Escuchar eventos internos del sistema
     if (this.eventBus?.on) {
-      const internalHandler = (eventType, data) => {
-        // Solo capturar si no es un log (evitar recursión)
-        if (!eventType.startsWith('log-manager.')) {
-          this.collectInternalEvent(eventType, data);
-        }
-      };
-
-      // No suscribimos a todo para evitar ruido excesivo
-      // Solo eventos específicos que queremos trackear
       const eventsToTrack = [
         'module.loaded',
         'module.unloaded',
@@ -105,7 +98,6 @@ class LogCollector {
       }
 
       // Suscribir a eventos de ActivityLogger
-      // Note: EventBus wraps data in envelope, actual activity is in envelope.data
       this.eventBus.on('activity.logged', (envelope) => {
         const activity = envelope.data || envelope;
         this.collectActivityLog(activity);
@@ -144,9 +136,17 @@ class LogCollector {
       ...(activity.error && { error: activity.error })
     };
 
-    this.storage.write(entry);
+    // Escribir al storage consolidado
+    this.storage?.write(entry);
+
+    // Escribir al SessionLogger (por módulo)
+    if (this.session && entry.module) {
+      this.session.write(entry.module, entry);
+      this.stats.toSession++;
+    }
+
     this.stats.collected++;
-    this.stats.fromActivity = (this.stats.fromActivity || 0) + 1;
+    this.stats.fromActivity++;
   }
 
   /**
@@ -156,9 +156,15 @@ class LogCollector {
     try {
       const logData = typeof message === 'string' ? JSON.parse(message) : message;
 
-      // Ya viene en formato normalizado, escribir directamente
       if (logData.ts && logData.level && logData.source) {
-        this.storage.write(logData);
+        this.storage?.write(logData);
+
+        // Escribir al SessionLogger
+        if (this.session && logData.module) {
+          this.session.write(logData.module, logData);
+          this.stats.toSession++;
+        }
+
         this.stats.collected++;
         this.stats.fromMqtt++;
       }
@@ -188,7 +194,6 @@ class LogCollector {
    */
   handleMqttLog(topic, message) {
     try {
-      // Parsear el mensaje si es string
       const logData = typeof message === 'string' ? JSON.parse(message) : message;
 
       // Extraer nivel del topic: core/core-a/logs/info -> info
@@ -205,7 +210,14 @@ class LogCollector {
         _topic: topic
       });
 
-      this.storage.write(entry);
+      this.storage?.write(entry);
+
+      // Escribir al SessionLogger
+      if (this.session && entry.module) {
+        this.session.write(entry.module, entry);
+        this.stats.toSession++;
+      }
+
       this.stats.collected++;
       this.stats.fromMqtt++;
 
@@ -227,7 +239,14 @@ class LogCollector {
       ctx: data
     });
 
-    this.storage.write(entry);
+    this.storage?.write(entry);
+
+    // Escribir al SessionLogger
+    if (this.session) {
+      this.session.write('core', entry);
+      this.stats.toSession++;
+    }
+
     this.stats.collected++;
     this.stats.fromMqtt++;
   }
@@ -243,7 +262,14 @@ class LogCollector {
         source: logData.source || 'frontend'
       });
 
-      this.storage.write(entry);
+      this.storage?.write(entry);
+
+      // Escribir al SessionLogger
+      if (this.session && entry.module) {
+        this.session.write(entry.module, entry);
+        this.stats.toSession++;
+      }
+
       this.stats.collected++;
       this.stats.fromHttp++;
 
@@ -286,7 +312,6 @@ class LogCollector {
    * Detiene la recolección
    */
   stop() {
-    // Limpiar suscripciones
     for (const sub of this.subscriptions) {
       if (this.eventBus?.off) {
         this.eventBus.off(sub.event, sub.handler);

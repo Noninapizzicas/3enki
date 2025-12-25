@@ -385,7 +385,9 @@ class ConversationManagerModule {
   }
 
   async onProjectGetResponse(event) {
-    const { request_id, success, project } = event;
+    // Handle both wrapped (event.data) and unwrapped event formats
+    const eventData = event.data || event;
+    const { request_id, success, project } = eventData;
 
     const pending = this.pendingProjectRequests.get(request_id);
     if (!pending) return;
@@ -401,7 +403,9 @@ class ConversationManagerModule {
   }
 
   async onStorageInfoResponse(event) {
-    const { request_id, success, storage } = event;
+    // Handle both wrapped (event.data) and unwrapped event formats
+    const eventData = event.data || event;
+    const { request_id, success, storage } = eventData;
 
     const pending = this.pendingStorageRequests.get(request_id);
     if (!pending) return;
@@ -417,7 +421,9 @@ class ConversationManagerModule {
   }
 
   async onToolListResponse(event) {
-    const { request_id, success, tools, count } = event;
+    // Handle both wrapped (event.data) and unwrapped event formats
+    const eventData = event.data || event;
+    const { request_id, success, tools, count } = eventData;
 
     const pending = this.pendingToolRequests.get(request_id);
     if (!pending) return;
@@ -582,7 +588,9 @@ class ConversationManagerModule {
   // ==================== TOOL CALL EXECUTION ====================
 
   async onToolCallResponse(event) {
-    const { request_id, success, result, error } = event;
+    // Handle both wrapped (event.data) and unwrapped event formats
+    const eventData = event.data || event;
+    const { request_id, success, result, error } = eventData;
 
     const pending = this.pendingToolCallRequests.get(request_id);
     if (!pending) return;
@@ -1203,7 +1211,9 @@ class ConversationManagerModule {
   }
 
   async onAIChatResponse(event) {
-    const { request_id, success, message, content, tool_calls, tokens, cost, model, provider, error } = event;
+    // Handle both wrapped (event.data) and unwrapped event formats
+    const eventData = event.data || event;
+    const { request_id, success, message, content, tool_calls, tokens, cost, model, provider, error } = eventData;
 
     const pending = this.pendingAIRequests.get(request_id);
     if (!pending) return;

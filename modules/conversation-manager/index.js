@@ -2022,9 +2022,10 @@ class ConversationManagerModule {
 
     // Listen for active project response
     const unsubActive = await this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE, (event) => {
-      if (event.request_id === requestId) {
+      // Handle wrapped event format: event.data contains the actual payload
+      if (event.data?.request_id === requestId) {
         clearTimeout(timeoutId);
-        resolvePromise(event);
+        resolvePromise(event.data);
       }
     });
 

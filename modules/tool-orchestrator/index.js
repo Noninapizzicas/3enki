@@ -41,7 +41,9 @@ class ToolOrchestratorModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.config = core.config || {};
+    this.activity = core.activity?.forModule('tool-orchestrator');
 
+    this.activity?.action('module.loading', { version: this.version });
     this.logger.info('module.loading', {
       module: this.name,
       version: this.version

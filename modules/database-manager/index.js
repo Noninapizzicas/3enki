@@ -37,6 +37,9 @@ class DatabaseManagerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.activity = core.activity?.forModule('database-manager');
+
+    this.activity?.action('module.loading', {});
 
     // Load config from module.json (core.config may not include module-specific config)
     try {

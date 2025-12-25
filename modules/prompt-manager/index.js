@@ -48,6 +48,9 @@ class PromptManagerModule {
     this.eventBus = context.eventBus;
     this.uiHandler = context.uiHandler;
     this.config = context.moduleConfig || {};
+    this.activity = context.activity?.forModule('prompt-manager');
+
+    this.activity?.action('module.loading', {});
 
     // Subscribe to DB response events
     await this.subscribeToEvents();

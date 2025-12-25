@@ -740,7 +740,7 @@ class ConversationManagerModule {
       project_id: projectId,
       user_id: userId || null,
       title: options.title || 'New Conversation',
-      system_prompt: options.system_prompt || this.config.defaultSystemPrompt,
+      system_prompt: options.system_prompt || this.config.defaultSystemPrompt || 'You are a helpful AI assistant.',
       model: options.model || null,
       provider: options.provider || null,
       temperature: options.temperature !== undefined ? options.temperature : 0.7,

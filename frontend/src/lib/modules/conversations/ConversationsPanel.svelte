@@ -18,7 +18,7 @@
     hasActiveConversation,
     activeProjectIdMqtt
   } from '$lib/stores';
-  import { openPanel } from '$lib/stores/ui';
+  import { openPanel, closePanel } from '$lib/stores/ui';
 
   import ChatTab from './ChatTab.svelte';
   import HistoryTab from './HistoryTab.svelte';
@@ -74,6 +74,11 @@
   function handleSelectConversation(conversationId: string) {
     selectConversation(conversationId);
     activeTab = 'chat';
+  }
+
+  function handleUseInChat() {
+    // Cerrar panel - la conversación ya está activa
+    closePanel();
   }
 </script>
 
@@ -135,7 +140,10 @@
         <span>Cargando...</span>
       </div>
     {:else if activeTab === 'chat'}
-      <ChatTab on:newConversation={handleNewConversation} />
+      <ChatTab
+        on:newConversation={handleNewConversation}
+        on:useInChat={handleUseInChat}
+      />
     {:else if activeTab === 'history'}
       <HistoryTab
         on:select={(e) => handleSelectConversation(e.detail)}

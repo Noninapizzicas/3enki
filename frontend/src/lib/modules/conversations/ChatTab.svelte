@@ -1,12 +1,12 @@
 <script lang="ts">
   /**
-   * ChatTab - Vista de chat con mensajes y envio
+   * ChatTab - Vista de mensajes de conversacion (solo lectura)
+   * El input de chat está en el sistema principal, no aquí
    */
 
   import { createEventDispatcher } from 'svelte';
   import {
     conversationsStore,
-    sendConversationMessage,
     hasActiveConversation,
     conversationMessages,
     activeConversation,
@@ -19,7 +19,6 @@
   // STATE
   // ==========================================================================
 
-  let messageInput = '';
   let messagesContainer: HTMLElement;
 
   // ==========================================================================
@@ -43,28 +42,13 @@
   // HANDLERS
   // ==========================================================================
 
-  async function handleSend() {
-    if (!messageInput.trim() || sending) return;
-
-    const content = messageInput.trim();
-    messageInput = '';
-
-    try {
-      await sendConversationMessage(content);
-    } catch (err) {
-      console.error('[ChatTab] Send failed:', err);
-    }
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }
-
   function handleNewConversation() {
     dispatch('newConversation');
+  }
+
+  function handleUseInChat() {
+    // Cerrar panel y usar esta conversación en el chat principal
+    dispatch('useInChat', { conversationId: conversation?.id });
   }
 
   // ==========================================================================
@@ -87,9 +71,9 @@
     <!-- Empty state -->
     <div class="empty-state">
       <span class="empty-icon">💬</span>
-      <span class="empty-title">Inicia una conversacion</span>
+      <span class="empty-title">Sin conversacion activa</span>
       <span class="empty-text">
-        Escribe un mensaje para comenzar a chatear con la IA
+        Selecciona una conversacion del historial o crea una nueva
       </span>
       <button class="btn primary" on:click={handleNewConversation}>
         + Nueva conversacion
@@ -100,10 +84,15 @@
     <div class="messages-container" bind:this={messagesContainer}>
       {#if conversation}
         <div class="conversation-header">
-          <span class="conversation-title">{conversation.title}</span>
-          <span class="conversation-model">
-            {conversation.provider || 'auto'} / {conversation.model || 'default'}
-          </span>
+          <div class="header-info">
+            <span class="conversation-title">{conversation.title}</span>
+            <span class="conversation-model">
+              {conversation.provider || 'auto'} / {conversation.model || 'default'}
+            </span>
+          </div>
+          <button class="btn-use" on:click={handleUseInChat} title="Continuar en chat">
+            Usar en chat ↗
+          </button>
         </div>
       {/if}
 
@@ -141,6 +130,13 @@
           </div>
         {/if}
       </div>
+
+      {#if messages.length === 0}
+        <div class="no-messages">
+          <span>Sin mensajes aún</span>
+          <span class="hint">Usa el chat principal para enviar mensajes</span>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -151,26 +147,6 @@
       <button on:click={() => conversationsStore.update(s => ({ ...s, error: null }))}>✕</button>
     </div>
   {/if}
-
-  <!-- Input -->
-  <div class="input-container">
-    <textarea
-      class="message-input"
-      placeholder="Escribe un mensaje..."
-      bind:value={messageInput}
-      on:keydown={handleKeydown}
-      disabled={sending}
-      rows="1"
-    ></textarea>
-    <button
-      class="send-btn"
-      on:click={handleSend}
-      disabled={!messageInput.trim() || sending}
-      title="Enviar"
-    >
-      ➤
-    </button>
-  </div>
 </div>
 
 <style>
@@ -245,6 +221,13 @@
     margin-bottom: 0.75rem;
     background: var(--_bg-surface);
     border-radius: var(--_radius);
+    gap: 0.5rem;
+  }
+
+  .header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
   }
 
   .conversation-title {
@@ -255,6 +238,21 @@
   .conversation-model {
     font-size: 0.75rem;
     color: var(--_text-muted);
+  }
+
+  .btn-use {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    background: var(--_primary);
+    color: white;
+    border: none;
+    border-radius: var(--_radius);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-use:hover {
+    filter: brightness(1.1);
   }
 
   .messages-list {
@@ -331,6 +329,23 @@
     color: var(--_text-muted);
   }
 
+  /* No messages */
+  .no-messages {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    color: var(--_text-muted);
+    gap: 0.25rem;
+  }
+
+  .no-messages .hint {
+    font-size: 0.75rem;
+    opacity: 0.7;
+  }
+
   /* Typing Indicator */
   .typing-indicator {
     display: flex;
@@ -383,59 +398,5 @@
     color: var(--_danger);
     cursor: pointer;
     padding: 0.25rem;
-  }
-
-  /* Input */
-  .input-container {
-    display: flex;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    border-top: 1px solid var(--_border);
-  }
-
-  .message-input {
-    flex: 1;
-    padding: 0.625rem 0.875rem;
-    background: var(--_bg-surface);
-    border: 1px solid var(--_border);
-    border-radius: var(--_radius);
-    color: var(--_text);
-    font-size: 0.875rem;
-    resize: none;
-    min-height: 40px;
-    max-height: 120px;
-  }
-
-  .message-input:focus {
-    outline: none;
-    border-color: var(--_primary);
-  }
-
-  .message-input:disabled {
-    opacity: 0.5;
-  }
-
-  .send-btn {
-    width: 40px;
-    height: 40px;
-    background: var(--_primary);
-    border: none;
-    border-radius: var(--_radius);
-    color: white;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.15s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .send-btn:hover:not(:disabled) {
-    filter: brightness(1.1);
-  }
-
-  .send-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

@@ -1,141 +1,21 @@
-# Log Manager Module
+# Log Manager Module v2.0
 
-Sistema centralizado de logs para Event Core. Recolecta logs de todos los módulos (backend y frontend) y los almacena en formato JSONL para fácil análisis.
+Sistema centralizado de logs **por sesión de arranque**. Cada vez que el core arranca, se crea una nueva sesión con logs organizados por módulo.
 
-## Ubicación de Logs
+## Estructura de Logs
 
 ```
 data/logs/
-├── current.jsonl      # Logs del día actual (LEER ESTE)
-├── 2025-01-14.jsonl   # Histórico por día
-├── 2025-01-13.jsonl
-└── index.json         # Índice con estadísticas
+├── sessions/                              # Logs por sesión
+│   └── 2025-01-14_10-30-00_abc123/       # Una sesión
+│       ├── session.json                   # Metadata
+│       └── modules/
+│           ├── conversation-manager.jsonl
+│           ├── ai-gateway.jsonl
+│           ├── project-manager.jsonl
+│           └── ...
+└── current.jsonl                          # Logs consolidados
 ```
-
-## Formato de Logs (JSONL)
-
-Cada línea es un JSON independiente:
-
-```json
-{"ts":"2025-01-14T10:00:01.123Z","level":"info","source":"backend","module":"ai-gateway","msg":"request.received","ctx":{"provider":"claude"}}
-{"ts":"2025-01-14T10:00:02.456Z","level":"error","source":"backend","module":"database","msg":"query.failed","ctx":{"error":"timeout"}}
-```
-
-### Campos
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `ts` | string | Timestamp ISO 8601 |
-| `level` | string | debug, info, warn, error |
-| `source` | string | backend, frontend |
-| `module` | string | Nombre del módulo origen |
-| `msg` | string | Evento en dot.notation |
-| `ctx` | object | Contexto adicional |
-| `traceId` | string | ID de traza (opcional) |
-| `error` | object | Detalles del error (opcional) |
-
-## Para la IA
-
-### Leer logs actuales
-```bash
-cat data/logs/current.jsonl
-```
-
-### Filtrar por nivel
-```bash
-# Solo errores
-grep '"level":"error"' data/logs/current.jsonl
-
-# Errores y warnings
-grep -E '"level":"(error|warn)"' data/logs/current.jsonl
-```
-
-### Filtrar por módulo
-```bash
-grep '"module":"ai-gateway"' data/logs/current.jsonl
-```
-
-### Buscar texto
-```bash
-grep "timeout" data/logs/current.jsonl
-```
-
-### Últimos N logs
-```bash
-tail -n 50 data/logs/current.jsonl
-```
-
-### Logs de una fecha específica
-```bash
-cat data/logs/2025-01-13.jsonl
-```
-
-### Contar errores por módulo
-```bash
-grep '"level":"error"' data/logs/current.jsonl | grep -o '"module":"[^"]*"' | sort | uniq -c
-```
-
-## APIs REST
-
-### GET /modules/log-manager/logs
-
-Obtener logs con filtros.
-
-**Query params:**
-- `level` - Filtrar por nivel (comma-separated: `error,warn`)
-- `module` - Filtrar por módulo (comma-separated: `ai-gateway,database`)
-- `source` - Filtrar por fuente (`backend`/`frontend`)
-- `search` - Búsqueda en mensaje y contexto
-- `from` - Fecha desde (YYYY-MM-DD)
-- `to` - Fecha hasta (YYYY-MM-DD)
-- `limit` - Límite de resultados (default: 100)
-- `offset` - Offset para paginación
-
-**Ejemplo:**
-```bash
-curl "http://localhost:3000/modules/log-manager/logs?level=error&limit=50"
-```
-
-### POST /modules/log-manager/logs
-
-Agregar un log (desde frontend).
-
-**Body:**
-```json
-{
-  "level": "error",
-  "module": "chat",
-  "msg": "send.failed",
-  "ctx": { "error": "timeout" }
-}
-```
-
-### GET /modules/log-manager/stats
-
-Estadísticas de logs.
-
-**Respuesta:**
-```json
-{
-  "success": true,
-  "stats": {
-    "total": 1234,
-    "byLevel": { "info": 1000, "warn": 200, "error": 34 },
-    "byModule": { "ai-gateway": 500, "database": 300 }
-  }
-}
-```
-
-### GET /modules/log-manager/files
-
-Listar archivos de logs disponibles.
-
-### DELETE /modules/log-manager/logs
-
-Limpiar logs antiguos.
-
-**Query params:**
-- `olderThan` - Días de antigüedad
 
 ## Configuración
 
@@ -145,40 +25,118 @@ En `module.json`:
 {
   "config": {
     "logsPath": "./data/logs",
-    "maxFileSize": 10485760,
-    "retentionDays": 30,
-    "rotateDaily": true
+    "trackedModules": ["*"],              // '*' = todos, o lista específica
+    "excludedModules": ["log-manager"],   // Módulos a excluir
+    "sessionRetentionDays": 7,            // Días a conservar sesiones
+    "retentionDays": 30                   // Días para logs consolidados
   }
 }
 ```
 
-## Niveles de Log
+### Trackear módulos específicos
 
-| Nivel | Uso |
-|-------|-----|
-| `debug` | Información detallada para debugging |
-| `info` | Eventos normales del sistema |
-| `warn` | Situaciones anómalas pero manejables |
-| `error` | Errores que requieren atención |
+Para debuggear el chat, configura solo los módulos relevantes:
 
-## Ejemplos de Análisis
-
-### ¿Qué errores ocurrieron hoy?
-```bash
-grep '"level":"error"' data/logs/current.jsonl | jq .
+```json
+{
+  "trackedModules": [
+    "conversation-manager",
+    "ai-gateway",
+    "prompt-manager",
+    "tool-orchestrator",
+    "project-manager",
+    "credential-manager",
+    "database-manager",
+    "storage-manager",
+    "calling-generator"
+  ]
+}
 ```
 
-### ¿Cuántas peticiones al AI gateway?
+## APIs
+
+### Sesión Actual
+
 ```bash
-grep '"module":"ai-gateway"' data/logs/current.jsonl | wc -l
+# Info de la sesión actual
+GET /modules/log-manager/api/session
+
+# Módulos con logs en esta sesión
+GET /modules/log-manager/api/session/modules
+
+# Logs de un módulo específico
+GET /modules/log-manager/api/session/modules/ai-gateway/logs
+GET /modules/log-manager/api/session/modules/conversation-manager/logs?level=error
+
+# Configurar tracking dinámicamente
+PUT /modules/log-manager/api/session/track
+{ "modules": ["conversation-manager", "ai-gateway"] }
+
+# Añadir módulos al tracking
+POST /modules/log-manager/api/session/track/add
+{ "modules": ["prompt-manager"] }
 ```
 
-### ¿Qué módulos generan más logs?
+### Historial de Sesiones
+
 ```bash
-cat data/logs/current.jsonl | grep -o '"module":"[^"]*"' | sort | uniq -c | sort -rn
+# Listar todas las sesiones
+GET /modules/log-manager/api/sessions
+
+# Info de una sesión específica
+GET /modules/log-manager/api/sessions/2025-01-14_10-30-00_abc123
+
+# Logs de una sesión
+GET /modules/log-manager/api/sessions/2025-01-14_10-30-00_abc123/logs
+GET /modules/log-manager/api/sessions/2025-01-14_10-30-00_abc123/logs?module=ai-gateway
 ```
 
-### Timeline de errores
+### Logs Consolidados
+
 ```bash
-grep '"level":"error"' data/logs/current.jsonl | jq -r '[.ts, .module, .msg] | @tsv'
+# Logs con filtros
+GET /modules/log-manager/api/logs?level=error&module=ai-gateway
+
+# Agregar log (frontend)
+POST /modules/log-manager/api/logs
+{ "level": "error", "module": "chat-ui", "msg": "send.failed", "ctx": {} }
+
+# Estadísticas
+GET /modules/log-manager/api/stats
 ```
+
+## Para la IA
+
+### Leer logs de la sesión actual
+
+```bash
+# Ver todos los módulos con logs
+cat data/logs/sessions/*/session.json | jq .
+
+# Logs de conversation-manager
+cat data/logs/sessions/2025-01-14_*/modules/conversation-manager.jsonl
+
+# Buscar errores en ai-gateway
+grep '"level":"error"' data/logs/sessions/*/modules/ai-gateway.jsonl
+
+# Últimos 20 logs de un módulo
+tail -20 data/logs/sessions/$(ls -t data/logs/sessions | head -1)/modules/ai-gateway.jsonl
+```
+
+### Formato de entrada (JSONL)
+
+```json
+{"ts":"2025-01-14T10:00:01.123Z","level":"info","source":"backend","module":"ai-gateway","msg":"request.sent","ctx":{"provider":"anthropic","model":"claude-3"}}
+```
+
+## Flujo de Debug del Chat
+
+Para debuggear una conversación, revisa los logs en este orden:
+
+1. **conversation-manager** - Inicio del mensaje, contexto
+2. **prompt-manager** - Prompt construido
+3. **ai-gateway** - Request/Response al LLM
+4. **tool-orchestrator** - Si hay tool calls
+5. **calling-generator** - Generación de function calls
+6. **database-manager** - Operaciones DB
+7. **storage-manager** - Archivos adjuntos

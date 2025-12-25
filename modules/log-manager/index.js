@@ -2,40 +2,45 @@
  * Log Manager Module
  *
  * Sistema centralizado de logs para Event Core.
- * Recolecta logs de todos los módulos (backend y frontend) y los almacena
- * en formato JSONL para fácil análisis por IA.
+ * Gestiona logs por sesión de arranque y por módulo.
  *
  * Características:
- * - Almacenamiento en JSONL (JSON Lines) - un JSON por línea
- * - Rotación diaria automática
- * - Filtros por nivel, módulo, fecha, texto
- * - Estadísticas de logs
- * - Limpieza automática por retención
+ * - Logging por sesión: cada arranque crea una nueva sesión
+ * - Filtrado por módulos: configura qué módulos trackear
+ * - Formato JSONL: un JSON por línea, fácil de leer/grep
+ * - APIs para consulta y estadísticas
  *
- * Ubicación de logs:
+ * Estructura:
  *   data/logs/
- *   ├── current.jsonl      # Logs del día actual
- *   ├── 2025-01-14.jsonl   # Histórico por día
- *   └── index.json         # Índice con metadata
+ *   ├── sessions/                          # Logs por sesión
+ *   │   └── 2025-01-14_10-30-00_abc123/
+ *   │       ├── session.json               # Metadata de sesión
+ *   │       └── modules/
+ *   │           ├── conversation-manager.jsonl
+ *   │           ├── ai-gateway.jsonl
+ *   │           └── ...
+ *   └── current.jsonl                      # Logs consolidados (opcional)
  *
- * Para la IA:
- *   - Leer directo: cat data/logs/current.jsonl
- *   - Filtrar errores: grep '"level":"error"' data/logs/current.jsonl
- *   - Buscar módulo: grep '"module":"ai-gateway"' data/logs/current.jsonl
+ * Configuración en module.json:
+ *   - trackedModules: ['*'] para todos, o lista específica
+ *   - excludedModules: módulos a excluir del tracking
  *
  * @module log-manager
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 const path = require('path');
 const LogStorage = require('./lib/storage');
 const LogCollector = require('./lib/collector');
+const SessionLogger = require('./lib/session');
+const { listSessions, readSessionLogs } = require('./lib/session');
 
 class LogManagerModule {
   constructor() {
     this.name = 'log-manager';
     this.storage = null;
     this.collector = null;
+    this.session = null;
     this.logger = null;
     this.cleanupInterval = null;
   }
@@ -49,51 +54,111 @@ class LogManagerModule {
     this.logger = core.logger?.child({ module: this.name });
     this.config = core.moduleConfig || {};
 
-    // Resolver path de logs
+    // Resolver paths
     const logsPath = path.resolve(
       process.cwd(),
       this.config.logsPath || './data/logs'
     );
+    const sessionsPath = path.join(logsPath, 'sessions');
 
-    // Inicializar storage
+    // =========================================================================
+    // 1. Inicializar Session Logger (NUEVO - por sesión de arranque)
+    // =========================================================================
+    this.session = new SessionLogger({
+      sessionsPath,
+      coreId: core.config?.core?.id || core.id || 'unknown',
+      trackedModules: this.config.trackedModules || ['*'],
+      excludedModules: this.config.excludedModules || ['log-manager']
+    });
+
+    await this.session.init();
+
+    // =========================================================================
+    // 2. Inicializar Storage (para logs consolidados)
+    // =========================================================================
     this.storage = new LogStorage({
       logsPath,
       maxFileSize: this.config.maxFileSize || 10 * 1024 * 1024,
       retentionDays: this.config.retentionDays || 30,
-      rotateDaily: this.config.rotateDaily !== false
+      rotateDaily: this.config.rotateDaily !== false,
+      organizeByModule: false // Desactivar, ahora usamos SessionLogger
     });
 
-    // Inicializar collector
+    // =========================================================================
+    // 3. Inicializar Collector con Session Logger
+    // =========================================================================
     this.collector = new LogCollector({
       storage: this.storage,
+      session: this.session,
       eventBus: core.eventBus,
       logger: this.logger,
-      coreId: core.config?.core?.id || 'unknown'
+      coreId: core.config?.core?.id || core.id || 'unknown'
     });
 
-    // Iniciar recolección
     this.collector.start();
 
-    // Programar limpieza diaria
+    // =========================================================================
+    // 4. Programar limpieza de sesiones antiguas
+    // =========================================================================
     this.cleanupInterval = setInterval(() => {
       this.storage.cleanup();
+      this._cleanupOldSessions();
     }, 24 * 60 * 60 * 1000); // Cada 24 horas
 
     // Log inicial
     this.logger?.info('log-manager.loaded', {
-      logsPath,
-      retentionDays: this.config.retentionDays || 30
+      sessionId: this.session.sessionId,
+      trackedModules: this.session.trackedModules,
+      excludedModules: this.session.excludedModules
     });
 
-    // Escribir un log de prueba para verificar que funciona
-    this.storage.write({
+    // Escribir log de inicio de sesión
+    this.session.write('log-manager', {
       ts: new Date().toISOString(),
       level: 'info',
       source: 'backend',
       module: 'log-manager',
-      msg: 'module.initialized',
-      ctx: { logsPath, version: '1.0.0' }
+      msg: 'session.started',
+      ctx: {
+        sessionId: this.session.sessionId,
+        trackedModules: this.session.trackedModules,
+        version: '2.0.0'
+      }
     });
+  }
+
+  /**
+   * Limpia sesiones antiguas
+   */
+  _cleanupOldSessions() {
+    const retentionDays = this.config.sessionRetentionDays || 7;
+    const sessionsPath = path.join(
+      process.cwd(),
+      this.config.logsPath || './data/logs',
+      'sessions'
+    );
+
+    try {
+      const sessions = listSessions(sessionsPath);
+      const cutoff = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
+      let deleted = 0;
+
+      for (const session of sessions) {
+        const sessionDate = new Date(session.startedAt || 0);
+        if (sessionDate.getTime() < cutoff) {
+          // Eliminar sesión antigua
+          const fs = require('fs');
+          fs.rmSync(session.path, { recursive: true, force: true });
+          deleted++;
+        }
+      }
+
+      if (deleted > 0) {
+        this.logger?.info('log-manager.sessions.cleaned', { deleted, retentionDays });
+      }
+    } catch (err) {
+      this.logger?.error('log-manager.sessions.cleanup_failed', { error: err.message });
+    }
   }
 
   /**
@@ -108,6 +173,10 @@ class LogManagerModule {
       this.collector.stop();
     }
 
+    if (this.session) {
+      this.session.close();
+    }
+
     if (this.storage) {
       this.storage.close();
     }
@@ -116,24 +185,190 @@ class LogManagerModule {
   }
 
   // ===========================================================================
-  // API HANDLERS
+  // API: SESIÓN ACTUAL
   // ===========================================================================
 
   /**
-   * GET /logs - Obtener logs con filtros
+   * GET /session - Info de la sesión actual
+   */
+  async getSession(req) {
+    return {
+      success: true,
+      session: this.session.getSessionInfo()
+    };
+  }
+
+  /**
+   * GET /session/modules - Módulos con logs en la sesión actual
+   */
+  async getSessionModules(req) {
+    const modules = this.session.listModules();
+    return {
+      success: true,
+      sessionId: this.session.sessionId,
+      count: modules.length,
+      modules
+    };
+  }
+
+  /**
+   * GET /session/modules/:module/logs - Logs de un módulo en la sesión actual
+   */
+  async getSessionModuleLogs(req) {
+    const moduleName = this._extractModuleName(req.path, 'modules', 'logs');
+
+    if (!moduleName) {
+      return { success: false, error: 'Module name required' };
+    }
+
+    const filters = {
+      level: req.query?.level,
+      search: req.query?.search
+    };
+
+    const logs = this.session.readModule(moduleName, filters);
+
+    return {
+      success: true,
+      sessionId: this.session.sessionId,
+      module: moduleName,
+      count: logs.length,
+      logs
+    };
+  }
+
+  /**
+   * PUT /session/track - Configurar módulos a trackear
    *
-   * Query params:
-   *   - level: Filtrar por nivel (comma-separated: error,warn)
-   *   - module: Filtrar por módulo (comma-separated: ai-gateway,database)
-   *   - source: Filtrar por fuente (backend/frontend)
-   *   - search: Búsqueda en mensaje y contexto
-   *   - from: Fecha desde (YYYY-MM-DD)
-   *   - to: Fecha hasta (YYYY-MM-DD)
-   *   - limit: Límite de resultados (default: 100)
-   *   - offset: Offset para paginación (default: 0)
-   *
-   * @example
-   * GET /modules/log-manager/api/logs?level=error&module=ai-gateway&limit=50
+   * Body:
+   *   - modules: ['conversation-manager', 'ai-gateway'] o ['*']
+   *   - exclude: ['log-manager'] (opcional)
+   */
+  async setTrackedModules(req) {
+    const { modules, exclude } = req.body || {};
+
+    if (modules) {
+      this.session.setTrackedModules(modules);
+    }
+
+    if (exclude) {
+      this.session.addExcludedModules(exclude);
+    }
+
+    return {
+      success: true,
+      trackedModules: this.session.trackedModules,
+      excludedModules: this.session.excludedModules
+    };
+  }
+
+  /**
+   * POST /session/track/add - Añadir módulos al tracking
+   */
+  async addTrackedModules(req) {
+    const { modules } = req.body || {};
+
+    if (!modules || !Array.isArray(modules)) {
+      return { success: false, error: 'modules array required' };
+    }
+
+    this.session.addTrackedModules(modules);
+
+    return {
+      success: true,
+      trackedModules: this.session.trackedModules
+    };
+  }
+
+  // ===========================================================================
+  // API: HISTORIAL DE SESIONES
+  // ===========================================================================
+
+  /**
+   * GET /sessions - Listar todas las sesiones
+   */
+  async getSessions(req) {
+    const sessionsPath = path.join(
+      process.cwd(),
+      this.config.logsPath || './data/logs',
+      'sessions'
+    );
+
+    const sessions = listSessions(sessionsPath);
+    const limit = parseInt(req.query?.limit) || 20;
+
+    return {
+      success: true,
+      currentSession: this.session.sessionId,
+      count: sessions.length,
+      sessions: sessions.slice(0, limit)
+    };
+  }
+
+  /**
+   * GET /sessions/:id - Info de una sesión específica
+   */
+  async getSessionById(req) {
+    const sessionId = this._extractParam(req.path, 'sessions');
+
+    if (!sessionId) {
+      return { success: false, error: 'Session ID required' };
+    }
+
+    const sessionsPath = path.join(
+      process.cwd(),
+      this.config.logsPath || './data/logs',
+      'sessions'
+    );
+
+    const sessions = listSessions(sessionsPath);
+    const session = sessions.find(s => s.id === sessionId);
+
+    if (!session) {
+      return { success: false, error: 'Session not found' };
+    }
+
+    return {
+      success: true,
+      session
+    };
+  }
+
+  /**
+   * GET /sessions/:id/logs - Logs de una sesión específica
+   */
+  async getSessionLogs(req) {
+    const sessionId = this._extractSessionId(req.path);
+
+    if (!sessionId) {
+      return { success: false, error: 'Session ID required' };
+    }
+
+    const moduleName = req.query?.module || null;
+    const sessionsPath = path.join(
+      process.cwd(),
+      this.config.logsPath || './data/logs',
+      'sessions'
+    );
+
+    const logs = readSessionLogs(sessionId, moduleName, sessionsPath);
+    const limit = parseInt(req.query?.limit) || 500;
+
+    return {
+      success: true,
+      sessionId,
+      module: moduleName || 'all',
+      count: logs.length,
+      logs: logs.slice(-limit) // Últimos N logs
+    };
+  }
+
+  // ===========================================================================
+  // API: LOGS CONSOLIDADOS (legado)
+  // ===========================================================================
+
+  /**
+   * GET /logs - Obtener logs consolidados con filtros
    */
   async getLogs(req) {
     const filters = {
@@ -158,18 +393,7 @@ class LogManagerModule {
   }
 
   /**
-   * POST /logs - Agregar un log (desde frontend u otros sistemas)
-   *
-   * Body:
-   *   - level: Nivel del log (debug/info/warn/error)
-   *   - module: Nombre del módulo
-   *   - msg: Mensaje del evento
-   *   - ctx: Contexto adicional (opcional)
-   *   - source: Fuente (default: frontend)
-   *
-   * @example
-   * POST /modules/log-manager/api/logs
-   * { "level": "error", "module": "chat", "msg": "send.failed", "ctx": { "error": "timeout" } }
+   * POST /logs - Agregar un log (desde frontend)
    */
   async addLog(req) {
     const body = req.body || {};
@@ -186,306 +410,71 @@ class LogManagerModule {
   }
 
   /**
-   * GET /stats - Estadísticas de logs
-   *
-   * Retorna:
-   *   - total: Total de logs
-   *   - byLevel: Conteo por nivel
-   *   - byModule: Conteo por módulo
-   *   - currentFile: Info del archivo actual
-   *   - archivedFiles: Cantidad de archivos históricos
-   *   - collector: Stats del collector
+   * GET /stats - Estadísticas generales
    */
   async getStats(req) {
-    const storageStats = this.storage.getStats();
+    const sessionInfo = this.session.getSessionInfo();
     const collectorStats = this.collector.getStats();
 
     return {
       success: true,
       stats: {
-        ...storageStats,
-        collector: collectorStats
+        currentSession: {
+          id: sessionInfo.id,
+          startedAt: sessionInfo.startedAt,
+          uptime: sessionInfo.uptime,
+          entries: sessionInfo.stats.totalEntries,
+          byModule: sessionInfo.stats.byModule,
+          byLevel: sessionInfo.stats.byLevel
+        },
+        collector: collectorStats,
+        trackedModules: this.session.trackedModules,
+        excludedModules: this.session.excludedModules
       }
-    };
-  }
-
-  /**
-   * GET /files - Listar archivos de logs
-   *
-   * Retorna lista de archivos JSONL disponibles con su metadata.
-   * Útil para la IA para saber qué archivos puede leer.
-   */
-  async getFiles(req) {
-    const files = this.storage.listFiles();
-
-    return {
-      success: true,
-      count: files.length,
-      files,
-      tip: 'Para leer un archivo: cat <path> o grep "pattern" <path>'
-    };
-  }
-
-  /**
-   * DELETE /logs - Limpiar logs antiguos
-   *
-   * Query params:
-   *   - olderThan: Días de antigüedad (default: usa retentionDays del config)
-   *
-   * @example
-   * DELETE /modules/log-manager/api/logs?olderThan=7
-   */
-  async clearLogs(req) {
-    const olderThan = parseInt(req.query?.olderThan);
-
-    if (olderThan) {
-      // Temporalmente cambiar retención
-      const originalRetention = this.storage.retentionDays;
-      this.storage.retentionDays = olderThan;
-      const deleted = this.storage.cleanup();
-      this.storage.retentionDays = originalRetention;
-
-      return {
-        success: true,
-        deleted,
-        message: `Deleted ${deleted} files older than ${olderThan} days`
-      };
-    }
-
-    const deleted = this.storage.cleanup();
-
-    return {
-      success: true,
-      deleted,
-      message: `Deleted ${deleted} files older than ${this.storage.retentionDays} days`
-    };
-  }
-
-  /**
-   * GET /activities - Obtener actividades con filtros
-   *
-   * Query params:
-   *   - type: Tipo de actividad (module_action, event_flow, api_operation, etc.)
-   *   - module: Filtrar por módulo
-   *   - action: Filtrar por acción (puede ser parcial)
-   *   - outcome: Filtrar por resultado (success, failure, pending, timeout)
-   *   - limit: Límite de resultados (default: 100)
-   *   - offset: Offset para paginación (default: 0)
-   *
-   * @example
-   * GET /modules/log-manager/api/activities?type=api_operation&module=file-browser&limit=50
-   */
-  async getActivities(req) {
-    const filters = {
-      source: 'activity',  // Only activity logs
-      module: req.query?.module,
-      search: req.query?.action,
-      limit: parseInt(req.query?.limit) || 100,
-      offset: parseInt(req.query?.offset) || 0
-    };
-
-    let logs = this.storage.read(filters);
-
-    // Additional filtering by activity type and outcome
-    const activityType = req.query?.type;
-    const outcome = req.query?.outcome;
-
-    if (activityType || outcome) {
-      logs = logs.filter(log => {
-        if (activityType && log.ctx?.type !== activityType) return false;
-        if (outcome && log.ctx?.outcome !== outcome) return false;
-        return true;
-      });
-    }
-
-    // Transform to cleaner activity format
-    const activities = logs.map(log => ({
-      id: log.ctx?.activityId,
-      ts: log.ts,
-      type: log.ctx?.type,
-      module: log.module,
-      action: log.ctx?.action,
-      outcome: log.ctx?.outcome,
-      duration_ms: log.ctx?.duration_ms,
-      context: log.ctx,
-      error: log.error
-    }));
-
-    return {
-      success: true,
-      count: activities.length,
-      filters: {
-        type: activityType,
-        module: req.query?.module,
-        action: req.query?.action,
-        outcome: outcome
-      },
-      activities
-    };
-  }
-
-  /**
-   * GET /activities/stats - Estadísticas de actividades
-   *
-   * Retorna:
-   *   - total: Total de actividades
-   *   - byType: Conteo por tipo de actividad
-   *   - byModule: Conteo por módulo
-   *   - byOutcome: Conteo por resultado
-   */
-  async getActivityStats(req) {
-    const logs = this.storage.read({ source: 'activity', limit: 10000 });
-
-    const stats = {
-      total: logs.length,
-      byType: {},
-      byModule: {},
-      byOutcome: {}
-    };
-
-    for (const log of logs) {
-      const type = log.ctx?.type || 'unknown';
-      const module = log.module || 'unknown';
-      const outcome = log.ctx?.outcome || 'unknown';
-
-      stats.byType[type] = (stats.byType[type] || 0) + 1;
-      stats.byModule[module] = (stats.byModule[module] || 0) + 1;
-      stats.byOutcome[outcome] = (stats.byOutcome[outcome] || 0) + 1;
-    }
-
-    return {
-      success: true,
-      stats
     };
   }
 
   // ===========================================================================
-  // LOGS POR MÓDULO
+  // HELPERS
   // ===========================================================================
 
   /**
-   * GET /modules - Listar todos los módulos con logs
-   *
-   * Retorna lista de módulos que tienen archivos de log,
-   * con estadísticas de cada uno.
-   *
-   * @example
-   * GET /modules/log-manager/api/modules
+   * Extrae nombre de módulo de una URL
    */
-  async getModules(req) {
-    const modules = this.storage.listModules();
-
-    return {
-      success: true,
-      count: modules.length,
-      modules,
-      tip: 'Usa GET /modules/log-manager/api/modules/{nombre}/logs para ver logs de un módulo'
-    };
+  _extractModuleName(urlPath, before, after) {
+    const parts = urlPath.split('/');
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === before && parts[i + 2] === after) {
+        return parts[i + 1];
+      }
+    }
+    return null;
   }
 
   /**
-   * GET /modules/:module/logs - Obtener logs de un módulo específico
-   *
-   * Query params:
-   *   - level: Filtrar por nivel (comma-separated: error,warn)
-   *   - source: Filtrar por fuente (backend/frontend/activity)
-   *   - search: Búsqueda en mensaje y contexto
-   *   - limit: Límite de resultados (default: 100)
-   *   - offset: Offset para paginación (default: 0)
-   *
-   * @example
-   * GET /modules/log-manager/api/modules/file-browser/logs?level=error&limit=50
+   * Extrae un parámetro de la URL
    */
-  async getModuleLogs(req) {
-    // Extraer nombre del módulo de la URL
-    // La URL será como: /modules/log-manager/api/modules/file-browser/logs
-    const pathParts = req.path.split('/');
-    const modulesIndex = pathParts.indexOf('modules');
-
-    // El nombre del módulo está después de 'modules' en la API path
-    // /api/modules/{moduleName}/logs
-    let moduleName = null;
-    for (let i = 0; i < pathParts.length; i++) {
-      if (pathParts[i] === 'modules' && pathParts[i + 2] === 'logs') {
-        moduleName = pathParts[i + 1];
-        break;
+  _extractParam(urlPath, after) {
+    const parts = urlPath.split('/');
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === after && parts[i + 1]) {
+        return parts[i + 1];
       }
     }
-
-    if (!moduleName) {
-      return {
-        success: false,
-        error: 'Module name not specified'
-      };
-    }
-
-    const filters = {
-      level: req.query?.level,
-      source: req.query?.source,
-      search: req.query?.search,
-      limit: parseInt(req.query?.limit) || 100,
-      offset: parseInt(req.query?.offset) || 0
-    };
-
-    const logs = this.storage.readByModule(moduleName, filters);
-
-    return {
-      success: true,
-      module: moduleName,
-      count: logs.length,
-      filters,
-      logs
-    };
+    return null;
   }
 
   /**
-   * GET /modules/:module/stats - Estadísticas de un módulo específico
-   *
-   * @example
-   * GET /modules/log-manager/api/modules/file-browser/stats
+   * Extrae session ID de URLs como /sessions/:id/logs
    */
-  async getModuleStats(req) {
-    // Extraer nombre del módulo de la URL
-    const pathParts = req.path.split('/');
-    let moduleName = null;
-    for (let i = 0; i < pathParts.length; i++) {
-      if (pathParts[i] === 'modules' && pathParts[i + 2] === 'stats') {
-        moduleName = pathParts[i + 1];
-        break;
+  _extractSessionId(urlPath) {
+    const parts = urlPath.split('/');
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === 'sessions' && parts[i + 1] && parts[i + 1] !== 'logs') {
+        return parts[i + 1];
       }
     }
-
-    if (!moduleName) {
-      return {
-        success: false,
-        error: 'Module name not specified'
-      };
-    }
-
-    const logs = this.storage.readByModule(moduleName, { limit: 10000 });
-
-    const stats = {
-      module: moduleName,
-      total: logs.length,
-      byLevel: {},
-      bySource: {},
-      byType: {},
-      firstLog: logs.length > 0 ? logs[logs.length - 1].ts : null,
-      lastLog: logs.length > 0 ? logs[0].ts : null
-    };
-
-    for (const log of logs) {
-      stats.byLevel[log.level] = (stats.byLevel[log.level] || 0) + 1;
-      stats.bySource[log.source] = (stats.bySource[log.source] || 0) + 1;
-      if (log.ctx?.type) {
-        stats.byType[log.ctx.type] = (stats.byType[log.ctx.type] || 0) + 1;
-      }
-    }
-
-    return {
-      success: true,
-      stats
-    };
+    return null;
   }
 
   // ===========================================================================
@@ -493,38 +482,24 @@ class LogManagerModule {
   // ===========================================================================
 
   /**
-   * Método helper para que la IA pueda obtener logs fácilmente
-   * @param {Object} filters - Filtros
-   * @returns {Array} Logs
-   */
-  query(filters = {}) {
-    return this.storage.read(filters);
-  }
-
-  /**
-   * Método helper para obtener logs de un módulo
-   * @param {string} moduleName - Nombre del módulo
-   * @param {Object} filters - Filtros
-   * @returns {Array} Logs
+   * Helper: obtener logs de la sesión actual para un módulo
    */
   queryModule(moduleName, filters = {}) {
-    return this.storage.readByModule(moduleName, filters);
+    return this.session.readModule(moduleName, filters);
   }
 
   /**
-   * Método helper para obtener la ruta del archivo actual
-   * @returns {string} Path al archivo current.jsonl
+   * Helper: obtener info de sesión actual
    */
-  getCurrentLogPath() {
-    return path.resolve(process.cwd(), this.config.logsPath || './data/logs', 'current.jsonl');
+  getCurrentSession() {
+    return this.session.getSessionInfo();
   }
 
   /**
-   * Método helper para obtener el directorio de logs
-   * @returns {string} Path al directorio de logs
+   * Helper: obtener path de la sesión actual
    */
-  getLogsDirectory() {
-    return path.resolve(process.cwd(), this.config.logsPath || './data/logs');
+  getSessionPath() {
+    return this.session.sessionPath;
   }
 }
 

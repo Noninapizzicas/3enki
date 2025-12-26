@@ -14,6 +14,7 @@
   import { fly, fade, scale } from 'svelte/transition';
   import { spring } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
+  import { browser } from '$app/environment';
   import { PANEL_SIZES } from '$lib/ui-core';
 
   export let title: string = '';
@@ -38,6 +39,7 @@
 
   // Tamaños base según size prop (convertir vh a pixeles)
   function vhToPixels(vh: number): number {
+    if (!browser) return (vh / 100) * 800; // Default height for SSR
     return (vh / 100) * window.innerHeight;
   }
 

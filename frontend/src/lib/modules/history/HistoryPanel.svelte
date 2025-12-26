@@ -97,10 +97,13 @@
       </div>
     {:else}
       {#each conversations as conv (conv.id)}
-        <button
+        <div
           class="conversation-item"
           class:active={$conversationId === conv.id}
+          role="button"
+          tabindex="0"
           on:click={() => handleSelect(conv)}
+          on:keydown={(e) => e.key === 'Enter' && handleSelect(conv)}
         >
           <div class="conv-header">
             <span class="conv-title">{conv.title}</span>
@@ -111,13 +114,13 @@
             <span class="conv-count">{conv.messageCount} mensajes</span>
             <button
               class="delete-btn"
-              on:click={(e) => handleDelete(conv.id, e)}
+              on:click|stopPropagation={(e) => handleDelete(conv.id, e)}
               title="Eliminar"
             >
               🗑️
             </button>
           </div>
-        </button>
+        </div>
       {/each}
     {/if}
   </div>

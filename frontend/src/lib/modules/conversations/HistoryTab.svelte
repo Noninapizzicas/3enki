@@ -145,10 +145,13 @@
           {#if expandedSections[section.id]}
             <div class="section-content">
               {#each section.conversations as conversation (conversation.id)}
-                <button
+                <div
                   class="conversation-item"
                   class:active={currentId === conversation.id}
+                  role="button"
+                  tabindex="0"
                   on:click={() => handleSelect(conversation.id)}
+                  on:keydown={(e) => e.key === 'Enter' && handleSelect(conversation.id)}
                 >
                   <div class="conversation-info">
                     <span class="conversation-title">{conversation.title}</span>
@@ -158,13 +161,13 @@
                   </div>
                   <button
                     class="delete-btn"
-                    on:click={(e) => handleDelete(conversation.id, e)}
+                    on:click|stopPropagation={(e) => handleDelete(conversation.id, e)}
                     disabled={deleting === conversation.id}
                     title="Eliminar"
                   >
                     {deleting === conversation.id ? '⏳' : '🗑️'}
                   </button>
-                </button>
+                </div>
               {/each}
             </div>
           {/if}

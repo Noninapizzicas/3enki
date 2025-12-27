@@ -92,7 +92,13 @@ export async function sendMessage(content: string): Promise<void> {
 
   // Enviar via mqttRequest (patrón ui/request/conversation/send)
   try {
-    await mqttRequest('conversation', 'send', {
+    const response = await mqttRequest<{
+      conversationId: string;
+      user_message: Message;
+      assistant_message: Message;
+      tokens_used?: number;
+      cost?: number;
+    }>('conversation', 'send', {
       conversationId: convId,
       content: userMessage.content,
       attachments: currentAttachments.map(a => ({
@@ -101,6 +107,25 @@ export async function sendMessage(content: string): Promise<void> {
         name: a.name
       }))
     });
+
+    // Añadir mensaje del asistente si existe
+    if (response?.assistant_message) {
+      const assistantMsg: Message = {
+        id: response.assistant_message.id || crypto.randomUUID(),
+        role: 'assistant',
+        content: response.assistant_message.content,
+        timestamp: response.assistant_message.created_at || new Date().toISOString(),
+        metadata: response.assistant_message.metadata
+      };
+      messages.update(msgs => [...msgs, assistantMsg]);
+    }
+
+    // Actualizar conversationId si se creó una nueva
+    if (response?.conversationId && response.conversationId !== convId) {
+      conversationId.set(response.conversationId);
+    }
+
+    isStreaming.set(false);
   } catch (error) {
     console.error('[chat] Error sending message:', error);
     isStreaming.set(false);

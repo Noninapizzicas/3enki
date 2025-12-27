@@ -241,6 +241,57 @@ IMPLEMENTAR: {module_name}
 
 ---
 
+## 👁️ OBSERVABILIDAD DEL SISTEMA (System Inspector)
+
+Cuando necesites saber qué está pasando en el sistema (errores, requests, eventos), consulta:
+
+### Archivo de estado (actualizado cada 2s):
+```bash
+# Leer directamente
+Read("/home/user/event-core/data/system-console.json")
+```
+
+### Endpoint HTTP (si el sistema está corriendo):
+```bash
+curl http://localhost:3000/modules/system-inspector/status
+```
+
+### Formato del JSON:
+```json
+{
+  "_meta": {
+    "core_id": "core-a",
+    "uptime_seconds": 120,
+    "entries_count": 50
+  },
+  "summary": {
+    "errors": 2,
+    "warnings": 5,
+    "network_requests": 30,
+    "network_failures": 1,
+    "mqtt_messages": 100
+  },
+  "recent_errors": [
+    { "type": "error", "source": "ai-gateway", "message": "...", "stack": "..." }
+  ],
+  "console": [
+    { "type": "network", "method": "POST", "path": "/api/chat", "status": 500, "duration_ms": 234 },
+    { "type": "mqtt", "direction": "out", "topic": "core/events/...", "payload": {...} },
+    { "type": "error", "source": "module", "message": "...", "stack": "..." }
+  ]
+}
+```
+
+### Cuándo consultar:
+- ❌ Cuando algo falla y no sabes por qué
+- 🔍 Para diagnosticar errores de integración
+- 📊 Para ver el flujo de eventos MQTT
+- 🌐 Para ver requests HTTP fallidos
+
+**Nota:** Solo disponible en modo desarrollo (NODE_ENV=development).
+
+---
+
 💡 **Recuerda**: Cada módulo debe mantener coherencia arquitectónica y funcionamiento óptimo de forma independiente antes de englobarse en el sistema completo.
 
 🎯 **Objetivo**: Módulos funcionales, escalables y mantenibles que se integren cohesivamente en el ecosistema global.

@@ -170,6 +170,7 @@ start_backend() {
     # Exportar puertos para el proceso
     export PORT=$port
     export MQTT_PORT=$mqtt_port
+    export NODE_ENV=${NODE_ENV:-development}
 
     # Iniciar backend
     cd "$SCRIPT_DIR"

@@ -24,7 +24,6 @@ class MqttInterceptor {
 
     // Bound handlers
     this._boundOnMessage = this._onMessage.bind(this);
-    this._boundOnPublish = this._onPublish.bind(this);
 
     // Original publish method
     this._originalPublish = null;
@@ -94,9 +93,17 @@ class MqttInterceptor {
 
     for (const topic of topics) {
       if (typeof this.eventBus.subscribe === 'function') {
-        this.eventBus.subscribe(topic, (data, info) => {
-          this._captureIncoming(info?.topic || topic, data);
-        }).catch(() => {});
+        try {
+          const result = this.eventBus.subscribe(topic, (data, info) => {
+            this._captureIncoming(info?.topic || topic, data);
+          });
+          // Handle promise if returned
+          if (result && typeof result.catch === 'function') {
+            result.catch(() => {});
+          }
+        } catch (e) {
+          // Ignore subscription errors
+        }
       }
     }
   }

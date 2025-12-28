@@ -106,23 +106,24 @@ export async function sendMessage(content: string): Promise<void> {
         path: a.path,
         name: a.name
       }))
-    });
+    }, { timeout: 60000 }); // 60s para respuestas de IA
 
-    // Añadir mensaje del asistente si existe
-    if (response?.assistant_message) {
+    // Añadir mensaje del asistente si existe (está en response.data)
+    const data = response?.data;
+    if (data?.assistant_message) {
       const assistantMsg: Message = {
-        id: response.assistant_message.id || crypto.randomUUID(),
+        id: data.assistant_message.id || crypto.randomUUID(),
         role: 'assistant',
-        content: response.assistant_message.content,
-        timestamp: response.assistant_message.created_at || new Date().toISOString(),
-        metadata: response.assistant_message.metadata
+        content: data.assistant_message.content,
+        timestamp: data.assistant_message.created_at || new Date().toISOString(),
+        metadata: data.assistant_message.metadata
       };
       messages.update(msgs => [...msgs, assistantMsg]);
     }
 
     // Actualizar conversationId si se creó una nueva
-    if (response?.conversationId && response.conversationId !== convId) {
-      conversationId.set(response.conversationId);
+    if (data?.conversationId && data.conversationId !== convId) {
+      conversationId.set(data.conversationId);
     }
 
     isStreaming.set(false);

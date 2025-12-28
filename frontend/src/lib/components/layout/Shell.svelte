@@ -143,6 +143,7 @@
 
   .main {
     flex: 1;
+    min-height: 0; /* Necesario para scroll en flexbox */
     display: flex;
     flex-direction: column;
     overflow: hidden;

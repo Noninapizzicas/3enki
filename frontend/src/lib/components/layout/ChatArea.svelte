@@ -82,7 +82,9 @@
 <style>
   .chat-area {
     flex: 1;
+    min-height: 0; /* Necesario para scroll en flexbox */
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* Scroll suave en móvil */
     padding: 1rem;
     display: flex;
     flex-direction: column;

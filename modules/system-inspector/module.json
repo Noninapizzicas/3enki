@@ -2,6 +2,7 @@
   "name": "system-inspector",
   "version": "1.0.0",
   "description": "Captura estado del sistema (HTTP, MQTT, errores, logs) para consulta por IA",
+  "main": "index.js",
   "dev_only": true,
   "provides": {
     "events": [],
@@ -51,6 +52,24 @@
       "errors": true,
       "logs": true,
       "validation": true
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "system-inspector.entries.captured",
+        "system-inspector.errors.captured",
+        "system-inspector.http.captured",
+        "system-inspector.mqtt.captured"
+      ],
+      "gauges": [
+        "system-inspector.buffer.size"
+      ]
     }
   }
 }

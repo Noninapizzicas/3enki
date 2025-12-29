@@ -677,19 +677,38 @@ async handleUpload(args, context) {
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
-| Función | Almacenamiento externo | S3, Google Cloud, etc. |
-| Integración | Via tools | IA puede solicitar uploads/downloads |
-| Permisos | Por tool | Algunas requieren confirmación |
+| Función | Almacenamiento LOCAL por proyecto | `data/storage/{project-id}/` |
+| Auto-gestión | Sí | Se crea/elimina con el proyecto |
+| Categorías | uploads, exports, temp, files | Organización interna |
+| Cleanup | Automático | Archivos temp se limpian tras 24h |
+
+**Estructura:**
+```
+data/storage/
+└── {project-id}/
+    ├── uploads/       # Archivos subidos por usuarios
+    ├── exports/       # Exports generados (CSV, PDF, etc.)
+    ├── temp/          # Archivos temporales (auto-cleanup)
+    └── files/         # Otros archivos del proyecto
+```
 
 **Tools expuestas:**
 ```javascript
 [
-  { name: "storage.list", description: "Lista archivos en storage remoto" },
-  { name: "storage.download", description: "Descarga archivo de storage" },
-  { name: "storage.upload", description: "Sube archivo a storage", requires_confirmation: true },
-  { name: "storage.delete", description: "Elimina archivo de storage", requires_confirmation: true }
+  { name: "storage.list", description: "Lista archivos del storage del proyecto" },
+  { name: "storage.info", description: "Info de uso del storage (tamaño, conteo)" },
+  { name: "storage.download", description: "Descarga archivo del storage" },
+  { name: "storage.upload", description: "Sube archivo al storage", requires_confirmation: true },
+  { name: "storage.delete", description: "Elimina archivo del storage", requires_confirmation: true },
+  { name: "storage.cleanup", description: "Limpia archivos temporales" }
 ]
 ```
+
+**Integración automática:**
+- `project.created` → Storage se crea automáticamente
+- `project.deleted` → Storage se elimina automáticamente
+
+**Futuro (opcional):** Cloud Storage (S3, Google Cloud) como módulo separado si se necesita.
 
 ---
 
@@ -788,7 +807,7 @@ async handleUpload(args, context) {
 | 6 | Prompt Manager | ✅ Definido | Prompts catalogados, combinables |
 | 7 | Plugin Manager | ✅ Definido | Plugins que añaden tools |
 | 8 | Credential Manager | ✅ Definido | Credenciales (solo nombres a IA) |
-| 9 | Storage Manager | ✅ Definido | Storage remoto via tools |
+| 9 | Storage Manager | ✅ Definido | Storage LOCAL por proyecto |
 | 10 | Database Manager | ✅ Definido | Consultas SQL via tools |
 | 11 | File Browser | ✅ Definido | Navegación de archivos |
 | 12 | Text Editor | ✅ Definido | Edición de archivos |
@@ -925,4 +944,5 @@ Usuario escribe mensaje
 | 2025-12-28 | Documento inicial con AI Gateway, Project Manager, Conversation Manager |
 | 2025-12-29 | Añadido sistema de Tools completo: tool-translator, tool-orchestrator, flujo, casos especiales |
 | 2025-12-29 | Completados TODOS los módulos: Prompt Manager, Plugin, Credential, Storage, Database, File Browser, Text Editor, PDF Viewer |
+| 2025-12-29 | Storage Manager corregido: es LOCAL por proyecto, no remoto |
 

@@ -1,0 +1,168 @@
+{
+  "name": "filesystem",
+  "version": "1.0.0",
+  "description": "Core filesystem operations for the entire system",
+  "author": "Aichat Team",
+  "main": "index.js",
+
+  "handlers": [
+    { "domain": "fs", "action": "list", "method": "handleList" },
+    { "domain": "fs", "action": "read", "method": "handleRead" },
+    { "domain": "fs", "action": "write", "method": "handleWrite" },
+    { "domain": "fs", "action": "delete", "method": "handleDelete" },
+    { "domain": "fs", "action": "mkdir", "method": "handleMkdir" },
+    { "domain": "fs", "action": "move", "method": "handleMove" },
+    { "domain": "fs", "action": "copy", "method": "handleCopy" },
+    { "domain": "fs", "action": "search", "method": "handleSearch" },
+    { "domain": "fs", "action": "info", "method": "handleInfo" }
+  ],
+
+  "tools": [
+    {
+      "name": "fs.list",
+      "description": "Lista archivos y carpetas de un directorio",
+      "handler": "handleList",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta del directorio", "default": "/" }
+        }
+      }
+    },
+    {
+      "name": "fs.read",
+      "description": "Lee el contenido de un archivo",
+      "handler": "handleRead",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta del archivo" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "fs.write",
+      "description": "Escribe contenido a un archivo (crea si no existe)",
+      "handler": "handleWrite",
+      "confirmation": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta del archivo" },
+          "content": { "type": "string", "description": "Contenido a escribir" }
+        },
+        "required": ["path", "content"]
+      }
+    },
+    {
+      "name": "fs.delete",
+      "description": "Elimina un archivo o carpeta",
+      "handler": "handleDelete",
+      "confirmation": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta a eliminar" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "fs.mkdir",
+      "description": "Crea un directorio",
+      "handler": "handleMkdir",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta del directorio a crear" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "fs.move",
+      "description": "Mueve un archivo o carpeta",
+      "handler": "handleMove",
+      "confirmation": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "from": { "type": "string", "description": "Ruta origen" },
+          "to": { "type": "string", "description": "Ruta destino" }
+        },
+        "required": ["from", "to"]
+      }
+    },
+    {
+      "name": "fs.copy",
+      "description": "Copia un archivo",
+      "handler": "handleCopy",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "from": { "type": "string", "description": "Ruta origen" },
+          "to": { "type": "string", "description": "Ruta destino" }
+        },
+        "required": ["from", "to"]
+      }
+    },
+    {
+      "name": "fs.search",
+      "description": "Busca archivos por nombre o contenido",
+      "handler": "handleSearch",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Texto a buscar" },
+          "path": { "type": "string", "description": "Directorio base", "default": "/" },
+          "content": { "type": "boolean", "description": "Buscar en contenido", "default": false }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "fs.info",
+      "description": "Obtiene informacion de un archivo o carpeta",
+      "handler": "handleInfo",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta del archivo o carpeta" }
+        },
+        "required": ["path"]
+      }
+    }
+  ],
+
+  "events": {
+    "publishes": [
+      "fs.file.created",
+      "fs.file.updated",
+      "fs.file.deleted",
+      "fs.directory.created"
+    ],
+    "subscribes": []
+  },
+
+  "ui": {
+    "zone": "work-bar",
+    "icon": "📁"
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "fs.read.total",
+        "fs.write.total",
+        "fs.delete.total",
+        "fs.error.total"
+      ]
+    }
+  }
+}

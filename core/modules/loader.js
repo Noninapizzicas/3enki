@@ -49,6 +49,12 @@ class ModuleLoader {
      * Map: moduleName -> FSWatcher
      */
     this.watchers = new Map();
+
+    /**
+     * Tools registry for AI
+     * Map: toolName -> { name, description, parameters, handler, module, confirmation }
+     */
+    this.toolsRegistry = new Map();
   }
 
   /**
@@ -302,6 +308,11 @@ class ModuleLoader {
         });
       }
 
+      // Register tools for AI if defined in manifest
+      if (manifest.tools && Array.isArray(manifest.tools)) {
+        this.registerToolsForAI(moduleName, manifest.tools, instance);
+      }
+
       if (this.logger) {
         this.logger.info('module.loaded', {
           module: moduleName,
@@ -356,6 +367,9 @@ class ModuleLoader {
       if (this.registry) {
         this.registry.unregister(moduleName);
       }
+
+      // Unregister tools for AI
+      this.unregisterToolsForAI(moduleName);
 
       // Detener watcher si existe
       if (this.watchers.has(moduleName)) {
@@ -600,6 +614,165 @@ class ModuleLoader {
    */
   isLoaded(moduleName) {
     return this.loadedModules.has(moduleName);
+  }
+
+  // ==========================================
+  // Tools Registry for AI
+  // ==========================================
+
+  /**
+   * Register tools from a module for AI use
+   *
+   * @param {string} moduleName - Module name
+   * @param {Array} tools - Tools definitions from module.json
+   * @param {Object} instance - Module instance
+   */
+  registerToolsForAI(moduleName, tools, instance) {
+    for (const tool of tools) {
+      const handlerName = tool.handler || tool.name.split('.')[1];
+      const handler = instance[handlerName];
+
+      if (typeof handler !== 'function') {
+        if (this.logger) {
+          this.logger.warn('module.tool.handler.missing', {
+            module: moduleName,
+            tool: tool.name,
+            expected_handler: handlerName
+          });
+        }
+        continue;
+      }
+
+      this.toolsRegistry.set(tool.name, {
+        name: tool.name,
+        description: tool.description || `${moduleName} ${tool.name}`,
+        parameters: tool.parameters || {},
+        handler: handler.bind(instance),
+        module: moduleName,
+        confirmation: tool.confirmation || false
+      });
+
+      if (this.logger) {
+        this.logger.debug('module.tool.registered', {
+          module: moduleName,
+          tool: tool.name,
+          confirmation: tool.confirmation || false
+        });
+      }
+    }
+
+    if (this.logger) {
+      this.logger.info('module.tools.registered', {
+        module: moduleName,
+        count: tools.length
+      });
+    }
+  }
+
+  /**
+   * Unregister tools from a module
+   *
+   * @param {string} moduleName - Module name
+   */
+  unregisterToolsForAI(moduleName) {
+    const toDelete = [];
+
+    for (const [toolName, tool] of this.toolsRegistry) {
+      if (tool.module === moduleName) {
+        toDelete.push(toolName);
+      }
+    }
+
+    for (const toolName of toDelete) {
+      this.toolsRegistry.delete(toolName);
+    }
+
+    if (this.logger && toDelete.length > 0) {
+      this.logger.info('module.tools.unregistered', {
+        module: moduleName,
+        count: toDelete.length
+      });
+    }
+  }
+
+  /**
+   * Get all tools for AI providers
+   * Returns tools in a format suitable for function calling
+   *
+   * @returns {Array} Array of tool definitions
+   */
+  getToolsForAI() {
+    return Array.from(this.toolsRegistry.values()).map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      confirmation: tool.confirmation
+    }));
+  }
+
+  /**
+   * Get a specific tool by name
+   *
+   * @param {string} toolName - Tool name (e.g., 'fs.read')
+   * @returns {Object|null} Tool definition or null
+   */
+  getTool(toolName) {
+    return this.toolsRegistry.get(toolName) || null;
+  }
+
+  /**
+   * Execute a tool by name
+   *
+   * @param {string} toolName - Tool name (e.g., 'fs.read')
+   * @param {Object} args - Tool arguments
+   * @returns {Promise<Object>} Tool execution result
+   */
+  async executeTool(toolName, args) {
+    const tool = this.toolsRegistry.get(toolName);
+
+    if (!tool) {
+      throw new Error(`Tool not found: ${toolName}`);
+    }
+
+    if (this.logger) {
+      this.logger.info('tool.executing', {
+        tool: toolName,
+        module: tool.module
+      });
+    }
+
+    try {
+      const result = await tool.handler(args);
+
+      if (this.logger) {
+        this.logger.info('tool.executed', {
+          tool: toolName,
+          status: result?.status || 200
+        });
+      }
+
+      return result;
+
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error('tool.execution.error', {
+          tool: toolName,
+          error: error.message
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a tool requires confirmation
+   *
+   * @param {string} toolName - Tool name
+   * @returns {boolean}
+   */
+  toolRequiresConfirmation(toolName) {
+    const tool = this.toolsRegistry.get(toolName);
+    return tool?.confirmation || false;
   }
 }
 

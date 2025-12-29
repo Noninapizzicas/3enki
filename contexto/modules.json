@@ -60,17 +60,20 @@
   "active_modules": [
     "admin-panel",
     "ai-gateway",
+    "calling-generator",
+    "conversation-manager",
     "credential-manager",
     "dashboard",
     "database-manager",
-    "file-browser",
+    "filesystem",
     "log-manager",
     "menu-generator",
     "metricas",
     "notas",
+    "plugin-manager",
     "project-manager",
     "prompt-manager",
-    "storage-manager",
+    "system-inspector",
     "ui-designer"
   ]
 }

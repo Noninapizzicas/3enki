@@ -153,7 +153,6 @@
     "localFunctionTimeout": 5000,
     "httpTimeout": 30000,
     "maxRetries": 3,
-    "retryDelay": 1000,
-    "registerWithToolOrchestrator": true
+    "retryDelay": 1000
   }
 }

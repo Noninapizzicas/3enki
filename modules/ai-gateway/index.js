@@ -111,6 +111,7 @@ class AIGatewayModule {
   async onLoad(context) {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
+    this.moduleLoader = context.moduleLoader; // Para acceder a tools registry
     this.activity = context.activity?.forModule('ai-gateway');
 
     this.activity?.action('module.loading', {});
@@ -1139,6 +1140,194 @@ class AIGatewayModule {
       this.logger.error('ai-gateway.ui-config-post.error', { error: error.message });
       return { status: 500, data: { error: 'UI_CONFIG_POST_FAILED', message: error.message } };
     }
+  }
+
+  // ============ TOOLS API HANDLERS ============
+
+  /**
+   * API Handler: List available tools
+   * GET /tools - Lista todas las tools disponibles para AI
+   */
+  async handleListTools(req, context) {
+    try {
+      const tools = this.getAvailableTools();
+
+      return {
+        status: 200,
+        data: {
+          tools,
+          count: tools.length,
+          source: 'moduleLoader'
+        }
+      };
+    } catch (error) {
+      this.logger.error('ai-gateway.list-tools.error', { error: error.message });
+      return { status: 500, data: { error: 'LIST_TOOLS_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Execute a tool
+   * POST /tools/:name/execute - Ejecuta una tool específica
+   */
+  async handleExecuteTool(req, context) {
+    try {
+      const toolName = context.params?.name || req.body?.name;
+      const args = req.body?.args || req.body?.arguments || {};
+
+      if (!toolName) {
+        return { status: 400, data: { error: 'INVALID_REQUEST', message: 'tool name is required' } };
+      }
+
+      // Check if tool exists
+      const tool = this.moduleLoader?.getTool(toolName);
+      if (!tool) {
+        return { status: 404, data: { error: 'TOOL_NOT_FOUND', message: `Tool '${toolName}' not found` } };
+      }
+
+      // Check confirmation requirement
+      if (tool.confirmation) {
+        const confirmed = req.body?.confirmed === true;
+        if (!confirmed) {
+          return {
+            status: 200,
+            data: {
+              requires_confirmation: true,
+              tool: toolName,
+              description: tool.description,
+              message: 'Esta acción requiere confirmación. Envía confirmed: true para ejecutar.'
+            }
+          };
+        }
+      }
+
+      // Execute
+      const result = await this.moduleLoader.executeTool(toolName, args);
+
+      return {
+        status: result?.status || 200,
+        data: {
+          success: true,
+          tool: toolName,
+          result: result?.data || result
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('ai-gateway.execute-tool.error', { error: error.message });
+      return { status: 500, data: { error: 'EXECUTE_TOOL_FAILED', message: error.message } };
+    }
+  }
+
+  // ============ TOOLS INTEGRATION ============
+
+  /**
+   * Get available tools from Module Loader
+   * Returns tools in format suitable for AI providers
+   */
+  getAvailableTools() {
+    if (!this.moduleLoader) {
+      return [];
+    }
+
+    return this.moduleLoader.getToolsForAI();
+  }
+
+  /**
+   * Execute tool calls from AI response
+   * @param {Array} toolCalls - Array of tool calls from AI
+   * @param {Object} context - Execution context
+   * @returns {Array} Results for each tool call
+   */
+  async executeToolCalls(toolCalls, context = {}) {
+    if (!this.moduleLoader || !toolCalls || !Array.isArray(toolCalls)) {
+      return [];
+    }
+
+    const results = [];
+
+    for (const call of toolCalls) {
+      const { id, name, arguments: args } = call;
+
+      try {
+        // Check if tool requires confirmation
+        if (this.moduleLoader.toolRequiresConfirmation(name)) {
+          this.logger.info('ai-gateway.tool.requires_confirmation', {
+            tool: name,
+            call_id: id
+          });
+
+          // Return pending confirmation status
+          results.push({
+            tool_call_id: id,
+            name,
+            status: 'pending_confirmation',
+            requires_confirmation: true
+          });
+          continue;
+        }
+
+        // Execute tool via moduleLoader
+        this.logger.info('ai-gateway.tool.executing', {
+          tool: name,
+          call_id: id,
+          correlation_id: context.correlationId
+        });
+
+        const result = await this.moduleLoader.executeTool(name, args);
+
+        results.push({
+          tool_call_id: id,
+          name,
+          status: 'success',
+          result: result?.data || result
+        });
+
+        this.logger.info('ai-gateway.tool.executed', {
+          tool: name,
+          call_id: id,
+          status: result?.status || 200
+        });
+
+      } catch (error) {
+        this.logger.error('ai-gateway.tool.error', {
+          tool: name,
+          call_id: id,
+          error: error.message
+        });
+
+        results.push({
+          tool_call_id: id,
+          name,
+          status: 'error',
+          error: error.message
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Translate tools to provider-specific format
+   * @param {Array} tools - Tools from moduleLoader
+   * @param {string} providerName - Target provider name
+   * @returns {Array} Provider-formatted tools
+   */
+  translateToolsForProvider(tools, providerName) {
+    // OpenAI/Anthropic format (function calling)
+    return tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters || {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }
+    }));
   }
 
   // ============ HELPER METHODS ============

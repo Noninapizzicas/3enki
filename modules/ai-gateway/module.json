@@ -85,6 +85,18 @@
       "path": "/ui/config",
       "description": "Actualizar configuración de parámetros LLM",
       "handler": "handleUIConfigPost"
+    },
+    {
+      "method": "GET",
+      "path": "/tools",
+      "description": "Listar todas las tools disponibles para AI",
+      "handler": "handleListTools"
+    },
+    {
+      "method": "POST",
+      "path": "/tools/:name/execute",
+      "description": "Ejecutar una tool específica",
+      "handler": "handleExecuteTool"
     }
   ],
   "hooks": {},

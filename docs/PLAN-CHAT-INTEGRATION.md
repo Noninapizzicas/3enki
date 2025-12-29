@@ -517,18 +517,282 @@ metrics.increment('tool.errors', { tool: 'file.read', reason: 'not_found' });
 
 ---
 
-## Módulos Pendientes de Definir
+### 6. Prompt Manager
 
-| # | Módulo | Estado |
-|---|--------|--------|
-| 5 | Prompt Manager | ⏳ Pendiente |
-| 6 | Plugin Manager | ⏳ Pendiente |
-| 7 | Credential Manager | ⏳ Pendiente |
-| 8 | Storage Manager | ⏳ Pendiente |
-| 9 | Database Manager | ⏳ Pendiente |
-| 10 | File Browser | ⏳ Pendiente |
-| 11 | Text Editor | ⏳ Pendiente |
-| 12 | PDF Viewer | ⏳ Pendiente |
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Selección prompt | Usuario elige | Desde UI del proyecto |
+| Tipos de prompt | Simple o combinado | Múltiples prompts encadenados |
+| Gestión | Catálogo centralizado | Ordenados, categorizados |
+| Herramientas | Creación, edición, combinación | UI dedicada |
+| Función | Inyección en cabecera | Antes de los 20 mensajes de contexto |
+
+#### Arquitectura del Prompt
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MENSAJE A IA                          │
+├─────────────────────────────────────────────────────────┤
+│ 1. SYSTEM PROMPT (Prompt Manager)                       │
+│    ├─ Prompt base del proyecto                          │
+│    ├─ + Prompt adicional 1 (si combinado)               │
+│    └─ + Prompt adicional 2 (si combinado)               │
+├─────────────────────────────────────────────────────────┤
+│ 2. CONTEXTO (Conversation Manager)                      │
+│    ├─ Mensaje 1 (activo ✓)                              │
+│    ├─ Mensaje 2 (activo ✓)                              │
+│    ├─ ...                                               │
+│    └─ Mensaje 20 (activo ✓)                             │
+├─────────────────────────────────────────────────────────┤
+│ 3. MENSAJE ACTUAL (usuario)                             │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### Tipos de Prompts
+
+| Tipo | Descripción | Ejemplo |
+|------|-------------|---------|
+| **Base** | Prompt inicial heredado del sistema | "Eres un asistente técnico..." |
+| **Simple** | Un único prompt seleccionado | "Especialista en Python" |
+| **Combinado** | Múltiples prompts encadenados | "Python" + "Testing" + "Clean Code" |
+
+#### Estructura de Prompt
+
+```javascript
+{
+  id: "uuid",
+  name: "Python Expert",
+  description: "Especialista en desarrollo Python",
+  category: "programming",       // Para organización
+  content: "You are a Python expert...",
+  variables: [],                 // Variables interpolables
+  tags: ["python", "backend"],
+  is_system: false,              // true = viene con el sistema
+  is_global: true,               // true = disponible en todos los proyectos
+  created_at: "2025-01-01",
+  updated_at: "2025-01-01"
+}
+```
+
+#### Combinación de Prompts
+
+```javascript
+// Prompt combinado en proyecto
+{
+  project_id: "uuid",
+  active_prompts: [
+    { prompt_id: "python-expert", order: 1 },
+    { prompt_id: "testing-specialist", order: 2 },
+    { prompt_id: "code-reviewer", order: 3 }
+  ]
+}
+
+// Resultado concatenado (separado por líneas)
+`
+${prompt1.content}
+
+---
+
+${prompt2.content}
+
+---
+
+${prompt3.content}
+`
+```
+
+#### UI de Prompt Manager
+
+| Elemento | Función |
+|----------|---------|
+| **Selector en proyecto** | Elegir prompt(s) activo(s) |
+| **Lista de prompts** | Catálogo con categorías y búsqueda |
+| **Editor de prompt** | Crear/editar prompts con preview |
+| **Combinador** | Drag & drop para ordenar múltiples prompts |
+| **Variables** | Definir {{variables}} e interpolar valores |
+
+#### Tools de Prompt Manager
+
+```javascript
+// Registradas en tool-orchestrator
+[
+  { name: "prompt.list", description: "Lista prompts disponibles" },
+  { name: "prompt.get", description: "Obtiene contenido de un prompt" },
+  { name: "prompt.render", description: "Renderiza prompt con variables" }
+]
+```
+
+---
+
+### 7. Plugin Manager
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Alcance | Sistema (no por proyecto) | Plugins disponibles globalmente |
+| Registro | Dinámico | Plugins pueden registrar tools |
+| Estado | Habilitar/deshabilitar | Toggle global |
+
+**Responsabilidad:**
+- Gestionar plugins del sistema
+- Permitir que plugins registren tools
+- Estado habilitado/deshabilitado
+
+**Integración con Chat:**
+- Plugins pueden añadir tools al orchestrator
+- Estas tools están disponibles para la IA
+
+---
+
+### 8. Credential Manager
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Acceso IA | Solo nombres | NUNCA valores de credenciales |
+| Uso | Referencias para tools | Tools las usan internamente |
+| Alcance | Global | Compartidas entre proyectos |
+
+**Tools expuestas:**
+```javascript
+[
+  {
+    name: "credential.list",
+    description: "Lista nombres de credenciales disponibles",
+    // NOTA: Solo retorna nombres, nunca valores
+  }
+]
+```
+
+**Uso por otras tools:**
+```javascript
+// Tool de storage puede usar credenciales internamente
+async handleUpload(args, context) {
+  const creds = await credentialManager.get('s3-bucket');
+  // Usar credenciales internamente, nunca exponer a IA
+}
+```
+
+---
+
+### 9. Storage Manager
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Función | Almacenamiento externo | S3, Google Cloud, etc. |
+| Integración | Via tools | IA puede solicitar uploads/downloads |
+| Permisos | Por tool | Algunas requieren confirmación |
+
+**Tools expuestas:**
+```javascript
+[
+  { name: "storage.list", description: "Lista archivos en storage remoto" },
+  { name: "storage.download", description: "Descarga archivo de storage" },
+  { name: "storage.upload", description: "Sube archivo a storage", requires_confirmation: true },
+  { name: "storage.delete", description: "Elimina archivo de storage", requires_confirmation: true }
+]
+```
+
+---
+
+### 10. Database Manager
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Función | Consultas a bases de datos | PostgreSQL, MySQL, SQLite |
+| Seguridad | Solo lectura por defecto | Escritura requiere confirmación |
+| Alcance | Conexiones configuradas | Del proyecto o globales |
+
+**Tools expuestas:**
+```javascript
+[
+  { name: "db.query", description: "Ejecuta consulta SQL (solo SELECT)", permissions: ["read"] },
+  { name: "db.tables", description: "Lista tablas de la base de datos" },
+  { name: "db.schema", description: "Obtiene esquema de una tabla" },
+  { name: "db.execute", description: "Ejecuta consulta modificadora", requires_confirmation: true }
+]
+```
+
+---
+
+### 11. File Browser
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Alcance | Directorio del proyecto | `/data/projects/{name}/` |
+| Funciones | Listar, buscar, leer | Core del chat |
+| Permisos | Lectura libre | Escritura/borrado con confirmación |
+
+**Tools expuestas:**
+```javascript
+[
+  { name: "file.list", description: "Lista archivos de un directorio" },
+  { name: "file.search", description: "Busca texto en archivos (grep)" },
+  { name: "file.read", description: "Lee contenido de un archivo" },
+  { name: "file.info", description: "Obtiene metadatos de un archivo" },
+  { name: "file.create", description: "Crea un nuevo archivo", requires_confirmation: true },
+  { name: "file.write", description: "Escribe contenido a archivo", requires_confirmation: true },
+  { name: "file.delete", description: "Elimina un archivo", requires_confirmation: true }
+]
+```
+
+---
+
+### 12. Text Editor
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Función | Edición de archivos | Integrado en UI |
+| Integración | Via tools | IA puede crear/editar archivos |
+| Formato | Texto plano + código | Syntax highlighting |
+
+**Tools expuestas:**
+```javascript
+[
+  { name: "editor.open", description: "Abre archivo en el editor" },
+  { name: "editor.save", description: "Guarda cambios del editor", requires_confirmation: true },
+  { name: "editor.create", description: "Crea nuevo archivo y abre en editor", requires_confirmation: true }
+]
+```
+
+**Nota:** El editor visual es para el usuario. Las tools permiten que la IA sugiera editar o crear archivos.
+
+---
+
+### 13. PDF Viewer
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Función | Lectura de PDFs | Extracción de texto |
+| Integración | Via tools | IA puede leer PDFs |
+| OCR | Si está disponible | Para PDFs escaneados |
+
+**Tools expuestas:**
+```javascript
+[
+  { name: "pdf.read", description: "Extrae texto de un PDF" },
+  { name: "pdf.info", description: "Obtiene metadatos del PDF (páginas, autor, etc)" },
+  { name: "pdf.extract", description: "Extrae páginas específicas como texto" }
+]
+```
+
+---
+
+## Módulos Definidos - Resumen
+
+| # | Módulo | Estado | Función Principal |
+|---|--------|--------|-------------------|
+| 1 | AI Gateway | ✅ Definido | Comunicación con proveedores IA |
+| 2 | Project Manager | ✅ Definido | Gestión de proyectos aislados |
+| 3 | Conversation Manager | ✅ Definido | Contexto FIFO con checkboxes |
+| 4 | Tool System | ✅ Definido | Function calling nativo |
+| 5 | Calling Generator | ✅ Definido | Registro dinámico de tools |
+| 6 | Prompt Manager | ✅ Definido | Prompts catalogados, combinables |
+| 7 | Plugin Manager | ✅ Definido | Plugins que añaden tools |
+| 8 | Credential Manager | ✅ Definido | Credenciales (solo nombres a IA) |
+| 9 | Storage Manager | ✅ Definido | Storage remoto via tools |
+| 10 | Database Manager | ✅ Definido | Consultas SQL via tools |
+| 11 | File Browser | ✅ Definido | Navegación de archivos |
+| 12 | Text Editor | ✅ Definido | Edición de archivos |
+| 13 | PDF Viewer | ✅ Definido | Lectura de PDFs |
 
 ---
 
@@ -660,4 +924,5 @@ Usuario escribe mensaje
 |-------|--------|
 | 2025-12-28 | Documento inicial con AI Gateway, Project Manager, Conversation Manager |
 | 2025-12-29 | Añadido sistema de Tools completo: tool-translator, tool-orchestrator, flujo, casos especiales |
+| 2025-12-29 | Completados TODOS los módulos: Prompt Manager, Plugin, Credential, Storage, Database, File Browser, Text Editor, PDF Viewer |
 

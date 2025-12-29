@@ -35,6 +35,7 @@ class CallingGenerator {
     this.eventBus = core.eventBus;
     this.config = core.config || {};
     this.moduleManager = core.moduleManager;
+    this.moduleLoader = core.moduleLoader; // Para registrar tools
     this.activity = core.activity?.forModule('calling-generator');
 
     this.activity?.action('module.loading', {});
@@ -49,10 +50,8 @@ class CallingGenerator {
   async onUnload() {
     this.logger.info('modulo.unloading', { module: this.name });
 
-    // Desregistrar funciones del tool-orchestrator si existe
-    if (this.config.registerWithToolOrchestrator) {
-      await this.unregisterAllFunctionsFromToolOrchestrator();
-    }
+    // Desregistrar funciones del Module Loader
+    this.unregisterAllToolsFromModuleLoader();
 
     this.generatedFunctions.clear();
     this.pluginsByName.clear();
@@ -203,10 +202,8 @@ class CallingGenerator {
           this.generatedFunctions.set(fullName, { func, metadata });
           generatedCount++;
 
-          // Registrar con tool-orchestrator si está habilitado
-          if (this.config.registerWithToolOrchestrator) {
-            await this.registerWithToolOrchestrator(fullName, func, metadata, correlationId);
-          }
+          // Registrar como tool para AI en Module Loader
+          this.registerToolForAI(fullName, func, metadata, correlationId);
 
           // REMOVED (migrate-to-event-metrics): this.metrics.increment('function.generated.total');
     // → Counter extracted from events
@@ -629,46 +626,52 @@ class CallingGenerator {
   }
 
   // ==========================================
-  // Tool Orchestrator Integration
+  // Module Loader Tools Integration
   // ==========================================
 
-  async registerWithToolOrchestrator(fullName, func, metadata, correlationId) {
-    try {
-      // Obtener tool-orchestrator vía evento
-      const requestId = `tool_reg_${Date.now()}`;
-
-      // Publicar evento para registrar
-      await this.eventBus.publish('tool.register.request', {
-        module_name: metadata.plugin_name,
-        tool_name: metadata.function_name,
-        description: metadata.description,
-        schema: metadata.parameters,
-        handler: func,
-        request_id: requestId
-      }, { correlationId });
-
-      this.logger.debug('function.registered.tool_orchestrator', {
+  /**
+   * Registra una función generada como tool en el Module Loader
+   * para que esté disponible para AI Gateway
+   */
+  registerToolForAI(fullName, func, metadata, correlationId) {
+    if (!this.moduleLoader || !this.moduleLoader.toolsRegistry) {
+      this.logger.warn('function.register.no_module_loader', {
         full_name: fullName,
         correlation_id: correlationId
       });
-
-    } catch (error) {
-      this.logger.warn('function.register.tool_orchestrator.error', {
-        full_name: fullName,
-        error: error.message,
-        correlation_id: correlationId
-      });
+      return;
     }
+
+    this.moduleLoader.toolsRegistry.set(fullName, {
+      name: fullName,
+      description: metadata.description,
+      parameters: metadata.parameters || {},
+      handler: func,
+      module: metadata.plugin_name,
+      confirmation: false, // Plugins HTTP no requieren confirmación por defecto
+      type: metadata.type // 'http' o 'local_event'
+    });
+
+    this.logger.debug('function.registered.module_loader', {
+      full_name: fullName,
+      type: metadata.type,
+      correlation_id: correlationId
+    });
   }
 
-  async unregisterAllFunctionsFromToolOrchestrator() {
-    for (const fullName of this.generatedFunctions.keys()) {
-      await this.eventBus.publish('tool.unregister.request', {
-        full_name: fullName
-      });
+  /**
+   * Desregistra todas las funciones del Module Loader
+   */
+  unregisterAllToolsFromModuleLoader() {
+    if (!this.moduleLoader || !this.moduleLoader.toolsRegistry) {
+      return;
     }
 
-    this.logger.info('functions.unregistered.tool_orchestrator', {
+    for (const fullName of this.generatedFunctions.keys()) {
+      this.moduleLoader.toolsRegistry.delete(fullName);
+    }
+
+    this.logger.info('functions.unregistered.module_loader', {
       count: this.generatedFunctions.size
     });
   }

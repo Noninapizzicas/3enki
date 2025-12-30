@@ -1381,6 +1381,203 @@ class PromptManagerModule {
   }
 
   // ==========================================
+  // AI Tool Handlers
+  // ==========================================
+
+  /**
+   * Tool handler: Lista prompts disponibles para AI
+   * @param {Object} args - Tool arguments
+   * @param {string} [args.slot_type] - Filter by slot type
+   * @param {string} [args.tag] - Filter by tag
+   * @param {string} [args.search] - Search in name/description
+   * @returns {Object} List of prompts (metadata only, not full content)
+   */
+  async handleToolPromptList(args) {
+    const { slot_type, tag, search } = args || {};
+
+    this.logger.info('prompt.tool.list.called', { slot_type, tag, search });
+
+    let prompts = Array.from(this.prompts.values());
+
+    // Filter by slot_type
+    if (slot_type && this.SLOT_TYPES.includes(slot_type)) {
+      prompts = prompts.filter(p => p.slot_type === slot_type);
+    }
+
+    // Filter by tag
+    if (tag) {
+      prompts = prompts.filter(p => p.tags && p.tags.includes(tag));
+    }
+
+    // Search
+    if (search) {
+      const s = search.toLowerCase();
+      prompts = prompts.filter(p =>
+        p.name.toLowerCase().includes(s) ||
+        (p.title && p.title.toLowerCase().includes(s)) ||
+        (p.description && p.description.toLowerCase().includes(s))
+      );
+    }
+
+    // Return metadata only (not full content to avoid large responses)
+    const results = prompts.map(p => ({
+      id: p.id,
+      name: p.name,
+      title: p.title,
+      description: p.description,
+      slot_type: p.slot_type,
+      tags: p.tags,
+      variables: p.variables,
+      level: p.level || 'GLOBAL',
+      current_version: p.current_version
+    }));
+
+    this.logger.info('prompt.tool.list.result', { count: results.length });
+
+    return {
+      status: 200,
+      data: {
+        prompts: results,
+        total: results.length,
+        filters: { slot_type, tag, search }
+      }
+    };
+  }
+
+  /**
+   * Tool handler: Obtiene un prompt específico para AI
+   * @param {Object} args - Tool arguments
+   * @param {string} [args.id] - Prompt ID
+   * @param {string} [args.name] - Prompt name (alternative to ID)
+   * @returns {Object} Prompt with full content
+   */
+  async handleToolPromptGet(args) {
+    const { id, name } = args || {};
+
+    this.logger.info('prompt.tool.get.called', { id, name });
+
+    if (!id && !name) {
+      return {
+        status: 400,
+        data: { error: 'Either id or name is required' }
+      };
+    }
+
+    let prompt = null;
+
+    if (id) {
+      prompt = this.prompts.get(id);
+    } else if (name) {
+      // Find by name (case-insensitive)
+      const nameLower = name.toLowerCase();
+      for (const p of this.prompts.values()) {
+        if (p.name.toLowerCase() === nameLower) {
+          prompt = p;
+          break;
+        }
+      }
+    }
+
+    if (!prompt) {
+      return {
+        status: 404,
+        data: { error: `Prompt not found: ${id || name}` }
+      };
+    }
+
+    // Record usage
+    await this.recordUsage(prompt.id, prompt.current_version);
+
+    return {
+      status: 200,
+      data: {
+        prompt: {
+          id: prompt.id,
+          name: prompt.name,
+          title: prompt.title,
+          description: prompt.description,
+          content: prompt.content,
+          slot_type: prompt.slot_type,
+          variables: prompt.variables,
+          tags: prompt.tags,
+          level: prompt.level || 'GLOBAL',
+          current_version: prompt.current_version
+        }
+      }
+    };
+  }
+
+  /**
+   * Tool handler: Renderiza un prompt con variables para AI
+   * @param {Object} args - Tool arguments
+   * @param {string} [args.id] - Prompt ID
+   * @param {string} [args.name] - Prompt name (alternative to ID)
+   * @param {Object} [args.variables] - Variables to interpolate
+   * @returns {Object} Rendered prompt content
+   */
+  async handleToolPromptRender(args) {
+    const { id, name, variables } = args || {};
+
+    this.logger.info('prompt.tool.render.called', { id, name, variables });
+
+    if (!id && !name) {
+      return {
+        status: 400,
+        data: { error: 'Either id or name is required' }
+      };
+    }
+
+    let prompt = null;
+
+    if (id) {
+      prompt = this.prompts.get(id);
+    } else if (name) {
+      const nameLower = name.toLowerCase();
+      for (const p of this.prompts.values()) {
+        if (p.name.toLowerCase() === nameLower) {
+          prompt = p;
+          break;
+        }
+      }
+    }
+
+    if (!prompt) {
+      return {
+        status: 404,
+        data: { error: `Prompt not found: ${id || name}` }
+      };
+    }
+
+    // Render template with variables
+    const rendered = this.renderTemplateString(prompt.content, variables || {});
+
+    // Identify missing variables
+    const missingVars = [];
+    if (prompt.variables && prompt.variables.length > 0) {
+      for (const v of prompt.variables) {
+        const varName = v.name || v;
+        if (!variables || variables[varName] === undefined) {
+          missingVars.push(varName);
+        }
+      }
+    }
+
+    // Record usage
+    await this.recordUsage(prompt.id, prompt.current_version);
+
+    return {
+      status: 200,
+      data: {
+        prompt_id: prompt.id,
+        prompt_name: prompt.name,
+        rendered,
+        variables_used: variables || {},
+        missing_variables: missingVars.length > 0 ? missingVars : undefined
+      }
+    };
+  }
+
+  // ==========================================
   // Helper Methods
   // ==========================================
 

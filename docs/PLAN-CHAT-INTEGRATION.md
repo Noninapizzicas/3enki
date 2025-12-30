@@ -1,7 +1,8 @@
 # Plan de Integración del Chat
 
 **Fecha:** 2025-12-29
-**Estado:** En definición
+**Actualizado:** 2025-12-30
+**Estado:** ✅ Implementado (verificado contra código real)
 **Objetivo:** Integrar todos los módulos en un flujo de chat unificado
 
 ---
@@ -32,26 +33,44 @@ Cada proyecto es un **mundo aislado** dentro del sistema, pero accede a **recurs
 
 ---
 
-## Módulos Definidos
+## Módulos Implementados
 
-### 1. AI Gateway
+### 1. AI Gateway ✅
+
+**Estado:** Implementado en `modules/ai-gateway/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
-| Cambio proveedor/modelo | Selector desde UI | No comandos, solo UI |
-| Mostrar costos/tokens | No | Oculto al usuario |
-| Streaming | No | Respuesta completa |
+| Cambio proveedor/modelo | Selector desde UI | APIs: `/ui/state`, `/ui/select` |
+| Mostrar costos/tokens | Sí (interno) | Tracking habilitado |
+| Streaming | Sí | `/chat/stream` con SSE |
 | Proveedor default | DeepSeek | Configurable por proyecto |
 
-**Implementación:**
-- Selector en header/sidebar del chat
-- Dropdown con proveedores disponibles
-- Modelos filtrados por proveedor seleccionado
-- NO se encarga de traducir formatos de tools (delegado a tool-translator)
+**APIs implementadas (12):**
+- `POST /chat` - Chat completion
+- `POST /chat/stream` - Chat con streaming SSE
+- `GET /providers` - Listar proveedores
+- `GET /models` - Listar modelos por proveedor
+- `GET /usage` - Estadísticas de uso y costos
+- `POST /providers/test` - Probar conectividad
+- `GET /ui/state` - Estado completo para UI
+- `POST /ui/select` - Seleccionar provider/modelo
+- `GET /ui/config` - Configuración LLM
+- `POST /ui/config` - Actualizar configuración
+- `GET /tools` - Listar tools disponibles
+- `POST /tools/:name/execute` - Ejecutar tool
+
+**Proveedores soportados:**
+- DeepSeek (prioridad 1)
+- Anthropic/Claude (prioridad 2)
+- OpenAI (prioridad 3)
+- Ollama (prioridad 4, local)
 
 ---
 
-### 2. Project Manager
+### 2. Project Manager ✅
+
+**Estado:** Implementado en `modules/project-manager/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
@@ -61,12 +80,6 @@ Cada proyecto es un **mundo aislado** dentro del sistema, pero accede a **recurs
 | Conversaciones | Solo las del proyecto | Filtrado por project_id |
 | Estado sesión | Persistir última sesión | Retomar donde quedó |
 | Filosofía | Mundo aislado + acceso a recursos compartidos | |
-
-**Campos a persistir en sesión:**
-- `last_conversation_id` - Última conversación abierta
-- `scroll_position` - Posición del scroll
-- `context_config` - Configuración de contexto
-- `ui_state` - Estado de paneles (abiertos/cerrados)
 
 **Estructura de directorio:**
 ```
@@ -79,7 +92,9 @@ Cada proyecto es un **mundo aislado** dentro del sistema, pero accede a **recurs
 
 ---
 
-### 3. Conversation Manager
+### 3. Conversation Manager ✅
+
+**Estado:** Implementado en `modules/conversation-manager/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
@@ -110,511 +125,135 @@ Cada proyecto es un **mundo aislado** dentro del sistema, pero accede a **recurs
 └─────────────────────────────────────────────────────┘
 ```
 
-**Reglas:**
-
-| Regla | Comportamiento |
-|-------|----------------|
-| Máximo | 20 activos (configurable por usuario) |
-| Nuevos mensajes | Se activan automáticamente |
-| Si supera máximo | El más antiguo ACTIVO se desactiva (FIFO) |
-| Manual OFF | Usuario desactiva → queda OFF permanentemente |
-| Manual ON | Usuario reactiva → si hay 20, desactiva otro antiguo |
-| Contador | Siempre visible en UI |
-
-**Campos en tabla `messages`:**
-```sql
-ALTER TABLE messages ADD COLUMN in_context BOOLEAN DEFAULT TRUE;
-ALTER TABLE messages ADD COLUMN manually_toggled BOOLEAN DEFAULT FALSE;
-```
-
-**Algoritmo al enviar mensaje:**
-```javascript
-async function addMessageToContext(conversationId, newMessage) {
-  const maxContext = conversation.max_context || 20;
-
-  // 1. Contar mensajes activos actuales
-  const activeCount = await countActiveMessages(conversationId);
-
-  // 2. Si supera límite, desactivar el más antiguo NO manualmente fijado
-  if (activeCount >= maxContext) {
-    await deactivateOldestAutoMessage(conversationId);
-  }
-
-  // 3. Insertar nuevo mensaje como activo
-  await insertMessage(newMessage, { in_context: true });
-
-  // 4. Actualizar contador en UI
-  emitContextCountUpdate(conversationId);
-}
-```
-
 ---
 
-### 4. Sistema de Tools (Function Calling Nativo)
+### 4. Sistema de Tools (Arquitectura Unificada) ✅
 
-#### Decisión Arquitectural
+**Estado:** Implementado en `core/modules/loader.js` + `modules/ai-gateway/`
 
-**Enfoque elegido:** Function Calling Nativo con módulo traductor separado.
+> **NOTA:** La arquitectura original con `tool-translator` y `tool-orchestrator` como módulos separados fue **unificada** en el Module Loader y AI Gateway.
 
-**Razón:** Todos los proveedores (Claude, OpenAI, DeepSeek, Ollama) soportan function calling. En lugar de sobrecargar ai-gateway con traducciones, se crea un módulo dedicado.
-
-#### Arquitectura de Tools
+#### Arquitectura Real Implementada
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    conversation-manager                      │
-│  • Recibe mensaje del usuario                               │
-│  • Obtiene TODAS las tools del sistema                      │
-│  • Pasa mensaje + tools al flujo                            │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    tool-translator (NUEVO)                   │
-│                                                              │
-│  • Recibe tools en formato interno                          │
-│  • Detecta proveedor destino (Claude/OpenAI/DeepSeek/etc)   │
-│  • Traduce al formato correcto del proveedor                │
-│  • Traduce respuestas de vuelta (tool_calls → interno)      │
-│  • Fallback prompt-based para Ollama sin soporte nativo     │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      ai-gateway                              │
-│                                                              │
-│  • Solo comunicación con proveedores                        │
-│  • Fallback entre proveedores                               │
-│  • Rate limiting                                            │
-│  • Tracking de costos                                       │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼ (si hay tool_call)
-┌─────────────────────────────────────────────────────────────┐
-│                    tool-orchestrator                         │
-│                                                              │
-│  • Registry central de TODAS las tools                      │
-│  • Validación de argumentos (JSON Schema)                   │
-│  • Ejecución de tools                                       │
-│  • Timeout y permisos                                       │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            FLUJO DE TOOLS                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────┐                    ┌─────────────────────┐
+  │   MÓDULOS LOCALES   │                    │   PLUGINS EXTERNOS  │
+  │   (filesystem, db)  │                    │   (github, slack)   │
+  └──────────┬──────────┘                    └──────────┬──────────┘
+             │                                          │
+             │ module.json                              │ plugin.json
+             │ + tools[]                                │
+             ▼                                          ▼
+  ┌─────────────────────┐                    ┌─────────────────────┐
+  │    Module Loader    │                    │   Plugin Manager    │
+  │  registerToolsForAI │                    │                     │
+  └──────────┬──────────┘                    └──────────┬──────────┘
+             │                                          │
+             │                                          ▼
+             │                               ┌─────────────────────┐
+             │                               │  Calling Generator  │
+             │                               │  registerToolForAI  │
+             │                               └──────────┬──────────┘
+             │                                          │
+             └─────────────────┬────────────────────────┘
+                               │
+                               ▼
+                ┌───────────────────────────┐
+                │  moduleLoader.toolsRegistry│
+                │                           │
+                │  Map<toolName, {          │
+                │    name,                  │
+                │    description,           │
+                │    parameters,            │
+                │    handler,               │
+                │    module,                │
+                │    confirmation           │
+                │  }>                       │
+                └─────────────┬─────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          │                   │                   │
+          ▼                   ▼                   ▼
+    ┌───────────┐      ┌───────────┐      ┌───────────┐
+    │    UI     │      │    AI     │      │  Módulos  │
+    │ (MQTT)    │      │ (Gateway) │      │ (eventBus)│
+    └─────┬─────┘      └─────┬─────┘      └─────┬─────┘
+          │                  │                  │
+          │ mqttRequest      │ tool_calls       │ eventBus
+          │                  ▼                  │
+          │           ┌─────────────┐           │
+          │           │executeToolCalls()      │
+          │           └──────┬──────┘           │
+          │                  │                  │
+          └─────────────────►├◄─────────────────┘
+                             │
+                             ▼
+                ┌───────────────────────────┐
+                │ moduleLoader.executeTool  │
+                │                           │
+                │ 1. Get tool from registry │
+                │ 2. Check confirmation     │
+                │ 3. Execute handler        │
+                │ 4. Return result          │
+                └───────────────────────────┘
 ```
 
-#### 4.1 tool-translator (NUEVO MÓDULO)
+#### APIs del Module Loader (interno)
 
-**Responsabilidad:** Traducir formatos de tools entre el sistema interno y cada proveedor.
+| Método | Descripción |
+|--------|-------------|
+| `getToolsForAI()` | Retorna tools en formato AI |
+| `getTool(name)` | Obtiene tool por nombre |
+| `executeTool(name, args)` | Ejecuta tool |
+| `toolRequiresConfirmation(name)` | Verifica si requiere confirmación |
 
-**Formatos por proveedor:**
+#### Traducción de Tools (en ai-gateway)
+
+El `ai-gateway` incluye un `tool-translator.js` interno que traduce automáticamente:
 
 | Proveedor | Formato tools | Formato respuesta |
 |-----------|---------------|-------------------|
 | OpenAI | `tools: [{type: "function", function: {...}}]` | `tool_calls: [{id, function: {name, arguments}}]` |
 | Claude | `tools: [{name, description, input_schema}]` | `tool_use: [{id, name, input}]` |
 | DeepSeek | Igual que OpenAI | Igual que OpenAI |
-| Ollama | Variable (algunos sí, otros no) | Fallback a prompt-based |
-
-**Formato interno unificado:**
-```javascript
-// Tool definition
-{
-  name: "file.search",
-  module: "file-browser",
-  description: "Busca texto dentro de archivos del proyecto",
-  parameters: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "Texto o regex a buscar" },
-      path: { type: "string", description: "Directorio base" },
-      extensions: { type: "array", description: "Filtrar por extensiones" }
-    },
-    required: ["query"]
-  },
-  handler: Function,
-  permissions: ["read"],
-  timeout_ms: 30000,
-  requires_confirmation: false
-}
-
-// Tool call (de la IA)
-{
-  id: "call_abc123",
-  tool: "file.search",
-  arguments: { query: "login", path: "/src" }
-}
-
-// Tool result (para la IA)
-{
-  tool_call_id: "call_abc123",
-  success: true,
-  result: { files: [...], matches: 15 }
-}
-```
-
-**Traducciones:**
-```javascript
-// Interno → OpenAI
-{
-  type: "function",
-  function: {
-    name: "file_search",  // Puntos → underscores
-    description: "Busca texto dentro de archivos del proyecto",
-    parameters: { type: "object", properties: {...} }
-  }
-}
-
-// Interno → Claude
-{
-  name: "file_search",
-  description: "Busca texto dentro de archivos del proyecto",
-  input_schema: { type: "object", properties: {...} }
-}
-
-// Fallback prompt-based (Ollama sin soporte)
-<available_tools>
-- file.search: Busca texto en archivos. Args: query (string), path (string)
-- file.read: Lee un archivo. Args: path (string)
-</available_tools>
-
-Para usar una tool, responde con: [TOOL:nombre]({"arg":"valor"})
-```
-
-#### 4.2 tool-orchestrator (EXISTENTE - MODIFICAR)
-
-**Cambios necesarios:**
-
-| Cambio | Descripción |
-|--------|-------------|
-| Escuchar `tool.register.request` | Actualmente no escucha este evento |
-| API GET /tools | Listar todas las tools registradas |
-| Ejecución paralela | Múltiples tool calls simultáneos |
-| Validación JSON Schema | Ya existe, verificar |
-| Timeout por tool | Configurable |
-| Permisos | Sistema de permisos por tool |
-
-#### 4.3 Registro de Tools (Auto-descubrimiento)
-
-Cada módulo registra sus tools al cargar:
-
-```javascript
-// En módulo file-browser/index.js
-async onLoad(core) {
-  // Registrar tools
-  await this.registerTools(core);
-}
-
-async registerTools(core) {
-  await core.eventBus.publish('tool.register.request', {
-    module: 'file-browser',
-    tools: [
-      {
-        name: 'file.list',
-        description: 'Lista archivos de un directorio',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'Directorio a listar' },
-            recursive: { type: 'boolean', default: false }
-          },
-          required: ['path']
-        },
-        handler: 'handleListFiles'  // Nombre del método
-      },
-      {
-        name: 'file.search',
-        description: 'Busca texto en archivos',
-        parameters: {...},
-        handler: 'handleSearchFiles'
-      },
-      {
-        name: 'file.read',
-        description: 'Lee el contenido de un archivo',
-        parameters: {...},
-        handler: 'handleReadFile'
-      }
-    ]
-  });
-}
-```
-
-#### 4.4 Tools por Módulo
-
-| Módulo | Tools a registrar |
-|--------|-------------------|
-| **file-browser** | `file.list`, `file.search`, `file.read`, `file.info` |
-| **text-editor** | `editor.open`, `editor.save`, `editor.create` |
-| **pdf-viewer** | `pdf.read`, `pdf.extract`, `pdf.info` |
-| **database-manager** | `db.query`, `db.tables`, `db.schema` |
-| **storage-manager** | `storage.upload`, `storage.download`, `storage.list`, `storage.delete` |
-| **notes** | `notes.create`, `notes.list`, `notes.search`, `notes.update` |
-| **prompt-manager** | `prompt.get`, `prompt.list`, `prompt.render` |
-| **project-manager** | `project.info`, `project.files`, `project.config` |
-| **credential-manager** | `credential.list` (solo nombres, no valores) |
-
-#### 4.5 Flujo Completo de Tool Calling
-
-```
-1. Usuario escribe: "busca dónde se usa la función login"
-   │
-   ▼
-2. conversation-manager
-   ├─► Carga contexto (mensajes activos con checkbox ON)
-   ├─► Carga prompt del proyecto
-   ├─► GET /tools → obtiene TODAS las tools
-   │
-   ▼
-3. tool-translator
-   ├─► Detecta proveedor activo (ej: Claude)
-   ├─► Traduce tools a formato Claude
-   │
-   ▼
-4. ai-gateway
-   ├─► Envía a Claude con tools traducidas
-   ├─► Recibe respuesta
-   │
-   ▼
-5. tool-translator (respuesta)
-   ├─► Detecta tool_use en respuesta
-   ├─► Traduce a formato interno: { tool: "file.search", arguments: {...} }
-   │
-   ▼
-6. tool-orchestrator
-   ├─► Valida argumentos
-   ├─► Ejecuta handler de file-browser
-   ├─► Retorna resultado
-   │
-   ▼
-7. tool-translator
-   ├─► Formatea resultado para Claude
-   │
-   ▼
-8. ai-gateway
-   ├─► Envía resultado a Claude
-   ├─► Recibe respuesta final
-   │
-   ▼
-9. conversation-manager
-   ├─► Guarda respuesta
-   ├─► Actualiza contexto FIFO
-   ├─► Notifica UI
-   │
-   ▼
-10. Usuario ve: "Encontré 'login' en: src/auth.js:45, src/api.js:120..."
-```
-
-#### 4.6 Casos Especiales
-
-**Tool calls múltiples (paralelos):**
-```javascript
-// La IA pide varias tools a la vez
-{
-  tool_calls: [
-    { tool: "file.search", args: { query: "login" } },
-    { tool: "file.search", args: { query: "logout" } }
-  ]
-}
-// → Ejecutar en paralelo, agregar resultados
-```
-
-**Tool calls encadenados:**
-```javascript
-// Loop hasta respuesta final (máximo 10 iteraciones)
-1. IA pide: file.search("config")
-2. Sistema ejecuta, retorna: ["config.json", "config.yaml"]
-3. IA pide: file.read("config.json")
-4. Sistema ejecuta, retorna: { contenido... }
-5. IA responde al usuario con la info
-```
-
-**Tools que fallan:**
-```javascript
-// Retornar error a la IA para que maneje
-{
-  tool_call_id: "call_123",
-  success: false,
-  error: "File not found: /path/to/file.txt"
-}
-// La IA debe responder gracefully al usuario
-```
-
-**Tools peligrosas:**
-```javascript
-// Requieren confirmación del usuario
-{
-  name: "file.delete",
-  requires_confirmation: true,
-  permissions: ["write", "delete"]
-}
-// UI muestra modal: "¿Permitir eliminar archivo X?"
-```
-
-**Ollama sin function calling:**
-```javascript
-// Fallback a prompt-based
-// 1. Añadir tools al system prompt
-// 2. Parsear respuesta buscando [TOOL:name](args)
-// 3. Ejecutar y re-enviar resultado
-```
-
-#### 4.7 Configuración
-
-```javascript
-// config.json o por proyecto
-{
-  "tools": {
-    "enabled": true,
-    "max_calls_per_message": 10,       // Límite de iteraciones
-    "timeout_ms": 30000,               // Timeout por tool
-    "parallel_execution": true,        // Ejecutar en paralelo
-    "require_confirmation_for": [      // Tools que piden confirmación
-      "file.delete",
-      "storage.delete",
-      "db.drop"
-    ],
-    "disabled_tools": [],              // Tools bloqueadas globalmente
-    "ollama_fallback": true            // Usar prompt-based para Ollama
-  }
-}
-```
-
-#### 4.8 UI Necesaria
-
-| Elemento | Función |
-|----------|---------|
-| Indicador "🔧 Ejecutando..." | Feedback mientras ejecuta tool |
-| Badge de tool ejecutada | "file.search ✓" (opcional, colapsable) |
-| Modal confirmación | Para tools con `requires_confirmation: true` |
-| Config de tools | Panel para habilitar/deshabilitar (opcional) |
-
-#### 4.9 Observabilidad
-
-```javascript
-// Logs
-logger.info('tool.called', { tool: 'file.search', args: {...} });
-logger.info('tool.completed', { tool: 'file.search', duration_ms: 45 });
-logger.error('tool.failed', { tool: 'file.read', error: 'Not found' });
-
-// Métricas
-metrics.increment('tool.calls.total', { tool: 'file.search' });
-metrics.timing('tool.duration', 45, { tool: 'file.search' });
-metrics.increment('tool.errors', { tool: 'file.read', reason: 'not_found' });
-
-// System Inspector
-// Todas las tool calls se capturan en /data/system-console.json
-```
+| Ollama | Variable | Fallback a prompt-based |
 
 ---
 
-### 5. Calling Generator
+### 5. Calling Generator ✅
 
-**Estado:** Se integra con el sistema de tools.
+**Estado:** Implementado en `modules/calling-generator/`
 
 **Responsabilidad:**
-- Generar definiciones de tools dinámicamente (si es necesario)
-- Puede usarse para crear tools desde plugins
+- Genera funciones ejecutables desde definiciones de plugins
+- Registra tools de plugins externos en el toolsRegistry
+- Publica eventos: `function.generated`, `function.executed`, `function.failed`
 
-**Integración:**
-- Publica `tool.register.request` → tool-orchestrator escucha y registra
+**APIs:**
+- `GET /functions` - Listar funciones generadas
+- `GET /functions/:name` - Obtener metadata
+- `POST /functions/:name/execute` - Ejecutar función
 
 ---
 
-### 6. Prompt Manager
+### 6. Prompt Manager ✅
+
+**Estado:** Implementado en `modules/prompt-manager/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
 | Selección prompt | Usuario elige | Desde UI del proyecto |
 | Tipos de prompt | Simple o combinado | Múltiples prompts encadenados |
 | Gestión | Catálogo centralizado | Ordenados, categorizados |
-| Herramientas | Creación, edición, combinación | UI dedicada |
-| Función | Inyección en cabecera | Antes de los 20 mensajes de contexto |
+| Slots | system, context, prefix, suffix, format | 5 tipos de slot |
+| Versionado | Sí | Hasta 10 versiones por prompt |
 
-#### Arquitectura del Prompt
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    MENSAJE A IA                          │
-├─────────────────────────────────────────────────────────┤
-│ 1. SYSTEM PROMPT (Prompt Manager)                       │
-│    ├─ Prompt base del proyecto                          │
-│    ├─ + Prompt adicional 1 (si combinado)               │
-│    └─ + Prompt adicional 2 (si combinado)               │
-├─────────────────────────────────────────────────────────┤
-│ 2. CONTEXTO (Conversation Manager)                      │
-│    ├─ Mensaje 1 (activo ✓)                              │
-│    ├─ Mensaje 2 (activo ✓)                              │
-│    ├─ ...                                               │
-│    └─ Mensaje 20 (activo ✓)                             │
-├─────────────────────────────────────────────────────────┤
-│ 3. MENSAJE ACTUAL (usuario)                             │
-└─────────────────────────────────────────────────────────┘
-```
-
-#### Tipos de Prompts
-
-| Tipo | Descripción | Ejemplo |
-|------|-------------|---------|
-| **Base** | Prompt inicial heredado del sistema | "Eres un asistente técnico..." |
-| **Simple** | Un único prompt seleccionado | "Especialista en Python" |
-| **Combinado** | Múltiples prompts encadenados | "Python" + "Testing" + "Clean Code" |
-
-#### Estructura de Prompt
-
+**Tools implementadas:**
 ```javascript
-{
-  id: "uuid",
-  name: "Python Expert",
-  description: "Especialista en desarrollo Python",
-  category: "programming",       // Para organización
-  content: "You are a Python expert...",
-  variables: [],                 // Variables interpolables
-  tags: ["python", "backend"],
-  is_system: false,              // true = viene con el sistema
-  is_global: true,               // true = disponible en todos los proyectos
-  created_at: "2025-01-01",
-  updated_at: "2025-01-01"
-}
-```
-
-#### Combinación de Prompts
-
-```javascript
-// Prompt combinado en proyecto
-{
-  project_id: "uuid",
-  active_prompts: [
-    { prompt_id: "python-expert", order: 1 },
-    { prompt_id: "testing-specialist", order: 2 },
-    { prompt_id: "code-reviewer", order: 3 }
-  ]
-}
-
-// Resultado concatenado (separado por líneas)
-`
-${prompt1.content}
-
----
-
-${prompt2.content}
-
----
-
-${prompt3.content}
-`
-```
-
-#### UI de Prompt Manager
-
-| Elemento | Función |
-|----------|---------|
-| **Selector en proyecto** | Elegir prompt(s) activo(s) |
-| **Lista de prompts** | Catálogo con categorías y búsqueda |
-| **Editor de prompt** | Crear/editar prompts con preview |
-| **Combinador** | Drag & drop para ordenar múltiples prompts |
-| **Variables** | Definir {{variables}} e interpolar valores |
-
-#### Tools de Prompt Manager
-
-```javascript
-// Registradas en tool-orchestrator
 [
   { name: "prompt.list", description: "Lista prompts disponibles" },
   { name: "prompt.get", description: "Obtiene contenido de un prompt" },
@@ -622,9 +261,19 @@ ${prompt3.content}
 ]
 ```
 
+**APIs (16):**
+- CRUD de prompts (`/prompts`)
+- Gestión de presets (`/presets`)
+- Versionado (`/prompts/:id/versions`)
+- Renderizado (`/prompts/:id/render`)
+- Analytics (`/analytics`)
+- Estado UI (`/ui/state`)
+
 ---
 
-### 7. Plugin Manager
+### 7. Plugin Manager ✅
+
+**Estado:** Implementado en `modules/plugin-manager/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
@@ -632,190 +281,212 @@ ${prompt3.content}
 | Registro | Dinámico | Plugins pueden registrar tools |
 | Estado | Habilitar/deshabilitar | Toggle global |
 
-**Responsabilidad:**
-- Gestionar plugins del sistema
-- Permitir que plugins registren tools
-- Estado habilitado/deshabilitado
+**APIs:**
+- `GET /plugins` - Listar plugins
+- `GET /plugins/:name` - Obtener plugin específico
+- `POST /plugins/reload` - Recargar todos los plugins
 
-**Integración con Chat:**
-- Plugins pueden añadir tools al orchestrator
-- Estas tools están disponibles para la IA
+**Plugins disponibles** (en `/plugins/`):
+- `github` - Integración GitHub API
+- `slack` - Integración Slack API
+- `weather` - API del clima
+- `http-utils` - Utilidades HTTP
 
 ---
 
-### 8. Credential Manager
+### 8. Credential Manager ✅
+
+**Estado:** Implementado en `modules/credential-manager/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
 | Acceso IA | Solo nombres | NUNCA valores de credenciales |
-| Uso | Referencias para tools | Tools las usan internamente |
-| Alcance | Global | Compartidas entre proyectos |
+| Niveles | GLOBAL, PROJECT, CLIENT, CUSTOM | Cascada de resolución |
+| Proveedores | OPENAI, DEEPSEEK, ANTHROPIC, OLLAMA | 4 proveedores |
 
-**Tools expuestas:**
+**Tool implementada:**
 ```javascript
-[
-  {
-    name: "credential.list",
-    description: "Lista nombres de credenciales disponibles",
-    // NOTA: Solo retorna nombres, nunca valores
-  }
-]
-```
-
-**Uso por otras tools:**
-```javascript
-// Tool de storage puede usar credenciales internamente
-async handleUpload(args, context) {
-  const creds = await credentialManager.get('s3-bucket');
-  // Usar credenciales internamente, nunca exponer a IA
+{
+  name: "credential.list",
+  description: "Lista nombres de credenciales disponibles por proveedor y nivel",
+  // NOTA: Solo retorna metadata (provider, level, identifier), NUNCA valores
 }
 ```
 
+**APIs (9):**
+- CRUD de credenciales (`/credentials`)
+- Resolución por cascada (`/credentials/resolve`)
+- Niveles disponibles (`/credentials/levels`)
+- Test de API key (`/ui/test`)
+
 ---
 
-### 9. Storage Manager
+### 9. Filesystem ✅ (reemplaza storage-manager + file-browser)
+
+**Estado:** Implementado en `modules/filesystem/`
+
+> **NOTA:** Este módulo unifica las funcionalidades de `storage-manager` y `file-browser` del plan original.
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
-| Función | Almacenamiento LOCAL por proyecto | `data/storage/{project-id}/` |
-| Auto-gestión | Sí | Se crea/elimina con el proyecto |
-| Categorías | uploads, exports, temp, files | Organización interna |
-| Cleanup | Automático | Archivos temp se limpian tras 24h |
+| Función | Operaciones de archivos del sistema | Unificado |
+| Alcance | Todo el sistema | No solo por proyecto |
+| Permisos | Lectura libre | Escritura/borrado con confirmación |
 
-**Estructura:**
-```
-data/storage/
-└── {project-id}/
-    ├── uploads/       # Archivos subidos por usuarios
-    ├── exports/       # Exports generados (CSV, PDF, etc.)
-    ├── temp/          # Archivos temporales (auto-cleanup)
-    └── files/         # Otros archivos del proyecto
-```
-
-**Tools expuestas:**
+**Tools implementadas (11):**
 ```javascript
 [
-  { name: "storage.list", description: "Lista archivos del storage del proyecto" },
-  { name: "storage.info", description: "Info de uso del storage (tamaño, conteo)" },
-  { name: "storage.download", description: "Descarga archivo del storage" },
-  { name: "storage.upload", description: "Sube archivo al storage", requires_confirmation: true },
-  { name: "storage.delete", description: "Elimina archivo del storage", requires_confirmation: true },
-  { name: "storage.cleanup", description: "Limpia archivos temporales" }
+  { name: "fs.list", description: "Lista archivos de un directorio" },
+  { name: "fs.read", description: "Lee contenido de un archivo" },
+  { name: "fs.write", description: "Escribe contenido", confirmation: true },
+  { name: "fs.delete", description: "Elimina archivo/carpeta", confirmation: true },
+  { name: "fs.mkdir", description: "Crea directorio" },
+  { name: "fs.move", description: "Mueve archivo/carpeta", confirmation: true },
+  { name: "fs.copy", description: "Copia archivo" },
+  { name: "fs.search", description: "Busca archivos por nombre o contenido" },
+  { name: "fs.info", description: "Obtiene metadatos de archivo" },
+  { name: "fs.cleanup", description: "Limpia archivos temporales" },
+  { name: "fs.stats", description: "Estadísticas de uso del storage" }
 ]
 ```
 
-**Integración automática:**
-- `project.created` → Storage se crea automáticamente
-- `project.deleted` → Storage se elimina automáticamente
-
-**Futuro (opcional):** Cloud Storage (S3, Google Cloud) como módulo separado si se necesita.
+**Handlers MQTT:**
+- `fs.list`, `fs.read`, `fs.write`, `fs.delete`
+- `fs.mkdir`, `fs.move`, `fs.copy`, `fs.search`
+- `fs.info`, `fs.cleanup`, `fs.stats`
 
 ---
 
-### 10. Database Manager
+### 10. Database Manager ✅
+
+**Estado:** Implementado en `modules/database-manager/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
-| Función | Consultas a bases de datos | PostgreSQL, MySQL, SQLite |
+| Motor | SQLite via sql.js | JavaScript puro, sin compilación nativa |
 | Seguridad | Solo lectura por defecto | Escritura requiere confirmación |
-| Alcance | Conexiones configuradas | Del proyecto o globales |
+| Alcance | Por proyecto | Cada proyecto tiene su DB |
 
-**Tools expuestas:**
+**Tools implementadas (4):**
 ```javascript
 [
-  { name: "db.query", description: "Ejecuta consulta SQL (solo SELECT)", permissions: ["read"] },
+  { name: "db.query", description: "Ejecuta consulta SQL (solo SELECT)" },
   { name: "db.tables", description: "Lista tablas de la base de datos" },
   { name: "db.schema", description: "Obtiene esquema de una tabla" },
   { name: "db.execute", description: "Ejecuta consulta modificadora", requires_confirmation: true }
 ]
 ```
 
----
-
-### 11. File Browser
-
-| Decisión | Valor | Notas |
-|----------|-------|-------|
-| Alcance | Directorio del proyecto | `/data/projects/{name}/` |
-| Funciones | Listar, buscar, leer | Core del chat |
-| Permisos | Lectura libre | Escritura/borrado con confirmación |
-
-**Tools expuestas:**
-```javascript
-[
-  { name: "file.list", description: "Lista archivos de un directorio" },
-  { name: "file.search", description: "Busca texto en archivos (grep)" },
-  { name: "file.read", description: "Lee contenido de un archivo" },
-  { name: "file.info", description: "Obtiene metadatos de un archivo" },
-  { name: "file.create", description: "Crea un nuevo archivo", requires_confirmation: true },
-  { name: "file.write", description: "Escribe contenido a archivo", requires_confirmation: true },
-  { name: "file.delete", description: "Elimina un archivo", requires_confirmation: true }
-]
-```
+**APIs (8):**
+- `GET /databases` - Listar bases de datos
+- `POST /databases/:projectId/query` - Ejecutar query
+- `GET /databases/:projectId/schema` - Obtener schema
+- `POST /databases/:projectId/init` - Inicializar schema
+- `DELETE /databases/:projectId` - Eliminar DB
+- `GET /databases/:projectId/tables` - Listar tablas
 
 ---
 
-### 12. Text Editor
+### 11. Text Editor ⚠️ (parcial)
+
+**Estado:** Implementado en `modules/text-editor/` - **SIN TOOLS para AI**
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
 | Función | Edición de archivos | Integrado en UI |
-| Integración | Via tools | IA puede crear/editar archivos |
-| Formato | Texto plano + código | Syntax highlighting |
+| Formatos | md, json, txt, html, css, js, yaml, xml | 9 formatos |
+| Integración AI | ❌ No implementada | Solo APIs HTTP |
 
-**Tools expuestas:**
-```javascript
-[
-  { name: "editor.open", description: "Abre archivo en el editor" },
-  { name: "editor.save", description: "Guarda cambios del editor", requires_confirmation: true },
-  { name: "editor.create", description: "Crea nuevo archivo y abre en editor", requires_confirmation: true }
-]
-```
+**APIs implementadas (4):**
+- `GET /editor/open` - Abrir archivo
+- `POST /editor/save` - Guardar archivo
+- `POST /editor/validate` - Validar JSON
+- `POST /editor/format` - Formatear JSON
 
-**Nota:** El editor visual es para el usuario. Las tools permiten que la IA sugiera editar o crear archivos.
+**Pendiente:**
+- [ ] Agregar tools: `editor.open`, `editor.save`, `editor.create`
+- [ ] Actualizar dependencia de `file-browser` → `filesystem`
 
 ---
 
-### 13. PDF Viewer
+### 12. PDF Viewer ✅
+
+**Estado:** Implementado en `modules/pdf-viewer/`
 
 | Decisión | Valor | Notas |
 |----------|-------|-------|
-| Función | Lectura de PDFs | Extracción de texto |
-| Integración | Via tools | IA puede leer PDFs |
-| OCR | Si está disponible | Para PDFs escaneados |
+| Función | Lectura y extracción de PDFs | Con pdftotext |
+| Parser primario | pdftotext (poppler-utils) | Sin dependencias npm |
+| Parser fallback | pdf-parse (npm) | Si pdftotext no disponible |
 
-**Tools expuestas:**
+**Tools implementadas (3):**
 ```javascript
 [
-  { name: "pdf.read", description: "Extrae texto de un PDF" },
-  { name: "pdf.info", description: "Obtiene metadatos del PDF (páginas, autor, etc)" },
-  { name: "pdf.extract", description: "Extrae páginas específicas como texto" }
+  { name: "pdf.list", description: "Lista PDFs de un proyecto" },
+  { name: "pdf.metadata", description: "Obtiene metadata del PDF" },
+  { name: "pdf.extract", description: "Extrae texto de PDF (todo o por página)" }
 ]
 ```
 
----
-
-## Módulos Definidos - Resumen
-
-| # | Módulo | Estado | Función Principal |
-|---|--------|--------|-------------------|
-| 1 | AI Gateway | ✅ Definido | Comunicación con proveedores IA |
-| 2 | Project Manager | ✅ Definido | Gestión de proyectos aislados |
-| 3 | Conversation Manager | ✅ Definido | Contexto FIFO con checkboxes |
-| 4 | Tool System | ✅ Definido | Function calling nativo |
-| 5 | Calling Generator | ✅ Definido | Registro dinámico de tools |
-| 6 | Prompt Manager | ✅ Definido | Prompts catalogados, combinables |
-| 7 | Plugin Manager | ✅ Definido | Plugins que añaden tools |
-| 8 | Credential Manager | ✅ Definido | Credenciales (solo nombres a IA) |
-| 9 | Storage Manager | ✅ Definido | Storage LOCAL por proyecto |
-| 10 | Database Manager | ✅ Definido | Consultas SQL via tools |
-| 11 | File Browser | ✅ Definido | Navegación de archivos |
-| 12 | Text Editor | ✅ Definido | Edición de archivos |
-| 13 | PDF Viewer | ✅ Definido | Lectura de PDFs |
+**APIs (4):**
+- `GET /pdf/view` - Ver PDF
+- `GET /pdf/extract-text` - Extraer texto
+- `GET /pdf/metadata` - Obtener metadata
+- `GET /pdf/list` - Listar PDFs del proyecto
 
 ---
 
-## Flujo General del Chat (Actualizado)
+### 13. Code Executor ✅ (NUEVO - no estaba en plan original)
+
+**Estado:** Implementado en `modules/code-executor/`
+
+| Decisión | Valor | Notas |
+|----------|-------|-------|
+| Función | Ejecución de comandos shell | Con controles de seguridad |
+| Timeout default | 30 segundos | Máximo 5 minutos |
+| Procesos background | Máximo 10 | Controlados por PID |
+
+**Tools implementadas (5):**
+```javascript
+[
+  { name: "shell.exec", description: "Ejecuta comando shell", requires_confirmation: true },
+  { name: "shell.script", description: "Ejecuta script (bash/python/node)", requires_confirmation: true },
+  { name: "shell.background", description: "Inicia proceso en background", requires_confirmation: true },
+  { name: "shell.kill", description: "Detiene proceso por PID o nombre" },
+  { name: "shell.list", description: "Lista procesos activos" }
+]
+```
+
+**Seguridad:**
+- Comandos bloqueados: `rm -rf /`, `sudo`, `mkfs`, etc.
+- Patrones peligrosos bloqueados via regex
+- Timeout máximo de 5 minutos
+
+---
+
+## Módulos Implementados - Resumen
+
+| # | Módulo | Estado | Tools | Función Principal |
+|---|--------|--------|-------|-------------------|
+| 1 | AI Gateway | ✅ Implementado | - | Comunicación con proveedores IA |
+| 2 | Project Manager | ✅ Implementado | - | Gestión de proyectos aislados |
+| 3 | Conversation Manager | ✅ Implementado | - | Contexto FIFO con checkboxes |
+| 4 | Tool System | ✅ Implementado | - | Unificado en Module Loader + AI Gateway |
+| 5 | Calling Generator | ✅ Implementado | - | Genera funciones desde plugins |
+| 6 | Prompt Manager | ✅ Implementado | 3 | Prompts catalogados, combinables |
+| 7 | Plugin Manager | ✅ Implementado | - | Plugins JSON que añaden tools |
+| 8 | Credential Manager | ✅ Implementado | 1 | Credenciales (solo nombres a IA) |
+| 9 | Filesystem | ✅ Implementado | 11 | Unifica storage-manager + file-browser |
+| 10 | Database Manager | ✅ Implementado | 4 | Consultas SQL via tools |
+| 11 | Text Editor | ⚠️ Parcial | 0 | Solo APIs, sin tools para AI |
+| 12 | PDF Viewer | ✅ Implementado | 3 | Lectura y extracción de PDFs |
+| 13 | Code Executor | ✅ Implementado | 5 | Ejecución shell con seguridad |
+
+**Total: 27 tools implementadas**
+
+---
+
+## Flujo General del Chat (Implementación Real)
 
 ```
 Usuario escribe mensaje
@@ -825,7 +496,6 @@ Usuario escribe mensaje
 │ Conversation Manager    │
 │ • Guarda mensaje        │
 │ • Gestiona contexto     │
-│ • Obtiene ALL tools     │
 └─────────┬───────────────┘
           │
           ▼
@@ -837,23 +507,11 @@ Usuario escribe mensaje
           │
           ▼
 ┌─────────────────────────┐
-│   Tool Translator       │
-│ • Traduce tools al      │
-│   formato del proveedor │
-└─────────┬───────────────┘
-          │
-          ▼
-┌─────────────────────────┐
 │    AI Gateway           │
+│ • getAvailableTools()   │
+│ • Traduce tools (interno)│
 │ • Envía a proveedor     │
 │ • Recibe respuesta      │
-└─────────┬───────────────┘
-          │
-          ▼
-┌─────────────────────────┐
-│   Tool Translator       │
-│ • Traduce tool_calls    │
-│   a formato interno     │
 └─────────┬───────────────┘
           │
     ¿Tool call?
@@ -862,10 +520,11 @@ Usuario escribe mensaje
    │            │
    ▼            │
 ┌─────────────┐ │
-│Tool Orchest.│ │
+│ Module      │ │
+│ Loader      │ │
+│• executeTool│ │
 │• Valida     │ │
 │• Ejecuta    │ │
-│• Retorna    │ │
 └──────┬──────┘ │
        │        │
        ▼        │
@@ -886,54 +545,40 @@ Usuario escribe mensaje
 
 ## Checklist de Implementación
 
-### tool-translator (NUEVO)
-- [ ] Crear módulo `modules/tool-translator/`
-- [ ] Traducir tools interno → OpenAI format
-- [ ] Traducir tools interno → Claude format
-- [ ] Traducir tools interno → DeepSeek format
-- [ ] Fallback prompt-based para Ollama
-- [ ] Traducir tool_calls de respuesta → interno
-- [ ] Traducir resultados interno → proveedor
+### Core ✅
+- [x] Module Loader toolsRegistry
+- [x] AI Gateway tool execution
+- [x] Tool translation (interno en ai-gateway)
 
-### tool-orchestrator (MODIFICAR)
-- [ ] Escuchar `tool.register.request`
-- [ ] API GET /tools (listar todas)
-- [ ] Ejecución paralela de múltiples tools
-- [ ] Sistema de permisos por tool
-- [ ] Confirmación para tools peligrosas
-- [ ] Timeout configurable por tool
+### Módulos con Tools ✅
+- [x] credential-manager: `credential.list`
+- [x] prompt-manager: `prompt.list`, `prompt.get`, `prompt.render`
+- [x] database-manager: `db.query`, `db.tables`, `db.schema`, `db.execute`
+- [x] filesystem: 11 tools (fs.*)
+- [x] pdf-viewer: `pdf.list`, `pdf.metadata`, `pdf.extract`
+- [x] code-executor: 5 tools (shell.*)
 
-### ai-gateway (MODIFICAR)
-- [ ] Recibir tools ya traducidas (no traduce)
-- [ ] Loop de tool calls hasta respuesta final
-- [ ] Límite de iteraciones (max 10)
+### Pendiente ⚠️
+- [ ] text-editor: agregar tools `editor.open`, `editor.save`, `editor.create`
+- [ ] text-editor: actualizar dependencia `file-browser` → `filesystem`
 
-### conversation-manager (MODIFICAR)
-- [ ] Obtener tools del orchestrator
-- [ ] Pasarlas al flujo
-- [ ] Guardar tool calls en historial (opcional)
-
-### Módulos (CADA UNO)
-- [ ] file-browser: registrar file.list, file.search, file.read
-- [ ] text-editor: registrar editor.open, editor.save, editor.create
-- [ ] pdf-viewer: registrar pdf.read, pdf.extract
-- [ ] database-manager: registrar db.query, db.tables
-- [ ] storage-manager: registrar storage.upload, storage.download, storage.list
-- [ ] notes: registrar notes.create, notes.list, notes.search
-- [ ] prompt-manager: registrar prompt.get, prompt.list
-- [ ] project-manager: registrar project.info, project.files
-
-### UI
-- [ ] Indicador "ejecutando tool"
-- [ ] Modal confirmación tools peligrosas
-- [ ] Badge de tool ejecutada (opcional)
+### Eliminados del Plan Original
+- ~~tool-translator~~ → Integrado en ai-gateway
+- ~~tool-orchestrator~~ → Reemplazado por Module Loader
+- ~~storage-manager~~ → Unificado en filesystem
+- ~~file-browser~~ → Unificado en filesystem
 
 ---
 
-## Notas Adicionales
+## Archivos Clave
 
-- **System Inspector:** Módulo de observabilidad para que Claude pueda consultar estado del sistema en `/data/system-console.json`.
-- **ai-agent-framework:** Disponible para crear agentes especializados, pero el chat principal usa function calling nativo.
+| Componente | Archivo |
+|------------|---------|
+| Tool Registry | `core/modules/loader.js` |
+| Tool Execution | `modules/ai-gateway/index.js` |
+| Tool Translation | `modules/ai-gateway/tool-translator.js` |
+| Filesystem Tools | `modules/filesystem/index.js` |
+| Code Executor Tools | `modules/code-executor/index.js` |
 
 ---
 
@@ -942,7 +587,10 @@ Usuario escribe mensaje
 | Fecha | Cambio |
 |-------|--------|
 | 2025-12-28 | Documento inicial con AI Gateway, Project Manager, Conversation Manager |
-| 2025-12-29 | Añadido sistema de Tools completo: tool-translator, tool-orchestrator, flujo, casos especiales |
-| 2025-12-29 | Completados TODOS los módulos: Prompt Manager, Plugin, Credential, Storage, Database, File Browser, Text Editor, PDF Viewer |
-| 2025-12-29 | Storage Manager corregido: es LOCAL por proyecto, no remoto |
-
+| 2025-12-29 | Añadido sistema de Tools completo (plan original) |
+| 2025-12-29 | Completados TODOS los módulos en plan |
+| 2025-12-30 | **VERIFICACIÓN vs código real:** Actualizado para reflejar implementación |
+| 2025-12-30 | Documentada arquitectura unificada (Module Loader + AI Gateway) |
+| 2025-12-30 | Eliminados módulos inexistentes: tool-translator, tool-orchestrator, storage-manager, file-browser |
+| 2025-12-30 | Agregado code-executor (no estaba en plan original) |
+| 2025-12-30 | Marcado text-editor como parcial (sin tools) |

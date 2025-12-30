@@ -104,8 +104,68 @@
   },
 
   "dependencies": {
-    "modules": ["file-browser", "storage-manager", "project-manager"]
+    "modules": ["filesystem", "project-manager"]
   },
+
+  "tools": [
+    {
+      "name": "pdf.list",
+      "description": "Lista todos los archivos PDF en un proyecto.",
+      "handler": "handleToolList",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          }
+        },
+        "required": ["projectId"]
+      }
+    },
+    {
+      "name": "pdf.metadata",
+      "description": "Obtiene metadata de un archivo PDF (tamaño, fecha, etc.).",
+      "handler": "handleToolMetadata",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Ruta al archivo PDF"
+          }
+        },
+        "required": ["projectId", "filePath"]
+      }
+    },
+    {
+      "name": "pdf.extract",
+      "description": "Extrae texto de un archivo PDF. Puede extraer una página específica o todo el documento.",
+      "handler": "handleToolExtract",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Ruta al archivo PDF"
+          },
+          "page": {
+            "type": "number",
+            "description": "Número de página (1-indexed). Si no se especifica, extrae todo."
+          }
+        },
+        "required": ["projectId", "filePath"]
+      }
+    }
+  ],
 
   "config": {
     "max_pdf_size": 52428800,

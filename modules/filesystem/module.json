@@ -14,7 +14,9 @@
     { "domain": "fs", "action": "move", "method": "handleMove" },
     { "domain": "fs", "action": "copy", "method": "handleCopy" },
     { "domain": "fs", "action": "search", "method": "handleSearch" },
-    { "domain": "fs", "action": "info", "method": "handleInfo" }
+    { "domain": "fs", "action": "info", "method": "handleInfo" },
+    { "domain": "fs", "action": "cleanup", "method": "handleCleanup" },
+    { "domain": "fs", "action": "stats", "method": "handleStats" }
   ],
 
   "tools": [
@@ -131,6 +133,30 @@
           "path": { "type": "string", "description": "Ruta del archivo o carpeta" }
         },
         "required": ["path"]
+      }
+    },
+    {
+      "name": "fs.cleanup",
+      "description": "Limpia archivos temporales del directorio temp que tengan más de N horas",
+      "handler": "handleCleanup",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta del directorio a limpiar", "default": "/temp" },
+          "max_age_hours": { "type": "number", "description": "Edad máxima en horas (archivos más viejos se eliminan)", "default": 24 },
+          "dry_run": { "type": "boolean", "description": "Si es true, solo muestra qué se eliminaría sin eliminar", "default": false }
+        }
+      }
+    },
+    {
+      "name": "fs.stats",
+      "description": "Obtiene estadísticas de uso del storage (tamaño total, conteo de archivos)",
+      "handler": "handleStats",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Ruta base para las estadísticas", "default": "/" }
+        }
       }
     }
   ],

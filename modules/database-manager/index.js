@@ -821,6 +821,406 @@ class DatabaseManagerModule {
   }
 
   // ==========================================
+  // AI Tool Handlers
+  // ==========================================
+
+  /**
+   * db.query - Execute read-only SELECT query
+   * Only allows SELECT statements for safety
+   */
+  async handleToolQuery(args) {
+    const { projectId, query, params = [] } = args || {};
+
+    // Validate required parameters
+    if (!projectId) {
+      return {
+        status: 400,
+        data: { error: 'projectId is required' }
+      };
+    }
+
+    if (!query) {
+      return {
+        status: 400,
+        data: { error: 'query is required' }
+      };
+    }
+
+    // Security: Only allow SELECT statements
+    const normalizedQuery = query.trim().toUpperCase();
+    if (!normalizedQuery.startsWith('SELECT')) {
+      return {
+        status: 403,
+        data: {
+          error: 'Only SELECT queries allowed',
+          hint: 'Use db.execute for INSERT, UPDATE, DELETE operations'
+        }
+      };
+    }
+
+    const startTime = Date.now();
+
+    this.logger.info('tool.query.start', {
+      project_id: projectId,
+      query_preview: query.substring(0, 100)
+    });
+
+    try {
+      const db = await this.getDatabase(projectId);
+      const results = [];
+
+      const stmt = db.prepare(query);
+      if (params.length > 0) {
+        stmt.bind(params);
+      }
+
+      while (stmt.step()) {
+        results.push(stmt.getAsObject());
+      }
+      stmt.free();
+
+      const duration = Date.now() - startTime;
+
+      this.logger.info('tool.query.success', {
+        project_id: projectId,
+        result_count: results.length,
+        duration
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          results,
+          count: results.length,
+          duration
+        }
+      };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.query.error', {
+        project_id: projectId,
+        error: errorMsg
+      });
+
+      return {
+        status: 500,
+        data: {
+          success: false,
+          projectId,
+          error: errorMsg
+        }
+      };
+    }
+  }
+
+  /**
+   * db.tables - List all tables in project database
+   */
+  async handleToolTables(args) {
+    const { projectId } = args || {};
+
+    if (!projectId) {
+      return {
+        status: 400,
+        data: { error: 'projectId is required' }
+      };
+    }
+
+    this.logger.info('tool.tables.start', { project_id: projectId });
+
+    try {
+      const db = await this.getDatabase(projectId);
+
+      const stmt = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+      );
+      const tables = [];
+
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        tables.push(row.name);
+      }
+      stmt.free();
+
+      this.logger.info('tool.tables.success', {
+        project_id: projectId,
+        count: tables.length
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          tables,
+          count: tables.length
+        }
+      };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.tables.error', {
+        project_id: projectId,
+        error: errorMsg
+      });
+
+      return {
+        status: 500,
+        data: {
+          success: false,
+          projectId,
+          error: errorMsg
+        }
+      };
+    }
+  }
+
+  /**
+   * db.schema - Get schema for a specific table
+   */
+  async handleToolSchema(args) {
+    const { projectId, tableName } = args || {};
+
+    if (!projectId) {
+      return {
+        status: 400,
+        data: { error: 'projectId is required' }
+      };
+    }
+
+    if (!tableName) {
+      return {
+        status: 400,
+        data: { error: 'tableName is required' }
+      };
+    }
+
+    this.logger.info('tool.schema.start', {
+      project_id: projectId,
+      table_name: tableName
+    });
+
+    try {
+      const db = await this.getDatabase(projectId);
+
+      // Get table info (columns)
+      const stmt = db.prepare(`PRAGMA table_info("${tableName}")`);
+      const columns = [];
+
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        columns.push({
+          name: row.name,
+          type: row.type,
+          notnull: row.notnull === 1,
+          default_value: row.dflt_value,
+          primary_key: row.pk === 1
+        });
+      }
+      stmt.free();
+
+      if (columns.length === 0) {
+        return {
+          status: 404,
+          data: {
+            success: false,
+            projectId,
+            tableName,
+            error: `Table '${tableName}' not found`
+          }
+        };
+      }
+
+      // Get foreign keys
+      const fkStmt = db.prepare(`PRAGMA foreign_key_list("${tableName}")`);
+      const foreignKeys = [];
+
+      while (fkStmt.step()) {
+        const row = fkStmt.getAsObject();
+        foreignKeys.push({
+          column: row.from,
+          references_table: row.table,
+          references_column: row.to,
+          on_update: row.on_update,
+          on_delete: row.on_delete
+        });
+      }
+      fkStmt.free();
+
+      // Get indexes
+      const idxStmt = db.prepare(`PRAGMA index_list("${tableName}")`);
+      const indexes = [];
+
+      while (idxStmt.step()) {
+        const row = idxStmt.getAsObject();
+        indexes.push({
+          name: row.name,
+          unique: row.unique === 1
+        });
+      }
+      idxStmt.free();
+
+      // Get CREATE TABLE statement
+      const sqlStmt = db.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      );
+      sqlStmt.bind([tableName]);
+      let createStatement = null;
+      if (sqlStmt.step()) {
+        createStatement = sqlStmt.getAsObject().sql;
+      }
+      sqlStmt.free();
+
+      this.logger.info('tool.schema.success', {
+        project_id: projectId,
+        table_name: tableName,
+        column_count: columns.length
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          tableName,
+          columns,
+          foreignKeys,
+          indexes,
+          createStatement
+        }
+      };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.schema.error', {
+        project_id: projectId,
+        table_name: tableName,
+        error: errorMsg
+      });
+
+      return {
+        status: 500,
+        data: {
+          success: false,
+          projectId,
+          tableName,
+          error: errorMsg
+        }
+      };
+    }
+  }
+
+  /**
+   * db.execute - Execute modifying query (INSERT, UPDATE, DELETE, etc.)
+   * Requires user confirmation (requires_confirmation: true in module.json)
+   */
+  async handleToolExecute(args) {
+    const { projectId, query, params = [] } = args || {};
+
+    if (!projectId) {
+      return {
+        status: 400,
+        data: { error: 'projectId is required' }
+      };
+    }
+
+    if (!query) {
+      return {
+        status: 400,
+        data: { error: 'query is required' }
+      };
+    }
+
+    // Security: Block SELECT (should use db.query instead)
+    const normalizedQuery = query.trim().toUpperCase();
+    if (normalizedQuery.startsWith('SELECT')) {
+      return {
+        status: 400,
+        data: {
+          error: 'Use db.query for SELECT statements',
+          hint: 'db.execute is for INSERT, UPDATE, DELETE, CREATE, ALTER, DROP'
+        }
+      };
+    }
+
+    const startTime = Date.now();
+
+    this.logger.info('tool.execute.start', {
+      project_id: projectId,
+      query_preview: query.substring(0, 100)
+    });
+
+    try {
+      const db = await this.getDatabase(projectId);
+
+      // For modifying queries, use run() to get changes count
+      const stmt = db.prepare(query);
+      if (params.length > 0) {
+        stmt.bind(params);
+      }
+      stmt.step();
+      stmt.free();
+
+      // Get number of affected rows
+      const changesStmt = db.prepare('SELECT changes() as affected_rows');
+      changesStmt.step();
+      const affectedRows = changesStmt.getAsObject().affected_rows;
+      changesStmt.free();
+
+      // Get last insert rowid for INSERT statements
+      let lastInsertId = null;
+      if (normalizedQuery.startsWith('INSERT')) {
+        const lastIdStmt = db.prepare('SELECT last_insert_rowid() as last_id');
+        lastIdStmt.step();
+        lastInsertId = lastIdStmt.getAsObject().last_id;
+        lastIdStmt.free();
+      }
+
+      // Auto-save
+      if (this.config.autoSave !== false) {
+        await this.saveDatabase(projectId);
+      }
+
+      const duration = Date.now() - startTime;
+
+      // Publish event
+      await this.publishQueryExecuted(projectId, affectedRows, false, duration, null);
+
+      this.logger.info('tool.execute.success', {
+        project_id: projectId,
+        affected_rows: affectedRows,
+        duration
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          affectedRows,
+          lastInsertId,
+          duration
+        }
+      };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.execute.error', {
+        project_id: projectId,
+        error: errorMsg
+      });
+
+      return {
+        status: 500,
+        data: {
+          success: false,
+          projectId,
+          error: errorMsg
+        }
+      };
+    }
+  }
+
+  // ==========================================
   // Database Operations
   // ==========================================
 

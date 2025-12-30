@@ -16,6 +16,76 @@
     "ai.completion.completed",
     "ai.request.started"
   ],
+
+  "tools": [
+    {
+      "name": "prompt.list",
+      "description": "Lista prompts disponibles por slot type, categoría o tags. Útil para conocer qué prompts hay configurados en el sistema.",
+      "handler": "handleToolPromptList",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "slot_type": {
+            "type": "string",
+            "enum": ["system", "context", "prefix", "suffix", "format"],
+            "description": "Filtrar por tipo de slot (opcional)"
+          },
+          "tag": {
+            "type": "string",
+            "description": "Filtrar por tag (opcional)"
+          },
+          "search": {
+            "type": "string",
+            "description": "Buscar por nombre o descripción (opcional)"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "prompt.get",
+      "description": "Obtiene el contenido completo de un prompt específico por ID o nombre.",
+      "handler": "handleToolPromptGet",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ID del prompt"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre del prompt (alternativa al ID)"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "prompt.render",
+      "description": "Renderiza un prompt con variables interpoladas. Las variables en el template usan formato {{variable}}.",
+      "handler": "handleToolPromptRender",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ID del prompt a renderizar"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre del prompt (alternativa al ID)"
+          },
+          "variables": {
+            "type": "object",
+            "description": "Variables para interpolar en el template"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+
   "publishes": [
     "prompt.created",
     "prompt.updated",

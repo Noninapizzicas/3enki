@@ -210,6 +210,18 @@
       "response_schema": { "$ref": "./schemas/conversation.json#/definitions/ui_state_response" }
     },
     {
+      "method": "PUT",
+      "path": "/messages/:id/context",
+      "handler": "handleToggleContext",
+      "description": "Toggle message context inclusion (in_context, manually_toggled)"
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id/context-stats",
+      "handler": "handleContextStats",
+      "description": "Get context statistics for a conversation (active, total, remaining)"
+    },
+    {
       "method": "GET",
       "path": "/health",
       "handler": "handleHealthCheck",

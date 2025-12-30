@@ -1426,6 +1426,67 @@ class CredentialManagerModule {
   }
 
   // ==========================================
+  // AI Tool Handlers
+  // ==========================================
+
+  /**
+   * Tool handler: Lista credenciales para AI
+   * IMPORTANTE: Solo retorna metadata (provider, level, identifier)
+   * NUNCA retorna valores de API keys
+   *
+   * @param {Object} args - Tool arguments
+   * @param {string} [args.level] - Filter by level (GLOBAL, PROJECT, CLIENT, CUSTOM)
+   * @param {string} [args.provider] - Filter by provider (OPENAI, DEEPSEEK, ANTHROPIC, OLLAMA)
+   * @returns {Object} List of credential metadata
+   */
+  async handleToolCredentialList(args) {
+    const { level, provider } = args || {};
+
+    this.logger.info('credential.tool.list.called', {
+      level,
+      provider
+    });
+
+    const credentials = [];
+
+    for (const [key, _value] of this.credentials.entries()) {
+      const parsed = this.parseKey(key);
+      if (!parsed) continue;
+
+      // Apply filters if specified
+      if (level && parsed.level !== level.toUpperCase()) continue;
+      if (provider && parsed.provider !== provider.toUpperCase()) continue;
+
+      // SECURITY: Never include api_key value - only metadata
+      credentials.push({
+        key,
+        provider: parsed.provider,
+        level: parsed.level,
+        identifier: parsed.identifier || null
+      });
+    }
+
+    // Sort by level priority (GLOBAL first, then PROJECT, CLIENT, CUSTOM)
+    const levelOrder = { GLOBAL: 1, PROJECT: 2, CLIENT: 3, CUSTOM: 4 };
+    credentials.sort((a, b) => (levelOrder[a.level] || 99) - (levelOrder[b.level] || 99));
+
+    this.logger.info('credential.tool.list.result', {
+      count: credentials.length,
+      filters: { level, provider }
+    });
+
+    return {
+      status: 200,
+      data: {
+        credentials,
+        total: credentials.length,
+        filters: { level: level || null, provider: provider || null },
+        note: 'Only credential names and metadata are returned. API key values are never exposed.'
+      }
+    };
+  }
+
+  // ==========================================
   // Core Logic
   // ==========================================
 

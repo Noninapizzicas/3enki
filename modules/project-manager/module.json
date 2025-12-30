@@ -170,6 +170,30 @@
       "response_schema": { "$ref": "./schemas/project.json#/definitions/project_response" }
     },
     {
+      "method": "POST",
+      "path": "/projects/:id/session",
+      "handler": "handleSaveSession",
+      "description": "Save project session state (scroll_position, context_config, ui_state)"
+    },
+    {
+      "method": "GET",
+      "path": "/projects/:id/session",
+      "handler": "handleRestoreSession",
+      "description": "Restore project session state"
+    },
+    {
+      "method": "PUT",
+      "path": "/projects/:id/ai-config",
+      "handler": "handleSetAIConfig",
+      "description": "Set AI configuration override (provider, model, prompt_id)"
+    },
+    {
+      "method": "PUT",
+      "path": "/projects/:id/last-conversation",
+      "handler": "handleSetLastConversation",
+      "description": "Update last active conversation ID"
+    },
+    {
       "method": "GET",
       "path": "/health",
       "handler": "handleHealthCheck",
@@ -213,6 +237,7 @@
   "config": {
     "dbTimeout": 10000,
     "maxProjects": 1000,
-    "defaultSchema": ""
+    "defaultSchema": "",
+    "projectsBasePath": "/data/projects"
   }
 }

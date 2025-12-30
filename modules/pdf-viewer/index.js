@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { execSync } = require('child_process');
 
 const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
 
@@ -562,6 +563,286 @@ class PdfViewerModule {
       pdfs,
       count: pdfs.length
     };
+  }
+
+  // ==========================================
+  // AI Tool Handlers
+  // ==========================================
+
+  /**
+   * pdf.list - List all PDFs in a project
+   */
+  async handleToolList(args) {
+    const { projectId } = args || {};
+
+    if (!projectId) {
+      return {
+        status: 400,
+        data: { error: 'projectId is required' }
+      };
+    }
+
+    this.logger.info('tool.pdf.list.start', { project_id: projectId });
+
+    try {
+      const basePath = await this.getBasePath(projectId);
+      const pdfs = await this.findPdfsRecursive(basePath);
+
+      this.logger.info('tool.pdf.list.success', {
+        project_id: projectId,
+        count: pdfs.length
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          pdfs,
+          count: pdfs.length
+        }
+      };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.pdf.list.error', {
+        project_id: projectId,
+        error: errorMsg
+      });
+
+      return {
+        status: 500,
+        data: {
+          success: false,
+          projectId,
+          error: errorMsg
+        }
+      };
+    }
+  }
+
+  /**
+   * pdf.metadata - Get PDF file metadata
+   */
+  async handleToolMetadata(args) {
+    const { projectId, filePath } = args || {};
+
+    if (!projectId) {
+      return {
+        status: 400,
+        data: { error: 'projectId is required' }
+      };
+    }
+
+    if (!filePath) {
+      return {
+        status: 400,
+        data: { error: 'filePath is required' }
+      };
+    }
+
+    this.logger.info('tool.pdf.metadata.start', {
+      project_id: projectId,
+      file_path: filePath
+    });
+
+    try {
+      const basePath = await this.getBasePath(projectId);
+      const fullPath = this.validatePath(basePath, filePath);
+
+      if (!fullPath.toLowerCase().endsWith('.pdf')) {
+        return {
+          status: 400,
+          data: { error: 'File must be a PDF' }
+        };
+      }
+
+      const stats = await fs.stat(fullPath);
+
+      const metadata = {
+        filePath,
+        filename: path.basename(filePath),
+        size: stats.size,
+        sizeFormatted: this.formatBytes(stats.size),
+        created: stats.birthtime,
+        modified: stats.mtime,
+        accessed: stats.atime
+      };
+
+      this.logger.info('tool.pdf.metadata.success', {
+        project_id: projectId,
+        file_path: filePath
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          ...metadata
+        }
+      };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.pdf.metadata.error', {
+        project_id: projectId,
+        file_path: filePath,
+        error: errorMsg
+      });
+
+      return {
+        status: 500,
+        data: {
+          success: false,
+          projectId,
+          filePath,
+          error: errorMsg
+        }
+      };
+    }
+  }
+
+  /**
+   * pdf.extract - Extract text from PDF
+   * Note: Requires pdf-parse library for full functionality
+   */
+  async handleToolExtract(args) {
+    const { projectId, filePath, page } = args || {};
+
+    if (!projectId) {
+      return {
+        status: 400,
+        data: { error: 'projectId is required' }
+      };
+    }
+
+    if (!filePath) {
+      return {
+        status: 400,
+        data: { error: 'filePath is required' }
+      };
+    }
+
+    this.logger.info('tool.pdf.extract.start', {
+      project_id: projectId,
+      file_path: filePath,
+      page: page || 'all'
+    });
+
+    try {
+      const basePath = await this.getBasePath(projectId);
+      const fullPath = this.validatePath(basePath, filePath);
+
+      if (!fullPath.toLowerCase().endsWith('.pdf')) {
+        return {
+          status: 400,
+          data: { error: 'File must be a PDF' }
+        };
+      }
+
+      // Check if file exists
+      await fs.stat(fullPath);
+
+      let text = null;
+      let pages = null;
+      let method = null;
+
+      // Try pdftotext first (poppler-utils) - lightweight, no npm dependencies
+      try {
+        const pageArgs = page ? `-f ${page} -l ${page}` : '';
+        text = execSync(
+          `pdftotext ${pageArgs} "${fullPath}" -`,
+          { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+        );
+
+        // Get page count with pdfinfo
+        try {
+          const info = execSync(`pdfinfo "${fullPath}"`, { encoding: 'utf-8' });
+          const pagesMatch = info.match(/Pages:\s+(\d+)/);
+          pages = pagesMatch ? parseInt(pagesMatch[1], 10) : null;
+        } catch {
+          // pdfinfo not available, pages will be null
+        }
+
+        method = 'pdftotext';
+        this.logger.info('tool.pdf.extract.pdftotext.success', {
+          project_id: projectId,
+          file_path: filePath,
+          pages,
+          text_length: text?.length || 0
+        });
+      } catch (pdftotextError) {
+        // pdftotext not available, try pdf-parse as fallback
+        this.logger.debug('tool.pdf.extract.pdftotext.unavailable', {
+          error: pdftotextError.message
+        });
+
+        try {
+          const pdfParse = require('pdf-parse');
+          const buffer = await fs.readFile(fullPath);
+          const data = await pdfParse(buffer);
+
+          text = data.text;
+          pages = data.numpages;
+          method = 'pdf-parse';
+
+          this.logger.info('tool.pdf.extract.pdfparse.success', {
+            project_id: projectId,
+            file_path: filePath,
+            pages,
+            text_length: text?.length || 0
+          });
+        } catch (parseError) {
+          // Neither pdftotext nor pdf-parse available
+          this.logger.warn('tool.pdf.extract.no_parser', {
+            pdftotext_error: pdftotextError.message,
+            pdfparse_error: parseError.message
+          });
+
+          return {
+            status: 200,
+            data: {
+              success: true,
+              projectId,
+              filePath,
+              text: null,
+              pages: null,
+              note: 'No PDF parser available. Install poppler-utils (pdftotext) or pdf-parse npm package.',
+              requestedPage: page || null
+            }
+          };
+        }
+      }
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          filePath,
+          text,
+          pages,
+          method,
+          requestedPage: page || null
+        }
+      };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.pdf.extract.error', {
+        project_id: projectId,
+        file_path: filePath,
+        error: errorMsg
+      });
+
+      return {
+        status: 500,
+        data: {
+          success: false,
+          projectId,
+          filePath,
+          error: errorMsg
+        }
+      };
+    }
   }
 }
 

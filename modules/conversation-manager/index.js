@@ -69,9 +69,12 @@ class ConversationManagerModule {
       this.uiHandler.register('conversation', 'get', this.handleUIGet.bind(this));
       this.uiHandler.register('conversation', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('conversation', 'delete', this.handleUIDelete.bind(this));
+      // Context management handlers
+      this.uiHandler.register('conversation', 'toggleContext', this.handleUIToggleContext.bind(this));
+      this.uiHandler.register('conversation', 'contextStats', this.handleUIContextStats.bind(this));
 
       this.logger.info('conversation-manager.ui_handlers.registered', {
-        handlers: ['send', 'load', 'create', 'list', 'get', 'update', 'delete']
+        handlers: ['send', 'load', 'create', 'list', 'get', 'update', 'delete', 'toggleContext', 'contextStats']
       });
     }
 
@@ -135,6 +138,8 @@ class ConversationManagerModule {
       this.uiHandler.unregister('conversation', 'get');
       this.uiHandler.unregister('conversation', 'update');
       this.uiHandler.unregister('conversation', 'delete');
+      this.uiHandler.unregister('conversation', 'toggleContext');
+      this.uiHandler.unregister('conversation', 'contextStats');
     }
 
     // Unsubscribe all
@@ -243,7 +248,7 @@ class ConversationManagerModule {
         )
       `, [], false, correlationId);
 
-      // Messages table
+      // Messages table with context management fields
       await this.queryDatabase(projectId, `
         CREATE TABLE IF NOT EXISTS messages (
           id TEXT PRIMARY KEY,
@@ -255,13 +260,34 @@ class ConversationManagerModule {
           cost REAL,
           created_at TEXT NOT NULL,
           metadata TEXT,
+          in_context INTEGER DEFAULT 1,
+          manually_toggled INTEGER DEFAULT 0,
           FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         )
       `, [], false, correlationId);
 
+      // Migration: Add new columns if they don't exist (for existing databases)
+      const messageMigrations = [
+        'ALTER TABLE messages ADD COLUMN in_context INTEGER DEFAULT 1',
+        'ALTER TABLE messages ADD COLUMN manually_toggled INTEGER DEFAULT 0'
+      ];
+
+      for (const migration of messageMigrations) {
+        try {
+          await this.queryDatabase(projectId, migration, [], false, correlationId);
+        } catch (e) {
+          // Column already exists, ignore
+        }
+      }
+
       // Index for messages by conversation
       await this.queryDatabase(projectId, `
         CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)
+      `, [], false, correlationId);
+
+      // Index for context filtering
+      await this.queryDatabase(projectId, `
+        CREATE INDEX IF NOT EXISTS idx_messages_context ON messages(conversation_id, in_context)
       `, [], false, correlationId);
 
       this.initializedProjects.add(projectId);
@@ -270,6 +296,104 @@ class ConversationManagerModule {
       this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to initialize schema for project');
       throw error;
     }
+  }
+
+  // ==================== CONTEXT MANAGEMENT (FIFO) ====================
+
+  /**
+   * Apply FIFO context management before adding a new message
+   * If context is full, deactivate the oldest non-manually-toggled message
+   * @param {string} projectId - Project ID
+   * @param {string} conversationId - Conversation ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async applyContextFIFO(projectId, conversationId, correlationId) {
+    const contextWindow = this.config.contextWindow || 20;
+
+    // Count active messages in context
+    const countResult = await this.queryDatabase(projectId,
+      'SELECT COUNT(*) as count FROM messages WHERE conversation_id = ? AND in_context = 1',
+      [conversationId],
+      true,
+      correlationId
+    );
+
+    const activeCount = countResult[0]?.count || 0;
+
+    // If we're at or above the limit, deactivate oldest non-manually-toggled message
+    if (activeCount >= contextWindow) {
+      const toDeactivate = await this.queryDatabase(projectId,
+        `SELECT id FROM messages
+         WHERE conversation_id = ? AND in_context = 1 AND manually_toggled = 0
+         ORDER BY created_at ASC LIMIT 1`,
+        [conversationId],
+        true,
+        correlationId
+      );
+
+      if (toDeactivate.length > 0) {
+        await this.queryDatabase(projectId,
+          'UPDATE messages SET in_context = 0 WHERE id = ?',
+          [toDeactivate[0].id],
+          false,
+          correlationId
+        );
+
+        this.logger.debug({ correlationId, conversationId, messageId: toDeactivate[0].id },
+          'FIFO: Deactivated oldest message from context');
+      }
+    }
+  }
+
+  /**
+   * Toggle a message's context inclusion
+   * @param {string} projectId - Project ID
+   * @param {string} messageId - Message ID
+   * @param {boolean} inContext - Whether to include in context
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async toggleMessageContext(projectId, messageId, inContext, correlationId) {
+    this.logger.debug({ correlationId, messageId, inContext }, 'Toggling message context');
+
+    await this.queryDatabase(projectId,
+      'UPDATE messages SET in_context = ?, manually_toggled = 1 WHERE id = ?',
+      [inContext ? 1 : 0, messageId],
+      false,
+      correlationId
+    );
+
+    this.logger.info({ correlationId, messageId, inContext }, 'Message context toggled');
+
+    return { messageId, inContext, manuallyToggled: true };
+  }
+
+  /**
+   * Get context statistics for a conversation
+   * @param {string} projectId - Project ID
+   * @param {string} conversationId - Conversation ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getContextStats(projectId, conversationId, correlationId) {
+    const stats = await this.queryDatabase(projectId,
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN in_context = 1 THEN 1 ELSE 0 END) as active,
+         SUM(CASE WHEN manually_toggled = 1 THEN 1 ELSE 0 END) as manually_toggled
+       FROM messages WHERE conversation_id = ?`,
+      [conversationId],
+      true,
+      correlationId
+    );
+
+    const contextWindow = this.config.contextWindow || 20;
+
+    return {
+      total: stats[0]?.total || 0,
+      active: stats[0]?.active || 0,
+      manuallyToggled: stats[0]?.manually_toggled || 0,
+      maxContext: contextWindow,
+      remaining: Math.max(0, contextWindow - (stats[0]?.active || 0))
+    };
   }
 
   /**
@@ -702,11 +826,11 @@ class ConversationManagerModule {
       throw new Error(`Conversation not found: ${conversationId}`);
     }
 
-    // Load messages (limited by context window)
+    // Load messages that are in context (limited by context window)
     const contextWindow = conversation.context_window || this.config.contextWindow || 20;
 
     const messages = await this.queryDatabase(conversation.project_id,
-      `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?`,
+      `SELECT * FROM messages WHERE conversation_id = ? AND in_context = 1 ORDER BY created_at DESC LIMIT ?`,
       [conversationId, contextWindow],
       true,
       correlationId
@@ -722,7 +846,9 @@ class ConversationManagerModule {
       tokens: row.tokens,
       cost: row.cost,
       created_at: row.created_at,
-      metadata: row.metadata ? JSON.parse(row.metadata) : {}
+      metadata: row.metadata ? JSON.parse(row.metadata) : {},
+      in_context: row.in_context === 1,
+      manually_toggled: row.manually_toggled === 1
     }));
 
     const totalTokens = parsedMessages.reduce((sum, m) => sum + (m.tokens || 0), 0);
@@ -961,13 +1087,18 @@ class ConversationManagerModule {
         tokens: null,
         cost: null,
         created_at: now,
-        metadata
+        metadata,
+        in_context: true,
+        manually_toggled: false
       };
 
-      // Save user message
+      // Apply FIFO before inserting new message
+      await this.applyContextFIFO(conversation.project_id, conversationId, correlationId);
+
+      // Save user message with context fields
       await this.queryDatabase(conversation.project_id,
-        `INSERT INTO messages (id, conversation_id, role, content, attachments, tokens, cost, created_at, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, conversation_id, role, content, attachments, tokens, cost, created_at, metadata, in_context, manually_toggled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
         [
           userMessageId,
           conversationId,
@@ -1099,13 +1230,18 @@ class ConversationManagerModule {
           provider: aiResponse.provider,
           tool_calls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
           iterations: iterations > 1 ? iterations : undefined
-        }
+        },
+        in_context: true,
+        manually_toggled: false
       };
 
-      // Save assistant message
+      // Apply FIFO before inserting assistant message
+      await this.applyContextFIFO(conversation.project_id, conversationId, correlationId);
+
+      // Save assistant message with context fields
       await this.queryDatabase(conversation.project_id,
-        `INSERT INTO messages (id, conversation_id, role, content, attachments, tokens, cost, created_at, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, conversation_id, role, content, attachments, tokens, cost, created_at, metadata, in_context, manually_toggled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
         [
           assistantMessageId,
           conversationId,
@@ -1257,7 +1393,9 @@ class ConversationManagerModule {
       tokens: row.tokens,
       cost: row.cost,
       created_at: row.created_at,
-      metadata: row.metadata ? JSON.parse(row.metadata) : {}
+      metadata: row.metadata ? JSON.parse(row.metadata) : {},
+      in_context: row.in_context === 1,
+      manually_toggled: row.manually_toggled === 1
     }));
   }
 
@@ -1697,6 +1835,66 @@ class ConversationManagerModule {
     }
   }
 
+  // ==================== CONTEXT MANAGEMENT HTTP HANDLERS ====================
+
+  async handleToggleContext(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id: messageId } = req.params || {};
+    const { project_id: projectId, in_context: inContext } = req.body || {};
+
+    this.logger.info({ correlationId, messageId, inContext }, 'HTTP: Toggle message context');
+
+    if (!projectId) {
+      return { status: 400, data: { success: false, error: 'project_id is required' } };
+    }
+
+    if (!messageId) {
+      return { status: 400, data: { success: false, error: 'message id is required' } };
+    }
+
+    if (inContext === undefined) {
+      return { status: 400, data: { success: false, error: 'in_context is required' } };
+    }
+
+    try {
+      const result = await this.toggleMessageContext(projectId, messageId, inContext, correlationId);
+      return { status: 200, data: { success: true, ...result } };
+    } catch (error) {
+      this.logger.error({ correlationId, messageId, error: error.message }, 'HTTP: Failed to toggle context');
+      return { status: 500, data: { success: false, error: error.message } };
+    }
+  }
+
+  async handleContextStats(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id: conversationId } = req.params || {};
+    const projectId = req.query?.project_id;
+
+    this.logger.debug({ correlationId, conversationId }, 'HTTP: Get context stats');
+
+    if (!conversationId) {
+      return { status: 400, data: { success: false, error: 'conversation id is required' } };
+    }
+
+    // Get project_id from conversation if not provided
+    const conversation = this.conversations.get(conversationId);
+    const resolvedProjectId = projectId || conversation?.project_id;
+
+    if (!resolvedProjectId) {
+      return { status: 400, data: { success: false, error: 'project_id is required or conversation not found' } };
+    }
+
+    try {
+      const stats = await this.getContextStats(resolvedProjectId, conversationId, correlationId);
+      return { status: 200, data: { success: true, ...stats } };
+    } catch (error) {
+      this.logger.error({ correlationId, conversationId, error: error.message }, 'HTTP: Failed to get context stats');
+      return { status: 500, data: { success: false, error: error.message } };
+    }
+  }
+
+  // ==================== HEALTH & METRICS ====================
+
   async handleHealthCheck(req, context) {
     return {
       status: 200,
@@ -1987,6 +2185,71 @@ class ConversationManagerModule {
       this.logger.error({ correlationId, conversationId, error: error.message },
         'UI: Failed to delete conversation');
       throw { status: 500, code: 'DELETE_ERROR', message: error.message };
+    }
+  }
+
+  // ==================== UI CONTEXT MANAGEMENT HANDLERS ====================
+
+  /**
+   * UI Handler: Toggle message context inclusion
+   * Request: mqttRequest('conversation', 'toggleContext', { projectId, messageId, inContext })
+   */
+  async handleUIToggleContext(data, request) {
+    const { projectId, messageId, inContext } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info({ correlationId, projectId, messageId, inContext }, 'UI: Toggle message context');
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'projectId is required' };
+    }
+
+    if (!messageId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'messageId is required' };
+    }
+
+    if (inContext === undefined) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'inContext is required' };
+    }
+
+    try {
+      const result = await this.toggleMessageContext(projectId, messageId, inContext, correlationId);
+      return {
+        success: true,
+        ...result
+      };
+    } catch (error) {
+      this.logger.error({ correlationId, messageId, error: error.message },
+        'UI: Failed to toggle message context');
+      throw { status: 500, code: 'TOGGLE_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get context statistics for a conversation
+   * Request: mqttRequest('conversation', 'contextStats', { projectId, conversationId })
+   */
+  async handleUIContextStats(data, request) {
+    const { projectId, conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.debug({ correlationId, projectId, conversationId }, 'UI: Get context stats');
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'projectId is required' };
+    }
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const stats = await this.getContextStats(projectId, conversationId, correlationId);
+      return stats;
+    } catch (error) {
+      this.logger.error({ correlationId, conversationId, error: error.message },
+        'UI: Failed to get context stats');
+      throw { status: 500, code: 'STATS_ERROR', message: error.message };
     }
   }
 

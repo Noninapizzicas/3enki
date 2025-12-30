@@ -46,9 +46,11 @@ class FilesystemModule {
       this.uiHandler.register('fs', 'copy', this.handleCopy.bind(this));
       this.uiHandler.register('fs', 'search', this.handleSearch.bind(this));
       this.uiHandler.register('fs', 'info', this.handleInfo.bind(this));
+      this.uiHandler.register('fs', 'cleanup', this.handleCleanup.bind(this));
+      this.uiHandler.register('fs', 'stats', this.handleStats.bind(this));
 
       this.logger.info('filesystem.handlers.registered', {
-        handlers: ['list', 'read', 'write', 'delete', 'mkdir', 'move', 'copy', 'search', 'info']
+        handlers: ['list', 'read', 'write', 'delete', 'mkdir', 'move', 'copy', 'search', 'info', 'cleanup', 'stats']
       });
     }
 
@@ -593,6 +595,223 @@ class FilesystemModule {
       this.logger.error('filesystem.info.error', { error: error.message, path: data?.path });
       return { status: error.status || 500, error: error.message };
     }
+  }
+
+  /**
+   * Cleanup old files from temp directory
+   */
+  async handleCleanup(data) {
+    try {
+      const cleanupPath = data?.path || '/temp';
+      const maxAgeHours = data?.max_age_hours || 24;
+      const dryRun = data?.dry_run === true;
+
+      const safePath = this.validatePath(cleanupPath);
+
+      // Check if directory exists
+      try {
+        const stats = await fs.stat(safePath);
+        if (!stats.isDirectory()) {
+          return { status: 400, error: 'Path is not a directory' };
+        }
+      } catch (e) {
+        if (e.code === 'ENOENT') {
+          return { status: 200, data: { message: 'Directory does not exist, nothing to clean', deleted: [], count: 0 } };
+        }
+        throw e;
+      }
+
+      const cutoffTime = Date.now() - (maxAgeHours * 60 * 60 * 1000);
+      const deleted = [];
+      const errors = [];
+
+      await this.cleanupRecursive(safePath, cleanupPath, cutoffTime, dryRun, deleted, errors);
+
+      this.logger.info('filesystem.cleanup.complete', {
+        path: cleanupPath,
+        maxAgeHours,
+        dryRun,
+        deletedCount: deleted.length
+      });
+
+      return {
+        status: 200,
+        data: {
+          path: cleanupPath,
+          max_age_hours: maxAgeHours,
+          dry_run: dryRun,
+          deleted,
+          count: deleted.length,
+          errors: errors.length > 0 ? errors : undefined
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('filesystem.cleanup.error', { error: error.message, path: data?.path });
+      return { status: error.status || 500, error: error.message };
+    }
+  }
+
+  async cleanupRecursive(dirPath, relativePath, cutoffTime, dryRun, deleted, errors) {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const entryRelative = path.join(relativePath, entry.name).replace(/\\/g, '/');
+
+        try {
+          const stats = await fs.stat(fullPath);
+
+          if (entry.isDirectory()) {
+            // Recurse into subdirectories
+            await this.cleanupRecursive(fullPath, entryRelative, cutoffTime, dryRun, deleted, errors);
+
+            // Check if directory is now empty
+            const remaining = await fs.readdir(fullPath);
+            if (remaining.length === 0) {
+              if (!dryRun) {
+                await fs.rmdir(fullPath);
+              }
+              deleted.push({ path: entryRelative, type: 'directory', reason: 'empty' });
+            }
+          } else {
+            // Check file age
+            if (stats.mtimeMs < cutoffTime) {
+              if (!dryRun) {
+                await fs.unlink(fullPath);
+              }
+              deleted.push({
+                path: entryRelative,
+                type: 'file',
+                size: stats.size,
+                age_hours: Math.round((Date.now() - stats.mtimeMs) / (1000 * 60 * 60))
+              });
+            }
+          }
+        } catch (e) {
+          errors.push({ path: entryRelative, error: e.message });
+        }
+      }
+    } catch (e) {
+      errors.push({ path: relativePath, error: e.message });
+    }
+  }
+
+  /**
+   * Get storage statistics
+   */
+  async handleStats(data) {
+    try {
+      const statsPath = data?.path || '/';
+      const safePath = this.validatePath(statsPath);
+
+      // Check if directory exists
+      try {
+        const dirStats = await fs.stat(safePath);
+        if (!dirStats.isDirectory()) {
+          return { status: 400, error: 'Path is not a directory' };
+        }
+      } catch (e) {
+        if (e.code === 'ENOENT') {
+          return { status: 404, error: 'Directory not found' };
+        }
+        throw e;
+      }
+
+      const stats = {
+        totalFiles: 0,
+        totalDirectories: 0,
+        totalSize: 0,
+        byExtension: {},
+        largestFiles: []
+      };
+
+      await this.calculateStats(safePath, statsPath, stats);
+
+      // Sort largest files
+      stats.largestFiles.sort((a, b) => b.size - a.size);
+      stats.largestFiles = stats.largestFiles.slice(0, 10);
+
+      // Sort extensions by size
+      const byExtSorted = Object.entries(stats.byExtension)
+        .sort((a, b) => b[1].size - a[1].size)
+        .reduce((obj, [ext, data]) => {
+          obj[ext] = data;
+          return obj;
+        }, {});
+      stats.byExtension = byExtSorted;
+
+      return {
+        status: 200,
+        data: {
+          path: statsPath,
+          total_files: stats.totalFiles,
+          total_directories: stats.totalDirectories,
+          total_size: stats.totalSize,
+          total_size_human: this.formatBytes(stats.totalSize),
+          by_extension: stats.byExtension,
+          largest_files: stats.largestFiles
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('filesystem.stats.error', { error: error.message, path: data?.path });
+      return { status: error.status || 500, error: error.message };
+    }
+  }
+
+  async calculateStats(dirPath, relativePath, stats) {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const entryRelative = path.join(relativePath, entry.name).replace(/\\/g, '/');
+
+        try {
+          const fileStats = await fs.stat(fullPath);
+
+          if (entry.isDirectory()) {
+            stats.totalDirectories++;
+            await this.calculateStats(fullPath, entryRelative, stats);
+          } else {
+            stats.totalFiles++;
+            stats.totalSize += fileStats.size;
+
+            // Track by extension
+            const ext = path.extname(entry.name).toLowerCase() || '.noext';
+            if (!stats.byExtension[ext]) {
+              stats.byExtension[ext] = { count: 0, size: 0 };
+            }
+            stats.byExtension[ext].count++;
+            stats.byExtension[ext].size += fileStats.size;
+
+            // Track largest files
+            if (stats.largestFiles.length < 20 || fileStats.size > stats.largestFiles[stats.largestFiles.length - 1]?.size) {
+              stats.largestFiles.push({
+                path: entryRelative,
+                name: entry.name,
+                size: fileStats.size,
+                size_human: this.formatBytes(fileStats.size)
+              });
+            }
+          }
+        } catch (e) {
+          // Skip files we can't stat
+        }
+      }
+    } catch (e) {
+      // Skip directories we can't access
+    }
+  }
+
+  formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 }
 

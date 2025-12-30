@@ -18,6 +18,30 @@
     ]
   },
 
+  "tools": [
+    {
+      "name": "credential.list",
+      "description": "Lista nombres de credenciales disponibles por proveedor y nivel. IMPORTANTE: Solo retorna metadata (provider, level, identifier), NUNCA valores de API keys.",
+      "handler": "handleToolCredentialList",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": ["GLOBAL", "PROJECT", "CLIENT", "CUSTOM"],
+            "description": "Filtrar por nivel de credencial (opcional)"
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA"],
+            "description": "Filtrar por proveedor de IA (opcional)"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+
   "events": {
     "publishes": [
       {

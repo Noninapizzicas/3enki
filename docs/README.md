@@ -1,7 +1,7 @@
 # Event Core - Índice de Documentación
 
-**Versión:** v0.1.0 + Port Management
-**Fecha:** 2025-10-20
+**Versión:** v0.1.0 + AI Integration
+**Fecha:** 2025-12-30
 
 ---
 
@@ -156,6 +156,27 @@
 | **[SECURITY_ARCHITECTURE.md](./SECURITY_ARCHITECTURE.md)** | Security como módulo (1,641 líneas) |
 | **[SECURITY_AS_MODULE.md](./SECURITY_AS_MODULE.md)** | Guía de refactorización |
 | **[ARCHITECTURAL_CHANGES.md](./ARCHITECTURAL_CHANGES.md)** | Control de cambios |
+
+---
+
+### 🤖 AI Integration
+
+| Documento | Descripción |
+|-----------|-------------|
+| **[AI_TOOLS_REFERENCE.md](./AI_TOOLS_REFERENCE.md)** | Referencia completa de 18 AI tools disponibles |
+| **[PLAN-CHAT-INTEGRATION.md](./PLAN-CHAT-INTEGRATION.md)** | Plan de integración del sistema de chat AI |
+
+**Contenido de AI_TOOLS_REFERENCE.md:**
+- 18 herramientas organizadas en 6 categorías
+- Credential Manager: `credential.list`
+- Prompt Manager: `prompt.list`, `prompt.get`, `prompt.render`
+- Database Manager: `db.query`, `db.tables`, `db.schema`, `db.execute`
+- Filesystem: `fs.cleanup`, `fs.stats`
+- PDF Viewer: `pdf.list`, `pdf.metadata`, `pdf.extract`
+- Code Executor: `shell.exec`, `shell.script`, `shell.background`, `shell.kill`, `shell.list`
+- Tool translation para múltiples proveedores (Anthropic, OpenAI, DeepSeek, Ollama)
+- Seguridad: tools que requieren confirmación
+- Ejemplos de uso
 
 ---
 
@@ -355,6 +376,9 @@ module.exports = MiModulo;
 ### Quiero ver el flujo de código
 → **[API_FLOW_DIAGRAM.md](./API_FLOW_DIAGRAM.md)** - Diagrama con líneas de código
 
+### Quiero integrar AI con tools
+→ **[AI_TOOLS_REFERENCE.md](./AI_TOOLS_REFERENCE.md)** - 18 tools para AI chat
+
 ---
 
 ## 💡 Ejemplos Rápidos
@@ -494,6 +518,10 @@ Sí! Lee **[PORT_MANAGEMENT_SUMMARY.md](../PORT_MANAGEMENT_SUMMARY.md)**.
 
 El Module Loader lee `module.json` de cada módulo y registra las APIs. Ver **[API_SYSTEM.md](./API_SYSTEM.md)**.
 
+### ¿Qué herramientas puede usar el AI?
+
+Lee **[AI_TOOLS_REFERENCE.md](./AI_TOOLS_REFERENCE.md)** - 18 tools organizadas en 6 categorías: Credenciales, Prompts, Base de Datos, Filesystem, PDF y Ejecución de código.
+
 ---
 
 ## 🎓 Recursos Adicionales
@@ -513,6 +541,6 @@ Para preguntas o issues:
 
 ---
 
-**Última actualización:** 2025-10-20
-**Versión:** v0.1.0 + Port Management System
+**Última actualización:** 2025-12-30
+**Versión:** v0.1.0 + AI Integration
 **Estado:** Documentación completa ✅

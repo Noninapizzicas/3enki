@@ -1310,24 +1310,200 @@ class AIGatewayModule {
 
   /**
    * Translate tools to provider-specific format
-   * @param {Array} tools - Tools from moduleLoader
+   * @param {Array} tools - Tools from moduleLoader (internal format)
    * @param {string} providerName - Target provider name
    * @returns {Array} Provider-formatted tools
    */
   translateToolsForProvider(tools, providerName) {
-    // OpenAI/Anthropic format (function calling)
-    return tools.map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters || {
-          type: 'object',
-          properties: {},
-          required: []
+    if (!tools || !Array.isArray(tools) || tools.length === 0) {
+      return [];
+    }
+
+    switch (providerName) {
+      case 'anthropic':
+        // Anthropic format: { name, description, input_schema }
+        return tools.map(tool => ({
+          name: tool.name,
+          description: tool.description || '',
+          input_schema: tool.parameters || {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }));
+
+      case 'openai':
+      case 'deepseek':
+        // OpenAI/DeepSeek format: { type: 'function', function: { name, description, parameters } }
+        return tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.parameters || {
+              type: 'object',
+              properties: {},
+              required: []
+            }
+          }
+        }));
+
+      case 'ollama':
+        // Ollama format (for models that support tools): same as OpenAI
+        // Note: Not all Ollama models support function calling
+        return tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.parameters || {
+              type: 'object',
+              properties: {},
+              required: []
+            }
+          }
+        }));
+
+      default:
+        // Default to OpenAI format
+        return tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.parameters || {
+              type: 'object',
+              properties: {},
+              required: []
+            }
+          }
+        }));
+    }
+  }
+
+  /**
+   * Parse tool calls from provider response to internal format
+   * @param {Object} response - Provider response
+   * @param {string} providerName - Source provider name
+   * @returns {Array} Normalized tool calls: [{ id, name, arguments }]
+   */
+  parseToolCallsFromProvider(response, providerName) {
+    if (!response) return [];
+
+    let toolCalls = [];
+
+    switch (providerName) {
+      case 'anthropic':
+        // Anthropic: content array with type: 'tool_use' blocks
+        if (Array.isArray(response.content)) {
+          toolCalls = response.content
+            .filter(block => block.type === 'tool_use')
+            .map(block => ({
+              id: block.id,
+              name: block.name,
+              arguments: block.input || {}
+            }));
         }
-      }
-    }));
+        break;
+
+      case 'openai':
+      case 'deepseek':
+        // OpenAI/DeepSeek: message.tool_calls array
+        if (response.tool_calls && Array.isArray(response.tool_calls)) {
+          toolCalls = response.tool_calls.map(tc => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: typeof tc.function?.arguments === 'string'
+              ? JSON.parse(tc.function.arguments)
+              : tc.function?.arguments || {}
+          }));
+        }
+        // Also check choices[0].message.tool_calls for raw API responses
+        else if (response.choices?.[0]?.message?.tool_calls) {
+          toolCalls = response.choices[0].message.tool_calls.map(tc => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: typeof tc.function?.arguments === 'string'
+              ? JSON.parse(tc.function.arguments)
+              : tc.function?.arguments || {}
+          }));
+        }
+        break;
+
+      case 'ollama':
+        // Ollama: similar to OpenAI when tools are supported
+        if (response.message?.tool_calls) {
+          toolCalls = response.message.tool_calls.map(tc => ({
+            id: tc.id || `ollama-${Date.now()}`,
+            name: tc.function?.name,
+            arguments: typeof tc.function?.arguments === 'string'
+              ? JSON.parse(tc.function.arguments)
+              : tc.function?.arguments || {}
+          }));
+        }
+        break;
+
+      default:
+        // Try OpenAI format as default
+        if (response.tool_calls && Array.isArray(response.tool_calls)) {
+          toolCalls = response.tool_calls.map(tc => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: typeof tc.function?.arguments === 'string'
+              ? JSON.parse(tc.function.arguments)
+              : tc.function?.arguments || {}
+          }));
+        }
+    }
+
+    return toolCalls;
+  }
+
+  /**
+   * Format tool results for provider
+   * @param {Array} results - Tool execution results: [{ tool_call_id, result }]
+   * @param {string} providerName - Target provider name
+   * @returns {Array} Provider-formatted tool result messages
+   */
+  formatToolResultsForProvider(results, providerName) {
+    if (!results || !Array.isArray(results)) return [];
+
+    switch (providerName) {
+      case 'anthropic':
+        // Anthropic: { role: 'user', content: [{ type: 'tool_result', tool_use_id, content }] }
+        return [{
+          role: 'user',
+          content: results.map(r => ({
+            type: 'tool_result',
+            tool_use_id: r.tool_call_id,
+            content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
+          }))
+        }];
+
+      case 'openai':
+      case 'deepseek':
+        // OpenAI/DeepSeek: { role: 'tool', tool_call_id, content }
+        return results.map(r => ({
+          role: 'tool',
+          tool_call_id: r.tool_call_id,
+          content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
+        }));
+
+      case 'ollama':
+        // Ollama: same as OpenAI for tool-capable models
+        return results.map(r => ({
+          role: 'tool',
+          tool_call_id: r.tool_call_id,
+          content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
+        }));
+
+      default:
+        return results.map(r => ({
+          role: 'tool',
+          tool_call_id: r.tool_call_id,
+          content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
+        }));
+    }
   }
 
   // ============ HELPER METHODS ============

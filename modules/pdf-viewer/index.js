@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { execSync } = require('child_process');
 
 const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
 
@@ -741,59 +742,89 @@ class PdfViewerModule {
       // Check if file exists
       await fs.stat(fullPath);
 
-      // Try to use pdf-parse if available
       let text = null;
       let pages = null;
+      let method = null;
 
+      // Try pdftotext first (poppler-utils) - lightweight, no npm dependencies
       try {
-        const pdfParse = require('pdf-parse');
-        const buffer = await fs.readFile(fullPath);
-        const data = await pdfParse(buffer);
+        const pageArgs = page ? `-f ${page} -l ${page}` : '';
+        text = execSync(
+          `pdftotext ${pageArgs} "${fullPath}" -`,
+          { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+        );
 
-        text = data.text;
-        pages = data.numpages;
+        // Get page count with pdfinfo
+        try {
+          const info = execSync(`pdfinfo "${fullPath}"`, { encoding: 'utf-8' });
+          const pagesMatch = info.match(/Pages:\s+(\d+)/);
+          pages = pagesMatch ? parseInt(pagesMatch[1], 10) : null;
+        } catch {
+          // pdfinfo not available, pages will be null
+        }
 
-        // If specific page requested, try to extract just that page
-        // Note: pdf-parse doesn't support per-page extraction natively
-        // This would require a more sophisticated PDF library
-
-        this.logger.info('tool.pdf.extract.success', {
+        method = 'pdftotext';
+        this.logger.info('tool.pdf.extract.pdftotext.success', {
           project_id: projectId,
           file_path: filePath,
           pages,
           text_length: text?.length || 0
         });
-
-        return {
-          status: 200,
-          data: {
-            success: true,
-            projectId,
-            filePath,
-            text,
-            pages,
-            requestedPage: page || null
-          }
-        };
-      } catch (parseError) {
-        // pdf-parse not available or parsing failed
-        this.logger.warn('tool.pdf.extract.no_parser', {
-          error: parseError.message
+      } catch (pdftotextError) {
+        // pdftotext not available, try pdf-parse as fallback
+        this.logger.debug('tool.pdf.extract.pdftotext.unavailable', {
+          error: pdftotextError.message
         });
 
-        return {
-          status: 200,
-          data: {
-            success: true,
-            projectId,
-            filePath,
-            text: null,
-            pages: null,
-            note: 'Text extraction requires pdf-parse library. Install with: npm install pdf-parse',
-            requestedPage: page || null
-          }
-        };
+        try {
+          const pdfParse = require('pdf-parse');
+          const buffer = await fs.readFile(fullPath);
+          const data = await pdfParse(buffer);
+
+          text = data.text;
+          pages = data.numpages;
+          method = 'pdf-parse';
+
+          this.logger.info('tool.pdf.extract.pdfparse.success', {
+            project_id: projectId,
+            file_path: filePath,
+            pages,
+            text_length: text?.length || 0
+          });
+        } catch (parseError) {
+          // Neither pdftotext nor pdf-parse available
+          this.logger.warn('tool.pdf.extract.no_parser', {
+            pdftotext_error: pdftotextError.message,
+            pdfparse_error: parseError.message
+          });
+
+          return {
+            status: 200,
+            data: {
+              success: true,
+              projectId,
+              filePath,
+              text: null,
+              pages: null,
+              note: 'No PDF parser available. Install poppler-utils (pdftotext) or pdf-parse npm package.',
+              requestedPage: page || null
+            }
+          };
+        }
       }
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          projectId,
+          filePath,
+          text,
+          pages,
+          method,
+          requestedPage: page || null
+        }
+      };
     } catch (error) {
       const errorMsg = error?.message || String(error);
       this.logger.error('tool.pdf.extract.error', {

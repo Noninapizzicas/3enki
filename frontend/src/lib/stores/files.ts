@@ -154,7 +154,7 @@ export async function listFiles(path: string = '/'): Promise<void> {
       path: string;
       files: FileItem[];
       root_mode: boolean;
-    }>('files', 'list', { project_id: projectId, path });
+    }>('fs', 'list', { project_id: projectId, path });
 
     filesStore.update(s => ({
       ...s,
@@ -244,7 +244,7 @@ export async function openFile(filePath: string): Promise<void> {
       viewType = 'pdf';
 
     } else if (IMAGE_EXTENSIONS.includes(ext)) {
-      // Use file-browser for images (reads as base64)
+      // Use filesystem for images (reads as base64)
       const response = await mqttRequest<{
         file_path: string;
         type: 'image';
@@ -252,7 +252,7 @@ export async function openFile(filePath: string): Promise<void> {
         content_type: string;
         size: number;
         modified: string;
-      }>('files', 'read', { project_id: projectId, file_path: filePath });
+      }>('fs', 'read', { project_id: projectId, file_path: filePath });
 
       fileContent = {
         file_path: response.data.file_path,
@@ -368,16 +368,27 @@ export async function createFile(
       ? `/${fileName}`
       : `${state.currentPath}/${fileName}`;
 
-    await mqttRequest<{
-      file_path: string;
-      type: string;
-      created: boolean;
-    }>('files', 'create', {
-      project_id: state.projectId,
-      file_path: filePath,
-      type,
-      content
-    });
+    if (type === 'directory') {
+      // Use fs/mkdir for directories
+      await mqttRequest<{
+        path: string;
+        created: boolean;
+      }>('fs', 'mkdir', {
+        project_id: state.projectId,
+        path: filePath
+      });
+    } else {
+      // Use fs/write for files
+      await mqttRequest<{
+        file_path: string;
+        written: boolean;
+        size: number;
+      }>('fs', 'write', {
+        project_id: state.projectId,
+        file_path: filePath,
+        content
+      });
+    }
 
     // Refresh file list
     await listFiles(state.currentPath);
@@ -405,7 +416,7 @@ export async function deleteFile(filePath: string): Promise<boolean> {
     await mqttRequest<{
       file_path: string;
       deleted: boolean;
-    }>('files', 'delete', {
+    }>('fs', 'delete', {
       project_id: state.projectId,
       file_path: filePath
     });
@@ -461,7 +472,7 @@ export async function searchFiles(query: string, searchContent: boolean = false)
       query: string;
       results: SearchResult[];
       count: number;
-    }>('files', 'search', {
+    }>('fs', 'search', {
       project_id: projectId,
       query,
       search_content: searchContent

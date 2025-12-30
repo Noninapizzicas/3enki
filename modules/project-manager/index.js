@@ -34,6 +34,80 @@ class ProjectManagerModule {
 
     // Unsubscribe functions
     this.unsubscribes = [];
+
+    // Base path for project directories
+    this.projectsBasePath = '/data/projects';
+  }
+
+  // ==================== HELPERS ====================
+
+  /**
+   * Create a URL-safe slug from a name
+   */
+  slugify(name) {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[áàäâã]/g, 'a')
+      .replace(/[éèëê]/g, 'e')
+      .replace(/[íìïî]/g, 'i')
+      .replace(/[óòöôõ]/g, 'o')
+      .replace(/[úùüû]/g, 'u')
+      .replace(/ñ/g, 'n')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/[\s_]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  /**
+   * Create project directory structure
+   */
+  async createProjectDirectories(projectId, name, correlationId) {
+    const slug = this.slugify(name);
+    const basePath = path.join(this.projectsBasePath, `${slug}-${projectId.slice(0, 8)}`);
+
+    this.logger.debug({ correlationId, projectId, basePath }, 'Creating project directories');
+
+    try {
+      // Create base directory and subdirectories
+      const dirs = [
+        basePath,
+        path.join(basePath, 'files'),
+        path.join(basePath, 'exports'),
+        path.join(basePath, 'cache')
+      ];
+
+      for (const dir of dirs) {
+        await fs.promises.mkdir(dir, { recursive: true });
+      }
+
+      this.logger.info({ correlationId, projectId, basePath }, 'Project directories created');
+      return basePath;
+    } catch (error) {
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to create project directories');
+      throw error;
+    }
+  }
+
+  /**
+   * Delete project directory structure
+   */
+  async deleteProjectDirectories(basePath, correlationId) {
+    if (!basePath || !basePath.startsWith(this.projectsBasePath)) {
+      this.logger.warn({ correlationId, basePath }, 'Invalid base path, skipping directory deletion');
+      return;
+    }
+
+    this.logger.debug({ correlationId, basePath }, 'Deleting project directories');
+
+    try {
+      await fs.promises.rm(basePath, { recursive: true, force: true });
+      this.logger.info({ correlationId, basePath }, 'Project directories deleted');
+    } catch (error) {
+      this.logger.warn({ correlationId, basePath, error: error.message }, 'Failed to delete project directories');
+      // Don't throw - directory deletion is not critical
+    }
   }
 
   async onLoad(core) {
@@ -120,9 +194,14 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('project', 'delete', this.handleUIDelete.bind(this));
       this.uiHandler.register('project', 'activate', this.handleUIActivate.bind(this));
+      // Session & AI Config handlers
+      this.uiHandler.register('project', 'saveSession', this.handleUISaveSession.bind(this));
+      this.uiHandler.register('project', 'restoreSession', this.handleUIRestoreSession.bind(this));
+      this.uiHandler.register('project', 'setAIConfig', this.handleUISetAIConfig.bind(this));
+      this.uiHandler.register('project', 'setLastConversation', this.handleUISetLastConversation.bind(this));
 
       this.logger.info('project-manager.ui_handlers.registered', {
-        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate']
+        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation']
       });
     }
 
@@ -143,6 +222,10 @@ class ProjectManagerModule {
       this.uiHandler.unregister('project', 'update');
       this.uiHandler.unregister('project', 'delete');
       this.uiHandler.unregister('project', 'activate');
+      this.uiHandler.unregister('project', 'saveSession');
+      this.uiHandler.unregister('project', 'restoreSession');
+      this.uiHandler.unregister('project', 'setAIConfig');
+      this.uiHandler.unregister('project', 'setLastConversation');
     }
 
     // Unsubscribe all eventBus subscriptions
@@ -223,7 +306,7 @@ class ProjectManagerModule {
     this.logger.debug({ correlationId }, 'Loading existing projects from database');
 
     try {
-      // Ensure projects table exists
+      // Ensure projects table exists with all required fields
       await this.queryDatabase(`
         CREATE TABLE IF NOT EXISTS projects (
           id TEXT PRIMARY KEY,
@@ -232,9 +315,33 @@ class ProjectManagerModule {
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           is_active INTEGER DEFAULT 0,
-          metadata TEXT
+          metadata TEXT,
+          last_conversation_id TEXT,
+          provider TEXT,
+          model TEXT,
+          prompt_id TEXT,
+          base_path TEXT,
+          session_state TEXT
         )
       `, [], false, correlationId);
+
+      // Migration: Add new columns if they don't exist (for existing databases)
+      const migrations = [
+        'ALTER TABLE projects ADD COLUMN last_conversation_id TEXT',
+        'ALTER TABLE projects ADD COLUMN provider TEXT',
+        'ALTER TABLE projects ADD COLUMN model TEXT',
+        'ALTER TABLE projects ADD COLUMN prompt_id TEXT',
+        'ALTER TABLE projects ADD COLUMN base_path TEXT',
+        'ALTER TABLE projects ADD COLUMN session_state TEXT'
+      ];
+
+      for (const migration of migrations) {
+        try {
+          await this.queryDatabase(migration, [], false, correlationId);
+        } catch (e) {
+          // Column already exists, ignore
+        }
+      }
 
       // Load all projects
       const rows = await this.queryDatabase(
@@ -252,7 +359,14 @@ class ProjectManagerModule {
           created_at: row.created_at,
           updated_at: row.updated_at,
           is_active: row.is_active === 1,
-          metadata: row.metadata ? JSON.parse(row.metadata) : {}
+          metadata: row.metadata ? JSON.parse(row.metadata) : {},
+          // New session/config fields
+          last_conversation_id: row.last_conversation_id || null,
+          provider: row.provider || null,
+          model: row.model || null,
+          prompt_id: row.prompt_id || null,
+          base_path: row.base_path || null,
+          session_state: row.session_state ? JSON.parse(row.session_state) : {}
         };
 
         this.projects.set(project.id, project);
@@ -277,8 +391,13 @@ class ProjectManagerModule {
 
   /**
    * Create new project
+   * @param {string} name - Project name
+   * @param {string} description - Project description
+   * @param {object} metadata - Additional metadata (color, icon, workspaceType)
+   * @param {string} correlationId - Correlation ID for tracing
+   * @param {object} options - Optional: { provider, model, prompt_id }
    */
-  async createProject(name, description = '', metadata = {}, correlationId) {
+  async createProject(name, description = '', metadata = {}, correlationId, options = {}) {
     const startTime = Date.now();
     const projectId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -286,20 +405,35 @@ class ProjectManagerModule {
     this.logger.info({ correlationId, projectId, name }, 'Creating project');
 
     try {
-      // Insert into database
+      // Create project directories
+      const basePath = await this.createProjectDirectories(projectId, name, correlationId);
+
+      // Extract optional AI config
+      const { provider = null, model = null, prompt_id = null } = options;
+
+      // Insert into database with all fields
       await this.queryDatabase(`
-        INSERT INTO projects (id, name, description, created_at, updated_at, is_active, metadata)
-        VALUES (?, ?, ?, ?, ?, 0, ?)
+        INSERT INTO projects (
+          id, name, description, created_at, updated_at, is_active, metadata,
+          last_conversation_id, provider, model, prompt_id, base_path, session_state
+        )
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
       `, [
         projectId,
         name,
         description,
         now,
         now,
-        JSON.stringify(metadata)
+        JSON.stringify(metadata),
+        null,  // last_conversation_id
+        provider,
+        model,
+        prompt_id,
+        basePath,
+        JSON.stringify({})  // session_state
       ], false, correlationId);
 
-      // Create project object
+      // Create project object with all fields
       const project = {
         id: projectId,
         name,
@@ -307,7 +441,14 @@ class ProjectManagerModule {
         created_at: now,
         updated_at: now,
         is_active: false,
-        metadata
+        metadata,
+        // New fields
+        last_conversation_id: null,
+        provider,
+        model,
+        prompt_id,
+        base_path: basePath,
+        session_state: {}
       };
 
       // Store in cache
@@ -465,6 +606,11 @@ class ProjectManagerModule {
         correlationId
       );
 
+      // Delete project directories
+      if (project.base_path) {
+        await this.deleteProjectDirectories(project.base_path, correlationId);
+      }
+
       this.projects.delete(projectId);
 
       // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.deleted.total');
@@ -484,6 +630,179 @@ class ProjectManagerModule {
       // REMOVED (migrate-to-event-metrics): this.metrics.increment('project.error.total', 1, { operation: 'delete' });
     // → Counter extracted from events
       this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to delete project');
+      throw error;
+    }
+  }
+
+  // ==================== SESSION & AI CONFIG ====================
+
+  /**
+   * Save session state for a project
+   * @param {string} projectId - Project ID
+   * @param {object} sessionData - Session data: { scroll_position, context_config, ui_state }
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async saveSession(projectId, sessionData, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Saving project session');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const now = new Date().toISOString();
+    const sessionState = {
+      ...project.session_state,
+      ...sessionData,
+      saved_at: now
+    };
+
+    try {
+      await this.queryDatabase(
+        'UPDATE projects SET session_state = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(sessionState), now, projectId],
+        false,
+        correlationId
+      );
+
+      project.session_state = sessionState;
+      project.updated_at = now;
+      this.projects.set(projectId, project);
+
+      this.logger.info({ correlationId, projectId }, 'Project session saved');
+
+      return sessionState;
+    } catch (error) {
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to save session');
+      throw error;
+    }
+  }
+
+  /**
+   * Restore session state for a project
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async restoreSession(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Restoring project session');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    return {
+      last_conversation_id: project.last_conversation_id,
+      session_state: project.session_state || {},
+      provider: project.provider,
+      model: project.model,
+      prompt_id: project.prompt_id
+    };
+  }
+
+  /**
+   * Update last conversation ID for a project
+   * @param {string} projectId - Project ID
+   * @param {string} conversationId - Last active conversation ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async setLastConversation(projectId, conversationId, correlationId) {
+    this.logger.debug({ correlationId, projectId, conversationId }, 'Setting last conversation');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      await this.queryDatabase(
+        'UPDATE projects SET last_conversation_id = ?, updated_at = ? WHERE id = ?',
+        [conversationId, now, projectId],
+        false,
+        correlationId
+      );
+
+      project.last_conversation_id = conversationId;
+      project.updated_at = now;
+      this.projects.set(projectId, project);
+
+      this.logger.info({ correlationId, projectId, conversationId }, 'Last conversation updated');
+
+      return project;
+    } catch (error) {
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to set last conversation');
+      throw error;
+    }
+  }
+
+  /**
+   * Set AI configuration override for a project
+   * @param {string} projectId - Project ID
+   * @param {object} aiConfig - AI config: { provider, model, prompt_id }
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async setProjectAIConfig(projectId, aiConfig, correlationId) {
+    this.logger.info({ correlationId, projectId, aiConfig }, 'Setting project AI config');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const now = new Date().toISOString();
+    const { provider, model, prompt_id } = aiConfig;
+
+    const queryParts = ['updated_at = ?'];
+    const params = [now];
+
+    if (provider !== undefined) {
+      queryParts.push('provider = ?');
+      params.push(provider);
+      project.provider = provider;
+    }
+
+    if (model !== undefined) {
+      queryParts.push('model = ?');
+      params.push(model);
+      project.model = model;
+    }
+
+    if (prompt_id !== undefined) {
+      queryParts.push('prompt_id = ?');
+      params.push(prompt_id);
+      project.prompt_id = prompt_id;
+    }
+
+    params.push(projectId);
+
+    try {
+      await this.queryDatabase(
+        `UPDATE projects SET ${queryParts.join(', ')} WHERE id = ?`,
+        params,
+        false,
+        correlationId
+      );
+
+      project.updated_at = now;
+      this.projects.set(projectId, project);
+
+      await this.eventBus.publish(EVENTS.PROJECT.UPDATED, {
+        project_id: projectId,
+        updated_fields: ['provider', 'model', 'prompt_id'].filter(f => aiConfig[f] !== undefined),
+        updated_at: now
+      });
+
+      this.logger.info({ correlationId, projectId }, 'Project AI config updated');
+
+      return {
+        provider: project.provider,
+        model: project.model,
+        prompt_id: project.prompt_id
+      };
+    } catch (error) {
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to set AI config');
       throw error;
     }
   }
@@ -1001,6 +1320,100 @@ class ProjectManagerModule {
     };
   }
 
+  // ==================== UI SESSION & AI CONFIG HANDLERS ====================
+
+  /**
+   * UI Handler: Save session state
+   * Request: mqttRequest('project', 'saveSession', { id, scroll_position, context_config, ui_state })
+   */
+  async handleUISaveSession(data, request) {
+    const { id, ...sessionData } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const existing = this.getProject(id);
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const session = await this.saveSession(id, sessionData, correlationId);
+
+    return { saved: true, session };
+  }
+
+  /**
+   * UI Handler: Restore session state
+   * Request: mqttRequest('project', 'restoreSession', { id })
+   */
+  async handleUIRestoreSession(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const existing = this.getProject(id);
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const session = await this.restoreSession(id, correlationId);
+
+    return session;
+  }
+
+  /**
+   * UI Handler: Set AI configuration
+   * Request: mqttRequest('project', 'setAIConfig', { id, provider?, model?, prompt_id? })
+   */
+  async handleUISetAIConfig(data, request) {
+    const { id, provider, model, prompt_id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const existing = this.getProject(id);
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const config = await this.setProjectAIConfig(id, { provider, model, prompt_id }, correlationId);
+
+    return { updated: true, ...config };
+  }
+
+  /**
+   * UI Handler: Set last conversation
+   * Request: mqttRequest('project', 'setLastConversation', { id, conversationId })
+   */
+  async handleUISetLastConversation(data, request) {
+    const { id, conversationId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Conversation ID is required' };
+    }
+
+    const existing = this.getProject(id);
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    await this.setLastConversation(id, conversationId, correlationId);
+
+    return { updated: true, lastConversationId: conversationId };
+  }
+
   // ==================== HTTP API HANDLERS ====================
   // Handlers use new gateway API style: return { status, data } instead of res.json()
 
@@ -1139,6 +1552,93 @@ class ProjectManagerModule {
       return { status: 500, data: { success: false, error: error.message } };
     }
   }
+
+  // ==================== SESSION & AI CONFIG HTTP HANDLERS ====================
+
+  async handleSaveSession(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+    const sessionData = req.body || {};
+
+    this.logger.info({ correlationId, projectId: id }, 'HTTP: Save session');
+
+    try {
+      const session = await this.saveSession(id, sessionData, correlationId);
+      return { status: 200, data: { success: true, session } };
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to save session');
+
+      if (error.message.includes('not found')) {
+        return { status: 404, data: { success: false, error: error.message } };
+      }
+      return { status: 500, data: { success: false, error: error.message } };
+    }
+  }
+
+  async handleRestoreSession(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+
+    this.logger.debug({ correlationId, projectId: id }, 'HTTP: Restore session');
+
+    try {
+      const session = await this.restoreSession(id, correlationId);
+      return { status: 200, data: { success: true, ...session } };
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to restore session');
+
+      if (error.message.includes('not found')) {
+        return { status: 404, data: { success: false, error: error.message } };
+      }
+      return { status: 500, data: { success: false, error: error.message } };
+    }
+  }
+
+  async handleSetAIConfig(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+    const aiConfig = req.body || {};
+
+    this.logger.info({ correlationId, projectId: id, aiConfig }, 'HTTP: Set AI config');
+
+    try {
+      const config = await this.setProjectAIConfig(id, aiConfig, correlationId);
+      return { status: 200, data: { success: true, ...config } };
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to set AI config');
+
+      if (error.message.includes('not found')) {
+        return { status: 404, data: { success: false, error: error.message } };
+      }
+      return { status: 500, data: { success: false, error: error.message } };
+    }
+  }
+
+  async handleSetLastConversation(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const { id } = req.params || {};
+    const { conversation_id } = req.body || {};
+
+    this.logger.info({ correlationId, projectId: id, conversationId: conversation_id }, 'HTTP: Set last conversation');
+
+    if (!conversation_id) {
+      return { status: 400, data: { success: false, error: 'conversation_id is required' } };
+    }
+
+    try {
+      const project = await this.setLastConversation(id, conversation_id, correlationId);
+      return { status: 200, data: { success: true, last_conversation_id: project.last_conversation_id } };
+    } catch (error) {
+      this.logger.error({ correlationId, projectId: id, error: error.message }, 'HTTP: Failed to set last conversation');
+
+      if (error.message.includes('not found')) {
+        return { status: 404, data: { success: false, error: error.message } };
+      }
+      return { status: 500, data: { success: false, error: error.message } };
+    }
+  }
+
+  // ==================== HEALTH & METRICS ====================
 
   async handleHealthCheck(req, context) {
     return {

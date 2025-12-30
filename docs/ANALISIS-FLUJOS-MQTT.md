@@ -1,13 +1,21 @@
 # Análisis de Flujos MQTT Backend ↔ Frontend
 
 **Fecha**: 2025-12-30
-**Estado**: Análisis completado con gaps identificados
+**Estado**: ✅ Gaps críticos corregidos
 
 ---
 
 ## Resumen Ejecutivo
 
-Se verificaron los flujos de comunicación MQTT entre el backend (handlers registrados) y el frontend (llamadas mqttRequest). Se encontraron **3 gaps críticos** que impiden el funcionamiento de funcionalidades y **16 handlers del backend sin uso en UI**.
+Se verificaron los flujos de comunicación MQTT entre el backend (handlers registrados) y el frontend (llamadas mqttRequest). Se encontraron **3 gaps críticos** que fueron **corregidos** y **16 handlers del backend sin uso en UI**.
+
+### Correcciones Aplicadas (2025-12-30)
+
+| Gap | Corrección | Archivo |
+|-----|------------|---------|
+| Dominio `files` → `fs` | ✅ Corregido | `files.ts` líneas 157, 255, 419, 475 |
+| Action `create` → `write`/`mkdir` | ✅ Corregido | `files.ts` función `createFile()` |
+| Comentario `file-browser` → `filesystem` | ✅ Corregido | `files.ts` línea 247 |
 
 ### Estado por Módulo
 
@@ -16,55 +24,52 @@ Se verificaron los flujos de comunicación MQTT entre el backend (handlers regis
 | project-manager | 10 | 6 | ⚠️ Parcial |
 | credential-manager | 6 | 5 | ⚠️ Parcial |
 | conversation-manager | 9 | 7 | ⚠️ Parcial |
-| filesystem | 11 | 0 | ❌ **GAP CRÍTICO** |
+| filesystem | 11 | 6 | ✅ Corregido |
 | text-editor | 4 | 4 | ✅ Completo |
 | prompt-manager | 13 | 12 | ⚠️ Parcial |
 | pdf-viewer | 3 | 1 | ⚠️ Parcial |
 
 ---
 
-## GAPS CRÍTICOS
+## GAPS CRÍTICOS (CORREGIDOS)
 
-### 1. Dominio Filesystem Inconsistente
+### 1. ✅ Dominio Filesystem Inconsistente - CORREGIDO
 
-**Problema**: El frontend usa dominio `files` pero el backend registra dominio `fs`.
+**Problema original**: El frontend usaba dominio `files` pero el backend registra dominio `fs`.
 
-```
-Frontend (files.ts):
-- mqttRequest('files', 'list', ...)
-- mqttRequest('files', 'read', ...)
-- mqttRequest('files', 'create', ...)
-- mqttRequest('files', 'delete', ...)
-- mqttRequest('files', 'search', ...)
-
-Backend (filesystem/index.js):
-- uiHandler.register('fs', 'list', ...)
-- uiHandler.register('fs', 'read', ...)
-- uiHandler.register('fs', 'write', ...)  // NO 'create'
-- uiHandler.register('fs', 'delete', ...)
-- uiHandler.register('fs', 'search', ...)
-```
-
-**Impacto**: El panel de archivos NO funciona.
-
-**Solución**: Cambiar en `frontend/src/lib/stores/files.ts`:
-- `'files'` → `'fs'`
-- `'create'` → `'write'`
-
-### 2. Action 'create' No Existe en Filesystem
-
-**Problema**: Frontend llama `files/create` pero backend solo tiene `fs/write`.
-
+**Corrección aplicada** en `frontend/src/lib/stores/files.ts`:
 ```typescript
-// files.ts:371
-await mqttRequest<{...}>('files', 'create', { ... });
+// ANTES:
+mqttRequest('files', 'list', ...)
+mqttRequest('files', 'read', ...)
+mqttRequest('files', 'delete', ...)
+mqttRequest('files', 'search', ...)
 
-// Backend no tiene fs/create, solo:
-// - fs/write (para archivos)
-// - fs/mkdir (para directorios)
+// DESPUÉS (corregido):
+mqttRequest('fs', 'list', ...)
+mqttRequest('fs', 'read', ...)
+mqttRequest('fs', 'delete', ...)
+mqttRequest('fs', 'search', ...)
 ```
 
-### 3. Conversation Load Duplicado
+### 2. ✅ Action 'create' No Existe - CORREGIDO
+
+**Problema original**: Frontend llamaba `files/create` pero backend solo tiene `fs/write` y `fs/mkdir`.
+
+**Corrección aplicada** en función `createFile()`:
+```typescript
+// ANTES:
+await mqttRequest('files', 'create', { type, ... });
+
+// DESPUÉS (corregido):
+if (type === 'directory') {
+  await mqttRequest('fs', 'mkdir', { path });
+} else {
+  await mqttRequest('fs', 'write', { file_path, content });
+}
+```
+
+### 3. ⚠️ Conversation Load Duplicado - Pendiente revisión
 
 **Problema**: Existen dos formas de cargar conversaciones.
 
@@ -76,7 +81,7 @@ mqttRequest('conversation', 'load', { conversationId })
 mqttRequest('conversation', 'get', { conversationId })
 ```
 
-Ambos existen en backend pero tienen comportamiento similar.
+Ambos existen en backend pero tienen comportamiento similar. Considerar unificar.
 
 ---
 
@@ -122,18 +127,18 @@ Ambos existen en backend pero tienen comportamiento similar.
 | `conversation/toggleContext` | - | ❌ Sin uso |
 | `conversation/contextStats` | - | ❌ Sin uso |
 
-### filesystem (❌ GAP CRÍTICO)
+### filesystem (✅ CORREGIDO)
 
 | Backend Handler | Frontend Store | Estado |
 |-----------------|----------------|--------|
-| `fs/list` | `files.ts:152` usa 'files' | ❌ **DOMAIN MISMATCH** |
-| `fs/read` | `files.ts:248` usa 'files' | ❌ **DOMAIN MISMATCH** |
-| `fs/write` | - | ❌ UI usa 'create' |
-| `fs/delete` | `files.ts:405` usa 'files' | ❌ **DOMAIN MISMATCH** |
-| `fs/mkdir` | - | ❌ Sin uso |
+| `fs/list` | `files.ts:157` | ✅ |
+| `fs/read` | `files.ts:255` | ✅ |
+| `fs/write` | `files.ts:386` | ✅ |
+| `fs/delete` | `files.ts:419` | ✅ |
+| `fs/mkdir` | `files.ts:376` | ✅ |
 | `fs/move` | - | ❌ Sin uso |
 | `fs/copy` | - | ❌ Sin uso |
-| `fs/search` | `files.ts:460` usa 'files' | ❌ **DOMAIN MISMATCH** |
+| `fs/search` | `files.ts:475` | ✅ |
 | `fs/info` | - | ❌ Sin uso |
 | `fs/cleanup` | - | ❌ Sin uso |
 | `fs/stats` | - | ❌ Sin uso |
@@ -175,7 +180,7 @@ Ambos existen en backend pero tienen comportamiento similar.
 
 ---
 
-## Handlers Sin Uso en UI (16 total)
+## Handlers Sin Uso en UI (15 total)
 
 Estos handlers están implementados en el backend pero no tienen llamadas correspondientes en el frontend:
 
@@ -190,57 +195,46 @@ Estos handlers están implementados en el backend pero no tienen llamadas corres
 6. `conversation/contextStats` - Estadísticas de contexto
 
 ### Operaciones de Archivo Avanzadas (filesystem)
-7. `fs/mkdir` - Crear directorio
-8. `fs/move` - Mover archivo/directorio
-9. `fs/copy` - Copiar archivo/directorio
-10. `fs/info` - Información detallada
-11. `fs/cleanup` - Limpieza de archivos temporales
-12. `fs/stats` - Estadísticas del sistema de archivos
+7. `fs/move` - Mover archivo/directorio
+8. `fs/copy` - Copiar archivo/directorio
+9. `fs/info` - Información detallada
+10. `fs/cleanup` - Limpieza de archivos temporales
+11. `fs/stats` - Estadísticas del sistema de archivos
 
 ### Otros
-13. `credential/get` - Obtener credencial específica
-14. `preset/get` - Obtener preset específico
-15. `pdf/metadata` - Metadatos de PDF
-16. `pdf/list` - Listar PDFs
+12. `credential/get` - Obtener credencial específica
+13. `preset/get` - Obtener preset específico
+14. `pdf/metadata` - Metadatos de PDF
+15. `pdf/list` - Listar PDFs
 
 ---
 
 ## Recomendaciones
 
-### Prioridad Alta (Bugs Críticos)
+### ✅ Prioridad Alta (RESUELTO)
 
-1. **Corregir dominio en files.ts**:
-   ```typescript
-   // Cambiar todas las ocurrencias de:
-   mqttRequest('files', 'list', ...)
-   // A:
-   mqttRequest('fs', 'list', ...)
-   ```
-
-2. **Corregir action create**:
-   ```typescript
-   // Cambiar:
-   mqttRequest('files', 'create', { type: 'file', ... })
-   // A:
-   mqttRequest('fs', 'write', { ... })
-
-   // Y para directorios:
-   mqttRequest('fs', 'mkdir', { ... })
-   ```
+~~1. **Corregir dominio en files.ts**~~ - COMPLETADO
+~~2. **Corregir action create**~~ - COMPLETADO
 
 ### Prioridad Media (Mejoras)
 
-3. **Unificar load/get de conversaciones** - Decidir cuál usar
-4. **Implementar UI para funciones faltantes** - sesión, contexto, etc.
+1. **Unificar load/get de conversaciones** - Decidir cuál usar
+2. **Implementar UI para funciones faltantes** - sesión, contexto, etc.
 
 ### Prioridad Baja (Limpieza)
 
-5. **Evaluar handlers sin uso** - ¿Son para futuras features o dead code?
+3. **Evaluar handlers sin uso** - ¿Son para futuras features o dead code?
 
 ---
 
-## Archivos Afectados
+## Archivos Modificados
 
-Para corregir los gaps críticos, modificar:
+Correcciones aplicadas en:
 
-- `frontend/src/lib/stores/files.ts` - Líneas 152, 227, 248, 269, 325, 371, 405, 460, 526, 561
+- `frontend/src/lib/stores/files.ts`:
+  - Línea 157: `'fs', 'list'` (antes 'files')
+  - Línea 255: `'fs', 'read'` (antes 'files')
+  - Línea 376: `'fs', 'mkdir'` (nuevo)
+  - Línea 386: `'fs', 'write'` (antes 'files', 'create')
+  - Línea 419: `'fs', 'delete'` (antes 'files')
+  - Línea 475: `'fs', 'search'` (antes 'files')

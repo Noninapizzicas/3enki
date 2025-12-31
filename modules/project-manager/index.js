@@ -36,7 +36,7 @@ class ProjectManagerModule {
     this.unsubscribes = [];
 
     // Base path for project directories
-    this.projectsBasePath = '/data/projects';
+    this.projectsBasePath = path.join(process.cwd(), 'data', 'projects');
   }
 
   // ==================== HELPERS ====================

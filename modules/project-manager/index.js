@@ -325,23 +325,8 @@ class ProjectManagerModule {
         )
       `, [], false, correlationId);
 
-      // Migration: Add new columns if they don't exist (for existing databases)
-      const migrations = [
-        'ALTER TABLE projects ADD COLUMN last_conversation_id TEXT',
-        'ALTER TABLE projects ADD COLUMN provider TEXT',
-        'ALTER TABLE projects ADD COLUMN model TEXT',
-        'ALTER TABLE projects ADD COLUMN prompt_id TEXT',
-        'ALTER TABLE projects ADD COLUMN base_path TEXT',
-        'ALTER TABLE projects ADD COLUMN session_state TEXT'
-      ];
-
-      for (const migration of migrations) {
-        try {
-          await this.queryDatabase(migration, [], false, correlationId);
-        } catch (e) {
-          // Column already exists, ignore
-        }
-      }
+      // Note: All columns are now defined in CREATE TABLE above
+      // Legacy migration code removed - columns already exist in schema
 
       // Load all projects
       const rows = await this.queryDatabase(

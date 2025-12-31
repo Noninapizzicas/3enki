@@ -238,6 +238,6 @@
     "dbTimeout": 10000,
     "maxProjects": 1000,
     "defaultSchema": "",
-    "projectsBasePath": "/data/projects"
+    "projectsBasePath": "./data/projects"
   }
 }

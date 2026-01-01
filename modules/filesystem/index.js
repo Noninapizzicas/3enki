@@ -110,6 +110,7 @@ class FilesystemModule {
    * List files and directories
    */
   async handleList(data) {
+    this.logger.info('filesystem.list.called', { data, path: data?.path });
     try {
       const dirPath = data?.path || '/';
       const safePath = this.validatePath(dirPath);
@@ -132,12 +133,14 @@ class FilesystemModule {
         const fullPath = path.join(safePath, entry.name);
         try {
           const stats = await fs.stat(fullPath);
+          const ext = entry.isDirectory() ? null : path.extname(entry.name).toLowerCase();
           return {
             name: entry.name,
             type: entry.isDirectory() ? 'directory' : 'file',
             size: stats.size,
             modified: stats.mtime,
-            path: path.join(dirPath, entry.name).replace(/\\/g, '/')
+            path: path.join(dirPath, entry.name).replace(/\\/g, '/'),
+            extension: ext
           };
         } catch (e) {
           // Skip files we can't stat
@@ -152,14 +155,16 @@ class FilesystemModule {
         return a.name.localeCompare(b.name);
       });
 
-      return {
-        status: 200,
-        data: {
-          path: dirPath,
-          items: validItems,
-          count: validItems.length
-        }
+      // Return data directly - UIRequestHandler wraps it in { status, success, data }
+      const result = {
+        path: dirPath,
+        files: validItems,
+        items: validItems, // backwards compatibility
+        count: validItems.length,
+        root_mode: !data?.project_id
       };
+      this.logger.info('filesystem.list.response', { path: dirPath, count: validItems.length, files: validItems.map(f => f.name) });
+      return result;
 
     } catch (error) {
       this.logger.error('filesystem.list.error', { error: error.message, path: data?.path });
@@ -198,15 +203,12 @@ class FilesystemModule {
         // Return base64 for binary files
         const buffer = await fs.readFile(safePath);
         return {
-          status: 200,
-          data: {
-            path: data.path,
-            content: buffer.toString('base64'),
-            encoding: 'base64',
-            size: stats.size,
-            modified: stats.mtime,
-            type: 'binary'
-          }
+          path: data.path,
+          content: buffer.toString('base64'),
+          encoding: 'base64',
+          size: stats.size,
+          modified: stats.mtime,
+          type: 'binary'
         };
       }
 
@@ -214,15 +216,12 @@ class FilesystemModule {
       const content = await fs.readFile(safePath, 'utf-8');
 
       return {
-        status: 200,
-        data: {
-          path: data.path,
-          content,
-          encoding: 'utf-8',
-          size: stats.size,
-          modified: stats.mtime,
-          type: 'text'
-        }
+        path: data.path,
+        content,
+        encoding: 'utf-8',
+        size: stats.size,
+        modified: stats.mtime,
+        type: 'text'
       };
 
     } catch (error) {
@@ -239,14 +238,15 @@ class FilesystemModule {
    */
   async handleWrite(data) {
     try {
-      if (!data?.path) {
+      const filePath = data?.path || data?.file_path;
+      if (!filePath) {
         return { status: 400, error: 'path is required' };
       }
       if (data.content === undefined) {
         return { status: 400, error: 'content is required' };
       }
 
-      const safePath = this.validatePath(data.path);
+      const safePath = this.validatePath(filePath);
 
       // Create parent directory if needed
       await fs.mkdir(path.dirname(safePath), { recursive: true });
@@ -265,20 +265,19 @@ class FilesystemModule {
       // Publish event
       const eventType = isNew ? 'fs.file.created' : 'fs.file.updated';
       await this.eventBus.publish(eventType, {
-        path: data.path,
+        path: filePath,
         size: data.content.length,
         timestamp: new Date().toISOString()
       });
 
-      this.logger.info('filesystem.write.success', { path: data.path, isNew });
+      this.logger.info('filesystem.write.success', { path: filePath, isNew });
 
+      // Return data directly - UIRequestHandler wraps it
       return {
-        status: isNew ? 201 : 200,
-        data: {
-          path: data.path,
-          created: isNew,
-          size: data.content.length
-        }
+        path: filePath,
+        file_path: filePath,
+        created: isNew,
+        size: data.content.length
       };
 
     } catch (error) {
@@ -292,16 +291,17 @@ class FilesystemModule {
    */
   async handleDelete(data) {
     try {
-      if (!data?.path) {
+      const filePath = data?.path || data?.file_path;
+      if (!filePath) {
         return { status: 400, error: 'path is required' };
       }
 
       // Prevent deleting root
-      if (data.path === '/' || data.path === '') {
+      if (filePath === '/' || filePath === '') {
         return { status: 403, error: 'Cannot delete root directory' };
       }
 
-      const safePath = this.validatePath(data.path);
+      const safePath = this.validatePath(filePath);
 
       const stats = await fs.stat(safePath);
       const isDirectory = stats.isDirectory();
@@ -314,20 +314,18 @@ class FilesystemModule {
 
       // Publish event
       await this.eventBus.publish('fs.file.deleted', {
-        path: data.path,
+        path: filePath,
         type: isDirectory ? 'directory' : 'file',
         timestamp: new Date().toISOString()
       });
 
-      this.logger.info('filesystem.delete.success', { path: data.path, type: isDirectory ? 'directory' : 'file' });
+      this.logger.info('filesystem.delete.success', { path: filePath, type: isDirectory ? 'directory' : 'file' });
 
       return {
-        status: 200,
-        data: {
-          path: data.path,
-          deleted: true,
-          type: isDirectory ? 'directory' : 'file'
-        }
+        path: filePath,
+        file_path: filePath,
+        deleted: true,
+        type: isDirectory ? 'directory' : 'file'
       };
 
     } catch (error) {
@@ -398,12 +396,9 @@ class FilesystemModule {
       this.logger.info('filesystem.move.success', { from: data.from, to: data.to });
 
       return {
-        status: 200,
-        data: {
-          from: data.from,
-          to: data.to,
-          moved: true
-        }
+        from: data.from,
+        to: data.to,
+        moved: true
       };
 
     } catch (error) {

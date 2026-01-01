@@ -190,9 +190,11 @@ export async function loadConversation(conversationId: string): Promise<void> {
 }
 
 /**
- * Crea una nueva conversacion
+ * Crea una nueva conversacion con configuración opcional
  */
-export async function createConversation(title?: string): Promise<Conversation> {
+export async function createConversation(
+  config?: Partial<Pick<Conversation, 'title' | 'system_prompt' | 'model' | 'provider' | 'temperature' | 'max_tokens' | 'context_window'>> | string
+): Promise<Conversation> {
   const projId = get(activeProjectId);
 
   if (!projId) {
@@ -201,13 +203,24 @@ export async function createConversation(title?: string): Promise<Conversation> 
 
   conversationsStore.update(s => ({ ...s, loading: true, error: null }));
 
+  // Support both old signature (just title string) and new signature (config object)
+  const createData = typeof config === 'string'
+    ? { projectId: projId, title: config }
+    : {
+        projectId: projId,
+        title: config?.title || 'Nueva conversación',
+        system_prompt: config?.system_prompt,
+        model: config?.model,
+        provider: config?.provider,
+        temperature: config?.temperature,
+        max_tokens: config?.max_tokens,
+        context_window: config?.context_window
+      };
+
   try {
     const response = await mqttRequest<{
       conversation: Conversation;
-    }>('conversation', 'create', {
-      projectId: projId,
-      title: title || 'Nueva conversacion'
-    });
+    }>('conversation', 'create', createData);
 
     const conversation = response.data.conversation;
 
@@ -439,9 +452,15 @@ export async function sendMessage(
 
 /**
  * Selecciona una conversacion como activa
+ * Sincroniza con el store de chat para que ChatArea muestre los mensajes
  */
-export async function selectConversation(conversationId: string): Promise<void> {
-  await loadConversation(conversationId);
+export async function selectConversation(convId: string): Promise<void> {
+  // Cargar conversación en el store de conversations
+  await loadConversation(convId);
+
+  // Sincronizar con el store de chat (para ChatArea y ChatInput)
+  const { loadConversation: loadChatConversation } = await import('./chat');
+  await loadChatConversation(convId);
 }
 
 /**

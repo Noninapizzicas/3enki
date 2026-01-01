@@ -17,6 +17,7 @@
     saveFile,
     createFile,
     deleteFile,
+    moveFile,
     navigateUp,
     closeFile,
     updateEditorContent,
@@ -40,6 +41,11 @@
   let newFileType: 'file' | 'directory' = 'file';
   let showNewFileForm = false;
   let confirmDelete: string | null = null;
+
+  // Move state
+  let moveSource: string | null = null;
+  let moveDestination = '';
+  let showMoveForm = false;
 
   // Start in root mode - navigate all projects
   onMount(() => {
@@ -125,6 +131,28 @@
     }
   }
 
+  // Move handlers
+  function handleStartMove(filePath: string) {
+    moveSource = filePath;
+    moveDestination = filePath;
+    showMoveForm = true;
+  }
+
+  function handleCancelMove() {
+    moveSource = null;
+    moveDestination = '';
+    showMoveForm = false;
+  }
+
+  async function handleConfirmMove() {
+    if (!moveSource || !moveDestination.trim()) return;
+
+    const success = await moveFile(moveSource, moveDestination);
+    if (success) {
+      handleCancelMove();
+    }
+  }
+
   // Path breadcrumbs
   $: breadcrumbs = (() => {
     const parts = state.currentPath.split('/').filter(Boolean);
@@ -201,6 +229,22 @@
         </div>
       {/if}
 
+      <!-- Move file form -->
+      {#if showMoveForm}
+        <div class="move-file-form">
+          <span class="move-label">Mover a:</span>
+          <input
+            type="text"
+            class="input"
+            placeholder="Ruta destino (ej: /carpeta/archivo.txt)"
+            bind:value={moveDestination}
+            on:keydown={(e) => e.key === 'Enter' && handleConfirmMove()}
+          />
+          <button class="btn primary small" on:click={handleConfirmMove}>Mover</button>
+          <button class="btn secondary small" on:click={handleCancelMove}>Cancelar</button>
+        </div>
+      {/if}
+
       <!-- Loading/Error -->
       {#if state.loading}
         <div class="loading">Cargando...</div>
@@ -253,7 +297,14 @@
                   <span class="file-size">{formatFileSize(item.size)}</span>
                 {/if}
                 <button
-                  class="delete-btn"
+                  class="action-btn"
+                  on:click|stopPropagation={() => handleStartMove(item.path)}
+                  title="Mover"
+                >
+                  ✂️
+                </button>
+                <button
+                  class="action-btn"
                   class:confirm={confirmDelete === item.path}
                   on:click|stopPropagation={() => handleDelete(item.path)}
                   title={confirmDelete === item.path ? 'Click para confirmar' : 'Eliminar'}
@@ -624,7 +675,7 @@
     font-size: 0.75rem;
   }
 
-  .delete-btn {
+  .action-btn {
     padding: 0.25rem;
     background: transparent;
     border: none;
@@ -633,13 +684,38 @@
     transition: opacity 0.15s;
   }
 
-  .delete-btn:hover {
+  .action-btn:hover {
     opacity: 1;
   }
 
-  .delete-btn.confirm {
+  .action-btn.confirm {
     opacity: 1;
     animation: pulse 0.5s infinite alternate;
+  }
+
+  .move-file-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg, #0f0f1a);
+    border-bottom: 1px solid var(--color-primary, #3b82f6);
+  }
+
+  .move-file-form .input {
+    flex: 1;
+    padding: 0.375rem 0.5rem;
+    background: var(--color-bg-secondary, #1a1a2e);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.25rem;
+    color: var(--color-text, #e5e5e5);
+    font-size: 0.75rem;
+  }
+
+  .move-label {
+    font-size: 0.75rem;
+    color: var(--color-primary, #3b82f6);
+    white-space: nowrap;
   }
 
   @keyframes pulse {

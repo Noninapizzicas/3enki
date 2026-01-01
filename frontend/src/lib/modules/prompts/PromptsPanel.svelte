@@ -32,6 +32,7 @@
     clearComposer,
     setComposerVariable,
     renderComposer,
+    applyComposerToChat,
     selectPrompt,
     setActiveTab,
     selectedPrompt,
@@ -182,6 +183,16 @@
     if (result) {
       previewResult = result;
       showPreview = true;
+    }
+  }
+
+  async function handleApplyToChat() {
+    const success = await applyComposerToChat();
+    if (success) {
+      // Mostrar feedback visual (podría ser un toast)
+      alert('Prompt aplicado al chat actual');
+    } else {
+      alert('No hay conversación activa o el composer está vacío');
     }
   }
 
@@ -511,6 +522,9 @@
             </button>
             <button class="btn primary" on:click={handlePreview}>
               👁️ Preview
+            </button>
+            <button class="btn success" on:click={handleApplyToChat}>
+              🚀 Aplicar al chat
             </button>
           </div>
 
@@ -1469,6 +1483,15 @@
   .btn.secondary:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
     color: var(--_text);
+  }
+
+  .btn.success {
+    background: var(--_primary);
+    color: white;
+  }
+
+  .btn.success:hover:not(:disabled) {
+    filter: brightness(1.1);
   }
 
   .btn.danger {

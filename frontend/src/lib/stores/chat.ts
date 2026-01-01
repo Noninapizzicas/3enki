@@ -197,8 +197,8 @@ export async function loadConversation(id: string): Promise<void> {
     const response = await mqttRequest<{ messages: Message[] }>('conversation', 'load', {
       conversationId: id
     });
-    if (response?.messages) {
-      messages.set(response.messages);
+    if (response?.data?.messages) {
+      messages.set(response.data.messages);
     }
   } catch (error) {
     console.error('[chat] Error loading conversation:', error);

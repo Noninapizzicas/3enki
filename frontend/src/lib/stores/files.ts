@@ -265,24 +265,24 @@ export async function openFile(filePath: string): Promise<void> {
       viewType = 'image';
 
     } else {
-      // Use text-editor for text files
+      // Use filesystem for text files (fs.read supports text)
       const response = await mqttRequest<{
-        file_path: string;
+        path: string;
         content: string;
-        extension: string;
+        encoding: string;
         size: number;
         modified: string;
-        readonly: boolean;
-      }>('editor', 'open', { project_id: projectId, file_path: filePath });
+        type: string;
+      }>('fs', 'read', { path: filePath });
 
       fileContent = {
-        file_path: response.data.file_path,
+        file_path: response.data.path,
         type: 'text',
         content: response.data.content,
-        extension: response.data.extension,
+        extension: ext,
         size: response.data.size,
         modified: response.data.modified,
-        readonly: response.data.readonly
+        readonly: false
       };
       viewType = 'editor';
     }
@@ -323,13 +323,11 @@ export async function saveFile(): Promise<boolean> {
 
   try {
     await mqttRequest<{
-      file_path: string;
-      saved: boolean;
+      path: string;
+      created: boolean;
       size: number;
-      modified: string;
-    }>('editor', 'save', {
-      project_id: state.projectId,
-      file_path: state.currentFilePath,
+    }>('fs', 'write', {
+      path: state.currentFilePath,
       content: state.editorContent
     });
 
@@ -440,6 +438,38 @@ export async function deleteFile(filePath: string): Promise<boolean> {
     const errorMessage = getErrorMessage(error);
     filesStore.update(s => ({ ...s, loading: false, error: errorMessage }));
     console.error('[Files] Delete failed:', errorMessage);
+    return false;
+  }
+}
+
+/**
+ * Moves a file or directory to a new location
+ */
+export async function moveFile(fromPath: string, toPath: string): Promise<boolean> {
+  let state: FilesStoreState = initialState;
+  filesStore.subscribe(s => { state = s; })();
+
+  filesStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<{
+      from: string;
+      to: string;
+      moved: boolean;
+    }>('fs', 'move', {
+      from: fromPath,
+      to: toPath
+    });
+
+    // Refresh file list
+    await listFiles(state.currentPath);
+
+    console.log('[Files] Moved:', fromPath, '->', toPath);
+    return true;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    filesStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Files] Move failed:', errorMessage);
     return false;
   }
 }

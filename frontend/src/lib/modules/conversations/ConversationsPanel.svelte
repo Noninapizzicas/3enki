@@ -2,25 +2,22 @@
   /**
    * ConversationsPanel - Gestion de conversaciones AI
    *
-   * Tabs:
-   * - Chat: Vista de mensajes + envio
-   * - Historial: Lista de conversaciones agrupadas
-   * - Config: model, temperature, system_prompt
+   * 2 Vistas:
+   * - Lista: conversaciones agrupadas por fecha
+   * - Config: crear/editar conversación
    */
 
   import { onMount, onDestroy } from 'svelte';
   import {
     conversationsStore,
     initConversations,
-    loadConversations,
     createConversation,
     selectConversation,
-    hasActiveConversation,
+    activeConversationId,
     activeProjectIdMqtt
   } from '$lib/stores';
   import { openPanel, closePanel } from '$lib/stores/ui';
 
-  import ChatTab from './ChatTab.svelte';
   import HistoryTab from './HistoryTab.svelte';
   import ConfigTab from './ConfigTab.svelte';
 
@@ -31,7 +28,12 @@
   // ==========================================================================
 
   let cleanup: (() => void) | null = null;
-  let activeTab: 'chat' | 'history' | 'config' = 'chat';
+
+  // Vista actual: 'list' o 'config'
+  let currentView: 'list' | 'config' = 'list';
+
+  // ID de conversación a editar (null = crear nueva)
+  let editingConversationId: string | null = null;
 
   // ==========================================================================
   // COMPUTED
@@ -40,7 +42,6 @@
   $: loading = $conversationsStore.loading;
   $: projectId = $activeProjectIdMqtt;
   $: hasProject = !!projectId;
-  $: hasConversation = $hasActiveConversation;
 
   // ==========================================================================
   // LIFECYCLE
@@ -58,63 +59,53 @@
   // HANDLERS
   // ==========================================================================
 
-  function handleTabChange(tab: typeof activeTab) {
-    activeTab = tab;
+  function handleNewConversation() {
+    editingConversationId = null;
+    currentView = 'config';
   }
 
-  async function handleNewConversation() {
-    await createConversation();
-    activeTab = 'chat';
+  function handleEditConversation(conversationId: string) {
+    editingConversationId = conversationId;
+    currentView = 'config';
+  }
+
+  function handleSelectConversation(conversationId: string) {
+    selectConversation(conversationId);
+    closePanel();
+  }
+
+  function handleBackToList() {
+    currentView = 'list';
+    editingConversationId = null;
+  }
+
+  function handleSaved() {
+    // Después de guardar, cerrar panel
+    closePanel();
   }
 
   function handleGoToProjects() {
     openPanel('project');
   }
-
-  function handleSelectConversation(conversationId: string) {
-    selectConversation(conversationId);
-    activeTab = 'chat';
-  }
-
-  function handleUseInChat() {
-    // Cerrar panel - la conversación ya está activa
-    closePanel();
-  }
 </script>
 
 <div class="conversations-panel">
-  <!-- Header with tabs -->
+  <!-- Header -->
   <div class="panel-header">
-    <div class="tabs">
-      <button
-        class="tab"
-        class:active={activeTab === 'chat'}
-        on:click={() => handleTabChange('chat')}
-        disabled={!hasProject}
-      >
-        💬 Chat
+    {#if currentView === 'list'}
+      <span class="header-title">Conversaciones</span>
+      {#if hasProject}
+        <button class="new-btn" on:click={handleNewConversation} title="Nueva conversacion">
+          + Nueva
+        </button>
+      {/if}
+    {:else}
+      <button class="back-btn" on:click={handleBackToList}>
+        ← Volver
       </button>
-      <button
-        class="tab"
-        class:active={activeTab === 'history'}
-        on:click={() => handleTabChange('history')}
-        disabled={!hasProject}
-      >
-        📜 Historial
-      </button>
-      <button
-        class="tab"
-        class:active={activeTab === 'config'}
-        on:click={() => handleTabChange('config')}
-        disabled={!hasProject || !hasConversation}
-      >
-        ⚙️ Config
-      </button>
-    </div>
-    {#if hasProject}
-      <button class="new-btn" on:click={handleNewConversation} title="Nueva conversacion">
-        + Nueva
-      </button>
+      <span class="header-title">
+        {editingConversationId ? 'Editar' : 'Nueva'} Conversación
+      </span>
     {/if}
   </div>
 
@@ -126,7 +117,7 @@
         <span class="empty-icon">📁</span>
         <span class="empty-title">Selecciona un proyecto</span>
         <span class="empty-text">
-          Las conversaciones estan vinculadas a proyectos.
+          Las conversaciones están vinculadas a proyectos.
           Activa uno para comenzar.
         </span>
         <button class="btn primary" on:click={handleGoToProjects}>
@@ -139,18 +130,19 @@
         <span class="loading-icon">⏳</span>
         <span>Cargando...</span>
       </div>
-    {:else if activeTab === 'chat'}
-      <ChatTab
-        on:newConversation={handleNewConversation}
-        on:useInChat={handleUseInChat}
-      />
-    {:else if activeTab === 'history'}
+    {:else if currentView === 'list'}
       <HistoryTab
         on:select={(e) => handleSelectConversation(e.detail)}
+        on:edit={(e) => handleEditConversation(e.detail)}
         on:newConversation={handleNewConversation}
       />
-    {:else if activeTab === 'config'}
-      <ConfigTab />
+    {:else if currentView === 'config'}
+      <ConfigTab
+        conversationId={editingConversationId}
+        isNewConversation={!editingConversationId}
+        on:saved={handleSaved}
+        on:cancel={handleBackToList}
+      />
     {/if}
   </div>
 </div>
@@ -170,57 +162,51 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
     color: var(--_text);
   }
 
-  /* Header & Tabs */
+  /* Header */
   .panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.5rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--_border);
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    gap: 0.5rem;
   }
 
-  .tabs {
-    display: flex;
-    gap: 0.25rem;
+  .header-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--_text);
   }
 
-  .tab {
-    padding: 0.375rem 0.625rem;
-    background: transparent;
+  .back-btn {
+    padding: 0.1875rem 0.375rem;
+    background: var(--_bg-surface);
     border: none;
     border-radius: var(--_radius);
     color: var(--_text-muted);
-    font-size: 0.75rem;
+    font-size: 0.625rem;
     cursor: pointer;
     transition: all 0.15s;
   }
 
-  .tab:hover:not(:disabled) {
-    background: var(--_bg-surface);
+  .back-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
     color: var(--_text);
   }
 
-  .tab:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .tab.active {
-    background: var(--_primary);
-    color: white;
-  }
-
   .new-btn {
-    padding: 0.375rem 0.625rem;
+    padding: 0.25rem 0.5rem;
     background: var(--_success);
     border: none;
     border-radius: var(--_radius);
     color: white;
-    font-size: 0.75rem;
+    font-size: 0.625rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
@@ -232,7 +218,8 @@
 
   /* Content */
   .panel-content {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;

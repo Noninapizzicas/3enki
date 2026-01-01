@@ -576,6 +576,41 @@ export async function renderComposer(): Promise<{
   }
 }
 
+/**
+ * Aplica el prompt renderizado del composer a la conversación activa
+ */
+export async function applyComposerToChat(): Promise<boolean> {
+  try {
+    // Importar dinámicamente para evitar dependencia circular
+    const { conversationsStore, updateConversation } = await import('./conversations');
+    const { get } = await import('svelte/store');
+
+    const convState = get(conversationsStore);
+    if (!convState.activeConversationId) {
+      console.warn('[Prompts] No active conversation to apply prompt');
+      return false;
+    }
+
+    // Renderizar el composer
+    const rendered = await renderComposer();
+    if (!rendered || !rendered.finalPrompt) {
+      console.warn('[Prompts] No prompt to apply');
+      return false;
+    }
+
+    // Actualizar system_prompt de la conversación
+    await updateConversation(convState.activeConversationId, {
+      system_prompt: rendered.finalPrompt
+    });
+
+    console.log('[Prompts] Applied composer to chat:', rendered.estimatedTokens, 'tokens');
+    return true;
+  } catch (error) {
+    console.error('[Prompts] Apply to chat failed:', getErrorMessage(error));
+    return false;
+  }
+}
+
 // =============================================================================
 // ACTIONS - Analytics
 // =============================================================================

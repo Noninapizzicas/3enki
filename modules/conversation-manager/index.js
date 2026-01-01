@@ -267,16 +267,30 @@ class ConversationManagerModule {
       `, [], false, correlationId);
 
       // Migration: Add new columns if they don't exist (for existing databases)
-      const messageMigrations = [
-        'ALTER TABLE messages ADD COLUMN in_context INTEGER DEFAULT 1',
-        'ALTER TABLE messages ADD COLUMN manually_toggled INTEGER DEFAULT 0'
+      const columnsToAdd = [
+        { name: 'in_context', definition: 'INTEGER DEFAULT 1' },
+        { name: 'manually_toggled', definition: 'INTEGER DEFAULT 0' }
       ];
 
-      for (const migration of messageMigrations) {
-        try {
-          await this.queryDatabase(projectId, migration, [], false, correlationId);
-        } catch (e) {
-          // Column already exists, ignore
+      for (const col of columnsToAdd) {
+        // Check if column exists before adding
+        const exists = await this.queryDatabase(
+          projectId,
+          `SELECT COUNT(*) as count FROM pragma_table_info('messages') WHERE name = ?`,
+          [col.name],
+          true,
+          correlationId
+        );
+
+        if (!exists[0]?.count) {
+          await this.queryDatabase(
+            projectId,
+            `ALTER TABLE messages ADD COLUMN ${col.name} ${col.definition}`,
+            [],
+            false,
+            correlationId
+          );
+          this.logger.debug({ correlationId, projectId, column: col.name }, 'Migration: added column');
         }
       }
 
@@ -2019,10 +2033,19 @@ class ConversationManagerModule {
 
   /**
    * UI Handler: Create conversation
-   * Request: mqttRequest('conversation', 'create', { projectId?, title? })
+   * Request: mqttRequest('conversation', 'create', { projectId?, title?, system_prompt?, model?, provider?, temperature?, max_tokens?, context_window? })
    */
   async handleUICreate(data, request) {
-    const { projectId, title } = data;
+    const {
+      projectId,
+      title,
+      system_prompt,
+      model,
+      provider,
+      temperature,
+      max_tokens,
+      context_window
+    } = data;
     const correlationId = request?.correlationId || crypto.randomUUID();
 
     this.logger.info({ correlationId, projectId }, 'UI: Create conversation');
@@ -2040,7 +2063,15 @@ class ConversationManagerModule {
       const conversation = await this.createConversation(
         projId,
         null, // user_id
-        { title: title || 'New Conversation' },
+        {
+          title: title || 'Nueva conversación',
+          system_prompt,
+          model,
+          provider,
+          temperature,
+          max_tokens,
+          context_window
+        },
         correlationId
       );
 

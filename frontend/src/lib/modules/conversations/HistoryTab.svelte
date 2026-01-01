@@ -54,6 +54,11 @@
     dispatch('select', conversationId);
   }
 
+  function handleEdit(conversationId: string, event: Event) {
+    event.stopPropagation();
+    dispatch('edit', conversationId);
+  }
+
   function handleNewConversation() {
     dispatch('newConversation');
   }
@@ -153,20 +158,32 @@
                   on:click={() => handleSelect(conversation.id)}
                   on:keydown={(e) => e.key === 'Enter' && handleSelect(conversation.id)}
                 >
+                  <span class="active-indicator">
+                    {currentId === conversation.id ? '●' : '○'}
+                  </span>
                   <div class="conversation-info">
                     <span class="conversation-title">{conversation.title}</span>
                     <span class="conversation-meta">
                       {conversation.message_count} mensajes · {formatRelativeTime(conversation.updated_at)}
                     </span>
                   </div>
-                  <button
-                    class="delete-btn"
-                    on:click|stopPropagation={(e) => handleDelete(conversation.id, e)}
-                    disabled={deleting === conversation.id}
-                    title="Eliminar"
-                  >
-                    {deleting === conversation.id ? '⏳' : '🗑️'}
-                  </button>
+                  <div class="conversation-actions">
+                    <button
+                      class="action-btn"
+                      on:click|stopPropagation={(e) => handleEdit(conversation.id, e)}
+                      title="Configurar"
+                    >
+                      ⚙️
+                    </button>
+                    <button
+                      class="action-btn delete"
+                      on:click|stopPropagation={(e) => handleDelete(conversation.id, e)}
+                      disabled={deleting === conversation.id}
+                      title="Eliminar"
+                    >
+                      {deleting === conversation.id ? '⏳' : '🗑️'}
+                    </button>
+                  </div>
                 </div>
               {/each}
             </div>
@@ -182,6 +199,8 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
     --_bg-surface: var(--panel-bg-surface, rgba(255, 255, 255, 0.05));
     --_text: var(--panel-text, var(--color-text, #e5e5e5));
     --_text-muted: var(--panel-text-muted, var(--color-text-muted, #a3a3a3));
@@ -193,18 +212,19 @@
 
   /* Search */
   .search-container {
-    padding: 0.75rem;
+    padding: 0.5rem;
     border-bottom: 1px solid var(--_border);
+    flex-shrink: 0;
   }
 
   .search-input {
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.375rem 0.5rem;
     background: var(--_bg-surface);
     border: 1px solid var(--_border);
     border-radius: var(--_radius);
     color: var(--_text);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
   }
 
   .search-input:focus {
@@ -256,25 +276,28 @@
 
   /* Sections */
   .sections-list {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     overflow-y: auto;
-    padding: 0.5rem;
+    overflow-x: hidden;
+    padding: 0.375rem;
+    -webkit-overflow-scrolling: touch;
   }
 
   .section {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.375rem;
   }
 
   .section-header {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.375rem;
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.25rem 0.5rem;
     background: transparent;
     border: none;
     color: var(--_text-muted);
-    font-size: 0.75rem;
+    font-size: 0.625rem;
     font-weight: 600;
     text-transform: uppercase;
     cursor: pointer;
@@ -286,7 +309,7 @@
   }
 
   .section-toggle {
-    font-size: 0.625rem;
+    font-size: 0.5rem;
   }
 
   .section-label {
@@ -294,10 +317,10 @@
   }
 
   .section-count {
-    padding: 0.125rem 0.375rem;
+    padding: 0.0625rem 0.25rem;
     background: var(--_bg-surface);
     border-radius: 9999px;
-    font-size: 0.625rem;
+    font-size: 0.5rem;
   }
 
   .section-content {
@@ -311,9 +334,9 @@
   .conversation-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.25rem;
     width: 100%;
-    padding: 0.625rem 0.75rem;
+    padding: 0.375rem 0.5rem;
     background: var(--_bg-surface);
     border: 1px solid transparent;
     border-radius: var(--_radius);
@@ -340,7 +363,7 @@
   }
 
   .conversation-title {
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     font-weight: 500;
     color: var(--_text);
     white-space: nowrap;
@@ -349,28 +372,59 @@
   }
 
   .conversation-meta {
-    font-size: 0.75rem;
+    font-size: 0.625rem;
     color: var(--_text-muted);
   }
 
-  .delete-btn {
-    padding: 0.25rem;
+  /* Active Indicator */
+  .active-indicator {
+    font-size: 0.5rem;
+    color: var(--_text-muted);
+    flex-shrink: 0;
+  }
+
+  .conversation-item.active .active-indicator {
+    color: var(--_primary);
+  }
+
+  /* Actions */
+  .conversation-actions {
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0.6;
+  }
+
+  .conversation-item:hover .conversation-actions {
+    opacity: 1;
+  }
+
+  /* En touch/móvil siempre visible */
+  @media (hover: none) {
+    .conversation-actions {
+      opacity: 1;
+    }
+  }
+
+  .action-btn {
+    padding: 0.125rem;
     background: transparent;
     border: none;
     cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s;
-  }
-
-  .conversation-item:hover .delete-btn {
     opacity: 0.5;
+    transition: opacity 0.15s;
+    font-size: 0.625rem;
+    line-height: 1;
   }
 
-  .delete-btn:hover {
-    opacity: 1 !important;
+  .action-btn:hover {
+    opacity: 1;
   }
 
-  .delete-btn:disabled {
+  .action-btn:disabled {
     cursor: wait;
+  }
+
+  .action-btn.delete:hover {
+    filter: brightness(1.2);
   }
 </style>

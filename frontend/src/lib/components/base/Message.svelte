@@ -7,13 +7,20 @@
    * - Timestamp formateado
    * - Adjuntos inline
    * - Indicador de streaming
-   * - Soporte markdown (futuro)
+   * - Checkbox de contexto (incluir/excluir del contexto AI)
+   * - Estilos visuales para mensajes fuera del contexto
    */
 
+  import { createEventDispatcher } from 'svelte';
   import type { Message, Attachment } from '$lib/ui-core';
   import Chip from './Chip.svelte';
 
   export let message: Message;
+  export let showContextToggle: boolean = true;
+
+  const dispatch = createEventDispatcher<{
+    toggleContext: { id: string; inContext: boolean };
+  }>();
 
   // Formatear timestamp
   function formatTime(timestamp: string): string {
@@ -34,50 +41,161 @@
     return icons[role] || '💬';
   }
 
+  function handleToggleContext() {
+    const newValue = !inContext;
+    dispatch('toggleContext', { id: message.id, inContext: newValue });
+  }
+
   $: roleIcon = getRoleIcon(message.role);
   $: formattedTime = formatTime(message.timestamp);
   $: hasAttachments = message.attachments && message.attachments.length > 0;
+  $: inContext = message.in_context !== false; // Default true si undefined
+  $: isManuallyToggled = message.manually_toggled === true;
 </script>
 
-<div class="message {message.role}" class:streaming={message.streaming}>
-  <div class="header">
-    <span class="role-icon">{roleIcon}</span>
-    <span class="time">{formattedTime}</span>
-    {#if message.streaming}
-      <span class="streaming-indicator">●</span>
-    {/if}
-  </div>
-
-  <div class="content">
-    {message.content}
-    {#if message.streaming && !message.content}
-      <span class="typing">...</span>
-    {/if}
-  </div>
-
-  {#if hasAttachments}
-    <div class="attachments">
-      {#each message.attachments as attachment (attachment.id)}
-        <Chip
-          id={attachment.id}
-          name={attachment.name}
-          type={attachment.type}
-          size={attachment.size}
-          removable={false}
-        />
-      {/each}
-    </div>
+<div
+  class="message {message.role}"
+  class:streaming={message.streaming}
+  class:out-of-context={!inContext}
+>
+  <!-- Context toggle checkbox -->
+  {#if showContextToggle && message.role !== 'system'}
+    <label
+      class="context-toggle"
+      title={inContext ? 'En contexto (clic para excluir)' : 'Fuera de contexto (clic para incluir)'}
+    >
+      <input
+        type="checkbox"
+        checked={inContext}
+        on:change={handleToggleContext}
+      />
+      <span class="checkmark" class:manual={isManuallyToggled}></span>
+    </label>
   {/if}
+
+  <div class="message-content">
+    <div class="header">
+      <span class="role-icon">{roleIcon}</span>
+      <span class="time">{formattedTime}</span>
+      {#if message.streaming}
+        <span class="streaming-indicator">●</span>
+      {/if}
+      {#if !inContext}
+        <span class="context-badge" title="Este mensaje no se incluirá en el contexto de la IA">⊘</span>
+      {/if}
+    </div>
+
+    <div class="content">
+      {message.content}
+      {#if message.streaming && !message.content}
+        <span class="typing">...</span>
+      {/if}
+    </div>
+
+    {#if hasAttachments}
+      <div class="attachments">
+        {#each message.attachments as attachment (attachment.id)}
+          <Chip
+            id={attachment.id}
+            name={attachment.name}
+            type={attachment.type}
+            size={attachment.size}
+            removable={false}
+          />
+        {/each}
+      </div>
+    {/if}
+  </div>
 </div>
 
 <style>
   .message {
     display: flex;
-    flex-direction: column;
+    align-items: flex-start;
     gap: 0.5rem;
     padding: 0.75rem 1rem;
     border-radius: 0.5rem;
     max-width: 85%;
+    transition: opacity 0.2s ease, filter 0.2s ease;
+  }
+
+  .message-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Context toggle checkbox */
+  .context-toggle {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+    cursor: pointer;
+  }
+
+  .context-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .checkmark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    transition: all 0.15s ease;
+  }
+
+  .context-toggle:hover .checkmark {
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+
+  .context-toggle input:checked ~ .checkmark {
+    background: var(--color-success, #22c55e);
+    border-color: var(--color-success, #22c55e);
+  }
+
+  .context-toggle input:checked ~ .checkmark::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  /* Indicator for manually toggled */
+  .checkmark.manual {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+  }
+
+  /* Out of context styles */
+  .message.out-of-context {
+    opacity: 0.5;
+    filter: grayscale(30%);
+  }
+
+  .message.out-of-context .content {
+    text-decoration: line-through;
+    text-decoration-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .context-badge {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-left: auto;
   }
 
   /* Estilos por rol */

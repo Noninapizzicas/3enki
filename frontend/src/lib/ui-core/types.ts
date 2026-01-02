@@ -176,6 +176,9 @@ export interface Message {
   timestamp: string;
   attachments?: Attachment[];
   streaming?: boolean;
+  // Context management
+  in_context?: boolean;
+  manually_toggled?: boolean;
 }
 
 // ============================================================================

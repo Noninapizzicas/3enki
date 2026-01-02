@@ -36,6 +36,16 @@ export interface Message {
     provider?: string;
     tool_calls?: ToolCallHistory[];
   };
+  // Context management
+  in_context: boolean;
+  manually_toggled: boolean;
+}
+
+export interface ContextStats {
+  active: number;
+  total: number;
+  maxContext: number;
+  remaining: number;
 }
 
 export interface Attachment {
@@ -488,6 +498,80 @@ export function clearError(): void {
 }
 
 /**
+ * Toggle de inclusión de mensaje en contexto
+ * @param messageId - ID del mensaje
+ * @param inContext - true para incluir, false para excluir
+ */
+export async function toggleMessageContext(
+  messageId: string,
+  inContext: boolean
+): Promise<void> {
+  const state = get(conversationsStore);
+  const projId = get(activeProjectId);
+
+  if (!projId) {
+    throw new Error('No active project');
+  }
+
+  // Optimistic update
+  conversationsStore.update(s => ({
+    ...s,
+    messages: s.messages.map(m =>
+      m.id === messageId
+        ? { ...m, in_context: inContext, manually_toggled: true }
+        : m
+    )
+  }));
+
+  try {
+    await mqttRequest('conversation', 'toggleContext', {
+      projectId: projId,
+      messageId,
+      inContext
+    });
+
+    console.log('[Conversations] Toggled context:', messageId, inContext);
+  } catch (error) {
+    // Rollback on error
+    conversationsStore.update(s => ({
+      ...s,
+      messages: s.messages.map(m =>
+        m.id === messageId
+          ? { ...m, in_context: !inContext, manually_toggled: true }
+          : m
+      ),
+      error: getErrorMessage(error)
+    }));
+    console.error('[Conversations] Toggle context failed:', getErrorMessage(error));
+    throw error;
+  }
+}
+
+/**
+ * Obtiene estadísticas de contexto de la conversación activa
+ */
+export async function loadContextStats(): Promise<ContextStats | null> {
+  const state = get(conversationsStore);
+  const projId = get(activeProjectId);
+
+  if (!projId || !state.activeConversationId) {
+    return null;
+  }
+
+  try {
+    const response = await mqttRequest<ContextStats>('conversation', 'contextStats', {
+      projectId: projId,
+      conversationId: state.activeConversationId
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('[Conversations] Load context stats failed:', getErrorMessage(error));
+    return null;
+  }
+}
+
+/**
  * Resetea el store
  */
 export function resetConversations(): void {
@@ -629,3 +713,31 @@ export const hasConversations = derived(conversationsStore, $s => $s.conversatio
 
 /** Tiene conversacion activa */
 export const hasActiveConversation = derived(conversationsStore, $s => $s.activeConversationId !== null);
+
+/** Mensajes en contexto (in_context = true) */
+export const messagesInContext = derived(conversationsStore, $s =>
+  $s.messages.filter(m => m.in_context)
+);
+
+/** Contador de mensajes en contexto */
+export const contextCount = derived(conversationsStore, $s =>
+  $s.messages.filter(m => m.in_context).length
+);
+
+/** Context window de la conversación activa */
+export const contextWindow = derived(conversationsStore, $s =>
+  $s.activeConversation?.context_window || 20
+);
+
+/** Estadísticas de contexto calculadas localmente */
+export const contextStats = derived(conversationsStore, $s => {
+  const maxContext = $s.activeConversation?.context_window || 20;
+  const active = $s.messages.filter(m => m.in_context).length;
+  const total = $s.messages.length;
+  return {
+    active,
+    total,
+    maxContext,
+    remaining: Math.max(0, maxContext - active)
+  };
+});

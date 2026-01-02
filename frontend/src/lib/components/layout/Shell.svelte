@@ -24,7 +24,12 @@
   import { onMount, onDestroy } from 'svelte';
   import { connect, disconnect, activePanel, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import { closePanel } from '$lib/stores/ui';
-  import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
+  import {
+  initWorkspaceSubscriptions,
+  initChatSubscriptions,
+  initProjectsSubscriptions,
+  initConversations
+} from '$lib/stores';
   import { registerAllModules, unregisterAllModules } from '$lib/modules';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
@@ -39,6 +44,8 @@
 
   let cleanupWorkspace: (() => void) | null = null;
   let cleanupChat: (() => void) | null = null;
+  let cleanupProjects: (() => void) | null = null;
+  let cleanupConversations: (() => void) | null = null;
 
   onMount(() => {
     perfStart('Shell.onMount.TOTAL');
@@ -57,7 +64,15 @@
 
     // 3. Conectar a MQTT en background
     perfStart('Shell.connect.start');
-    connect().catch((error) => {
+    connect().then(() => {
+      // 3.1 Una vez conectados, inicializar proyectos y conversaciones
+      // Esto restaura el estado guardado en localStorage
+      perfStart('Shell.initPersistence');
+      cleanupProjects = initProjectsSubscriptions();
+      cleanupConversations = initConversations();
+      perfEnd('Shell.initPersistence');
+      logMsg('✅ Session restored from localStorage');
+    }).catch((error) => {
       logMsg('❌ MQTT connection failed', { error: String(error) });
     });
     perfEnd('Shell.connect.start');
@@ -81,6 +96,12 @@
     }
     if (cleanupChat) {
       cleanupChat();
+    }
+    if (cleanupProjects) {
+      cleanupProjects();
+    }
+    if (cleanupConversations) {
+      cleanupConversations();
     }
 
     // 3. Desconectar MQTT

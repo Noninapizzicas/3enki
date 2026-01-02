@@ -1357,6 +1357,7 @@ class ConversationManagerModule {
 
   async callAI(messages, conversation, tools, correlationId) {
     const requestId = crypto.randomUUID();
+    const hasTools = tools && tools.length > 0;
 
     this.activity?.action('ai.calling', {
       requestId,
@@ -1366,12 +1367,23 @@ class ConversationManagerModule {
       toolsCount: tools?.length || 0
     });
 
+    // Longer timeout when tools are involved (tool execution + AI response generation)
+    const baseTimeout = this.config.aiTimeout || 60000;
+    const toolTimeout = this.config.aiTimeoutWithTools || 180000; // 3 minutes for tool calls
+    const timeoutMs = hasTools ? toolTimeout : baseTimeout;
+
     const aiPromise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingAIRequests.delete(requestId);
-        this.activity?.error('ai.call', new Error('AI request timeout'), { requestId });
-        reject(new Error('AI request timeout'));
-      }, this.config.aiTimeout || 60000);
+        this.logger.error({
+          requestId,
+          timeoutMs,
+          hasTools,
+          toolsCount: tools?.length || 0
+        }, 'AI request timeout - consider increasing aiTimeoutWithTools config');
+        this.activity?.error('ai.call', new Error('AI request timeout'), { requestId, timeoutMs });
+        reject(new Error(`AI request timeout after ${timeoutMs / 1000}s`));
+      }, timeoutMs);
 
       this.pendingAIRequests.set(requestId, { resolve, reject, timeout });
     });
@@ -1399,7 +1411,18 @@ class ConversationManagerModule {
     const { request_id, success, message, content, tool_calls, tokens, cost, model, provider, error } = eventData;
 
     const pending = this.pendingAIRequests.get(request_id);
-    if (!pending) return;
+    if (!pending) {
+      // Orphaned response - request already timed out or was handled
+      this.logger.warn({
+        request_id,
+        success,
+        has_content: !!content,
+        has_tool_calls: !!tool_calls,
+        has_error: !!error,
+        pending_count: this.pendingAIRequests.size
+      }, 'Orphaned AI response received - request not found (likely timed out)');
+      return;
+    }
 
     clearTimeout(pending.timeout);
     this.pendingAIRequests.delete(request_id);

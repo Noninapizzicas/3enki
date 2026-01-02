@@ -19,8 +19,12 @@ class DatabaseManagerModule {
 
     // State
     this.databases = new Map(); // projectId -> db instance
+    this.projectPaths = new Map(); // projectId -> { basePath, slug } cache
     this.SQL = null;
     this.projectsPath = null;
+
+    // Special projects that use legacy path structure
+    this.systemProjects = new Set(['system', '_prompts']);
 
     // Dependencies (injected)
     this.logger = null;
@@ -399,19 +403,30 @@ class DatabaseManagerModule {
 
         for (const entry of entries) {
           if (entry.isDirectory()) {
-            const projectId = entry.name;
-            const dbPath = path.join(this.projectsPath, projectId, 'db.sqlite');
+            const dirName = entry.name;
+
+            // Check both legacy and new structure
+            const legacyPath = path.join(this.projectsPath, dirName, 'db.sqlite');
+            const newPath = path.join(this.projectsPath, dirName, 'db', `${dirName}.sqlite`);
+
+            let dbPath = null;
+            if (fsSync.existsSync(newPath)) {
+              dbPath = newPath;
+            } else if (fsSync.existsSync(legacyPath)) {
+              dbPath = legacyPath;
+            }
 
             const dbInfo = {
-              project_id: projectId,
-              loaded: this.databases.has(projectId),
-              exists: fsSync.existsSync(dbPath)
+              project_id: dirName,
+              loaded: this.databases.has(dirName),
+              exists: !!dbPath
             };
 
-            if (dbInfo.exists) {
+            if (dbPath) {
               const stats = await fs.stat(dbPath);
               dbInfo.size = stats.size;
               dbInfo.last_modified = stats.mtime.toISOString();
+              dbInfo.path = dbPath;
             }
 
             databases.push(dbInfo);
@@ -668,7 +683,10 @@ class DatabaseManagerModule {
         this.databases.delete(projectId);
       }
 
-      const dbPath = path.join(this.projectsPath, projectId, 'db.sqlite');
+      // Clear path cache
+      this.projectPaths.delete(projectId);
+
+      const { dbPath } = await this.resolveDatabasePath(projectId);
 
       if (fsSync.existsSync(dbPath)) {
         await fs.unlink(dbPath);
@@ -1224,18 +1242,91 @@ class DatabaseManagerModule {
   // Database Operations
   // ==========================================
 
+  /**
+   * Resolve database path for a project
+   * - System projects: /projects/{name}/db.sqlite (legacy)
+   * - User projects: /projects/{slug}/db/{slug}.sqlite (new structure)
+   */
+  async resolveDatabasePath(projectId) {
+    // System projects use legacy structure
+    if (this.systemProjects.has(projectId)) {
+      const projectDir = path.join(this.projectsPath, projectId);
+      return {
+        projectDir,
+        dbPath: path.join(projectDir, 'db.sqlite'),
+        isSystem: true
+      };
+    }
+
+    // Check cache first
+    if (this.projectPaths.has(projectId)) {
+      const cached = this.projectPaths.get(projectId);
+      return {
+        projectDir: cached.basePath,
+        dbPath: path.join(cached.basePath, 'db', `${cached.slug}.sqlite`),
+        isSystem: false
+      };
+    }
+
+    // Query system database for project info
+    try {
+      const systemDb = await this.getDatabase('system');
+      const result = systemDb.exec(`SELECT base_path, name FROM projects WHERE id = ?`, [projectId]);
+
+      if (result.length > 0 && result[0].values.length > 0) {
+        const [basePath, name] = result[0].values[0];
+
+        if (basePath) {
+          // Create slug from name for db filename
+          const slug = name.toLowerCase()
+            .replace(/[áàäâã]/g, 'a')
+            .replace(/[éèëê]/g, 'e')
+            .replace(/[íìïî]/g, 'i')
+            .replace(/[óòöôõ]/g, 'o')
+            .replace(/[úùüû]/g, 'u')
+            .replace(/ñ/g, 'n')
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/[\s_]+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '') || projectId.slice(0, 8);
+
+          // Cache the result
+          this.projectPaths.set(projectId, { basePath, slug });
+
+          return {
+            projectDir: basePath,
+            dbPath: path.join(basePath, 'db', `${slug}.sqlite`),
+            isSystem: false
+          };
+        }
+      }
+    } catch (err) {
+      // System DB might not have the project yet, fall back to legacy
+      this.logger.debug('db.resolve.fallback', { project_id: projectId, error: err.message });
+    }
+
+    // Fallback to legacy structure for unknown projects
+    const projectDir = path.join(this.projectsPath, projectId);
+    return {
+      projectDir,
+      dbPath: path.join(projectDir, 'db.sqlite'),
+      isSystem: true
+    };
+  }
+
   async getDatabase(projectId) {
     if (this.databases.has(projectId)) {
       return this.databases.get(projectId);
     }
 
     const startTime = Date.now();
-    const projectDir = path.join(this.projectsPath, projectId);
-    const dbPath = path.join(projectDir, 'db.sqlite');
+    const { projectDir, dbPath, isSystem } = await this.resolveDatabasePath(projectId);
+    const dbDir = path.dirname(dbPath);
 
     this.logger.info('db.loading', {
       project_id: projectId,
-      db_path: dbPath
+      db_path: dbPath,
+      is_system: isSystem
     });
 
     try {
@@ -1246,14 +1337,11 @@ class DatabaseManagerModule {
         db = new this.SQL.Database(fileBuffer);
         this.logger.info('db.loaded.existing', { project_id: projectId });
       } else {
-        if (!fsSync.existsSync(projectDir)) {
-          await fs.mkdir(projectDir, { recursive: true });
+        // Create db directory if needed
+        if (!fsSync.existsSync(dbDir)) {
+          await fs.mkdir(dbDir, { recursive: true });
         }
         db = new this.SQL.Database();
-
-        // Metrics
-        // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.created.total');
-    // → Counter extracted from events
 
         // Publish event
         await this.eventBus.publish('db.created', {
@@ -1261,15 +1349,12 @@ class DatabaseManagerModule {
           created_at: new Date().toISOString()
         });
 
-        this.logger.info('db.created.new', { project_id: projectId });
+        this.logger.info('db.created.new', { project_id: projectId, db_path: dbPath });
       }
 
       this.databases.set(projectId, db);
 
       const duration = Date.now() - startTime;
-      // REMOVED: this.metrics.timing('db.load.duration', duration);
-      // REMOVED (migrate-to-event-metrics): this.metrics.gauge('db.loaded.count', this.databases.size);
-    // → Emit db.loaded event with `count: this.databases.size`
 
       return db;
     } catch (error) {
@@ -1289,12 +1374,12 @@ class DatabaseManagerModule {
 
     const startTime = Date.now();
     const db = this.databases.get(projectId);
-    const projectDir = path.join(this.projectsPath, projectId);
-    const dbPath = path.join(projectDir, 'db.sqlite');
+    const { dbPath } = await this.resolveDatabasePath(projectId);
+    const dbDir = path.dirname(dbPath);
 
     try {
-      if (!fsSync.existsSync(projectDir)) {
-        await fs.mkdir(projectDir, { recursive: true });
+      if (!fsSync.existsSync(dbDir)) {
+        await fs.mkdir(dbDir, { recursive: true });
       }
 
       const data = db.export();

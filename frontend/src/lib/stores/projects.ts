@@ -9,13 +9,14 @@
  * @see docs/architecture/mqtt-request-response.md
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import {
   mqttRequest,
   MqttTimeoutError,
   MqttRequestError,
   type UIResponse
 } from '$lib/ui-core/mqtt-request';
+import { saveWorkspace, getState } from './persistence';
 
 // =============================================================================
 // TYPES
@@ -220,7 +221,10 @@ export async function activateProject(id: string): Promise<void> {
       error: null
     }));
 
-    console.log('[Projects] Activated:', id);
+    // Guardar en localStorage para persistir entre sesiones
+    saveWorkspace({ projectId: id });
+
+    console.log('[Projects] Activated and saved:', id);
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
@@ -265,11 +269,25 @@ function getErrorMessage(error: unknown): string {
 
 /**
  * Inicializa el store de proyectos
- * Carga la lista inicial
+ * Carga la lista inicial y restaura el proyecto desde localStorage
  */
 export function initProjects(): () => void {
+  // Leer estado guardado en localStorage
+  const savedState = getState();
+  const savedProjectId = savedState.workspace?.projectId;
+
   // Cargar proyectos al inicializar
-  loadProjects();
+  loadProjects().then(() => {
+    // Prioridad: localStorage > backend
+    const projectIdToActivate = savedProjectId || get(projectsStore).activeProjectId;
+
+    if (projectIdToActivate) {
+      console.log('[Projects] Restoring project from localStorage:', projectIdToActivate);
+      activateProject(projectIdToActivate).catch(err => {
+        console.warn('[Projects] Failed to restore project:', err);
+      });
+    }
+  });
 
   // Retornar cleanup (no-op por ahora)
   return () => {};

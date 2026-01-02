@@ -16,6 +16,7 @@ import {
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
 import { activeProjectId } from './projects';
+import { saveConversation, getState } from './persistence';
 
 // =============================================================================
 // TYPES
@@ -461,6 +462,10 @@ export async function selectConversation(convId: string): Promise<void> {
   // Sincronizar con el store de chat (para ChatArea y ChatInput)
   const { loadConversation: loadChatConversation } = await import('./chat');
   await loadChatConversation(convId);
+
+  // Guardar en localStorage para persistir entre sesiones
+  saveConversation(convId);
+  console.log('[Conversations] Selected and saved:', convId);
 }
 
 /**
@@ -560,12 +565,29 @@ function groupByDate(conversations: Conversation[]): ConversationSection[] {
 
 /**
  * Inicializa el store y suscribe a cambios de proyecto
+ * Restaura la conversación guardada en localStorage
  */
 export function initConversations(): () => void {
+  // Leer conversación guardada en localStorage
+  const savedState = getState();
+  const savedConversationId = savedState.chat?.conversationId;
+
   // Suscribirse a cambios de proyecto activo
-  const unsubscribe = activeProjectId.subscribe((projectId) => {
+  const unsubscribe = activeProjectId.subscribe(async (projectId) => {
     if (projectId) {
-      loadConversations(projectId);
+      await loadConversations(projectId);
+
+      // Restaurar conversación guardada si existe
+      if (savedConversationId) {
+        const state = get(conversationsStore);
+        const exists = state.conversations.some(c => c.id === savedConversationId);
+        if (exists) {
+          console.log('[Conversations] Restoring from localStorage:', savedConversationId);
+          selectConversation(savedConversationId).catch(err => {
+            console.warn('[Conversations] Failed to restore:', err);
+          });
+        }
+      }
     } else {
       resetConversations();
     }

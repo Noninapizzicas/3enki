@@ -62,10 +62,13 @@ class ProjectManagerModule {
 
   /**
    * Create project directory structure
+   * Structure: /projects/{slug}/
+   *   ├── db/       # SQLite database
+   *   └── storage/  # Project files
    */
   async createProjectDirectories(projectId, name, correlationId) {
     const slug = this.slugify(name);
-    const basePath = path.join(this.projectsBasePath, `${slug}-${projectId.slice(0, 8)}`);
+    const basePath = path.join(this.projectsBasePath, slug);
 
     this.logger.debug({ correlationId, projectId, basePath }, 'Creating project directories');
 
@@ -73,9 +76,8 @@ class ProjectManagerModule {
       // Create base directory and subdirectories
       const dirs = [
         basePath,
-        path.join(basePath, 'files'),
-        path.join(basePath, 'exports'),
-        path.join(basePath, 'cache')
+        path.join(basePath, 'db'),
+        path.join(basePath, 'storage')
       ];
 
       for (const dir of dirs) {
@@ -87,6 +89,21 @@ class ProjectManagerModule {
     } catch (error) {
       this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to create project directories');
       throw error;
+    }
+  }
+
+  /**
+   * Check if a project name already exists
+   */
+  async projectNameExists(name, correlationId) {
+    const slug = this.slugify(name);
+    const basePath = path.join(this.projectsBasePath, slug);
+
+    try {
+      await fs.promises.access(basePath);
+      return true; // Directory exists
+    } catch {
+      return false; // Directory doesn't exist
     }
   }
 
@@ -390,6 +407,13 @@ class ProjectManagerModule {
     this.logger.info({ correlationId, projectId, name }, 'Creating project');
 
     try {
+      // Check if project name already exists
+      if (await this.projectNameExists(name, correlationId)) {
+        const error = new Error(`Project with name "${name}" already exists`);
+        error.code = 'PROJECT_NAME_EXISTS';
+        throw error;
+      }
+
       // Create project directories
       const basePath = await this.createProjectDirectories(projectId, name, correlationId);
 
@@ -803,8 +827,17 @@ class ProjectManagerModule {
       throw new Error(`Project not found: ${projectId}`);
     }
 
+    // Si ya está activo, solo re-emitir el evento (útil para que módulos reciban el contexto al reconectar)
     if (this.activeProjectId === projectId) {
-      this.logger.info({ correlationId, projectId }, 'Project already active');
+      this.logger.info({ correlationId, projectId }, 'Project already active, re-emitting event');
+
+      await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
+        project_id: projectId,
+        name: project.name,
+        base_path: project.base_path,
+        activated_at: new Date().toISOString()
+      });
+
       return project;
     }
 
@@ -853,6 +886,7 @@ class ProjectManagerModule {
       await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
         project_id: projectId,
         name: project.name,
+        base_path: project.base_path,
         activated_at: new Date().toISOString()
       });
 

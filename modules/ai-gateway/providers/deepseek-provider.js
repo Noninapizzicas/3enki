@@ -119,6 +119,12 @@ class DeepSeekProvider extends BaseProvider {
       stream: false
     };
 
+    // Add tools if provided (DeepSeek supports OpenAI function calling format)
+    if (options.tools && options.tools.length > 0) {
+      requestData.tools = options.tools;
+      requestData.tool_choice = options.tool_choice || 'auto';
+    }
+
     const headers = {
       'Authorization': `Bearer ${this.apiKey}`
     };
@@ -130,7 +136,9 @@ class DeepSeekProvider extends BaseProvider {
     );
 
     // Extract response
-    const content = response.choices[0]?.message?.content || '';
+    const message = response.choices[0]?.message || {};
+    const content = message.content || '';
+    const toolCalls = message.tool_calls || null;  // Extract tool_calls if present
     const inputTokens = response.usage?.prompt_tokens || estimatedTokens;
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
@@ -141,7 +149,7 @@ class DeepSeekProvider extends BaseProvider {
     // Calculate cost
     const cost = this.calculateCost(inputTokens, outputTokens);
 
-    return {
+    const result = {
       provider: this.name,
       model,
       content,
@@ -153,6 +161,13 @@ class DeepSeekProvider extends BaseProvider {
       cost,
       finish_reason: response.choices[0]?.finish_reason || 'stop'
     };
+
+    // Include tool_calls if present
+    if (toolCalls && toolCalls.length > 0) {
+      result.tool_calls = toolCalls;
+    }
+
+    return result;
   }
 
   /**

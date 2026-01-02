@@ -641,7 +641,7 @@ class HTTPGateway {
       this._logInteraction({
         request_id: requestId,
         method: req.method,
-        path: parsedUrl?.pathname,
+        path: req.url?.split('?')[0] || req.url,  // parsedUrl may not be defined yet
         status: 500,
         duration: Date.now() - startTime,
         error: error.message

@@ -268,7 +268,7 @@
     "contextWindow": 20,
     "maxMessagesPerConversation": 10000,
     "dbTimeout": 10000,
-    "aiTimeout": 60000,
+    "aiTimeout": 120000,
     "toolTimeout": 5000,
     "toolCallTimeout": 30000,
     "maxToolCallIterations": 10,

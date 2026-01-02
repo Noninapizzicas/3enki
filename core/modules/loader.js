@@ -282,8 +282,12 @@ class ModuleLoader {
         throw new Error('Module must implement onLoad() method');
       }
 
-      // Ejecutar onLoad
-      await instance.onLoad(this.core);
+      // Ejecutar onLoad - pasamos el core context + moduleLoader
+      const moduleContext = {
+        ...this.core,
+        moduleLoader: this  // Añadir referencia al loader para acceso a tools
+      };
+      await instance.onLoad(moduleContext);
 
       // Guardar módulo cargado
       this.loadedModules.set(moduleName, {

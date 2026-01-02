@@ -18,7 +18,11 @@ class PdfViewerModule {
 
     // State
     this.cache = new Map();
+    this.projectPaths = new Map(); // projectId -> basePath cache
     this.unsubscribes = [];
+
+    // System projects use legacy structure
+    this.systemProjects = new Set(['system', '_prompts']);
   }
 
   async onLoad(core) {
@@ -382,12 +386,84 @@ class PdfViewerModule {
   }
 
   async getProjectPath(project_id) {
-    const dataDir = path.join(process.cwd(), 'data', 'projects', project_id);
+    // Check cache first
+    if (this.projectPaths.has(project_id)) {
+      const cachedPath = this.projectPaths.get(project_id);
+      await fs.mkdir(cachedPath, { recursive: true });
+      return cachedPath;
+    }
 
-    // Ensure directory exists
-    await fs.mkdir(dataDir, { recursive: true });
+    // System projects use legacy structure
+    if (this.systemProjects.has(project_id)) {
+      const legacyPath = path.join(process.cwd(), 'data', 'projects', project_id);
+      await fs.mkdir(legacyPath, { recursive: true });
+      return legacyPath;
+    }
 
-    return dataDir;
+    // Query project base_path from database via events
+    try {
+      const result = await this.queryProjectBasePath(project_id);
+      if (result) {
+        // Use storage subdirectory for PDFs
+        const storagePath = path.join(result, 'storage');
+        this.projectPaths.set(project_id, storagePath);
+        await fs.mkdir(storagePath, { recursive: true });
+        return storagePath;
+      }
+    } catch (err) {
+      this.logger.debug('pdf-viewer.project.path.fallback', {
+        project_id,
+        error: err.message
+      });
+    }
+
+    // Fallback to legacy structure
+    const fallbackPath = path.join(process.cwd(), 'data', 'projects', project_id);
+    await fs.mkdir(fallbackPath, { recursive: true });
+    return fallbackPath;
+  }
+
+  /**
+   * Query project base_path from system database
+   */
+  async queryProjectBasePath(project_id) {
+    return new Promise((resolve, reject) => {
+      const requestId = `pdf_path_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout querying project path'));
+      }, 5000);
+
+      const handler = (event) => {
+        const data = event.data || event;
+        if (data.request_id === requestId) {
+          clearTimeout(timeout);
+          if (data.success && data.data?.length > 0) {
+            resolve(data.data[0].base_path);
+          } else {
+            resolve(null);
+          }
+        }
+      };
+
+      // Subscribe temporarily
+      this.eventBus.subscribe('db.query.response', handler).then(unsub => {
+        // Query system DB for project base_path
+        this.eventBus.publish('db.query.request', {
+          project_id: 'system',
+          query: 'SELECT base_path FROM projects WHERE id = ?',
+          params: [project_id],
+          read_only: true,
+          request_id: requestId
+        }).catch(err => {
+          clearTimeout(timeout);
+          unsub();
+          reject(err);
+        });
+
+        // Cleanup after response or timeout
+        setTimeout(() => unsub(), 6000);
+      });
+    });
   }
 
   /**

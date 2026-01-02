@@ -21,6 +21,14 @@ class FilesystemModule {
     this.logger = null;
     this.eventBus = null;
     this.uiHandler = null;
+
+    // Active project context
+    this.activeProjectId = null;
+    this.activeProjectPath = null;  // /data/projects/paco/storage
+    this.workingDirectory = null;   // Current working dir (defaults to project storage)
+
+    // Unsubscribe functions
+    this.unsubscribes = [];
   }
 
   // ==========================================
@@ -35,6 +43,13 @@ class FilesystemModule {
     // Ensure base data directory exists
     await this.ensureDataDirectory();
 
+    // Subscribe to project activation events
+    const unsubActivated = await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
+    this.unsubscribes.push(unsubActivated);
+
+    const unsubDeactivated = await this.eventBus.subscribe('project.deactivated', this.onProjectDeactivated.bind(this));
+    this.unsubscribes.push(unsubDeactivated);
+
     // Register UI handlers
     if (this.uiHandler) {
       this.uiHandler.register('fs', 'list', this.handleList.bind(this));
@@ -48,9 +63,11 @@ class FilesystemModule {
       this.uiHandler.register('fs', 'info', this.handleInfo.bind(this));
       this.uiHandler.register('fs', 'cleanup', this.handleCleanup.bind(this));
       this.uiHandler.register('fs', 'stats', this.handleStats.bind(this));
+      this.uiHandler.register('fs', 'setWorkDir', this.handleSetWorkDir.bind(this));
+      this.uiHandler.register('fs', 'getWorkDir', this.handleGetWorkDir.bind(this));
 
       this.logger.info('filesystem.handlers.registered', {
-        handlers: ['list', 'read', 'write', 'delete', 'mkdir', 'move', 'copy', 'search', 'info', 'cleanup', 'stats']
+        handlers: ['list', 'read', 'write', 'delete', 'mkdir', 'move', 'copy', 'search', 'info', 'cleanup', 'stats', 'setWorkDir', 'getWorkDir']
       });
     }
 
@@ -60,7 +77,129 @@ class FilesystemModule {
   }
 
   async onUnload() {
+    // Cleanup subscriptions
+    for (const unsub of this.unsubscribes) {
+      if (typeof unsub === 'function') unsub();
+    }
+    this.unsubscribes = [];
+
     this.logger.info('filesystem.unloaded');
+  }
+
+  // ==========================================
+  // Project Context
+  // ==========================================
+
+  /**
+   * Handle project activation - set working directory to project storage
+   */
+  async onProjectActivated(event) {
+    const data = event.data || event;
+    const { project_id, base_path, name } = data;
+
+    this.logger.debug('filesystem.project.activating', {
+      project_id,
+      base_path,
+      name,
+      raw_event: JSON.stringify(data).slice(0, 200)
+    });
+
+    this.activeProjectId = project_id;
+
+    if (base_path) {
+      // New structure: use storage subdirectory
+      this.activeProjectPath = path.join(base_path, 'storage');
+    } else {
+      // Legacy structure - try to find by project ID
+      this.activeProjectPath = path.join(this.basePath, 'projects', project_id);
+      this.logger.warn('filesystem.project.no_base_path', {
+        project_id,
+        fallback_path: this.activeProjectPath
+      });
+    }
+
+    // Set working directory to project storage by default
+    this.workingDirectory = this.activeProjectPath;
+
+    // Ensure directory exists
+    await fs.mkdir(this.activeProjectPath, { recursive: true }).catch(() => {});
+
+    this.logger.info('filesystem.project.activated', {
+      project_id,
+      project_name: name,
+      active_project_path: this.activeProjectPath,
+      working_directory: this.workingDirectory
+    });
+  }
+
+  /**
+   * Handle project deactivation - reset to global data directory
+   */
+  async onProjectDeactivated(event) {
+    const previousProject = this.activeProjectId;
+
+    this.activeProjectId = null;
+    this.activeProjectPath = null;
+    this.workingDirectory = null;
+
+    this.logger.info('filesystem.project.deactivated', {
+      previous_project: previousProject
+    });
+  }
+
+  /**
+   * Get current working directory (for display/info)
+   */
+  getEffectiveWorkingDirectory() {
+    return this.workingDirectory || this.basePath;
+  }
+
+  /**
+   * Handle setting custom working directory
+   */
+  async handleSetWorkDir(data) {
+    try {
+      const requestedPath = data.path || '/';
+
+      // Validate the path is within basePath
+      const safePath = this.validatePath(requestedPath);
+
+      // Check it exists and is a directory
+      const stats = await fs.stat(safePath);
+      if (!stats.isDirectory()) {
+        return { success: false, error: 'Path is not a directory' };
+      }
+
+      this.workingDirectory = safePath;
+
+      this.logger.info('filesystem.workdir.changed', {
+        new_workdir: safePath,
+        relative: this.toRelativePath(safePath)
+      });
+
+      return {
+        success: true,
+        working_directory: this.toRelativePath(safePath),
+        absolute_path: safePath
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Handle getting current working directory info
+   */
+  async handleGetWorkDir(data) {
+    const workDir = this.getEffectiveWorkingDirectory();
+
+    return {
+      success: true,
+      working_directory: this.toRelativePath(workDir),
+      absolute_path: workDir,
+      project_id: this.activeProjectId,
+      is_project_context: !!this.activeProjectId
+    };
   }
 
   async ensureDataDirectory() {
@@ -78,11 +217,49 @@ class FilesystemModule {
   /**
    * Validates that a path is within the allowed data directory
    * Prevents path traversal attacks
+   *
+   * Path resolution (when project is active):
+   * - "/" or relative paths resolve from project storage
+   * - "@/" prefix accesses global data root (system access)
+   *
+   * Path resolution (no active project):
+   * - All paths resolve from global data root
    */
-  validatePath(userPath) {
-    // Normalize and remove leading slashes
-    const normalized = path.normalize(userPath || '/').replace(/^\/+/, '');
-    const resolved = path.resolve(this.basePath, normalized);
+  validatePath(userPath, options = {}) {
+    const inputPath = userPath || '/';
+
+    let resolved;
+
+    // Check for global data root access with @/ prefix
+    if (inputPath.startsWith('@/') || inputPath === '@') {
+      // Global data root access (bypass project context)
+      const relativePart = inputPath === '@' ? '' : inputPath.slice(2);
+      const normalized = path.normalize(relativePart).replace(/^\/+/, '');
+      resolved = path.resolve(this.basePath, normalized);
+    } else if (this.activeProjectPath) {
+      // Project is active - all paths resolve from project storage
+      if (inputPath.startsWith('/')) {
+        // "/archivo.txt" -> project storage root
+        const normalized = path.normalize(inputPath).replace(/^\/+/, '');
+        resolved = path.resolve(this.activeProjectPath, normalized);
+      } else if (inputPath === '~' || inputPath.startsWith('~/')) {
+        // "~" is alias for project storage root (same as "/")
+        const relativePart = inputPath === '~' ? '' : inputPath.slice(2);
+        resolved = path.resolve(this.activeProjectPath, relativePart);
+      } else {
+        // Relative path from working directory
+        const workDir = this.getEffectiveWorkingDirectory();
+        resolved = path.resolve(workDir, inputPath);
+      }
+    } else {
+      // No active project - resolve from global data root
+      if (inputPath.startsWith('/')) {
+        const normalized = path.normalize(inputPath).replace(/^\/+/, '');
+        resolved = path.resolve(this.basePath, normalized);
+      } else {
+        resolved = path.resolve(this.basePath, inputPath);
+      }
+    }
 
     // Security check: must be within basePath
     if (!resolved.startsWith(this.basePath)) {
@@ -97,9 +274,17 @@ class FilesystemModule {
 
   /**
    * Converts absolute path back to relative path for responses
+   * When a project is active, shows path relative to project storage
    */
   toRelativePath(absolutePath) {
-    return '/' + path.relative(this.basePath, absolutePath).replace(/\\/g, '/');
+    if (this.activeProjectPath && absolutePath.startsWith(this.activeProjectPath)) {
+      // Path within project storage - show relative to project
+      const relativePath = path.relative(this.activeProjectPath, absolutePath).replace(/\\/g, '/');
+      return '/' + relativePath;
+    }
+    // Global path - show with @/ prefix to indicate it's outside project
+    const relativePath = path.relative(this.basePath, absolutePath).replace(/\\/g, '/');
+    return this.activeProjectPath ? '@/' + relativePath : '/' + relativePath;
   }
 
   // ==========================================
@@ -157,6 +342,8 @@ class FilesystemModule {
 
       // Return data directly - UIRequestHandler wraps it in { status, success, data }
       const result = {
+        success: true,
+        message: `Directorio listado: ${dirPath} (${validItems.length} elementos)`,
         path: dirPath,
         files: validItems,
         items: validItems, // backwards compatibility
@@ -216,6 +403,8 @@ class FilesystemModule {
       const content = await fs.readFile(safePath, 'utf-8');
 
       return {
+        success: true,
+        message: `Archivo leído: ${data.path} (${stats.size} bytes)`,
         path: data.path,
         content,
         encoding: 'utf-8',
@@ -274,6 +463,10 @@ class FilesystemModule {
 
       // Return data directly - UIRequestHandler wraps it
       return {
+        success: true,
+        message: isNew
+          ? `Archivo creado exitosamente: ${filePath}`
+          : `Archivo actualizado exitosamente: ${filePath}`,
         path: filePath,
         file_path: filePath,
         created: isNew,
@@ -322,6 +515,8 @@ class FilesystemModule {
       this.logger.info('filesystem.delete.success', { path: filePath, type: isDirectory ? 'directory' : 'file' });
 
       return {
+        success: true,
+        message: `${isDirectory ? 'Directorio' : 'Archivo'} eliminado: ${filePath}`,
         path: filePath,
         file_path: filePath,
         deleted: true,
@@ -359,11 +554,10 @@ class FilesystemModule {
       this.logger.info('filesystem.mkdir.success', { path: data.path });
 
       return {
-        status: 201,
-        data: {
-          path: data.path,
-          created: true
-        }
+        success: true,
+        message: `Directorio creado: ${data.path}`,
+        path: data.path,
+        created: true
       };
 
     } catch (error) {
@@ -396,6 +590,8 @@ class FilesystemModule {
       this.logger.info('filesystem.move.success', { from: data.from, to: data.to });
 
       return {
+        success: true,
+        message: `Movido de ${data.from} a ${data.to}`,
         from: data.from,
         to: data.to,
         moved: true

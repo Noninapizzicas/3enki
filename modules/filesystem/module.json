@@ -16,7 +16,9 @@
     { "domain": "fs", "action": "search", "method": "handleSearch" },
     { "domain": "fs", "action": "info", "method": "handleInfo" },
     { "domain": "fs", "action": "cleanup", "method": "handleCleanup" },
-    { "domain": "fs", "action": "stats", "method": "handleStats" }
+    { "domain": "fs", "action": "stats", "method": "handleStats" },
+    { "domain": "fs", "action": "setWorkDir", "method": "handleSetWorkDir" },
+    { "domain": "fs", "action": "getWorkDir", "method": "handleGetWorkDir" }
   ],
 
   "tools": [
@@ -158,6 +160,27 @@
           "path": { "type": "string", "description": "Ruta base para las estadísticas", "default": "/" }
         }
       }
+    },
+    {
+      "name": "fs.setWorkDir",
+      "description": "Cambia el directorio de trabajo actual. Las rutas relativas se resolverán desde este directorio.",
+      "handler": "handleSetWorkDir",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Nueva ruta de trabajo (absoluta o relativa)" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "fs.getWorkDir",
+      "description": "Obtiene información del directorio de trabajo actual y contexto del proyecto activo",
+      "handler": "handleGetWorkDir",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
 
@@ -166,9 +189,13 @@
       "fs.file.created",
       "fs.file.updated",
       "fs.file.deleted",
-      "fs.directory.created"
+      "fs.directory.created",
+      "fs.workdir.changed"
     ],
-    "subscribes": []
+    "subscribes": [
+      "project.activated",
+      "project.deactivated"
+    ]
   },
 
   "ui": {

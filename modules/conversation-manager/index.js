@@ -54,6 +54,7 @@ class ConversationManagerModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.moduleLoader = core.moduleLoader; // Para acceder a tools registry
     this.config = core.config || {};
     this.activity = core.activity?.forModule(this.name);
 
@@ -579,7 +580,7 @@ class ConversationManagerModule {
   // ==================== TOOL LOADING ====================
 
   /**
-   * Load available tools from tool-orchestrator
+   * Load available tools from moduleLoader
    * Uses cache to avoid repeated requests
    */
   async loadAvailableTools(correlationId) {
@@ -588,38 +589,33 @@ class ConversationManagerModule {
       return this.toolsCache;
     }
 
-    this.logger.debug({ correlationId }, 'Loading available tools from tool-orchestrator');
+    this.logger.debug({ correlationId }, 'Loading available tools from moduleLoader');
 
-    const requestId = crypto.randomUUID();
+    if (!this.moduleLoader) {
+      this.logger.warn({ correlationId }, 'ModuleLoader not available, continuing without tools');
+      return [];
+    }
 
-    const toolsPromise = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingToolRequests.delete(requestId);
-        this.logger.warn({ correlationId }, 'Tool list request timeout, continuing without tools');
-        resolve([]); // Don't fail, just return empty
-      }, this.config.toolTimeout || 5000);
+    try {
+      const tools = this.moduleLoader.getToolsForAI();
 
-      this.pendingToolRequests.set(requestId, { resolve, reject, timeout });
-    });
+      // Update cache
+      this.toolsCache = tools;
+      this.toolsCacheTime = Date.now();
 
-    await this.eventBus.publish(EVENTS.TOOL.LIST_REQUEST, {
-      request_id: requestId,
-      correlation_id: correlationId
-    });
+      this.logger.info({ correlationId, toolsCount: tools.length }, 'Tools loaded from moduleLoader');
 
-    const tools = await toolsPromise;
-
-    // Update cache
-    this.toolsCache = tools;
-    this.toolsCacheTime = Date.now();
-
-    this.logger.info({ correlationId, toolsCount: tools.length }, 'Tools loaded');
-
-    return tools;
+      return tools;
+    } catch (error) {
+      this.logger.error({ correlationId, error: error.message }, 'Failed to load tools');
+      return [];
+    }
   }
 
   /**
    * Format tools for LLM (OpenAI function calling format)
+   * Input format from moduleLoader.getToolsForAI():
+   * { name, description, parameters, confirmation }
    */
   formatToolsForLLM(tools) {
     if (!tools || tools.length === 0) {
@@ -629,15 +625,32 @@ class ConversationManagerModule {
     return tools.map(tool => ({
       type: 'function',
       function: {
-        name: tool.full_name,
-        description: tool.description || `Tool: ${tool.full_name}`,
-        parameters: tool.schema || {
+        // DeepSeek only accepts [a-zA-Z0-9_-], so replace dots with underscores
+        name: tool.name.replace(/\./g, '_'),
+        description: tool.description || `Tool: ${tool.name}`,
+        parameters: tool.parameters || {
           type: 'object',
           properties: {},
           required: []
         }
       }
     }));
+  }
+
+  /**
+   * Convert tool name from LLM format back to internal format
+   * fs_write -> fs.write
+   */
+  convertToolNameFromLLM(llmName) {
+    // Find matching tool by comparing normalized names
+    const tools = this.moduleLoader?.getToolsForAI() || [];
+    for (const tool of tools) {
+      if (tool.name.replace(/\./g, '_') === llmName) {
+        return tool.name;
+      }
+    }
+    // Fallback: just replace underscores with dots for known patterns
+    return llmName.replace(/_/g, '.');
   }
 
   // ==================== PROMPT COMPOSER ====================
@@ -708,6 +721,14 @@ class ConversationManagerModule {
       sections.push(toolsSection.join('\n'));
     }
 
+    // Add filesystem guidelines
+    const fsSection = [];
+    fsSection.push('## Filesystem Guidelines');
+    fsSection.push('When saving files, organize them according to the context of what we are working on.');
+    fsSection.push('Create directories that reflect the current task or theme.');
+    fsSection.push('Avoid generic names like `temp/`, `output/`, `files/`.');
+    sections.push(fsSection.join('\n'));
+
     // Combine all sections
     return sections.join('\n\n');
   }
@@ -744,11 +765,12 @@ class ConversationManagerModule {
   }
 
   /**
-   * Execute a single tool call via tool-orchestrator
+   * Execute a single tool call via moduleLoader
    */
   async executeToolCall(toolCall, correlationId) {
-    const requestId = crypto.randomUUID();
-    const toolName = toolCall.function?.name || toolCall.name;
+    // Convert from LLM format (fs_write) to internal format (fs.write)
+    const llmToolName = toolCall.function?.name || toolCall.name;
+    const toolName = this.convertToolNameFromLLM(llmToolName);
     let args = {};
 
     try {
@@ -764,32 +786,43 @@ class ConversationManagerModule {
       };
     }
 
-    this.logger.debug({ correlationId, toolName, requestId }, 'Executing tool call');
+    this.logger.debug({ correlationId, toolName, args }, 'Executing tool call via moduleLoader');
 
-    const toolPromise = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingToolCallRequests.delete(requestId);
-        resolve({ success: false, error: 'Tool call timeout' });
-      }, this.config.toolCallTimeout || 30000);
+    if (!this.moduleLoader) {
+      this.logger.error({ correlationId, toolName }, 'ModuleLoader not available');
+      return {
+        tool_call_id: toolCall.id,
+        success: false,
+        error: 'ModuleLoader not available'
+      };
+    }
 
-      this.pendingToolCallRequests.set(requestId, { resolve, reject, timeout });
-    });
+    try {
+      // Check if tool requires confirmation
+      if (this.moduleLoader.toolRequiresConfirmation && this.moduleLoader.toolRequiresConfirmation(toolName)) {
+        this.logger.info({ correlationId, toolName }, 'Tool requires confirmation (skipping for now)');
+        // TODO: Implement confirmation flow via UI
+      }
 
-    await this.eventBus.publish(EVENTS.TOOL.CALL_REQUEST, {
-      request_id: requestId,
-      tool_name: toolName,
-      arguments: args,
-      correlation_id: correlationId
-    });
+      // Execute tool via moduleLoader
+      const result = await this.moduleLoader.executeTool(toolName, args);
 
-    const result = await toolPromise;
+      this.logger.info({ correlationId, toolName, success: true }, 'Tool call completed');
 
-    this.logger.info({ correlationId, toolName, success: result.success }, 'Tool call completed');
+      return {
+        tool_call_id: toolCall.id,
+        success: true,
+        result: result?.data || result
+      };
+    } catch (error) {
+      this.logger.error({ correlationId, toolName, error: error.message }, 'Tool call failed');
 
-    return {
-      tool_call_id: toolCall.id,
-      ...result
-    };
+      return {
+        tool_call_id: toolCall.id,
+        success: false,
+        error: error.message
+      };
+    }
   }
 
   /**

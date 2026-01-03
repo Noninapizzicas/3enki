@@ -1,0 +1,10 @@
+{
+  "id": "provider",
+  "name": "Provider",
+  "version": "1.0.0",
+  "zone": "chat-config",
+  "order": 1,
+  "icon": "🤖",
+  "label": "Proveedor",
+  "critical": true
+}

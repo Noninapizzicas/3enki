@@ -1,0 +1,9 @@
+{
+  "id": "prompts",
+  "name": "Prompts",
+  "version": "2.0.0",
+  "zone": "chat-config",
+  "order": 2,
+  "icon": "💬",
+  "label": "Prompts"
+}

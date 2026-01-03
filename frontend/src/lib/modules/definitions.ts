@@ -1,91 +1,36 @@
 /**
- * Module Definitions - Definiciones de módulos sin cargar
+ * Module Definitions - Wrapper sobre el loader de autodescubrimiento
  *
- * Solo define ID, zona, ícono y loader.
- * El módulo real se importa bajo demanda cuando se navega a él.
+ * NOTA: Este archivo ahora re-exporta desde loader.ts
+ * El sistema de autodescubrimiento escanea manifest.json en cada módulo.
+ *
+ * Para agregar un nuevo módulo:
+ * 1. Crear carpeta en modules/
+ * 2. Crear manifest.json con id, zone, icon, label, etc.
+ * 3. Crear index.ts exportando el UIModule como default
+ *
+ * ¡No hay que tocar este archivo!
  */
 
-import type { LazyModuleDefinition } from '$lib/ui-core/lazy-registry';
+import {
+  getModuleDefinitions,
+  getDefinitionsByZone as _getDefsByZone,
+  getDefinition as _getDef,
+  getCriticalModules,
+  getHeavyModules,
+} from './loader';
 
 // ============================================================================
-// DEFINICIONES DE MÓDULOS
+// EXPORTS PARA COMPATIBILIDAD
 // ============================================================================
 
-export const moduleDefinitions: LazyModuleDefinition[] = [
-  // --- WORK BAR (barra superior colapsable) ---
-  {
-    id: 'project',
-    zone: 'work-bar',
-    order: 1,
-    icon: '📁',
-    label: 'Proyecto',
-    loader: () => import('./project').then(m => m.projectModule)
-  },
-  {
-    id: 'files',
-    zone: 'work-bar',
-    order: 2,
-    icon: '🗂️',
-    label: 'Archivos',
-    loader: () => import('./files').then(m => m.filesModule),
-    dependencies: ['project']
-  },
+// Array de definiciones (evalúa al importar)
+export const moduleDefinitions = getModuleDefinitions();
 
-  // --- CHAT CONFIG (configuración del chat) ---
-  {
-    id: 'provider',
-    zone: 'chat-config',
-    order: 1,
-    icon: '🤖',
-    label: 'Proveedor',
-    loader: () => import('./provider').then(m => m.providerModule)
-  },
-  {
-    id: 'prompts',
-    zone: 'chat-config',
-    order: 2,
-    icon: '💬',
-    label: 'Prompts',
-    loader: () => import('./prompts').then(m => m.promptsModule)
-  },
+// Helpers
+export const getDefinitionsByZone = _getDefsByZone;
+export const getDefinition = _getDef;
 
-  // --- SYSTEM BAR (barra lateral derecha) ---
-  {
-    id: 'credentials',
-    zone: 'system-bar',
-    order: 1,
-    icon: '🔑',
-    label: 'Credenciales',
-    loader: () => import('./credentials').then(m => m.credentialsModule)
-  }
-];
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-/**
- * Obtener definiciones por zona
- */
-export function getDefinitionsByZone(zone: string): LazyModuleDefinition[] {
-  return moduleDefinitions
-    .filter(d => d.zone === zone)
-    .sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-}
-
-/**
- * Obtener definición por ID
- */
-export function getDefinition(id: string): LazyModuleDefinition | undefined {
-  return moduleDefinitions.find(d => d.id === id);
-}
-
-/**
- * IDs de módulos críticos que se precargan después del bootstrap
- */
-export const criticalModules = ['project', 'provider'];
-
-/**
- * IDs de módulos pesados que se cargan en background
- */
-export const heavyModules: string[] = [];
+// Módulos por categoría
+export const criticalModules = getCriticalModules();
+export const heavyModules = getHeavyModules();

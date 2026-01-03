@@ -185,6 +185,8 @@ export {
   clearActiveConversation,
   clearError as clearConversationError,
   resetConversations,
+  toggleMessageContext,
+  loadContextStats,
   conversationsList,
   conversationSections,
   activeConversationId,
@@ -194,6 +196,10 @@ export {
   conversationsSending,
   conversationsError,
   hasConversations,
-  hasActiveConversation
+  hasActiveConversation,
+  messagesInContext,
+  contextCount,
+  contextWindow,
+  contextStats
 } from './conversations';
-export type { Conversation, Message, ConversationSection, ConversationsState } from './conversations';
+export type { Conversation, Message, ConversationSection, ConversationsState, ContextStats } from './conversations';

@@ -8,13 +8,24 @@
    * - Mensaje vacío cuando no hay conversación
    * - Indicador de typing/streaming
    * - Indicador de conexión
+   * - Toggle de contexto por mensaje
    */
 
-  import { messages, hasConversation, isStreaming } from '$lib/stores';
+  import { messages, hasConversation, isStreaming, toggleMessageContext } from '$lib/stores';
   import { Message, ConnectionStatus } from '$lib/components/base';
   import { connected } from '$lib/ui-core';
   import { afterUpdate } from 'svelte';
   import { fade } from 'svelte/transition';
+
+  // Handler para toggle de contexto
+  async function handleToggleContext(event: CustomEvent<{ id: string; inContext: boolean }>) {
+    const { id, inContext } = event.detail;
+    try {
+      await toggleMessageContext(id, inContext);
+    } catch (error) {
+      console.error('[ChatArea] Failed to toggle context:', error);
+    }
+  }
 
   let containerEl: HTMLDivElement;
   let shouldAutoScroll = true;
@@ -49,7 +60,7 @@
   {#if $messages.length > 0}
     <div class="messages">
       {#each $messages as message (message.id)}
-        <Message {message} />
+        <Message {message} on:toggleContext={handleToggleContext} />
       {/each}
 
       <!-- Typing indicator -->

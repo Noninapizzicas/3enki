@@ -1,72 +1,86 @@
 /**
  * Modules Index - Registro centralizado de módulos
  *
- * Exporta todos los módulos y una función para registrarlos.
+ * Usa el sistema de autodescubrimiento para cargar módulos.
+ * No necesita importar cada módulo manualmente.
  */
 
 import { register, unregister } from '$lib/ui-core';
 import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
+import { getModuleDefinitions, loadModule, debugListModules } from './loader';
 
-// Módulos disponibles
-import { projectModule } from './project';
-import { providerModule } from './provider';
-import { promptsModule } from './prompts';
-import { credentialsModule } from './credentials';
-import { historyModule } from './history';
-import { filesModule } from './files';
+// Re-exportar desde loader (funciones principales)
+export {
+  getModuleDefinitions,
+  getDefinitionsByZone,
+  getDefinition,
+  loadModule,
+  getCriticalModules,
+  getHeavyModules,
+  getAllManifests,
+  debugListModules,
+  type ModuleManifest
+} from './loader';
 
-// Exportar módulos individuales
-export { projectModule } from './project';
-export { providerModule } from './provider';
-export { promptsModule } from './prompts';
-export { credentialsModule } from './credentials';
-export { historyModule } from './history';
-export { filesModule } from './files';
-
-// Lista de módulos
-export const coreModules = [
-  projectModule,
-  providerModule,
-  promptsModule,
-  credentialsModule,
-  historyModule,
-  filesModule,
-];
-
-// Lista completa
-export const allModules = coreModules;
+// Re-exportar constantes pre-evaluadas desde definitions (para compatibilidad)
+export { moduleDefinitions, criticalModules, heavyModules } from './definitions';
 
 /**
  * Registrar todos los módulos en el sistema
+ * Carga cada módulo de forma lazy y lo registra
  */
-export function registerAllModules(): void {
-  perfStart('Modules.registerCore');
-  for (const module of coreModules) {
-    perfStart(`Module.${module.manifest.id}`);
-    register(module);
-    perfEnd(`Module.${module.manifest.id}`);
+export async function registerAllModules(): Promise<void> {
+  const definitions = getModuleDefinitions();
+
+  perfStart('Modules.registerAll');
+
+  for (const def of definitions) {
+    try {
+      perfStart(`Module.${def.id}`);
+      const module = await loadModule(def.id);
+      register(module);
+      perfEnd(`Module.${def.id}`);
+    } catch (err) {
+      console.error(`[Modules] Failed to load ${def.id}:`, err);
+    }
   }
-  perfEnd('Modules.registerCore');
-  logMsg(`📦 ${coreModules.length} módulos registrados`);
+
+  perfEnd('Modules.registerAll');
+  logMsg(`📦 ${definitions.length} módulos registrados`);
 }
 
 /**
  * Registrar módulos por zona
  */
-export function registerModulesByZone(zone: string): void {
-  const zoneModules = allModules.filter(m => m.manifest.zone === zone);
-  for (const module of zoneModules) {
-    register(module);
+export async function registerModulesByZone(zone: string): Promise<void> {
+  const definitions = getModuleDefinitions().filter(d => d.zone === zone);
+
+  for (const def of definitions) {
+    try {
+      const module = await loadModule(def.id);
+      register(module);
+    } catch (err) {
+      console.error(`[Modules] Failed to load ${def.id}:`, err);
+    }
   }
-  console.log(`[Modules] ${zoneModules.length} módulos registrados en zona ${zone}`);
+
+  console.log(`[Modules] ${definitions.length} módulos registrados en zona ${zone}`);
 }
 
 /**
  * Desregistrar todos los módulos (cleanup para HMR)
  */
 export function unregisterAllModules(): void {
-  for (const module of coreModules) {
-    unregister(module.manifest.id);
+  const definitions = getModuleDefinitions();
+
+  for (const def of definitions) {
+    unregister(def.id);
   }
+
   console.log(`[Modules] Módulos desregistrados`);
+}
+
+// Debug en desarrollo
+if (import.meta.env.DEV) {
+  debugListModules();
 }

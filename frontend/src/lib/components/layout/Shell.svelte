@@ -1,180 +1,58 @@
 <script lang="ts">
   /**
-   * Shell - Contenedor principal de la aplicación
+   * Shell - Página de Chat
    *
-   * Layout:
-   * ┌─────────────────────────────────────────┬───┐
-   * │ WorkBar (plegable)                    [▼]│   │
-   * ├─────────────────────────────────────────┤ S │
-   * │                                         │ y │
-   * │ ChatArea (scroll)                       │ s │
-   * │                                         │ t │
-   * │                                         │ e │
-   * ├─────────────────────────────────────────┤ m │
-   * │ ChatConfig                              │ B │
-   * ├─────────────────────────────────────────┤ a │
-   * │ ChatInput                               │ r │
-   * ├─────────────────────────────────────────┤   │
-   * │ ChatTools + Attachments                 │   │
-   * └─────────────────────────────────────────┴───┘
-   *
-   * Paneles se cargan BAJO DEMANDA al abrirlos.
+   * Usa AppShell como base y añade componentes específicos de chat:
+   * - WorkBar: Barra superior con proyecto activo
+   * - ChatArea: Área de mensajes (scrollable)
+   * - ChatConfig: Configuración de conversación
+   * - ChatInput: Entrada de mensajes
+   * - ChatTools: Herramientas y archivos adjuntos
    */
 
-  import { onMount, onDestroy } from 'svelte';
-  import { connect, disconnect, activePanel, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
-  import { closePanel } from '$lib/stores/ui';
-  import {
-  initWorkspaceSubscriptions,
-  initChatSubscriptions,
-  initProjectsSubscriptions,
-  initConversations
-} from '$lib/stores';
-  import { registerAllModules, unregisterAllModules } from '$lib/modules';
+  import { onDestroy } from 'svelte';
+  import { initChatSubscriptions, initConversations } from '$lib/stores';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
+  import AppShell from './AppShell.svelte';
   import WorkBar from './WorkBar.svelte';
   import ChatArea from './ChatArea.svelte';
   import ChatConfig from './ChatConfig.svelte';
   import ChatInput from './ChatInput.svelte';
   import ChatTools from './ChatTools.svelte';
-  import SystemBar from './SystemBar.svelte';
-  import LazyPanel from './LazyPanel.svelte';
-  import { ToastContainer } from '$lib/components/base';
 
-  let cleanupWorkspace: (() => void) | null = null;
   let cleanupChat: (() => void) | null = null;
-  let cleanupProjects: (() => void) | null = null;
   let cleanupConversations: (() => void) | null = null;
 
-  onMount(() => {
-    perfStart('Shell.onMount.TOTAL');
-    logMsg('🚀 Shell mounting...');
-
-    // 1. Registrar módulos UI (para botones, no carga componentes)
-    perfStart('Shell.registerAllModules');
-    registerAllModules();
-    perfEnd('Shell.registerAllModules');
-
-    // 2. Inicializar subscripciones
-    perfStart('Shell.initSubscriptions');
-    cleanupWorkspace = initWorkspaceSubscriptions();
+  // Inicialización específica de Chat cuando MQTT está conectado
+  function handleConnected() {
+    perfStart('Shell.initChat');
     cleanupChat = initChatSubscriptions();
-    perfEnd('Shell.initSubscriptions');
-
-    // 3. Conectar a MQTT en background
-    perfStart('Shell.connect.start');
-    connect().then(() => {
-      // 3.1 Una vez conectados, inicializar proyectos y conversaciones
-      // Esto restaura el estado guardado en localStorage
-      perfStart('Shell.initPersistence');
-      cleanupProjects = initProjectsSubscriptions();
-      cleanupConversations = initConversations();
-      perfEnd('Shell.initPersistence');
-      logMsg('✅ Session restored from localStorage');
-    }).catch((error) => {
-      logMsg('❌ MQTT connection failed', { error: String(error) });
-    });
-    perfEnd('Shell.connect.start');
-
-    // 4. Registrar handler de visibilidad (HyperOS/MIUI fix)
-    setupVisibilityHandler();
-
-    perfEnd('Shell.onMount.TOTAL');
-    logMsg('✅ Shell.onMount completed - UI visible');
-  });
-
-  onDestroy(() => {
-    console.log('[Shell] Destroying...');
-
-    // 1. Desregistrar módulos (cleanup HMR)
-    unregisterAllModules();
-
-    // 2. Limpiar subscripciones
-    if (cleanupWorkspace) {
-      cleanupWorkspace();
-    }
-    if (cleanupChat) {
-      cleanupChat();
-    }
-    if (cleanupProjects) {
-      cleanupProjects();
-    }
-    if (cleanupConversations) {
-      cleanupConversations();
-    }
-
-    // 3. Desconectar MQTT
-    disconnect();
-
-    // 4. Remover handler de visibilidad
-    removeVisibilityHandler();
-
-    console.log('[Shell] Disconnected');
-  });
-
-  function handlePanelClose() {
-    closePanel();
+    cleanupConversations = initConversations();
+    perfEnd('Shell.initChat');
+    logMsg('✅ Chat initialized');
   }
+
+  // Cleanup específico de Chat (AppShell maneja lo base)
+  onDestroy(() => {
+    if (cleanupChat) cleanupChat();
+    if (cleanupConversations) cleanupConversations();
+  });
 </script>
 
-<div class="shell">
-  <!-- Work Bar (top, collapsible) -->
-  <WorkBar />
+<AppShell onConnected={handleConnected}>
+  <!-- Top Bar -->
+  <WorkBar slot="top-bar" />
 
-  <!-- Main content area -->
-  <main class="main">
-    <!-- Chat Area (scrollable) -->
-    <ChatArea />
+  <!-- Chat Area (scrollable messages) -->
+  <ChatArea slot="content" />
 
-    <!-- Chat "Sandwich" -->
-    <div class="chat-controls">
-      <ChatConfig />
-      <ChatInput />
-      <ChatTools />
-    </div>
-  </main>
+  <!-- Chat Controls -->
+  <svelte:fragment slot="controls">
+    <ChatConfig />
+    <ChatInput />
+  </svelte:fragment>
 
-  <!-- System Bar (floating right) -->
-  <SystemBar />
-
-  <!-- Toast notifications -->
-  <ToastContainer />
-
-  <!-- Active Panel (LAZY LOADED) -->
-  {#if $activePanel}
-    <LazyPanel
-      panelId={$activePanel}
-      open={true}
-      on:close={handlePanelClose}
-    />
-  {/if}
-</div>
-
-<style>
-  .shell {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    width: 100vw;
-    background: var(--color-bg, #121212);
-    color: var(--color-text, #e5e5e5);
-    overflow: hidden;
-  }
-
-  .main {
-    flex: 1;
-    min-height: 0; /* Necesario para scroll en flexbox */
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    /* Leave space for system bar */
-    margin-right: 3rem;
-  }
-
-  .chat-controls {
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-  }
-</style>
+  <!-- Chat Tools (files, attachments) -->
+  <ChatTools slot="tools" />
+</AppShell>

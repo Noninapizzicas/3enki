@@ -1,16 +1,19 @@
 <script lang="ts">
   /**
-   * Página de Facturas - Gestión de facturas
-   * Usa AppShell como base con los mismos módulos que Chat
+   * Página de Facturas
+   *
+   * Usa AppShell que ya incluye ChatConfig + ChatInput + ChatTools.
+   * Solo define el contenido específico de facturas.
    */
-  import { onDestroy } from 'svelte';
-  import { AppShell, WorkBar, ChatConfig, ChatTools } from '$lib/components/layout';
+  import { AppShell } from '$lib/components/layout';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
   // Estado local de facturas
   let facturas: any[] = [];
   let loading = false;
   let error: string | null = null;
+  let searchQuery = '';
+  let statusFilter = '';
 
   // Inicialización cuando MQTT está conectado
   function handleConnected() {
@@ -20,28 +23,31 @@
     // loadFacturas();
     perfEnd('Facturas.init');
   }
-
-  // Cleanup
-  onDestroy(() => {
-    // Limpiar subscripciones si las hay
-  });
 </script>
 
 <AppShell onConnected={handleConnected}>
-  <!-- Top Bar -->
-  <WorkBar slot="top-bar" />
+  <!-- Work Bar: módulos específicos de Facturas -->
+  <div class="facturas-toolbar" slot="work-bar">
+    <h1 class="page-title">📄 Facturas</h1>
+    <div class="toolbar-actions">
+      <input
+        type="text"
+        placeholder="Buscar..."
+        class="search-input"
+        bind:value={searchQuery}
+      />
+      <select class="filter-select" bind:value={statusFilter}>
+        <option value="">Todos</option>
+        <option value="pendiente">Pendiente</option>
+        <option value="pagada">Pagada</option>
+        <option value="vencida">Vencida</option>
+      </select>
+      <button class="btn primary">➕ Nueva</button>
+    </div>
+  </div>
 
-  <!-- Content -->
+  <!-- Content: Lista de facturas -->
   <div class="facturas-content" slot="content">
-    <header class="page-header">
-      <h1>Facturas</h1>
-      <div class="actions">
-        <button class="btn primary">
-          ➕ Nueva Factura
-        </button>
-      </div>
-    </header>
-
     {#if loading}
       <div class="loading">Cargando facturas...</div>
     {:else if error}
@@ -60,55 +66,57 @@
             <span class="numero">{factura.numero}</span>
             <span class="cliente">{factura.cliente}</span>
             <span class="total">{factura.total}</span>
-            <span class="estado">{factura.estado}</span>
+            <span class="estado estado-{factura.estado}">{factura.estado}</span>
           </div>
         {/each}
       </div>
     {/if}
   </div>
-
-  <!-- Controls: Config bar + Facturas controls -->
-  <svelte:fragment slot="controls">
-    <ChatConfig />
-    <div class="facturas-controls">
-      <div class="filters">
-        <input type="text" placeholder="Buscar facturas..." class="search-input" />
-        <select class="filter-select">
-          <option value="">Todos los estados</option>
-          <option value="pendiente">Pendiente</option>
-          <option value="pagada">Pagada</option>
-          <option value="vencida">Vencida</option>
-        </select>
-      </div>
-    </div>
-  </svelte:fragment>
-
-  <!-- Tools: Files, etc -->
-  <ChatTools slot="tools" />
 </AppShell>
 
 <style>
-  .facturas-content {
-    padding: 1.5rem;
-    height: 100%;
-    overflow-y: auto;
-  }
-
-  .page-header {
+  .facturas-toolbar {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--color-bg-secondary, #1a1a2e);
+    border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
   }
 
-  .page-header h1 {
-    font-size: 1.5rem;
+  .page-title {
+    font-size: 1.125rem;
     font-weight: 600;
     margin: 0;
   }
 
+  .toolbar-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .search-input {
+    padding: 0.375rem 0.75rem;
+    background: var(--color-bg, #0f0f1a);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.375rem;
+    color: var(--color-text, #e5e5e5);
+    font-size: 0.875rem;
+    width: 200px;
+  }
+
+  .filter-select {
+    padding: 0.375rem 0.75rem;
+    background: var(--color-bg, #0f0f1a);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.375rem;
+    color: var(--color-text, #e5e5e5);
+    font-size: 0.875rem;
+  }
+
   .btn {
-    padding: 0.5rem 1rem;
+    padding: 0.375rem 0.75rem;
     border: none;
     border-radius: 0.375rem;
     cursor: pointer;
@@ -124,6 +132,12 @@
 
   .btn.primary:hover {
     background: var(--color-primary-hover, #2563eb);
+  }
+
+  .facturas-content {
+    padding: 1rem;
+    height: 100%;
+    overflow-y: auto;
   }
 
   .empty-state {
@@ -186,37 +200,22 @@
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
     font-size: 0.75rem;
-    background: var(--color-bg, #0f0f1a);
+    text-transform: capitalize;
   }
 
-  .facturas-controls {
-    padding: 0.75rem 1rem;
-    background: var(--color-bg-secondary, #1a1a2e);
-    border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  .estado-pendiente {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
   }
 
-  .filters {
-    display: flex;
-    gap: 0.5rem;
+  .estado-pagada {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
   }
 
-  .search-input {
-    flex: 1;
-    padding: 0.5rem 0.75rem;
-    background: var(--color-bg, #0f0f1a);
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-    border-radius: 0.375rem;
-    color: var(--color-text, #e5e5e5);
-    font-size: 0.875rem;
-  }
-
-  .filter-select {
-    padding: 0.5rem 0.75rem;
-    background: var(--color-bg, #0f0f1a);
-    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-    border-radius: 0.375rem;
-    color: var(--color-text, #e5e5e5);
-    font-size: 0.875rem;
+  .estado-vencida {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
   }
 
   .loading, .error {

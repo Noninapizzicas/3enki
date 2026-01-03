@@ -1,7 +1,7 @@
 {
   "name": "telegram-service",
-  "version": "1.0.0",
-  "description": "Telegram Bot service for sending/receiving messages and photos",
+  "version": "2.0.0",
+  "description": "Generic Telegram Bot service - messaging, files, commands, callbacks",
   "author": "Event Core Team",
   "main": "index.js",
 
@@ -9,75 +9,69 @@
     "publishes": [
       {
         "event": "telegram.message.received",
-        "description": "Text message received from Telegram",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "chatId": { "type": "number" },
-            "messageId": { "type": "number" },
-            "from": { "type": "object" },
-            "text": { "type": "string" },
-            "timestamp": { "type": "string" }
-          }
-        }
+        "description": "Text message received"
       },
       {
         "event": "telegram.photo.received",
-        "description": "Photo received from Telegram",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "chatId": { "type": "number" },
-            "messageId": { "type": "number" },
-            "from": { "type": "object" },
-            "photo": {
-              "type": "object",
-              "properties": {
-                "fileId": { "type": "string" },
-                "fileSize": { "type": "number" },
-                "width": { "type": "number" },
-                "height": { "type": "number" }
-              }
-            },
-            "caption": { "type": "string" },
-            "timestamp": { "type": "string" }
-          }
-        }
+        "description": "Photo received"
+      },
+      {
+        "event": "telegram.document.received",
+        "description": "Document/file received"
+      },
+      {
+        "event": "telegram.audio.received",
+        "description": "Audio file received"
+      },
+      {
+        "event": "telegram.video.received",
+        "description": "Video received"
+      },
+      {
+        "event": "telegram.voice.received",
+        "description": "Voice message received"
+      },
+      {
+        "event": "telegram.location.received",
+        "description": "Location received"
+      },
+      {
+        "event": "telegram.contact.received",
+        "description": "Contact received"
+      },
+      {
+        "event": "telegram.command.received",
+        "description": "Bot command received (/start, /help, etc)"
+      },
+      {
+        "event": "telegram.callback.received",
+        "description": "Inline button callback received"
       },
       {
         "event": "telegram.message.sent",
-        "description": "Message sent successfully",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "chatId": { "type": "number" },
-            "messageId": { "type": "number" },
-            "text": { "type": "string" }
-          }
-        }
+        "description": "Message sent successfully"
       },
       {
         "event": "telegram.error",
-        "description": "Error in Telegram operations",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "error": { "type": "string" },
-            "context": { "type": "object" }
-          }
-        }
+        "description": "Error in Telegram operations"
       }
     ],
     "subscribes": [
       {
         "event": "telegram.send.request",
-        "description": "Request to send a message",
         "handler": "onSendRequest"
       },
       {
         "event": "telegram.photo.send.request",
-        "description": "Request to send a photo",
         "handler": "onSendPhotoRequest"
+      },
+      {
+        "event": "telegram.document.send.request",
+        "handler": "onSendDocumentRequest"
+      },
+      {
+        "event": "telegram.keyboard.send.request",
+        "handler": "onSendKeyboardRequest"
       }
     ]
   },
@@ -87,121 +81,240 @@
       "method": "POST",
       "path": "/telegram/webhook",
       "handler": "handleWebhook",
-      "description": "Telegram webhook endpoint for receiving updates"
+      "description": "Telegram webhook endpoint"
     },
     {
       "method": "POST",
       "path": "/telegram/send",
       "handler": "handleSendMessage",
-      "description": "Send a text message",
-      "body_params": {
-        "chatId": { "type": "number", "required": true },
-        "text": { "type": "string", "required": true },
-        "replyToMessageId": { "type": "number", "required": false }
-      }
+      "description": "Send text message"
     },
     {
       "method": "POST",
       "path": "/telegram/sendPhoto",
       "handler": "handleSendPhoto",
-      "description": "Send a photo",
-      "body_params": {
-        "chatId": { "type": "number", "required": true },
-        "photo": { "type": "string", "required": true, "description": "File ID, URL or base64" },
-        "caption": { "type": "string", "required": false }
-      }
+      "description": "Send photo"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/sendDocument",
+      "handler": "handleSendDocument",
+      "description": "Send document/file"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/sendKeyboard",
+      "handler": "handleSendKeyboard",
+      "description": "Send message with inline keyboard"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/editMessage",
+      "handler": "handleEditMessage",
+      "description": "Edit existing message"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/deleteMessage",
+      "handler": "handleDeleteMessage",
+      "description": "Delete a message"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/answerCallback",
+      "handler": "handleAnswerCallback",
+      "description": "Answer callback query"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/setCommands",
+      "handler": "handleSetCommands",
+      "description": "Set bot commands menu"
+    },
+    {
+      "method": "GET",
+      "path": "/telegram/file/:fileId",
+      "handler": "handleGetFile",
+      "description": "Get file info and download URL"
     },
     {
       "method": "GET",
       "path": "/telegram/status",
       "handler": "handleStatus",
-      "description": "Get bot status and info"
+      "description": "Get bot status"
     }
   ],
 
   "tools": [
     {
       "name": "telegram.send",
-      "description": "Envía un mensaje de texto a un chat de Telegram",
+      "description": "Enviar mensaje de texto a Telegram",
       "handler": "handleToolSend",
       "parameters": {
         "type": "object",
         "properties": {
-          "chatId": {
-            "type": "number",
-            "description": "ID del chat destino"
-          },
-          "text": {
-            "type": "string",
-            "description": "Texto del mensaje"
-          },
-          "replyToMessageId": {
-            "type": "number",
-            "description": "ID del mensaje a responder (opcional)"
-          }
+          "chatId": { "type": "number", "description": "ID del chat" },
+          "text": { "type": "string", "description": "Texto del mensaje" },
+          "parseMode": { "type": "string", "enum": ["HTML", "Markdown"], "description": "Formato del texto" },
+          "replyToMessageId": { "type": "number", "description": "ID mensaje a responder" }
         },
         "required": ["chatId", "text"]
       }
     },
     {
       "name": "telegram.sendPhoto",
-      "description": "Envía una foto a un chat de Telegram",
+      "description": "Enviar foto a Telegram",
       "handler": "handleToolSendPhoto",
       "parameters": {
         "type": "object",
         "properties": {
-          "chatId": {
-            "type": "number",
-            "description": "ID del chat destino"
-          },
-          "photo": {
-            "type": "string",
-            "description": "URL de la foto o file_id de Telegram"
-          },
-          "caption": {
-            "type": "string",
-            "description": "Texto descriptivo de la foto (opcional)"
-          }
+          "chatId": { "type": "number", "description": "ID del chat" },
+          "photo": { "type": "string", "description": "URL o file_id de la foto" },
+          "caption": { "type": "string", "description": "Descripcion de la foto" }
         },
         "required": ["chatId", "photo"]
       }
     },
     {
+      "name": "telegram.sendDocument",
+      "description": "Enviar documento/archivo a Telegram",
+      "handler": "handleToolSendDocument",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": { "type": "number", "description": "ID del chat" },
+          "document": { "type": "string", "description": "URL o file_id del documento" },
+          "caption": { "type": "string", "description": "Descripcion del documento" }
+        },
+        "required": ["chatId", "document"]
+      }
+    },
+    {
+      "name": "telegram.sendKeyboard",
+      "description": "Enviar mensaje con botones inline",
+      "handler": "handleToolSendKeyboard",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": { "type": "number", "description": "ID del chat" },
+          "text": { "type": "string", "description": "Texto del mensaje" },
+          "buttons": {
+            "type": "array",
+            "description": "Array de filas de botones",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "callback_data": { "type": "string" },
+                  "url": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "required": ["chatId", "text", "buttons"]
+      }
+    },
+    {
+      "name": "telegram.editMessage",
+      "description": "Editar un mensaje existente",
+      "handler": "handleToolEditMessage",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": { "type": "number", "description": "ID del chat" },
+          "messageId": { "type": "number", "description": "ID del mensaje a editar" },
+          "text": { "type": "string", "description": "Nuevo texto" }
+        },
+        "required": ["chatId", "messageId", "text"]
+      }
+    },
+    {
+      "name": "telegram.deleteMessage",
+      "description": "Eliminar un mensaje",
+      "handler": "handleToolDeleteMessage",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": { "type": "number", "description": "ID del chat" },
+          "messageId": { "type": "number", "description": "ID del mensaje a eliminar" }
+        },
+        "required": ["chatId", "messageId"]
+      }
+    },
+    {
       "name": "telegram.reply",
-      "description": "Responde a un mensaje específico",
+      "description": "Responder a un mensaje",
       "handler": "handleToolReply",
       "parameters": {
         "type": "object",
         "properties": {
-          "chatId": {
-            "type": "number",
-            "description": "ID del chat"
-          },
-          "messageId": {
-            "type": "number",
-            "description": "ID del mensaje a responder"
-          },
-          "text": {
-            "type": "string",
-            "description": "Texto de la respuesta"
-          }
+          "chatId": { "type": "number", "description": "ID del chat" },
+          "messageId": { "type": "number", "description": "ID del mensaje a responder" },
+          "text": { "type": "string", "description": "Texto de respuesta" }
         },
         "required": ["chatId", "messageId", "text"]
       }
     },
     {
       "name": "telegram.getFile",
-      "description": "Obtiene información y URL de descarga de un archivo",
+      "description": "Obtener info y URL de descarga de un archivo",
       "handler": "handleToolGetFile",
       "parameters": {
         "type": "object",
         "properties": {
-          "fileId": {
-            "type": "string",
-            "description": "ID del archivo en Telegram"
-          }
+          "fileId": { "type": "string", "description": "ID del archivo" }
         },
         "required": ["fileId"]
+      }
+    },
+    {
+      "name": "telegram.downloadFile",
+      "description": "Descargar archivo y guardarlo localmente",
+      "handler": "handleToolDownloadFile",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fileId": { "type": "string", "description": "ID del archivo" },
+          "savePath": { "type": "string", "description": "Ruta donde guardar (opcional)" }
+        },
+        "required": ["fileId"]
+      }
+    },
+    {
+      "name": "telegram.getChatInfo",
+      "description": "Obtener informacion de un chat",
+      "handler": "handleToolGetChatInfo",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": { "type": "number", "description": "ID del chat" }
+        },
+        "required": ["chatId"]
+      }
+    },
+    {
+      "name": "telegram.setCommands",
+      "description": "Configurar menu de comandos del bot",
+      "handler": "handleToolSetCommands",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "commands": {
+            "type": "array",
+            "description": "Lista de comandos",
+            "items": {
+              "type": "object",
+              "properties": {
+                "command": { "type": "string", "description": "Comando sin /" },
+                "description": { "type": "string", "description": "Descripcion" }
+              }
+            }
+          }
+        },
+        "required": ["commands"]
       }
     }
   ],
@@ -210,7 +323,7 @@
     "botToken": "${TELEGRAM_BOT_TOKEN}",
     "webhookUrl": "${TELEGRAM_WEBHOOK_URL}",
     "allowedChatIds": [],
-    "downloadPath": "./downloads/telegram"
+    "downloadPath": "./data/telegram"
   },
 
   "dependencies": {
@@ -227,6 +340,9 @@
       "counters": [
         "telegram.messages.received.total",
         "telegram.photos.received.total",
+        "telegram.documents.received.total",
+        "telegram.commands.received.total",
+        "telegram.callbacks.received.total",
         "telegram.messages.sent.total",
         "telegram.errors.total"
       ]

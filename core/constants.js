@@ -248,12 +248,22 @@ const EVENTS = {
 
   // === TELEGRAM ===
   TELEGRAM: {
+    AUDIO_RECEIVED: 'telegram.audio.received',
+    CALLBACK_RECEIVED: 'telegram.callback.received',
+    COMMAND_RECEIVED: 'telegram.command.received',
+    CONTACT_RECEIVED: 'telegram.contact.received',
+    DOCUMENT_RECEIVED: 'telegram.document.received',
+    DOCUMENT_SEND_REQUEST: 'telegram.document.send.request',
     ERROR: 'telegram.error',
+    KEYBOARD_SEND_REQUEST: 'telegram.keyboard.send.request',
+    LOCATION_RECEIVED: 'telegram.location.received',
     MESSAGE_RECEIVED: 'telegram.message.received',
     MESSAGE_SENT: 'telegram.message.sent',
     PHOTO_RECEIVED: 'telegram.photo.received',
     PHOTO_SEND_REQUEST: 'telegram.photo.send.request',
     SEND_REQUEST: 'telegram.send.request',
+    VIDEO_RECEIVED: 'telegram.video.received',
+    VOICE_RECEIVED: 'telegram.voice.received',
   },
 
   // === TEMPLATES ===
@@ -548,6 +558,13 @@ const API_ROUTES = {
     WEBHOOK: '/modules/telegram-service/telegram/webhook',
     SEND_MESSAGE: '/modules/telegram-service/telegram/send',
     SEND_PHOTO: '/modules/telegram-service/telegram/sendPhoto',
+    SEND_DOCUMENT: '/modules/telegram-service/telegram/sendDocument',
+    SEND_KEYBOARD: '/modules/telegram-service/telegram/sendKeyboard',
+    EDIT_MESSAGE: '/modules/telegram-service/telegram/editMessage',
+    DELETE_MESSAGE: '/modules/telegram-service/telegram/deleteMessage',
+    ANSWER_CALLBACK: '/modules/telegram-service/telegram/answerCallback',
+    SET_COMMANDS: '/modules/telegram-service/telegram/setCommands',
+    GET_FILE: '/modules/telegram-service/telegram/file/:fileId',
     STATUS: '/modules/telegram-service/telegram/status',
   },
 
@@ -729,10 +746,10 @@ const MODULES = {
     },
   },
   'telegram-service': {
-    version: '1.0.0',
+    version: '2.0.0',
     events: {
-      publishes: ['telegram.message.received', 'telegram.photo.received', 'telegram.message.sent', 'telegram.error'],
-      subscribes: ['telegram.send.request', 'telegram.photo.send.request'],
+      publishes: ['telegram.message.received', 'telegram.photo.received', 'telegram.document.received', 'telegram.audio.received', 'telegram.video.received', 'telegram.voice.received', 'telegram.location.received', 'telegram.contact.received', 'telegram.command.received', 'telegram.callback.received', 'telegram.message.sent', 'telegram.error'],
+      subscribes: ['telegram.send.request', 'telegram.photo.send.request', 'telegram.document.send.request', 'telegram.keyboard.send.request'],
     },
   },
   'text-editor': {

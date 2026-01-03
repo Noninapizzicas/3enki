@@ -249,6 +249,8 @@ const EVENTS = {
   // === TELEGRAM ===
   TELEGRAM: {
     AUDIO_RECEIVED: 'telegram.audio.received',
+    BOT_REGISTERED: 'telegram.bot.registered',
+    BOT_REMOVED: 'telegram.bot.removed',
     CALLBACK_RECEIVED: 'telegram.callback.received',
     COMMAND_RECEIVED: 'telegram.command.received',
     CONTACT_RECEIVED: 'telegram.contact.received',
@@ -555,7 +557,13 @@ const API_ROUTES = {
 
   TELEGRAM: {
     BASE: '/modules/telegram-service',
+    REGISTER_BOT: '/modules/telegram-service/bots',
+    LIST_BOTS: '/modules/telegram-service/bots',
+    GET_BOT: '/modules/telegram-service/bots/:projectId',
+    REMOVE_BOT: '/modules/telegram-service/bots/:projectId',
+    SETUP_WEBHOOK: '/modules/telegram-service/bots/:projectId/webhook',
     WEBHOOK: '/modules/telegram-service/telegram/webhook',
+    WEBHOOK_BY_BOT: '/modules/telegram-service/telegram/webhook/:botId',
     SEND_MESSAGE: '/modules/telegram-service/telegram/send',
     SEND_PHOTO: '/modules/telegram-service/telegram/sendPhoto',
     SEND_DOCUMENT: '/modules/telegram-service/telegram/sendDocument',
@@ -746,9 +754,9 @@ const MODULES = {
     },
   },
   'telegram-service': {
-    version: '2.0.0',
+    version: '2.1.0',
     events: {
-      publishes: ['telegram.message.received', 'telegram.photo.received', 'telegram.document.received', 'telegram.audio.received', 'telegram.video.received', 'telegram.voice.received', 'telegram.location.received', 'telegram.contact.received', 'telegram.command.received', 'telegram.callback.received', 'telegram.message.sent', 'telegram.error'],
+      publishes: ['telegram.bot.registered', 'telegram.bot.removed', 'telegram.message.received', 'telegram.photo.received', 'telegram.document.received', 'telegram.audio.received', 'telegram.video.received', 'telegram.voice.received', 'telegram.location.received', 'telegram.contact.received', 'telegram.command.received', 'telegram.callback.received', 'telegram.message.sent', 'telegram.error'],
       subscribes: ['telegram.send.request', 'telegram.photo.send.request', 'telegram.document.send.request', 'telegram.keyboard.send.request'],
     },
   },

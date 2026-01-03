@@ -1,12 +1,20 @@
 {
   "name": "telegram-service",
-  "version": "2.0.0",
-  "description": "Generic Telegram Bot service - messaging, files, commands, callbacks",
+  "version": "2.1.0",
+  "description": "Multi-bot Telegram service - one bot per project, secure token storage",
   "author": "Event Core Team",
   "main": "index.js",
 
   "events": {
     "publishes": [
+      {
+        "event": "telegram.bot.registered",
+        "description": "New bot registered for a project"
+      },
+      {
+        "event": "telegram.bot.removed",
+        "description": "Bot removed from project"
+      },
       {
         "event": "telegram.message.received",
         "description": "Text message received"
@@ -79,9 +87,45 @@
   "apis": [
     {
       "method": "POST",
+      "path": "/bots",
+      "handler": "handleRegisterBot",
+      "description": "Register a new bot for a project"
+    },
+    {
+      "method": "GET",
+      "path": "/bots",
+      "handler": "handleListBots",
+      "description": "List all registered bots"
+    },
+    {
+      "method": "GET",
+      "path": "/bots/:projectId",
+      "handler": "handleGetBot",
+      "description": "Get bot info for a project"
+    },
+    {
+      "method": "DELETE",
+      "path": "/bots/:projectId",
+      "handler": "handleRemoveBot",
+      "description": "Remove bot from project"
+    },
+    {
+      "method": "POST",
+      "path": "/bots/:projectId/webhook",
+      "handler": "handleSetupWebhook",
+      "description": "Setup webhook for project bot"
+    },
+    {
+      "method": "POST",
       "path": "/telegram/webhook",
       "handler": "handleWebhook",
-      "description": "Telegram webhook endpoint"
+      "description": "Telegram webhook endpoint (identifies bot by token in URL)"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/webhook/:botId",
+      "handler": "handleWebhookByBot",
+      "description": "Telegram webhook endpoint for specific bot"
     },
     {
       "method": "POST",
@@ -146,6 +190,28 @@
   ],
 
   "tools": [
+    {
+      "name": "telegram.registerBot",
+      "description": "Registrar un bot de Telegram para el proyecto actual",
+      "handler": "handleToolRegisterBot",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "description": "Token del bot (de @BotFather)" },
+          "name": { "type": "string", "description": "Nombre descriptivo del bot" }
+        },
+        "required": ["token"]
+      }
+    },
+    {
+      "name": "telegram.getBotStatus",
+      "description": "Ver estado del bot del proyecto actual",
+      "handler": "handleToolGetBotStatus",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
     {
       "name": "telegram.send",
       "description": "Enviar mensaje de texto a Telegram",

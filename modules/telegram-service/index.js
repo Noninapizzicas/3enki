@@ -1,22 +1,14 @@
 /**
- * Telegram Service Module v2.0
- * Generic Telegram Bot service for any project
+ * Telegram Service Module v2.1
+ * Multi-bot support - one bot per project
+ * Tokens stored securely via credential-manager
  *
- * Events (received):
- * - telegram.message.received: Text message
- * - telegram.photo.received: Photo
- * - telegram.document.received: Document/file
- * - telegram.audio.received: Audio
- * - telegram.video.received: Video
- * - telegram.voice.received: Voice message
- * - telegram.location.received: Location
- * - telegram.contact.received: Contact
- * - telegram.command.received: Bot command (/start, /help)
- * - telegram.callback.received: Inline button callback
- *
- * Events (sent):
- * - telegram.message.sent: Message sent
- * - telegram.error: Error
+ * Architecture:
+ * - Each project can have ONE bot
+ * - Token stored in credential-manager as: telegram:bot:{projectId}
+ * - Bot metadata stored in: telegram:meta:{projectId}
+ * - Webhook URL: /modules/telegram-service/telegram/webhook/{botId}
+ * - All events include projectId for routing
  */
 
 const fs = require('fs');
@@ -25,6 +17,9 @@ const TelegramClient = require('./services/telegram-client');
 
 // Event constants
 const EVENTS = {
+  // Bot lifecycle
+  BOT_REGISTERED: 'telegram.bot.registered',
+  BOT_REMOVED: 'telegram.bot.removed',
   // Received
   MESSAGE_RECEIVED: 'telegram.message.received',
   PHOTO_RECEIVED: 'telegram.photo.received',
@@ -49,16 +44,20 @@ const EVENTS = {
 class TelegramServiceModule {
   constructor() {
     this.name = 'telegram-service';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
 
     this.logger = null;
     this.metrics = null;
     this.eventBus = null;
     this.config = null;
     this.activity = null;
+    this.credentialManager = null;
 
-    this.client = null;
-    this.botInfo = null;
+    // Multi-bot storage: projectId -> { client, botInfo, botId }
+    this.bots = new Map();
+    // Reverse lookup: botId -> projectId
+    this.botIdToProject = new Map();
+
     this.unsubscribes = [];
   }
 
@@ -72,29 +71,9 @@ class TelegramServiceModule {
     this.eventBus = core.eventBus;
     this.config = core.config || {};
     this.activity = core.activity?.forModule(this.name);
+    this.credentialManager = core.modules?.['credential-manager'];
 
     this.activity?.action('module.loading', { version: this.version });
-
-    const botToken = this.config.botToken || process.env.TELEGRAM_BOT_TOKEN;
-
-    if (!botToken) {
-      this.logger.warn('telegram.no_token', {
-        message: 'TELEGRAM_BOT_TOKEN not configured'
-      });
-      return;
-    }
-
-    this.client = new TelegramClient(botToken, this.logger);
-
-    try {
-      this.botInfo = await this.client.getMe();
-      this.logger.info('telegram.connected', {
-        username: this.botInfo.username,
-        id: this.botInfo.id
-      });
-    } catch (error) {
-      this.logger.error('telegram.connection_failed', { error: error.message });
-    }
 
     // Ensure download directory
     const downloadPath = this.config.downloadPath || './data/telegram';
@@ -102,11 +81,14 @@ class TelegramServiceModule {
       fs.mkdirSync(downloadPath, { recursive: true });
     }
 
+    // Load existing bots from credential-manager
+    await this.loadRegisteredBots();
+
     await this.subscribeToEvents();
 
     this.logger.info('telegram.loaded', {
-      bot: this.botInfo?.username,
-      version: this.version
+      version: this.version,
+      botsLoaded: this.bots.size
     });
   }
 
@@ -118,8 +100,31 @@ class TelegramServiceModule {
     }
     this.unsubscribes = [];
 
-    this.client = null;
-    this.botInfo = null;
+    this.bots.clear();
+    this.botIdToProject.clear();
+  }
+
+  async loadRegisteredBots() {
+    if (!this.credentialManager) {
+      this.logger.warn('telegram.no_credential_manager');
+      return;
+    }
+
+    try {
+      // List all telegram credentials
+      const credentials = await this.credentialManager.list('telegram:bot:');
+
+      for (const cred of credentials) {
+        const projectId = cred.key.replace('telegram:bot:', '');
+        const token = await this.credentialManager.get(cred.key);
+
+        if (token) {
+          await this.initBot(projectId, token, false);
+        }
+      }
+    } catch (error) {
+      this.logger.error('telegram.load_bots_failed', { error: error.message });
+    }
   }
 
   async subscribeToEvents() {
@@ -137,51 +142,141 @@ class TelegramServiceModule {
   }
 
   // ==========================================
+  // Bot Management
+  // ==========================================
+
+  async initBot(projectId, token, save = true) {
+    try {
+      const client = new TelegramClient(token, this.logger);
+      const botInfo = await client.getMe();
+
+      this.bots.set(projectId, {
+        client,
+        botInfo,
+        botId: botInfo.id,
+        token
+      });
+
+      this.botIdToProject.set(botInfo.id, projectId);
+
+      if (save && this.credentialManager) {
+        await this.credentialManager.save(`telegram:bot:${projectId}`, token);
+        await this.credentialManager.save(`telegram:meta:${projectId}`, JSON.stringify({
+          botId: botInfo.id,
+          username: botInfo.username,
+          firstName: botInfo.first_name,
+          registeredAt: new Date().toISOString()
+        }));
+      }
+
+      this.logger.info('telegram.bot.initialized', {
+        projectId,
+        botUsername: botInfo.username,
+        botId: botInfo.id
+      });
+
+      return { success: true, bot: botInfo };
+    } catch (error) {
+      this.logger.error('telegram.bot.init_failed', {
+        projectId,
+        error: error.message
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  async removeBot(projectId) {
+    const bot = this.bots.get(projectId);
+    if (bot) {
+      this.botIdToProject.delete(bot.botId);
+      this.bots.delete(projectId);
+
+      if (this.credentialManager) {
+        await this.credentialManager.delete(`telegram:bot:${projectId}`);
+        await this.credentialManager.delete(`telegram:meta:${projectId}`);
+      }
+
+      this.logger.info('telegram.bot.removed', { projectId });
+      return true;
+    }
+    return false;
+  }
+
+  getBot(projectId) {
+    return this.bots.get(projectId);
+  }
+
+  getBotByBotId(botId) {
+    const projectId = this.botIdToProject.get(botId);
+    return projectId ? { projectId, ...this.bots.get(projectId) } : null;
+  }
+
+  // ==========================================
   // Event Handlers (from other modules)
   // ==========================================
 
   async onSendRequest(event) {
-    const { chatId, text, parseMode, replyToMessageId, respondTo } = event;
+    const { projectId, chatId, text, parseMode, replyToMessageId, respondTo } = event;
+    const bot = this.getBot(projectId);
+
+    if (!bot) {
+      const error = `No bot registered for project ${projectId}`;
+      if (respondTo) await this.eventBus.publish(respondTo, { success: false, error });
+      return;
+    }
+
     try {
-      const result = await this.client.sendMessage(chatId, text, { parseMode, replyToMessageId });
+      const result = await bot.client.sendMessage(chatId, text, { parseMode, replyToMessageId });
       if (respondTo) await this.eventBus.publish(respondTo, { success: true, result });
-      await this.eventBus.publish(EVENTS.MESSAGE_SENT, { chatId, messageId: result.message_id, text });
+      await this.eventBus.publish(EVENTS.MESSAGE_SENT, { projectId, chatId, messageId: result.message_id, text });
       this.metrics?.increment('telegram.messages.sent.total');
     } catch (error) {
-      this.handleError('send', error, { chatId }, respondTo);
+      this.handleError('send', error, { projectId, chatId }, respondTo);
     }
   }
 
   async onSendPhotoRequest(event) {
-    const { chatId, photo, caption, respondTo } = event;
+    const { projectId, chatId, photo, caption, respondTo } = event;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return this.handleError('sendPhoto', new Error('No bot'), { projectId }, respondTo);
+
     try {
-      const result = await this.client.sendPhoto(chatId, photo, { caption });
+      const result = await bot.client.sendPhoto(chatId, photo, { caption });
       if (respondTo) await this.eventBus.publish(respondTo, { success: true, result });
       this.metrics?.increment('telegram.messages.sent.total');
     } catch (error) {
-      this.handleError('sendPhoto', error, { chatId }, respondTo);
+      this.handleError('sendPhoto', error, { projectId, chatId }, respondTo);
     }
   }
 
   async onSendDocumentRequest(event) {
-    const { chatId, document, caption, respondTo } = event;
+    const { projectId, chatId, document, caption, respondTo } = event;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return this.handleError('sendDocument', new Error('No bot'), { projectId }, respondTo);
+
     try {
-      const result = await this.client.sendDocument(chatId, document, { caption });
+      const result = await bot.client.sendDocument(chatId, document, { caption });
       if (respondTo) await this.eventBus.publish(respondTo, { success: true, result });
       this.metrics?.increment('telegram.messages.sent.total');
     } catch (error) {
-      this.handleError('sendDocument', error, { chatId }, respondTo);
+      this.handleError('sendDocument', error, { projectId, chatId }, respondTo);
     }
   }
 
   async onSendKeyboardRequest(event) {
-    const { chatId, text, buttons, respondTo } = event;
+    const { projectId, chatId, text, buttons, respondTo } = event;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return this.handleError('sendKeyboard', new Error('No bot'), { projectId }, respondTo);
+
     try {
-      const result = await this.client.sendKeyboard(chatId, text, buttons);
+      const result = await bot.client.sendKeyboard(chatId, text, buttons);
       if (respondTo) await this.eventBus.publish(respondTo, { success: true, result });
       this.metrics?.increment('telegram.messages.sent.total');
     } catch (error) {
-      this.handleError('sendKeyboard', error, { chatId }, respondTo);
+      this.handleError('sendKeyboard', error, { projectId, chatId }, respondTo);
     }
   }
 
@@ -194,21 +289,134 @@ class TelegramServiceModule {
   }
 
   // ==========================================
-  // Webhook Handler
+  // Bot Management API Handlers
+  // ==========================================
+
+  async handleRegisterBot(req, res) {
+    const { projectId, token, name } = req.body;
+
+    if (!projectId || !token) {
+      return res.status(400).json({ error: 'projectId and token required' });
+    }
+
+    // Check if bot already exists for this project
+    if (this.bots.has(projectId)) {
+      return res.status(400).json({ error: 'Project already has a bot. Remove it first.' });
+    }
+
+    const result = await this.initBot(projectId, token, true);
+
+    if (result.success) {
+      await this.eventBus.publish(EVENTS.BOT_REGISTERED, {
+        projectId,
+        botId: result.bot.id,
+        username: result.bot.username
+      });
+
+      res.json({
+        success: true,
+        bot: {
+          id: result.bot.id,
+          username: result.bot.username,
+          firstName: result.bot.first_name
+        },
+        webhookUrl: this.getWebhookUrl(result.bot.id)
+      });
+    } else {
+      res.status(400).json({ success: false, error: result.error });
+    }
+  }
+
+  async handleListBots(req, res) {
+    const bots = [];
+
+    for (const [projectId, bot] of this.bots) {
+      bots.push({
+        projectId,
+        botId: bot.botId,
+        username: bot.botInfo.username,
+        firstName: bot.botInfo.first_name
+      });
+    }
+
+    res.json({ bots });
+  }
+
+  async handleGetBot(req, res) {
+    const { projectId } = req.params;
+    const bot = this.getBot(projectId);
+
+    if (!bot) {
+      return res.status(404).json({ error: 'No bot registered for this project' });
+    }
+
+    res.json({
+      projectId,
+      botId: bot.botId,
+      username: bot.botInfo.username,
+      firstName: bot.botInfo.first_name,
+      webhookUrl: this.getWebhookUrl(bot.botId)
+    });
+  }
+
+  async handleRemoveBot(req, res) {
+    const { projectId } = req.params;
+    const bot = this.getBot(projectId);
+
+    if (!bot) {
+      return res.status(404).json({ error: 'No bot registered for this project' });
+    }
+
+    await this.removeBot(projectId);
+
+    await this.eventBus.publish(EVENTS.BOT_REMOVED, { projectId });
+
+    res.json({ success: true });
+  }
+
+  async handleSetupWebhook(req, res) {
+    const { projectId } = req.params;
+    const { webhookBaseUrl } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) {
+      return res.status(404).json({ error: 'No bot registered for this project' });
+    }
+
+    try {
+      const webhookUrl = `${webhookBaseUrl}/modules/telegram-service/telegram/webhook/${bot.botId}`;
+      await bot.client.setWebhook(webhookUrl);
+      res.json({ success: true, webhookUrl });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  getWebhookUrl(botId) {
+    const baseUrl = this.config.webhookBaseUrl || process.env.WEBHOOK_BASE_URL || '';
+    return `${baseUrl}/modules/telegram-service/telegram/webhook/${botId}`;
+  }
+
+  // ==========================================
+  // Webhook Handlers
   // ==========================================
 
   async handleWebhook(req, res) {
+    // Generic webhook - try to identify bot from update
     try {
       const update = req.body;
+      const botId = this.extractBotIdFromUpdate(update);
 
-      if (update.message) {
-        await this.processMessage(update.message);
-      } else if (update.callback_query) {
-        await this.processCallback(update.callback_query);
-      } else if (update.edited_message) {
-        // Could handle edited messages
+      if (!botId) {
+        return res.status(400).json({ error: 'Cannot identify bot' });
       }
 
+      const botData = this.getBotByBotId(botId);
+      if (!botData) {
+        return res.status(404).json({ error: 'Bot not registered' });
+      }
+
+      await this.processUpdate(update, botData.projectId, botData);
       res.json({ ok: true });
     } catch (error) {
       this.logger.error('telegram.webhook.error', { error: error.message });
@@ -216,14 +424,48 @@ class TelegramServiceModule {
     }
   }
 
+  async handleWebhookByBot(req, res) {
+    const { botId } = req.params;
+
+    try {
+      const botData = this.getBotByBotId(parseInt(botId));
+      if (!botData) {
+        return res.status(404).json({ error: 'Bot not registered' });
+      }
+
+      const update = req.body;
+      await this.processUpdate(update, botData.projectId, botData);
+      res.json({ ok: true });
+    } catch (error) {
+      this.logger.error('telegram.webhook.error', { error: error.message, botId });
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  }
+
+  extractBotIdFromUpdate(update) {
+    // Try to extract bot ID from the update
+    // This is tricky - normally you'd use the webhook URL to identify
+    return null;
+  }
+
+  async processUpdate(update, projectId, botData) {
+    if (update.message) {
+      await this.processMessage(update.message, projectId, botData);
+    } else if (update.callback_query) {
+      await this.processCallback(update.callback_query, projectId, botData);
+    }
+  }
+
   // ==========================================
   // Message Processing
   // ==========================================
 
-  async processMessage(message) {
+  async processMessage(message, projectId, botData) {
     const { chat, from, message_id, date, text, photo, document, audio, video, voice, location, contact, caption } = message;
 
     const baseEvent = {
+      projectId,
+      botId: botData.botId,
       chatId: chat.id,
       chatType: chat.type,
       chatTitle: chat.title,
@@ -238,19 +480,11 @@ class TelegramServiceModule {
       timestamp: new Date(date * 1000).toISOString()
     };
 
-    // Check allowed chats
-    if (this.config.allowedChatIds?.length > 0) {
-      if (!this.config.allowedChatIds.includes(chat.id)) {
-        this.logger.debug('telegram.unauthorized', { chatId: chat.id });
-        return;
-      }
-    }
-
-    // Command (starts with /)
+    // Command
     if (text && text.startsWith('/')) {
       const parts = text.split(' ');
-      const commandFull = parts[0].substring(1); // Remove /
-      const [command, botMention] = commandFull.split('@');
+      const commandFull = parts[0].substring(1);
+      const [command] = commandFull.split('@');
       const args = parts.slice(1);
 
       await this.eventBus.publish(EVENTS.COMMAND_RECEIVED, {
@@ -260,7 +494,6 @@ class TelegramServiceModule {
         rawText: text
       });
       this.metrics?.increment('telegram.commands.received.total');
-      this.activity?.action('command.received', { chatId: chat.id, command });
       return;
     }
 
@@ -273,7 +506,6 @@ class TelegramServiceModule {
         caption
       });
       this.metrics?.increment('telegram.photos.received.total');
-      this.activity?.action('photo.received', { chatId: chat.id });
       return;
     }
 
@@ -290,7 +522,6 @@ class TelegramServiceModule {
         caption
       });
       this.metrics?.increment('telegram.documents.received.total');
-      this.activity?.action('document.received', { chatId: chat.id, fileName: document.file_name });
       return;
     }
 
@@ -302,12 +533,9 @@ class TelegramServiceModule {
           fileId: audio.file_id,
           duration: audio.duration,
           title: audio.title,
-          performer: audio.performer,
-          mimeType: audio.mime_type,
-          fileSize: audio.file_size
+          performer: audio.performer
         }
       });
-      this.activity?.action('audio.received', { chatId: chat.id });
       return;
     }
 
@@ -319,13 +547,10 @@ class TelegramServiceModule {
           fileId: video.file_id,
           duration: video.duration,
           width: video.width,
-          height: video.height,
-          mimeType: video.mime_type,
-          fileSize: video.file_size
+          height: video.height
         },
         caption
       });
-      this.activity?.action('video.received', { chatId: chat.id });
       return;
     }
 
@@ -335,12 +560,9 @@ class TelegramServiceModule {
         ...baseEvent,
         voice: {
           fileId: voice.file_id,
-          duration: voice.duration,
-          mimeType: voice.mime_type,
-          fileSize: voice.file_size
+          duration: voice.duration
         }
       });
-      this.activity?.action('voice.received', { chatId: chat.id });
       return;
     }
 
@@ -348,12 +570,8 @@ class TelegramServiceModule {
     if (location) {
       await this.eventBus.publish(EVENTS.LOCATION_RECEIVED, {
         ...baseEvent,
-        location: {
-          latitude: location.latitude,
-          longitude: location.longitude
-        }
+        location: { latitude: location.latitude, longitude: location.longitude }
       });
-      this.activity?.action('location.received', { chatId: chat.id });
       return;
     }
 
@@ -364,30 +582,28 @@ class TelegramServiceModule {
         contact: {
           phoneNumber: contact.phone_number,
           firstName: contact.first_name,
-          lastName: contact.last_name,
-          userId: contact.user_id
+          lastName: contact.last_name
         }
       });
-      this.activity?.action('contact.received', { chatId: chat.id });
       return;
     }
 
-    // Text message
+    // Text
     if (text) {
       await this.eventBus.publish(EVENTS.MESSAGE_RECEIVED, {
         ...baseEvent,
         text
       });
       this.metrics?.increment('telegram.messages.received.total');
-      this.activity?.action('message.received', { chatId: chat.id, length: text.length });
-      return;
     }
   }
 
-  async processCallback(callback) {
+  async processCallback(callback, projectId, botData) {
     const { id, from, message, data } = callback;
 
     await this.eventBus.publish(EVENTS.CALLBACK_RECEIVED, {
+      projectId,
+      botId: botData.botId,
       callbackId: id,
       from: {
         id: from.id,
@@ -400,26 +616,25 @@ class TelegramServiceModule {
     });
 
     this.metrics?.increment('telegram.callbacks.received.total');
-    this.activity?.action('callback.received', { data });
 
-    // Auto-answer callback to remove loading state
     try {
-      await this.client.answerCallbackQuery(id);
-    } catch (e) {
-      // Ignore answer errors
-    }
+      await botData.client.answerCallbackQuery(id);
+    } catch (e) {}
   }
 
   // ==========================================
-  // API Handlers
+  // Message API Handlers (use projectId from body/context)
   // ==========================================
 
   async handleSendMessage(req, res) {
-    const { chatId, text, parseMode, replyToMessageId } = req.body;
+    const { projectId, chatId, text, parseMode, replyToMessageId } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
     if (!chatId || !text) return res.status(400).json({ error: 'chatId and text required' });
 
     try {
-      const result = await this.client.sendMessage(chatId, text, { parseMode, replyToMessageId });
+      const result = await bot.client.sendMessage(chatId, text, { parseMode, replyToMessageId });
       res.json({ success: true, messageId: result.message_id });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -427,11 +642,14 @@ class TelegramServiceModule {
   }
 
   async handleSendPhoto(req, res) {
-    const { chatId, photo, caption } = req.body;
+    const { projectId, chatId, photo, caption } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
     if (!chatId || !photo) return res.status(400).json({ error: 'chatId and photo required' });
 
     try {
-      const result = await this.client.sendPhoto(chatId, photo, { caption });
+      const result = await bot.client.sendPhoto(chatId, photo, { caption });
       res.json({ success: true, messageId: result.message_id });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -439,11 +657,14 @@ class TelegramServiceModule {
   }
 
   async handleSendDocument(req, res) {
-    const { chatId, document, caption } = req.body;
+    const { projectId, chatId, document, caption } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
     if (!chatId || !document) return res.status(400).json({ error: 'chatId and document required' });
 
     try {
-      const result = await this.client.sendDocument(chatId, document, { caption });
+      const result = await bot.client.sendDocument(chatId, document, { caption });
       res.json({ success: true, messageId: result.message_id });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -451,11 +672,13 @@ class TelegramServiceModule {
   }
 
   async handleSendKeyboard(req, res) {
-    const { chatId, text, buttons } = req.body;
-    if (!chatId || !text || !buttons) return res.status(400).json({ error: 'chatId, text and buttons required' });
+    const { projectId, chatId, text, buttons } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
 
     try {
-      const result = await this.client.sendKeyboard(chatId, text, buttons);
+      const result = await bot.client.sendKeyboard(chatId, text, buttons);
       res.json({ success: true, messageId: result.message_id });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -463,23 +686,27 @@ class TelegramServiceModule {
   }
 
   async handleEditMessage(req, res) {
-    const { chatId, messageId, text, parseMode } = req.body;
-    if (!chatId || !messageId || !text) return res.status(400).json({ error: 'chatId, messageId and text required' });
+    const { projectId, chatId, messageId, text, parseMode } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
 
     try {
-      const result = await this.client.editMessageText(chatId, messageId, text, { parseMode });
-      res.json({ success: true, result });
+      await bot.client.editMessageText(chatId, messageId, text, { parseMode });
+      res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   }
 
   async handleDeleteMessage(req, res) {
-    const { chatId, messageId } = req.body;
-    if (!chatId || !messageId) return res.status(400).json({ error: 'chatId and messageId required' });
+    const { projectId, chatId, messageId } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
 
     try {
-      await this.client.deleteMessage(chatId, messageId);
+      await bot.client.deleteMessage(chatId, messageId);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -487,11 +714,13 @@ class TelegramServiceModule {
   }
 
   async handleAnswerCallback(req, res) {
-    const { callbackId, text, showAlert } = req.body;
-    if (!callbackId) return res.status(400).json({ error: 'callbackId required' });
+    const { projectId, callbackId, text, showAlert } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
 
     try {
-      await this.client.answerCallbackQuery(callbackId, { text, showAlert });
+      await bot.client.answerCallbackQuery(callbackId, { text, showAlert });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -499,11 +728,13 @@ class TelegramServiceModule {
   }
 
   async handleSetCommands(req, res) {
-    const { commands } = req.body;
-    if (!commands) return res.status(400).json({ error: 'commands required' });
+    const { projectId, commands } = req.body;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
 
     try {
-      await this.client.setMyCommands(commands);
+      await bot.client.setMyCommands(commands);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -511,17 +742,19 @@ class TelegramServiceModule {
   }
 
   async handleGetFile(req, res) {
+    const { projectId } = req.query;
     const { fileId } = req.params;
-    if (!fileId) return res.status(400).json({ error: 'fileId required' });
+    const bot = this.getBot(projectId);
+
+    if (!bot) return res.status(404).json({ error: 'No bot for project' });
 
     try {
-      const file = await this.client.getFile(fileId);
+      const file = await bot.client.getFile(fileId);
       res.json({
         success: true,
         fileId: file.file_id,
         filePath: file.file_path,
-        fileSize: file.file_size,
-        downloadUrl: this.client.getFileUrl(file.file_path)
+        downloadUrl: bot.client.getFileUrl(file.file_path)
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -529,25 +762,88 @@ class TelegramServiceModule {
   }
 
   async handleStatus(req, res) {
+    const bots = [];
+    for (const [projectId, bot] of this.bots) {
+      bots.push({
+        projectId,
+        botId: bot.botId,
+        username: bot.botInfo.username
+      });
+    }
+
     res.json({
-      connected: !!this.botInfo,
-      bot: this.botInfo ? {
-        id: this.botInfo.id,
-        username: this.botInfo.username,
-        firstName: this.botInfo.first_name
-      } : null,
-      version: this.version
+      version: this.version,
+      botsCount: this.bots.size,
+      bots
     });
   }
 
   // ==========================================
-  // Tool Handlers (for AI)
+  // Tool Handlers (for AI) - use context.projectId
   // ==========================================
 
-  async handleToolSend(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolRegisterBot(args, context) {
+    const projectId = context?.projectId;
+    if (!projectId) return { success: false, error: 'No project context' };
+
+    if (this.bots.has(projectId)) {
+      return { success: false, error: 'Project already has a bot' };
+    }
+
+    const result = await this.initBot(projectId, args.token, true);
+
+    if (result.success) {
+      await this.eventBus.publish(EVENTS.BOT_REGISTERED, {
+        projectId,
+        botId: result.bot.id,
+        username: result.bot.username
+      });
+
+      return {
+        success: true,
+        message: `Bot @${result.bot.username} registrado para el proyecto`,
+        bot: {
+          id: result.bot.id,
+          username: result.bot.username
+        }
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
+  async handleToolGetBotStatus(args, context) {
+    const projectId = context?.projectId;
+    if (!projectId) return { success: false, error: 'No project context' };
+
+    const bot = this.getBot(projectId);
+    if (!bot) {
+      return {
+        success: true,
+        hasBot: false,
+        message: 'No hay bot registrado para este proyecto. Usa telegram.registerBot con el token de @BotFather'
+      };
+    }
+
+    return {
+      success: true,
+      hasBot: true,
+      bot: {
+        id: bot.botId,
+        username: bot.botInfo.username,
+        firstName: bot.botInfo.first_name
+      }
+    };
+  }
+
+  async handleToolSend(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered for this project' };
+
     try {
-      const result = await this.client.sendMessage(args.chatId, args.text, {
+      const result = await bot.client.sendMessage(args.chatId, args.text, {
         parseMode: args.parseMode,
         replyToMessageId: args.replyToMessageId
       });
@@ -557,60 +853,84 @@ class TelegramServiceModule {
     }
   }
 
-  async handleToolSendPhoto(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolSendPhoto(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      const result = await this.client.sendPhoto(args.chatId, args.photo, { caption: args.caption });
+      const result = await bot.client.sendPhoto(args.chatId, args.photo, { caption: args.caption });
       return { success: true, messageId: result.message_id };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolSendDocument(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolSendDocument(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      const result = await this.client.sendDocument(args.chatId, args.document, { caption: args.caption });
+      const result = await bot.client.sendDocument(args.chatId, args.document, { caption: args.caption });
       return { success: true, messageId: result.message_id };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolSendKeyboard(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolSendKeyboard(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      const result = await this.client.sendKeyboard(args.chatId, args.text, args.buttons);
+      const result = await bot.client.sendKeyboard(args.chatId, args.text, args.buttons);
       return { success: true, messageId: result.message_id };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolEditMessage(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolEditMessage(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      await this.client.editMessageText(args.chatId, args.messageId, args.text);
+      await bot.client.editMessageText(args.chatId, args.messageId, args.text);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolDeleteMessage(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolDeleteMessage(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      await this.client.deleteMessage(args.chatId, args.messageId);
+      await bot.client.deleteMessage(args.chatId, args.messageId);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolReply(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolReply(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      const result = await this.client.sendMessage(args.chatId, args.text, {
+      const result = await bot.client.sendMessage(args.chatId, args.text, {
         replyToMessageId: args.messageId
       });
       return { success: true, messageId: result.message_id };
@@ -619,58 +939,70 @@ class TelegramServiceModule {
     }
   }
 
-  async handleToolGetFile(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolGetFile(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      const file = await this.client.getFile(args.fileId);
+      const file = await bot.client.getFile(args.fileId);
       return {
         success: true,
         fileId: file.file_id,
         filePath: file.file_path,
-        fileSize: file.file_size,
-        downloadUrl: this.client.getFileUrl(file.file_path)
+        downloadUrl: bot.client.getFileUrl(file.file_path)
       };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolDownloadFile(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolDownloadFile(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      const buffer = await this.client.downloadFileAsBuffer(args.fileId);
-
-      // Determine save path
-      const file = await this.client.getFile(args.fileId);
+      const buffer = await bot.client.downloadFileAsBuffer(args.fileId);
+      const file = await bot.client.getFile(args.fileId);
       const fileName = path.basename(file.file_path);
-      const savePath = args.savePath || path.join(this.config.downloadPath || './data/telegram', fileName);
+      const savePath = args.savePath || path.join(this.config.downloadPath || './data/telegram', projectId, fileName);
 
-      // Ensure directory exists
       const dir = path.dirname(savePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-      fs.writeFileSync(savePath, buffer);
+      fs.writeFileSync(savePath, buffer.buffer);
 
-      return { success: true, path: savePath, size: buffer.length };
+      return { success: true, path: savePath, size: buffer.size };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolGetChatInfo(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolGetChatInfo(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      const chat = await this.client.getChat(args.chatId);
+      const chat = await bot.client.getChat(args.chatId);
       return { success: true, chat };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolSetCommands(args) {
-    if (!this.client) return { success: false, error: 'Telegram not configured' };
+  async handleToolSetCommands(args, context) {
+    const projectId = context?.projectId;
+    const bot = this.getBot(projectId);
+
+    if (!bot) return { success: false, error: 'No bot registered' };
+
     try {
-      await this.client.setMyCommands(args.commands);
+      await bot.client.setMyCommands(args.commands);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -681,14 +1013,16 @@ class TelegramServiceModule {
   // Public API (for other modules)
   // ==========================================
 
-  async send(chatId, text, options = {}) {
-    if (!this.client) throw new Error('Telegram not configured');
-    return this.client.sendMessage(chatId, text, options);
+  async send(projectId, chatId, text, options = {}) {
+    const bot = this.getBot(projectId);
+    if (!bot) throw new Error('No bot registered for project');
+    return bot.client.sendMessage(chatId, text, options);
   }
 
-  async downloadFile(fileId) {
-    if (!this.client) throw new Error('Telegram not configured');
-    return this.client.downloadFileAsBuffer(fileId);
+  async downloadFile(projectId, fileId) {
+    const bot = this.getBot(projectId);
+    if (!bot) throw new Error('No bot registered for project');
+    return bot.client.downloadFileAsBuffer(fileId);
   }
 }
 

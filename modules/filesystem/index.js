@@ -448,18 +448,27 @@ class FilesystemModule {
         if (e.code === 'ENOENT') isNew = true;
       }
 
-      // Write file
-      await fs.writeFile(safePath, data.content, 'utf-8');
+      // Write file - support base64 encoding for binary files
+      let contentBuffer;
+      let fileSize;
+      if (data.encoding === 'base64') {
+        contentBuffer = Buffer.from(data.content, 'base64');
+        fileSize = contentBuffer.length;
+      } else {
+        contentBuffer = data.content;
+        fileSize = Buffer.byteLength(data.content, 'utf-8');
+      }
+      await fs.writeFile(safePath, contentBuffer, data.encoding === 'base64' ? undefined : 'utf-8');
 
       // Publish event
       const eventType = isNew ? 'fs.file.created' : 'fs.file.updated';
       await this.eventBus.publish(eventType, {
         path: filePath,
-        size: data.content.length,
+        size: fileSize,
         timestamp: new Date().toISOString()
       });
 
-      this.logger.info('filesystem.write.success', { path: filePath, isNew });
+      this.logger.info('filesystem.write.success', { path: filePath, isNew, encoding: data.encoding || 'utf-8' });
 
       // Return data directly - UIRequestHandler wraps it
       return {
@@ -470,7 +479,7 @@ class FilesystemModule {
         path: filePath,
         file_path: filePath,
         created: isNew,
-        size: data.content.length
+        size: fileSize
       };
 
     } catch (error) {

@@ -28,18 +28,22 @@
       "note": "Tabs depend on module capabilities"
     },
     "step_3_generate": {
-      "registration": {
-        "module": "module-name",
-        "zone": "work-bar | chat-config | chat-tools",
-        "icon": "emoji",
-        "tabs": ["Lista", "Nuevo?", "Config?"]
-      },
-      "components": {
-        "location": "frontend/src/lib/components/{domain}/",
-        "files": [
-          "{Module}Button.svelte",
-          "{Module}Panel.svelte"
-        ]
+      "module_structure": {
+        "location": "frontend/src/lib/modules/{module-name}/",
+        "files": {
+          "manifest.json": {
+            "id": "module-name",
+            "name": "Display Name",
+            "version": "1.0.0",
+            "zone": "work-bar | chat-config | chat-tools | system-bar",
+            "order": 1,
+            "icon": "emoji",
+            "label": "Button label"
+          },
+          "index.ts": "UIModule with manifest, PanelComponent, getIcon(), getBadge()",
+          "{Module}Panel.svelte": "Panel component with tabs"
+        },
+        "note": "No manual registration needed - loader auto-discovers via import.meta.glob"
       },
       "mqtt_contract": {
         "list": "ui/request/{domain}/list → { status: 200, data: [...] }",
@@ -72,11 +76,10 @@
   "output_format": [
     "1. Module summary",
     "2. Panel tabs (needed functions)",
-    "3. UI module registration",
-    "4. File structure (Button + Panel)",
-    "5. MQTT contract (pub/sub)",
-    "6. UI State",
-    "7. Detected limitations (if any)"
+    "3. File structure (manifest.json + index.ts + Panel.svelte)",
+    "4. MQTT contract (pub/sub)",
+    "5. UI State",
+    "6. Detected limitations (if any)"
   ],
 
   "restrictions": [

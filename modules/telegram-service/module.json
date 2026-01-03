@@ -1,0 +1,235 @@
+{
+  "name": "telegram-service",
+  "version": "1.0.0",
+  "description": "Telegram Bot service for sending/receiving messages and photos",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "events": {
+    "publishes": [
+      {
+        "event": "telegram.message.received",
+        "description": "Text message received from Telegram",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "chatId": { "type": "number" },
+            "messageId": { "type": "number" },
+            "from": { "type": "object" },
+            "text": { "type": "string" },
+            "timestamp": { "type": "string" }
+          }
+        }
+      },
+      {
+        "event": "telegram.photo.received",
+        "description": "Photo received from Telegram",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "chatId": { "type": "number" },
+            "messageId": { "type": "number" },
+            "from": { "type": "object" },
+            "photo": {
+              "type": "object",
+              "properties": {
+                "fileId": { "type": "string" },
+                "fileSize": { "type": "number" },
+                "width": { "type": "number" },
+                "height": { "type": "number" }
+              }
+            },
+            "caption": { "type": "string" },
+            "timestamp": { "type": "string" }
+          }
+        }
+      },
+      {
+        "event": "telegram.message.sent",
+        "description": "Message sent successfully",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "chatId": { "type": "number" },
+            "messageId": { "type": "number" },
+            "text": { "type": "string" }
+          }
+        }
+      },
+      {
+        "event": "telegram.error",
+        "description": "Error in Telegram operations",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "error": { "type": "string" },
+            "context": { "type": "object" }
+          }
+        }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "telegram.send.request",
+        "description": "Request to send a message",
+        "handler": "onSendRequest"
+      },
+      {
+        "event": "telegram.photo.send.request",
+        "description": "Request to send a photo",
+        "handler": "onSendPhotoRequest"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/telegram/webhook",
+      "handler": "handleWebhook",
+      "description": "Telegram webhook endpoint for receiving updates"
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/send",
+      "handler": "handleSendMessage",
+      "description": "Send a text message",
+      "body_params": {
+        "chatId": { "type": "number", "required": true },
+        "text": { "type": "string", "required": true },
+        "replyToMessageId": { "type": "number", "required": false }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/telegram/sendPhoto",
+      "handler": "handleSendPhoto",
+      "description": "Send a photo",
+      "body_params": {
+        "chatId": { "type": "number", "required": true },
+        "photo": { "type": "string", "required": true, "description": "File ID, URL or base64" },
+        "caption": { "type": "string", "required": false }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/telegram/status",
+      "handler": "handleStatus",
+      "description": "Get bot status and info"
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "telegram.send",
+      "description": "Envía un mensaje de texto a un chat de Telegram",
+      "handler": "handleToolSend",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat destino"
+          },
+          "text": {
+            "type": "string",
+            "description": "Texto del mensaje"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "ID del mensaje a responder (opcional)"
+          }
+        },
+        "required": ["chatId", "text"]
+      }
+    },
+    {
+      "name": "telegram.sendPhoto",
+      "description": "Envía una foto a un chat de Telegram",
+      "handler": "handleToolSendPhoto",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat destino"
+          },
+          "photo": {
+            "type": "string",
+            "description": "URL de la foto o file_id de Telegram"
+          },
+          "caption": {
+            "type": "string",
+            "description": "Texto descriptivo de la foto (opcional)"
+          }
+        },
+        "required": ["chatId", "photo"]
+      }
+    },
+    {
+      "name": "telegram.reply",
+      "description": "Responde a un mensaje específico",
+      "handler": "handleToolReply",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "messageId": {
+            "type": "number",
+            "description": "ID del mensaje a responder"
+          },
+          "text": {
+            "type": "string",
+            "description": "Texto de la respuesta"
+          }
+        },
+        "required": ["chatId", "messageId", "text"]
+      }
+    },
+    {
+      "name": "telegram.getFile",
+      "description": "Obtiene información y URL de descarga de un archivo",
+      "handler": "handleToolGetFile",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "description": "ID del archivo en Telegram"
+          }
+        },
+        "required": ["fileId"]
+      }
+    }
+  ],
+
+  "config": {
+    "botToken": "${TELEGRAM_BOT_TOKEN}",
+    "webhookUrl": "${TELEGRAM_WEBHOOK_URL}",
+    "allowedChatIds": [],
+    "downloadPath": "./downloads/telegram"
+  },
+
+  "dependencies": {
+    "modules": ["credential-manager"]
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "telegram.messages.received.total",
+        "telegram.photos.received.total",
+        "telegram.messages.sent.total",
+        "telegram.errors.total"
+      ]
+    }
+  }
+}

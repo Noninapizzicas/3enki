@@ -14,6 +14,21 @@ const fs = require('fs');
 const path = require('path');
 const InvoiceProcessor = require('./services/invoice-processor');
 
+// Event names (will be added to core/constants.js via generate:constants)
+const INVOICE_EVENTS = {
+  RECEIVED: 'invoice.received',
+  PROCESSED: 'invoice.processed',
+  SYNCED: 'invoice.synced',
+  ERROR: 'invoice.error',
+  SYNC_REQUEST: 'invoice.sync.request'
+};
+
+// External event from telegram-service
+const TELEGRAM_EVENTS = {
+  PHOTO_RECEIVED: 'telegram.photo.received',
+  SEND_REQUEST: 'telegram.send.request'
+};
+
 class InvoiceCollectorModule {
   constructor() {
     this.name = 'invoice-collector';
@@ -24,6 +39,7 @@ class InvoiceCollectorModule {
     this.metrics = null;
     this.eventBus = null;
     this.config = null;
+    this.activity = null;
 
     // Services
     this.processor = null;
@@ -33,6 +49,9 @@ class InvoiceCollectorModule {
     // State
     this.invoices = new Map(); // id -> invoice data
     this.storagePath = null;
+
+    // Unsubscribe functions (pattern from conversation-manager)
+    this.unsubscribes = [];
   }
 
   // ==========================================
@@ -44,7 +63,9 @@ class InvoiceCollectorModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.config = core.config || {};
+    this.activity = core.activity?.forModule(this.name);
 
+    this.activity?.action('module.loading', { version: this.version });
     this.logger.info('module.loading', {
       module: this.name,
       version: this.version
@@ -80,7 +101,17 @@ class InvoiceCollectorModule {
   }
 
   async onUnload() {
+    this.activity?.action('module.unloading');
     this.logger.info('module.unloading', { module: this.name });
+
+    // Unsubscribe all event handlers
+    for (const unsub of this.unsubscribes) {
+      if (typeof unsub === 'function') {
+        await unsub();
+      }
+    }
+    this.unsubscribes = [];
+
     await this.saveInvoicesIndex();
   }
 
@@ -104,11 +135,23 @@ class InvoiceCollectorModule {
   }
 
   async subscribeToEvents() {
-    // Escuchar fotos de Telegram
-    this.eventBus.subscribe('telegram.photo.received', this.onTelegramPhoto.bind(this));
+    // Escuchar fotos de Telegram (tracking unsubscribes)
+    const unsubPhoto = await this.eventBus.subscribe(
+      TELEGRAM_EVENTS.PHOTO_RECEIVED,
+      this.onTelegramPhoto.bind(this)
+    );
+    this.unsubscribes.push(unsubPhoto);
 
     // Escuchar peticiones de sync
-    this.eventBus.subscribe('invoice.sync.request', this.onSyncRequest.bind(this));
+    const unsubSync = await this.eventBus.subscribe(
+      INVOICE_EVENTS.SYNC_REQUEST,
+      this.onSyncRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSync);
+
+    this.logger.info('invoice.events.subscribed', {
+      events: [TELEGRAM_EVENTS.PHOTO_RECEIVED, INVOICE_EVENTS.SYNC_REQUEST]
+    });
   }
 
   // ==========================================
@@ -175,14 +218,19 @@ class InvoiceCollectorModule {
       await this.saveInvoicesIndex();
 
       // Publicar evento
-      await this.eventBus.publish('invoice.received', invoice);
-      await this.eventBus.publish('invoice.processed', {
+      await this.eventBus.publish(INVOICE_EVENTS.RECEIVED, invoice);
+      await this.eventBus.publish(INVOICE_EVENTS.PROCESSED, {
         id: invoiceId,
         extracted: result.extracted
       });
 
       this.metrics?.increment('invoices.received.total');
       this.metrics?.increment('invoices.processed.total');
+      this.activity?.action('invoice.processed', {
+        id: invoiceId,
+        vendor: result.extracted.vendor,
+        total: result.extracted.total
+      });
 
       // Responder con resultado
       if (this.config.autoReplyTelegram) {
@@ -215,8 +263,9 @@ class InvoiceCollectorModule {
       });
 
       this.metrics?.increment('invoices.errors.total');
+      this.activity?.error('invoice.processing', error, { chatId, fileId: photo.fileId });
 
-      await this.eventBus.publish('invoice.error', {
+      await this.eventBus.publish(INVOICE_EVENTS.ERROR, {
         error: error.message,
         source: 'telegram',
         chatId
@@ -268,7 +317,7 @@ class InvoiceCollectorModule {
 
   async replyToTelegram(chatId, messageId, text) {
     try {
-      await this.eventBus.publish('telegram.send.request', {
+      await this.eventBus.publish(TELEGRAM_EVENTS.SEND_REQUEST, {
         chatId,
         text,
         replyToMessageId: messageId
@@ -329,11 +378,12 @@ class InvoiceCollectorModule {
 
     await this.saveInvoicesIndex();
 
-    await this.eventBus.publish('invoice.synced', {
+    await this.eventBus.publish(INVOICE_EVENTS.SYNCED, {
       count: pending.length,
       timestamp: new Date().toISOString()
     });
 
+    this.activity?.action('invoice.synced', { count: pending.length });
     this.logger.info('invoice.sync.complete', { synced: pending.length });
 
     return { synced: pending.length };

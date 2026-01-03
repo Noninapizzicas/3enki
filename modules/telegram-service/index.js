@@ -17,6 +17,16 @@
 
 const TelegramClient = require('./services/telegram-client');
 
+// Event names (will be added to core/constants.js via generate:constants)
+const TELEGRAM_EVENTS = {
+  MESSAGE_RECEIVED: 'telegram.message.received',
+  PHOTO_RECEIVED: 'telegram.photo.received',
+  MESSAGE_SENT: 'telegram.message.sent',
+  SEND_REQUEST: 'telegram.send.request',
+  PHOTO_SEND_REQUEST: 'telegram.photo.send.request',
+  ERROR: 'telegram.error'
+};
+
 class TelegramServiceModule {
   constructor() {
     this.name = 'telegram-service';
@@ -27,10 +37,14 @@ class TelegramServiceModule {
     this.metrics = null;
     this.eventBus = null;
     this.config = null;
+    this.activity = null;
 
     // Client
     this.client = null;
     this.botInfo = null;
+
+    // Unsubscribe functions (pattern from conversation-manager)
+    this.unsubscribes = [];
   }
 
   // ==========================================
@@ -42,7 +56,9 @@ class TelegramServiceModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.config = core.config || {};
+    this.activity = core.activity?.forModule(this.name);
 
+    this.activity?.action('module.loading', { version: this.version });
     this.logger.info('module.loading', {
       module: this.name,
       version: this.version
@@ -82,15 +98,38 @@ class TelegramServiceModule {
   }
 
   async onUnload() {
+    this.activity?.action('module.unloading');
     this.logger.info('module.unloading', { module: this.name });
+
+    // Unsubscribe all event handlers
+    for (const unsub of this.unsubscribes) {
+      if (typeof unsub === 'function') {
+        await unsub();
+      }
+    }
+    this.unsubscribes = [];
+
     this.client = null;
     this.botInfo = null;
   }
 
   async subscribeToEvents() {
-    // Suscribirse a peticiones de envío
-    this.eventBus.subscribe('telegram.send.request', this.onSendRequest.bind(this));
-    this.eventBus.subscribe('telegram.photo.send.request', this.onSendPhotoRequest.bind(this));
+    // Suscribirse a peticiones de envío (tracking unsubscribes)
+    const unsubSend = await this.eventBus.subscribe(
+      TELEGRAM_EVENTS.SEND_REQUEST,
+      this.onSendRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSend);
+
+    const unsubPhoto = await this.eventBus.subscribe(
+      TELEGRAM_EVENTS.PHOTO_SEND_REQUEST,
+      this.onSendPhotoRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubPhoto);
+
+    this.logger.info('telegram.events.subscribed', {
+      events: [TELEGRAM_EVENTS.SEND_REQUEST, TELEGRAM_EVENTS.PHOTO_SEND_REQUEST]
+    });
   }
 
   // ==========================================
@@ -107,21 +146,23 @@ class TelegramServiceModule {
         await this.eventBus.publish(respondTo, { success: true, result });
       }
 
-      await this.eventBus.publish('telegram.message.sent', {
+      await this.eventBus.publish(TELEGRAM_EVENTS.MESSAGE_SENT, {
         chatId,
         messageId: result.message_id,
         text
       });
 
       this.metrics?.increment('telegram.messages.sent.total');
+      this.activity?.action('message.sent', { chatId, messageId: result.message_id });
     } catch (error) {
       this.logger.error('telegram.send.error', { error: error.message, chatId });
+      this.activity?.error('message.send', error, { chatId });
 
       if (respondTo) {
         await this.eventBus.publish(respondTo, { success: false, error: error.message });
       }
 
-      await this.eventBus.publish('telegram.error', {
+      await this.eventBus.publish(TELEGRAM_EVENTS.ERROR, {
         error: error.message,
         context: { action: 'send', chatId }
       });
@@ -208,7 +249,7 @@ class TelegramServiceModule {
       // Obtener la foto de mayor resolución
       const bestPhoto = photo[photo.length - 1];
 
-      await this.eventBus.publish('telegram.photo.received', {
+      await this.eventBus.publish(TELEGRAM_EVENTS.PHOTO_RECEIVED, {
         ...baseEvent,
         photo: {
           fileId: bestPhoto.file_id,
@@ -220,6 +261,7 @@ class TelegramServiceModule {
       });
 
       this.metrics?.increment('telegram.photos.received.total');
+      this.activity?.action('photo.received', { chatId: chat.id, fileId: bestPhoto.file_id });
       this.logger.info('telegram.photo.received', {
         chatId: chat.id,
         fileId: bestPhoto.file_id,
@@ -231,12 +273,13 @@ class TelegramServiceModule {
 
     // Mensaje de texto
     if (text) {
-      await this.eventBus.publish('telegram.message.received', {
+      await this.eventBus.publish(TELEGRAM_EVENTS.MESSAGE_RECEIVED, {
         ...baseEvent,
         text
       });
 
       this.metrics?.increment('telegram.messages.received.total');
+      this.activity?.action('message.received', { chatId: chat.id, textLength: text.length });
       this.logger.info('telegram.message.received', {
         chatId: chat.id,
         textLength: text.length
@@ -259,17 +302,19 @@ class TelegramServiceModule {
     try {
       const result = await this.client.sendMessage(chatId, text, { replyToMessageId });
 
-      await this.eventBus.publish('telegram.message.sent', {
+      await this.eventBus.publish(TELEGRAM_EVENTS.MESSAGE_SENT, {
         chatId,
         messageId: result.message_id,
         text
       });
 
       this.metrics?.increment('telegram.messages.sent.total');
+      this.activity?.action('api.sendMessage', { chatId, messageId: result.message_id });
 
       res.json({ success: true, messageId: result.message_id });
     } catch (error) {
       this.logger.error('telegram.api.sendMessage.error', { error: error.message });
+      this.activity?.error('api.sendMessage', error, { chatId });
       res.status(500).json({ error: error.message });
     }
   }

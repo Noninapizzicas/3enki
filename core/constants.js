@@ -120,15 +120,6 @@ const EVENTS = {
     LIST_RESPONSE: 'function.list.response',
   },
 
-  // === INVOICE ===
-  INVOICE: {
-    ERROR: 'invoice.error',
-    PROCESSED: 'invoice.processed',
-    RECEIVED: 'invoice.received',
-    SYNCED: 'invoice.synced',
-    SYNC_REQUEST: 'invoice.sync.request',
-  },
-
   // === MENU ===
   MENU: {
     ERROR: 'menu.error',
@@ -406,14 +397,6 @@ const API_ROUTES = {
     GET_METRICS: '/modules/database-manager/metrics',
   },
 
-  INVOICE: {
-    BASE: '/modules/invoice-collector',
-    LIST_INVOICES: '/modules/invoice-collector/invoices',
-    GET_INVOICE: '/modules/invoice-collector/invoices/:id',
-    SYNC_INVOICES: '/modules/invoice-collector/invoices/sync',
-    DELETE_INVOICE: '/modules/invoice-collector/invoices/:id',
-  },
-
   LOG: {
     BASE: '/modules/log-manager',
     GET_SESSION: '/modules/log-manager/session',
@@ -673,13 +656,6 @@ const MODULES = {
     events: {
       publishes: ['fs.file.created', 'fs.file.updated', 'fs.file.deleted', 'fs.directory.created', 'fs.workdir.changed'],
       subscribes: ['project.activated', 'project.deactivated'],
-    },
-  },
-  'invoice-collector': {
-    version: '1.0.0',
-    events: {
-      publishes: ['invoice.received', 'invoice.processed', 'invoice.synced', 'invoice.error'],
-      subscribes: ['telegram.photo.received', 'invoice.sync.request'],
     },
   },
   'log-manager': {

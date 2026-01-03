@@ -21,6 +21,33 @@
     "location": "frontend/src/lib/components/{domain}/",
     "panel_features": ["tabs if needed", "loading states", "error handling"]
   },
+  "ui_modules": {
+    "location": "frontend/src/lib/modules/",
+    "loader": "frontend/src/lib/modules/loader.ts",
+    "discovery": "automatic (scans */manifest.json using import.meta.glob)",
+    "module_structure": {
+      "required_files": {
+        "manifest.json": "Module metadata (id, zone, icon, label, order, dependencies)",
+        "index.ts": "UIModule with manifest, PanelComponent, getIcon(), getBadge()"
+      },
+      "optional_files": {
+        "{Name}Panel.svelte": "Panel component"
+      }
+    },
+    "manifest_schema": {
+      "id": "string",
+      "name": "string",
+      "version": "string (semver)",
+      "zone": "work-bar|chat-config|chat-tools|system-bar",
+      "order": "number (optional)",
+      "icon": "emoji",
+      "label": "string",
+      "dependencies": ["module-id"] ,
+      "critical": "boolean (preload on startup)",
+      "heavy": "boolean (load in background)"
+    },
+    "active_modules": ["project", "files", "provider", "prompts", "credentials"]
+  },
   "stores": {
     "location": "frontend/src/lib/stores/",
     "pattern": "Svelte writable stores + async functions",
@@ -51,6 +78,8 @@
     "Never add screens or flows not specified",
     "Read module.json to understand capabilities",
     "Use mqttRequest() for all CRUD operations",
-    "Keep state minimal"
+    "Keep state minimal",
+    "New UI modules: create folder in modules/, add manifest.json + index.ts",
+    "No manual registration needed - loader auto-discovers via import.meta.glob"
   ]
 }

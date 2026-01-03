@@ -91,18 +91,6 @@ export const panels: Record<string, PanelDef> = {
     zone: 'chat-config',
     order: 3,
     loader: () => import('$lib/modules/credentials/CredentialsPanel.svelte')
-  },
-
-  // === SYSTEM BAR ===
-  history: {
-    id: 'history',
-    title: 'Historial',
-    icon: '📜',
-    size: 'md',
-    position: 'right',
-    zone: 'system-bar',
-    order: 1,
-    loader: () => import('$lib/modules/history/HistoryPanel.svelte')
   }
 };
 

@@ -1,0 +1,160 @@
+{
+  "name": "invoice-collector",
+  "version": "1.0.0",
+  "description": "Collects invoices from Telegram, processes with OCR, syncs to cloud storage",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "events": {
+    "publishes": [
+      {
+        "event": "invoice.received",
+        "description": "New invoice received and processed",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "source": { "type": "string", "enum": ["telegram", "email", "upload"] },
+            "imagePath": { "type": "string" },
+            "ocrText": { "type": "string" },
+            "extracted": {
+              "type": "object",
+              "properties": {
+                "vendor": { "type": "string" },
+                "date": { "type": "string" },
+                "total": { "type": "number" },
+                "taxId": { "type": "string" }
+              }
+            },
+            "status": { "type": "string", "enum": ["pending", "processed", "synced", "error"] },
+            "timestamp": { "type": "string" }
+          }
+        }
+      },
+      {
+        "event": "invoice.processed",
+        "description": "Invoice OCR processing completed"
+      },
+      {
+        "event": "invoice.synced",
+        "description": "Invoice synced to cloud storage"
+      },
+      {
+        "event": "invoice.error",
+        "description": "Error processing invoice"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "telegram.photo.received",
+        "description": "Photo received from Telegram",
+        "handler": "onTelegramPhoto"
+      },
+      {
+        "event": "invoice.sync.request",
+        "description": "Request to sync pending invoices",
+        "handler": "onSyncRequest"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/invoices",
+      "handler": "handleListInvoices",
+      "description": "List all collected invoices"
+    },
+    {
+      "method": "GET",
+      "path": "/invoices/:id",
+      "handler": "handleGetInvoice",
+      "description": "Get invoice details"
+    },
+    {
+      "method": "POST",
+      "path": "/invoices/sync",
+      "handler": "handleSyncInvoices",
+      "description": "Trigger sync to cloud storage"
+    },
+    {
+      "method": "DELETE",
+      "path": "/invoices/:id",
+      "handler": "handleDeleteInvoice",
+      "description": "Delete an invoice"
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "invoice.list",
+      "description": "Lista las facturas recibidas",
+      "handler": "handleToolList",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "processed", "synced", "error"],
+            "description": "Filtrar por estado"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Máximo de resultados"
+          }
+        }
+      }
+    },
+    {
+      "name": "invoice.sync",
+      "description": "Sincroniza facturas pendientes a la nube",
+      "handler": "handleToolSync",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "invoice.stats",
+      "description": "Obtiene estadísticas de facturas",
+      "handler": "handleToolStats",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+
+  "config": {
+    "storagePath": "./data/invoices",
+    "syncSchedule": "0 18 * * 5",
+    "cloudProvider": "gdrive",
+    "cloudFolder": "Facturas/Recibidas",
+    "autoReplyTelegram": true,
+    "replyMessages": {
+      "received": "📄 Factura recibida. Procesando...",
+      "processed": "✅ Factura procesada: {vendor} - {total}€",
+      "error": "❌ Error procesando factura: {error}"
+    }
+  },
+
+  "dependencies": {
+    "modules": ["telegram-service", "filesystem"]
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "invoices.received.total",
+        "invoices.processed.total",
+        "invoices.synced.total",
+        "invoices.errors.total"
+      ]
+    }
+  }
+}

@@ -26,6 +26,7 @@
     formatContent,
     getFileIcon,
     formatFileSize,
+    uploadFiles,
     type FileItem
   } from '$lib/stores/files';
 
@@ -46,6 +47,11 @@
   let moveSource: string | null = null;
   let moveDestination = '';
   let showMoveForm = false;
+
+  // Upload state
+  let fileInput: HTMLInputElement;
+  let uploading = false;
+  let uploadProgress = { current: 0, total: 0, fileName: '' };
 
   // Start in root mode - navigate all projects
   onMount(() => {
@@ -153,6 +159,33 @@
     }
   }
 
+  // Upload handlers
+  function handleUploadClick() {
+    fileInput?.click();
+  }
+
+  async function handleFileSelect(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const files = target.files;
+    if (!files || files.length === 0) return;
+
+    uploading = true;
+    uploadProgress = { current: 0, total: files.length, fileName: '' };
+
+    try {
+      const result = await uploadFiles(files, (current, total, fileName) => {
+        uploadProgress = { current, total, fileName };
+      });
+
+      console.log(`[Files] Upload complete: ${result.success} success, ${result.failed} failed`);
+    } finally {
+      uploading = false;
+      uploadProgress = { current: 0, total: 0, fileName: '' };
+      // Reset input to allow re-uploading same file
+      target.value = '';
+    }
+  }
+
   // Path breadcrumbs
   $: breadcrumbs = (() => {
     const parts = state.currentPath.split('/').filter(Boolean);
@@ -192,6 +225,16 @@
         <button class="icon-btn" on:click={() => showNewFileForm = !showNewFileForm} title="Nuevo">
           ➕
         </button>
+        <button class="icon-btn" on:click={handleUploadClick} disabled={uploading} title="Subir archivo">
+          {uploading ? '⏳' : '📤'}
+        </button>
+        <input
+          type="file"
+          bind:this={fileInput}
+          on:change={handleFileSelect}
+          multiple
+          style="display: none;"
+        />
       </div>
 
       <!-- Search bar -->
@@ -242,6 +285,22 @@
           />
           <button class="btn primary small" on:click={handleConfirmMove}>Mover</button>
           <button class="btn secondary small" on:click={handleCancelMove}>Cancelar</button>
+        </div>
+      {/if}
+
+      <!-- Upload progress -->
+      {#if uploading}
+        <div class="upload-progress">
+          <span class="upload-icon">📤</span>
+          <span class="upload-text">
+            Subiendo {uploadProgress.current}/{uploadProgress.total}: {uploadProgress.fileName}
+          </span>
+          <div class="progress-bar">
+            <div
+              class="progress"
+              style="width: {(uploadProgress.current / uploadProgress.total) * 100}%"
+            ></div>
+          </div>
         </div>
       {/if}
 
@@ -716,6 +775,47 @@
     font-size: 0.75rem;
     color: var(--color-primary, #3b82f6);
     white-space: nowrap;
+  }
+
+  .upload-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg, #0f0f1a);
+    border-bottom: 1px solid var(--color-success, #22c55e);
+  }
+
+  .upload-icon {
+    animation: bounce 0.5s infinite alternate;
+  }
+
+  .upload-text {
+    flex: 1;
+    font-size: 0.75rem;
+    color: var(--color-text, #e5e5e5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .upload-progress .progress-bar {
+    width: 80px;
+    height: 4px;
+    background: var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .upload-progress .progress {
+    height: 100%;
+    background: var(--color-success, #22c55e);
+    transition: width 0.2s;
+  }
+
+  @keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-2px); }
   }
 
   @keyframes pulse {

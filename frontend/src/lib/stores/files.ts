@@ -402,6 +402,111 @@ export async function createFile(
 }
 
 /**
+ * Upload a file to the current directory
+ * Handles both text and binary files (binary as base64)
+ */
+export async function uploadFile(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<boolean> {
+  let state: FilesStoreState = initialState;
+  filesStore.subscribe(s => { state = s; })();
+
+  filesStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    // Read file content
+    const content = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // For binary files, extract base64 from data URL
+        if (result.startsWith('data:')) {
+          resolve(result.split(',')[1]);
+        } else {
+          resolve(result);
+        }
+      };
+      reader.onerror = () => reject(new Error('Error reading file'));
+      reader.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 50)); // 50% for reading
+        }
+      };
+
+      // Read as text for text files, as data URL for binary
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      if (TEXT_EXTENSIONS.includes(ext)) {
+        reader.readAsText(file);
+      } else {
+        reader.readAsDataURL(file);
+      }
+    });
+
+    onProgress?.(60);
+
+    const filePath = state.currentPath === '/'
+      ? `/${file.name}`
+      : `${state.currentPath}/${file.name}`;
+
+    // Determine if binary
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isBinary = !TEXT_EXTENSIONS.includes(ext);
+
+    // Write file to filesystem
+    await mqttRequest<{
+      path: string;
+      created: boolean;
+      size: number;
+    }>('fs', 'write', {
+      path: filePath,
+      content,
+      encoding: isBinary ? 'base64' : 'utf8'
+    });
+
+    onProgress?.(90);
+
+    // Refresh file list
+    await listFiles(state.currentPath);
+
+    onProgress?.(100);
+
+    console.log('[Files] Uploaded:', filePath);
+    return true;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    filesStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Files] Upload failed:', errorMessage);
+    return false;
+  }
+}
+
+/**
+ * Upload multiple files to the current directory
+ */
+export async function uploadFiles(
+  files: FileList,
+  onProgress?: (current: number, total: number, fileName: string) => void
+): Promise<{ success: number; failed: number }> {
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    onProgress?.(i + 1, files.length, file.name);
+
+    const result = await uploadFile(file);
+    if (result) {
+      success++;
+    } else {
+      failed++;
+    }
+  }
+
+  return { success, failed };
+}
+
+/**
  * Deletes a file or directory
  */
 export async function deleteFile(filePath: string): Promise<boolean> {

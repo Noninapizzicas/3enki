@@ -50,6 +50,12 @@ const EVENTS = {
     LIST: 'conversations.list',
   },
 
+  // === CORE ===
+  CORE: {
+    +_ERRORS_#: 'core/+/errors/#',
+    +_EVENTS_#: 'core/+/events/#',
+  },
+
   // === CREDENTIAL ===
   CREDENTIAL: {
     CREATE: 'credential/create',
@@ -91,21 +97,13 @@ const EVENTS = {
     VALIDATE_RESPONSE: 'editor.validate.response',
   },
 
-  // === FILE ===
-  FILE: {
-    CONTENT_REQUEST: 'file.content.request',
-    CONTENT_RESPONSE: 'file.content.response',
-    CREATED: 'file.created',
-    CREATE_REQUEST: 'file.create.request',
-    DELETED: 'file.deleted',
-    DELETE_REQUEST: 'file.delete.request',
-    GET_REQUEST: 'file.get.request',
-    GET_RESPONSE: 'file.get.response',
-    LIST_REQUEST: 'file.list.request',
-    LIST_RESPONSE: 'file.list.response',
-    SEARCH_REQUEST: 'file.search.request',
-    SEARCH_RESPONSE: 'file.search.response',
-    UPLOADED: 'file.uploaded',
+  // === FS ===
+  FS: {
+    DIRECTORY_CREATED: 'fs.directory.created',
+    FILE_CREATED: 'fs.file.created',
+    FILE_DELETED: 'fs.file.deleted',
+    FILE_UPDATED: 'fs.file.updated',
+    WORKDIR_CHANGED: 'fs.workdir.changed',
   },
 
   // === FUNCTION ===
@@ -120,6 +118,15 @@ const EVENTS = {
     GET_RESPONSE: 'function.get.response',
     LIST_REQUEST: 'function.list.request',
     LIST_RESPONSE: 'function.list.response',
+  },
+
+  // === INVOICE ===
+  INVOICE: {
+    ERROR: 'invoice.error',
+    PROCESSED: 'invoice.processed',
+    RECEIVED: 'invoice.received',
+    SYNCED: 'invoice.synced',
+    SYNC_REQUEST: 'invoice.sync.request',
   },
 
   // === MENU ===
@@ -228,13 +235,34 @@ const EVENTS = {
     DESIGN_UPDATED: 'scratch.design.updated',
   },
 
+  // === SHELL ===
+  SHELL: {
+    ERROR: 'shell.error',
+    EXECUTED: 'shell.executed',
+    EXEC_REQUEST: 'shell.exec.request',
+    PROCESS_STARTED: 'shell.process.started',
+    PROCESS_STOPPED: 'shell.process.stopped',
+  },
+
   // === STORAGE ===
   STORAGE: {
-    CLEANED: 'storage.cleaned',
-    CREATED: 'storage.created',
-    DELETED: 'storage.deleted',
-    INFO_REQUEST: 'storage.info.request',
     INFO_RESPONSE: 'storage.info.response',
+  },
+
+  // === SYSTEM ===
+  SYSTEM: {
+    ERRORS: 'system.errors',
+    STATUS: 'system.status',
+  },
+
+  // === TELEGRAM ===
+  TELEGRAM: {
+    ERROR: 'telegram.error',
+    MESSAGE_RECEIVED: 'telegram.message.received',
+    MESSAGE_SENT: 'telegram.message.sent',
+    PHOTO_RECEIVED: 'telegram.photo.received',
+    PHOTO_SEND_REQUEST: 'telegram.photo.send.request',
+    SEND_REQUEST: 'telegram.send.request',
   },
 
   // === TEMPLATES ===
@@ -244,16 +272,10 @@ const EVENTS = {
 
   // === TOOL ===
   TOOL: {
-    CALL_FAILED: 'tool.call.failed',
     CALL_REQUEST: 'tool.call.request',
     CALL_RESPONSE: 'tool.call.response',
-    CALL_SUCCESS: 'tool.call.success',
-    GET_REQUEST: 'tool.get.request',
-    GET_RESPONSE: 'tool.get.response',
     LIST_REQUEST: 'tool.list.request',
     LIST_RESPONSE: 'tool.list.response',
-    REGISTERED: 'tool.registered',
-    UNREGISTERED: 'tool.unregistered',
   },
 
   // === UI ===
@@ -329,6 +351,8 @@ const API_ROUTES = {
     U_I_SELECT: '/modules/ai-gateway/ui/select',
     U_I_CONFIG_GET: '/modules/ai-gateway/ui/config',
     U_I_CONFIG_POST: '/modules/ai-gateway/ui/config',
+    LIST_TOOLS: '/modules/ai-gateway/tools',
+    EXECUTE_TOOL: '/modules/ai-gateway/tools/:name/execute',
   },
 
   CALLING: {
@@ -351,6 +375,8 @@ const API_ROUTES = {
     GET_MESSAGES: '/modules/conversation-manager/conversations/:id/messages',
     GET_CONTEXT: '/modules/conversation-manager/conversations/:id/context',
     U_I_STATE: '/modules/conversation-manager/ui/state',
+    TOGGLE_CONTEXT: '/modules/conversation-manager/messages/:id/context',
+    CONTEXT_STATS: '/modules/conversation-manager/conversations/:id/context-stats',
     HEALTH_CHECK: '/modules/conversation-manager/health',
     GET_METRICS: '/modules/conversation-manager/metrics',
   },
@@ -380,29 +406,27 @@ const API_ROUTES = {
     GET_METRICS: '/modules/database-manager/metrics',
   },
 
-  FILE: {
-    BASE: '/modules/file-browser',
-    LIST_FILES: '/modules/file-browser/files',
-    GET_FILE_CONTENT: '/modules/file-browser/files/content',
-    CREATE_FILE: '/modules/file-browser/files',
-    DELETE_FILE: '/modules/file-browser/files',
-    SEARCH_FILES: '/modules/file-browser/files/search',
+  INVOICE: {
+    BASE: '/modules/invoice-collector',
+    LIST_INVOICES: '/modules/invoice-collector/invoices',
+    GET_INVOICE: '/modules/invoice-collector/invoices/:id',
+    SYNC_INVOICES: '/modules/invoice-collector/invoices/sync',
+    DELETE_INVOICE: '/modules/invoice-collector/invoices/:id',
   },
 
   LOG: {
     BASE: '/modules/log-manager',
+    GET_SESSION: '/modules/log-manager/session',
+    GET_SESSION_MODULES: '/modules/log-manager/session/modules',
+    GET_SESSION_MODULE_LOGS: '/modules/log-manager/session/modules/*/logs',
+    SET_TRACKED_MODULES: '/modules/log-manager/session/track',
+    ADD_TRACKED_MODULES: '/modules/log-manager/session/track/add',
+    GET_SESSIONS: '/modules/log-manager/sessions',
+    GET_SESSION_BY_ID: '/modules/log-manager/sessions/*',
+    GET_SESSION_LOGS: '/modules/log-manager/sessions/*/logs',
     GET_LOGS: '/modules/log-manager/logs',
     ADD_LOG: '/modules/log-manager/logs',
     GET_STATS: '/modules/log-manager/stats',
-    GET_FILES: '/modules/log-manager/files',
-    CLEAR_LOGS: '/modules/log-manager/logs',
-    GET_ACTIVITIES: '/modules/log-manager/activities',
-    GET_ACTIVITY_STATS: '/modules/log-manager/activities/stats',
-    GET_MODULES: '/modules/log-manager/modules',
-    GET_MODULE_LOGS: '/modules/log-manager/modules/*/logs',
-    GET_MODULE_STATS: '/modules/log-manager/modules/*/stats',
-    GET_TEST_PAGE: '/modules/log-test/',
-    RUN_TEST: '/modules/log-test/test',
   },
 
   MENU: {
@@ -477,6 +501,10 @@ const API_ROUTES = {
     DELETE_PROJECT: '/modules/project-manager/projects/:id',
     ACTIVATE_PROJECT: '/modules/project-manager/projects/:id/activate',
     GET_ACTIVE_PROJECT: '/modules/project-manager/projects/active',
+    SAVE_SESSION: '/modules/project-manager/projects/:id/session',
+    RESTORE_SESSION: '/modules/project-manager/projects/:id/session',
+    SET_A_I_CONFIG: '/modules/project-manager/projects/:id/ai-config',
+    SET_LAST_CONVERSATION: '/modules/project-manager/projects/:id/last-conversation',
     HEALTH_CHECK: '/modules/project-manager/health',
     GET_METRICS: '/modules/project-manager/metrics',
   },
@@ -524,17 +552,20 @@ const API_ROUTES = {
     GET_METRICS: '/modules/scratch-designer/metrics',
   },
 
-  STORAGE: {
-    BASE: '/modules/storage-manager',
-    UPLOAD_FILE: '/modules/storage-manager/storage/:projectId/upload',
-    LIST_FILES: '/modules/storage-manager/storage/:projectId/files',
-    GET_FILE: '/modules/storage-manager/storage/:projectId/files/:fileId',
-    DOWNLOAD_FILE: '/modules/storage-manager/storage/:projectId/download/:fileId',
-    DELETE_FILE: '/modules/storage-manager/storage/:projectId/files/:fileId',
-    CLEANUP_TEMP: '/modules/storage-manager/storage/:projectId/cleanup',
-    GET_STORAGE_INFO: '/modules/storage-manager/storage/:projectId/info',
-    HEALTH_CHECK: '/modules/storage-manager/health',
-    GET_METRICS: '/modules/storage-manager/metrics',
+  SYSTEM: {
+    BASE: '/modules/system-inspector',
+    GET_STATUS: '/modules/system-inspector/status',
+    GET_ERRORS: '/modules/system-inspector/errors',
+    GET_NETWORK: '/modules/system-inspector/network',
+    CLEAR: '/modules/system-inspector/clear',
+  },
+
+  TELEGRAM: {
+    BASE: '/modules/telegram-service',
+    WEBHOOK: '/modules/telegram-service/telegram/webhook',
+    SEND_MESSAGE: '/modules/telegram-service/telegram/send',
+    SEND_PHOTO: '/modules/telegram-service/telegram/sendPhoto',
+    STATUS: '/modules/telegram-service/telegram/status',
   },
 
   TEXT: {
@@ -543,17 +574,6 @@ const API_ROUTES = {
     SAVE_FILE: '/modules/text-editor/editor/save',
     VALIDATE_CONTENT: '/modules/text-editor/editor/validate',
     FORMAT_CONTENT: '/modules/text-editor/editor/format',
-  },
-
-  TOOL: {
-    BASE: '/modules/tool-orchestrator',
-    LIST_TOOLS: '/modules/tool-orchestrator/tools',
-    GET_TOOL: '/modules/tool-orchestrator/tools/:name',
-    CALL_TOOL: '/modules/tool-orchestrator/tools/:name/call',
-    REGISTER_TOOL: '/modules/tool-orchestrator/tools/register',
-    UNREGISTER_TOOL: '/modules/tool-orchestrator/tools/:name',
-    HEALTH_CHECK: '/modules/tool-orchestrator/health',
-    GET_METRICS: '/modules/tool-orchestrator/metrics',
   },
 
   UI: {
@@ -613,6 +633,13 @@ const MODULES = {
       subscribes: ['plugin.loaded', 'function.get.request', 'function.list.request', 'function.execute.request'],
     },
   },
+  'code-executor': {
+    version: '1.0.0',
+    events: {
+      publishes: ['shell.executed', 'shell.error', 'shell.process.started', 'shell.process.stopped'],
+      subscribes: ['shell.exec.request'],
+    },
+  },
   'conversation-manager': {
     version: '1.0.0',
     events: {
@@ -641,22 +668,22 @@ const MODULES = {
       subscribes: ['db.query.request', 'db.schema.init.request'],
     },
   },
-  'file-browser': {
+  'filesystem': {
     version: '1.0.0',
     events: {
-      publishes: ['file.list.response', 'file.content.response', 'file.created', 'file.deleted', 'file.search.response'],
-      subscribes: ['file.list.request', 'file.content.request', 'file.create.request', 'file.delete.request', 'file.search.request'],
+      publishes: ['fs.file.created', 'fs.file.updated', 'fs.file.deleted', 'fs.directory.created', 'fs.workdir.changed'],
+      subscribes: ['project.activated', 'project.deactivated'],
+    },
+  },
+  'invoice-collector': {
+    version: '1.0.0',
+    events: {
+      publishes: ['invoice.received', 'invoice.processed', 'invoice.synced', 'invoice.error'],
+      subscribes: ['telegram.photo.received', 'invoice.sync.request'],
     },
   },
   'log-manager': {
-    version: '1.0.0',
-    events: {
-      publishes: [],
-      subscribes: [],
-    },
-  },
-  'log-test': {
-    version: '1.0.0',
+    version: '2.0.0',
     events: {
       publishes: [],
       subscribes: [],
@@ -718,11 +745,18 @@ const MODULES = {
       subscribes: [],
     },
   },
-  'storage-manager': {
+  'system-inspector': {
     version: '1.0.0',
     events: {
-      publishes: ['storage.created', 'storage.deleted', 'storage.cleaned', 'file.uploaded', 'file.deleted', 'file.list.response', 'file.get.response', 'storage.info.response'],
-      subscribes: ['project.created', 'project.deleted', 'file.list.request', 'file.get.request', 'storage.info.request'],
+      publishes: [],
+      subscribes: ['core/+/events/#', 'core/+/errors/#', 'system.status', 'system.errors'],
+    },
+  },
+  'telegram-service': {
+    version: '1.0.0',
+    events: {
+      publishes: ['telegram.message.received', 'telegram.photo.received', 'telegram.message.sent', 'telegram.error'],
+      subscribes: ['telegram.send.request', 'telegram.photo.send.request'],
     },
   },
   'text-editor': {
@@ -730,13 +764,6 @@ const MODULES = {
     events: {
       publishes: ['editor.open.response', 'editor.saved', 'editor.validate.response', 'editor.format.response', 'editor.error'],
       subscribes: ['editor.open.request', 'editor.save.request', 'editor.validate.request', 'editor.format.request'],
-    },
-  },
-  'tool-orchestrator': {
-    version: '2.0.0',
-    events: {
-      publishes: ['tool.registered', 'tool.unregistered', 'tool.call.response', 'tool.call.success', 'tool.call.failed', 'tool.list.response', 'tool.get.response'],
-      subscribes: ['tool.call.request', 'tool.list.request', 'tool.get.request'],
     },
   },
   'ui-designer': {

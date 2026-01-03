@@ -27,31 +27,17 @@ const componentCache = new Map<string, ComponentType>();
  * Definiciones de paneles - SIN importar componentes
  */
 export const panels: Record<string, PanelDef> = {
-  // === WORK BAR ===
+  // === CHAT CONFIG (barra de configuración) ===
   project: {
     id: 'project',
     title: 'Proyecto',
     icon: '📁',
     size: 'md',
     position: 'top',
-    zone: 'work-bar',
-    order: 1,
+    zone: 'chat-config',
+    order: 0,
     loader: () => import('$lib/modules/project/ProjectPanel.svelte')
   },
-
-  // === CHAT TOOLS (barra inferior junto al chat) ===
-  files: {
-    id: 'files',
-    title: 'Archivos',
-    icon: '🗂️',
-    size: 'lg',
-    position: 'left',
-    zone: 'chat-tools',
-    order: 1,
-    loader: () => import('$lib/modules/files/FilesPanel.svelte')
-  },
-
-  // === CHAT CONFIG ===
   provider: {
     id: 'provider',
     title: 'Proveedor IA',
@@ -79,7 +65,7 @@ export const panels: Record<string, PanelDef> = {
     size: 'lg',
     position: 'top',
     zone: 'chat-config',
-    order: 2.5,
+    order: 3,
     loader: () => import('$lib/modules/conversations/ConversationsPanel.svelte')
   },
   'credentials-list': {
@@ -89,8 +75,20 @@ export const panels: Record<string, PanelDef> = {
     size: 'md',
     position: 'top',
     zone: 'chat-config',
-    order: 3,
+    order: 4,
     loader: () => import('$lib/modules/credentials/CredentialsPanel.svelte')
+  },
+
+  // === CHAT TOOLS (barra inferior junto al chat) ===
+  files: {
+    id: 'files',
+    title: 'Archivos',
+    icon: '🗂️',
+    size: 'lg',
+    position: 'left',
+    zone: 'chat-tools',
+    order: 1,
+    loader: () => import('$lib/modules/files/FilesPanel.svelte')
   }
 };
 

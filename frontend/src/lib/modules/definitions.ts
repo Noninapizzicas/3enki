@@ -51,17 +51,9 @@ export const moduleDefinitions: LazyModuleDefinition[] = [
 
   // --- SYSTEM BAR (barra lateral derecha) ---
   {
-    id: 'history',
-    zone: 'system-bar',
-    order: 1,
-    icon: '📜',
-    label: 'Historial',
-    loader: () => import('./history').then(m => m.historyModule)
-  },
-  {
     id: 'credentials',
     zone: 'system-bar',
-    order: 2,
+    order: 1,
     icon: '🔑',
     label: 'Credenciales',
     loader: () => import('./credentials').then(m => m.credentialsModule)

@@ -865,6 +865,44 @@ class ConversationManagerModule {
     return messages;
   }
 
+  /**
+   * Generate a fallback message when AI fails to respond after tool execution
+   * This ensures users always see the result of tool operations
+   */
+  generateToolResultsFallback(lastToolResults, toolCallHistory) {
+    const lines = ['⚠️ **La IA no pudo generar una respuesta, pero las operaciones se ejecutaron:**\n'];
+
+    for (let i = 0; i < lastToolResults.calls.length; i++) {
+      const call = lastToolResults.calls[i];
+      const result = lastToolResults.results[i];
+      const toolName = call.function?.name || call.name || 'unknown';
+
+      if (result.success) {
+        lines.push(`✅ **${toolName}**: Operación completada exitosamente`);
+        // Include result summary if available
+        if (result.result) {
+          const resultStr = typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result, null, 2);
+          // Truncate long results
+          const truncated = resultStr.length > 500
+            ? resultStr.substring(0, 500) + '...[truncado]'
+            : resultStr;
+          lines.push('```\n' + truncated + '\n```');
+        }
+      } else {
+        lines.push(`❌ **${toolName}**: Error - ${result.error || 'desconocido'}`);
+      }
+    }
+
+    // Add summary from tool history if multiple iterations
+    if (toolCallHistory.length > 1) {
+      lines.push(`\n📊 Total de operaciones: ${toolCallHistory.reduce((acc, h) => acc + h.calls.length, 0)} en ${toolCallHistory.length} iteraciones`);
+    }
+
+    return lines.join('\n');
+  }
+
   async loadConversationContext(conversationId, correlationId) {
     this.logger.debug({ correlationId, conversationId }, 'Loading conversation context');
 
@@ -1213,13 +1251,42 @@ class ConversationManagerModule {
       let iterations = 0;
       const toolCallHistory = []; // Track all tool calls for metadata
 
+      let lastToolResults = null; // Track last tool results for fallback
+
       while (iterations < this.maxToolCallIterations) {
         iterations++;
 
-        // Call AI
-        aiResponse = await this.callAI(currentMessages, conversation, tools, correlationId);
-        totalTokens += aiResponse.tokens || 0;
-        totalCost += aiResponse.cost || 0;
+        // Call AI - with fallback handling when tools have been executed
+        try {
+          aiResponse = await this.callAI(currentMessages, conversation, tools, correlationId);
+          totalTokens += aiResponse.tokens || 0;
+          totalCost += aiResponse.cost || 0;
+        } catch (aiError) {
+          // If tools were executed but AI failed to respond, generate fallback message
+          if (toolCallHistory.length > 0 && lastToolResults) {
+            this.logger.warn({
+              correlationId,
+              conversationId,
+              error: aiError.message,
+              toolCallsExecuted: toolCallHistory.length
+            }, 'AI failed after tool execution - generating fallback response');
+
+            // Generate fallback content showing tool results
+            const fallbackContent = this.generateToolResultsFallback(lastToolResults, toolCallHistory);
+            aiResponse = {
+              content: fallbackContent,
+              tokens: 0,
+              cost: 0,
+              model: conversation.model || 'unknown',
+              provider: conversation.provider || 'unknown',
+              tool_calls: null,
+              fallback: true
+            };
+            break; // Exit loop with fallback response
+          }
+          // No tools executed, propagate error normally
+          throw aiError;
+        }
 
         // Check if AI wants to call tools
         if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
@@ -1232,6 +1299,9 @@ class ConversationManagerModule {
 
           // Execute all tool calls
           const toolResults = await this.executeToolCalls(aiResponse.tool_calls, correlationId);
+
+          // Store for fallback in case AI fails to respond after tool execution
+          lastToolResults = { calls: aiResponse.tool_calls, results: toolResults };
 
           // Track tool calls for metadata
           toolCallHistory.push({
@@ -1276,7 +1346,8 @@ class ConversationManagerModule {
           model: aiResponse.model,
           provider: aiResponse.provider,
           tool_calls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
-          iterations: iterations > 1 ? iterations : undefined
+          iterations: iterations > 1 ? iterations : undefined,
+          fallback: aiResponse.fallback || undefined // Indicates AI failed but tools executed
         },
         in_context: true,
         manually_toggled: false

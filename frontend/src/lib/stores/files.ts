@@ -180,13 +180,25 @@ export async function listFiles(path: string = '/'): Promise<void> {
 
 /**
  * Navigate to parent directory
+ * Handles both project-scoped paths (/) and global paths (@/)
  */
 export function navigateUp(): void {
   let currentPath = '/';
   filesStore.subscribe(s => { currentPath = s.currentPath; })();
 
-  if (currentPath === '/') return;
+  if (currentPath === '/' || currentPath === '@/') return;
 
+  // Handle global paths (@/...)
+  if (currentPath.startsWith('@/')) {
+    const relativePart = currentPath.slice(2); // Remove @/
+    const parts = relativePart.split('/').filter(Boolean);
+    parts.pop();
+    const parentPath = parts.length > 0 ? '@/' + parts.join('/') : '@/';
+    listFiles(parentPath);
+    return;
+  }
+
+  // Handle project-scoped paths
   const parts = currentPath.split('/').filter(Boolean);
   parts.pop();
   const parentPath = '/' + parts.join('/');

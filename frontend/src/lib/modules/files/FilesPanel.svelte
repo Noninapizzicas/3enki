@@ -186,13 +186,20 @@
     }
   }
 
-  // Path breadcrumbs
+  // Path breadcrumbs - handles both project paths (/) and global paths (@/)
   $: breadcrumbs = (() => {
-    const parts = state.currentPath.split('/').filter(Boolean);
-    const crumbs = [{ name: '/', path: '/' }];
-    let accumulated = '';
+    const isGlobal = state.currentPath.startsWith('@/');
+    const pathToProcess = isGlobal ? state.currentPath.slice(2) : state.currentPath;
+    const parts = pathToProcess.split('/').filter(Boolean);
+
+    // Start with root crumb
+    const crumbs = isGlobal
+      ? [{ name: '🏠 Global', path: '@/' }]
+      : [{ name: '/', path: '/' }];
+
+    let accumulated = isGlobal ? '@/' : '';
     for (const part of parts) {
-      accumulated += '/' + part;
+      accumulated += (accumulated === '@/' ? '' : '/') + part;
       crumbs.push({ name: part, path: accumulated });
     }
     return crumbs;
@@ -205,7 +212,10 @@
     <div class="explorer-view">
       <!-- Header with path and actions -->
       <div class="header">
-        <button class="icon-btn" on:click={handleGoUp} disabled={state.currentPath === '/'} title="Subir">
+        <button class="icon-btn" on:click={() => listFiles('@/')} title="Raíz global (todos los proyectos)">
+          🏠
+        </button>
+        <button class="icon-btn" on:click={handleGoUp} disabled={state.currentPath === '/' || state.currentPath === '@/'} title="Subir">
           ⬆️
         </button>
 

@@ -1,10 +1,10 @@
 <script lang="ts">
   /**
    * Página de Facturas - Gestión de facturas
-   * Usa AppShell como base
+   * Usa AppShell como base con los mismos módulos que Chat
    */
   import { onDestroy } from 'svelte';
-  import { AppShell, WorkBar } from '$lib/components/layout';
+  import { AppShell, WorkBar, ChatConfig, ChatTools } from '$lib/components/layout';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
   // Estado local de facturas
@@ -67,18 +67,24 @@
     {/if}
   </div>
 
-  <!-- Controls (opcional) -->
-  <div class="facturas-controls" slot="controls">
-    <div class="filters">
-      <input type="text" placeholder="Buscar facturas..." class="search-input" />
-      <select class="filter-select">
-        <option value="">Todos los estados</option>
-        <option value="pendiente">Pendiente</option>
-        <option value="pagada">Pagada</option>
-        <option value="vencida">Vencida</option>
-      </select>
+  <!-- Controls: Config bar + Facturas controls -->
+  <svelte:fragment slot="controls">
+    <ChatConfig />
+    <div class="facturas-controls">
+      <div class="filters">
+        <input type="text" placeholder="Buscar facturas..." class="search-input" />
+        <select class="filter-select">
+          <option value="">Todos los estados</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="pagada">Pagada</option>
+          <option value="vencida">Vencida</option>
+        </select>
+      </div>
     </div>
-  </div>
+  </svelte:fragment>
+
+  <!-- Tools: Files, etc -->
+  <ChatTools slot="tools" />
 </AppShell>
 
 <style>

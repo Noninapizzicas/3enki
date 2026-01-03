@@ -52,6 +52,7 @@ class TelegramServiceModule {
     this.config = null;
     this.activity = null;
     this.credentialManager = null;
+    this.uiHandler = null;
 
     // Multi-bot storage: projectId -> { client, botInfo, botId }
     this.bots = new Map();
@@ -72,6 +73,7 @@ class TelegramServiceModule {
     this.config = core.config || {};
     this.activity = core.activity?.forModule(this.name);
     this.credentialManager = core.modules?.['credential-manager'];
+    this.uiHandler = core.uiHandler;
 
     this.activity?.action('module.loading', { version: this.version });
 
@@ -86,6 +88,19 @@ class TelegramServiceModule {
 
     await this.subscribeToEvents();
 
+    // Register UI Request/Response handlers
+    if (this.uiHandler) {
+      this.uiHandler.register('telegram', 'listBots', this.handleUIListBots.bind(this));
+      this.uiHandler.register('telegram', 'registerBot', this.handleUIRegisterBot.bind(this));
+      this.uiHandler.register('telegram', 'removeBot', this.handleUIRemoveBot.bind(this));
+      this.uiHandler.register('telegram', 'testToken', this.handleUITestToken.bind(this));
+      this.uiHandler.register('telegram', 'setupWebhook', this.handleUISetupWebhook.bind(this));
+
+      this.logger.info('telegram.ui_handlers.registered', {
+        handlers: ['listBots', 'registerBot', 'removeBot', 'testToken', 'setupWebhook']
+      });
+    }
+
     this.logger.info('telegram.loaded', {
       version: this.version,
       botsLoaded: this.bots.size
@@ -94,6 +109,15 @@ class TelegramServiceModule {
 
   async onUnload() {
     this.activity?.action('module.unloading');
+
+    // Unregister UI handlers
+    if (this.uiHandler) {
+      this.uiHandler.unregister('telegram', 'listBots');
+      this.uiHandler.unregister('telegram', 'registerBot');
+      this.uiHandler.unregister('telegram', 'removeBot');
+      this.uiHandler.unregister('telegram', 'testToken');
+      this.uiHandler.unregister('telegram', 'setupWebhook');
+    }
 
     for (const unsub of this.unsubscribes) {
       if (typeof unsub === 'function') await unsub();
@@ -1006,6 +1030,136 @@ class TelegramServiceModule {
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
+    }
+  }
+
+  // ==========================================
+  // UI Request/Response Handlers
+  // ==========================================
+
+  async handleUIListBots(data) {
+    const bots = [];
+
+    for (const [projectId, bot] of this.bots) {
+      bots.push({
+        projectId,
+        botId: bot.botId,
+        username: bot.botInfo.username,
+        firstName: bot.botInfo.first_name,
+        canJoinGroups: bot.botInfo.can_join_groups,
+        canReadAllGroupMessages: bot.botInfo.can_read_all_group_messages,
+        supportsInlineQueries: bot.botInfo.supports_inline_queries
+      });
+    }
+
+    return { bots, count: bots.length };
+  }
+
+  async handleUIRegisterBot(data) {
+    const { projectId, token, name } = data;
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'projectId is required' };
+    }
+    if (!token) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'token is required' };
+    }
+
+    // Check if bot already exists for this project
+    if (this.bots.has(projectId)) {
+      throw { status: 409, code: 'CONFLICT', message: 'Project already has a bot. Remove it first.' };
+    }
+
+    const result = await this.initBot(projectId, token, true);
+
+    if (result.success) {
+      await this.eventBus.publish(EVENTS.BOT_REGISTERED, {
+        projectId,
+        botId: result.bot.id,
+        username: result.bot.username
+      });
+
+      return {
+        success: true,
+        projectId,
+        botInfo: {
+          id: result.bot.id,
+          username: result.bot.username,
+          first_name: result.bot.first_name,
+          can_join_groups: result.bot.can_join_groups,
+          can_read_all_group_messages: result.bot.can_read_all_group_messages,
+          supports_inline_queries: result.bot.supports_inline_queries
+        }
+      };
+    }
+
+    throw { status: 400, code: 'INVALID_TOKEN', message: result.error };
+  }
+
+  async handleUIRemoveBot(data) {
+    const { projectId } = data;
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'projectId is required' };
+    }
+
+    const bot = this.getBot(projectId);
+    if (!bot) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'No bot registered for this project' };
+    }
+
+    await this.removeBot(projectId);
+    await this.eventBus.publish(EVENTS.BOT_REMOVED, { projectId });
+
+    return { success: true, projectId };
+  }
+
+  async handleUITestToken(data) {
+    const { token } = data;
+
+    if (!token) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'token is required' };
+    }
+
+    try {
+      const client = new TelegramClient(token, this.logger);
+      const botInfo = await client.getMe();
+
+      return {
+        valid: true,
+        message: 'Token válido',
+        botInfo: {
+          id: botInfo.id,
+          username: botInfo.username,
+          first_name: botInfo.first_name
+        }
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        message: error.message || 'Token inválido'
+      };
+    }
+  }
+
+  async handleUISetupWebhook(data) {
+    const { projectId, webhookUrl } = data;
+
+    if (!projectId || !webhookUrl) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'projectId and webhookUrl required' };
+    }
+
+    const bot = this.getBot(projectId);
+    if (!bot) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'No bot registered for this project' };
+    }
+
+    try {
+      const fullWebhookUrl = `${webhookUrl}/modules/telegram-service/telegram/webhook/${bot.botId}`;
+      await bot.client.setWebhook(fullWebhookUrl);
+      return { success: true, webhookUrl: fullWebhookUrl };
+    } catch (error) {
+      throw { status: 500, code: 'WEBHOOK_ERROR', message: error.message };
     }
   }
 

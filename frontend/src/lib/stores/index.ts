@@ -203,3 +203,25 @@ export {
   contextStats
 } from './conversations';
 export type { Conversation, Message, ConversationSection, ConversationsState, ContextStats } from './conversations';
+
+// Telegram Store (MQTT-based)
+export {
+  telegramStore,
+  initTelegram,
+  loadBots,
+  registerBot,
+  removeBot,
+  testBotToken,
+  setupWebhook,
+  selectBot,
+  setTelegramTab,
+  clearTelegramTestResult,
+  telegramBots,
+  selectedBot,
+  telegramLoading,
+  telegramError,
+  botCount,
+  telegramActiveTab,
+  telegramTestResult
+} from './telegram';
+export type { TelegramBot, TelegramState } from './telegram';

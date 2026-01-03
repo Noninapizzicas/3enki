@@ -3,7 +3,7 @@
    * Página de Facturas
    *
    * Usa AppShell que ya incluye ChatConfig + ChatInput + ChatTools.
-   * Solo define el contenido específico de facturas.
+   * Work-bar y System-bar vacíos (igual que chat principal).
    */
   import { AppShell } from '$lib/components/layout';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
@@ -19,39 +19,38 @@
   function handleConnected() {
     perfStart('Facturas.init');
     logMsg('✅ Facturas page ready');
-    // Aquí cargarías las facturas via MQTT
-    // loadFacturas();
     perfEnd('Facturas.init');
   }
 </script>
 
 <AppShell onConnected={handleConnected}>
-  <!-- Work Bar: módulos específicos de Facturas -->
-  <div class="facturas-toolbar" slot="work-bar">
-    <h1 class="page-title">📄 Facturas</h1>
-    <div class="toolbar-actions">
-      <input
-        type="text"
-        placeholder="Buscar..."
-        class="search-input"
-        bind:value={searchQuery}
-      />
-      <select class="filter-select" bind:value={statusFilter}>
-        <option value="">Todos</option>
-        <option value="pendiente">Pendiente</option>
-        <option value="pagada">Pagada</option>
-        <option value="vencida">Vencida</option>
-      </select>
-      <button class="btn primary">➕ Nueva</button>
-    </div>
-  </div>
+  <!-- Content: Gestión de facturas -->
+  <div class="facturas-page" slot="content">
+    <!-- Header -->
+    <header class="page-header">
+      <h1>📄 Facturas</h1>
+      <div class="actions">
+        <input
+          type="text"
+          placeholder="Buscar..."
+          class="search-input"
+          bind:value={searchQuery}
+        />
+        <select class="filter-select" bind:value={statusFilter}>
+          <option value="">Todos</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="pagada">Pagada</option>
+          <option value="vencida">Vencida</option>
+        </select>
+        <button class="btn primary">➕ Nueva</button>
+      </div>
+    </header>
 
-  <!-- Content: Lista de facturas -->
-  <div class="facturas-content" slot="content">
+    <!-- Lista o estado vacío -->
     {#if loading}
-      <div class="loading">Cargando facturas...</div>
+      <div class="center-message">Cargando facturas...</div>
     {:else if error}
-      <div class="error">{error}</div>
+      <div class="center-message error">{error}</div>
     {:else if facturas.length === 0}
       <div class="empty-state">
         <span class="icon">📄</span>
@@ -75,22 +74,29 @@
 </AppShell>
 
 <style>
-  .facturas-toolbar {
+  .facturas-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 1rem;
+    overflow-y: auto;
+  }
+
+  .page-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: var(--color-bg-secondary, #1a1a2e);
-    border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    margin-bottom: 1.5rem;
+    flex-shrink: 0;
   }
 
-  .page-title {
-    font-size: 1.125rem;
+  .page-header h1 {
+    font-size: 1.25rem;
     font-weight: 600;
     margin: 0;
   }
 
-  .toolbar-actions {
+  .actions {
     display: flex;
     gap: 0.5rem;
     align-items: center;
@@ -98,17 +104,17 @@
 
   .search-input {
     padding: 0.375rem 0.75rem;
-    background: var(--color-bg, #0f0f1a);
+    background: var(--color-bg-secondary, #1a1a2e);
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
     border-radius: 0.375rem;
     color: var(--color-text, #e5e5e5);
     font-size: 0.875rem;
-    width: 200px;
+    width: 180px;
   }
 
   .filter-select {
     padding: 0.375rem 0.75rem;
-    background: var(--color-bg, #0f0f1a);
+    background: var(--color-bg-secondary, #1a1a2e);
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
     border-radius: 0.375rem;
     color: var(--color-text, #e5e5e5);
@@ -122,7 +128,6 @@
     cursor: pointer;
     font-size: 0.875rem;
     font-weight: 500;
-    transition: background-color 0.15s;
   }
 
   .btn.primary {
@@ -134,18 +139,12 @@
     background: var(--color-primary-hover, #2563eb);
   }
 
-  .facturas-content {
-    padding: 1rem;
-    height: 100%;
-    overflow-y: auto;
-  }
-
   .empty-state {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 4rem 2rem;
     text-align: center;
     color: var(--color-text-muted, #a3a3a3);
   }
@@ -218,15 +217,15 @@
     color: #ef4444;
   }
 
-  .loading, .error {
+  .center-message {
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4rem;
     color: var(--color-text-muted, #a3a3a3);
   }
 
-  .error {
+  .center-message.error {
     color: var(--color-error, #ef4444);
   }
 </style>

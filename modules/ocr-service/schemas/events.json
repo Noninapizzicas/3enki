@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ocr-service/events",
+  "title": "Ocr Service Events",
+  "description": "Esquemas de eventos para ocr-service",
+
+  "definitions": {
+    "extract_completed": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "description": "ID de la solicitud original"
+        },
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "engine": {
+          "type": "string",
+          "description": "Engine utilizado"
+        },
+        "text": {
+          "type": "string",
+          "description": "Texto extraído"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Nivel de confianza (0-1)"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duración en ms"
+        }
+      },
+      "required": ["request_id", "success", "engine"]
+    },
+
+    "extract_failed": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "description": "ID de la solicitud original"
+        },
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "string",
+          "description": "Mensaje de error"
+        },
+        "engine": {
+          "type": "string",
+          "description": "Engine que falló"
+        }
+      },
+      "required": ["request_id", "error"]
+    },
+
+    "extract_request": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "description": "ID único de la solicitud"
+        },
+        "input": {
+          "type": "string",
+          "description": "Entrada en base64 o texto"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "engine": {
+              "type": "string",
+              "description": "Engine específico a usar"
+            }
+          }
+        },
+        "correlation_id": {
+          "type": "string",
+          "description": "ID de correlación para trazabilidad"
+        }
+      },
+      "required": ["request_id", "input"]
+    },
+
+    "engine_loaded": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Nombre del engine"
+        },
+        "local": {
+          "type": "boolean",
+          "description": "Si es un engine local"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Capacidades del engine"
+        }
+      },
+      "required": ["name", "local"]
+    }
+  }
+}

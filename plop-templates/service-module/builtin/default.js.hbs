@@ -1,0 +1,49 @@
+/**
+ * {{titleCase name}} - Default Builtin Engine
+ *
+ * Este es el engine por defecto que siempre está disponible.
+ * Funciona sin dependencias externas ni plugins adicionales.
+ *
+ * Para {{name}}-service, este handler debería ser reemplazado
+ * con la implementación específica (ej: tesseract para OCR).
+ */
+
+// Capacidades que este engine soporta
+const capabilities = ['{{inputType}}'];
+
+// Configuración por defecto
+const config = {
+  // Añadir configuración específica del engine
+};
+
+/**
+ * Función principal de extracción/procesamiento
+ * @param {Buffer|string} input - Entrada a procesar
+ * @param {Object} options - Opciones de procesamiento
+ * @returns {Object} { text, confidence, ... }
+ */
+async function extract(input, options = {}) {
+  // TODO: Implementar lógica de procesamiento
+
+  // Placeholder - retorna mensaje indicando que debe implementarse
+  return {
+    text: '[{{titleCase name}} builtin engine - Implement extract() in builtin/default.js]',
+    confidence: 0,
+    engine: 'default',
+    warning: 'Using placeholder builtin engine. Replace with actual implementation.'
+  };
+}
+
+/**
+ * Limpieza de recursos (opcional)
+ */
+async function terminate() {
+  // Cleanup si es necesario
+}
+
+module.exports = {
+  capabilities,
+  config,
+  extract,
+  terminate
+};

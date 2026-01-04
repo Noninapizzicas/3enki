@@ -1141,4 +1141,159 @@ module.exports = function (plop) {
       ];
     }
   });
+
+  // ==========================================
+  // Generator: service-module
+  // ==========================================
+  plop.setGenerator('service-module', {
+    description: 'Crear un módulo de servicio con arquitectura de plugins (OCR, Translate, etc.)',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '🔧 Nombre del servicio (sin "-service", ej: ocr, translate, speech):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+            return 'Usa kebab-case (ej: ocr, image-gen)';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'description',
+        message: '📝 Descripción del servicio:',
+        default: (answers) => `Servicio de ${answers.name} con soporte multi-engine`
+      },
+      {
+        type: 'input',
+        name: 'author',
+        message: '👤 Autor:',
+        default: 'Event Core Team'
+      },
+      {
+        type: 'input',
+        name: 'inputType',
+        message: '📥 Tipo de entrada principal (ej: image, audio, text, pdf):',
+        default: 'image'
+      },
+      {
+        type: 'input',
+        name: 'outputType',
+        message: '📤 Tipo de salida principal (ej: text, audio, image):',
+        default: 'text'
+      },
+      {
+        type: 'input',
+        name: 'builtinEngine',
+        message: '🏠 Engine builtin por defecto (ej: tesseract, basic):',
+        default: 'default'
+      },
+      {
+        type: 'confirm',
+        name: 'createPlugin',
+        message: '📦 ¿Crear directorio de plugins vacío?',
+        default: true
+      }
+    ],
+
+    actions: (data) => {
+      const modulePath = `modules/${data.name}-service`;
+      const pluginsPath = `plugins/${data.name}`;
+
+      const actions = [
+        // Crear index.js
+        {
+          type: 'add',
+          path: `${modulePath}/index.js`,
+          templateFile: 'plop-templates/service-module/index.js.hbs'
+        },
+        // Crear module.json
+        {
+          type: 'add',
+          path: `${modulePath}/module.json`,
+          templateFile: 'plop-templates/service-module/module.json.hbs'
+        },
+        // Crear README.md
+        {
+          type: 'add',
+          path: `${modulePath}/README.md`,
+          templateFile: 'plop-templates/service-module/README.md.hbs'
+        },
+        // Crear lib/plugin-loader.js
+        {
+          type: 'add',
+          path: `${modulePath}/lib/plugin-loader.js`,
+          templateFile: 'plop-templates/service-module/lib/plugin-loader.js.hbs'
+        },
+        // Crear lib/api-executor.js
+        {
+          type: 'add',
+          path: `${modulePath}/lib/api-executor.js`,
+          templateFile: 'plop-templates/service-module/lib/api-executor.js.hbs'
+        },
+        // Crear builtin/default.js
+        {
+          type: 'add',
+          path: `${modulePath}/builtin/${data.builtinEngine}.js`,
+          templateFile: 'plop-templates/service-module/builtin/default.js.hbs'
+        },
+        // Crear schemas/events.json
+        {
+          type: 'add',
+          path: `${modulePath}/schemas/events.json`,
+          templateFile: 'plop-templates/service-module/schemas/events.json.hbs'
+        },
+        // Crear .generated
+        {
+          type: 'add',
+          path: `${modulePath}/.generated`,
+          template: `Service Module generado el {{currentDate}}\nGenerador: plop service-module\nBuiltin: ${data.builtinEngine}\n`
+        }
+      ];
+
+      // Crear directorio de plugins si se solicita
+      if (data.createPlugin) {
+        actions.push({
+          type: 'add',
+          path: `${pluginsPath}/.gitkeep`,
+          template: '# Plugins para {{name}}-service\n# Cada plugin debe estar en su propio directorio con engine.json\n'
+        });
+      }
+
+      // Mensaje final
+      actions.push(() => {
+        console.log('\n✅ Service Module creado exitosamente');
+        console.log(`\n📁 Módulo: ${modulePath}/`);
+        console.log('   ├── index.js           (orquestador)');
+        console.log('   ├── module.json        (configuración)');
+        console.log('   ├── README.md          (documentación)');
+        console.log('   ├── lib/');
+        console.log('   │   ├── plugin-loader.js');
+        console.log('   │   └── api-executor.js');
+        console.log('   ├── builtin/');
+        console.log(`   │   └── ${data.builtinEngine}.js`);
+        console.log('   └── schemas/');
+        console.log('       └── events.json');
+        if (data.createPlugin) {
+          console.log(`\n📦 Plugins: ${pluginsPath}/`);
+        }
+        console.log('\n🚀 Próximos pasos:');
+        console.log(`   1. Implementar builtin/${data.builtinEngine}.js con la lógica real`);
+        console.log(`   2. Agregar "${data.name}-service" a config.json → modules.enabled`);
+        console.log('   3. Reiniciar Event-Core: npm start');
+        console.log(`   4. Probar: curl http://localhost:3000/modules/${data.name}-service/engines`);
+        console.log('\n📖 Para añadir plugins externos:');
+        console.log(`   1. Crear directorio: ${pluginsPath}/mi-engine/`);
+        console.log('   2. Añadir engine.json con la configuración');
+        console.log('   3. Para locales: añadir handler.js');
+        console.log('   4. Reiniciar el servidor\n');
+        return '';
+      });
+
+      return actions;
+    }
+  });
 };

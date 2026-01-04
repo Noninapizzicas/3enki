@@ -1,0 +1,240 @@
+/**
+ * API Executor for Ocr Service
+ *
+ * Ejecuta plugins remotos (APIs externas) basándose en la
+ * configuración definida en engine.json
+ *
+ * Soporta:
+ * - Interpolación de variables: , , etc.
+ * - Extracción de respuesta via JSONPath simplificado
+ * - Resolución de credenciales desde process.env
+ */
+
+const https = require('https');
+const http = require('http');
+
+class ApiExecutor {
+  constructor(logger, core = {}) {
+    this.logger = logger;
+    this.eventBus = core.eventBus;
+  }
+
+  /**
+   * Ejecuta un engine remoto
+   * @param {Object} engine - Configuración del engine
+   * @param {Buffer|string} input - Entrada a procesar
+   * @param {Object} options - Opciones adicionales
+   * @returns {Object} Resultado del procesamiento
+   */
+  async execute(engine, input, options = {}) {
+    const startTime = Date.now();
+
+    // Obtener credencial
+    const credential = this.resolveCredential(engine.credentialKey);
+
+    if (!credential) {
+      throw new Error(`Credential not found: ${engine.credentialKey}`);
+    }
+
+    // Preparar input
+    const inputBase64 = Buffer.isBuffer(input)
+      ? input.toString('base64')
+      : Buffer.from(input).toString('base64');
+
+    // Interpolar URL
+    const url = this.interpolate(engine.request.url, {
+      credential,
+      input_base64: inputBase64,
+      ...options
+    });
+
+    // Interpolar body
+    const body = engine.request.body
+      ? JSON.stringify(this.interpolateObject(engine.request.body, {
+          credential,
+          input_base64: inputBase64,
+          ...options
+        }))
+      : null;
+
+    // Interpolar headers
+    const headers = this.interpolateObject(engine.request.headers || {}, {
+      credential,
+      ...options
+    });
+
+    // Hacer request
+    this.logger.debug('api-executor.request', {
+      engine: engine.name,
+      url: url.replace(credential, '***'),
+      method: engine.request.method
+    });
+
+    const response = await this.httpRequest({
+      url,
+      method: engine.request.method || 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body,
+      timeout: options.timeout || 30000
+    });
+
+    // Extraer resultado según configuración
+    const result = this.extractResult(response, engine.response);
+
+    const duration = Date.now() - startTime;
+
+    this.logger.debug('api-executor.response', {
+      engine: engine.name,
+      duration,
+      resultLength: result.text?.length || 0
+    });
+
+    return result;
+  }
+
+  /**
+   * Resuelve una credencial desde process.env
+   */
+  resolveCredential(key) {
+    if (!key) return null;
+    return process.env[key] || null;
+  }
+
+  /**
+   * Interpola variables en un string
+   * Formato: 
+   */
+  interpolate(template, vars) {
+    if (!template) return template;
+
+    return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+      return vars[key] !== undefined ? vars[key] : match;
+    });
+  }
+
+  /**
+   * Interpola variables en un objeto recursivamente
+   */
+  interpolateObject(obj, vars) {
+    if (typeof obj === 'string') {
+      return this.interpolate(obj, vars);
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.interpolateObject(item, vars));
+    }
+
+    if (obj && typeof obj === 'object') {
+      const result = {};
+      for (const [key, value] of Object.entries(obj)) {
+        result[key] = this.interpolateObject(value, vars);
+      }
+      return result;
+    }
+
+    return obj;
+  }
+
+  /**
+   * Extrae el resultado de la respuesta según la configuración
+   */
+  extractResult(response, responseConfig) {
+    if (!responseConfig) {
+      return { text: JSON.stringify(response), confidence: 1 };
+    }
+
+    const text = responseConfig.textPath
+      ? this.extractPath(response, responseConfig.textPath)
+      : null;
+
+    const confidence = responseConfig.confidencePath
+      ? this.extractPath(response, responseConfig.confidencePath)
+      : 1;
+
+    return {
+      text: text || '',
+      confidence: typeof confidence === 'number' ? confidence : parseFloat(confidence) || 1,
+      raw: response
+    };
+  }
+
+  /**
+   * Extrae un valor de un objeto usando path simplificado
+   * Ejemplo: "responses[0].textAnnotations[0].description"
+   */
+  extractPath(obj, path) {
+    if (!path || !obj) return null;
+
+    const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+    let current = obj;
+
+    for (const part of parts) {
+      if (current === null || current === undefined) return null;
+      current = current[part];
+    }
+
+    return current;
+  }
+
+  /**
+   * Realiza una petición HTTP/HTTPS
+   */
+  httpRequest({ url, method, headers, body, timeout }) {
+    return new Promise((resolve, reject) => {
+      const urlObj = new URL(url);
+      const isHttps = urlObj.protocol === 'https:';
+      const lib = isHttps ? https : http;
+
+      const options = {
+        hostname: urlObj.hostname,
+        port: urlObj.port || (isHttps ? 443 : 80),
+        path: urlObj.pathname + urlObj.search,
+        method,
+        headers,
+        timeout
+      };
+
+      const req = lib.request(options, (res) => {
+        let data = '';
+
+        res.on('data', chunk => data += chunk);
+
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+
+            if (res.statusCode >= 400) {
+              reject(new Error(json.error?.message || json.message || `HTTP ${res.statusCode}`));
+            } else {
+              resolve(json);
+            }
+          } catch (e) {
+            if (res.statusCode >= 400) {
+              reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
+            } else {
+              resolve(data);
+            }
+          }
+        });
+      });
+
+      req.on('error', reject);
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      if (body) {
+        req.write(body);
+      }
+
+      req.end();
+    });
+  }
+}
+
+module.exports = ApiExecutor;

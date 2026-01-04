@@ -1,28 +1,26 @@
 <script lang="ts">
   /**
-   * AppShell - Layout base reutilizable para todas las páginas
+   * AppShell - Layout base para todas las páginas
    *
-   * Layout:
+   * Layout fijo:
    * ┌─────────────────────────────────────────┬───────┐
-   * │ slot:top-bar                         [▼]│       │
+   * │ slot:work-bar (módulos de página)       │       │
    * ├─────────────────────────────────────────┤ System│
    * │                                         │  Bar  │
    * │ slot:content (área principal scroll)    │       │
    * │                                         │       │
    * ├─────────────────────────────────────────┤       │
-   * │ slot:controls (controles)               │       │
+   * │ 📁 🤖 🧘 💬 🔐  ChatConfig (FIJO)       │       │
    * ├─────────────────────────────────────────┤       │
-   * │ slot:tools (herramientas)               │       │
+   * │ [____ChatInput____] ➤  (FIJO)          │       │
+   * ├─────────────────────────────────────────┤       │
+   * │ 🗂️ ChatTools (FIJO)                    │       │
    * └─────────────────────────────────────────┴───────┘
-   * + LazyPanel (modales/paneles dinámicos)
-   * + ToastContainer (notificaciones)
    *
    * Uso:
    * <AppShell>
-   *   <WorkBar slot="top-bar" />
+   *   <MyWorkBarModules slot="work-bar" />
    *   <MyContent slot="content" />
-   *   <MyControls slot="controls" />
-   *   <MyTools slot="tools" />
    * </AppShell>
    */
 
@@ -31,25 +29,33 @@
   import { closePanel } from '$lib/stores/ui';
   import {
     initWorkspaceSubscriptions,
-    initProjectsSubscriptions
+    initProjectsSubscriptions,
+    initChatSubscriptions,
+    initConversations
   } from '$lib/stores';
   import { registerAllModules, unregisterAllModules } from '$lib/modules';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
   import SystemBar from './SystemBar.svelte';
+  import ChatConfig from './ChatConfig.svelte';
+  import ChatInput from './ChatInput.svelte';
+  import ChatTools from './ChatTools.svelte';
   import LazyPanel from './LazyPanel.svelte';
   import { ToastContainer } from '$lib/components/base';
 
   // Props opcionales para configuración
   export let showSystemBar = true;
-  export let showTopBar = true;
-  export let showTools = true;
+  export let showWorkBar = true;
+  export let showChatInput = true;
+  export let showChatTools = true;
 
   // Callbacks para inicialización adicional por página
   export let onConnected: (() => void) | null = null;
 
   let cleanupWorkspace: (() => void) | null = null;
   let cleanupProjects: (() => void) | null = null;
+  let cleanupChat: (() => void) | null = null;
+  let cleanupConversations: (() => void) | null = null;
 
   onMount(() => {
     perfStart('AppShell.onMount.TOTAL');
@@ -68,10 +74,17 @@
     // 3. Conectar a MQTT en background
     perfStart('AppShell.connect.start');
     connect().then(() => {
-      // Inicializar proyectos (compartido entre páginas)
+      // Inicializar proyectos
       perfStart('AppShell.initProjects');
       cleanupProjects = initProjectsSubscriptions();
       perfEnd('AppShell.initProjects');
+
+      // Inicializar chat (siempre disponible)
+      perfStart('AppShell.initChat');
+      cleanupChat = initChatSubscriptions();
+      cleanupConversations = initConversations();
+      perfEnd('AppShell.initChat');
+
       logMsg('✅ AppShell connected');
 
       // Callback para inicialización adicional por página
@@ -99,6 +112,8 @@
     // 2. Limpiar subscripciones
     if (cleanupWorkspace) cleanupWorkspace();
     if (cleanupProjects) cleanupProjects();
+    if (cleanupChat) cleanupChat();
+    if (cleanupConversations) cleanupConversations();
 
     // 3. Desconectar MQTT
     disconnect();
@@ -115,10 +130,10 @@
 </script>
 
 <div class="app-shell">
-  <!-- Top Bar (slot) -->
-  {#if showTopBar}
-    <header class="top-bar">
-      <slot name="top-bar" />
+  <!-- Work Bar: módulos específicos de página -->
+  {#if showWorkBar}
+    <header class="work-bar">
+      <slot name="work-bar" />
     </header>
   {/if}
 
@@ -129,11 +144,19 @@
       <slot name="content" />
     </div>
 
-    <!-- Controls + Tools -->
+    <!-- Bottom Area: Config + Input + Tools (FIJO) -->
     <div class="bottom-area">
-      <slot name="controls" />
-      {#if showTools}
-        <slot name="tools" />
+      <!-- ChatConfig: 📁 🤖 🧘 💬 🔐 -->
+      <ChatConfig />
+
+      <!-- ChatInput: siempre disponible -->
+      {#if showChatInput}
+        <ChatInput />
+      {/if}
+
+      <!-- ChatTools: 🗂️ -->
+      {#if showChatTools}
+        <ChatTools />
       {/if}
     </div>
   </main>
@@ -167,7 +190,7 @@
     overflow: hidden;
   }
 
-  .top-bar {
+  .work-bar {
     flex-shrink: 0;
   }
 

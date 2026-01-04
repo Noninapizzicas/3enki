@@ -1,18 +1,283 @@
 /**
- * Telegram Bot API Client v2.0
- * Complete wrapper for Telegram Bot API
+ * Telegram Bot API Client v3.0
+ * Multi-bot support with polling and rate limiting
  */
 
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { EventEmitter } = require('events');
 
-class TelegramClient {
-  constructor(botToken, logger) {
+class TelegramClient extends EventEmitter {
+  constructor(botToken, botName, options = {}) {
+    super();
+
     this.botToken = botToken;
-    this.logger = logger;
+    this.botName = botName;
     this.baseUrl = `https://api.telegram.org/bot${botToken}`;
     this.fileBaseUrl = `https://api.telegram.org/file/bot${botToken}`;
+
+    // Polling state
+    this.polling = false;
+    this.pollingInterval = options.pollingInterval || 1000;
+    this.lastUpdateId = 0;
+    this.pollingTimeout = null;
+
+    // Rate limiting
+    this.rateLimitPerSecond = options.rateLimitPerSecond || 25;
+    this.maxQueueSize = options.maxQueueSize || 100;
+    this.sendQueue = [];
+    this.sending = false;
+    this.lastSendTime = 0;
+    this.sendInterval = 1000 / this.rateLimitPerSecond;
+
+    // Bot info
+    this.botInfo = null;
+  }
+
+  // ==========================================
+  // Polling
+  // ==========================================
+
+  async startPolling() {
+    if (this.polling) return;
+
+    try {
+      // Get bot info first
+      this.botInfo = await this.getMe();
+      this.polling = true;
+      this.emit('started', { botName: this.botName, username: this.botInfo.username });
+      this.poll();
+    } catch (error) {
+      this.emit('error', { botName: this.botName, error: error.message, reason: 'start_failed' });
+      throw error;
+    }
+  }
+
+  stopPolling() {
+    this.polling = false;
+    if (this.pollingTimeout) {
+      clearTimeout(this.pollingTimeout);
+      this.pollingTimeout = null;
+    }
+    this.emit('stopped', { botName: this.botName });
+  }
+
+  async poll() {
+    if (!this.polling) return;
+
+    try {
+      const updates = await this.getUpdates(this.lastUpdateId + 1);
+
+      for (const update of updates) {
+        this.lastUpdateId = update.update_id;
+        this.processUpdate(update);
+      }
+    } catch (error) {
+      // Don't emit error for network timeouts during polling
+      if (!error.message.includes('ETIMEDOUT')) {
+        this.emit('error', { botName: this.botName, error: error.message, reason: 'polling_error' });
+      }
+    }
+
+    // Schedule next poll
+    if (this.polling) {
+      this.pollingTimeout = setTimeout(() => this.poll(), this.pollingInterval);
+    }
+  }
+
+  async getUpdates(offset = 0, timeout = 30) {
+    return this.request('getUpdates', {
+      offset,
+      timeout,
+      allowed_updates: ['message', 'callback_query', 'edited_message']
+    });
+  }
+
+  processUpdate(update) {
+    const baseData = {
+      botName: this.botName,
+      timestamp: new Date().toISOString()
+    };
+
+    // Callback query (button press)
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      this.emit('callback', {
+        ...baseData,
+        chatId: cb.message?.chat?.id,
+        messageId: cb.message?.message_id,
+        callbackId: cb.id,
+        data: cb.data,
+        from: this.extractFrom(cb.from)
+      });
+      return;
+    }
+
+    // Message
+    const message = update.message || update.edited_message;
+    if (!message) return;
+
+    const msgBase = {
+      ...baseData,
+      chatId: message.chat.id,
+      messageId: message.message_id,
+      from: this.extractFrom(message.from)
+    };
+
+    // Command
+    if (message.text && message.text.startsWith('/')) {
+      const parts = message.text.split(' ');
+      const command = parts[0].substring(1).split('@')[0]; // Remove / and @botname
+      const args = parts.slice(1);
+      this.emit('command', { ...msgBase, command, args, text: message.text });
+      return;
+    }
+
+    // Text
+    if (message.text) {
+      this.emit('text', { ...msgBase, text: message.text });
+      return;
+    }
+
+    // Photo
+    if (message.photo) {
+      const bestPhoto = message.photo[message.photo.length - 1];
+      this.emit('photo', {
+        ...msgBase,
+        fileId: bestPhoto.file_id,
+        fileSize: bestPhoto.file_size,
+        width: bestPhoto.width,
+        height: bestPhoto.height,
+        caption: message.caption || null,
+        sizes: message.photo.map(p => ({ fileId: p.file_id, width: p.width, height: p.height }))
+      });
+      return;
+    }
+
+    // Document
+    if (message.document) {
+      this.emit('document', {
+        ...msgBase,
+        fileId: message.document.file_id,
+        fileName: message.document.file_name,
+        mimeType: message.document.mime_type,
+        fileSize: message.document.file_size,
+        caption: message.caption || null
+      });
+      return;
+    }
+
+    // Video
+    if (message.video) {
+      this.emit('video', {
+        ...msgBase,
+        fileId: message.video.file_id,
+        duration: message.video.duration,
+        width: message.video.width,
+        height: message.video.height,
+        caption: message.caption || null
+      });
+      return;
+    }
+
+    // Audio
+    if (message.audio) {
+      this.emit('audio', {
+        ...msgBase,
+        fileId: message.audio.file_id,
+        duration: message.audio.duration,
+        title: message.audio.title,
+        performer: message.audio.performer
+      });
+      return;
+    }
+
+    // Voice
+    if (message.voice) {
+      this.emit('voice', {
+        ...msgBase,
+        fileId: message.voice.file_id,
+        duration: message.voice.duration
+      });
+      return;
+    }
+
+    // Location
+    if (message.location) {
+      this.emit('location', {
+        ...msgBase,
+        latitude: message.location.latitude,
+        longitude: message.location.longitude
+      });
+      return;
+    }
+
+    // Contact
+    if (message.contact) {
+      this.emit('contact', {
+        ...msgBase,
+        phoneNumber: message.contact.phone_number,
+        firstName: message.contact.first_name,
+        lastName: message.contact.last_name
+      });
+      return;
+    }
+  }
+
+  extractFrom(from) {
+    if (!from) return null;
+    return {
+      id: from.id,
+      username: from.username,
+      firstName: from.first_name,
+      lastName: from.last_name
+    };
+  }
+
+  // ==========================================
+  // Rate Limited Send Queue
+  // ==========================================
+
+  async queueSend(method, params) {
+    return new Promise((resolve, reject) => {
+      if (this.sendQueue.length >= this.maxQueueSize) {
+        this.emit('queue_overflow', { botName: this.botName, queueSize: this.sendQueue.length });
+        reject(new Error('Send queue overflow'));
+        return;
+      }
+
+      this.sendQueue.push({ method, params, resolve, reject });
+      this.processQueue();
+    });
+  }
+
+  async processQueue() {
+    if (this.sending || this.sendQueue.length === 0) return;
+
+    const now = Date.now();
+    const timeSinceLastSend = now - this.lastSendTime;
+
+    if (timeSinceLastSend < this.sendInterval) {
+      setTimeout(() => this.processQueue(), this.sendInterval - timeSinceLastSend);
+      return;
+    }
+
+    this.sending = true;
+    const { method, params, resolve, reject } = this.sendQueue.shift();
+
+    try {
+      const result = await this.request(method, params);
+      this.lastSendTime = Date.now();
+      resolve(result);
+    } catch (error) {
+      reject(error);
+    } finally {
+      this.sending = false;
+      if (this.sendQueue.length > 0) {
+        setTimeout(() => this.processQueue(), this.sendInterval);
+      }
+    }
   }
 
   // ==========================================
@@ -34,7 +299,8 @@ class TelegramClient {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData)
-        }
+        },
+        timeout: method === 'getUpdates' ? 35000 : 10000
       };
 
       const req = https.request(options, (res) => {
@@ -55,6 +321,11 @@ class TelegramClient {
       });
 
       req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
       req.write(postData);
       req.end();
     });
@@ -69,7 +340,7 @@ class TelegramClient {
   }
 
   // ==========================================
-  // Sending Messages
+  // Sending Messages (rate limited)
   // ==========================================
 
   async sendMessage(chatId, text, options = {}) {
@@ -83,7 +354,7 @@ class TelegramClient {
     if (options.disableNotification) params.disable_notification = true;
     if (options.replyMarkup) params.reply_markup = options.replyMarkup;
 
-    return this.request('sendMessage', params);
+    return this.queueSend('sendMessage', params);
   }
 
   async sendPhoto(chatId, photo, options = {}) {
@@ -96,7 +367,7 @@ class TelegramClient {
     if (options.parseMode) params.parse_mode = options.parseMode;
     if (options.replyToMessageId) params.reply_to_message_id = options.replyToMessageId;
 
-    return this.request('sendPhoto', params);
+    return this.queueSend('sendPhoto', params);
   }
 
   async sendDocument(chatId, document, options = {}) {
@@ -109,7 +380,7 @@ class TelegramClient {
     if (options.parseMode) params.parse_mode = options.parseMode;
     if (options.replyToMessageId) params.reply_to_message_id = options.replyToMessageId;
 
-    return this.request('sendDocument', params);
+    return this.queueSend('sendDocument', params);
   }
 
   async sendAudio(chatId, audio, options = {}) {
@@ -123,7 +394,7 @@ class TelegramClient {
     if (options.performer) params.performer = options.performer;
     if (options.title) params.title = options.title;
 
-    return this.request('sendAudio', params);
+    return this.queueSend('sendAudio', params);
   }
 
   async sendVideo(chatId, video, options = {}) {
@@ -137,7 +408,7 @@ class TelegramClient {
     if (options.width) params.width = options.width;
     if (options.height) params.height = options.height;
 
-    return this.request('sendVideo', params);
+    return this.queueSend('sendVideo', params);
   }
 
   async sendVoice(chatId, voice, options = {}) {
@@ -149,7 +420,7 @@ class TelegramClient {
     if (options.caption) params.caption = options.caption;
     if (options.duration) params.duration = options.duration;
 
-    return this.request('sendVoice', params);
+    return this.queueSend('sendVoice', params);
   }
 
   async sendLocation(chatId, latitude, longitude, options = {}) {
@@ -161,7 +432,7 @@ class TelegramClient {
 
     if (options.replyToMessageId) params.reply_to_message_id = options.replyToMessageId;
 
-    return this.request('sendLocation', params);
+    return this.queueSend('sendLocation', params);
   }
 
   async sendContact(chatId, phoneNumber, firstName, options = {}) {
@@ -173,7 +444,7 @@ class TelegramClient {
 
     if (options.lastName) params.last_name = options.lastName;
 
-    return this.request('sendContact', params);
+    return this.queueSend('sendContact', params);
   }
 
   // ==========================================
@@ -192,7 +463,7 @@ class TelegramClient {
     if (options.parseMode) params.parse_mode = options.parseMode;
     if (options.replyToMessageId) params.reply_to_message_id = options.replyToMessageId;
 
-    return this.request('sendMessage', params);
+    return this.queueSend('sendMessage', params);
   }
 
   async sendReplyKeyboard(chatId, text, keyboard, options = {}) {
@@ -206,11 +477,11 @@ class TelegramClient {
       }
     };
 
-    return this.request('sendMessage', params);
+    return this.queueSend('sendMessage', params);
   }
 
   async removeKeyboard(chatId, text) {
-    return this.request('sendMessage', {
+    return this.queueSend('sendMessage', {
       chat_id: chatId,
       text: text,
       reply_markup: { remove_keyboard: true }
@@ -231,11 +502,11 @@ class TelegramClient {
     if (options.parseMode) params.parse_mode = options.parseMode;
     if (options.replyMarkup) params.reply_markup = options.replyMarkup;
 
-    return this.request('editMessageText', params);
+    return this.queueSend('editMessageText', params);
   }
 
   async editMessageReplyMarkup(chatId, messageId, replyMarkup) {
-    return this.request('editMessageReplyMarkup', {
+    return this.queueSend('editMessageReplyMarkup', {
       chat_id: chatId,
       message_id: messageId,
       reply_markup: replyMarkup
@@ -243,7 +514,7 @@ class TelegramClient {
   }
 
   async deleteMessage(chatId, messageId) {
-    return this.request('deleteMessage', {
+    return this.queueSend('deleteMessage', {
       chat_id: chatId,
       message_id: messageId
     });
@@ -262,7 +533,7 @@ class TelegramClient {
     if (options.showAlert) params.show_alert = options.showAlert;
     if (options.url) params.url = options.url;
 
-    return this.request('answerCallbackQuery', params);
+    return this.queueSend('answerCallbackQuery', params);
   }
 
   // ==========================================
@@ -270,7 +541,7 @@ class TelegramClient {
   // ==========================================
 
   async sendChatAction(chatId, action = 'typing') {
-    return this.request('sendChatAction', {
+    return this.queueSend('sendChatAction', {
       chat_id: chatId,
       action: action
     });
@@ -385,36 +656,11 @@ class TelegramClient {
   }
 
   // ==========================================
-  // Webhook
-  // ==========================================
-
-  async setWebhook(url, options = {}) {
-    const params = { url };
-
-    if (options.certificate) params.certificate = options.certificate;
-    if (options.maxConnections) params.max_connections = options.maxConnections;
-    if (options.allowedUpdates) params.allowed_updates = options.allowedUpdates;
-    if (options.secretToken) params.secret_token = options.secretToken;
-
-    return this.request('setWebhook', params);
-  }
-
-  async deleteWebhook(dropPendingUpdates = false) {
-    return this.request('deleteWebhook', {
-      drop_pending_updates: dropPendingUpdates
-    });
-  }
-
-  async getWebhookInfo() {
-    return this.request('getWebhookInfo');
-  }
-
-  // ==========================================
   // Forward/Copy
   // ==========================================
 
   async forwardMessage(chatId, fromChatId, messageId) {
-    return this.request('forwardMessage', {
+    return this.queueSend('forwardMessage', {
       chat_id: chatId,
       from_chat_id: fromChatId,
       message_id: messageId
@@ -430,7 +676,7 @@ class TelegramClient {
 
     if (options.caption) params.caption = options.caption;
 
-    return this.request('copyMessage', params);
+    return this.queueSend('copyMessage', params);
   }
 
   // ==========================================
@@ -460,11 +706,12 @@ class TelegramClient {
     return mimeTypes[ext] || 'application/octet-stream';
   }
 
-  reply(chatId, messageId, text, options = {}) {
-    return this.sendMessage(chatId, text, {
-      ...options,
-      replyToMessageId: messageId
-    });
+  getQueueSize() {
+    return this.sendQueue.length;
+  }
+
+  isPolling() {
+    return this.polling;
   }
 }
 

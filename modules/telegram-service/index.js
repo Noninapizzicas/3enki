@@ -1,49 +1,57 @@
 /**
- * Telegram Service Module
- * Servicio de Telegram para enviar/recibir mensajes y fotos
+ * Telegram Service Module v3.0
+ * Multi-bot management with credential-manager integration
  *
- * Events publicados:
- * - telegram.message.received: Mensaje de texto recibido
- * - telegram.photo.received: Foto recibida
- * - telegram.message.sent: Mensaje enviado
- * - telegram.error: Error en operaciones
- *
- * Tools para AI:
- * - telegram.send: Enviar mensaje
- * - telegram.sendPhoto: Enviar foto
- * - telegram.reply: Responder mensaje
- * - telegram.getFile: Obtener archivo
+ * Features:
+ * - Centralized multi-bot management
+ * - Auto-start/stop via credential-manager events
+ * - Polling-based (no webhook needed)
+ * - Rate-limited message queue
+ * - All events include botName for filtering
  */
 
+const path = require('path');
+const fs = require('fs').promises;
 const TelegramClient = require('./services/telegram-client');
 
-// Event names (will be added to core/constants.js via generate:constants)
-const TELEGRAM_EVENTS = {
-  MESSAGE_RECEIVED: 'telegram.message.received',
+// Event names
+const EVENTS = {
+  TEXT_RECEIVED: 'telegram.text.received',
   PHOTO_RECEIVED: 'telegram.photo.received',
+  DOCUMENT_RECEIVED: 'telegram.document.received',
+  VIDEO_RECEIVED: 'telegram.video.received',
+  AUDIO_RECEIVED: 'telegram.audio.received',
+  VOICE_RECEIVED: 'telegram.voice.received',
+  LOCATION_RECEIVED: 'telegram.location.received',
+  CONTACT_RECEIVED: 'telegram.contact.received',
+  COMMAND_RECEIVED: 'telegram.command.received',
+  CALLBACK_RECEIVED: 'telegram.callback.received',
   MESSAGE_SENT: 'telegram.message.sent',
-  SEND_REQUEST: 'telegram.send.request',
-  PHOTO_SEND_REQUEST: 'telegram.photo.send.request',
-  ERROR: 'telegram.error'
+  SEND_FAILED: 'telegram.send.failed',
+  BOT_STARTED: 'telegram.bot.started',
+  BOT_STOPPED: 'telegram.bot.stopped',
+  BOT_ERROR: 'telegram.bot.error',
+  QUEUE_OVERFLOW: 'telegram.queue.overflow'
 };
+
+// Credential pattern: TELEGRAM_API_KEY_BOT_{botName}
+const CREDENTIAL_PATTERN = /^TELEGRAM_API_KEY_BOT_(.+)$/;
 
 class TelegramServiceModule {
   constructor() {
     this.name = 'telegram-service';
-    this.version = '1.0.0';
+    this.version = '3.0.0';
 
     // Dependencies
     this.logger = null;
     this.metrics = null;
     this.eventBus = null;
     this.config = null;
-    this.activity = null;
 
-    // Client
-    this.client = null;
-    this.botInfo = null;
+    // Multi-bot state
+    this.bots = new Map(); // botName -> TelegramClient
 
-    // Unsubscribe functions (pattern from conversation-manager)
+    // Unsubscribe functions
     this.unsubscribes = [];
   }
 
@@ -55,53 +63,41 @@ class TelegramServiceModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
-    this.activity = core.activity?.forModule(this.name);
 
-    this.activity?.action('module.loading', { version: this.version });
+    // Load config from module.json
+    const moduleJsonPath = path.join(__dirname, 'module.json');
+    const moduleJson = JSON.parse(await fs.readFile(moduleJsonPath, 'utf-8'));
+    this.config = moduleJson.config || {};
+
     this.logger.info('module.loading', {
       module: this.name,
       version: this.version
     });
 
-    // Obtener token
-    const botToken = this.config.botToken || process.env.TELEGRAM_BOT_TOKEN;
-
-    if (!botToken) {
-      this.logger.warn('telegram.no_token', {
-        message: 'TELEGRAM_BOT_TOKEN not configured. Module will be inactive.'
-      });
-      return;
-    }
-
-    // Inicializar cliente
-    this.client = new TelegramClient(botToken, this.logger);
-
-    // Obtener info del bot
-    try {
-      this.botInfo = await this.client.getMe();
-      this.logger.info('telegram.bot_connected', {
-        username: this.botInfo.username,
-        id: this.botInfo.id
-      });
-    } catch (error) {
-      this.logger.error('telegram.connection_failed', { error: error.message });
-    }
-
-    // Suscribirse a eventos
+    // Subscribe to credential events
     await this.subscribeToEvents();
+
+    // Load existing Telegram credentials
+    await this.loadExistingBots();
 
     this.logger.info('module.loaded', {
       module: this.name,
-      bot: this.botInfo?.username || 'not connected'
+      version: this.version,
+      activeBots: this.bots.size
     });
   }
 
   async onUnload() {
-    this.activity?.action('module.unloading');
     this.logger.info('module.unloading', { module: this.name });
 
-    // Unsubscribe all event handlers
+    // Stop all bots
+    for (const [botName, client] of this.bots) {
+      this.logger.info('telegram.bot.stopping', { botName });
+      client.stopPolling();
+    }
+    this.bots.clear();
+
+    // Unsubscribe all
     for (const unsub of this.unsubscribes) {
       if (typeof unsub === 'function') {
         await unsub();
@@ -109,304 +105,400 @@ class TelegramServiceModule {
     }
     this.unsubscribes = [];
 
-    this.client = null;
-    this.botInfo = null;
+    this.logger.info('module.unloaded', { module: this.name });
   }
 
   async subscribeToEvents() {
-    // Suscribirse a peticiones de envío (tracking unsubscribes)
-    const unsubSend = await this.eventBus.subscribe(
-      TELEGRAM_EVENTS.SEND_REQUEST,
-      this.onSendRequest.bind(this)
+    // Listen for credential changes
+    const unsubSaved = await this.eventBus.subscribe(
+      'credential.saved',
+      this.onCredentialSaved.bind(this)
     );
-    this.unsubscribes.push(unsubSend);
+    this.unsubscribes.push(unsubSaved);
 
-    const unsubPhoto = await this.eventBus.subscribe(
-      TELEGRAM_EVENTS.PHOTO_SEND_REQUEST,
-      this.onSendPhotoRequest.bind(this)
+    const unsubDeleted = await this.eventBus.subscribe(
+      'credential.deleted',
+      this.onCredentialDeleted.bind(this)
     );
-    this.unsubscribes.push(unsubPhoto);
+    this.unsubscribes.push(unsubDeleted);
 
     this.logger.info('telegram.events.subscribed', {
-      events: [TELEGRAM_EVENTS.SEND_REQUEST, TELEGRAM_EVENTS.PHOTO_SEND_REQUEST]
+      events: ['credential.saved', 'credential.deleted']
     });
   }
 
   // ==========================================
-  // Event Handlers
+  // Credential Event Handlers
   // ==========================================
 
-  async onSendRequest(event) {
-    const { chatId, text, replyToMessageId, requestId, respondTo } = event;
+  async loadExistingBots() {
+    // Scan process.env for existing Telegram bot tokens
+    for (const [key, value] of Object.entries(process.env)) {
+      const match = key.match(CREDENTIAL_PATTERN);
+      if (match && value) {
+        const botName = match[1];
+        await this.startBot(botName, value);
+      }
+    }
+  }
+
+  async onCredentialSaved(event) {
+    const data = event?.data || event?.payload || event;
+    const { key, provider, level } = data;
+
+    // Only handle Telegram BOT credentials
+    if (provider !== 'TELEGRAM' || level !== 'BOT') return;
+
+    const match = key?.match(CREDENTIAL_PATTERN);
+    if (!match) return;
+
+    const botName = match[1];
+    const token = process.env[key];
+
+    if (!token) {
+      this.logger.warn('telegram.credential.no_token', { key, botName });
+      return;
+    }
+
+    this.logger.info('telegram.credential.saved', { botName });
+
+    // Stop existing bot if any
+    if (this.bots.has(botName)) {
+      await this.stopBot(botName);
+    }
+
+    // Start new bot
+    await this.startBot(botName, token);
+  }
+
+  async onCredentialDeleted(event) {
+    const data = event?.data || event?.payload || event;
+    const { key } = data;
+
+    const match = key?.match(CREDENTIAL_PATTERN);
+    if (!match) return;
+
+    const botName = match[1];
+    this.logger.info('telegram.credential.deleted', { botName });
+
+    await this.stopBot(botName);
+  }
+
+  // ==========================================
+  // Bot Management
+  // ==========================================
+
+  async startBot(botName, token) {
+    if (this.bots.has(botName)) {
+      this.logger.warn('telegram.bot.already_running', { botName });
+      return;
+    }
 
     try {
-      const result = await this.client.sendMessage(chatId, text, { replyToMessageId });
-
-      if (respondTo) {
-        await this.eventBus.publish(respondTo, { success: true, result });
-      }
-
-      await this.eventBus.publish(TELEGRAM_EVENTS.MESSAGE_SENT, {
-        chatId,
-        messageId: result.message_id,
-        text
+      const client = new TelegramClient(token, botName, {
+        pollingInterval: this.config.pollingInterval || 1000,
+        rateLimitPerSecond: this.config.rateLimitPerSecond || 25,
+        maxQueueSize: this.config.maxQueueSize || 100
       });
 
-      this.metrics?.increment('telegram.messages.sent.total');
-      this.activity?.action('message.sent', { chatId, messageId: result.message_id });
+      // Wire up client events to eventBus
+      this.wireClientEvents(client, botName);
+
+      // Start polling
+      await client.startPolling();
+
+      this.bots.set(botName, client);
+      this.updateMetrics();
+
+      this.logger.info('telegram.bot.started', {
+        botName,
+        username: client.botInfo?.username
+      });
+
+      await this.eventBus.publish(EVENTS.BOT_STARTED, {
+        botName,
+        username: client.botInfo?.username
+      });
+
+      this.metrics?.increment('telegram.bots.started.total');
+
     } catch (error) {
-      this.logger.error('telegram.send.error', { error: error.message, chatId });
-      this.activity?.error('message.send', error, { chatId });
+      this.logger.error('telegram.bot.start_failed', {
+        botName,
+        error: error.message
+      });
 
-      if (respondTo) {
-        await this.eventBus.publish(respondTo, { success: false, error: error.message });
-      }
-
-      await this.eventBus.publish(TELEGRAM_EVENTS.ERROR, {
-        error: error.message,
-        context: { action: 'send', chatId }
+      await this.eventBus.publish(EVENTS.BOT_ERROR, {
+        botName,
+        reason: 'start_failed',
+        error: error.message
       });
 
       this.metrics?.increment('telegram.errors.total');
     }
   }
 
-  async onSendPhotoRequest(event) {
-    const { chatId, photo, caption, requestId, respondTo } = event;
+  async stopBot(botName) {
+    const client = this.bots.get(botName);
+    if (!client) return;
 
-    try {
-      const result = await this.client.sendPhoto(chatId, photo, { caption });
+    client.stopPolling();
+    this.bots.delete(botName);
+    this.updateMetrics();
 
-      if (respondTo) {
-        await this.eventBus.publish(respondTo, { success: true, result });
-      }
+    this.logger.info('telegram.bot.stopped', { botName });
 
-      this.metrics?.increment('telegram.messages.sent.total');
-    } catch (error) {
-      this.logger.error('telegram.sendPhoto.error', { error: error.message, chatId });
-
-      if (respondTo) {
-        await this.eventBus.publish(respondTo, { success: false, error: error.message });
-      }
-
-      this.metrics?.increment('telegram.errors.total');
-    }
+    await this.eventBus.publish(EVENTS.BOT_STOPPED, { botName });
+    this.metrics?.increment('telegram.bots.stopped.total');
   }
 
-  // ==========================================
-  // API Handlers
-  // ==========================================
-
-  /**
-   * Webhook de Telegram - recibe updates
-   */
-  async handleWebhook(req, res) {
-    try {
-      const update = req.body;
-
-      this.logger.debug('telegram.webhook.received', { updateId: update.update_id });
-
-      // Procesar mensaje
-      if (update.message) {
-        await this.processMessage(update.message);
-      }
-
-      res.json({ ok: true });
-    } catch (error) {
-      this.logger.error('telegram.webhook.error', { error: error.message });
-      res.status(500).json({ ok: false, error: error.message });
-    }
-  }
-
-  /**
-   * Procesa un mensaje recibido
-   */
-  async processMessage(message) {
-    const { chat, from, message_id, text, photo, caption, date } = message;
-
-    const baseEvent = {
-      chatId: chat.id,
-      messageId: message_id,
-      from: {
-        id: from.id,
-        username: from.username,
-        firstName: from.first_name,
-        lastName: from.last_name
-      },
-      timestamp: new Date(date * 1000).toISOString()
+  wireClientEvents(client, botName) {
+    // Map client events to eventBus events
+    const eventMap = {
+      'text': EVENTS.TEXT_RECEIVED,
+      'photo': EVENTS.PHOTO_RECEIVED,
+      'document': EVENTS.DOCUMENT_RECEIVED,
+      'video': EVENTS.VIDEO_RECEIVED,
+      'audio': EVENTS.AUDIO_RECEIVED,
+      'voice': EVENTS.VOICE_RECEIVED,
+      'location': EVENTS.LOCATION_RECEIVED,
+      'contact': EVENTS.CONTACT_RECEIVED,
+      'command': EVENTS.COMMAND_RECEIVED,
+      'callback': EVENTS.CALLBACK_RECEIVED
     };
 
-    // Verificar si el chat está permitido (si hay lista)
-    if (this.config.allowedChatIds?.length > 0) {
-      if (!this.config.allowedChatIds.includes(chat.id)) {
-        this.logger.warn('telegram.unauthorized_chat', { chatId: chat.id });
-        return;
-      }
-    }
-
-    // Mensaje con foto
-    if (photo && photo.length > 0) {
-      // Obtener la foto de mayor resolución
-      const bestPhoto = photo[photo.length - 1];
-
-      await this.eventBus.publish(TELEGRAM_EVENTS.PHOTO_RECEIVED, {
-        ...baseEvent,
-        photo: {
-          fileId: bestPhoto.file_id,
-          fileSize: bestPhoto.file_size,
-          width: bestPhoto.width,
-          height: bestPhoto.height
-        },
-        caption: caption || null
+    for (const [clientEvent, busEvent] of Object.entries(eventMap)) {
+      client.on(clientEvent, async (data) => {
+        await this.eventBus.publish(busEvent, data);
+        this.metrics?.increment('telegram.messages.received.total');
       });
-
-      this.metrics?.increment('telegram.photos.received.total');
-      this.activity?.action('photo.received', { chatId: chat.id, fileId: bestPhoto.file_id });
-      this.logger.info('telegram.photo.received', {
-        chatId: chat.id,
-        fileId: bestPhoto.file_id,
-        size: bestPhoto.file_size
-      });
-
-      return;
     }
 
-    // Mensaje de texto
-    if (text) {
-      await this.eventBus.publish(TELEGRAM_EVENTS.MESSAGE_RECEIVED, {
-        ...baseEvent,
-        text
-      });
+    // Error events
+    client.on('error', async (data) => {
+      await this.eventBus.publish(EVENTS.BOT_ERROR, data);
+      this.metrics?.increment('telegram.errors.total');
+    });
 
-      this.metrics?.increment('telegram.messages.received.total');
-      this.activity?.action('message.received', { chatId: chat.id, textLength: text.length });
-      this.logger.info('telegram.message.received', {
-        chatId: chat.id,
-        textLength: text.length
-      });
-
-      return;
-    }
-  }
-
-  /**
-   * API: Enviar mensaje
-   */
-  async handleSendMessage(req, res) {
-    const { chatId, text, replyToMessageId } = req.body;
-
-    if (!chatId || !text) {
-      return res.status(400).json({ error: 'chatId and text are required' });
-    }
-
-    try {
-      const result = await this.client.sendMessage(chatId, text, { replyToMessageId });
-
-      await this.eventBus.publish(TELEGRAM_EVENTS.MESSAGE_SENT, {
-        chatId,
-        messageId: result.message_id,
-        text
-      });
-
-      this.metrics?.increment('telegram.messages.sent.total');
-      this.activity?.action('api.sendMessage', { chatId, messageId: result.message_id });
-
-      res.json({ success: true, messageId: result.message_id });
-    } catch (error) {
-      this.logger.error('telegram.api.sendMessage.error', { error: error.message });
-      this.activity?.error('api.sendMessage', error, { chatId });
-      res.status(500).json({ error: error.message });
-    }
-  }
-
-  /**
-   * API: Enviar foto
-   */
-  async handleSendPhoto(req, res) {
-    const { chatId, photo, caption } = req.body;
-
-    if (!chatId || !photo) {
-      return res.status(400).json({ error: 'chatId and photo are required' });
-    }
-
-    try {
-      const result = await this.client.sendPhoto(chatId, photo, { caption });
-      res.json({ success: true, messageId: result.message_id });
-    } catch (error) {
-      this.logger.error('telegram.api.sendPhoto.error', { error: error.message });
-      res.status(500).json({ error: error.message });
-    }
-  }
-
-  /**
-   * API: Estado del bot
-   */
-  async handleStatus(req, res) {
-    res.json({
-      connected: !!this.botInfo,
-      bot: this.botInfo ? {
-        id: this.botInfo.id,
-        username: this.botInfo.username,
-        firstName: this.botInfo.first_name
-      } : null
+    // Queue overflow
+    client.on('queue_overflow', async (data) => {
+      await this.eventBus.publish(EVENTS.QUEUE_OVERFLOW, data);
     });
   }
 
+  updateMetrics() {
+    this.metrics?.gauge('telegram.bots.active', this.bots.size);
+  }
+
   // ==========================================
-  // Tool Handlers (para AI)
+  // Tool Handlers
   // ==========================================
 
-  async handleToolSend(args) {
-    const { chatId, text, replyToMessageId } = args;
-
-    if (!this.client) {
-      return { success: false, error: 'Telegram not configured' };
+  getBot(botName) {
+    const client = this.bots.get(botName);
+    if (!client) {
+      throw new Error(`Bot not found: ${botName}`);
     }
+    return client;
+  }
+
+  async handleToolSendMessage(args) {
+    const { botName, chatId, text, parseMode, replyMarkup } = args;
 
     try {
-      const result = await this.client.sendMessage(chatId, text, { replyToMessageId });
+      const client = this.getBot(botName);
+      const result = await client.sendMessage(chatId, text, { parseMode, replyMarkup });
+
+      await this.eventBus.publish(EVENTS.MESSAGE_SENT, {
+        botName,
+        chatId,
+        messageId: result.message_id,
+        type: 'text'
+      });
+
+      this.metrics?.increment('telegram.messages.sent.total');
+
       return {
         success: true,
         messageId: result.message_id,
         message: `Mensaje enviado a chat ${chatId}`
       };
     } catch (error) {
+      await this.eventBus.publish(EVENTS.SEND_FAILED, {
+        botName,
+        chatId,
+        reason: error.message
+      });
       return { success: false, error: error.message };
     }
   }
 
   async handleToolSendPhoto(args) {
-    const { chatId, photo, caption } = args;
-
-    if (!this.client) {
-      return { success: false, error: 'Telegram not configured' };
-    }
+    const { botName, chatId, photo, caption } = args;
 
     try {
-      const result = await this.client.sendPhoto(chatId, photo, { caption });
+      const client = this.getBot(botName);
+      const result = await client.sendPhoto(chatId, photo, { caption });
+
+      await this.eventBus.publish(EVENTS.MESSAGE_SENT, {
+        botName,
+        chatId,
+        messageId: result.message_id,
+        type: 'photo'
+      });
+
+      this.metrics?.increment('telegram.messages.sent.total');
+
       return {
         success: true,
         messageId: result.message_id,
         message: `Foto enviada a chat ${chatId}`
       };
     } catch (error) {
+      await this.eventBus.publish(EVENTS.SEND_FAILED, {
+        botName,
+        chatId,
+        reason: error.message
+      });
       return { success: false, error: error.message };
     }
   }
 
-  async handleToolReply(args) {
-    const { chatId, messageId, text } = args;
-
-    if (!this.client) {
-      return { success: false, error: 'Telegram not configured' };
-    }
+  async handleToolSendDocument(args) {
+    const { botName, chatId, document, caption } = args;
 
     try {
-      const result = await this.client.reply(chatId, messageId, text);
+      const client = this.getBot(botName);
+      const result = await client.sendDocument(chatId, document, { caption });
+
+      await this.eventBus.publish(EVENTS.MESSAGE_SENT, {
+        botName,
+        chatId,
+        messageId: result.message_id,
+        type: 'document'
+      });
+
+      this.metrics?.increment('telegram.messages.sent.total');
+
       return {
         success: true,
         messageId: result.message_id,
-        message: `Respuesta enviada`
+        message: `Documento enviado a chat ${chatId}`
+      };
+    } catch (error) {
+      await this.eventBus.publish(EVENTS.SEND_FAILED, {
+        botName,
+        chatId,
+        reason: error.message
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleToolSendVideo(args) {
+    const { botName, chatId, video, caption } = args;
+
+    try {
+      const client = this.getBot(botName);
+      const result = await client.sendVideo(chatId, video, { caption });
+
+      await this.eventBus.publish(EVENTS.MESSAGE_SENT, {
+        botName,
+        chatId,
+        messageId: result.message_id,
+        type: 'video'
+      });
+
+      this.metrics?.increment('telegram.messages.sent.total');
+
+      return {
+        success: true,
+        messageId: result.message_id,
+        message: `Video enviado a chat ${chatId}`
+      };
+    } catch (error) {
+      await this.eventBus.publish(EVENTS.SEND_FAILED, {
+        botName,
+        chatId,
+        reason: error.message
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleToolSendLocation(args) {
+    const { botName, chatId, latitude, longitude } = args;
+
+    try {
+      const client = this.getBot(botName);
+      const result = await client.sendLocation(chatId, latitude, longitude);
+
+      await this.eventBus.publish(EVENTS.MESSAGE_SENT, {
+        botName,
+        chatId,
+        messageId: result.message_id,
+        type: 'location'
+      });
+
+      this.metrics?.increment('telegram.messages.sent.total');
+
+      return {
+        success: true,
+        messageId: result.message_id,
+        message: `Ubicación enviada a chat ${chatId}`
+      };
+    } catch (error) {
+      await this.eventBus.publish(EVENTS.SEND_FAILED, {
+        botName,
+        chatId,
+        reason: error.message
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleToolEditMessage(args) {
+    const { botName, chatId, messageId, text } = args;
+
+    try {
+      const client = this.getBot(botName);
+      await client.editMessageText(chatId, messageId, text);
+
+      return {
+        success: true,
+        message: `Mensaje ${messageId} editado`
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleToolDeleteMessage(args) {
+    const { botName, chatId, messageId } = args;
+
+    try {
+      const client = this.getBot(botName);
+      await client.deleteMessage(chatId, messageId);
+
+      return {
+        success: true,
+        message: `Mensaje ${messageId} eliminado`
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleToolAnswerCallback(args) {
+    const { botName, callbackId, text, showAlert } = args;
+
+    try {
+      const client = this.getBot(botName);
+      await client.answerCallbackQuery(callbackId, { text, showAlert });
+
+      return {
+        success: true,
+        message: 'Callback respondido'
       };
     } catch (error) {
       return { success: false, error: error.message };
@@ -414,58 +506,89 @@ class TelegramServiceModule {
   }
 
   async handleToolGetFile(args) {
-    const { fileId } = args;
-
-    if (!this.client) {
-      return { success: false, error: 'Telegram not configured' };
-    }
+    const { botName, fileId, download } = args;
 
     try {
-      const file = await this.client.getFile(fileId);
-      return {
+      const client = this.getBot(botName);
+      const file = await client.getFile(fileId);
+
+      const result = {
         success: true,
         fileId: file.file_id,
         filePath: file.file_path,
         fileSize: file.file_size,
-        downloadUrl: `https://api.telegram.org/file/bot${this.config.botToken}/${file.file_path}`
+        downloadUrl: client.getFileUrl(file.file_path)
+      };
+
+      if (download) {
+        const storagePath = this.config.storagePath || '/storage/telegram';
+        const destPath = path.join(storagePath, botName, 'received', path.basename(file.file_path));
+        await client.downloadFile(fileId, destPath);
+        result.localPath = destPath;
+      }
+
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleToolGetChat(args) {
+    const { botName, chatId } = args;
+
+    try {
+      const client = this.getBot(botName);
+      const chat = await client.getChat(chatId);
+
+      return {
+        success: true,
+        chat: {
+          id: chat.id,
+          type: chat.type,
+          title: chat.title,
+          username: chat.username,
+          firstName: chat.first_name,
+          lastName: chat.last_name
+        }
       };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  // ==========================================
-  // Public API (para otros módulos)
-  // ==========================================
+  async handleToolSetCommands(args) {
+    const { botName, commands } = args;
 
-  /**
-   * Descarga un archivo como buffer
-   */
-  async downloadFile(fileId) {
-    if (!this.client) {
-      throw new Error('Telegram not configured');
+    try {
+      const client = this.getBot(botName);
+      await client.setMyCommands(commands);
+
+      return {
+        success: true,
+        message: `${commands.length} comandos configurados`
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-    return this.client.downloadFileAsBuffer(fileId);
   }
 
-  /**
-   * Envía un mensaje (API directa para módulos)
-   */
-  async send(chatId, text, options = {}) {
-    if (!this.client) {
-      throw new Error('Telegram not configured');
-    }
-    return this.client.sendMessage(chatId, text, options);
-  }
+  async handleToolListBots(args) {
+    const bots = [];
 
-  /**
-   * Responde a un mensaje (API directa para módulos)
-   */
-  async reply(chatId, messageId, text) {
-    if (!this.client) {
-      throw new Error('Telegram not configured');
+    for (const [botName, client] of this.bots) {
+      bots.push({
+        botName,
+        username: client.botInfo?.username,
+        polling: client.isPolling(),
+        queueSize: client.getQueueSize()
+      });
     }
-    return this.client.reply(chatId, messageId, text);
+
+    return {
+      success: true,
+      bots,
+      total: bots.length
+    };
   }
 }
 

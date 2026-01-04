@@ -1,48 +1,119 @@
 # telegram-service - Diseño Completo
 
-**Fecha:** 2026-01-03
-**Estado:** Pendiente de implementación
+**Fecha:** 2026-01-04
+**Estado:** Acordado, pendiente de implementación
 
 ---
 
 ## Visión
 
 Servicio genérico de Telegram que:
-- Múltiples bots (uno por proyecto/contexto)
-- Recibe y reenvía mensajes como eventos
-- Permite a la AI enviar mensajes/fotos/docs
-- Almacena tokens en credential-manager
+- Gestiona múltiples bots de forma centralizada
+- Módulos/proyectos se suscriben a eventos filtrando por `botName`
+- Desacoplamiento total: telegram-service no sabe de proyectos
 - Extensible para cualquier proyecto futuro
+
+---
+
+## Decisiones Acordadas
+
+| Aspecto | Decisión |
+|---------|----------|
+| Arquitectura | Centralizada, suscripción por eventos |
+| Tokens | `TELEGRAM_BOT_{botName}` vía credential-manager |
+| Registro | Automático vía eventos `credentials.*` |
+| UI | Sin panel propio (credential-manager suficiente) |
+| Conexión | Polling (sin dominio público) |
+| Librería | node-telegram-bot-api |
+| Archivos | `/storage/telegram/{botName}/received\|sent/` (vía filesystem) |
+| Persistencia | No (solo eventos efímeros) |
+| Errores | Eventos específicos por tipo |
+| Rate limit | Cola interna 25 msg/seg |
 
 ---
 
 ## Arquitectura
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                    telegram-service                           │
-├──────────────────────────────────────────────────────────────┤
-│  BOTS (Map: botId → TelegramClient)                          │
-│    - bot-facturas  → polling activo                          │
-│    - bot-soporte   → polling activo                          │
-│    - bot-notif     → polling activo                          │
-├──────────────────────────────────────────────────────────────┤
-│  EVENTOS (eventBus)                                          │
-│    telegram.*.received  ← contenido entrante                 │
-│    telegram.*.sent      → contenido enviado                  │
-│    telegram.bot.*       → lifecycle del bot                  │
-│    telegram.error       → errores                            │
-├──────────────────────────────────────────────────────────────┤
-│  UI HANDLERS (frontend)                                      │
-│    telegram/state   → lista bots y estado                    │
-│    telegram/register → registrar bot nuevo                   │
-│    telegram/send    → enviar mensaje                         │
-├──────────────────────────────────────────────────────────────┤
-│  AI TOOLS                                                    │
-│    telegram.send_*    → enviar contenido                     │
-│    telegram.get_*     → obtener info                         │
-│    telegram.list_bots → listar bots                          │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    telegram-service                          │
+├─────────────────────────────────────────────────────────────┤
+│  BOTS (Map: botName → TelegramClient)                       │
+│    - facturas   → polling activo                            │
+│    - ventas     → polling activo                            │
+│    - alertas    → polling activo                            │
+├─────────────────────────────────────────────────────────────┤
+│  EVENTOS (eventBus)                                         │
+│    telegram.*.received    ← contenido entrante              │
+│    telegram.*.sent        → contenido enviado               │
+│    telegram.bot.*         → lifecycle del bot               │
+│    telegram.send.failed   → errores de envío                │
+│    telegram.queue.overflow → cola saturada                  │
+├─────────────────────────────────────────────────────────────┤
+│  AI TOOLS                                                   │
+│    telegram.send_*    → enviar contenido                    │
+│    telegram.get_*     → obtener info                        │
+│    telegram.list_bots → listar bots                         │
+└─────────────────────────────────────────────────────────────┘
+         ▲
+         │ credentials.created / credentials.deleted
+         │
+┌────────┴────────────────────────────────────────────────────┐
+│                  credential-manager                          │
+│  TELEGRAM_BOT_facturas = 123:AAA...                         │
+│  TELEGRAM_BOT_ventas = 456:BBB...                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Flujo de Registro de Bots
+
+```
+┌─────────────────┐         ┌─────────────────────┐         ┌─────────────────┐
+│  Panel Creds    │         │  credential-manager │         │ telegram-service│
+│                 │         │                     │         │                 │
+│ + Nueva Cred    │────────▶│ Guarda en .env      │         │                 │
+│   Provider:     │         │ TELEGRAM_BOT_ventas │         │                 │
+│   TELEGRAM      │         │ = 123:AAA...        │         │                 │
+│   Level: BOT    │         │                     │         │                 │
+│   Id: ventas    │         │ emit('credentials.  │────────▶│ Escucha evento  │
+│   Token: 123... │         │   created', {...})  │         │ startBot(ventas)│
+│                 │         │                     │         │ ✅ Bot activo   │
+└─────────────────┘         └─────────────────────┘         └─────────────────┘
+```
+
+**Automático:** Añadir/eliminar credencial → evento → arrancar/parar bot
+
+---
+
+## Token Storage
+
+Patrón credential-manager:
+```
+TELEGRAM_BOT_{botName} = bot_token
+```
+
+Ejemplo:
+```
+TELEGRAM_BOT_facturas = 8575070471:AAGA...
+TELEGRAM_BOT_ventas = 1234567890:BBBB...
+```
+
+---
+
+## Almacenamiento de Archivos
+
+Usando módulo filesystem:
+```
+/storage/telegram/{botName}/received/
+/storage/telegram/{botName}/sent/
+```
+
+Ejemplo:
+```
+/storage/telegram/facturas/received/photo_123.jpg
+/storage/telegram/facturas/sent/document_456.pdf
 ```
 
 ---
@@ -99,11 +170,33 @@ Servicio genérico de Telegram que:
 
 ---
 
+## Manejo de Errores
+
+| Error | Evento | Datos |
+|-------|--------|-------|
+| Token inválido | `telegram.bot.error` | `{ botName, reason: 'invalid_token' }` |
+| Bot bloqueado | `telegram.send.failed` | `{ botName, chatId, reason: 'blocked' }` |
+| Timeout | `telegram.send.failed` | `{ botName, chatId, reason: 'timeout' }` |
+| Polling caído | `telegram.bot.disconnected` | `{ botName }` → reintento automático |
+| Cola saturada | `telegram.queue.overflow` | `{ botName, queueSize }` |
+
+---
+
+## Rate Limiting
+
+- Cola FIFO por bot
+- Máximo 25 msg/seg (margen de seguridad vs límite 30)
+- Si cola > 100 mensajes → evento `telegram.queue.overflow`
+- Transparente para quien usa las tools
+
+---
+
 ## Keyboards/Botones
 
 ```javascript
 // Inline keyboard (botones bajo mensaje)
 await telegram.send_message({
+  botName: 'facturas',
   chatId: 123,
   text: '¿Confirmar pedido?',
   reply_markup: {
@@ -116,6 +209,7 @@ await telegram.send_message({
 
 // Reply keyboard (teclado personalizado)
 await telegram.send_message({
+  botName: 'facturas',
   chatId: 123,
   text: 'Elige opción:',
   reply_markup: {
@@ -130,29 +224,13 @@ await telegram.send_message({
 
 ---
 
-## Token Storage
-
-Patrón credential-manager:
-```
-TELEGRAM_API_KEY_PROJECT_{projectId} = bot_token
-```
-
-Ejemplo:
-```
-TELEGRAM_API_KEY_PROJECT_facturas = 8575070471:AAGA...
-TELEGRAM_API_KEY_PROJECT_soporte = 1234567890:BBBB...
-```
-
----
-
 ## Payload de Eventos
 
-Todos los eventos incluyen `projectId` para routing:
+Todos los eventos incluyen `botName` para filtrado:
 
 ```javascript
 {
-  projectId: 'facturas',
-  botId: 'bot-facturas',
+  botName: 'facturas',
   chatId: 123456789,
   messageId: 987,
   from: {
@@ -161,7 +239,7 @@ Todos los eventos incluyen `projectId` para routing:
     firstName: 'Juan'
   },
   // ... datos específicos del tipo
-  timestamp: '2026-01-03T12:00:00.000Z'
+  timestamp: '2026-01-04T12:00:00.000Z'
 }
 ```
 
@@ -173,16 +251,16 @@ Todos los eventos incluyen `projectId` para routing:
 Usuario envía foto de factura
         ↓
 telegram.photo.received
-  { projectId: 'facturas', chatId, fileId, caption }
+  { botName: 'facturas', chatId, fileId, caption }
         ↓
-invoice-processor escucha evento
+invoice-processor escucha evento (filtra botName='facturas')
         ↓
-Descarga foto: telegram.get_file(fileId)
+Descarga foto: telegram.get_file({ botName, fileId })
         ↓
 Procesa (OCR, AI, storage)
         ↓
 Responde: telegram.send_message({
-  botId: 'bot-facturas',
+  botName: 'facturas',
   chatId,
   text: 'Factura procesada ✅\nTotal: 150.00€',
   reply_markup: {
@@ -195,12 +273,14 @@ Responde: telegram.send_message({
 
 ---
 
-## Pendiente Definir
+## Dependencias
 
-1. **Contrato module.json** - Ver estructura exacta
-2. **Credenciales** - Confirmar patrón con credential-manager
-3. **UI Panel** - Diseño del panel en frontend
+```json
+{
+  "node-telegram-bot-api": "^0.66.0"
+}
+```
 
 ---
 
-*Guardado para referencia durante implementación*
+*Documento acordado - Listo para implementación*

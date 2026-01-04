@@ -1,0 +1,99 @@
+{
+  "name": "ocr-service",
+  "version": "1.0.0",
+  "description": "Servicio OCR con soporte multi-engine (Tesseract, Google Vision, Claude Vision)",
+  "author": "Event Core Team",
+  "type": "service-module",
+
+  "provides": {
+    "events": [
+      "ocr.extract.completed",
+      "ocr.extract.failed"
+    ],
+    "queries": [
+      "ocr.extract.request"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "ocr.extract.completed",
+        "description": "Procesamiento completado exitosamente",
+        "schema": { "$ref": "./schemas/events.json#/definitions/extract_completed" }
+      },
+      {
+        "event": "ocr.extract.failed",
+        "description": "Error en el procesamiento",
+        "schema": { "$ref": "./schemas/events.json#/definitions/extract_failed" }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "ocr.extract.request",
+        "description": "Solicitud de procesamiento",
+        "handler": "onExtractRequest"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/extract",
+      "handler": "handleExtract",
+      "description": "Procesar entrada y extraer resultado"
+    },
+    {
+      "method": "GET",
+      "path": "/engines",
+      "handler": "handleListEngines",
+      "description": "Listar engines disponibles"
+    },
+    {
+      "method": "GET",
+      "path": "/engines/:name",
+      "handler": "handleGetEngine",
+      "description": "Obtener detalles de un engine"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del servicio"
+    }
+  ],
+
+  "ui": {
+    "enabled": false
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ocr.extract.total",
+        "ocr.extract.success",
+        "ocr.extract.error"
+      ],
+      "timings": [
+        "ocr.extract.duration"
+      ],
+      "gauges": [
+        "ocr.engines.active"
+      ]
+    }
+  },
+
+  "config": {
+    "pluginsPath": "../../plugins/ocr",
+    "defaultEngine": "auto",
+    "fallbackEnabled": true,
+    "timeout": 30000
+  }
+}

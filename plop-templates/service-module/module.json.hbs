@@ -1,0 +1,99 @@
+{
+  "name": "{{name}}-service",
+  "version": "1.0.0",
+  "description": "{{description}}",
+  "author": "{{author}}",
+  "type": "service-module",
+
+  "provides": {
+    "events": [
+      "{{name}}.extract.completed",
+      "{{name}}.extract.failed"
+    ],
+    "queries": [
+      "{{name}}.extract.request"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "{{name}}.extract.completed",
+        "description": "Procesamiento completado exitosamente",
+        "schema": { "$ref": "./schemas/events.json#/definitions/extract_completed" }
+      },
+      {
+        "event": "{{name}}.extract.failed",
+        "description": "Error en el procesamiento",
+        "schema": { "$ref": "./schemas/events.json#/definitions/extract_failed" }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "{{name}}.extract.request",
+        "description": "Solicitud de procesamiento",
+        "handler": "onExtractRequest"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/extract",
+      "handler": "handleExtract",
+      "description": "Procesar entrada y extraer resultado"
+    },
+    {
+      "method": "GET",
+      "path": "/engines",
+      "handler": "handleListEngines",
+      "description": "Listar engines disponibles"
+    },
+    {
+      "method": "GET",
+      "path": "/engines/:name",
+      "handler": "handleGetEngine",
+      "description": "Obtener detalles de un engine"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del servicio"
+    }
+  ],
+
+  "ui": {
+    "enabled": false
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "{{name}}.extract.total",
+        "{{name}}.extract.success",
+        "{{name}}.extract.error"
+      ],
+      "timings": [
+        "{{name}}.extract.duration"
+      ],
+      "gauges": [
+        "{{name}}.engines.active"
+      ]
+    }
+  },
+
+  "config": {
+    "pluginsPath": "../../plugins/{{name}}",
+    "defaultEngine": "auto",
+    "fallbackEnabled": true,
+    "timeout": 30000
+  }
+}

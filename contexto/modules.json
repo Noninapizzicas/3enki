@@ -30,6 +30,14 @@
       "publishes": ["event.name"],
       "subscribes": ["event.name"]
     },
+    "tools": [
+      {
+        "name": "string (module.action)",
+        "description": "string",
+        "handler": "string (method name)",
+        "parameters": "JSON Schema object"
+      }
+    ],
     "ui": {
       "zone": "work-bar|chat-config|chat-tools",
       "icon": "emoji"
@@ -59,6 +67,7 @@
   },
   "active_modules": [
     "admin-panel",
+    "ai-agent-framework",
     "ai-gateway",
     "calling-generator",
     "conversation-manager",
@@ -70,10 +79,151 @@
     "menu-generator",
     "metricas",
     "notas",
+    "ocr-service",
     "plugin-manager",
     "project-manager",
     "prompt-manager",
     "system-inspector",
+    "telegram-service",
     "ui-designer"
-  ]
+  ],
+  "module_categories": {
+    "ai": {
+      "description": "Módulos de inteligencia artificial",
+      "modules": ["ai-gateway", "ai-agent-framework", "menu-generator", "calling-generator"]
+    },
+    "communication": {
+      "description": "Módulos de comunicación externa",
+      "modules": ["telegram-service"]
+    },
+    "processing": {
+      "description": "Módulos de procesamiento de datos",
+      "modules": ["ocr-service", "pdf-viewer"]
+    },
+    "storage": {
+      "description": "Módulos de almacenamiento",
+      "modules": ["database-manager", "filesystem", "credential-manager"]
+    },
+    "ui": {
+      "description": "Módulos de interfaz de usuario",
+      "modules": ["admin-panel", "dashboard", "ui-designer", "notas"]
+    },
+    "system": {
+      "description": "Módulos del sistema",
+      "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas"]
+    }
+  },
+  "key_modules": {
+    "telegram-service": {
+      "version": "3.0.0",
+      "description": "Bot de Telegram multi-instancia",
+      "events": {
+        "publishes": [
+          "telegram.text.received",
+          "telegram.photo.received",
+          "telegram.document.received",
+          "telegram.video.received",
+          "telegram.audio.received",
+          "telegram.voice.received",
+          "telegram.location.received",
+          "telegram.contact.received",
+          "telegram.command.received",
+          "telegram.callback.received",
+          "telegram.message.sent",
+          "telegram.bot.started",
+          "telegram.bot.stopped"
+        ],
+        "subscribes": [
+          "credential.saved",
+          "credential.deleted"
+        ]
+      },
+      "key_apis": [
+        "POST /send - Enviar mensaje",
+        "GET /file/:fileId - Obtener archivo",
+        "GET /bots - Listar bots activos"
+      ]
+    },
+    "ocr-service": {
+      "version": "1.0.0",
+      "description": "Servicio OCR con múltiples engines",
+      "engines": ["tesseract", "openai-vision", "claude-vision", "google-vision"],
+      "events": {
+        "publishes": [
+          "ocr.extract.completed",
+          "ocr.extract.failed"
+        ],
+        "subscribes": [
+          "ocr.extract.request"
+        ]
+      },
+      "key_apis": [
+        "POST /extract - Extraer texto de imagen/PDF",
+        "GET /engines - Listar engines disponibles"
+      ]
+    },
+    "ai-agent-framework": {
+      "version": "1.0.0",
+      "description": "Framework para agentes AI event-driven",
+      "components": ["Agent", "ContextManager", "ToolManager"],
+      "builtin_tools": ["http_request", "publish_event", "read_file", "write_file"],
+      "events": {
+        "publishes": [
+          "agent.{name}.started",
+          "agent.{name}.completed",
+          "agent.{name}.failed"
+        ]
+      },
+      "key_apis": [
+        "POST /agents - Crear agente",
+        "GET /agents - Listar agentes",
+        "POST /agents/:id/trigger - Ejecutar agente manualmente"
+      ]
+    },
+    "ai-gateway": {
+      "version": "1.0.0",
+      "description": "Gateway unificado para LLMs",
+      "providers": {
+        "deepseek": { "priority": 1, "models": ["deepseek-chat", "deepseek-coder"] },
+        "anthropic": { "priority": 2, "models": ["claude-3-5-sonnet", "claude-3-haiku"] },
+        "openai": { "priority": 3, "models": ["gpt-4o", "gpt-4o-mini"] },
+        "ollama": { "priority": 4, "models": ["llama2", "mistral"] }
+      },
+      "key_apis": [
+        "POST /chat - Chat completion",
+        "GET /providers - Listar providers"
+      ]
+    },
+    "prompt-manager": {
+      "version": "1.0.0",
+      "description": "Gestión de prompts con versionado",
+      "storage": "SQLite",
+      "slot_types": ["system", "context", "prefix", "suffix", "format"],
+      "key_apis": [
+        "POST /prompts - Crear prompt",
+        "GET /prompts - Listar prompts",
+        "POST /prompts/:id/render - Renderizar con variables"
+      ]
+    }
+  },
+  "integration_patterns": {
+    "telegram_ocr_response": {
+      "description": "Procesar imagen de Telegram con OCR y responder",
+      "trigger": "telegram.photo.received",
+      "flow": [
+        "1. Recibir evento telegram.photo.received",
+        "2. GET /modules/telegram-service/file/{fileId}?download=true",
+        "3. POST /modules/ocr-service/extract {input: base64}",
+        "4. POST /modules/telegram-service/send {chatId, text}"
+      ]
+    },
+    "agent_creation": {
+      "description": "Crear agente via Arquitecto",
+      "flow": [
+        "1. create_prompt con instrucciones del agente",
+        "2. create_agent con prompt_id y subscribes",
+        "3. Agente comienza a escuchar eventos"
+      ]
+    }
+  }
 }

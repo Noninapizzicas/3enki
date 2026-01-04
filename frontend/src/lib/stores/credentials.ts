@@ -53,7 +53,6 @@ export interface CredentialsState {
     PROJECT: Credential[];
     CLIENT: Credential[];
     CUSTOM: Credential[];
-    BOT: Credential[];
   };
   stats: {
     total: number;
@@ -112,8 +111,7 @@ const DEFAULT_LEVELS: LevelOption[] = [
   { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },
   { id: 'PROJECT', name: 'Proyecto', icon: '🔵', requiresIdentifier: true },
   { id: 'CLIENT', name: 'Cliente', icon: '🟡', requiresIdentifier: true },
-  { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true },
-  { id: 'BOT', name: 'Bot', icon: '🤖', requiresIdentifier: true }
+  { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true }
 ];
 
 // =============================================================================
@@ -127,8 +125,7 @@ const initialState: CredentialsState = {
     GLOBAL: [],
     PROJECT: [],
     CLIENT: [],
-    CUSTOM: [],
-    BOT: []
+    CUSTOM: []
   },
   stats: { total: 0, byLevel: {} },
   loading: false,
@@ -167,8 +164,7 @@ export async function loadCredentials(): Promise<void> {
         GLOBAL: response.data.credentials?.GLOBAL || [],
         PROJECT: response.data.credentials?.PROJECT || [],
         CLIENT: response.data.credentials?.CLIENT || [],
-        CUSTOM: response.data.credentials?.CUSTOM || [],
-        BOT: response.data.credentials?.BOT || []
+        CUSTOM: response.data.credentials?.CUSTOM || []
       },
       stats: response.data.stats || { total: 0, byLevel: {} },
       loading: false,
@@ -374,8 +370,7 @@ export const allCredentials = derived(credentialsStore, $s => [
   ...$s.credentials.GLOBAL,
   ...$s.credentials.PROJECT,
   ...$s.credentials.CLIENT,
-  ...$s.credentials.CUSTOM,
-  ...$s.credentials.BOT
+  ...$s.credentials.CUSTOM
 ]);
 
 /** Credenciales globales */
@@ -387,11 +382,15 @@ export const projectCredentials = derived(credentialsStore, $s => $s.credentials
 /** Credenciales de cliente */
 export const clientCredentials = derived(credentialsStore, $s => $s.credentials.CLIENT);
 
-/** Credenciales custom */
-export const customCredentials = derived(credentialsStore, $s => $s.credentials.CUSTOM);
+/** Credenciales custom (excluyendo Telegram bots) */
+export const customCredentials = derived(credentialsStore, $s =>
+  $s.credentials.CUSTOM.filter(c => c.provider !== 'TELEGRAM')
+);
 
-/** Credenciales de bots (Telegram) */
-export const botCredentials = derived(credentialsStore, $s => $s.credentials.BOT);
+/** Credenciales de bots (Telegram = CUSTOM con provider TELEGRAM) */
+export const botCredentials = derived(credentialsStore, $s =>
+  $s.credentials.CUSTOM.filter(c => c.provider === 'TELEGRAM')
+);
 
 /** Servicio activo */
 export const activeService = derived(credentialsStore, $s => $s.activeService);

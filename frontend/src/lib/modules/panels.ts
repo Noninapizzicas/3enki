@@ -72,7 +72,7 @@ export const panels: Record<string, PanelDef> = {
     id: 'credentials-list',
     title: 'Credenciales',
     icon: '🔐',
-    size: 'md',
+    size: 'lg',
     position: 'top',
     zone: 'chat-config',
     order: 4,

@@ -1568,7 +1568,7 @@ class CredentialManagerModule {
 
   parseKey(key) {
     // Pattern: PROVIDER_API_KEY_LEVEL or PROVIDER_API_KEY_LEVEL_IDENTIFIER
-    const match = key.match(/^([A-Z_]+)_API_KEY_(GLOBAL|PROJECT|CLIENT|CUSTOM)(?:_(.+))?$/);
+    const match = key.match(/^([A-Z_]+)_API_KEY_(GLOBAL|PROJECT|CLIENT|CUSTOM|BOT)(?:_(.+))?$/);
     if (!match) return null;
 
     return {

@@ -241,10 +241,10 @@
     error = null;
 
     try {
-      // Crear credencial con provider=TELEGRAM, level=BOT, identifier=botName
+      // Crear credencial con provider=TELEGRAM, level=CUSTOM, identifier=botName
       await createCredential(
         'TELEGRAM',
-        'BOT',
+        'CUSTOM',
         telegramForm.botName,
         telegramForm.token
       );
@@ -970,12 +970,12 @@
 
   .service-tab {
     flex: 1;
-    padding: 0.75rem;
+    padding: 0.5rem;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--_text-muted);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
@@ -998,22 +998,22 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.5rem;
+    padding: 0.375rem 0.5rem;
     border-bottom: 1px solid var(--_border);
   }
 
   .tabs {
     display: flex;
-    gap: 0.25rem;
+    gap: 0.2rem;
   }
 
   .tab {
-    padding: 0.5rem 0.75rem;
+    padding: 0.375rem 0.625rem;
     background: transparent;
     border: none;
     border-radius: var(--_radius);
     color: var(--_text-muted);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -1034,7 +1034,7 @@
   }
 
   .stats {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--_text-muted);
   }
 
@@ -1044,7 +1044,7 @@
   .panel-content {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem;
+    padding: 0.5rem;
   }
 
   /* ==========================================================================
@@ -1055,13 +1055,13 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem;
-    padding: 2rem;
+    gap: 0.5rem;
+    padding: 1.5rem;
     text-align: center;
   }
 
   .loading-icon {
-    font-size: 2rem;
+    font-size: 1.5rem;
     animation: spin 1s linear infinite;
   }
 
@@ -1071,18 +1071,18 @@
   }
 
   .empty-icon {
-    font-size: 3rem;
+    font-size: 2rem;
     opacity: 0.5;
   }
 
   .empty-title {
-    font-size: 1.125rem;
+    font-size: 0.95rem;
     font-weight: 600;
     color: var(--_text);
   }
 
   .empty-text {
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     color: var(--_text-muted);
   }
 
@@ -1092,7 +1092,7 @@
   .credentials-list {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .group {
@@ -1103,8 +1103,8 @@
   .group-header {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
+    gap: 0.375rem;
+    padding: 0.375rem;
     background: transparent;
     border: none;
     border-radius: var(--_radius);
@@ -1120,20 +1120,20 @@
   }
 
   .group-icon {
-    font-size: 0.625rem;
-    width: 1rem;
+    font-size: 0.55rem;
+    width: 0.875rem;
   }
 
   .group-level {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   .group-count {
-    font-size: 0.625rem;
-    padding: 0.125rem 0.375rem;
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
     background: var(--_bg-surface);
     border-radius: 9999px;
     margin-left: auto;
@@ -1142,16 +1142,16 @@
   .group-items {
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
-    padding-left: 1.5rem;
-    margin-top: 0.375rem;
+    gap: 0.25rem;
+    padding-left: 1.25rem;
+    margin-top: 0.25rem;
   }
 
   .credential-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
+    gap: 0.375rem;
+    padding: 0.375rem;
     background: var(--_bg-surface);
     border: 1px solid var(--_border);
     border-radius: var(--_radius);
@@ -1171,7 +1171,7 @@
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.375rem;
     background: none;
     border: none;
     color: inherit;
@@ -1181,40 +1181,42 @@
   }
 
   .cred-icon {
-    font-size: 1.25rem;
+    font-size: 1rem;
   }
 
   .cred-info {
     display: flex;
     flex-direction: column;
-    gap: 0.125rem;
+    gap: 0.05rem;
     min-width: 0;
   }
 
   .cred-name {
+    font-size: 0.8rem;
     font-weight: 500;
     color: var(--_text);
   }
 
   .cred-identifier {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--_primary);
   }
 
   .cred-preview {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--_text-muted);
     font-family: monospace;
   }
 
   .cred-edit {
-    padding: 0.25rem;
+    padding: 0.2rem;
     background: transparent;
     border: none;
     border-radius: 0.25rem;
     cursor: pointer;
     opacity: 0.5;
     transition: opacity 0.15s;
+    font-size: 0.8rem;
   }
 
   .credential-item:hover .cred-edit {
@@ -1231,13 +1233,13 @@
   .form {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .field {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   fieldset.field {
@@ -1247,15 +1249,15 @@
   }
 
   .label, legend.label {
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     font-weight: 500;
     color: var(--_text-muted);
   }
 
   .input {
     width: 100%;
-    padding: 0.75rem;
-    font-size: 0.875rem;
+    padding: 0.5rem 0.625rem;
+    font-size: 0.8rem;
     background: var(--_bg-surface);
     color: var(--_text);
     border: 1px solid var(--_border);
@@ -1273,24 +1275,24 @@
   }
 
   .field-hint {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--_text-muted);
-    margin-top: 0.25rem;
+    margin-top: 0.15rem;
   }
 
   /* Providers Grid */
   .providers-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
+    gap: 0.375rem;
   }
 
   .provider-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.75rem;
+    gap: 0.2rem;
+    padding: 0.5rem;
     background: var(--_bg-surface);
     border: 2px solid var(--_border);
     border-radius: var(--_radius);
@@ -1308,11 +1310,11 @@
   }
 
   .provider-icon {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
   }
 
   .provider-name {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--_text-muted);
   }
 
@@ -1320,16 +1322,16 @@
   .levels-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 0.25rem;
+    gap: 0.2rem;
   }
 
   .level-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.125rem;
-    padding: 0.5rem 0.25rem;
-    font-size: 0.625rem;
+    gap: 0.1rem;
+    padding: 0.375rem 0.2rem;
+    font-size: 0.6rem;
     background: var(--_bg-surface);
     border: 2px solid var(--_border);
     border-radius: var(--_radius);
@@ -1356,17 +1358,17 @@
   }
 
   .password-input {
-    padding-right: 3rem;
+    padding-right: 2.5rem;
   }
 
   .toggle-password {
     position: absolute;
-    right: 0.5rem;
+    right: 0.4rem;
     background: none;
     border: none;
-    font-size: 1.25rem;
+    font-size: 1rem;
     cursor: pointer;
-    padding: 0.25rem;
+    padding: 0.2rem;
     opacity: 0.7;
     transition: opacity 0.15s;
   }
@@ -1379,8 +1381,8 @@
   .current-info {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 1rem;
+    gap: 0.35rem;
+    padding: 0.625rem;
     background: var(--_bg-surface);
     border: 1px solid var(--_border);
     border-radius: var(--_radius);
@@ -1390,19 +1392,19 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .info-label {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--_text-muted);
   }
 
   .info-value {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    font-size: 0.875rem;
+    gap: 0.3rem;
+    font-size: 0.8rem;
     color: var(--_text);
     font-weight: 500;
   }
@@ -1414,9 +1416,9 @@
 
   /* Test result */
   .test-result {
-    padding: 0.75rem;
+    padding: 0.5rem;
     border-radius: var(--_radius);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     text-align: center;
   }
 
@@ -1432,11 +1434,11 @@
 
   /* Error message */
   .error-msg {
-    padding: 0.75rem;
+    padding: 0.5rem;
     background: rgb(239 68 68 / 0.15);
     color: var(--_danger);
     border-radius: var(--_radius);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     text-align: center;
   }
 
@@ -1445,14 +1447,14 @@
      ========================================================================== */
   .actions {
     display: flex;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
   }
 
   .btn {
     flex: 1;
-    padding: 0.75rem;
-    font-size: 0.875rem;
+    padding: 0.5rem;
+    font-size: 0.8rem;
     font-weight: 500;
     border: none;
     border-radius: var(--_radius);
@@ -1488,7 +1490,7 @@
     background: var(--_danger);
     color: white;
     flex: 0 0 auto;
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 0.75rem;
   }
 
   .btn.danger:hover:not(:disabled) {

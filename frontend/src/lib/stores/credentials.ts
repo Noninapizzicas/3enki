@@ -43,6 +43,8 @@ export interface LevelOption {
   requiresIdentifier: boolean;
 }
 
+export type ServiceType = 'providers' | 'telegram';
+
 export interface CredentialsState {
   providers: ProviderOption[];
   levels: LevelOption[];
@@ -51,6 +53,7 @@ export interface CredentialsState {
     PROJECT: Credential[];
     CLIENT: Credential[];
     CUSTOM: Credential[];
+    BOT: Credential[];
   };
   stats: {
     total: number;
@@ -60,6 +63,7 @@ export interface CredentialsState {
   error: string | null;
   selectedKey: string | null;
   activeTab: 'lista' | 'nuevo' | 'config';
+  activeService: ServiceType;
   testResult: { valid: boolean; message: string } | null;
 }
 
@@ -100,14 +104,16 @@ const DEFAULT_PROVIDERS: ProviderOption[] = [
   { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
   { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
   { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
-  { id: 'OLLAMA', name: 'Ollama', icon: '🦙' }
+  { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
+  { id: 'TELEGRAM', name: 'Telegram', icon: '📱' }
 ];
 
 const DEFAULT_LEVELS: LevelOption[] = [
   { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },
   { id: 'PROJECT', name: 'Proyecto', icon: '🔵', requiresIdentifier: true },
   { id: 'CLIENT', name: 'Cliente', icon: '🟡', requiresIdentifier: true },
-  { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true }
+  { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true },
+  { id: 'BOT', name: 'Bot', icon: '🤖', requiresIdentifier: true }
 ];
 
 // =============================================================================
@@ -121,13 +127,15 @@ const initialState: CredentialsState = {
     GLOBAL: [],
     PROJECT: [],
     CLIENT: [],
-    CUSTOM: []
+    CUSTOM: [],
+    BOT: []
   },
   stats: { total: 0, byLevel: {} },
   loading: false,
   error: null,
   selectedKey: null,
   activeTab: 'lista',
+  activeService: 'providers',
   testResult: null
 };
 
@@ -155,7 +163,13 @@ export async function loadCredentials(): Promise<void> {
       ...s,
       providers: response.data.providers?.length > 0 ? response.data.providers : DEFAULT_PROVIDERS,
       levels: response.data.levels?.length > 0 ? response.data.levels : DEFAULT_LEVELS,
-      credentials: response.data.credentials || { GLOBAL: [], PROJECT: [], CLIENT: [], CUSTOM: [] },
+      credentials: {
+        GLOBAL: response.data.credentials?.GLOBAL || [],
+        PROJECT: response.data.credentials?.PROJECT || [],
+        CLIENT: response.data.credentials?.CLIENT || [],
+        CUSTOM: response.data.credentials?.CUSTOM || [],
+        BOT: response.data.credentials?.BOT || []
+      },
       stats: response.data.stats || { total: 0, byLevel: {} },
       loading: false,
       error: null
@@ -299,6 +313,19 @@ export function setActiveTab(tab: 'lista' | 'nuevo' | 'config'): void {
 }
 
 /**
+ * Cambia el servicio activo (providers o telegram)
+ */
+export function setActiveService(service: ServiceType): void {
+  credentialsStore.update(s => ({
+    ...s,
+    activeService: service,
+    activeTab: 'lista',
+    selectedKey: null,
+    testResult: null
+  }));
+}
+
+/**
  * Limpia el resultado del test
  */
 export function clearTestResult(): void {
@@ -347,7 +374,8 @@ export const allCredentials = derived(credentialsStore, $s => [
   ...$s.credentials.GLOBAL,
   ...$s.credentials.PROJECT,
   ...$s.credentials.CLIENT,
-  ...$s.credentials.CUSTOM
+  ...$s.credentials.CUSTOM,
+  ...$s.credentials.BOT
 ]);
 
 /** Credenciales globales */
@@ -361,6 +389,12 @@ export const clientCredentials = derived(credentialsStore, $s => $s.credentials.
 
 /** Credenciales custom */
 export const customCredentials = derived(credentialsStore, $s => $s.credentials.CUSTOM);
+
+/** Credenciales de bots (Telegram) */
+export const botCredentials = derived(credentialsStore, $s => $s.credentials.BOT);
+
+/** Servicio activo */
+export const activeService = derived(credentialsStore, $s => $s.activeService);
 
 /** Credencial seleccionada actual */
 export const selectedCredential = derived(

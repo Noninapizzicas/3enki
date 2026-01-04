@@ -23,12 +23,15 @@
     testCredential,
     selectCredential,
     setActiveTab,
+    setActiveService,
     clearTestResult,
     globalCredentials,
     projectCredentials,
     clientCredentials,
     customCredentials,
-    selectedCredential
+    botCredentials,
+    selectedCredential,
+    type ServiceType
   } from '$lib/stores/credentials';
   import { closePanel } from '$lib/stores';
 
@@ -40,12 +43,18 @@
 
   let cleanup: (() => void) | null = null;
 
-  // Form state for "Nuevo" tab
+  // Form state for "Nuevo" tab (Providers)
   let newForm = {
     provider: '',
     level: 'GLOBAL',
     identifier: '',
     apiKey: ''
+  };
+
+  // Form state for "Nuevo" tab (Telegram)
+  let telegramForm = {
+    botName: '',
+    token: ''
   };
 
   // Form state for "Config" tab
@@ -71,12 +80,18 @@
   // ==========================================================================
 
   $: activeTab = $credentialsStore.activeTab;
+  $: activeServiceValue = $credentialsStore.activeService;
   $: providers = $credentialsStore.providers;
   $: levels = $credentialsStore.levels;
   $: loading = $credentialsStore.loading;
   $: testResult = $credentialsStore.testResult;
   $: selected = $selectedCredential;
   $: stats = $credentialsStore.stats;
+
+  // Filtrar providers y levels según servicio
+  $: aiProviders = providers.filter(p => p.id !== 'TELEGRAM');
+  $: aiLevels = levels.filter(l => l.id !== 'BOT');
+  $: telegramBots = $botCredentials;
 
   // Form validation
   $: selectedLevel = levels.find(l => l.id === newForm.level);
@@ -105,6 +120,16 @@
   // Update default provider when providers load
   $: if (providers.length > 0 && !newForm.provider) {
     newForm.provider = providers[0].id;
+  }
+
+  // ==========================================================================
+  // HANDLERS - SERVICE TABS
+  // ==========================================================================
+
+  function handleServiceChange(service: ServiceType) {
+    setActiveService(service);
+    error = null;
+    clearTestResult();
   }
 
   // ==========================================================================
@@ -206,6 +231,43 @@
   }
 
   // ==========================================================================
+  // HANDLERS - TELEGRAM
+  // ==========================================================================
+
+  async function handleSaveTelegramBot() {
+    if (!telegramForm.botName || !telegramForm.token || saving) return;
+
+    saving = true;
+    error = null;
+
+    try {
+      // Crear credencial con provider=TELEGRAM, level=BOT, identifier=botName
+      await createCredential(
+        'TELEGRAM',
+        'BOT',
+        telegramForm.botName,
+        telegramForm.token
+      );
+
+      // Reset form
+      telegramForm = { botName: '', token: '' };
+      clearTestResult();
+      setActiveTab('lista');
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al guardar bot';
+    } finally {
+      saving = false;
+    }
+  }
+
+  function handleCancelTelegram() {
+    telegramForm = { botName: '', token: '' };
+    clearTestResult();
+    error = null;
+    setActiveTab('lista');
+  }
+
+  // ==========================================================================
   // HANDLERS - CONFIG
   // ==========================================================================
 
@@ -300,6 +362,24 @@
 </script>
 
 <div class="credentials-panel">
+  <!-- Service tabs (Providers | Telegram) -->
+  <div class="service-tabs">
+    <button
+      class="service-tab"
+      class:active={activeServiceValue === 'providers'}
+      on:click={() => handleServiceChange('providers')}
+    >
+      🤖 Providers
+    </button>
+    <button
+      class="service-tab"
+      class:active={activeServiceValue === 'telegram'}
+      on:click={() => handleServiceChange('telegram')}
+    >
+      📱 Telegram
+    </button>
+  </div>
+
   <!-- Header with tabs -->
   <div class="panel-header">
     <div class="tabs">
@@ -326,7 +406,13 @@
         Config
       </button>
     </div>
-    <span class="stats">{stats.total} credenciales</span>
+    <span class="stats">
+      {#if activeServiceValue === 'providers'}
+        {stats.total - telegramBots.length} credenciales
+      {:else}
+        {telegramBots.length} bots
+      {/if}
+    </span>
   </div>
 
   <!-- Content -->
@@ -340,7 +426,50 @@
           <span class="loading-icon">⏳</span>
           <span>Cargando...</span>
         </div>
-      {:else if stats.total === 0}
+
+      <!-- TELEGRAM BOTS LIST -->
+      {:else if activeServiceValue === 'telegram'}
+        {#if telegramBots.length === 0}
+          <div class="empty">
+            <span class="empty-icon">📱</span>
+            <span class="empty-title">Sin bots</span>
+            <span class="empty-text">Registra tu primer bot de Telegram</span>
+            <button class="btn primary" on:click={() => handleTabChange('nuevo')}>
+              ➕ Agregar Bot
+            </button>
+          </div>
+        {:else}
+          <div class="credentials-list">
+            <div class="group">
+              <div class="group-items" style="padding-left: 0;">
+                {#each telegramBots as bot (bot.key)}
+                  <div
+                    class="credential-item"
+                    class:selected={selected?.key === bot.key}
+                  >
+                    <button class="cred-main" on:click={() => handleSelectCredential(bot.key)}>
+                      <span class="cred-icon">🤖</span>
+                      <div class="cred-info">
+                        <span class="cred-name">{bot.identifier}</span>
+                        <span class="cred-preview">{bot.preview}</span>
+                      </div>
+                    </button>
+                    <button
+                      class="cred-edit"
+                      on:click|stopPropagation={() => handleEditCredential(bot.key)}
+                      title="Editar"
+                    >
+                      ✏️
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/if}
+
+      <!-- AI PROVIDERS LIST -->
+      {:else if stats.total - telegramBots.length === 0}
         <div class="empty">
           <span class="empty-icon">🔑</span>
           <span class="empty-title">Sin credenciales</span>
@@ -504,123 +633,190 @@
     <!-- TAB: NUEVO -->
     <!-- ================================================================== -->
     {:else if activeTab === 'nuevo'}
-      <div class="form">
-        <!-- Provider -->
-        <fieldset class="field">
-          <legend class="label">Proveedor</legend>
-          <div class="providers-grid" role="group">
-            {#each providers as p (p.id)}
-              <button
-                type="button"
-                class="provider-btn"
-                class:active={newForm.provider === p.id}
-                on:click={() => { newForm.provider = p.id; clearTestResult(); }}
-              >
-                <span class="provider-icon">{p.icon}</span>
-                <span class="provider-name">{p.name}</span>
-              </button>
-            {/each}
-          </div>
-        </fieldset>
 
-        <!-- Level -->
-        <fieldset class="field">
-          <legend class="label">Nivel</legend>
-          <div class="levels-grid" role="group">
-            {#each levels as l (l.id)}
-              <button
-                type="button"
-                class="level-btn"
-                class:active={newForm.level === l.id}
-                on:click={() => { newForm.level = l.id; newForm.identifier = ''; }}
-              >
-                <span>{l.icon}</span>
-                <span>{l.name}</span>
-              </button>
-            {/each}
-          </div>
-        </fieldset>
-
-        <!-- Identifier -->
-        {#if requiresIdentifier}
+      <!-- TELEGRAM NEW BOT FORM -->
+      {#if activeServiceValue === 'telegram'}
+        <div class="form">
           <div class="field">
-            <label class="label" for="new-identifier">Identificador</label>
+            <label class="label" for="bot-name">Nombre del Bot</label>
             <input
-              id="new-identifier"
+              id="bot-name"
               type="text"
               class="input"
-              placeholder={newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
-              bind:value={newForm.identifier}
+              placeholder="facturas, ventas, alertas..."
+              bind:value={telegramForm.botName}
             />
+            <span class="field-hint">Identificador interno (sin espacios)</span>
           </div>
-        {/if}
 
-        <!-- API Key -->
-        <div class="field">
-          <label class="label" for="new-apikey">API Key</label>
-          <div class="password-wrapper">
-            {#if showPassword}
-              <input
-                id="new-apikey"
-                type="text"
-                class="input password-input"
-                placeholder="sk-..."
-                bind:value={newForm.apiKey}
-                on:input={() => clearTestResult()}
-              />
-            {:else}
-              <input
-                id="new-apikey"
-                type="password"
-                class="input password-input"
-                placeholder="sk-..."
-                bind:value={newForm.apiKey}
-                on:input={() => clearTestResult()}
-              />
-            {/if}
+          <div class="field">
+            <label class="label" for="bot-token">Token (de @BotFather)</label>
+            <div class="password-wrapper">
+              {#if showPassword}
+                <input
+                  id="bot-token"
+                  type="text"
+                  class="input password-input"
+                  placeholder="123456789:ABCdefGHI..."
+                  bind:value={telegramForm.token}
+                />
+              {:else}
+                <input
+                  id="bot-token"
+                  type="password"
+                  class="input password-input"
+                  placeholder="123456789:ABCdefGHI..."
+                  bind:value={telegramForm.token}
+                />
+              {/if}
+              <button
+                type="button"
+                class="toggle-password"
+                on:click={togglePassword}
+              >
+                {showPassword ? '🙈' : '👁'}
+              </button>
+            </div>
+          </div>
+
+          {#if error}
+            <div class="error-msg">{error}</div>
+          {/if}
+
+          <div class="actions">
+            <button class="btn secondary" on:click={handleCancelTelegram} disabled={saving}>
+              Cancelar
+            </button>
             <button
-              type="button"
-              class="toggle-password"
-              on:click={togglePassword}
+              class="btn primary"
+              on:click={handleSaveTelegramBot}
+              disabled={!telegramForm.botName || !telegramForm.token || saving}
             >
-              {showPassword ? '🙈' : '👁'}
+              {saving ? '⏳...' : '💾 Guardar Bot'}
             </button>
           </div>
         </div>
 
-        <!-- Test Result -->
-        {#if testResult}
-          <div class="test-result" class:valid={testResult.valid} class:invalid={!testResult.valid}>
-            {testResult.valid ? '✅' : '❌'} {testResult.message}
+      <!-- AI PROVIDERS NEW FORM -->
+      {:else}
+        <div class="form">
+          <!-- Provider -->
+          <fieldset class="field">
+            <legend class="label">Proveedor</legend>
+            <div class="providers-grid" role="group">
+              {#each aiProviders as p (p.id)}
+                <button
+                  type="button"
+                  class="provider-btn"
+                  class:active={newForm.provider === p.id}
+                  on:click={() => { newForm.provider = p.id; clearTestResult(); }}
+                >
+                  <span class="provider-icon">{p.icon}</span>
+                  <span class="provider-name">{p.name}</span>
+                </button>
+              {/each}
+            </div>
+          </fieldset>
+
+          <!-- Level -->
+          <fieldset class="field">
+            <legend class="label">Nivel</legend>
+            <div class="levels-grid" role="group">
+              {#each aiLevels as l (l.id)}
+                <button
+                  type="button"
+                  class="level-btn"
+                  class:active={newForm.level === l.id}
+                  on:click={() => { newForm.level = l.id; newForm.identifier = ''; }}
+                >
+                  <span>{l.icon}</span>
+                  <span>{l.name}</span>
+                </button>
+              {/each}
+            </div>
+          </fieldset>
+
+          <!-- Identifier -->
+          {#if requiresIdentifier}
+            <div class="field">
+              <label class="label" for="new-identifier">Identificador</label>
+              <input
+                id="new-identifier"
+                type="text"
+                class="input"
+                placeholder={newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
+                bind:value={newForm.identifier}
+              />
+            </div>
+          {/if}
+
+          <!-- API Key -->
+          <div class="field">
+            <label class="label" for="new-apikey">API Key</label>
+            <div class="password-wrapper">
+              {#if showPassword}
+                <input
+                  id="new-apikey"
+                  type="text"
+                  class="input password-input"
+                  placeholder="sk-..."
+                  bind:value={newForm.apiKey}
+                  on:input={() => clearTestResult()}
+                />
+              {:else}
+                <input
+                  id="new-apikey"
+                  type="password"
+                  class="input password-input"
+                  placeholder="sk-..."
+                  bind:value={newForm.apiKey}
+                  on:input={() => clearTestResult()}
+                />
+              {/if}
+              <button
+                type="button"
+                class="toggle-password"
+                on:click={togglePassword}
+              >
+                {showPassword ? '🙈' : '👁'}
+              </button>
+            </div>
           </div>
-        {/if}
 
-        <!-- Error -->
-        {#if error}
-          <div class="error-msg">{error}</div>
-        {/if}
+          <!-- Test Result -->
+          {#if testResult}
+            <div class="test-result" class:valid={testResult.valid} class:invalid={!testResult.valid}>
+              {testResult.valid ? '✅' : '❌'} {testResult.message}
+            </div>
+          {/if}
 
-        <!-- Actions -->
-        <div class="actions">
-          <button class="btn secondary" on:click={handleCancelNew} disabled={saving || testing}>
-            Cancelar
-          </button>
-          <button
-            class="btn secondary"
-            on:click={handleTestNew}
-            disabled={!newForm.apiKey || testing || saving}
-          >
-            {testing ? '🔍...' : '🧪 Test'}
-          </button>
-          <button
-            class="btn primary"
-            on:click={handleSaveNew}
-            disabled={!canSaveNew || saving || testing}
-          >
-            {saving ? '⏳...' : '💾 Guardar'}
-          </button>
+          <!-- Error -->
+          {#if error}
+            <div class="error-msg">{error}</div>
+          {/if}
+
+          <!-- Actions -->
+          <div class="actions">
+            <button class="btn secondary" on:click={handleCancelNew} disabled={saving || testing}>
+              Cancelar
+            </button>
+            <button
+              class="btn secondary"
+              on:click={handleTestNew}
+              disabled={!newForm.apiKey || testing || saving}
+            >
+              {testing ? '🔍...' : '🧪 Test'}
+            </button>
+            <button
+              class="btn primary"
+              on:click={handleSaveNew}
+              disabled={!canSaveNew || saving || testing}
+            >
+              {saving ? '⏳...' : '💾 Guardar'}
+            </button>
+          </div>
         </div>
-      </div>
+      {/if}
 
     <!-- ================================================================== -->
     <!-- TAB: CONFIG -->
@@ -761,6 +957,38 @@
     flex-direction: column;
     height: 100%;
     color: var(--_text);
+  }
+
+  /* ==========================================================================
+     Service Tabs
+     ========================================================================== */
+  .service-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--_border);
+  }
+
+  .service-tab {
+    flex: 1;
+    padding: 0.75rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--_text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .service-tab:hover {
+    background: var(--_bg-surface);
+    color: var(--_text);
+  }
+
+  .service-tab.active {
+    color: var(--_primary);
+    border-bottom-color: var(--_primary);
   }
 
   /* ==========================================================================
@@ -1042,6 +1270,12 @@
 
   .input::placeholder {
     color: var(--_text-muted);
+  }
+
+  .field-hint {
+    font-size: 0.75rem;
+    color: var(--_text-muted);
+    margin-top: 0.25rem;
   }
 
   /* Providers Grid */

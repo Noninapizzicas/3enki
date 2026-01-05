@@ -52,8 +52,8 @@ const EVENTS = {
 
   // === CORE ===
   CORE: {
-    +_ERRORS_#: 'core/+/errors/#',
-    +_EVENTS_#: 'core/+/events/#',
+    ERRORS_PATTERN: 'core/+/errors/#',
+    EVENTS_PATTERN: 'core/+/events/#',
   },
 
   // === CREDENTIAL ===

@@ -240,7 +240,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Register Agent
    */
-  async registerAgentAPI(req, res) {
+  async handleRegisterAgent(req, res) {
     try {
       const agentConfig = req.body;
 
@@ -284,7 +284,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: List Agents
    */
-  async listAgents(req, res) {
+  async handleListAgents(req, res) {
     try {
       const { enabled } = req.query;
 
@@ -315,7 +315,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Get Agent
    */
-  async getAgent(req, res) {
+  async handleGetAgent(req, res) {
     try {
       const { id } = req.params;
 
@@ -344,7 +344,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Update Agent
    */
-  async updateAgent(req, res) {
+  async handleUpdateAgent(req, res) {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -391,7 +391,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Delete Agent
    */
-  async deleteAgent(req, res) {
+  async handleDeleteAgent(req, res) {
     try {
       const { id } = req.params;
 
@@ -435,7 +435,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Trigger Agent
    */
-  async triggerAgent(req, res) {
+  async handleTriggerAgent(req, res) {
     try {
       const { id } = req.params;
       const { payload } = req.body;
@@ -479,7 +479,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Get Context
    */
-  async getContext(req, res) {
+  async handleGetContext(req, res) {
     try {
       const { id } = req.params;
 
@@ -510,7 +510,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Clear Context
    */
-  async clearContext(req, res) {
+  async handleClearContext(req, res) {
     try {
       const { id } = req.params;
 
@@ -544,7 +544,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: List Tools
    */
-  async listTools(req, res) {
+  async handleListTools(req, res) {
     try {
       const tools = this.toolManager.listTools();
 
@@ -567,7 +567,7 @@ class AIAgentFrameworkModule {
   /**
    * API Handler: Get Agent Stats
    */
-  async getAgentStats(req, res) {
+  async handleGetAgentStats(req, res) {
     try {
       const { id } = req.params;
 

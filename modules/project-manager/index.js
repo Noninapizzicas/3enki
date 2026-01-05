@@ -177,28 +177,28 @@ class ProjectManagerModule {
     // Comunicación via eventBus (que usa MQTT internamente con topics transformados)
     // Frontend suscribe a core/*/events/project/state, etc.
 
-    const unsubStateReq = await this.eventBus.subscribe('project.state.request',
+    const unsubStateReq = await this.eventBus.subscribe('project/state/request',
       this.onProjectStateRequest.bind(this));
     this.unsubscribes.push(unsubStateReq);
 
-    const unsubCreate = await this.eventBus.subscribe('project.create',
+    const unsubCreate = await this.eventBus.subscribe('project/create',
       this.onProjectCreate.bind(this));
     this.unsubscribes.push(unsubCreate);
 
-    const unsubUpdate = await this.eventBus.subscribe('project.update',
+    const unsubUpdate = await this.eventBus.subscribe('project/update',
       this.onProjectUpdate.bind(this));
     this.unsubscribes.push(unsubUpdate);
 
-    const unsubDelete = await this.eventBus.subscribe('project.delete',
+    const unsubDelete = await this.eventBus.subscribe('project/delete',
       this.onProjectDelete.bind(this));
     this.unsubscribes.push(unsubDelete);
 
-    const unsubActivate = await this.eventBus.subscribe('project.activate',
+    const unsubActivate = await this.eventBus.subscribe('project/activate',
       this.onProjectActivate.bind(this));
     this.unsubscribes.push(unsubActivate);
 
     this.logger.info('project-manager.eventbus.subscribed', {
-      topics: ['project.state.request', 'project.create', 'project.update', 'project.delete', 'project.activate']
+      topics: ['project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate']
     });
 
     // ==================== UI REQUEST/RESPONSE HANDLERS ====================
@@ -1012,7 +1012,7 @@ class ProjectManagerModule {
     };
 
     // Publicar via eventBus → MQTT topic: core/*/events/project/state
-    await this.eventBus.emit('project.state', state);
+    await this.eventBus.emit('project/state', state);
     this.logger.debug('project-manager.state.published', { count: projects.length });
   }
 

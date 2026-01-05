@@ -1,7 +1,7 @@
 # Event Core - Índice de Documentación
 
-**Versión:** v0.1.0 + AI Integration
-**Fecha:** 2025-12-30
+**Versión:** v0.5.0 + AI Agents
+**Fecha:** 2026-01-04
 
 ---
 
@@ -163,20 +163,33 @@
 
 | Documento | Descripción |
 |-----------|-------------|
-| **[AI_TOOLS_REFERENCE.md](./AI_TOOLS_REFERENCE.md)** | Referencia completa de 18 AI tools disponibles |
+| **[AI_TOOLS_REFERENCE.md](./AI_TOOLS_REFERENCE.md)** | Referencia completa de 29 AI tools disponibles |
+| **[AI_AGENTS_ARCHITECTURE.md](./AI_AGENTS_ARCHITECTURE.md)** | Arquitectura del sistema de agentes auto-generativos |
+| **[PLAN-AI-AGENTS.md](./PLAN-AI-AGENTS.md)** | Plan de implementación de agentes |
 | **[PLAN-CHAT-INTEGRATION.md](./PLAN-CHAT-INTEGRATION.md)** | Plan de integración del sistema de chat AI |
 
 **Contenido de AI_TOOLS_REFERENCE.md:**
-- 18 herramientas organizadas en 6 categorías
+- 29 herramientas organizadas en 9 categorías
 - Credential Manager: `credential.list`
 - Prompt Manager: `prompt.list`, `prompt.get`, `prompt.render`
 - Database Manager: `db.query`, `db.tables`, `db.schema`, `db.execute`
 - Filesystem: `fs.cleanup`, `fs.stats`
 - PDF Viewer: `pdf.list`, `pdf.metadata`, `pdf.extract`
 - Code Executor: `shell.exec`, `shell.script`, `shell.background`, `shell.kill`, `shell.list`
+- **AI Agent Framework:** `agent.list`, `agent.get`, `agent.trigger`, `agent.stats`, `create_prompt`, `create_agent`, `list_agents`
+- **OCR Service:** `ocr.extract`
+- **Telegram Service:** `telegram.send_message`, `telegram.get_file`, `telegram.list_bots`
 - Tool translation para múltiples proveedores (Anthropic, OpenAI, DeepSeek, Ollama)
 - Seguridad: tools que requieren confirmación
-- Ejemplos de uso
+- Arquitectura del Agente Arquitecto
+
+**Contenido de AI_AGENTS_ARCHITECTURE.md:**
+- Sistema de agentes auto-generativos
+- Agente Arquitecto (meta-agente que crea agentes)
+- Integración con telegram-service, ocr-service, ai-gateway
+- Flujos de creación de agentes
+- Configuración de providers (DeepSeek por defecto)
+- Roadmap de implementación
 
 ---
 
@@ -520,7 +533,15 @@ El Module Loader lee `module.json` de cada módulo y registra las APIs. Ver **[A
 
 ### ¿Qué herramientas puede usar el AI?
 
-Lee **[AI_TOOLS_REFERENCE.md](./AI_TOOLS_REFERENCE.md)** - 18 tools organizadas en 6 categorías: Credenciales, Prompts, Base de Datos, Filesystem, PDF y Ejecución de código.
+Lee **[AI_TOOLS_REFERENCE.md](./AI_TOOLS_REFERENCE.md)** - 29 tools organizadas en 9 categorías: Credenciales, Prompts, Base de Datos, Filesystem, PDF, Ejecución de código, Agentes, OCR y Telegram.
+
+### ¿Cómo creo agentes que se comuniquen entre módulos?
+
+Lee **[AI_AGENTS_ARCHITECTURE.md](./AI_AGENTS_ARCHITECTURE.md)** - Arquitectura del sistema de agentes auto-generativos que permite a la IA crear agentes funcionales.
+
+### ¿Cómo integro Telegram con OCR?
+
+Lee **[PLAN-AI-AGENTS.md](./PLAN-AI-AGENTS.md)** - Plan de implementación que incluye el patrón Telegram → OCR → Respuesta.
 
 ---
 
@@ -541,6 +562,14 @@ Para preguntas o issues:
 
 ---
 
-**Última actualización:** 2025-12-30
-**Versión:** v0.1.0 + AI Integration
+**Última actualización:** 2026-01-04
+**Versión:** v0.5.0 + AI Agents
 **Estado:** Documentación completa ✅
+
+## 🆕 Novedades v0.5.0
+
+- **AI Agent Framework**: Sistema de agentes event-driven
+- **Agente Arquitecto**: Meta-agente que crea otros agentes
+- **telegram-service**: Integración multi-bot con Telegram
+- **ocr-service**: OCR con múltiples engines (Tesseract, OpenAI Vision, Claude Vision)
+- **29 AI Tools**: Nuevas herramientas para agentes, OCR y Telegram

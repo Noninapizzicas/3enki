@@ -1,8 +1,8 @@
 # AI Tools Reference
 
-**Versión:** 1.0.0
-**Fecha:** 2025-12-30
-**Estado:** Implementado
+**Versión:** 2.0.0
+**Fecha:** 2026-01-04
+**Estado:** Implementado + Planificado
 
 ---
 
@@ -22,7 +22,12 @@ Este documento describe todas las herramientas (tools) disponibles para el AI en
 | Archivos | filesystem | 2 | ✅ |
 | PDF | pdf-viewer | 3 | ✅ |
 | Ejecución | code-executor | 5 | ✅ |
-| **Total** | | **18** | |
+| **Agentes** | **ai-agent-framework** | **7** | ✅ + 🔜 |
+| **OCR** | **ocr-service** | **1** | 🔜 |
+| **Telegram** | **telegram-service** | **3** | 🔜 |
+| **Total** | | **29** | |
+
+**Leyenda:** ✅ Implementado | 🔜 Planificado
 
 ---
 
@@ -473,4 +478,241 @@ async handleToolAccion(args) {
 
 ---
 
-**Última actualización:** 2025-12-30
+## 7. AI Agent Framework
+
+### agent.list ✅
+
+Lista todos los agentes registrados.
+
+```json
+{
+  "name": "agent.list",
+  "parameters": {
+    "enabled_only": "boolean (opcional) - solo agentes activos"
+  }
+}
+```
+
+### agent.get ✅
+
+Obtiene detalles de un agente específico.
+
+```json
+{
+  "name": "agent.get",
+  "parameters": {
+    "agent_id": "string (requerido) - ID del agente"
+  }
+}
+```
+
+### agent.trigger ✅
+
+Ejecuta un agente manualmente con un payload.
+
+```json
+{
+  "name": "agent.trigger",
+  "parameters": {
+    "agent_id": "string (requerido) - ID del agente",
+    "payload": "object (requerido) - datos para el agente"
+  }
+}
+```
+
+### agent.stats ✅
+
+Obtiene estadísticas de ejecución de un agente.
+
+```json
+{
+  "name": "agent.stats",
+  "parameters": {
+    "agent_id": "string (requerido) - ID del agente"
+  }
+}
+```
+
+**Retorna:** executions, successes, failures, total_tokens, total_cost, avg_latency_ms.
+
+### create_prompt 🔜
+
+Crea un nuevo prompt en prompt-manager (para uso del Agente Arquitecto).
+
+```json
+{
+  "name": "create_prompt",
+  "parameters": {
+    "name": "string (requerido) - nombre único kebab-case",
+    "content": "string (requerido) - contenido del prompt",
+    "slot_type": "string (default: system) - system|context|prefix|suffix|format",
+    "description": "string (opcional)",
+    "tags": "array (opcional) - tags para categorización"
+  }
+}
+```
+
+### create_agent 🔜
+
+Crea un nuevo agente (para uso del Agente Arquitecto).
+
+```json
+{
+  "name": "create_agent",
+  "parameters": {
+    "name": "string (requerido) - nombre único",
+    "prompt_id": "string (requerido) - ID del prompt a usar",
+    "subscribes": "array (requerido) - eventos a escuchar",
+    "provider": "string (default: deepseek) - deepseek|openai|anthropic|ollama|auto",
+    "model": "string (opcional) - modelo específico",
+    "temperature": "number (default: 0.3) - 0.0 a 1.0",
+    "tools": "array (default: [http_request]) - tools permitidas",
+    "enabled": "boolean (default: true)"
+  }
+}
+```
+
+### list_agents 🔜
+
+Alias simplificado de agent.list para el Agente Arquitecto.
+
+```json
+{
+  "name": "list_agents",
+  "parameters": {}
+}
+```
+
+---
+
+## 8. OCR Service 🔜
+
+### ocr.extract
+
+Extrae texto de una imagen o PDF.
+
+```json
+{
+  "name": "ocr.extract",
+  "parameters": {
+    "input": "string (requerido) - imagen en base64",
+    "engine": "string (default: auto) - auto|tesseract|openai-vision|claude-vision|google-vision",
+    "language": "string (default: eng) - idioma para tesseract"
+  }
+}
+```
+
+**Retorna:** text, confidence, engine, duration, words, lines.
+
+---
+
+## 9. Telegram Service 🔜
+
+### telegram.send_message
+
+Envía un mensaje de texto a un chat.
+
+```json
+{
+  "name": "telegram.send_message",
+  "parameters": {
+    "botName": "string (requerido) - nombre del bot",
+    "chatId": "number (requerido) - ID del chat",
+    "text": "string (requerido) - mensaje a enviar",
+    "parseMode": "string (opcional) - HTML|Markdown"
+  }
+}
+```
+
+### telegram.get_file
+
+Obtiene información de un archivo y opcionalmente lo descarga.
+
+```json
+{
+  "name": "telegram.get_file",
+  "parameters": {
+    "botName": "string (requerido) - nombre del bot",
+    "fileId": "string (requerido) - ID del archivo",
+    "download": "boolean (default: false) - descargar contenido"
+  }
+}
+```
+
+**Retorna:** Si download=true, retorna el archivo en base64.
+
+### telegram.list_bots
+
+Lista los bots activos.
+
+```json
+{
+  "name": "telegram.list_bots",
+  "parameters": {}
+}
+```
+
+**Retorna:** Array de bots con nombre, username, status.
+
+---
+
+## Arquitectura de Agentes
+
+### Flujo de Creación de Agente
+
+```
+Usuario: "Crea agente para procesar fotos con OCR"
+                    │
+                    ▼
+            Agente Arquitecto
+                    │
+    ┌───────────────┼───────────────┐
+    ▼               ▼               ▼
+create_prompt   create_agent    Confirma
+    │               │               │
+    ▼               ▼               ▼
+prompt-manager  ai-agent       Usuario
+                framework      informado
+```
+
+### Tools del Arquitecto
+
+El Agente Arquitecto tiene acceso a:
+
+| Tool | Uso |
+|------|-----|
+| `create_prompt` | Crear prompts para nuevos agentes |
+| `create_agent` | Crear la definición del agente |
+| `list_agents` | Ver agentes existentes |
+| `http_request` | Consultar APIs de módulos |
+
+### Ejemplo: Crear Agente via Arquitecto
+
+```javascript
+// 1. Arquitecto crea el prompt
+[TOOL:create_prompt]({
+  "name": "media-processor-system",
+  "content": "Eres un agente que procesa imágenes...",
+  "slot_type": "system"
+})
+
+// 2. Arquitecto crea el agente
+[TOOL:create_agent]({
+  "name": "media-processor",
+  "prompt_id": "media-processor-system",
+  "subscribes": ["telegram.photo.received"],
+  "tools": ["http_request"],
+  "provider": "deepseek"
+})
+```
+
+---
+
+## Referencias
+
+- [AI_AGENTS_ARCHITECTURE.md](./AI_AGENTS_ARCHITECTURE.md) - Arquitectura completa de agentes
+- [PLAN-AI-AGENTS.md](./PLAN-AI-AGENTS.md) - Plan de implementación
+
+---
+
+**Última actualización:** 2026-01-04

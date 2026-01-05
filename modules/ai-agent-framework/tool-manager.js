@@ -80,6 +80,50 @@ class ToolManager {
       },
       handler: this.writeFileTool.bind(this)
     });
+
+    // ============ AGENT ARCHITECT TOOLS ============
+
+    // Create Prompt tool
+    this.registerTool({
+      name: 'create_prompt',
+      description: 'Create a new prompt in prompt-manager for agent configuration',
+      parameters: {
+        name: { type: 'string', required: true },
+        content: { type: 'string', required: true },
+        slot_type: { type: 'string', required: false },
+        description: { type: 'string', required: false },
+        tags: { type: 'array', required: false }
+      },
+      handler: this.createPromptTool.bind(this)
+    });
+
+    // Create Agent tool
+    this.registerTool({
+      name: 'create_agent',
+      description: 'Create a new AI agent in the agent framework',
+      parameters: {
+        name: { type: 'string', required: true },
+        description: { type: 'string', required: false },
+        prompt_id: { type: 'string', required: true },
+        subscribes: { type: 'array', required: true },
+        tools: { type: 'array', required: false },
+        provider: { type: 'string', required: false },
+        model: { type: 'string', required: false },
+        temperature: { type: 'number', required: false },
+        enabled: { type: 'boolean', required: false }
+      },
+      handler: this.createAgentTool.bind(this)
+    });
+
+    // List Agents tool
+    this.registerTool({
+      name: 'list_agents',
+      description: 'List all registered agents in the framework',
+      parameters: {
+        enabled_only: { type: 'boolean', required: false }
+      },
+      handler: this.listAgentsTool.bind(this)
+    });
   }
 
   /**
@@ -345,11 +389,189 @@ class ToolManager {
     return { path, size: content.length, success: true };
   }
 
+  // ============ AGENT ARCHITECT TOOLS ============
+
+  /**
+   * Tool: Create Prompt
+   * Creates a new prompt in prompt-manager
+   */
+  async createPromptTool(args) {
+    const { name, content, slot_type = 'system', description = '', tags = [] } = args;
+
+    const port = this.coreConfig?.http?.port || 3000;
+    const url = `http://localhost:${port}/modules/prompt-manager/prompts`;
+
+    const body = {
+      name,
+      content,
+      slot_type,
+      description: description || `Prompt for agent: ${name}`,
+      tags: Array.isArray(tags) ? tags : []
+    };
+
+    try {
+      const response = await this.httpRequestTool({
+        method: 'POST',
+        url,
+        body,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      this.logger.info('tool-manager.create_prompt.success', {
+        prompt_name: name,
+        prompt_id: response?.prompt?.id || response?.id
+      });
+
+      return {
+        success: true,
+        prompt_id: response?.prompt?.id || response?.id,
+        prompt_name: name,
+        message: `Prompt '${name}' created successfully`
+      };
+    } catch (error) {
+      this.logger.error('tool-manager.create_prompt.failed', {
+        prompt_name: name,
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to create prompt '${name}': ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Tool: Create Agent
+   * Creates a new agent in ai-agent-framework
+   */
+  async createAgentTool(args) {
+    const {
+      name,
+      description = '',
+      prompt_id,
+      subscribes,
+      tools = ['http_request'],
+      provider = 'deepseek',
+      model = 'deepseek-chat',
+      temperature = 0.3,
+      enabled = true
+    } = args;
+
+    const port = this.coreConfig?.http?.port || 3000;
+    const url = `http://localhost:${port}/modules/ai-agent-framework/agents`;
+
+    const body = {
+      name,
+      description: description || `Agent: ${name}`,
+      prompt_id,
+      subscribes: Array.isArray(subscribes) ? subscribes : [subscribes],
+      tools: Array.isArray(tools) ? tools : [tools],
+      provider,
+      model,
+      temperature,
+      max_tokens: 2000,
+      context_enabled: true,
+      context_window: 10,
+      enabled
+    };
+
+    try {
+      const response = await this.httpRequestTool({
+        method: 'POST',
+        url,
+        body,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      this.logger.info('tool-manager.create_agent.success', {
+        agent_name: name,
+        agent_id: response?.agent?.id || response?.id,
+        subscribes
+      });
+
+      return {
+        success: true,
+        agent_id: response?.agent?.id || response?.id,
+        agent_name: name,
+        subscribes,
+        message: `Agent '${name}' created successfully, listening to: ${subscribes.join(', ')}`
+      };
+    } catch (error) {
+      this.logger.error('tool-manager.create_agent.failed', {
+        agent_name: name,
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to create agent '${name}': ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Tool: List Agents
+   * Lists all registered agents
+   */
+  async listAgentsTool(args) {
+    const { enabled_only = false } = args || {};
+
+    const port = this.coreConfig?.http?.port || 3000;
+    const url = `http://localhost:${port}/modules/ai-agent-framework/agents`;
+
+    try {
+      const response = await this.httpRequestTool({
+        method: 'GET',
+        url,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      let agents = response?.agents || [];
+
+      if (enabled_only) {
+        agents = agents.filter(a => a.enabled);
+      }
+
+      return {
+        success: true,
+        count: agents.length,
+        agents: agents.map(a => ({
+          id: a.id,
+          name: a.name,
+          description: a.description,
+          enabled: a.enabled,
+          subscribes: a.subscribes,
+          provider: a.provider
+        }))
+      };
+    } catch (error) {
+      this.logger.error('tool-manager.list_agents.failed', {
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message,
+        agents: []
+      };
+    }
+  }
+
   /**
    * Inject eventBus for publish_event tool
    */
   setEventBus(eventBus) {
     this.eventBus = eventBus;
+  }
+
+  /**
+   * Inject core config for API calls
+   */
+  setCoreConfig(coreConfig) {
+    this.coreConfig = coreConfig;
   }
 }
 

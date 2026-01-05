@@ -11,6 +11,8 @@ class Agent {
     this.name = config.name;
     this.description = config.description || '';
     this.prompt_id = config.prompt_id; // From Prompt Manager
+    this.prompt_file = config.prompt_file; // Local file path (relative to module)
+    this.knowledge_file = config.knowledge_file; // Knowledge file to embed in prompt
     this.provider = config.provider || 'auto'; // AI provider
     this.model = config.model || null;
     this.temperature = config.temperature || 0.7;
@@ -179,23 +181,64 @@ class Agent {
 
   /**
    * Render prompt template
+   * Supports: prompt_id (from prompt-manager) OR prompt_file (local file)
    */
   async renderPrompt(event, context) {
-    if (!this.prompt_id || !this.promptManager) {
-      // No prompt configured, use event payload as prompt
+    let promptContent = null;
+
+    // Option 1: Load from local file (for built-in agents like Architect)
+    if (this.prompt_file) {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const promptPath = path.join(__dirname, this.prompt_file);
+
+      try {
+        promptContent = await fs.readFile(promptPath, 'utf8');
+
+        // If knowledge_file is specified, embed it in the prompt
+        if (this.knowledge_file) {
+          const knowledgePath = path.join(__dirname, this.knowledge_file);
+          const knowledge = await fs.readFile(knowledgePath, 'utf8');
+          promptContent = promptContent.replace('{{architect_knowledge}}', knowledge);
+        }
+      } catch (error) {
+        this.logger?.error('agent.prompt.file.read.failed', {
+          agent_id: this.id,
+          prompt_file: this.prompt_file,
+          error: error.message
+        });
+      }
+    }
+
+    // Option 2: Load from prompt-manager
+    if (!promptContent && this.prompt_id && this.promptManager) {
+      const variables = {
+        ...event.payload,
+        event_type: event.type,
+        timestamp: event.timestamp
+      };
+
+      const rendered = await this.promptManager.renderTemplate(this.prompt_id, variables);
+      promptContent = rendered.rendered;
+    }
+
+    // Fallback: use event payload
+    if (!promptContent) {
       return event.payload?.message || JSON.stringify(event.payload);
     }
 
-    // Render prompt with variables from event
+    // Replace event variables in prompt
     const variables = {
       ...event.payload,
       event_type: event.type,
       timestamp: event.timestamp
     };
 
-    const rendered = await this.promptManager.renderTemplate(this.prompt_id, variables);
+    for (const [key, value] of Object.entries(variables)) {
+      promptContent = promptContent.replace(new RegExp(`{{${key}}}`, 'g'), String(value || ''));
+    }
 
-    return rendered.rendered;
+    return promptContent;
   }
 
   /**
@@ -365,6 +408,8 @@ class Agent {
       name: this.name,
       description: this.description,
       prompt_id: this.prompt_id,
+      prompt_file: this.prompt_file,
+      knowledge_file: this.knowledge_file,
       provider: this.provider,
       model: this.model,
       temperature: this.temperature,

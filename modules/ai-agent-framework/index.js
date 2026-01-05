@@ -239,26 +239,27 @@ class AIAgentFrameworkModule {
 
   /**
    * API Handler: Register Agent
+   * Format: return { status, data }
    */
-  async handleRegisterAgent(req, res) {
+  async handleRegisterAgent(req, context) {
     try {
       const agentConfig = req.body;
 
       // Validate
       if (!agentConfig.name) {
-        return res.status(400).json({
-          error: 'INVALID_CONFIG',
-          message: 'Agent name is required'
-        });
+        return {
+          status: 400,
+          data: { error: 'INVALID_CONFIG', message: 'Agent name is required' }
+        };
       }
 
       // Check if agent with same name exists
       const existing = Array.from(this.agents.values()).find(a => a.name === agentConfig.name);
       if (existing) {
-        return res.status(409).json({
-          error: 'AGENT_EXISTS',
-          message: `Agent with name '${agentConfig.name}' already exists`
-        });
+        return {
+          status: 409,
+          data: { error: 'AGENT_EXISTS', message: `Agent with name '${agentConfig.name}' already exists` }
+        };
       }
 
       // Create agent
@@ -268,25 +269,20 @@ class AIAgentFrameworkModule {
       // Save to disk
       await this.saveAgentsToDisk();
 
-      return res.status(201).json(agent.toJSON());
+      return { status: 201, data: agent.toJSON() };
     } catch (error) {
-      this.logger.error('ai-agent-framework.register.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'REGISTER_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.register.error', { error: error.message });
+      return { status: 500, data: { error: 'REGISTER_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: List Agents
+   * Format: return { status, data }
    */
-  async handleListAgents(req, res) {
+  async handleListAgents(req, context) {
     try {
-      const { enabled } = req.query;
+      const { enabled } = req.query || {};
 
       let agents = Array.from(this.agents.values());
 
@@ -296,66 +292,48 @@ class AIAgentFrameworkModule {
         agents = agents.filter(a => a.enabled === isEnabled);
       }
 
-      return res.status(200).json({
-        agents: agents.map(a => a.toJSON()),
-        total: agents.length
-      });
+      return {
+        status: 200,
+        data: { agents: agents.map(a => a.toJSON()), total: agents.length }
+      };
     } catch (error) {
-      this.logger.error('ai-agent-framework.list.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'LIST_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.list.error', { error: error.message });
+      return { status: 500, data: { error: 'LIST_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: Get Agent
+   * Format: return { status, data }
    */
-  async handleGetAgent(req, res) {
+  async handleGetAgent(req, context) {
     try {
-      const { id } = req.params;
-
+      const id = context?.params?.id || req.params?.id;
       const agent = this.agents.get(id);
 
       if (!agent) {
-        return res.status(404).json({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${id}' not found`
-        });
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
       }
 
-      return res.status(200).json(agent.toJSON());
+      return { status: 200, data: agent.toJSON() };
     } catch (error) {
-      this.logger.error('ai-agent-framework.get.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'GET_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.get.error', { error: error.message });
+      return { status: 500, data: { error: 'GET_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: Update Agent
+   * Format: return { status, data }
    */
-  async handleUpdateAgent(req, res) {
+  async handleUpdateAgent(req, context) {
     try {
-      const { id } = req.params;
+      const id = context?.params?.id || req.params?.id;
       const updates = req.body;
-
       const agent = this.agents.get(id);
 
       if (!agent) {
-        return res.status(404).json({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${id}' not found`
-        });
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
       }
 
       // Update fields
@@ -375,33 +353,24 @@ class AIAgentFrameworkModule {
       // Save to disk
       await this.saveAgentsToDisk();
 
-      return res.status(200).json(agent.toJSON());
+      return { status: 200, data: agent.toJSON() };
     } catch (error) {
-      this.logger.error('ai-agent-framework.update.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'UPDATE_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.update.error', { error: error.message });
+      return { status: 500, data: { error: 'UPDATE_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: Delete Agent
+   * Format: return { status, data }
    */
-  async handleDeleteAgent(req, res) {
+  async handleDeleteAgent(req, context) {
     try {
-      const { id } = req.params;
-
+      const id = context?.params?.id || req.params?.id;
       const agent = this.agents.get(id);
 
       if (!agent) {
-        return res.status(404).json({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${id}' not found`
-        });
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
       }
 
       // Remove agent
@@ -416,37 +385,25 @@ class AIAgentFrameworkModule {
       // Clear context
       await this.contextManager.clearContext(id);
 
-      return res.status(200).json({
-        success: true,
-        message: 'Agent deleted successfully'
-      });
+      return { status: 200, data: { success: true, message: 'Agent deleted successfully' } };
     } catch (error) {
-      this.logger.error('ai-agent-framework.delete.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'DELETE_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.delete.error', { error: error.message });
+      return { status: 500, data: { error: 'DELETE_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: Trigger Agent
+   * Format: return { status, data }
    */
-  async handleTriggerAgent(req, res) {
+  async handleTriggerAgent(req, context) {
     try {
-      const { id } = req.params;
-      const { payload } = req.body;
-
+      const id = context?.params?.id || req.params?.id;
+      const { payload } = req.body || {};
       const agent = this.agents.get(id);
 
       if (!agent) {
-        return res.status(404).json({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${id}' not found`
-        });
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
       }
 
       // Create synthetic event
@@ -459,141 +416,89 @@ class AIAgentFrameworkModule {
       // Execute agent
       const result = await agent.handleEvent(event);
 
-      return res.status(200).json({
-        agent_id: id,
-        agent_name: agent.name,
-        result
-      });
+      return { status: 200, data: { agent_id: id, agent_name: agent.name, result } };
     } catch (error) {
-      this.logger.error('ai-agent-framework.trigger.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'TRIGGER_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.trigger.error', { error: error.message });
+      return { status: 500, data: { error: 'TRIGGER_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: Get Context
+   * Format: return { status, data }
    */
-  async handleGetContext(req, res) {
+  async handleGetContext(req, context) {
     try {
-      const { id } = req.params;
-
+      const id = context?.params?.id || req.params?.id;
       const agent = this.agents.get(id);
 
       if (!agent) {
-        return res.status(404).json({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${id}' not found`
-        });
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
       }
 
-      const context = await this.contextManager.getContext(id);
+      const agentContext = await this.contextManager.getContext(id);
 
-      return res.status(200).json(context);
+      return { status: 200, data: agentContext };
     } catch (error) {
-      this.logger.error('ai-agent-framework.get-context.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'GET_CONTEXT_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.get-context.error', { error: error.message });
+      return { status: 500, data: { error: 'GET_CONTEXT_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: Clear Context
+   * Format: return { status, data }
    */
-  async handleClearContext(req, res) {
+  async handleClearContext(req, context) {
     try {
-      const { id } = req.params;
-
+      const id = context?.params?.id || req.params?.id;
       const agent = this.agents.get(id);
 
       if (!agent) {
-        return res.status(404).json({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${id}' not found`
-        });
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
       }
 
       await this.contextManager.clearContext(id);
 
-      return res.status(200).json({
-        success: true,
-        message: 'Context cleared successfully'
-      });
+      return { status: 200, data: { success: true, message: 'Context cleared successfully' } };
     } catch (error) {
-      this.logger.error('ai-agent-framework.clear-context.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'CLEAR_CONTEXT_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.clear-context.error', { error: error.message });
+      return { status: 500, data: { error: 'CLEAR_CONTEXT_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: List Tools
+   * Format: return { status, data }
    */
-  async handleListTools(req, res) {
+  async handleListTools(req, context) {
     try {
       const tools = this.toolManager.listTools();
 
-      return res.status(200).json({
-        tools,
-        total: tools.length
-      });
+      return { status: 200, data: { tools, total: tools.length } };
     } catch (error) {
-      this.logger.error('ai-agent-framework.list-tools.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'LIST_TOOLS_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.list-tools.error', { error: error.message });
+      return { status: 500, data: { error: 'LIST_TOOLS_FAILED', message: error.message } };
     }
   }
 
   /**
    * API Handler: Get Agent Stats
+   * Format: return { status, data }
    */
-  async handleGetAgentStats(req, res) {
+  async handleGetAgentStats(req, context) {
     try {
-      const { id } = req.params;
-
+      const id = context?.params?.id || req.params?.id;
       const agent = this.agents.get(id);
 
       if (!agent) {
-        return res.status(404).json({
-          error: 'AGENT_NOT_FOUND',
-          message: `Agent '${id}' not found`
-        });
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
       }
 
-      return res.status(200).json({
-        agent_id: id,
-        agent_name: agent.name,
-        stats: agent.stats
-      });
+      return { status: 200, data: { agent_id: id, agent_name: agent.name, stats: agent.stats } };
     } catch (error) {
-      this.logger.error('ai-agent-framework.get-stats.error', {
-        error: error.message
-      });
-
-      return res.status(500).json({
-        error: 'GET_STATS_FAILED',
-        message: error.message
-      });
+      this.logger.error('ai-agent-framework.get-stats.error', { error: error.message });
+      return { status: 500, data: { error: 'GET_STATS_FAILED', message: error.message } };
     }
   }
 }

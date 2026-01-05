@@ -34,8 +34,9 @@ const EVENTS = {
   QUEUE_OVERFLOW: 'telegram.queue.overflow'
 };
 
-// Credential pattern: TELEGRAM_API_KEY_BOT_{botName}
-const CREDENTIAL_PATTERN = /^TELEGRAM_API_KEY_BOT_(.+)$/;
+// Credential pattern: TELEGRAM_API_KEY_{type}_{botName}
+// Supports BOT and CUSTOM types (credential-manager uses CUSTOM for custom credentials)
+const CREDENTIAL_PATTERN = /^TELEGRAM_API_KEY_(?:BOT|CUSTOM)_(.+)$/;
 
 class TelegramServiceModule {
   constructor() {

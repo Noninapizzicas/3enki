@@ -242,7 +242,7 @@ class Agent {
   }
 
   /**
-   * Call AI Gateway
+   * Call AI Gateway with native function calling support
    */
   async callAI(prompt, context) {
     if (!this.aiGateway) {
@@ -263,11 +263,15 @@ class Agent {
       content: prompt
     });
 
+    // Get tool definitions for native function calling
+    const tools = this.getToolDefinitions();
+
     // Call AI Gateway
     const startTime = Date.now();
 
     const response = await this.aiGateway.chatCompletion({
       messages,
+      tools: tools.length > 0 ? tools : undefined,
       provider: this.provider,
       model: this.model,
       temperature: this.temperature,
@@ -282,8 +286,8 @@ class Agent {
     const latencyMs = Date.now() - startTime;
 
     // Update stats
-    this.stats.total_tokens += response.usage.total_tokens;
-    this.stats.total_cost += response.cost;
+    this.stats.total_tokens += response.usage?.total_tokens || 0;
+    this.stats.total_cost += response.cost || 0;
 
     // Update avg latency
     const totalExecutions = this.stats.executions + 1;
@@ -294,11 +298,59 @@ class Agent {
   }
 
   /**
+   * Get tool definitions in OpenAI/DeepSeek format
+   * Used for native function calling
+   */
+  getToolDefinitions() {
+    if (!this.toolManager || !this.tools || this.tools.length === 0) {
+      return [];
+    }
+
+    // Get full tool definitions from toolManager
+    const definitions = [];
+
+    for (const toolName of this.tools) {
+      const tool = this.toolManager.getTool(toolName);
+      if (tool) {
+        definitions.push({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.parameters || {
+              type: 'object',
+              properties: {},
+              required: []
+            }
+          }
+        });
+      }
+    }
+
+    return definitions;
+  }
+
+  /**
    * Process tool calls if needed
+   * Supports both native tool_calls (DeepSeek/OpenAI) and legacy text format
    */
   async processTools(aiResponse, event, context) {
-    // Check if AI response contains tool calls
-    const toolCalls = this.extractToolCalls(aiResponse.content);
+    // Check for native tool_calls first (DeepSeek/OpenAI format)
+    let toolCalls = [];
+
+    if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
+      // Native function calling format
+      toolCalls = aiResponse.tool_calls.map(tc => ({
+        id: tc.id,
+        tool_name: tc.function?.name || tc.name,
+        arguments: typeof tc.function?.arguments === 'string'
+          ? JSON.parse(tc.function.arguments)
+          : tc.function?.arguments || tc.arguments || {}
+      }));
+    } else {
+      // Fallback: legacy text format [TOOL:name]({args})
+      toolCalls = this.extractToolCalls(aiResponse.content);
+    }
 
     if (toolCalls.length === 0 || !this.toolManager) {
       return {
@@ -316,6 +368,12 @@ class Agent {
 
     for (const toolCall of toolCalls) {
       try {
+        this.logger?.info('agent.tool.executing', {
+          agent_id: this.id,
+          tool: toolCall.tool_name,
+          args: toolCall.arguments
+        });
+
         const result = await this.toolManager.executeTool(
           toolCall.tool_name,
           toolCall.arguments,
@@ -323,18 +381,20 @@ class Agent {
         );
 
         toolResults.push({
+          tool_call_id: toolCall.id,
           tool: toolCall.tool_name,
           success: true,
           result
         });
       } catch (error) {
-        this.logger.error('agent.tool.failed', {
+        this.logger?.error('agent.tool.failed', {
           agent_id: this.id,
           tool: toolCall.tool_name,
           error: error.message
         });
 
         toolResults.push({
+          tool_call_id: toolCall.id,
           tool: toolCall.tool_name,
           success: false,
           error: error.message
@@ -348,16 +408,21 @@ class Agent {
       model: aiResponse.model,
       usage: aiResponse.usage,
       cost: aiResponse.cost,
-      tools_used: toolResults
+      tools_used: toolResults,
+      finish_reason: aiResponse.finish_reason
     };
   }
 
   /**
-   * Extract tool calls from AI response
-   *
+   * Extract tool calls from AI response (legacy format)
    * Format: [TOOL:tool_name]({"arg1":"value1"})
+   * Kept for backwards compatibility
    */
   extractToolCalls(content) {
+    if (!content || typeof content !== 'string') {
+      return [];
+    }
+
     const toolPattern = /\[TOOL:([^\]]+)\]\(({[^)]+})\)/g;
     const toolCalls = [];
 
@@ -369,7 +434,7 @@ class Agent {
           arguments: JSON.parse(match[2])
         });
       } catch (error) {
-        this.logger.warn('agent.tool.parse-failed', {
+        this.logger?.warn('agent.tool.parse-failed', {
           agent_id: this.id,
           raw: match[0]
         });

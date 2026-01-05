@@ -124,6 +124,87 @@ class ToolManager {
       },
       handler: this.listAgentsTool.bind(this)
     });
+
+    // ============ TELEGRAM TOOLS ============
+    // Wrappers that call telegram-service via HTTP API
+
+    this.registerTool({
+      name: 'telegram.send_message',
+      description: 'Send text message to Telegram chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name (e.g., facturas_asesoria_bot)' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          text: { type: 'string', description: 'Message text' },
+          parseMode: { type: 'string', description: 'Parse mode: HTML or Markdown' }
+        },
+        required: ['botName', 'chatId', 'text']
+      },
+      handler: this.telegramSendMessageTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram.get_file',
+      description: 'Get file info and optionally download from Telegram',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          fileId: { type: 'string', description: 'Telegram file ID' },
+          download: { type: 'boolean', description: 'Download file to storage' }
+        },
+        required: ['botName', 'fileId']
+      },
+      handler: this.telegramGetFileTool.bind(this)
+    });
+
+    // ============ FILESYSTEM TOOLS ============
+
+    this.registerTool({
+      name: 'fs.copy',
+      description: 'Copy file from source to destination',
+      parameters: {
+        type: 'object',
+        properties: {
+          source: { type: 'string', description: 'Source file path' },
+          destination: { type: 'string', description: 'Destination file path' }
+        },
+        required: ['source', 'destination']
+      },
+      handler: this.fsCopyTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'fs.write',
+      description: 'Write content to file',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'File path' },
+          content: { type: 'string', description: 'File content' }
+        },
+        required: ['path', 'content']
+      },
+      handler: this.writeFileTool.bind(this)  // Reuse existing write_file
+    });
+
+    // ============ DATABASE TOOLS ============
+
+    this.registerTool({
+      name: 'db.execute',
+      description: 'Execute SQL query on project database',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Project ID (or "system")' },
+          query: { type: 'string', description: 'SQL query to execute' },
+          params: { type: 'array', description: 'Query parameters' }
+        },
+        required: ['project_id', 'query']
+      },
+      handler: this.dbExecuteTool.bind(this)
+    });
   }
 
   /**
@@ -558,6 +639,185 @@ class ToolManager {
         agents: []
       };
     }
+  }
+
+  // ============ TELEGRAM TOOL HANDLERS ============
+
+  /**
+   * Tool: Telegram Send Message
+   */
+  async telegramSendMessageTool(args) {
+    const { botName, chatId, text, parseMode } = args;
+
+    const port = this.coreConfig?.http?.port || 3000;
+    const url = `http://localhost:${port}/modules/telegram-service/send`;
+
+    try {
+      const response = await this.httpRequestTool({
+        method: 'POST',
+        url,
+        body: { botName, chatId, text, parseMode },
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      this.logger.info('tool-manager.telegram.send_message.success', {
+        botName, chatId
+      });
+
+      return {
+        success: true,
+        message_id: response?.message_id,
+        chat_id: chatId
+      };
+    } catch (error) {
+      this.logger.error('tool-manager.telegram.send_message.failed', {
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Tool: Telegram Get File
+   */
+  async telegramGetFileTool(args) {
+    const { botName, fileId, download = true } = args;
+
+    const port = this.coreConfig?.http?.port || 3000;
+    const url = `http://localhost:${port}/modules/telegram-service/file`;
+
+    try {
+      const response = await this.httpRequestTool({
+        method: 'POST',
+        url,
+        body: { botName, fileId, download },
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      this.logger.info('tool-manager.telegram.get_file.success', {
+        botName, fileId, downloaded: download
+      });
+
+      return {
+        success: true,
+        file_path: response?.file_path || response?.localPath,
+        file_size: response?.file_size,
+        file_id: fileId
+      };
+    } catch (error) {
+      this.logger.error('tool-manager.telegram.get_file.failed', {
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // ============ FILESYSTEM TOOL HANDLERS ============
+
+  /**
+   * Tool: Copy File
+   */
+  async fsCopyTool(args) {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const { source, destination } = args;
+
+    try {
+      // Ensure destination directory exists
+      const destDir = path.dirname(destination);
+      await fs.mkdir(destDir, { recursive: true });
+
+      // Copy file
+      await fs.copyFile(source, destination);
+
+      this.logger.info('tool-manager.fs.copy.success', {
+        source, destination
+      });
+
+      return {
+        success: true,
+        source,
+        destination
+      };
+    } catch (error) {
+      this.logger.error('tool-manager.fs.copy.failed', {
+        source, destination,
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // ============ DATABASE TOOL HANDLERS ============
+
+  /**
+   * Tool: Execute SQL
+   */
+  async dbExecuteTool(args) {
+    const { project_id, query, params = [] } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const requestId = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Database query timeout' });
+      }, 10000);
+
+      // One-time listener for response
+      const handler = (event) => {
+        const data = event.data || event;
+        if (data.request_id === requestId) {
+          clearTimeout(timeout);
+          this.eventBus.off('db.query.response', handler);
+
+          if (data.success) {
+            this.logger.info('tool-manager.db.execute.success', {
+              project_id, rows: data.data?.length || 0
+            });
+            resolve({
+              success: true,
+              data: data.data,
+              changes: data.changes
+            });
+          } else {
+            this.logger.error('tool-manager.db.execute.failed', {
+              error: data.error
+            });
+            resolve({
+              success: false,
+              error: data.error
+            });
+          }
+        }
+      };
+
+      this.eventBus.on('db.query.response', handler);
+
+      // Publish query request
+      this.eventBus.publish('db.query.request', {
+        project_id,
+        query,
+        params,
+        request_id: requestId
+      });
+    });
   }
 
   /**

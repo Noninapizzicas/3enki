@@ -52,8 +52,8 @@ const EVENTS = {
 
   // === CORE ===
   CORE: {
-    ERRORS_WILDCARD: 'core/+/errors/#',
-    EVENTS_WILDCARD: 'core/+/events/#',
+    +_ERRORS_#: 'core/+/errors/#',
+    +_EVENTS_#: 'core/+/events/#',
   },
 
   // === CREDENTIAL ===
@@ -164,6 +164,13 @@ const EVENTS = {
     OBTENER: 'nota.obtener',
   },
 
+  // === OCR ===
+  OCR: {
+    EXTRACT_COMPLETED: 'ocr.extract.completed',
+    EXTRACT_FAILED: 'ocr.extract.failed',
+    EXTRACT_REQUEST: 'ocr.extract.request',
+  },
+
   // === PDF ===
   PDF: {
     ERROR: 'pdf.error',
@@ -249,21 +256,19 @@ const EVENTS = {
   // === TELEGRAM ===
   TELEGRAM: {
     AUDIO_RECEIVED: 'telegram.audio.received',
-    BOT_REGISTERED: 'telegram.bot.registered',
-    BOT_REMOVED: 'telegram.bot.removed',
+    BOT_ERROR: 'telegram.bot.error',
+    BOT_STARTED: 'telegram.bot.started',
+    BOT_STOPPED: 'telegram.bot.stopped',
     CALLBACK_RECEIVED: 'telegram.callback.received',
     COMMAND_RECEIVED: 'telegram.command.received',
     CONTACT_RECEIVED: 'telegram.contact.received',
     DOCUMENT_RECEIVED: 'telegram.document.received',
-    DOCUMENT_SEND_REQUEST: 'telegram.document.send.request',
-    ERROR: 'telegram.error',
-    KEYBOARD_SEND_REQUEST: 'telegram.keyboard.send.request',
     LOCATION_RECEIVED: 'telegram.location.received',
-    MESSAGE_RECEIVED: 'telegram.message.received',
     MESSAGE_SENT: 'telegram.message.sent',
     PHOTO_RECEIVED: 'telegram.photo.received',
-    PHOTO_SEND_REQUEST: 'telegram.photo.send.request',
-    SEND_REQUEST: 'telegram.send.request',
+    QUEUE_OVERFLOW: 'telegram.queue.overflow',
+    SEND_FAILED: 'telegram.send.failed',
+    TEXT_RECEIVED: 'telegram.text.received',
     VIDEO_RECEIVED: 'telegram.video.received',
     VOICE_RECEIVED: 'telegram.voice.received',
   },
@@ -470,6 +475,14 @@ const API_ROUTES = {
     GET_METRICS: '/modules/notas/metrics',
   },
 
+  OCR: {
+    BASE: '/modules/ocr-service',
+    EXTRACT: '/modules/ocr-service/extract',
+    LIST_ENGINES: '/modules/ocr-service/engines',
+    GET_ENGINE: '/modules/ocr-service/engines/:name',
+    HEALTH_CHECK: '/modules/ocr-service/health',
+  },
+
   PDF: {
     BASE: '/modules/pdf-viewer',
     VIEW_PDF: '/modules/pdf-viewer/pdf/view',
@@ -553,27 +566,6 @@ const API_ROUTES = {
     GET_ERRORS: '/modules/system-inspector/errors',
     GET_NETWORK: '/modules/system-inspector/network',
     CLEAR: '/modules/system-inspector/clear',
-  },
-
-  TELEGRAM: {
-    BASE: '/modules/telegram-service',
-    REGISTER_BOT: '/modules/telegram-service/bots',
-    LIST_BOTS: '/modules/telegram-service/bots',
-    GET_BOT: '/modules/telegram-service/bots/:projectId',
-    REMOVE_BOT: '/modules/telegram-service/bots/:projectId',
-    SETUP_WEBHOOK: '/modules/telegram-service/bots/:projectId/webhook',
-    WEBHOOK: '/modules/telegram-service/telegram/webhook',
-    WEBHOOK_BY_BOT: '/modules/telegram-service/telegram/webhook/:botId',
-    SEND_MESSAGE: '/modules/telegram-service/telegram/send',
-    SEND_PHOTO: '/modules/telegram-service/telegram/sendPhoto',
-    SEND_DOCUMENT: '/modules/telegram-service/telegram/sendDocument',
-    SEND_KEYBOARD: '/modules/telegram-service/telegram/sendKeyboard',
-    EDIT_MESSAGE: '/modules/telegram-service/telegram/editMessage',
-    DELETE_MESSAGE: '/modules/telegram-service/telegram/deleteMessage',
-    ANSWER_CALLBACK: '/modules/telegram-service/telegram/answerCallback',
-    SET_COMMANDS: '/modules/telegram-service/telegram/setCommands',
-    GET_FILE: '/modules/telegram-service/telegram/file/:fileId',
-    STATUS: '/modules/telegram-service/telegram/status',
   },
 
   TEXT: {
@@ -711,6 +703,13 @@ const MODULES = {
       subscribes: ['nota.obtener', 'nota.listar'],
     },
   },
+  'ocr-service': {
+    version: '1.0.0',
+    events: {
+      publishes: ['ocr.extract.completed', 'ocr.extract.failed'],
+      subscribes: ['ocr.extract.request'],
+    },
+  },
   'pdf-viewer': {
     version: '1.0.0',
     events: {
@@ -754,10 +753,10 @@ const MODULES = {
     },
   },
   'telegram-service': {
-    version: '2.1.0',
+    version: '3.0.0',
     events: {
-      publishes: ['telegram.bot.registered', 'telegram.bot.removed', 'telegram.message.received', 'telegram.photo.received', 'telegram.document.received', 'telegram.audio.received', 'telegram.video.received', 'telegram.voice.received', 'telegram.location.received', 'telegram.contact.received', 'telegram.command.received', 'telegram.callback.received', 'telegram.message.sent', 'telegram.error'],
-      subscribes: ['telegram.send.request', 'telegram.photo.send.request', 'telegram.document.send.request', 'telegram.keyboard.send.request'],
+      publishes: ['telegram.text.received', 'telegram.photo.received', 'telegram.document.received', 'telegram.video.received', 'telegram.audio.received', 'telegram.voice.received', 'telegram.location.received', 'telegram.contact.received', 'telegram.command.received', 'telegram.callback.received', 'telegram.message.sent', 'telegram.send.failed', 'telegram.bot.started', 'telegram.bot.stopped', 'telegram.bot.error', 'telegram.queue.overflow'],
+      subscribes: ['credential.saved', 'credential.deleted'],
     },
   },
   'text-editor': {

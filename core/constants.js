@@ -104,6 +104,13 @@ const EVENTS = {
     FILE_DELETED: 'fs.file.deleted',
     FILE_UPDATED: 'fs.file.updated',
     WORKDIR_CHANGED: 'fs.workdir.changed',
+    // Request events (agents can ask for actions)
+    WRITE_REQUEST: 'fs.write.request',
+    WRITE_RESPONSE: 'fs.write.response',
+    COPY_REQUEST: 'fs.copy.request',
+    COPY_RESPONSE: 'fs.copy.response',
+    READ_REQUEST: 'fs.read.request',
+    READ_RESPONSE: 'fs.read.response',
   },
 
   // === FUNCTION ===

@@ -136,12 +136,82 @@ class TelegramServiceModule {
     );
     this.unsubscribes.push(unsubGetFile);
 
+    const unsubSendPhoto = await this.eventBus.subscribe(
+      'telegram.send_photo.request',
+      this.onSendPhotoRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSendPhoto);
+
+    const unsubSendDocument = await this.eventBus.subscribe(
+      'telegram.send_document.request',
+      this.onSendDocumentRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSendDocument);
+
+    const unsubSendVideo = await this.eventBus.subscribe(
+      'telegram.send_video.request',
+      this.onSendVideoRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSendVideo);
+
+    const unsubSendLocation = await this.eventBus.subscribe(
+      'telegram.send_location.request',
+      this.onSendLocationRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSendLocation);
+
+    const unsubEditMessage = await this.eventBus.subscribe(
+      'telegram.edit_message.request',
+      this.onEditMessageRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubEditMessage);
+
+    const unsubDeleteMessage = await this.eventBus.subscribe(
+      'telegram.delete_message.request',
+      this.onDeleteMessageRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubDeleteMessage);
+
+    const unsubAnswerCallback = await this.eventBus.subscribe(
+      'telegram.answer_callback.request',
+      this.onAnswerCallbackRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubAnswerCallback);
+
+    const unsubGetChat = await this.eventBus.subscribe(
+      'telegram.get_chat.request',
+      this.onGetChatRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubGetChat);
+
+    const unsubSetCommands = await this.eventBus.subscribe(
+      'telegram.set_commands.request',
+      this.onSetCommandsRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSetCommands);
+
+    const unsubListBots = await this.eventBus.subscribe(
+      'telegram.list_bots.request',
+      this.onListBotsRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubListBots);
+
     this.logger.info('telegram.events.subscribed', {
       events: [
         'credential.saved',
         'credential.deleted',
         'telegram.send_message.request',
-        'telegram.get_file.request'
+        'telegram.get_file.request',
+        'telegram.send_photo.request',
+        'telegram.send_document.request',
+        'telegram.send_video.request',
+        'telegram.send_location.request',
+        'telegram.edit_message.request',
+        'telegram.delete_message.request',
+        'telegram.answer_callback.request',
+        'telegram.get_chat.request',
+        'telegram.set_commands.request',
+        'telegram.list_bots.request'
       ]
     });
   }
@@ -175,6 +245,146 @@ class TelegramServiceModule {
 
     // Publish response
     await this.eventBus.publish('telegram.get_file.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onSendPhotoRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId, photo, caption } = data;
+
+    this.logger.info('telegram.send_photo.request', { botName, chatId, request_id });
+
+    const result = await this.handleToolSendPhoto({ botName, chatId, photo, caption });
+
+    await this.eventBus.publish('telegram.send_photo.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onSendDocumentRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId, document, caption } = data;
+
+    this.logger.info('telegram.send_document.request', { botName, chatId, request_id });
+
+    const result = await this.handleToolSendDocument({ botName, chatId, document, caption });
+
+    await this.eventBus.publish('telegram.send_document.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onSendVideoRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId, video, caption } = data;
+
+    this.logger.info('telegram.send_video.request', { botName, chatId, request_id });
+
+    const result = await this.handleToolSendVideo({ botName, chatId, video, caption });
+
+    await this.eventBus.publish('telegram.send_video.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onSendLocationRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId, latitude, longitude } = data;
+
+    this.logger.info('telegram.send_location.request', { botName, chatId, request_id });
+
+    const result = await this.handleToolSendLocation({ botName, chatId, latitude, longitude });
+
+    await this.eventBus.publish('telegram.send_location.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onEditMessageRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId, messageId, text } = data;
+
+    this.logger.info('telegram.edit_message.request', { botName, chatId, messageId, request_id });
+
+    const result = await this.handleToolEditMessage({ botName, chatId, messageId, text });
+
+    await this.eventBus.publish('telegram.edit_message.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onDeleteMessageRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId, messageId } = data;
+
+    this.logger.info('telegram.delete_message.request', { botName, chatId, messageId, request_id });
+
+    const result = await this.handleToolDeleteMessage({ botName, chatId, messageId });
+
+    await this.eventBus.publish('telegram.delete_message.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onAnswerCallbackRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, callbackId, text, showAlert } = data;
+
+    this.logger.info('telegram.answer_callback.request', { botName, callbackId, request_id });
+
+    const result = await this.handleToolAnswerCallback({ botName, callbackId, text, showAlert });
+
+    await this.eventBus.publish('telegram.answer_callback.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onGetChatRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId } = data;
+
+    this.logger.info('telegram.get_chat.request', { botName, chatId, request_id });
+
+    const result = await this.handleToolGetChat({ botName, chatId });
+
+    await this.eventBus.publish('telegram.get_chat.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onSetCommandsRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, commands } = data;
+
+    this.logger.info('telegram.set_commands.request', { botName, request_id });
+
+    const result = await this.handleToolSetCommands({ botName, commands });
+
+    await this.eventBus.publish('telegram.set_commands.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onListBotsRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id } = data;
+
+    this.logger.info('telegram.list_bots.request', { request_id });
+
+    const result = await this.handleToolListBots({});
+
+    await this.eventBus.publish('telegram.list_bots.response', {
       request_id,
       ...result
     });

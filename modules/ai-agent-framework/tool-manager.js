@@ -159,6 +159,156 @@ class ToolManager {
       handler: this.telegramGetFileTool.bind(this)
     });
 
+    this.registerTool({
+      name: 'telegram_send_photo',
+      description: 'Send photo to Telegram chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          photo: { type: 'string', description: 'Photo file path or URL' },
+          caption: { type: 'string', description: 'Photo caption' }
+        },
+        required: ['botName', 'chatId', 'photo']
+      },
+      handler: this.telegramSendPhotoTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_send_document',
+      description: 'Send document to Telegram chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          document: { type: 'string', description: 'Document file path or URL' },
+          caption: { type: 'string', description: 'Document caption' }
+        },
+        required: ['botName', 'chatId', 'document']
+      },
+      handler: this.telegramSendDocumentTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_send_video',
+      description: 'Send video to Telegram chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          video: { type: 'string', description: 'Video file path or URL' },
+          caption: { type: 'string', description: 'Video caption' }
+        },
+        required: ['botName', 'chatId', 'video']
+      },
+      handler: this.telegramSendVideoTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_send_location',
+      description: 'Send location to Telegram chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          latitude: { type: 'number', description: 'Latitude' },
+          longitude: { type: 'number', description: 'Longitude' }
+        },
+        required: ['botName', 'chatId', 'latitude', 'longitude']
+      },
+      handler: this.telegramSendLocationTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_edit_message',
+      description: 'Edit existing Telegram message',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          messageId: { type: 'number', description: 'Message ID to edit' },
+          text: { type: 'string', description: 'New message text' }
+        },
+        required: ['botName', 'chatId', 'messageId', 'text']
+      },
+      handler: this.telegramEditMessageTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_delete_message',
+      description: 'Delete Telegram message',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          messageId: { type: 'number', description: 'Message ID to delete' }
+        },
+        required: ['botName', 'chatId', 'messageId']
+      },
+      handler: this.telegramDeleteMessageTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_answer_callback',
+      description: 'Answer callback query from inline keyboard',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          callbackId: { type: 'string', description: 'Callback query ID' },
+          text: { type: 'string', description: 'Notification text' },
+          showAlert: { type: 'boolean', description: 'Show as alert' }
+        },
+        required: ['botName', 'callbackId']
+      },
+      handler: this.telegramAnswerCallbackTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_get_chat',
+      description: 'Get chat information from Telegram',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          chatId: { type: 'number', description: 'Telegram chat ID' }
+        },
+        required: ['botName', 'chatId']
+      },
+      handler: this.telegramGetChatTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_set_commands',
+      description: 'Set bot commands for Telegram',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          commands: { type: 'array', description: 'Array of {command, description}' }
+        },
+        required: ['botName', 'commands']
+      },
+      handler: this.telegramSetCommandsTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram_list_bots',
+      description: 'List all active Telegram bots',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: this.telegramListBotsTool.bind(this)
+    });
+
     // ============ FILESYSTEM TOOLS ============
 
     this.registerTool({
@@ -796,6 +946,324 @@ class ToolManager {
         fileId,
         download
       });
+    });
+  }
+
+  /**
+   * Tool: Telegram Send Photo (event-driven)
+   */
+  async telegramSendPhotoTool(args) {
+    const { botName, chatId, photo, caption } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram send photo timeout' });
+      }, 30000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.send_photo.response', handler);
+          resolve({ success: data.success, message_id: data.messageId, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.send_photo.response', handler);
+      this.eventBus.publish('telegram.send_photo.request', { request_id, botName, chatId, photo, caption });
+    });
+  }
+
+  /**
+   * Tool: Telegram Send Document (event-driven)
+   */
+  async telegramSendDocumentTool(args) {
+    const { botName, chatId, document, caption } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram send document timeout' });
+      }, 30000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.send_document.response', handler);
+          resolve({ success: data.success, message_id: data.messageId, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.send_document.response', handler);
+      this.eventBus.publish('telegram.send_document.request', { request_id, botName, chatId, document, caption });
+    });
+  }
+
+  /**
+   * Tool: Telegram Send Video (event-driven)
+   */
+  async telegramSendVideoTool(args) {
+    const { botName, chatId, video, caption } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram send video timeout' });
+      }, 30000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.send_video.response', handler);
+          resolve({ success: data.success, message_id: data.messageId, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.send_video.response', handler);
+      this.eventBus.publish('telegram.send_video.request', { request_id, botName, chatId, video, caption });
+    });
+  }
+
+  /**
+   * Tool: Telegram Send Location (event-driven)
+   */
+  async telegramSendLocationTool(args) {
+    const { botName, chatId, latitude, longitude } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram send location timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.send_location.response', handler);
+          resolve({ success: data.success, message_id: data.messageId, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.send_location.response', handler);
+      this.eventBus.publish('telegram.send_location.request', { request_id, botName, chatId, latitude, longitude });
+    });
+  }
+
+  /**
+   * Tool: Telegram Edit Message (event-driven)
+   */
+  async telegramEditMessageTool(args) {
+    const { botName, chatId, messageId, text } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram edit message timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.edit_message.response', handler);
+          resolve({ success: data.success, message: data.message, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.edit_message.response', handler);
+      this.eventBus.publish('telegram.edit_message.request', { request_id, botName, chatId, messageId, text });
+    });
+  }
+
+  /**
+   * Tool: Telegram Delete Message (event-driven)
+   */
+  async telegramDeleteMessageTool(args) {
+    const { botName, chatId, messageId } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram delete message timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.delete_message.response', handler);
+          resolve({ success: data.success, message: data.message, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.delete_message.response', handler);
+      this.eventBus.publish('telegram.delete_message.request', { request_id, botName, chatId, messageId });
+    });
+  }
+
+  /**
+   * Tool: Telegram Answer Callback (event-driven)
+   */
+  async telegramAnswerCallbackTool(args) {
+    const { botName, callbackId, text, showAlert } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram answer callback timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.answer_callback.response', handler);
+          resolve({ success: data.success, message: data.message, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.answer_callback.response', handler);
+      this.eventBus.publish('telegram.answer_callback.request', { request_id, botName, callbackId, text, showAlert });
+    });
+  }
+
+  /**
+   * Tool: Telegram Get Chat (event-driven)
+   */
+  async telegramGetChatTool(args) {
+    const { botName, chatId } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram get chat timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.get_chat.response', handler);
+          resolve({ success: data.success, chat: data.chat, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.get_chat.response', handler);
+      this.eventBus.publish('telegram.get_chat.request', { request_id, botName, chatId });
+    });
+  }
+
+  /**
+   * Tool: Telegram Set Commands (event-driven)
+   */
+  async telegramSetCommandsTool(args) {
+    const { botName, commands } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram set commands timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.set_commands.response', handler);
+          resolve({ success: data.success, message: data.message, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.set_commands.response', handler);
+      this.eventBus.publish('telegram.set_commands.request', { request_id, botName, commands });
+    });
+  }
+
+  /**
+   * Tool: Telegram List Bots (event-driven)
+   */
+  async telegramListBotsTool(args) {
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram list bots timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.list_bots.response', handler);
+          resolve({ success: data.success, bots: data.bots, total: data.total, error: data.error });
+        }
+      };
+
+      this.eventBus.on('telegram.list_bots.response', handler);
+      this.eventBus.publish('telegram.list_bots.request', { request_id });
     });
   }
 

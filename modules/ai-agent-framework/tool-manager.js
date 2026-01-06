@@ -447,27 +447,79 @@ class ToolManager {
   }
 
   /**
-   * Tool: Read File
+   * Tool: Read File (event-driven)
+   * Uses filesystem module for validation and project context
    */
   async readFileTool(args) {
-    const fs = require('fs').promises;
     const { path } = args;
 
-    const content = await fs.readFile(path, 'utf8');
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
 
-    return { path, content, size: content.length };
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Filesystem read timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('fs.read.response', handler);
+          resolve(data);
+        }
+      };
+
+      this.eventBus.on('fs.read.response', handler);
+
+      this.eventBus.publish('fs.read.request', {
+        request_id,
+        path
+      });
+    });
   }
 
   /**
-   * Tool: Write File
+   * Tool: Write File (event-driven)
+   * Uses filesystem module for validation and project context
    */
   async writeFileTool(args) {
-    const fs = require('fs').promises;
-    const { path, content } = args;
+    const { path, content, encoding } = args;
 
-    await fs.writeFile(path, content, 'utf8');
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
 
-    return { path, size: content.length, success: true };
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Filesystem write timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('fs.write.response', handler);
+          resolve(data);
+        }
+      };
+
+      this.eventBus.on('fs.write.response', handler);
+
+      this.eventBus.publish('fs.write.request', {
+        request_id,
+        path,
+        content,
+        encoding
+      });
+    });
   }
 
   // ============ AGENT ARCHITECT TOOLS ============
@@ -748,43 +800,43 @@ class ToolManager {
   }
 
   // ============ FILESYSTEM TOOL HANDLERS ============
+  // These tools publish events - filesystem module listens and responds
 
   /**
-   * Tool: Copy File
+   * Tool: Copy File (event-driven)
    */
   async fsCopyTool(args) {
-    const fs = require('fs').promises;
-    const path = require('path');
     const { source, destination } = args;
 
-    try {
-      // Ensure destination directory exists
-      const destDir = path.dirname(destination);
-      await fs.mkdir(destDir, { recursive: true });
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
 
-      // Copy file
-      await fs.copyFile(source, destination);
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
 
-      this.logger.info('tool-manager.fs.copy.success', {
-        source, destination
-      });
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Filesystem copy timeout' });
+      }, 10000);
 
-      return {
-        success: true,
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('fs.copy.response', handler);
+          resolve(data);
+        }
+      };
+
+      this.eventBus.on('fs.copy.response', handler);
+
+      this.eventBus.publish('fs.copy.request', {
+        request_id,
         source,
         destination
-      };
-    } catch (error) {
-      this.logger.error('tool-manager.fs.copy.failed', {
-        source, destination,
-        error: error.message
       });
-
-      return {
-        success: false,
-        error: error.message
-      };
-    }
+    });
   }
 
   // ============ DATABASE TOOL HANDLERS ============

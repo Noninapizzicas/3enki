@@ -12,11 +12,11 @@
     "telegram.document.received"
   ],
   "tools": [
-    "telegram.get_file",
-    "telegram.send_message",
-    "fs.copy",
-    "fs.write",
-    "db.execute"
+    "telegram_get_file",
+    "telegram_send_message",
+    "fs_copy",
+    "fs_write",
+    "db_execute"
   ],
   "context_enabled": false,
   "enabled": true,

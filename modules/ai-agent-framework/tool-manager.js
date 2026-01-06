@@ -129,7 +129,7 @@ class ToolManager {
     // Wrappers that call telegram-service via HTTP API
 
     this.registerTool({
-      name: 'telegram.send_message',
+      name: 'telegram_send_message',
       description: 'Send text message to Telegram chat',
       parameters: {
         type: 'object',
@@ -145,7 +145,7 @@ class ToolManager {
     });
 
     this.registerTool({
-      name: 'telegram.get_file',
+      name: 'telegram_get_file',
       description: 'Get file info and optionally download from Telegram',
       parameters: {
         type: 'object',
@@ -162,7 +162,7 @@ class ToolManager {
     // ============ FILESYSTEM TOOLS ============
 
     this.registerTool({
-      name: 'fs.copy',
+      name: 'fs_copy',
       description: 'Copy file from source to destination',
       parameters: {
         type: 'object',
@@ -176,7 +176,7 @@ class ToolManager {
     });
 
     this.registerTool({
-      name: 'fs.write',
+      name: 'fs_write',
       description: 'Write content to file',
       parameters: {
         type: 'object',
@@ -192,7 +192,7 @@ class ToolManager {
     // ============ DATABASE TOOLS ============
 
     this.registerTool({
-      name: 'db.execute',
+      name: 'db_execute',
       description: 'Execute SQL query on project database',
       parameters: {
         type: 'object',

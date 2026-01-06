@@ -340,7 +340,7 @@ class TelegramServiceModule {
   }
 
   updateMetrics() {
-    this.metrics?.gauge('telegram.bots.active', this.bots.size);
+    // Bots count logged, no gauge needed
   }
 
   // ==========================================

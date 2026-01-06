@@ -99,33 +99,6 @@ class Metrics {
   }
 
   /**
-   * Establece un gauge (valor instantáneo)
-   *
-   * @param {string} name - Nombre del gauge
-   * @param {number} value - Valor actual
-   *
-   * @example
-   * metrics.gauge('telegram.bots.active', 5);
-   * metrics.gauge('connections.open', connectionCount);
-   */
-  gauge(name, value) {
-    if (!this.gauges) {
-      this.gauges = {};
-    }
-    this.gauges[name] = value;
-  }
-
-  /**
-   * Obtiene el valor de un gauge
-   *
-   * @param {string} name - Nombre del gauge
-   * @returns {number} Valor actual
-   */
-  getGauge(name) {
-    return this.gauges?.[name] || 0;
-  }
-
-  /**
    * Observa un valor en un histogram
    *
    * @param {string} name - Nombre del histogram
@@ -226,14 +199,13 @@ class Metrics {
   /**
    * Obtiene todas las métricas
    *
-   * @returns {Object} Todas las métricas (counters + histograms + gauges)
+   * @returns {Object} Todas las métricas (counters + histograms)
    */
   getStats() {
     const stats = {
       timestamp: new Date().toISOString(),
       core_id: this.coreId,
       counters: { ...this.counters },
-      gauges: { ...(this.gauges || {}) },
       histograms: {}
     };
 

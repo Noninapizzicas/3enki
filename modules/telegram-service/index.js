@@ -123,8 +123,60 @@ class TelegramServiceModule {
     );
     this.unsubscribes.push(unsubDeleted);
 
+    // Listen for action requests (event-driven API for agents)
+    const unsubSendMessage = await this.eventBus.subscribe(
+      'telegram.send_message.request',
+      this.onSendMessageRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubSendMessage);
+
+    const unsubGetFile = await this.eventBus.subscribe(
+      'telegram.get_file.request',
+      this.onGetFileRequest.bind(this)
+    );
+    this.unsubscribes.push(unsubGetFile);
+
     this.logger.info('telegram.events.subscribed', {
-      events: ['credential.saved', 'credential.deleted']
+      events: [
+        'credential.saved',
+        'credential.deleted',
+        'telegram.send_message.request',
+        'telegram.get_file.request'
+      ]
+    });
+  }
+
+  // ==========================================
+  // Request Event Handlers (for agents)
+  // ==========================================
+
+  async onSendMessageRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, chatId, text, parseMode, replyMarkup } = data;
+
+    this.logger.info('telegram.send_message.request', { botName, chatId, request_id });
+
+    const result = await this.handleToolSendMessage({ botName, chatId, text, parseMode, replyMarkup });
+
+    // Publish response
+    await this.eventBus.publish('telegram.send_message.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onGetFileRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, botName, fileId, download } = data;
+
+    this.logger.info('telegram.get_file.request', { botName, fileId, request_id });
+
+    const result = await this.handleToolGetFile({ botName, fileId, download });
+
+    // Publish response
+    await this.eventBus.publish('telegram.get_file.response', {
+      request_id,
+      ...result
     });
   }
 

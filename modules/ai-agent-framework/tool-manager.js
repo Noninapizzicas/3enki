@@ -642,82 +642,109 @@ class ToolManager {
   }
 
   // ============ TELEGRAM TOOL HANDLERS ============
+  // These tools publish events - telegram-service listens and responds
 
   /**
-   * Tool: Telegram Send Message
+   * Tool: Telegram Send Message (event-driven)
    */
   async telegramSendMessageTool(args) {
     const { botName, chatId, text, parseMode } = args;
 
-    const port = this.coreConfig?.http?.port || 3000;
-    const url = `http://localhost:${port}/modules/telegram-service/send`;
-
-    try {
-      const response = await this.httpRequestTool({
-        method: 'POST',
-        url,
-        body: { botName, chatId, text, parseMode },
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      this.logger.info('tool-manager.telegram.send_message.success', {
-        botName, chatId
-      });
-
-      return {
-        success: true,
-        message_id: response?.message_id,
-        chat_id: chatId
-      };
-    } catch (error) {
-      this.logger.error('tool-manager.telegram.send_message.failed', {
-        error: error.message
-      });
-
-      return {
-        success: false,
-        error: error.message
-      };
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
     }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram send message timeout' });
+      }, 10000);
+
+      // Listen for response
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.send_message.response', handler);
+
+          this.logger.info('tool-manager.telegram.send_message.success', {
+            botName, chatId, messageId: data.messageId
+          });
+
+          resolve({
+            success: data.success,
+            message_id: data.messageId,
+            chat_id: chatId,
+            error: data.error
+          });
+        }
+      };
+
+      this.eventBus.on('telegram.send_message.response', handler);
+
+      // Publish request
+      this.eventBus.publish('telegram.send_message.request', {
+        request_id,
+        botName,
+        chatId,
+        text,
+        parseMode
+      });
+    });
   }
 
   /**
-   * Tool: Telegram Get File
+   * Tool: Telegram Get File (event-driven)
    */
   async telegramGetFileTool(args) {
     const { botName, fileId, download = true } = args;
 
-    const port = this.coreConfig?.http?.port || 3000;
-    const url = `http://localhost:${port}/modules/telegram-service/file`;
-
-    try {
-      const response = await this.httpRequestTool({
-        method: 'POST',
-        url,
-        body: { botName, fileId, download },
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      this.logger.info('tool-manager.telegram.get_file.success', {
-        botName, fileId, downloaded: download
-      });
-
-      return {
-        success: true,
-        file_path: response?.file_path || response?.localPath,
-        file_size: response?.file_size,
-        file_id: fileId
-      };
-    } catch (error) {
-      this.logger.error('tool-manager.telegram.get_file.failed', {
-        error: error.message
-      });
-
-      return {
-        success: false,
-        error: error.message
-      };
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
     }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram get file timeout' });
+      }, 30000); // More time for file downloads
+
+      // Listen for response
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.get_file.response', handler);
+
+          this.logger.info('tool-manager.telegram.get_file.success', {
+            botName, fileId, localPath: data.localPath
+          });
+
+          resolve({
+            success: data.success,
+            file_path: data.localPath || data.filePath,
+            file_size: data.fileSize,
+            file_id: fileId,
+            download_url: data.downloadUrl,
+            error: data.error
+          });
+        }
+      };
+
+      this.eventBus.on('telegram.get_file.response', handler);
+
+      // Publish request
+      this.eventBus.publish('telegram.get_file.request', {
+        request_id,
+        botName,
+        fileId,
+        download
+      });
+    });
   }
 
   // ============ FILESYSTEM TOOL HANDLERS ============

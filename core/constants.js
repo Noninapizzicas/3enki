@@ -271,6 +271,11 @@ const EVENTS = {
     TEXT_RECEIVED: 'telegram.text.received',
     VIDEO_RECEIVED: 'telegram.video.received',
     VOICE_RECEIVED: 'telegram.voice.received',
+    // Request events (agents can ask for actions)
+    SEND_MESSAGE_REQUEST: 'telegram.send_message.request',
+    SEND_MESSAGE_RESPONSE: 'telegram.send_message.response',
+    GET_FILE_REQUEST: 'telegram.get_file.request',
+    GET_FILE_RESPONSE: 'telegram.get_file.response',
   },
 
   // === TEMPLATES ===

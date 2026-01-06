@@ -50,6 +50,20 @@ class FilesystemModule {
     const unsubDeactivated = await this.eventBus.subscribe('project.deactivated', this.onProjectDeactivated.bind(this));
     this.unsubscribes.push(unsubDeactivated);
 
+    // Subscribe to request events (event-driven API for agents)
+    const unsubWriteReq = await this.eventBus.subscribe('fs.write.request', this.onWriteRequest.bind(this));
+    this.unsubscribes.push(unsubWriteReq);
+
+    const unsubCopyReq = await this.eventBus.subscribe('fs.copy.request', this.onCopyRequest.bind(this));
+    this.unsubscribes.push(unsubCopyReq);
+
+    const unsubReadReq = await this.eventBus.subscribe('fs.read.request', this.onReadRequest.bind(this));
+    this.unsubscribes.push(unsubReadReq);
+
+    this.logger.info('filesystem.events.subscribed', {
+      events: ['project.activated', 'project.deactivated', 'fs.write.request', 'fs.copy.request', 'fs.read.request']
+    });
+
     // Register UI handlers
     if (this.uiHandler) {
       this.uiHandler.register('fs', 'list', this.handleList.bind(this));
@@ -144,6 +158,56 @@ class FilesystemModule {
 
     this.logger.info('filesystem.project.deactivated', {
       previous_project: previousProject
+    });
+  }
+
+  // ==========================================
+  // Request Event Handlers (for agents)
+  // ==========================================
+
+  async onWriteRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path, content, encoding } = data;
+
+    this.logger.info('fs.write.request', { path, request_id });
+
+    const result = await this.handleWrite({ path, content, encoding });
+
+    await this.eventBus.publish('fs.write.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onCopyRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, from, source, to, destination } = data;
+
+    // Support both naming conventions
+    const fromPath = from || source;
+    const toPath = to || destination;
+
+    this.logger.info('fs.copy.request', { from: fromPath, to: toPath, request_id });
+
+    const result = await this.handleCopy({ from: fromPath, to: toPath });
+
+    await this.eventBus.publish('fs.copy.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onReadRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path } = data;
+
+    this.logger.info('fs.read.request', { path, request_id });
+
+    const result = await this.handleRead({ path });
+
+    await this.eventBus.publish('fs.read.response', {
+      request_id,
+      ...result
     });
   }
 

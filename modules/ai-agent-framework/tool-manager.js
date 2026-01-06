@@ -124,6 +124,87 @@ class ToolManager {
       },
       handler: this.listAgentsTool.bind(this)
     });
+
+    // ============ TELEGRAM TOOLS ============
+    // Wrappers that call telegram-service via HTTP API
+
+    this.registerTool({
+      name: 'telegram.send_message',
+      description: 'Send text message to Telegram chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name (e.g., facturas_asesoria_bot)' },
+          chatId: { type: 'number', description: 'Telegram chat ID' },
+          text: { type: 'string', description: 'Message text' },
+          parseMode: { type: 'string', description: 'Parse mode: HTML or Markdown' }
+        },
+        required: ['botName', 'chatId', 'text']
+      },
+      handler: this.telegramSendMessageTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'telegram.get_file',
+      description: 'Get file info and optionally download from Telegram',
+      parameters: {
+        type: 'object',
+        properties: {
+          botName: { type: 'string', description: 'Bot name' },
+          fileId: { type: 'string', description: 'Telegram file ID' },
+          download: { type: 'boolean', description: 'Download file to storage' }
+        },
+        required: ['botName', 'fileId']
+      },
+      handler: this.telegramGetFileTool.bind(this)
+    });
+
+    // ============ FILESYSTEM TOOLS ============
+
+    this.registerTool({
+      name: 'fs.copy',
+      description: 'Copy file from source to destination',
+      parameters: {
+        type: 'object',
+        properties: {
+          source: { type: 'string', description: 'Source file path' },
+          destination: { type: 'string', description: 'Destination file path' }
+        },
+        required: ['source', 'destination']
+      },
+      handler: this.fsCopyTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'fs.write',
+      description: 'Write content to file',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'File path' },
+          content: { type: 'string', description: 'File content' }
+        },
+        required: ['path', 'content']
+      },
+      handler: this.writeFileTool.bind(this)  // Reuse existing write_file
+    });
+
+    // ============ DATABASE TOOLS ============
+
+    this.registerTool({
+      name: 'db.execute',
+      description: 'Execute SQL query on project database',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Project ID (or "system")' },
+          query: { type: 'string', description: 'SQL query to execute' },
+          params: { type: 'array', description: 'Query parameters' }
+        },
+        required: ['project_id', 'query']
+      },
+      handler: this.dbExecuteTool.bind(this)
+    });
   }
 
   /**
@@ -366,27 +447,79 @@ class ToolManager {
   }
 
   /**
-   * Tool: Read File
+   * Tool: Read File (event-driven)
+   * Uses filesystem module for validation and project context
    */
   async readFileTool(args) {
-    const fs = require('fs').promises;
     const { path } = args;
 
-    const content = await fs.readFile(path, 'utf8');
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
 
-    return { path, content, size: content.length };
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Filesystem read timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('fs.read.response', handler);
+          resolve(data);
+        }
+      };
+
+      this.eventBus.on('fs.read.response', handler);
+
+      this.eventBus.publish('fs.read.request', {
+        request_id,
+        path
+      });
+    });
   }
 
   /**
-   * Tool: Write File
+   * Tool: Write File (event-driven)
+   * Uses filesystem module for validation and project context
    */
   async writeFileTool(args) {
-    const fs = require('fs').promises;
-    const { path, content } = args;
+    const { path, content, encoding } = args;
 
-    await fs.writeFile(path, content, 'utf8');
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
 
-    return { path, size: content.length, success: true };
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Filesystem write timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('fs.write.response', handler);
+          resolve(data);
+        }
+      };
+
+      this.eventBus.on('fs.write.response', handler);
+
+      this.eventBus.publish('fs.write.request', {
+        request_id,
+        path,
+        content,
+        encoding
+      });
+    });
   }
 
   // ============ AGENT ARCHITECT TOOLS ============
@@ -558,6 +691,212 @@ class ToolManager {
         agents: []
       };
     }
+  }
+
+  // ============ TELEGRAM TOOL HANDLERS ============
+  // These tools publish events - telegram-service listens and responds
+
+  /**
+   * Tool: Telegram Send Message (event-driven)
+   */
+  async telegramSendMessageTool(args) {
+    const { botName, chatId, text, parseMode } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram send message timeout' });
+      }, 10000);
+
+      // Listen for response
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.send_message.response', handler);
+
+          this.logger.info('tool-manager.telegram.send_message.success', {
+            botName, chatId, messageId: data.messageId
+          });
+
+          resolve({
+            success: data.success,
+            message_id: data.messageId,
+            chat_id: chatId,
+            error: data.error
+          });
+        }
+      };
+
+      this.eventBus.on('telegram.send_message.response', handler);
+
+      // Publish request
+      this.eventBus.publish('telegram.send_message.request', {
+        request_id,
+        botName,
+        chatId,
+        text,
+        parseMode
+      });
+    });
+  }
+
+  /**
+   * Tool: Telegram Get File (event-driven)
+   */
+  async telegramGetFileTool(args) {
+    const { botName, fileId, download = true } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Telegram get file timeout' });
+      }, 30000); // More time for file downloads
+
+      // Listen for response
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('telegram.get_file.response', handler);
+
+          this.logger.info('tool-manager.telegram.get_file.success', {
+            botName, fileId, localPath: data.localPath
+          });
+
+          resolve({
+            success: data.success,
+            file_path: data.localPath || data.filePath,
+            file_size: data.fileSize,
+            file_id: fileId,
+            download_url: data.downloadUrl,
+            error: data.error
+          });
+        }
+      };
+
+      this.eventBus.on('telegram.get_file.response', handler);
+
+      // Publish request
+      this.eventBus.publish('telegram.get_file.request', {
+        request_id,
+        botName,
+        fileId,
+        download
+      });
+    });
+  }
+
+  // ============ FILESYSTEM TOOL HANDLERS ============
+  // These tools publish events - filesystem module listens and responds
+
+  /**
+   * Tool: Copy File (event-driven)
+   */
+  async fsCopyTool(args) {
+    const { source, destination } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Filesystem copy timeout' });
+      }, 10000);
+
+      const handler = (event) => {
+        const data = event?.data || event;
+        if (data.request_id === request_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('fs.copy.response', handler);
+          resolve(data);
+        }
+      };
+
+      this.eventBus.on('fs.copy.response', handler);
+
+      this.eventBus.publish('fs.copy.request', {
+        request_id,
+        source,
+        destination
+      });
+    });
+  }
+
+  // ============ DATABASE TOOL HANDLERS ============
+
+  /**
+   * Tool: Execute SQL
+   */
+  async dbExecuteTool(args) {
+    const { project_id, query, params = [] } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const requestId = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ success: false, error: 'Database query timeout' });
+      }, 10000);
+
+      // One-time listener for response
+      const handler = (event) => {
+        const data = event.data || event;
+        if (data.request_id === requestId) {
+          clearTimeout(timeout);
+          this.eventBus.off('db.query.response', handler);
+
+          if (data.success) {
+            this.logger.info('tool-manager.db.execute.success', {
+              project_id, rows: data.data?.length || 0
+            });
+            resolve({
+              success: true,
+              data: data.data,
+              changes: data.changes
+            });
+          } else {
+            this.logger.error('tool-manager.db.execute.failed', {
+              error: data.error
+            });
+            resolve({
+              success: false,
+              error: data.error
+            });
+          }
+        }
+      };
+
+      this.eventBus.on('db.query.response', handler);
+
+      // Publish query request
+      this.eventBus.publish('db.query.request', {
+        project_id,
+        query,
+        params,
+        request_id: requestId
+      });
+    });
   }
 
   /**

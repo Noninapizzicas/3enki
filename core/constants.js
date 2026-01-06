@@ -104,6 +104,13 @@ const EVENTS = {
     FILE_DELETED: 'fs.file.deleted',
     FILE_UPDATED: 'fs.file.updated',
     WORKDIR_CHANGED: 'fs.workdir.changed',
+    // Request events (agents can ask for actions)
+    WRITE_REQUEST: 'fs.write.request',
+    WRITE_RESPONSE: 'fs.write.response',
+    COPY_REQUEST: 'fs.copy.request',
+    COPY_RESPONSE: 'fs.copy.response',
+    READ_REQUEST: 'fs.read.request',
+    READ_RESPONSE: 'fs.read.response',
   },
 
   // === FUNCTION ===
@@ -271,6 +278,11 @@ const EVENTS = {
     TEXT_RECEIVED: 'telegram.text.received',
     VIDEO_RECEIVED: 'telegram.video.received',
     VOICE_RECEIVED: 'telegram.voice.received',
+    // Request events (agents can ask for actions)
+    SEND_MESSAGE_REQUEST: 'telegram.send_message.request',
+    SEND_MESSAGE_RESPONSE: 'telegram.send_message.response',
+    GET_FILE_REQUEST: 'telegram.get_file.request',
+    GET_FILE_RESPONSE: 'telegram.get_file.response',
   },
 
   // === TEMPLATES ===

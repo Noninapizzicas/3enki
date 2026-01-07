@@ -10,9 +10,10 @@
 ## Tabla de Contenidos
 
 1. [Resumen de Flujos](#resumen-de-flujos)
-2. [Flujo 1: Usuario en Chat](#flujo-1-usuario-en-chat)
-3. [Flujo 2: Agente Telegram por Imagen](#flujo-2-agente-telegram-por-imagen)
-4. [Comparativa de Flujos](#comparativa-de-flujos)
+2. [Sistema de Contexto: Diferencia Crítica](#sistema-de-contexto-diferencia-crítica)
+3. [Flujo 1: Usuario en Chat](#flujo-1-usuario-en-chat)
+4. [Flujo 2: Agente Telegram por Imagen](#flujo-2-agente-telegram-por-imagen)
+5. [Comparativa de Flujos](#comparativa-de-flujos)
 
 ---
 
@@ -24,6 +25,311 @@
 | **Flujo 2** | Usuario envía imagen al bot de Telegram | Agente detecta imagen y automáticamente crea frase | Archivo `frase_motivadora.txt` creado |
 
 **Resultado idéntico, triggers diferentes.**
+
+---
+
+## Sistema de Contexto: Diferencia Crítica
+
+> **IMPORTANTE**: La principal diferencia entre ambos flujos es cómo manejan el **contexto**. Esta sección documenta esta diferencia arquitectónica fundamental.
+
+### Flujo Chat: Contexto Rico y Persistente
+
+El flujo de chat utiliza múltiples módulos para construir un contexto enriquecido:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        CONTEXTO DEL FLUJO CHAT                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐     │
+│  │  chat-session   │    │ prompt-composer  │    │   prompt-manager    │     │
+│  │   (Historial)   │    │  (Enriquecedor)  │    │    (Templates)      │     │
+│  └────────┬────────┘    └────────┬─────────┘    └──────────┬──────────┘     │
+│           │                      │                         │                │
+│           ▼                      ▼                         ▼                │
+│  ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐     │
+│  │ • Mensajes      │    │ • project.get    │    │ • Prompts guardados │     │
+│  │   anteriores    │    │   (nombre, desc) │    │ • Variables         │     │
+│  │ • in_context=1  │    │ • storage.info   │    │ • Templates         │     │
+│  │ • BD SQLite     │    │   (files, size)  │    │ • BD persistente    │     │
+│  │ • FIFO auto     │    │ • Tools list     │    │                     │     │
+│  └─────────────────┘    └──────────────────┘    └─────────────────────┘     │
+│                                                                              │
+│  RESULTADO: System Prompt Dinámico                                          │
+│  ════════════════════════════════════════════════════════════════════════   │
+│                                                                              │
+│  "You are a helpful AI assistant working on the project 'Mi Proyecto'.      │
+│                                                                              │
+│   ## Project Context                                                         │
+│   - **Project**: Mi Proyecto                                                 │
+│   - **Description**: Sistema de gestión de documentos                        │
+│   - **Files**: 42 files (1.2 MB)                                            │
+│                                                                              │
+│   ## Available Tools                                                         │
+│   You have access to 3 tool(s):                                             │
+│   - **fs_write**: Escribe contenido en un archivo                           │
+│   - **fs_read**: Lee el contenido de un archivo                             │
+│   - **fs_list**: Lista archivos en un directorio                            │
+│                                                                              │
+│   ## Filesystem Guidelines                                                   │
+│   When saving files, organize them according to the context..."              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Componentes del Contexto (Chat)
+
+| Componente | Módulo | Persistencia | Descripción |
+|------------|--------|--------------|-------------|
+| **Historial de conversación** | `chat-session` | BD SQLite | Todos los mensajes anteriores con `in_context=1` |
+| **Información del proyecto** | `prompt-composer` → `project-manager` | BD | Nombre, descripción, metadata |
+| **Info de storage** | `prompt-composer` → `storage` | Filesystem | Cantidad de archivos, tamaño total |
+| **Tools disponibles** | `prompt-composer` → `moduleLoader` | Runtime | Lista de herramientas con descripciones |
+| **Template de prompt** | `prompt-composer` → `prompt-manager` | BD | Prompts personalizados por proyecto |
+
+#### Código: Cómo se carga el contexto (chat-ai-bridge)
+
+```javascript
+// chat-ai-bridge/index.js - líneas 239-250
+
+// Step 2: Load conversation context (historial de BD)
+flowState.stage = 'loading_context';
+const context = await this.loadConversationContext(flowState);
+// → Emite: session.context.load.request
+// → chat-session retorna mensajes con in_context=1
+
+// Step 3: Compose prompt (enriquecer con proyecto)
+flowState.stage = 'composing_prompt';
+const prompt = await this.composePrompt(flowState, context);
+// → Emite: prompt.compose.request
+// → prompt-composer carga proyecto, storage, tools
+
+// Step 4: Build messages array for AI
+const aiMessages = this.buildAIMessages(prompt, context, content);
+// → Combina: system prompt + historial + mensaje actual
+```
+
+#### Código: Cómo se compone el prompt (prompt-composer)
+
+```javascript
+// prompt-composer/index.js - líneas 610-682
+
+composeSystemPrompt(conversation, projectContext, tools) {
+  // 1. Prompt base
+  let basePrompt = conversation?.system_prompt || 'You are a helpful AI assistant.';
+
+  // 2. Sustituir variables {{project_name}}, {{date}}, etc.
+  basePrompt = this.substituteVariables(basePrompt, variables);
+
+  // 3. Añadir sección "Project Context"
+  if (projectContext?.project_name) {
+    sections.push('## Project Context');
+    sections.push(`- **Project**: ${projectContext.project_name}`);
+    sections.push(`- **Description**: ${projectContext.project_description}`);
+    sections.push(`- **Files**: ${projectContext.storage_info.file_count} files`);
+  }
+
+  // 4. Añadir sección "Available Tools"
+  if (tools && tools.length > 0) {
+    sections.push('## Available Tools');
+    for (const tool of tools) {
+      sections.push(`- **${tool.name}**: ${tool.description}`);
+    }
+  }
+
+  // 5. Añadir "Filesystem Guidelines"
+  sections.push('## Filesystem Guidelines');
+  sections.push('When saving files, organize them according to context...');
+
+  return sections.join('\n\n');
+}
+```
+
+---
+
+### Flujo Agente: Contexto Limitado y Volátil
+
+El flujo del agente tiene un sistema de contexto mucho más simple:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       CONTEXTO DEL FLUJO AGENTE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      context-manager (MEMORIA)                       │    │
+│  │                                                                      │    │
+│  │   this.contexts = new Map();  // ⚠️ SOLO EN RAM                     │    │
+│  │                                                                      │    │
+│  │   {                                                                  │    │
+│  │     "agent-123": {                                                   │    │
+│  │       messages: [                                                    │    │
+│  │         { role: "user", content: "...", timestamp: "..." },          │    │
+│  │         { role: "assistant", content: "...", timestamp: "..." }      │    │
+│  │       ],                                                             │    │
+│  │       metadata: {},                                                  │    │
+│  │       created_at: "...",                                             │    │
+│  │       updated_at: "..."                                              │    │
+│  │     }                                                                │    │
+│  │   }                                                                  │    │
+│  │                                                                      │    │
+│  │   ⚠️ Se pierde al reiniciar el sistema                              │    │
+│  │   ⚠️ TTL: 1440 minutos (24h) por defecto                            │    │
+│  │   ⚠️ Max messages: 100 por agente                                    │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  RESULTADO: System Prompt Fijo (desde archivo)                               │
+│  ════════════════════════════════════════════════════════════════════════   │
+│                                                                              │
+│  "Eres un agente que crea frases motivadoras. Cuando recibas una            │
+│   notificación de imagen, tu tarea es:                                       │
+│   1. Crear un archivo llamado 'frase_motivadora.txt'                        │
+│   2. Escribir una frase motivadora inspiradora en ese archivo               │
+│   3. No necesitas analizar la imagen, solo crear la frase"                  │
+│                                                                              │
+│   ❌ Sin información del proyecto                                            │
+│   ❌ Sin historial persistente                                               │
+│   ❌ Sin info de storage                                                     │
+│   ❌ Sin variables dinámicas                                                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Componentes del Contexto (Agente)
+
+| Componente | Módulo | Persistencia | Descripción |
+|------------|--------|--------------|-------------|
+| **Historial del agente** | `context-manager` | **RAM (volátil)** | Últimos N mensajes del agente |
+| **Prompt del agente** | `agent.js` | Archivo local | `prompt_file` o `prompt_id` |
+| **Tools del agente** | `agent.js` | Config JSON | Lista fija en configuración |
+| ~~Info del proyecto~~ | ❌ | - | **NO DISPONIBLE** |
+| ~~Storage info~~ | ❌ | - | **NO DISPONIBLE** |
+| ~~Prompt dinámico~~ | ❌ | - | **NO DISPONIBLE** |
+
+#### Código: Cómo se carga el contexto (agent.js)
+
+```javascript
+// ai-agent-framework/agent.js - líneas 169-180
+
+async buildContext(event) {
+  // ⚠️ Solo usa context-manager (memoria)
+  if (!this.context_enabled || !this.contextManager) {
+    return { messages: [] };
+  }
+
+  const context = await this.contextManager.getContext(this.id);
+
+  // Solo últimos N mensajes (context_window)
+  const messages = context.messages.slice(-this.context_window);
+
+  return { messages };
+
+  // ❌ NO hay: loadProjectContext()
+  // ❌ NO hay: prompt.compose.request
+  // ❌ NO hay: project.get.request
+  // ❌ NO hay: storage.info.request
+}
+```
+
+#### Código: Cómo se renderiza el prompt (agent.js)
+
+```javascript
+// ai-agent-framework/agent.js - líneas 186-242
+
+async renderPrompt(event, context) {
+  let promptContent = null;
+
+  // Opción 1: Cargar de archivo local
+  if (this.prompt_file) {
+    const promptPath = path.join(__dirname, this.prompt_file);
+    promptContent = await fs.readFile(promptPath, 'utf8');
+    // ⚠️ Prompt estático desde archivo
+  }
+
+  // Opción 2: Cargar de prompt-manager
+  if (!promptContent && this.prompt_id && this.promptManager) {
+    const rendered = await this.promptManager.renderTemplate(this.prompt_id, variables);
+    promptContent = rendered.rendered;
+    // ⚠️ Variables limitadas: solo event.payload
+  }
+
+  // Opción 3: Usar payload del evento
+  if (!promptContent) {
+    return event.payload?.message || JSON.stringify(event.payload);
+  }
+
+  // Sustituir solo variables del evento
+  // ❌ NO hay: {{project_name}}, {{file_count}}, {{storage_size}}
+  for (const [key, value] of Object.entries(event.payload)) {
+    promptContent = promptContent.replace(`{{${key}}}`, String(value || ''));
+  }
+
+  return promptContent;
+}
+```
+
+---
+
+### Comparativa de Contexto
+
+| Aspecto | Flujo Chat | Flujo Agente |
+|---------|------------|--------------|
+| **Historial** | BD SQLite (persistente) | RAM Map (volátil) |
+| **Alcance historial** | Por conversación | Por agente |
+| **Info proyecto** | ✅ Nombre, descripción | ❌ No disponible |
+| **Info storage** | ✅ Files, tamaño | ❌ No disponible |
+| **Tools en prompt** | ✅ Lista con descripciones | ❌ Solo en config |
+| **Variables dinámicas** | ✅ {{project_name}}, {{date}}... | ⚠️ Solo {{event.payload.*}} |
+| **Prompt composer** | ✅ prompt-composer module | ❌ No utilizado |
+| **Reinicio sistema** | Historial preservado | Historial perdido |
+| **Filesystem guidelines** | ✅ Incluidas | ❌ No incluidas |
+
+---
+
+### ⚠️ Limitación Actual del Agente
+
+El agente actualmente **NO tiene acceso** a:
+
+1. **Contexto del proyecto**: No sabe en qué proyecto está trabajando
+2. **Historial persistente**: Se pierde al reiniciar
+3. **Info de archivos**: No conoce qué archivos existen
+4. **Prompt dinámico**: El prompt es fijo, no se adapta al contexto
+
+### 💡 Mejora Propuesta
+
+Para que el agente tenga el mismo nivel de contexto que el chat, necesitaría:
+
+```javascript
+// Propuesta: agent.js mejorado
+
+async buildContext(event) {
+  // 1. Contexto de memoria (actual)
+  const memoryContext = await this.contextManager.getContext(this.id);
+
+  // 2. NUEVO: Contexto de proyecto via prompt-composer
+  const projectContext = await this.loadProjectContext(event);
+
+  // 3. NUEVO: Componer prompt dinámico
+  const enrichedPrompt = await this.composePrompt(projectContext);
+
+  return {
+    messages: memoryContext.messages.slice(-this.context_window),
+    project: projectContext,
+    prompt: enrichedPrompt
+  };
+}
+
+async loadProjectContext(event) {
+  // Emitir: prompt.compose.request
+  // Esperar: prompt.compose.response
+  // Retornar: projectContext con nombre, descripción, storage, etc.
+}
+```
+
+Esto requeriría:
+1. Añadir `project_id` a la configuración del agente
+2. Integrar con `prompt-composer` via eventos
+3. Usar el prompt compuesto en lugar del fijo
 
 ---
 

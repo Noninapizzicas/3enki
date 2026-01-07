@@ -7,6 +7,7 @@
  * @version 1.0.0
  */
 
+const crypto = require('crypto');
 {{#if persistence}}
 const fs = require('fs').promises;
 const path = require('path');
@@ -29,6 +30,9 @@ class {{pascalCase name}}Module {
     this.dataDir = path.join(process.cwd(), 'data');
     this.dataFile = path.join(this.dataDir, '{{name}}.json');
     {{/if}}
+
+    // Pending requests tracking (for async event responses)
+    this.pendingRequests = new Map();
 
     // Unsubscribe tracking for cleanup
     this.unsubscribes = [];
@@ -83,6 +87,13 @@ class {{pascalCase name}}Module {
       await unsub();
     }
     this.unsubscribes = [];
+
+    // Cleanup pending requests
+    for (const [, req] of this.pendingRequests) {
+      if (req.timeout) clearTimeout(req.timeout);
+      if (req.reject) req.reject(new Error('Module unloading'));
+    }
+    this.pendingRequests.clear();
 
     {{#if persistence}}
     // Persist data before shutdown
@@ -159,23 +170,25 @@ class {{pascalCase name}}Module {
 
   {{#each uiActions}}
   async handleUI{{pascalCase this}}(data, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+
     try {
       this.logger.debug('{{../name}}.handleUI{{pascalCase this}}', {
-        correlation_id: context.correlationId
+        correlation_id: correlationId
       });
 
       // TODO: Implement UI handler logic
-      const result = {
+      return {
+        success: true,
         message: '{{this}} action executed',
         timestamp: new Date().toISOString()
       };
-
-      return { status: 200, data: result };
     } catch (error) {
       this.logger.error('{{../name}}.handleUI{{pascalCase this}}.error', {
-        error: error.message
+        error: error.message,
+        correlation_id: correlationId
       });
-      return { status: 500, error: error.message };
+      throw { status: 500, code: '{{constantCase this}}_ERROR', message: error.message };
     }
   }
 
@@ -186,24 +199,28 @@ class {{pascalCase name}}Module {
 
   {{#each apis}}
   async {{this.handler}}(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+
     try {
       this.logger.debug('{{../name}}.{{this.handler}}', {
-        correlation_id: context.correlationId
+        correlation_id: correlationId
       });
 
       // TODO: Implement API handler logic
-      const data = {
-        message: '{{this.method}} {{this.path}} - Not implemented yet',
-        timestamp: new Date().toISOString()
+      return {
+        status: 200,
+        data: {
+          success: true,
+          message: '{{this.method}} {{this.path}} - Not implemented yet',
+          timestamp: new Date().toISOString()
+        }
       };
-
-      return { status: 200, data };
     } catch (error) {
       this.logger.error('{{../name}}.{{this.handler}}.error', {
         error: error.message,
-        correlation_id: context.correlationId
+        correlation_id: correlationId
       });
-      return { status: 500, data: { error: error.message } };
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
@@ -229,10 +246,12 @@ class {{pascalCase name}}Module {
 
   {{#each tools}}
   async tool{{pascalCase this.name}}(params, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+
     try {
       this.logger.debug('{{../name}}.tool{{pascalCase this.name}}', {
         params,
-        correlation_id: context.correlationId
+        correlation_id: correlationId
       });
 
       // TODO: Implement tool logic
@@ -243,13 +262,62 @@ class {{pascalCase name}}Module {
       };
     } catch (error) {
       this.logger.error('{{../name}}.tool{{pascalCase this.name}}.error', {
-        error: error.message
+        error: error.message,
+        correlation_id: correlationId
       });
       return { success: false, error: error.message };
     }
   }
 
   {{/each}}
+  // ==========================================
+  // Async Request Helper (Event Request/Response Pattern)
+  // ==========================================
+
+  /**
+   * Send event request and wait for response
+   * @param {string} requestEvent - Event to publish
+   * @param {string} responseEvent - Event to wait for
+   * @param {object} payload - Request payload
+   * @param {number} timeoutMs - Timeout in milliseconds
+   */
+  async sendRequest(requestEvent, responseEvent, payload, timeoutMs = 10000) {
+    const requestId = crypto.randomUUID();
+
+    const promise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error(`Request timeout: ${requestEvent}`));
+      }, timeoutMs);
+
+      this.pendingRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    // Subscribe to response (one-time)
+    const unsub = await this.eventBus.subscribe(responseEvent, (event) => {
+      const data = event.data || event;
+      if (data.request_id === requestId) {
+        const pending = this.pendingRequests.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingRequests.delete(requestId);
+          if (data.success !== false) {
+            pending.resolve(data);
+          } else {
+            pending.reject(new Error(data.error || 'Request failed'));
+          }
+        }
+        unsub(); // Cleanup subscription
+      }
+    });
+
+    await this.eventBus.publish(requestEvent, {
+      request_id: requestId,
+      ...payload
+    });
+
+    return promise;
+  }
   {{#if persistence}}
   // ==========================================
   // Persistence (JSON)

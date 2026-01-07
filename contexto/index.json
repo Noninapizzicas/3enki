@@ -55,6 +55,11 @@
       "file": "chat-refactoring.json",
       "purpose": "Plan de refactorización del sistema de chat",
       "when": "Trabajar en conversation-manager, chat-session, chat-ai-bridge, prompt-composer"
+    },
+    {
+      "file": "refactor-plop.json",
+      "purpose": "Análisis de templates Plop vs estándar",
+      "when": "Trabajar en generadores plop, crear nuevos templates, corregir templates existentes"
     }
   ],
 

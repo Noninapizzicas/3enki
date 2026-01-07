@@ -1,0 +1,379 @@
+{
+  "title": "Análisis y Refactorización de Templates Plop",
+  "version": "1.0.0",
+  "status": "analysis",
+  "created": "2026-01-07",
+  "plopfile_location": "plopfile.js",
+  "templates_location": "plop-templates/",
+  "standard_reference": "contexto/modules.json",
+  "summary": {
+    "total_generators": 9,
+    "total_templates": 6,
+    "compliant": 1,
+    "needs_update": 4,
+    "deprecated": 1
+  },
+  "generators_analysis": {
+    "module": {
+      "status": "needs_update",
+      "description": "Generador principal de módulos Event-Core",
+      "location": "plop-templates/module/",
+      "files_generated": ["index.js", "module.json", "README.md", "schemas/events.json", "schemas/{name}.json"],
+      "issues": [
+        {
+          "severity": "high",
+          "field": "tools",
+          "issue": "No genera sección 'tools' en module.json",
+          "standard": "module.json debe incluir tools[] con name, description, handler, parameters",
+          "current": "No existe",
+          "fix": "Agregar prompt para tools y generar sección tools en module.json.hbs"
+        },
+        {
+          "severity": "high",
+          "field": "ui.zone",
+          "issue": "UI usa formato Auto-UI v2.0 con widgets, no el estándar simplificado",
+          "standard": "ui.zone: 'work-bar|chat-config|chat-tools', ui.icon: 'emoji'",
+          "current": "ui.version: '2.0' con layout, sections, widgets",
+          "fix": "Crear dos modos: simple (estándar) y advanced (Auto-UI v2.0)"
+        },
+        {
+          "severity": "medium",
+          "field": "uiHandler",
+          "issue": "No registra handlers UI en onLoad",
+          "standard": "context.uiHandler.register('domain', 'action', handler)",
+          "current": "Solo suscribe a eventos MQTT",
+          "fix": "Agregar registerUIHandlers() en index.js.hbs"
+        },
+        {
+          "severity": "medium",
+          "field": "events.subscribes",
+          "issue": "Formato de subscribes usa 'handler' inline, no array simple",
+          "standard": "subscribes: ['event.name']",
+          "current": "subscribes: [{ event, handler, description }]",
+          "fix": "Mantener formato actual (más descriptivo), pero alinear con module_json_schema"
+        },
+        {
+          "severity": "low",
+          "field": "lifecycle",
+          "issue": "onLoad recibe 'core' en lugar de 'context'",
+          "standard": "async onLoad(context)",
+          "current": "async onLoad(core)",
+          "fix": "Renombrar parámetro a 'context' para consistencia"
+        }
+      ],
+      "missing_features": [
+        "Prompt para tools AI (nombre, descripción, parámetros)",
+        "Opción para elegir tipo de UI (simple vs Auto-UI v2.0)",
+        "Generación de handlers UI",
+        "Schema de tools en schemas/"
+      ]
+    },
+    "chat-module": {
+      "status": "needs_update",
+      "description": "Generador de módulos con interfaz Chat IA",
+      "location": "plop-templates/chat-module/",
+      "files_generated": ["index.js", "module.json", "README.md", "page.svelte"],
+      "issues": [
+        {
+          "severity": "high",
+          "field": "ai-gateway integration",
+          "issue": "Accede directamente a aiGateway.handleChatCompletion()",
+          "standard": "Comunicación vía eventos MQTT",
+          "current": "core.modules['ai-gateway'].handleChatCompletion()",
+          "fix": "Usar eventBus.publish('ai.chat.request') y escuchar 'ai.chat.response'"
+        },
+        {
+          "severity": "high",
+          "field": "tools",
+          "issue": "No genera tools para AI",
+          "standard": "tools[] en module.json",
+          "current": "ui.tools[] (diferente propósito)",
+          "fix": "Agregar tools[] reales que el AI pueda ejecutar"
+        },
+        {
+          "severity": "medium",
+          "field": "persistence",
+          "issue": "Usa Map() en memoria, no SQLite",
+          "standard": "Persistencia vía sql-engine events",
+          "current": "this.conversations = new Map()",
+          "fix": "Integrar con database-manager o sql-engine"
+        },
+        {
+          "severity": "medium",
+          "field": "uiHandler",
+          "issue": "No registra handlers UI",
+          "standard": "uiHandler.register('domain', 'action', handler)",
+          "current": "No implementado",
+          "fix": "Agregar registerUIHandlers() con handlers para MQTT"
+        }
+      ],
+      "missing_features": [
+        "Integración con conversation-manager existente",
+        "Tools AI reales",
+        "Persistencia SQLite",
+        "Handlers UI vía MQTT"
+      ]
+    },
+    "service-module": {
+      "status": "compliant",
+      "description": "Generador de módulos de servicio con arquitectura de plugins",
+      "location": "plop-templates/service-module/",
+      "files_generated": ["index.js", "module.json", "README.md", "lib/plugin-loader.js", "lib/api-executor.js", "builtin/{engine}.js", "schemas/events.json"],
+      "compliance": {
+        "lifecycle": "Correcto: onLoad(core), onUnload()",
+        "events": "Correcto: publishes, subscribes con handlers",
+        "apis": "Correcto: method, path, handler, description",
+        "uiHandler": "Correcto: uiHandler.register()",
+        "observability": "Correcto: logging, metrics"
+      },
+      "notes": [
+        "Mejor template del sistema",
+        "Buen ejemplo de arquitectura de plugins",
+        "Incluye métricas y observability",
+        "Puede servir de referencia para otros templates"
+      ]
+    },
+    "full-module": {
+      "status": "needs_update",
+      "description": "Generador de módulo Backend + Frontend Svelte",
+      "location": "plop-templates/full-module/",
+      "files_generated": ["index.js", "module.json", "README.md", "schemas/", "page.svelte"],
+      "issues": [
+        {
+          "severity": "medium",
+          "field": "reuse",
+          "issue": "Reutiliza templates de module/ pero hereda sus problemas",
+          "current": "Usa plop-templates/module/*.hbs",
+          "fix": "Se corregirá automáticamente al arreglar module/"
+        },
+        {
+          "severity": "low",
+          "field": "frontend",
+          "issue": "Template Svelte básico sin integración MQTT",
+          "current": "Formulario simple",
+          "fix": "Agregar mqttStore y suscripciones a eventos"
+        }
+      ]
+    },
+    "svelte-component": {
+      "status": "ok",
+      "description": "Generador de componentes Svelte reutilizables",
+      "location": "plop-templates/svelte-component/",
+      "notes": "Frontend only, no requiere alineación con módulos backend"
+    },
+    "selector-panel": {
+      "status": "ok",
+      "description": "Generador de wrappers para SelectorPanel",
+      "location": "plopfile.js (inline template)",
+      "notes": "Frontend only, específico para UI"
+    },
+    "from-blueprint": {
+      "status": "deprecated",
+      "description": "Generador desde archivos YAML blueprint",
+      "issues": [
+        {
+          "severity": "high",
+          "issue": "Requiere paquete 'yaml' no instalado por defecto",
+          "fix": "Agregar yaml a dependencies o documentar instalación"
+        },
+        {
+          "severity": "medium",
+          "issue": "Blueprints no están documentados en /contexto",
+          "fix": "Documentar formato de blueprints o deprecar"
+        }
+      ],
+      "recommendation": "Evaluar si mantener o deprecar en favor de prompts interactivos"
+    },
+    "api": {
+      "status": "ok",
+      "description": "Asistente para agregar APIs (solo instrucciones)",
+      "notes": "No genera archivos, solo muestra instrucciones"
+    },
+    "event": {
+      "status": "ok",
+      "description": "Asistente para agregar eventos (solo instrucciones)",
+      "notes": "No genera archivos, solo muestra instrucciones"
+    }
+  },
+  "standard_compliance_matrix": {
+    "module_json_schema": {
+      "name": { "module": true, "chat-module": true, "service-module": true },
+      "version": { "module": true, "chat-module": true, "service-module": true },
+      "description": { "module": true, "chat-module": true, "service-module": true },
+      "apis": { "module": true, "chat-module": true, "service-module": true },
+      "events.publishes": { "module": true, "chat-module": true, "service-module": true },
+      "events.subscribes": { "module": true, "chat-module": true, "service-module": true },
+      "tools": { "module": false, "chat-module": false, "service-module": false },
+      "ui.zone": { "module": false, "chat-module": false, "service-module": "N/A" },
+      "ui.icon": { "module": true, "chat-module": true, "service-module": "N/A" }
+    },
+    "lifecycle_hooks": {
+      "onLoad(context)": { "module": "onLoad(core)", "chat-module": "onLoad(core)", "service-module": "onLoad(core)" },
+      "onUnload()": { "module": true, "chat-module": true, "service-module": true },
+      "uiHandler.register()": { "module": false, "chat-module": false, "service-module": true }
+    }
+  },
+  "proposed_refactoring": {
+    "phase_1": {
+      "name": "Actualizar template module/",
+      "priority": "high",
+      "tasks": [
+        {
+          "file": "plop-templates/module/module.json.hbs",
+          "changes": [
+            "Agregar sección tools[] vacía o con prompts",
+            "Simplificar ui{} a formato estándar (zone, icon)",
+            "Agregar opción ui_advanced para Auto-UI v2.0"
+          ]
+        },
+        {
+          "file": "plop-templates/module/index.js.hbs",
+          "changes": [
+            "Renombrar 'core' a 'context' en onLoad",
+            "Agregar método registerUIHandlers()",
+            "Agregar ejemplo de uiHandler.register()"
+          ]
+        },
+        {
+          "file": "plopfile.js",
+          "changes": [
+            "Agregar prompt para tools AI",
+            "Agregar prompt para elegir tipo de UI (simple/advanced)"
+          ]
+        }
+      ]
+    },
+    "phase_2": {
+      "name": "Actualizar template chat-module/",
+      "priority": "high",
+      "tasks": [
+        {
+          "file": "plop-templates/chat-module/index.js.hbs",
+          "changes": [
+            "Reemplazar acceso directo a ai-gateway por eventos",
+            "Agregar integración con conversation-manager",
+            "Agregar registerUIHandlers()"
+          ]
+        },
+        {
+          "file": "plop-templates/chat-module/module.json.hbs",
+          "changes": [
+            "Agregar sección tools[] reales",
+            "Documentar dependencia de conversation-manager"
+          ]
+        }
+      ]
+    },
+    "phase_3": {
+      "name": "Evaluar from-blueprint",
+      "priority": "low",
+      "tasks": [
+        "Decidir si mantener o deprecar",
+        "Si mantener: documentar formato YAML en /contexto",
+        "Si deprecar: eliminar generator y documentar alternativas"
+      ]
+    },
+    "phase_4": {
+      "name": "Crear template unificado",
+      "priority": "medium",
+      "description": "Considerar fusionar module/, chat-module/, full-module/ en un solo generator con opciones",
+      "benefits": [
+        "Un solo lugar para mantener",
+        "Consistencia garantizada",
+        "Menos duplicación de templates"
+      ]
+    }
+  },
+  "recommended_module_json_template": {
+    "description": "Formato estándar que debería generar plop module",
+    "template": {
+      "name": "{{name}}",
+      "version": "1.0.0",
+      "description": "{{description}}",
+      "author": "{{author}}",
+      "apis": [
+        {
+          "method": "GET|POST|PUT|DELETE",
+          "path": "/endpoint",
+          "handler": "handlerMethodName",
+          "description": "Descripción del endpoint"
+        }
+      ],
+      "events": {
+        "publishes": ["{{name}}.created", "{{name}}.updated"],
+        "subscribes": ["other.event"]
+      },
+      "tools": [
+        {
+          "name": "{{name}}.action",
+          "description": "Descripción de la tool para AI",
+          "handler": "handleToolAction",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "param1": { "type": "string", "description": "..." }
+            },
+            "required": ["param1"]
+          }
+        }
+      ],
+      "ui": {
+        "zone": "work-bar|chat-config|chat-tools",
+        "icon": "emoji"
+      },
+      "config": {}
+    }
+  },
+  "recommended_index_js_template": {
+    "description": "Estructura estándar para index.js",
+    "structure": [
+      "class ModuleNameModule {",
+      "  constructor() - Estado inicial, sin dependencias",
+      "  async onLoad(context) - Inyectar deps, registrar handlers",
+      "  async onUnload() - Cleanup",
+      "  async registerUIHandlers() - uiHandler.register()",
+      "  async subscribeToEvents() - eventBus.subscribe()",
+      "  // HTTP API handlers",
+      "  async handleXxx(req, context) - return { status, data }",
+      "  // Event handlers",
+      "  async onEventName(event) - procesar eventos",
+      "  // UI handlers",
+      "  async handleUIAction(data, context) - handlers MQTT",
+      "  // Tool handlers",
+      "  async handleToolAction(params, context) - tools para AI",
+      "}"
+    ]
+  },
+  "action_items": [
+    {
+      "priority": 1,
+      "action": "Actualizar module/module.json.hbs con tools[]",
+      "impact": "Todos los nuevos módulos tendrán tools",
+      "effort": "bajo"
+    },
+    {
+      "priority": 2,
+      "action": "Actualizar module/index.js.hbs con registerUIHandlers()",
+      "impact": "Nuevos módulos soportarán UI vía MQTT",
+      "effort": "bajo"
+    },
+    {
+      "priority": 3,
+      "action": "Actualizar chat-module/ para usar eventos en lugar de acceso directo",
+      "impact": "Arquitectura correcta de chat modules",
+      "effort": "medio"
+    },
+    {
+      "priority": 4,
+      "action": "Documentar o deprecar from-blueprint",
+      "impact": "Claridad en opciones de generación",
+      "effort": "bajo"
+    },
+    {
+      "priority": 5,
+      "action": "Considerar generator unificado",
+      "impact": "Mantenimiento simplificado",
+      "effort": "alto"
+    }
+  ]
+}

@@ -197,8 +197,13 @@ class ProjectManagerModule {
       this.onProjectActivate.bind(this));
     this.unsubscribes.push(unsubActivate);
 
+    // Phase 5: Subscribe to context requests from prompt-composer
+    const unsubContextFull = await this.eventBus.subscribe('context.full.request',
+      this.onContextFullRequest.bind(this));
+    this.unsubscribes.push(unsubContextFull);
+
     this.logger.info('project-manager.eventbus.subscribed', {
-      topics: ['project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate']
+      topics: ['project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate', 'context.full.request']
     });
 
     // ==================== UI REQUEST/RESPONSE HANDLERS ====================
@@ -2263,6 +2268,40 @@ class ProjectManagerModule {
       success: true,
       active_project_id: this.activeProjectId
     });
+  }
+
+  /**
+   * Handle context.full.request (Phase 5)
+   * Returns full project context for prompt-composer inherited context
+   */
+  async onContextFullRequest(event) {
+    const eventData = event.data || event;
+    const { request_id, project_id, correlation_id } = eventData;
+
+    this.logger.debug({ correlationId: correlation_id, requestId: request_id, projectId: project_id },
+      'Received context.full.request');
+
+    try {
+      const fullContext = await this.getFullProjectContext(project_id, correlation_id || crypto.randomUUID());
+
+      await this.eventBus.publish('context.full.response', {
+        request_id,
+        success: true,
+        context: fullContext,
+        correlation_id
+      });
+    } catch (error) {
+      this.logger.warn({ correlationId: correlation_id, error: error.message },
+        'Failed to get full project context');
+
+      await this.eventBus.publish('context.full.response', {
+        request_id,
+        success: false,
+        context: null,
+        error: error.message,
+        correlation_id
+      });
+    }
   }
 
   // ==================== UI EVENT HANDLERS (via EventBus) ====================

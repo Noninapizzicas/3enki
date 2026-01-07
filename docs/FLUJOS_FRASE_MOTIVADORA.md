@@ -333,6 +333,321 @@ Esto requeriría:
 
 ---
 
+## Análisis Profundo: ¿Qué Contexto Necesita Realmente un Agente?
+
+### El Problema del Proyecto Activo
+
+El sistema tiene un mecanismo interesante: **el filesystem resuelve rutas automáticamente según el proyecto activo**.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    RESOLUCIÓN DE RUTAS EN FILESYSTEM                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  project.activated                                                           │
+│       │                                                                      │
+│       ▼                                                                      │
+│  ┌───────────────────────────────────────────────────────────────┐          │
+│  │  filesystem.onProjectActivated(event)                          │          │
+│  │                                                                │          │
+│  │  this.activeProjectId = project_id                             │          │
+│  │  this.activeProjectPath = base_path + '/storage'               │          │
+│  │  this.workingDirectory = this.activeProjectPath                │          │
+│  └───────────────────────────────────────────────────────────────┘          │
+│                                                                              │
+│  RESULTADO DE fs_write({ path: "frase_motivadora.txt" })                     │
+│  ═══════════════════════════════════════════════════════════════════════    │
+│                                                                              │
+│  SI proyecto "paco" activo:                                                  │
+│  → /data/projects/paco/storage/frase_motivadora.txt                         │
+│                                                                              │
+│  SI proyecto "maria" activo:                                                 │
+│  → /data/projects/maria/storage/frase_motivadora.txt                         │
+│                                                                              │
+│  SI ningún proyecto activo:                                                  │
+│  → /data/frase_motivadora.txt (raíz global)                                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Escenario: Mismo Agente, Distintos Proyectos
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│               AGENTE "motivational-image-processor"                          │
+│                                                                              │
+│  Configuración:                                                              │
+│  {                                                                           │
+│    "name": "motivational-image-processor",                                   │
+│    "triggers": ["telegram.photo.received"],                                  │
+│    "tools": ["fs_write"],                                                    │
+│    "system_prompt": "Crea frases motivadoras..."                            │
+│    // ❌ NO tiene: project_id                                                │
+│  }                                                                           │
+│                                                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  CASO 1: Usuario Juan trabaja en proyecto "startup-juan"                    │
+│  ─────────────────────────────────────────────────────────                  │
+│  1. Juan activa proyecto "startup-juan"                                      │
+│     → project.activated { project_id: "startup-juan" }                       │
+│     → filesystem actualiza activeProjectPath                                 │
+│                                                                              │
+│  2. Juan envía imagen al bot                                                 │
+│     → telegram.photo.received                                                │
+│     → Agente ejecuta fs_write("frase_motivadora.txt")                       │
+│     → Archivo: /data/projects/startup-juan/storage/frase_motivadora.txt     │
+│                                                                              │
+│  CASO 2: Usuario María trabaja en proyecto "blog-maria"                     │
+│  ─────────────────────────────────────────────────────────                  │
+│  1. María activa proyecto "blog-maria"                                       │
+│     → project.activated { project_id: "blog-maria" }                        │
+│     → filesystem actualiza activeProjectPath                                 │
+│                                                                              │
+│  2. María envía imagen al bot                                                │
+│     → telegram.photo.received                                                │
+│     → Agente ejecuta fs_write("frase_motivadora.txt")                       │
+│     → Archivo: /data/projects/blog-maria/storage/frase_motivadora.txt       │
+│                                                                              │
+│  ✅ El archivo se guarda en el proyecto correcto                             │
+│  ❌ PERO el agente NO SABE en qué proyecto está trabajando                  │
+│  ❌ El prompt NO incluye contexto del proyecto                               │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### ¿Qué Contexto Necesita Realmente un Agente?
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    NIVELES DE CONTEXTO PARA AGENTES                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  NIVEL 0: SIN CONTEXTO (actual)                                              │
+│  ─────────────────────────────────                                          │
+│  • Solo el evento trigger                                                    │
+│  • Prompt fijo                                                               │
+│  • Sin awareness del proyecto                                                │
+│  • Funciona pero es "ciego"                                                  │
+│                                                                              │
+│  NIVEL 1: CONTEXTO MÍNIMO (recomendado para agentes simples)                │
+│  ───────────────────────────────────────────────────────────                │
+│  • project_id del proyecto activo                                            │
+│  • project_name para personalización                                         │
+│  • Permite: "He creado el archivo en el proyecto 'Mi Startup'"              │
+│                                                                              │
+│  NIVEL 2: CONTEXTO ENRIQUECIDO (para agentes avanzados)                     │
+│  ─────────────────────────────────────────────────────────                  │
+│  • Todo del Nivel 1                                                          │
+│  • project_description                                                       │
+│  • storage_info (archivos existentes)                                        │
+│  • Historial del agente (últimas N ejecuciones)                              │
+│  • Permite: Decisiones basadas en archivos existentes                        │
+│                                                                              │
+│  NIVEL 3: CONTEXTO COMPLETO (como chat)                                      │
+│  ──────────────────────────────────────                                     │
+│  • Todo del Nivel 2                                                          │
+│  • Historial persistente en BD                                               │
+│  • Prompt dinámico via prompt-composer                                       │
+│  • Tools con descripciones                                                   │
+│  • Permite: Comportamiento equivalente a chat                                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Propuesta: Contexto por Niveles para Agentes
+
+```javascript
+// Configuración de agente con contexto
+{
+  "name": "motivational-image-processor",
+  "triggers": ["telegram.photo.received"],
+  "tools": ["fs_write"],
+
+  // NUEVO: Nivel de contexto
+  "context_level": 1,  // 0, 1, 2, o 3
+
+  // NUEVO: Hereda proyecto activo automáticamente
+  "inherit_active_project": true,
+
+  // NUEVO: O proyecto fijo específico
+  // "project_id": "proyecto-especifico",
+
+  "system_prompt": "Eres un agente del proyecto {{project_name}}..."
+}
+```
+
+### Implementación Propuesta por Nivel
+
+#### Nivel 0 (Actual - Sin Cambios)
+
+```javascript
+async buildContext(event) {
+  return { messages: [] };
+}
+```
+
+#### Nivel 1 (Contexto Mínimo)
+
+```javascript
+async buildContext(event) {
+  // 1. Obtener proyecto activo o configurado
+  const projectId = this.project_id || await this.getActiveProjectId();
+
+  if (!projectId) {
+    return { messages: [], project: null };
+  }
+
+  // 2. Cargar info básica del proyecto
+  const projectInfo = await this.loadProjectInfo(projectId);
+
+  return {
+    messages: [],
+    project: {
+      id: projectId,
+      name: projectInfo.name,
+      description: projectInfo.description
+    }
+  };
+}
+
+async renderPrompt(event, context) {
+  let prompt = this.system_prompt;
+
+  // Sustituir variables de proyecto
+  if (context.project) {
+    prompt = prompt.replace('{{project_name}}', context.project.name);
+    prompt = prompt.replace('{{project_id}}', context.project.id);
+  }
+
+  return prompt;
+}
+```
+
+#### Nivel 2 (Contexto Enriquecido)
+
+```javascript
+async buildContext(event) {
+  const projectId = this.project_id || await this.getActiveProjectId();
+
+  // 1. Contexto de memoria (actual)
+  const memoryContext = await this.contextManager.getContext(this.id);
+
+  // 2. Info del proyecto
+  const projectInfo = await this.loadProjectInfo(projectId);
+
+  // 3. Info de storage
+  const storageInfo = await this.loadStorageInfo(projectId);
+
+  return {
+    messages: memoryContext.messages.slice(-this.context_window),
+    project: {
+      id: projectId,
+      name: projectInfo.name,
+      description: projectInfo.description,
+      storage: storageInfo
+    }
+  };
+}
+```
+
+#### Nivel 3 (Contexto Completo - Como Chat)
+
+```javascript
+async buildContext(event) {
+  const projectId = this.project_id || await this.getActiveProjectId();
+
+  // 1. Contexto de memoria
+  const memoryContext = await this.contextManager.getContext(this.id);
+
+  // 2. Usar prompt-composer (como hace chat)
+  const composedPrompt = await this.requestPromptCompose({
+    project_id: projectId,
+    include_tools: true,
+    include_storage: true
+  });
+
+  return {
+    messages: memoryContext.messages.slice(-this.context_window),
+    project: composedPrompt.context,
+    prompt: composedPrompt.prompt  // System prompt dinámico
+  };
+}
+```
+
+### Eventos Necesarios para Contexto de Agente
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                  EVENTOS PARA CONTEXTO DE AGENTE                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  NIVEL 1: Info básica del proyecto                                           │
+│  ─────────────────────────────────                                          │
+│                                                                              │
+│  Agente                          project-manager                             │
+│     │                                 │                                      │
+│     │ project.get.request            │                                      │
+│     │ { project_id }                  │                                      │
+│     │────────────────────────────────>│                                      │
+│     │                                 │                                      │
+│     │ project.get.response            │                                      │
+│     │ { name, description }          │                                      │
+│     │<────────────────────────────────│                                      │
+│                                                                              │
+│  NIVEL 2: Info de storage                                                    │
+│  ────────────────────────                                                   │
+│                                                                              │
+│  Agente                          filesystem                                  │
+│     │                                 │                                      │
+│     │ storage.info.request            │                                      │
+│     │ { project_id }                  │                                      │
+│     │────────────────────────────────>│                                      │
+│     │                                 │                                      │
+│     │ storage.info.response           │                                      │
+│     │ { file_count, total_size }     │                                      │
+│     │<────────────────────────────────│                                      │
+│                                                                              │
+│  NIVEL 3: Prompt compuesto                                                   │
+│  ─────────────────────────                                                  │
+│                                                                              │
+│  Agente                          prompt-composer                             │
+│     │                                 │                                      │
+│     │ prompt.compose.request          │                                      │
+│     │ { project_id, include_tools }  │                                      │
+│     │────────────────────────────────>│                                      │
+│     │                                 │                                      │
+│     │ prompt.compose.response         │                                      │
+│     │ { prompt, context }            │                                      │
+│     │<────────────────────────────────│                                      │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Resumen: Estado Actual vs Necesario
+
+| Aspecto | Estado Actual | Nivel 1 | Nivel 2 | Nivel 3 |
+|---------|---------------|---------|---------|---------|
+| Sabe proyecto activo | ❌ | ✅ | ✅ | ✅ |
+| Nombre proyecto en prompt | ❌ | ✅ | ✅ | ✅ |
+| Info de archivos existentes | ❌ | ❌ | ✅ | ✅ |
+| Prompt dinámico | ❌ | ❌ | ❌ | ✅ |
+| Historial persistente | ❌ | ❌ | ❌ | ✅ |
+| Tools en prompt | ❌ | ❌ | ❌ | ✅ |
+| Complejidad | Baja | Baja | Media | Alta |
+| Eventos adicionales | 0 | 1 | 2 | 1 |
+
+### Recomendación
+
+Para el agente de frases motivadoras, **Nivel 1** es suficiente:
+- Conoce el proyecto activo
+- Puede personalizar respuestas: *"He creado la frase en tu proyecto 'Mi Startup'"*
+- Bajo overhead (solo 1 evento adicional)
+
+Para agentes más complejos (ej: asistente de código), **Nivel 3** sería necesario.
+
+---
+
 ## Flujo 1: Usuario en Chat
 
 ### Escenario

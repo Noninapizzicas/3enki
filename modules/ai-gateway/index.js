@@ -521,14 +521,30 @@ class AIGatewayModule {
   /**
    * API Handler: Chat Completion
    * Format: return { status, data }
-   * Supports tools for function calling
+   * Supports tools for function calling with optional auto-execution
+   *
+   * Options:
+   * - tools: Array of tools to make available
+   * - execute_tools: If true, auto-execute tool calls and continue conversation
+   * - max_tool_iterations: Max tool call loops (default: 10)
    */
   async handleChatCompletion(req, context) {
     try {
-      const { messages, tools, provider: requestedProvider, model, temperature, max_tokens, top_p, metadata } = req.body || {};
+      const {
+        messages: initialMessages,
+        tools: requestedTools,
+        provider: requestedProvider,
+        model,
+        temperature,
+        max_tokens,
+        top_p,
+        metadata,
+        execute_tools,
+        max_tool_iterations
+      } = req.body || {};
       const projectId = context?.projectId || metadata?.project_id;
 
-      if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      if (!initialMessages || !Array.isArray(initialMessages) || initialMessages.length === 0) {
         return {
           status: 400,
           data: { error: 'INVALID_REQUEST', message: 'messages array is required' }
@@ -536,96 +552,138 @@ class AIGatewayModule {
       }
 
       const startTime = Date.now();
+      const maxIterations = max_tool_iterations || 10;
+      let messages = [...initialMessages];
+      let totalTokens = 0;
+      let totalCost = 0;
+      let allToolResults = [];
 
-      // Opciones comunes para todos los providers
-      const chatOptions = {
-        model,
-        temperature,
-        max_tokens,
-        top_p,
-        tools: tools || null,
-        projectId,
-        retryConfig: this.config.retry
-      };
+      // Get tools - use provided or load from moduleLoader
+      let tools = requestedTools;
+      if (!tools && this.moduleLoader) {
+        const availableTools = this.getAvailableTools();
+        if (availableTools.length > 0) {
+          tools = availableTools;
+        }
+      }
 
-      // Determine provider
-      let result;
+      // Determine provider first
       let providerName;
+      let provider;
 
       if (requestedProvider && requestedProvider !== 'auto') {
-        // Use specific provider
-        const provider = this.providers.get(requestedProvider);
-
+        provider = this.providers.get(requestedProvider);
         if (!provider) {
           return {
             status: 400,
             data: { error: 'PROVIDER_NOT_FOUND', message: `Provider '${requestedProvider}' not found or not enabled` }
           };
         }
-
         if (!await provider.isAvailable({ projectId })) {
           return {
             status: 503,
             data: { error: 'PROVIDER_NOT_AVAILABLE', message: `Provider '${requestedProvider}' not available` }
           };
         }
-
         providerName = requestedProvider;
-        result = await this.chatWithRetry(provider, messages, chatOptions);
       } else {
-        // Auto fallback
         const providers = await this.getProvidersByPriority();
-
         if (providers.length === 0) {
           return {
             status: 503,
             data: { error: 'NO_PROVIDERS_AVAILABLE', message: 'No AI providers available. Check your API keys in credentials.' }
           };
         }
+        providerName = providers[0].name;
+        provider = providers[0].provider;
+      }
 
-        // Try providers in order of priority
-        let lastError;
+      // Translate tools to provider format
+      const translatedTools = tools ? this.translateToolsForProvider(tools, providerName) : null;
 
-        for (const { name, provider } of providers) {
-          try {
-            providerName = name;
-            result = await this.chatWithRetry(provider, messages, chatOptions);
+      // Chat options
+      const chatOptions = {
+        model,
+        temperature,
+        max_tokens,
+        top_p,
+        tools: translatedTools,
+        projectId,
+        retryConfig: this.config.retry
+      };
 
-            break; // Success, exit loop
-          } catch (error) {
-            this.logger.warn('ai-gateway.provider.failed', {
-              provider: name,
-              error: error.message
-            });
+      // Agentic loop - execute tools and continue conversation
+      let result;
+      let iteration = 0;
 
-            lastError = error;
+      while (iteration < maxIterations) {
+        iteration++;
 
-            // Record error
-            const usage = this.usage.get(name);
-            if (usage) {
-              usage.errors++;
-            }
+        this.logger.info('ai-gateway.chat.iteration', {
+          iteration,
+          messages_count: messages.length,
+          has_tools: !!translatedTools
+        });
 
-            // Continue to next provider
-          }
+        // Call AI
+        result = await this.chatWithRetry(provider, messages, chatOptions);
+
+        // Accumulate usage
+        totalTokens += result.usage?.total_tokens || 0;
+        totalCost += result.cost || 0;
+
+        // Check for tool calls
+        if (!result.tool_calls || result.tool_calls.length === 0) {
+          // No tool calls - we're done
+          break;
         }
 
-        if (!result) {
-          return {
-            status: 503,
-            data: { error: 'ALL_PROVIDERS_FAILED', message: `All providers failed. Last error: ${lastError?.message}` }
-          };
+        // If execute_tools is not enabled, return with tool_calls for caller to handle
+        if (!execute_tools) {
+          break;
         }
+
+        this.logger.info('ai-gateway.tools.executing', {
+          iteration,
+          tool_calls_count: result.tool_calls.length,
+          tools: result.tool_calls.map(tc => tc.function?.name || tc.name)
+        });
+
+        // Parse and execute tool calls
+        const toolCalls = this.parseToolCallsFromProvider(result, providerName);
+        const toolResults = await this.executeToolCalls(toolCalls, context);
+        allToolResults.push(...toolResults);
+
+        // Check if any tool requires confirmation (pause the loop)
+        const pendingConfirmation = toolResults.find(r => r.requires_confirmation);
+        if (pendingConfirmation) {
+          this.logger.info('ai-gateway.tools.pending_confirmation', {
+            tool: pendingConfirmation.name
+          });
+          result.pending_confirmation = pendingConfirmation;
+          break;
+        }
+
+        // Add assistant message with tool calls to conversation
+        messages.push({
+          role: 'assistant',
+          content: result.content || null,
+          tool_calls: result.tool_calls
+        });
+
+        // Add tool results to conversation
+        const toolResultMessages = this.formatToolResultsForProvider(toolResults, providerName);
+        messages.push(...toolResultMessages);
       }
 
       const latencyMs = Date.now() - startTime;
 
       // Record usage
-      const usage = this.usage.get(providerName);
-      if (usage) {
-        usage.requests++;
-        usage.tokens += result.usage?.total_tokens || 0;
-        usage.cost += result.cost || 0;
+      const usageStats = this.usage.get(providerName);
+      if (usageStats) {
+        usageStats.requests++;
+        usageStats.tokens += totalTokens;
+        usageStats.cost += totalCost;
       }
 
       // Publish completion event
@@ -634,9 +692,11 @@ class AIGatewayModule {
           provider: providerName,
           model: result.model,
           prompt_id: metadata?.prompt_id,
-          tokens_used: result.usage?.total_tokens || 0,
+          tokens_used: totalTokens,
           latency_ms: latencyMs,
-          cost: result.cost || 0,
+          cost: totalCost,
+          tool_calls_count: allToolResults.length,
+          iterations: iteration,
           metadata
         });
       }
@@ -645,7 +705,14 @@ class AIGatewayModule {
         status: 200,
         data: {
           ...result,
+          usage: {
+            ...result.usage,
+            total_tokens: totalTokens
+          },
+          cost: totalCost,
           latency_ms: latencyMs,
+          iterations: iteration,
+          tool_results: allToolResults.length > 0 ? allToolResults : undefined,
           metadata
         }
       };

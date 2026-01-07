@@ -134,6 +134,13 @@ class AnthropicProvider extends BaseProvider {
       requestData.system = system;
     }
 
+    // Add tools if provided (Anthropic format)
+    if (options.tools && Array.isArray(options.tools) && options.tools.length > 0) {
+      requestData.tools = options.tools;
+      // Allow model to choose whether to use tools
+      requestData.tool_choice = options.tool_choice || { type: 'auto' };
+    }
+
     const headers = {
       'x-api-key': this.apiKey,
       'anthropic-version': this.apiVersion
@@ -145,8 +152,31 @@ class AnthropicProvider extends BaseProvider {
       options.retryConfig || {}
     );
 
-    // Extract response
-    const content = response.content[0]?.text || '';
+    // Extract response - handle both text and tool_use content blocks
+    let content = '';
+    let toolCalls = null;
+
+    if (Array.isArray(response.content)) {
+      // Extract text content
+      const textBlocks = response.content.filter(block => block.type === 'text');
+      content = textBlocks.map(block => block.text).join('');
+
+      // Extract tool_use blocks (convert to normalized format)
+      const toolUseBlocks = response.content.filter(block => block.type === 'tool_use');
+      if (toolUseBlocks.length > 0) {
+        toolCalls = toolUseBlocks.map(block => ({
+          id: block.id,
+          type: 'function',
+          function: {
+            name: block.name,
+            arguments: JSON.stringify(block.input || {})
+          }
+        }));
+      }
+    } else {
+      content = response.content?.[0]?.text || '';
+    }
+
     const inputTokens = response.usage?.input_tokens || estimatedTokens;
     const outputTokens = response.usage?.output_tokens || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
@@ -161,6 +191,7 @@ class AnthropicProvider extends BaseProvider {
       provider: this.name,
       model,
       content,
+      tool_calls: toolCalls,
       usage: {
         input_tokens: inputTokens,
         output_tokens: outputTokens,

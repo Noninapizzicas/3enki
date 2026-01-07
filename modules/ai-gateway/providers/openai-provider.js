@@ -116,6 +116,13 @@ class OpenAIProvider extends BaseProvider {
       stream: false
     };
 
+    // Add tools if provided (OpenAI format)
+    if (options.tools && Array.isArray(options.tools) && options.tools.length > 0) {
+      requestData.tools = options.tools;
+      // Allow model to choose whether to use tools
+      requestData.tool_choice = options.tool_choice || 'auto';
+    }
+
     const headers = {
       'Authorization': `Bearer ${this.apiKey}`
     };
@@ -127,7 +134,9 @@ class OpenAIProvider extends BaseProvider {
     );
 
     // Extract response
-    const content = response.choices[0]?.message?.content || '';
+    const message = response.choices[0]?.message || {};
+    const content = message.content || '';
+    const toolCalls = message.tool_calls || null;
     const inputTokens = response.usage?.prompt_tokens || estimatedTokens;
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
@@ -142,6 +151,7 @@ class OpenAIProvider extends BaseProvider {
       provider: this.name,
       model,
       content,
+      tool_calls: toolCalls,
       usage: {
         input_tokens: inputTokens,
         output_tokens: outputTokens,

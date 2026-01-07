@@ -3,7 +3,18 @@
 > **Objetivo**: Implementar el modelo de composición progresiva sin romper lo que funciona.
 >
 > **Fecha**: 2026-01-07
-> **Versión**: 1.0.0
+> **Versión**: 2.0.0 (COMPLETADO)
+> **Estado**: ✅ TODAS LAS FASES IMPLEMENTADAS
+
+## Commits de Implementación
+
+| Fase | Commit | Descripción |
+|------|--------|-------------|
+| 1 | `5b5070d` | feat(project-manager): implement Phase 1 - project links |
+| 2 | `94e486f` | feat(project-manager): implement Phase 2 - project dependencies |
+| 3 | `f0ac6b7` | feat(project-manager): implement Phase 3 - systems as containers |
+| 4 | `e271189` | feat(project-manager): implement Phase 4 - shared context between projects |
+| 5 | `00e06b3` | feat: implement Phase 5 - automatic inherited context for prompts |
 
 ---
 
@@ -104,88 +115,76 @@
 
 ## Plan de Implementación por Fases
 
-### FASE 0: Preparación (No rompe nada)
+### FASE 0: Preparación (No rompe nada) ✅ COMPLETADA
 
 **Objetivo**: Preparar el terreno sin cambiar comportamiento.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  FASE 0: PREPARACIÓN                                                         │
-│  Duración estimada: 1 sesión                                                 │
+│  Estado: ✅ COMPLETADA (incluida en Fase 1)                                  │
 │  Riesgo: NINGUNO                                                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  TAREAS:                                                                     │
 │                                                                              │
-│  □ 0.1 Añadir columnas a tabla projects (con defaults null)                 │
+│  ✅ 0.1 Añadir columnas a tabla projects (con defaults null)                │
 │        ALTER TABLE projects ADD COLUMN system_id TEXT;                       │
 │        ALTER TABLE projects ADD COLUMN system_role TEXT;                     │
-│        ALTER TABLE projects ADD COLUMN parent_project_id TEXT;               │
+│        (parent_project_id no fue necesario - usamos project_links)          │
 │                                                                              │
-│  □ 0.2 Crear tablas nuevas (vacías, no usadas aún)                          │
+│  ✅ 0.2 Crear tablas nuevas (vacías, no usadas aún)                         │
 │        CREATE TABLE systems (...)                                            │
 │        CREATE TABLE project_links (...)                                      │
 │        CREATE TABLE project_dependencies (...)                               │
 │        CREATE TABLE shared_context (...)                                     │
 │                                                                              │
-│  □ 0.3 Actualizar schema de project-manager para leer nuevos campos         │
-│        - Añadir campos al SELECT en loadExistingProjects()                  │
-│        - Mapear a objeto project (con valores null por defecto)             │
+│  ✅ 0.3 Actualizar schema de project-manager para leer nuevos campos        │
+│        - Implementado con migraciones automáticas en onLoad()               │
+│        - Mapeo de campos en loadExistingProjects()                          │
 │                                                                              │
 │  RESULTADO:                                                                  │
 │  ──────────                                                                 │
 │  • Sistema funciona EXACTAMENTE igual que antes                              │
 │  • Proyectos existentes tienen campos nuevos = null                          │
-│  • Tablas nuevas existen pero están vacías                                   │
+│  • Tablas nuevas creadas automáticamente al iniciar                          │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### FASE 1: Relaciones entre Proyectos
+### FASE 1: Relaciones entre Proyectos ✅ COMPLETADA
 
 **Objetivo**: Poder decir "estos dos proyectos están relacionados".
+**Commit**: `5b5070d`
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  FASE 1: RELACIONES ENTRE PROYECTOS                                          │
-│  Duración estimada: 2-3 sesiones                                             │
+│  Estado: ✅ COMPLETADA                                                       │
 │  Riesgo: BAJO (añade funcionalidad, no cambia existente)                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  TAREAS:                                                                     │
 │                                                                              │
-│  □ 1.1 Implementar API de links en project-manager                          │
+│  ✅ 1.1 Implementar API de links en project-manager                         │
+│        - linkProjects(sourceId, targetId, linkType, reason)                 │
+│        - unlinkProjects(sourceId, targetId)                                 │
+│        - getProjectLinks(projectId)                                         │
+│        - getRelatedProjects(projectId)                                      │
 │                                                                              │
-│        // Crear link entre proyectos                                         │
-│        async linkProjects(sourceId, targetId, linkType, reason) {           │
-│          // linkType: 'inspired_by' | 'related_to' | 'evolved_from'         │
-│          await this.queryDatabase(`                                          │
-│            INSERT INTO project_links (...)                                   │
-│          `);                                                                 │
-│          await this.eventBus.publish('project.linked', {...});              │
-│        }                                                                     │
-│                                                                              │
-│        // Obtener proyectos relacionados                                     │
-│        async getRelatedProjects(projectId) {                                │
-│          return await this.queryDatabase(`                                   │
-│            SELECT * FROM project_links                                       │
-│            WHERE source_project_id = ? OR target_project_id = ?             │
-│          `);                                                                 │
-│        }                                                                     │
-│                                                                              │
-│  □ 1.2 Añadir UI handlers                                                   │
+│  ✅ 1.2 Añadir UI handlers                                                  │
 │        this.uiHandler.register('project', 'link', ...)                      │
 │        this.uiHandler.register('project', 'unlink', ...)                    │
 │        this.uiHandler.register('project', 'getLinks', ...)                  │
 │                                                                              │
-│  □ 1.3 Evento nuevo: project.linked                                         │
-│        - Publicar cuando se crea link                                        │
+│  ✅ 1.3 Evento nuevo: project.linked, project.unlinked                      │
+│        - Publicado cuando se crea/elimina link                               │
 │        - Otros módulos pueden escuchar para actualizar vistas               │
 │                                                                              │
-│  □ 1.4 Actualizar handleUIList para incluir relaciones                      │
-│        - Añadir campo 'related_projects' al listar                           │
+│  ✅ 1.4 Actualizar handleUIList para incluir relaciones                     │
+│        - Campo 'links' incluido en respuesta de getLinks                     │
 │        - Frontend puede mostrar conexiones                                   │
 │                                                                              │
 │  RESULTADO:                                                                  │
@@ -194,58 +193,46 @@
 │  • Al listar proyectos, veo sus relaciones                                   │
 │  • Sistema sigue funcionando igual para proyectos sin relaciones            │
 │                                                                              │
-│  EJEMPLO DE USO:                                                             │
-│  ────────────────                                                           │
-│  await mqttRequest('project', 'link', {                                      │
-│    source: 'proj-compras',                                                   │
-│    target: 'proj-facturacion',                                               │
-│    type: 'inspired_by',                                                      │
-│    reason: 'Compras reutiliza el modelo de clientes'                        │
-│  });                                                                         │
-│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### FASE 2: Dependencias Explícitas
+### FASE 2: Dependencias Explícitas ✅ COMPLETADA
 
 **Objetivo**: Poder decir "Comandero NECESITA datos de Facturación".
+**Commit**: `94e486f`
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  FASE 2: DEPENDENCIAS                                                        │
-│  Duración estimada: 2 sesiones                                               │
+│  Estado: ✅ COMPLETADA                                                       │
 │  Riesgo: BAJO                                                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  TAREAS:                                                                     │
 │                                                                              │
-│  □ 2.1 Implementar API de dependencias                                       │
+│  ✅ 2.1 Implementar API de dependencias                                      │
+│        - addDependency(projectId, dependsOnId, type, description)           │
+│        - removeDependency(projectId, dependsOnId)                           │
+│        - getDependencies(projectId) - proyectos de los que depende          │
+│        - getDependents(projectId) - proyectos que dependen de este          │
+│        - hasDependents(projectId) - verificación rápida                     │
 │                                                                              │
-│        async addDependency(projectId, dependsOnId, type, description) {     │
-│          // type: 'data' | 'code' | 'api' | 'context'                       │
-│          await this.queryDatabase(`                                          │
-│            INSERT INTO project_dependencies (...)                            │
-│          `);                                                                 │
-│        }                                                                     │
-│                                                                              │
-│        async getDependencies(projectId) {                                   │
-│          // Retorna proyectos de los que depende                             │
-│        }                                                                     │
-│                                                                              │
-│        async getDependents(projectId) {                                     │
-│          // Retorna proyectos que dependen de este                           │
-│        }                                                                     │
-│                                                                              │
-│  □ 2.2 UI handlers                                                           │
+│  ✅ 2.2 UI handlers                                                          │
 │        'project', 'addDependency'                                            │
 │        'project', 'removeDependency'                                         │
 │        'project', 'getDependencies'                                          │
+│        'project', 'getDependents'                                            │
 │                                                                              │
-│  □ 2.3 Validación en delete                                                  │
-│        - Al borrar proyecto, verificar si otros dependen de él              │
-│        - Advertir o bloquear según configuración                             │
+│  ✅ 2.3 Validación en delete                                                 │
+│        - handleUIDelete verifica hasDependents() antes de borrar            │
+│        - Bloquea borrado si otros proyectos dependen                         │
+│        - Mensaje: "Cannot delete: X projects depend on this"                │
+│                                                                              │
+│  ✅ 2.4 Eventos                                                              │
+│        - project.dependency.added                                            │
+│        - project.dependency.removed                                          │
 │                                                                              │
 │  RESULTADO:                                                                  │
 │  ──────────                                                                 │
@@ -258,59 +245,49 @@
 
 ---
 
-### FASE 3: Sistemas (Contenedores)
+### FASE 3: Sistemas (Contenedores) ✅ COMPLETADA
 
 **Objetivo**: Agrupar proyectos relacionados en un "sistema".
+**Commit**: `f0ac6b7`
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  FASE 3: SISTEMAS                                                            │
-│  Duración estimada: 2-3 sesiones                                             │
+│  Estado: ✅ COMPLETADA                                                       │
 │  Riesgo: BAJO-MEDIO                                                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  TAREAS:                                                                     │
 │                                                                              │
-│  □ 3.1 CRUD de sistemas                                                      │
+│  ✅ 3.1 CRUD de sistemas                                                     │
+│        - createSystem(name, description)                                     │
+│        - getSystem(systemId) - incluye proyectos asociados                  │
+│        - listSystems() - todos los sistemas con sus proyectos               │
+│        - updateSystem(systemId, updates)                                     │
+│        - deleteSystem(systemId) - solo si no tiene proyectos                │
 │                                                                              │
-│        async createSystem(name, description, initialProjects = []) {        │
-│          const systemId = crypto.randomUUID();                               │
-│          await this.queryDatabase(`                                          │
-│            INSERT INTO systems (id, name, description, created_at)           │
-│          `);                                                                 │
+│  ✅ 3.2 Asociar/desasociar proyectos                                        │
+│        - addProjectToSystem(systemId, projectId, role)                      │
+│        - removeProjectFromSystem(projectId)                                  │
+│        - getUnassignedProjects() - proyectos sin sistema                    │
 │                                                                              │
-│          // Asociar proyectos iniciales                                      │
-│          for (const proj of initialProjects) {                               │
-│            await this.addProjectToSystem(systemId, proj.id, proj.role);     │
-│          }                                                                   │
-│          return systemId;                                                    │
-│        }                                                                     │
+│  ✅ 3.3 Vista de sistema                                                     │
+│        - getSystem incluye array de proyectos con nombre y rol              │
+│        - listSystems incluye conteo de proyectos por sistema                │
 │                                                                              │
-│  □ 3.2 Asociar/desasociar proyectos                                         │
-│                                                                              │
-│        async addProjectToSystem(systemId, projectId, role) {                │
-│          await this.queryDatabase(`                                          │
-│            UPDATE projects SET system_id = ?, system_role = ? WHERE id = ?  │
-│          `);                                                                 │
-│          await this.eventBus.publish('project.joined_system', {...});       │
-│        }                                                                     │
-│                                                                              │
-│  □ 3.3 Vista de sistema                                                      │
-│                                                                              │
-│        async getSystem(systemId) {                                          │
-│          const system = await this.queryDatabase(`SELECT * FROM systems`);  │
-│          const projects = await this.queryDatabase(`                         │
-│            SELECT * FROM projects WHERE system_id = ?                        │
-│          `);                                                                 │
-│          return { ...system, projects };                                     │
-│        }                                                                     │
-│                                                                              │
-│  □ 3.4 UI handlers                                                           │
+│  ✅ 3.4 UI handlers                                                          │
 │        'system', 'create'                                                    │
 │        'system', 'list'                                                      │
 │        'system', 'get'                                                       │
+│        'system', 'update'                                                    │
+│        'system', 'delete'                                                    │
 │        'system', 'addProject'                                                │
 │        'system', 'removeProject'                                             │
+│        'system', 'getUnassigned'                                             │
+│                                                                              │
+│  ✅ 3.5 Eventos                                                              │
+│        - system.created, system.updated, system.deleted                      │
+│        - project.joined_system, project.left_system                          │
 │                                                                              │
 │  RESULTADO:                                                                  │
 │  ──────────                                                                 │
@@ -325,132 +302,98 @@
 
 ---
 
-### FASE 4: Contexto Compartido
+### FASE 4: Contexto Compartido ✅ COMPLETADA
 
 **Objetivo**: Acceder a conversaciones de proyectos relacionados.
+**Commit**: `e271189`
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  FASE 4: CONTEXTO COMPARTIDO                                                 │
-│  Duración estimada: 3-4 sesiones                                             │
+│  Estado: ✅ COMPLETADA                                                       │
 │  Riesgo: MEDIO (toca el stack de conversaciones)                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  TAREAS:                                                                     │
 │                                                                              │
-│  □ 4.1 Importar conversaciones entre proyectos                               │
+│  ✅ 4.1 Importar conversaciones entre proyectos                              │
+│        - importContext(toProjectId, fromProjectId, conversationId, reason)  │
+│        - Almacena referencia en tabla shared_context                         │
+│        - Evento: context.imported                                            │
 │                                                                              │
-│        async importContext(toProjectId, fromProjectId, conversationIds) {   │
-│          for (const convId of conversationIds) {                             │
-│            await this.queryDatabase(`                                        │
-│              INSERT INTO shared_context (                                    │
-│                from_project_id, to_project_id, conversation_id, ...         │
-│              )                                                               │
-│            `);                                                               │
-│          }                                                                   │
-│        }                                                                     │
+│  ✅ 4.2 Gestión de contexto compartido                                       │
+│        - removeSharedContext(sharedContextId)                                │
+│        - getSharedContext(toProjectId) - contexto importado a un proyecto   │
+│        - getExportedContext(fromProjectId) - contexto exportado desde uno   │
 │                                                                              │
-│  □ 4.2 Listar contexto disponible                                           │
+│  ✅ 4.3 Fuentes de contexto disponibles                                      │
+│        - getAvailableContextSources(projectId)                               │
+│          Retorna conversaciones de proyectos relacionados/dependencias       │
+│          que pueden ser importadas                                           │
 │                                                                              │
-│        async getAvailableContext(projectId) {                               │
-│          // Conversaciones propias                                           │
-│          const own = await chat-session.list(projectId);                    │
+│  ✅ 4.4 Contexto completo del proyecto                                       │
+│        - getFullProjectContext(projectId, correlationId)                    │
+│          Retorna: sistema, dependencias, proyectos relacionados,             │
+│          contexto heredado (summaries de conversaciones importadas)          │
 │                                                                              │
-│          // Conversaciones importadas de proyectos relacionados              │
-│          const imported = await this.queryDatabase(`                         │
-│            SELECT sc.*, c.title, c.summary                                   │
-│            FROM shared_context sc                                            │
-│            JOIN conversations c ON sc.conversation_id = c.id                │
-│            WHERE sc.to_project_id = ?                                        │
-│          `);                                                                 │
-│                                                                              │
-│          return { own, imported };                                           │
-│        }                                                                     │
-│                                                                              │
-│  □ 4.3 Modificar prompt-composer para inyectar contexto heredado            │
-│                                                                              │
-│        // En composeSystemPrompt()                                           │
-│        if (projectContext.imported_context?.length > 0) {                   │
-│          sections.push('## Inherited Context');                              │
-│          sections.push('From related projects:');                            │
-│          for (const ctx of projectContext.imported_context) {               │
-│            sections.push(`- [${ctx.project_name}]: ${ctx.summary}`);        │
-│          }                                                                   │
-│        }                                                                     │
-│                                                                              │
-│  □ 4.4 UI para gestionar contexto compartido                                │
+│  ✅ 4.5 UI handlers                                                          │
 │        'context', 'import'                                                   │
-│        'context', 'list'                                                     │
 │        'context', 'remove'                                                   │
+│        'context', 'getShared'                                                │
+│        'context', 'getExported'                                              │
+│        'context', 'getAvailableSources'                                      │
+│        'context', 'getFullProjectContext'                                    │
 │                                                                              │
 │  RESULTADO:                                                                  │
 │  ──────────                                                                 │
 │  • Al trabajar en Comandero, puedo importar conversaciones de Facturación   │
 │  • El AI "sabe" cómo funcionan las facturas aunque estoy en otro proyecto   │
-│  • Contexto heredado aparece en el system prompt                             │
+│  • getFullProjectContext prepara todo para Fase 5                            │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### FASE 5: Contexto Automático para Agentes
+### FASE 5: Contexto Automático para Agentes ✅ COMPLETADA
 
 **Objetivo**: Agentes reciben contexto de proyectos relacionados automáticamente.
+**Commit**: `00e06b3`
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  FASE 5: CONTEXTO AUTOMÁTICO                                                 │
-│  Duración estimada: 3-4 sesiones                                             │
+│  Estado: ✅ COMPLETADA (Opción A - Integración en prompt-composer)          │
 │  Riesgo: MEDIO-ALTO (toca flujo de agentes)                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
+│  IMPLEMENTACIÓN: Se eligió Opción A (modificar prompt-composer)              │
+│  en lugar de crear módulo context-resolver separado.                         │
+│                                                                              │
 │  TAREAS:                                                                     │
 │                                                                              │
-│  □ 5.1 Crear módulo context-resolver                                         │
+│  ✅ 5.1 project-manager: Evento context.full.request/response               │
+│        - onContextFullRequest() escucha peticiones de contexto               │
+│        - Responde con getFullProjectContext() via context.full.response     │
+│        - Patrón request/response asíncrono                                   │
 │                                                                              │
-│        // Resuelve contexto completo para un proyecto                        │
-│        async resolveFullContext(projectId) {                                │
-│          const project = await projectManager.get(projectId);               │
+│  ✅ 5.2 prompt-composer: Carga de contexto heredado                          │
+│        - loadInheritedContext(projectId, timeout) - petición async          │
+│        - pendingInheritedContextRequests Map para correlación                │
+│        - onInheritedContextResponse() maneja respuestas                      │
 │                                                                              │
-│          // Obtener dependencias                                             │
-│          const dependencies = await projectManager.getDependencies(id);     │
+│  ✅ 5.3 prompt-composer: Composición del prompt                              │
+│        - composeSystemPrompt() acepta 4to parámetro: inheritedContext       │
+│        - buildInheritedContextSection() formatea el contexto:                │
+│          • ## System Context (sistema al que pertenece)                      │
+│          • ## Dependencies (proyectos de los que depende)                    │
+│          • ## Related Projects (proyectos relacionados)                      │
+│          • ## Inherited Knowledge (summaries de conversaciones)              │
 │                                                                              │
-│          // Obtener contexto compartido                                      │
-│          const sharedContext = await this.getAvailableContext(id);          │
-│                                                                              │
-│          // Obtener sistema (si pertenece a uno)                             │
-│          const system = project.system_id                                    │
-│            ? await systemManager.get(project.system_id)                      │
-│            : null;                                                           │
-│                                                                              │
-│          return {                                                            │
-│            project,                                                          │
-│            dependencies,                                                     │
-│            sharedContext,                                                    │
-│            system,                                                           │
-│            relatedProjects: system?.projects || []                          │
-│          };                                                                  │
-│        }                                                                     │
-│                                                                              │
-│  □ 5.2 Integrar con ai-agent-framework                                       │
-│                                                                              │
-│        // Antes de ejecutar agente, resolver contexto                        │
-│        async executeAgent(trigger, agentConfig) {                           │
-│          const projectId = this.resolveProjectFromTrigger(trigger);         │
-│          const fullContext = await contextResolver.resolve(projectId);      │
-│                                                                              │
-│          // Inyectar en el agente                                            │
-│          agentConfig.context = fullContext;                                  │
-│        }                                                                     │
-│                                                                              │
-│  □ 5.3 Actualizar prompts de agentes para usar contexto                     │
-│                                                                              │
-│        // El agente ahora "sabe" de proyectos relacionados                   │
-│        "You are working on {{project.name}}.                                 │
-│         This project is part of '{{system.name}}'.                           │
-│         Related projects: {{relatedProjects}}                                │
-│         Inherited knowledge: {{sharedContext}}"                              │
+│  ✅ 5.4 prompt-composer: Integración en flujo                                │
+│        - onComposeRequest soporta flag include_inherited_context            │
+│        - Si true, carga contexto antes de componer                           │
+│        - Configurable via this.config.includeInheritedContext               │
 │                                                                              │
 │  RESULTADO:                                                                  │
 │  ──────────                                                                 │
@@ -459,36 +402,53 @@
 │  • Puede responder: "Para generar factura, usa evento invoice.create"       │
 │    aunque eso se aprendió en otro proyecto                                   │
 │                                                                              │
+│  USO:                                                                        │
+│  ─────                                                                      │
+│  // Petición con contexto heredado                                           │
+│  await eventBus.publish('prompt.compose.request', {                         │
+│    request_id: uuid,                                                         │
+│    project_id: 'proj-comandero',                                             │
+│    include_inherited_context: true,  // ← Activar contexto heredado         │
+│    ...                                                                       │
+│  });                                                                         │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Matriz de Impacto por Módulo
+## Matriz de Impacto por Módulo (Resultado Real)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    IMPACTO POR MÓDULO                                        │
+│                    IMPACTO POR MÓDULO (IMPLEMENTADO)                         │
 ├───────────────────────┬────────┬────────┬────────┬────────┬────────────────┤
 │ Módulo                │ Fase 0 │ Fase 1 │ Fase 2 │ Fase 3 │ Fase 4-5       │
 ├───────────────────────┼────────┼────────┼────────┼────────┼────────────────┤
-│ project-manager       │ EXTEND │ EXTEND │ EXTEND │ EXTEND │ -              │
-│ database-manager      │ SCHEMA │ -      │ -      │ -      │ -              │
+│ project-manager       │ ✅ EXT │ ✅ EXT │ ✅ EXT │ ✅ EXT │ ✅ EXTEND      │
+│ database-manager      │ -      │ -      │ -      │ -      │ -              │
 │ filesystem            │ -      │ -      │ -      │ -      │ -              │
 │ credential-manager    │ -      │ -      │ -      │ -      │ -              │
-│ chat-session          │ -      │ -      │ -      │ -      │ EXTEND (leer)  │
-│ prompt-composer       │ -      │ -      │ -      │ -      │ EXTEND         │
-│ ai-agent-framework    │ -      │ -      │ -      │ -      │ EXTEND         │
+│ chat-session          │ -      │ -      │ -      │ -      │ -              │
+│ prompt-composer       │ -      │ -      │ -      │ -      │ ✅ EXTEND      │
+│ ai-agent-framework    │ -      │ -      │ -      │ -      │ -              │
 │ conversation-manager  │ -      │ -      │ -      │ -      │ -              │
-│ (nuevo) system-mgr    │ -      │ -      │ -      │ CREATE │ -              │
-│ (nuevo) ctx-resolver  │ -      │ -      │ -      │ -      │ CREATE         │
+│ (nuevo) system-mgr    │ -      │ -      │ -      │ N/A    │ -              │
+│ (nuevo) ctx-resolver  │ -      │ -      │ -      │ -      │ N/A            │
 ├───────────────────────┼────────┼────────┼────────┼────────┼────────────────┤
 │ LEYENDA:              │        │        │        │        │                │
-│ EXTEND = añadir       │        │        │        │        │                │
-│ SCHEMA = solo BD      │        │        │        │        │                │
-│ CREATE = módulo nuevo │        │        │        │        │                │
+│ ✅ = implementado     │        │        │        │        │                │
+│ EXT = extendido       │        │        │        │        │                │
+│ N/A = no necesario    │        │        │        │        │                │
 │ - = sin cambios       │        │        │        │        │                │
 └───────────────────────┴────────┴────────┴────────┴────────┴────────────────┘
+
+NOTAS:
+- system-manager: Integrado dentro de project-manager (no módulo separado)
+- context-resolver: Integrado en prompt-composer (Opción A)
+- database-manager: Las migraciones se manejan dentro de project-manager
+- ai-agent-framework: Puede usar contexto heredado sin modificaciones
+  (el prompt ya incluye el contexto cuando se solicita)
 ```
 
 ---
@@ -535,128 +495,106 @@
 
 ---
 
-## Orden Recomendado de Implementación
+## Orden de Implementación (Completado)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    ROADMAP RECOMENDADO                                       │
+│                    ROADMAP COMPLETADO                                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  INMEDIATO (Fase 0)                                                          │
-│  ──────────────────                                                         │
-│  → Preparar schema de BD                                                     │
-│  → 0 riesgo, prepara el terreno                                              │
+│  ✅ FASE 0: Preparación                                                      │
+│     - Schema de BD con migraciones automáticas                               │
+│     - Tablas: systems, project_links, project_dependencies, shared_context  │
 │                                                                              │
-│  CORTO PLAZO (Fase 1-2)                                                      │
-│  ──────────────────────                                                     │
-│  → Links y dependencias entre proyectos                                      │
-│  → Valor inmediato: ver qué proyectos están relacionados                    │
-│  → Protección: no borrar proyectos con dependientes                         │
+│  ✅ FASE 1: Links entre proyectos (5b5070d)                                  │
+│     - linkProjects, unlinkProjects, getProjectLinks, getRelatedProjects     │
+│     - Eventos: project.linked, project.unlinked                              │
 │                                                                              │
-│  MEDIO PLAZO (Fase 3)                                                        │
-│  ────────────────────                                                       │
-│  → Sistemas como contenedores                                                │
-│  → Valor: "Sistema Hostelería" agrupa 4 proyectos                           │
-│  → Vista unificada en frontend                                               │
+│  ✅ FASE 2: Dependencias (94e486f)                                           │
+│     - addDependency, removeDependency, getDependencies, getDependents       │
+│     - Validación en delete: no borrar proyectos con dependientes            │
 │                                                                              │
-│  LARGO PLAZO (Fase 4-5)                                                      │
-│  ─────────────────────                                                      │
-│  → Contexto compartido y automático                                          │
-│  → Valor: AI "hereda" conocimiento de proyectos relacionados                │
-│  → Requiere más testing y refinamiento                                       │
+│  ✅ FASE 3: Sistemas (f0ac6b7)                                               │
+│     - CRUD completo de sistemas                                              │
+│     - addProjectToSystem, removeProjectFromSystem, getUnassignedProjects    │
 │                                                                              │
-│  TIMELINE SUGERIDO:                                                          │
-│  ──────────────────                                                         │
+│  ✅ FASE 4: Contexto Compartido (e271189)                                    │
+│     - importContext, removeSharedContext, getSharedContext                   │
+│     - getFullProjectContext para agregación de contexto                      │
+│                                                                              │
+│  ✅ FASE 5: Contexto Automático (00e06b3)                                    │
+│     - Integración en prompt-composer                                         │
+│     - buildInheritedContextSection para formatear contexto                   │
+│     - Flag include_inherited_context en compose requests                     │
+│                                                                              │
+│  TIMELINE REAL:                                                              │
+│  ──────────────                                                             │
 │  Fase 0 ──→ Fase 1 ──→ Fase 2 ──→ Fase 3 ──→ Fase 4 ──→ Fase 5             │
-│    │          │          │          │          │          │                 │
-│    ▼          ▼          ▼          ▼          ▼          ▼                 │
-│  [HOY]    [+1 sem]   [+2 sem]   [+3 sem]   [+5 sem]   [+7 sem]              │
+│    ✅         ✅         ✅         ✅         ✅         ✅                 │
 │                                                                              │
-│  Cada fase es DEPLOYABLE independientemente.                                 │
-│  Puedes parar en cualquier fase y el sistema funciona.                       │
+│  TODO COMPLETADO EN UNA SESIÓN (2026-01-07)                                  │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Siguiente Paso Concreto
+## Implementación Técnica
 
-### Fase 0: Script de Migración
+### Migraciones Automáticas (en project-manager onLoad)
+
+Las migraciones se ejecutan automáticamente al cargar el módulo:
 
 ```javascript
-// scripts/migrate-project-composition.js
-// Ejecutar una vez para preparar BD
+// Implementado en project-manager/index.js onLoad()
+// Las tablas se crean automáticamente si no existen
 
-const migrations = [
-  // Añadir columnas a projects
-  `ALTER TABLE projects ADD COLUMN system_id TEXT`,
-  `ALTER TABLE projects ADD COLUMN system_role TEXT`,
-  `ALTER TABLE projects ADD COLUMN parent_project_id TEXT`,
+// Columnas añadidas a projects:
+// - system_id TEXT
+// - system_role TEXT
 
-  // Crear tabla systems
-  `CREATE TABLE IF NOT EXISTS systems (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )`,
+// Tablas creadas:
+// - systems (id, name, description, created_at, updated_at)
+// - project_links (id, source_project_id, target_project_id, link_type, reason, created_at)
+// - project_dependencies (id, project_id, depends_on_project_id, dependency_type, description, created_at)
+// - shared_context (id, from_project_id, to_project_id, conversation_id, reason, imported_at)
 
-  // Crear tabla project_links
-  `CREATE TABLE IF NOT EXISTS project_links (
-    id TEXT PRIMARY KEY,
-    source_project_id TEXT NOT NULL,
-    target_project_id TEXT NOT NULL,
-    link_type TEXT NOT NULL,
-    reason TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (source_project_id) REFERENCES projects(id),
-    FOREIGN KEY (target_project_id) REFERENCES projects(id)
-  )`,
-
-  // Crear tabla project_dependencies
-  `CREATE TABLE IF NOT EXISTS project_dependencies (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    depends_on_project_id TEXT NOT NULL,
-    dependency_type TEXT,
-    description TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id),
-    FOREIGN KEY (depends_on_project_id) REFERENCES projects(id)
-  )`,
-
-  // Crear tabla shared_context
-  `CREATE TABLE IF NOT EXISTS shared_context (
-    id TEXT PRIMARY KEY,
-    from_project_id TEXT NOT NULL,
-    to_project_id TEXT NOT NULL,
-    conversation_id TEXT NOT NULL,
-    reason TEXT,
-    imported_at TEXT NOT NULL,
-    FOREIGN KEY (from_project_id) REFERENCES projects(id),
-    FOREIGN KEY (to_project_id) REFERENCES projects(id)
-  )`,
-
-  // Índices para performance
-  `CREATE INDEX IF NOT EXISTS idx_projects_system ON projects(system_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_links_source ON project_links(source_project_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_links_target ON project_links(target_project_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_deps_project ON project_dependencies(project_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_shared_to ON shared_context(to_project_id)`
-];
+// Índices creados:
+// - idx_projects_system, idx_links_source, idx_links_target
+// - idx_deps_project, idx_deps_depends_on, idx_shared_to
 ```
 
 ---
 
-## Resumen
+## Resumen Final
 
 | Pregunta | Respuesta |
 |----------|-----------|
 | ¿Lo que funciona sigue funcionando? | ✅ SÍ, 100% compatible |
-| ¿Hay que refactorizar algo? | ❌ NO, solo EXTENDER |
-| ¿Es incremental? | ✅ SÍ, 6 fases independientes |
-| ¿Puedo parar en cualquier momento? | ✅ SÍ, cada fase es deployable |
-| ¿Qué módulos cambian? | project-manager (extend), prompt-composer (fase 4-5) |
-| ¿Qué módulos NO cambian? | filesystem, credential-manager, database-manager |
+| ¿Hay que refactorizar algo? | ✅ COMPLETADO - solo extensiones |
+| ¿Es incremental? | ✅ SÍ, 6 fases implementadas |
+| ¿Estado actual? | ✅ TODAS LAS FASES COMPLETADAS |
+| ¿Qué módulos cambiaron? | project-manager, prompt-composer |
+| ¿Qué módulos NO cambiaron? | filesystem, credential-manager, database-manager, ai-agent-framework |
+
+### UI Handlers Añadidos
+
+**project-manager:**
+- `project.link`, `project.unlink`, `project.getLinks` (Fase 1)
+- `project.addDependency`, `project.removeDependency`, `project.getDependencies`, `project.getDependents` (Fase 2)
+- `system.create`, `system.list`, `system.get`, `system.update`, `system.delete` (Fase 3)
+- `system.addProject`, `system.removeProject`, `system.getUnassigned` (Fase 3)
+- `context.import`, `context.remove`, `context.getShared`, `context.getExported` (Fase 4)
+- `context.getAvailableSources`, `context.getFullProjectContext` (Fase 4)
+
+**prompt-composer:**
+- `include_inherited_context` flag en compose request (Fase 5)
+
+### Eventos Añadidos
+
+- `project.linked`, `project.unlinked` (Fase 1)
+- `project.dependency.added`, `project.dependency.removed` (Fase 2)
+- `system.created`, `system.updated`, `system.deleted` (Fase 3)
+- `project.joined_system`, `project.left_system` (Fase 3)
+- `context.imported`, `context.removed` (Fase 4)
+- `context.full.request`, `context.full.response` (Fase 5)

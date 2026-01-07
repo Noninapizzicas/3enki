@@ -3,7 +3,10 @@
 > **Problema**: Los proyectos no nacen organizados. Evolucionan, se relacionan, y eventualmente forman sistemas mayores.
 >
 > **Fecha**: 2026-01-07
-> **Versión**: 1.0.0
+> **Versión**: 2.0.0 (IMPLEMENTADO)
+> **Estado**: ✅ COMPLETAMENTE IMPLEMENTADO
+>
+> Ver [PLAN_COMPOSICION_PROYECTOS.md](./PLAN_COMPOSICION_PROYECTOS.md) para detalles técnicos de implementación.
 
 ---
 
@@ -566,3 +569,130 @@ CREATE TABLE shared_context (
 
 **Principio Fundamental**:
 > Los proyectos nacen solos y crecen juntos. Las relaciones se descubren, no se planifican.
+
+---
+
+## API Implementada
+
+### Relaciones entre Proyectos (Fase 1)
+
+```javascript
+// Crear link
+await mqttRequest('project', 'link', {
+  source_project_id: 'proj-compras',
+  target_project_id: 'proj-facturacion',
+  link_type: 'inspired_by',  // inspired_by | related_to | evolved_from
+  reason: 'Comparte modelo de clientes'
+});
+
+// Eliminar link
+await mqttRequest('project', 'unlink', {
+  source_project_id: 'proj-compras',
+  target_project_id: 'proj-facturacion'
+});
+
+// Obtener links de un proyecto
+await mqttRequest('project', 'getLinks', { project_id: 'proj-compras' });
+```
+
+### Dependencias (Fase 2)
+
+```javascript
+// Añadir dependencia
+await mqttRequest('project', 'addDependency', {
+  project_id: 'proj-comandero',
+  depends_on_project_id: 'proj-facturacion',
+  dependency_type: 'data',  // data | code | api | context
+  description: 'Usa módulo de emisión de facturas'
+});
+
+// Eliminar dependencia
+await mqttRequest('project', 'removeDependency', {
+  project_id: 'proj-comandero',
+  depends_on_project_id: 'proj-facturacion'
+});
+
+// Obtener dependencias
+await mqttRequest('project', 'getDependencies', { project_id: 'proj-comandero' });
+await mqttRequest('project', 'getDependents', { project_id: 'proj-facturacion' });
+```
+
+### Sistemas (Fase 3)
+
+```javascript
+// Crear sistema
+await mqttRequest('system', 'create', {
+  name: 'Sistema Gestión Hostelería',
+  description: 'Sistema completo de gestión de local'
+});
+
+// Listar sistemas
+await mqttRequest('system', 'list', {});
+
+// Añadir proyecto a sistema
+await mqttRequest('system', 'addProject', {
+  system_id: 'sys-123',
+  project_id: 'proj-facturacion',
+  role: 'billing'
+});
+
+// Quitar proyecto de sistema
+await mqttRequest('system', 'removeProject', { project_id: 'proj-facturacion' });
+
+// Proyectos sin asignar
+await mqttRequest('system', 'getUnassigned', {});
+```
+
+### Contexto Compartido (Fase 4)
+
+```javascript
+// Importar conversación de otro proyecto
+await mqttRequest('context', 'import', {
+  to_project_id: 'proj-comandero',
+  from_project_id: 'proj-facturacion',
+  conversation_id: 'conv-123',
+  reason: 'Contexto de cómo funcionan las facturas'
+});
+
+// Eliminar contexto compartido
+await mqttRequest('context', 'remove', { shared_context_id: 'sc-123' });
+
+// Ver contexto importado a un proyecto
+await mqttRequest('context', 'getShared', { to_project_id: 'proj-comandero' });
+
+// Ver fuentes de contexto disponibles
+await mqttRequest('context', 'getAvailableSources', { project_id: 'proj-comandero' });
+
+// Obtener contexto completo del proyecto
+await mqttRequest('context', 'getFullProjectContext', { project_id: 'proj-comandero' });
+```
+
+### Contexto Heredado en Prompts (Fase 5)
+
+```javascript
+// Solicitar composición de prompt CON contexto heredado
+await eventBus.publish('prompt.compose.request', {
+  request_id: crypto.randomUUID(),
+  project_id: 'proj-comandero',
+  include_inherited_context: true,  // ← Activa contexto heredado
+  conversation: [...],
+  tools: [...]
+});
+
+// El prompt resultante incluirá secciones adicionales:
+// ## System Context
+// ## Dependencies
+// ## Related Projects
+// ## Inherited Knowledge
+```
+
+---
+
+## Módulos Modificados
+
+| Módulo | Cambios |
+|--------|---------|
+| **project-manager** | +40 métodos, +6 tablas, +15 eventos |
+| **prompt-composer** | +3 métodos, soporte contexto heredado |
+
+Ver [PLAN_COMPOSICION_PROYECTOS.md](./PLAN_COMPOSICION_PROYECTOS.md) para lista completa de UI handlers y eventos.

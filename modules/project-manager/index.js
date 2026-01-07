@@ -216,9 +216,14 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'restoreSession', this.handleUIRestoreSession.bind(this));
       this.uiHandler.register('project', 'setAIConfig', this.handleUISetAIConfig.bind(this));
       this.uiHandler.register('project', 'setLastConversation', this.handleUISetLastConversation.bind(this));
+      // Project Composition handlers (Phase 1)
+      this.uiHandler.register('project', 'link', this.handleUILink.bind(this));
+      this.uiHandler.register('project', 'unlink', this.handleUIUnlink.bind(this));
+      this.uiHandler.register('project', 'getLinks', this.handleUIGetLinks.bind(this));
+      this.uiHandler.register('project', 'getRelated', this.handleUIGetRelated.bind(this));
 
       this.logger.info('project-manager.ui_handlers.registered', {
-        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation']
+        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation', 'link', 'unlink', 'getLinks', 'getRelated']
       });
     }
 
@@ -243,6 +248,11 @@ class ProjectManagerModule {
       this.uiHandler.unregister('project', 'restoreSession');
       this.uiHandler.unregister('project', 'setAIConfig');
       this.uiHandler.unregister('project', 'setLastConversation');
+      // Project Composition handlers (Phase 1)
+      this.uiHandler.unregister('project', 'link');
+      this.uiHandler.unregister('project', 'unlink');
+      this.uiHandler.unregister('project', 'getLinks');
+      this.uiHandler.unregister('project', 'getRelated');
     }
 
     // Unsubscribe all eventBus subscriptions
@@ -1044,6 +1054,203 @@ class ProjectManagerModule {
     return this.activeProjectId;
   }
 
+  // ==================== PROJECT COMPOSITION (PHASE 1) ====================
+
+  /**
+   * Create a link between two projects
+   * @param {string} sourceProjectId - Source project ID
+   * @param {string} targetProjectId - Target project ID
+   * @param {string} linkType - Type: 'inspired_by' | 'related_to' | 'evolved_from'
+   * @param {string} reason - Reason for the link
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async linkProjects(sourceProjectId, targetProjectId, linkType, reason, correlationId) {
+    this.logger.info({ correlationId, sourceProjectId, targetProjectId, linkType }, 'Linking projects');
+
+    // Validate projects exist
+    const sourceProject = this.projects.get(sourceProjectId);
+    const targetProject = this.projects.get(targetProjectId);
+
+    if (!sourceProject) {
+      throw new Error(`Source project not found: ${sourceProjectId}`);
+    }
+    if (!targetProject) {
+      throw new Error(`Target project not found: ${targetProjectId}`);
+    }
+    if (sourceProjectId === targetProjectId) {
+      throw new Error('Cannot link a project to itself');
+    }
+
+    // Check if link already exists
+    const existingLinks = await this.queryDatabase(
+      `SELECT id FROM project_links
+       WHERE source_project_id = ? AND target_project_id = ? AND link_type = ?`,
+      [sourceProjectId, targetProjectId, linkType],
+      true,
+      correlationId
+    );
+
+    if (existingLinks.length > 0) {
+      throw new Error(`Link already exists between these projects with type '${linkType}'`);
+    }
+
+    const linkId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await this.queryDatabase(`
+      INSERT INTO project_links (id, source_project_id, target_project_id, link_type, reason, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [linkId, sourceProjectId, targetProjectId, linkType, reason || null, now], false, correlationId);
+
+    // Emit event
+    await this.eventBus.publish('project.linked', {
+      link_id: linkId,
+      source_project_id: sourceProjectId,
+      source_project_name: sourceProject.name,
+      target_project_id: targetProjectId,
+      target_project_name: targetProject.name,
+      link_type: linkType,
+      reason,
+      created_at: now
+    });
+
+    this.logger.info({ correlationId, linkId, sourceProjectId, targetProjectId }, 'Projects linked successfully');
+
+    return {
+      id: linkId,
+      sourceProjectId,
+      targetProjectId,
+      linkType,
+      reason,
+      createdAt: now
+    };
+  }
+
+  /**
+   * Remove a link between projects
+   * @param {string} linkId - Link ID to remove
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async unlinkProjects(linkId, correlationId) {
+    this.logger.info({ correlationId, linkId }, 'Unlinking projects');
+
+    // Get link info before deleting
+    const links = await this.queryDatabase(
+      'SELECT * FROM project_links WHERE id = ?',
+      [linkId],
+      true,
+      correlationId
+    );
+
+    if (links.length === 0) {
+      throw new Error(`Link not found: ${linkId}`);
+    }
+
+    const link = links[0];
+
+    await this.queryDatabase(
+      'DELETE FROM project_links WHERE id = ?',
+      [linkId],
+      false,
+      correlationId
+    );
+
+    // Emit event
+    await this.eventBus.publish('project.unlinked', {
+      link_id: linkId,
+      source_project_id: link.source_project_id,
+      target_project_id: link.target_project_id,
+      link_type: link.link_type,
+      unlinked_at: new Date().toISOString()
+    });
+
+    this.logger.info({ correlationId, linkId }, 'Projects unlinked successfully');
+
+    return { success: true, linkId };
+  }
+
+  /**
+   * Get all links for a project (both as source and target)
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getProjectLinks(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting project links');
+
+    const links = await this.queryDatabase(`
+      SELECT
+        pl.*,
+        sp.name as source_project_name,
+        tp.name as target_project_name
+      FROM project_links pl
+      LEFT JOIN projects sp ON pl.source_project_id = sp.id
+      LEFT JOIN projects tp ON pl.target_project_id = tp.id
+      WHERE pl.source_project_id = ? OR pl.target_project_id = ?
+      ORDER BY pl.created_at DESC
+    `, [projectId, projectId], true, correlationId);
+
+    return links.map(link => ({
+      id: link.id,
+      sourceProjectId: link.source_project_id,
+      sourceProjectName: link.source_project_name,
+      targetProjectId: link.target_project_id,
+      targetProjectName: link.target_project_name,
+      linkType: link.link_type,
+      reason: link.reason,
+      createdAt: link.created_at,
+      direction: link.source_project_id === projectId ? 'outgoing' : 'incoming'
+    }));
+  }
+
+  /**
+   * Get related projects (projects connected via links)
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getRelatedProjects(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting related projects');
+
+    const links = await this.getProjectLinks(projectId, correlationId);
+
+    // Get unique related project IDs
+    const relatedIds = new Set();
+    for (const link of links) {
+      if (link.sourceProjectId !== projectId) {
+        relatedIds.add(link.sourceProjectId);
+      }
+      if (link.targetProjectId !== projectId) {
+        relatedIds.add(link.targetProjectId);
+      }
+    }
+
+    // Get full project info for related projects
+    const relatedProjects = [];
+    for (const relatedId of relatedIds) {
+      const project = this.projects.get(relatedId);
+      if (project) {
+        // Find the link(s) connecting to this project
+        const connectingLinks = links.filter(
+          l => l.sourceProjectId === relatedId || l.targetProjectId === relatedId
+        );
+
+        relatedProjects.push({
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          color: project.metadata?.color || 'blue',
+          icon: project.metadata?.icon || '📁',
+          links: connectingLinks.map(l => ({
+            linkType: l.linkType,
+            reason: l.reason,
+            direction: l.sourceProjectId === projectId ? 'outgoing' : 'incoming'
+          }))
+        });
+      }
+    }
+
+    return relatedProjects;
+  }
+
   // ==================== EVENT HANDLERS ====================
 
   /**
@@ -1479,6 +1686,110 @@ class ProjectManagerModule {
       activated: true,
       activeProjectId: id
     };
+  }
+
+  // ==================== UI COMPOSITION HANDLERS (Phase 1) ====================
+
+  /**
+   * UI Handler: Link two projects
+   * Request: mqttRequest('project', 'link', { sourceId, targetId, linkType, reason })
+   */
+  async handleUILink(data, request) {
+    const { sourceId, targetId, linkType, reason } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!sourceId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Source project ID is required' };
+    }
+    if (!targetId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Target project ID is required' };
+    }
+    if (!linkType) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Link type is required (inspired_by, related_to, evolved_from)' };
+    }
+
+    const validTypes = ['inspired_by', 'related_to', 'evolved_from'];
+    if (!validTypes.includes(linkType)) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: `Invalid link type. Must be one of: ${validTypes.join(', ')}` };
+    }
+
+    try {
+      const link = await this.linkProjects(sourceId, targetId, linkType, reason, correlationId);
+      return { linked: true, link };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      if (error.message.includes('already exists')) {
+        throw { status: 409, code: 'CONFLICT', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Unlink projects
+   * Request: mqttRequest('project', 'unlink', { linkId })
+   */
+  async handleUIUnlink(data, request) {
+    const { linkId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!linkId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Link ID is required' };
+    }
+
+    try {
+      await this.unlinkProjects(linkId, correlationId);
+      return { unlinked: true, linkId };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get all links for a project
+   * Request: mqttRequest('project', 'getLinks', { id })
+   */
+  async handleUIGetLinks(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(id);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const links = await this.getProjectLinks(id, correlationId);
+    return { projectId: id, links, count: links.length };
+  }
+
+  /**
+   * UI Handler: Get related projects
+   * Request: mqttRequest('project', 'getRelated', { id })
+   */
+  async handleUIGetRelated(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(id);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const relatedProjects = await this.getRelatedProjects(id, correlationId);
+    return { projectId: id, relatedProjects, count: relatedProjects.length };
   }
 
   // ==================== UI SESSION & AI CONFIG HANDLERS ====================

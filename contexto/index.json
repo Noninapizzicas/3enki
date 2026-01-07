@@ -60,6 +60,11 @@
       "file": "refactor-plop.json",
       "purpose": "Análisis de templates Plop vs estándar",
       "when": "Trabajar en generadores plop, crear nuevos templates, corregir templates existentes"
+    },
+    {
+      "file": "project-composition.json",
+      "purpose": "Sistema de composición progresiva de proyectos (links, dependencias, sistemas, contexto compartido)",
+      "when": "Trabajar con relaciones entre proyectos, sistemas, contexto heredado, project-manager v2.0"
     }
   ],
 

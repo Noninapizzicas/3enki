@@ -70,6 +70,8 @@
     "ai-agent-framework",
     "ai-gateway",
     "calling-generator",
+    "chat-ai-bridge",
+    "chat-session",
     "conversation-manager",
     "credential-manager",
     "dashboard",
@@ -82,6 +84,7 @@
     "ocr-service",
     "plugin-manager",
     "project-manager",
+    "prompt-composer",
     "prompt-manager",
     "system-inspector",
     "telegram-service",
@@ -91,6 +94,14 @@
     "ai": {
       "description": "Módulos de inteligencia artificial",
       "modules": ["ai-gateway", "ai-agent-framework", "menu-generator", "calling-generator"]
+    },
+    "chat": {
+      "description": "Módulos del stack de chat/conversaciones",
+      "modules": ["chat-session", "chat-ai-bridge", "prompt-composer", "conversation-manager"]
+    },
+    "project": {
+      "description": "Módulos de gestión de proyectos y composición",
+      "modules": ["project-manager"]
     },
     "communication": {
       "description": "Módulos de comunicación externa",
@@ -204,6 +215,90 @@
         "GET /prompts - Listar prompts",
         "POST /prompts/:id/render - Renderizar con variables"
       ]
+    },
+    "project-manager": {
+      "version": "2.0.0",
+      "description": "Gestión de proyectos con composición progresiva (links, dependencias, sistemas, contexto compartido)",
+      "features": {
+        "core": "CRUD de proyectos, activación, sesiones, AI config",
+        "composition": {
+          "links": "Relacionar proyectos entre sí (inspired_by, related_to, evolved_from)",
+          "dependencies": "Declarar dependencias (data, code, api, context)",
+          "systems": "Agrupar proyectos en sistemas/contenedores lógicos",
+          "shared_context": "Compartir conversaciones entre proyectos",
+          "inherited_context": "Contexto automático para prompts AI"
+        }
+      },
+      "tables": ["projects", "systems", "project_links", "project_dependencies", "shared_context"],
+      "events": {
+        "publishes": [
+          "project.created", "project.updated", "project.deleted", "project.activated",
+          "project.linked", "project.unlinked",
+          "project.dependency.added", "project.dependency.removed",
+          "system.created", "system.updated", "system.deleted",
+          "project.joined_system", "project.left_system",
+          "context.imported", "context.removed",
+          "context.full.response"
+        ],
+        "subscribes": [
+          "project.get.request", "project.list.request", "project.active.request",
+          "context.full.request"
+        ]
+      },
+      "ui_handlers": {
+        "project": ["list", "get", "create", "update", "delete", "activate", "link", "unlink", "getLinks", "addDependency", "removeDependency", "getDependencies", "getDependents"],
+        "system": ["create", "list", "get", "update", "delete", "addProject", "removeProject", "getUnassigned"],
+        "context": ["import", "remove", "getShared", "getExported", "getAvailableSources", "getFullProjectContext"]
+      }
+    },
+    "prompt-composer": {
+      "version": "1.1.0",
+      "description": "Composición de system prompts con contexto heredado de proyectos",
+      "features": [
+        "Composición de system prompts con templates",
+        "Sustitución de variables {{variable}}",
+        "Contexto heredado automático de proyectos relacionados"
+      ],
+      "inherited_context_sections": [
+        "## System Context - sistema al que pertenece el proyecto",
+        "## Dependencies - proyectos de los que depende",
+        "## Related Projects - proyectos relacionados",
+        "## Inherited Knowledge - summaries de conversaciones importadas"
+      ],
+      "events": {
+        "publishes": ["prompt.compose.response", "context.full.request"],
+        "subscribes": ["prompt.compose.request", "context.full.response"]
+      },
+      "usage": {
+        "with_inherited_context": "eventBus.publish('prompt.compose.request', { project_id, include_inherited_context: true })"
+      }
+    },
+    "chat-session": {
+      "version": "1.0.0",
+      "description": "Persistencia CRUD de conversaciones y mensajes",
+      "responsibilities": [
+        "CRUD de conversaciones en SQLite",
+        "CRUD de mensajes",
+        "Context FIFO management",
+        "Schema management por proyecto"
+      ],
+      "events": {
+        "publishes": ["session.*.response", "conversation.created", "message.saved"],
+        "subscribes": ["session.*.request"]
+      }
+    },
+    "chat-ai-bridge": {
+      "version": "1.0.0",
+      "description": "Orquestador de flujo entre chat y ai-gateway",
+      "responsibilities": [
+        "Coordinar flujo: session → prompt → ai-gateway",
+        "Manejar respuesta y guardar mensaje",
+        "Flow state tracking con stages"
+      ],
+      "events": {
+        "publishes": ["chat.send.response", "ai.chat.request", "session.save.request", "prompt.compose.request"],
+        "subscribes": ["chat.send.request", "ai.chat.response", "session.save.response", "prompt.compose.response"]
+      }
     }
   },
   "integration_patterns": {
@@ -223,6 +318,30 @@
         "1. create_prompt con instrucciones del agente",
         "2. create_agent con prompt_id y subscribes",
         "3. Agente comienza a escuchar eventos"
+      ]
+    },
+    "project_composition": {
+      "description": "Configurar composición de proyectos para contexto heredado",
+      "flow": [
+        "1. Crear sistema: mqttRequest('system', 'create', { name, description })",
+        "2. Añadir proyectos: mqttRequest('system', 'addProject', { system_id, project_id, role })",
+        "3. Crear dependencias: mqttRequest('project', 'addDependency', { project_id, depends_on_project_id, type })",
+        "4. Importar contexto: mqttRequest('context', 'import', { to_project_id, from_project_id, conversation_id, reason })",
+        "5. Usar en prompts: eventBus.publish('prompt.compose.request', { project_id, include_inherited_context: true })"
+      ],
+      "result": "El AI recibe contexto automático de proyectos relacionados"
+    },
+    "chat_flow": {
+      "description": "Flujo de mensaje de chat con módulos refactorizados",
+      "flow": [
+        "1. conversation-manager recibe mqttRequest('conversation', 'send', { conversationId, content })",
+        "2. Publica chat.send.request → chat-ai-bridge",
+        "3. chat-ai-bridge guarda mensaje via session.save.request → chat-session",
+        "4. chat-ai-bridge solicita prompt.compose.request → prompt-composer",
+        "5. prompt-composer (si include_inherited_context) carga contexto via context.full.request → project-manager",
+        "6. chat-ai-bridge envía ai.chat.request → ai-gateway",
+        "7. ai-gateway responde con ai.chat.response",
+        "8. chat-ai-bridge guarda respuesta y publica chat.send.response"
       ]
     }
   }

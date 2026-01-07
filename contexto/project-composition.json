@@ -1,0 +1,247 @@
+{
+  "title": "Sistema de Composición Progresiva de Proyectos",
+  "version": "2.0.0",
+  "status": "implemented",
+  "implementation_date": "2026-01-07",
+  "modules_affected": ["project-manager", "prompt-composer"],
+
+  "concept": {
+    "summary": "Los proyectos nacen solos y crecen juntos. Las relaciones se descubren, no se planifican.",
+    "problem": "Los proyectos evolucionan, se relacionan, y eventualmente forman sistemas mayores. El modelo plano no captura estas relaciones.",
+    "solution": "Composición progresiva: links → dependencias → sistemas → contexto compartido → contexto automático"
+  },
+
+  "project_structure": {
+    "lineage": {
+      "description": "De dónde viene este proyecto",
+      "fields": {
+        "inspired_by": "array - Proyecto(s) que inspiraron o dieron origen",
+        "linked_at": "timestamp - Fecha de relación",
+        "link_reason": "string - Por qué se relacionaron"
+      }
+    },
+    "composition": {
+      "description": "A qué sistema mayor pertenece",
+      "fields": {
+        "system_id": "string - Sistema al que contribuye (nullable)",
+        "role": "string - Rol dentro del sistema (billing, purchasing, order-entry...)",
+        "joined_at": "timestamp - Desde cuándo forma parte"
+      }
+    },
+    "dependencies": {
+      "description": "Qué necesita de otros proyectos",
+      "fields": {
+        "project_id": "string - Proyecto del que depende",
+        "type": "data | code | api | context",
+        "description": "string - Descripción de la dependencia"
+      }
+    }
+  },
+
+  "database_schema": {
+    "tables": {
+      "systems": {
+        "description": "Contenedores lógicos de proyectos",
+        "columns": ["id", "name", "description", "created_at", "updated_at"]
+      },
+      "project_links": {
+        "description": "Relaciones entre proyectos",
+        "columns": ["id", "source_project_id", "target_project_id", "link_type", "reason", "created_at"],
+        "link_types": ["inspired_by", "related_to", "evolved_from"]
+      },
+      "project_dependencies": {
+        "description": "Dependencias explícitas",
+        "columns": ["id", "project_id", "depends_on_project_id", "dependency_type", "description", "created_at"],
+        "dependency_types": ["data", "code", "api", "context"]
+      },
+      "shared_context": {
+        "description": "Conversaciones compartidas entre proyectos",
+        "columns": ["id", "from_project_id", "to_project_id", "conversation_id", "reason", "imported_at"]
+      }
+    },
+    "columns_added_to_projects": ["system_id", "system_role"]
+  },
+
+  "api": {
+    "links": {
+      "description": "Relaciones entre proyectos (Fase 1)",
+      "handlers": {
+        "project.link": {
+          "params": "{ source_project_id, target_project_id, link_type, reason }",
+          "link_types": ["inspired_by", "related_to", "evolved_from"]
+        },
+        "project.unlink": {
+          "params": "{ source_project_id, target_project_id }"
+        },
+        "project.getLinks": {
+          "params": "{ project_id }",
+          "returns": "{ outgoing: [...], incoming: [...] }"
+        }
+      }
+    },
+    "dependencies": {
+      "description": "Dependencias explícitas (Fase 2)",
+      "handlers": {
+        "project.addDependency": {
+          "params": "{ project_id, depends_on_project_id, dependency_type, description }",
+          "dependency_types": ["data", "code", "api", "context"]
+        },
+        "project.removeDependency": {
+          "params": "{ project_id, depends_on_project_id }"
+        },
+        "project.getDependencies": {
+          "params": "{ project_id }",
+          "returns": "array - proyectos de los que depende"
+        },
+        "project.getDependents": {
+          "params": "{ project_id }",
+          "returns": "array - proyectos que dependen de este"
+        }
+      },
+      "validation": "No se puede borrar un proyecto si otros dependen de él"
+    },
+    "systems": {
+      "description": "Sistemas como contenedores (Fase 3)",
+      "handlers": {
+        "system.create": {
+          "params": "{ name, description }"
+        },
+        "system.list": {
+          "params": "{}",
+          "returns": "array - sistemas con sus proyectos"
+        },
+        "system.get": {
+          "params": "{ system_id }",
+          "returns": "sistema con array de proyectos"
+        },
+        "system.update": {
+          "params": "{ system_id, name?, description? }"
+        },
+        "system.delete": {
+          "params": "{ system_id }",
+          "note": "Solo si no tiene proyectos asignados"
+        },
+        "system.addProject": {
+          "params": "{ system_id, project_id, role }"
+        },
+        "system.removeProject": {
+          "params": "{ project_id }"
+        },
+        "system.getUnassigned": {
+          "params": "{}",
+          "returns": "array - proyectos sin sistema"
+        }
+      }
+    },
+    "context": {
+      "description": "Contexto compartido (Fase 4)",
+      "handlers": {
+        "context.import": {
+          "params": "{ to_project_id, from_project_id, conversation_id, reason }",
+          "description": "Importar conversación de otro proyecto"
+        },
+        "context.remove": {
+          "params": "{ shared_context_id }"
+        },
+        "context.getShared": {
+          "params": "{ to_project_id }",
+          "returns": "array - contexto importado a este proyecto"
+        },
+        "context.getExported": {
+          "params": "{ from_project_id }",
+          "returns": "array - contexto exportado desde este proyecto"
+        },
+        "context.getAvailableSources": {
+          "params": "{ project_id }",
+          "returns": "array - conversaciones de proyectos relacionados disponibles para importar"
+        },
+        "context.getFullProjectContext": {
+          "params": "{ project_id }",
+          "returns": "{ system, dependencies, related_projects, inherited_context }"
+        }
+      }
+    },
+    "inherited_context_in_prompts": {
+      "description": "Contexto automático para AI (Fase 5)",
+      "usage": "eventBus.publish('prompt.compose.request', { project_id, include_inherited_context: true })",
+      "sections_added_to_prompt": [
+        "## System Context - sistema al que pertenece",
+        "## Dependencies - proyectos de los que depende",
+        "## Related Projects - proyectos relacionados",
+        "## Inherited Knowledge - summaries de conversaciones importadas"
+      ],
+      "template_variables": ["{{system_name}}", "{{related_projects_count}}", "{{inherited_context_count}}"]
+    }
+  },
+
+  "events": {
+    "phase_1": ["project.linked", "project.unlinked"],
+    "phase_2": ["project.dependency.added", "project.dependency.removed"],
+    "phase_3": ["system.created", "system.updated", "system.deleted", "project.joined_system", "project.left_system"],
+    "phase_4": ["context.imported", "context.removed"],
+    "phase_5": ["context.full.request", "context.full.response"]
+  },
+
+  "example_usage": {
+    "setup_hospitality_system": {
+      "description": "Configurar sistema de hostelería con 4 proyectos",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Crear sistema",
+          "code": "await mqttRequest('system', 'create', { name: 'Sistema Gestión Hostelería', description: 'Sistema completo' })"
+        },
+        {
+          "step": 2,
+          "action": "Añadir proyectos con roles",
+          "code": [
+            "await mqttRequest('system', 'addProject', { system_id, project_id: 'proj-facturacion', role: 'billing' })",
+            "await mqttRequest('system', 'addProject', { system_id, project_id: 'proj-compras', role: 'purchasing' })",
+            "await mqttRequest('system', 'addProject', { system_id, project_id: 'proj-comandero', role: 'order-entry' })",
+            "await mqttRequest('system', 'addProject', { system_id, project_id: 'proj-cocina', role: 'kitchen' })"
+          ]
+        },
+        {
+          "step": 3,
+          "action": "Declarar dependencias",
+          "code": [
+            "await mqttRequest('project', 'addDependency', { project_id: 'proj-comandero', depends_on_project_id: 'proj-facturacion', type: 'data', description: 'Genera facturas' })",
+            "await mqttRequest('project', 'addDependency', { project_id: 'proj-comandero', depends_on_project_id: 'proj-compras', type: 'data', description: 'Descuenta stock' })",
+            "await mqttRequest('project', 'addDependency', { project_id: 'proj-cocina', depends_on_project_id: 'proj-comandero', type: 'api', description: 'Recibe tickets' })"
+          ]
+        },
+        {
+          "step": 4,
+          "action": "Importar contexto relevante",
+          "code": "await mqttRequest('context', 'import', { to_project_id: 'proj-comandero', from_project_id: 'proj-facturacion', conversation_id: 'conv-034', reason: 'Contexto de emisión de facturas' })"
+        },
+        {
+          "step": 5,
+          "action": "Usar contexto heredado en AI",
+          "code": "await eventBus.publish('prompt.compose.request', { project_id: 'proj-comandero', include_inherited_context: true })"
+        }
+      ]
+    }
+  },
+
+  "compatibility": {
+    "backwards_compatible": true,
+    "notes": [
+      "Proyectos existentes funcionan sin cambios (campos nuevos = null)",
+      "API existente sin cambios (endpoints nuevos son adicionales)",
+      "Eventos existentes sin cambios (eventos nuevos son adicionales)",
+      "Contexto extra es ADITIVO, no cambia comportamiento base"
+    ]
+  },
+
+  "related_files": {
+    "documentation": [
+      "docs/ARQUITECTURA_COMPOSICION_PROYECTOS.md",
+      "docs/PLAN_COMPOSICION_PROYECTOS.md"
+    ],
+    "implementation": [
+      "modules/project-manager/index.js",
+      "modules/prompt-composer/index.js"
+    ]
+  }
+}

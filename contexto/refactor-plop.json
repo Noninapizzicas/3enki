@@ -1,8 +1,9 @@
 {
   "title": "Análisis y Refactorización de Templates Plop",
-  "version": "1.0.0",
-  "status": "analysis",
+  "version": "1.1.0",
+  "status": "in_progress",
   "created": "2026-01-07",
+  "updated": "2026-01-07",
   "plopfile_location": "plopfile.js",
   "templates_location": "plop-templates/",
   "standard_reference": "contexto/modules.json",
@@ -11,7 +12,9 @@
     "total_templates": 6,
     "compliant": 1,
     "needs_update": 4,
-    "deprecated": 1
+    "deprecated": 1,
+    "reference_modules_created": 2,
+    "patterns_documented": 12
   },
   "generators_analysis": {
     "module": {
@@ -345,8 +348,8 @@
     ]
   },
   "learned_patterns": {
-    "source": "modules/chat-session (creado como referencia)",
-    "description": "Patrones extraídos de implementación real para mejorar templates",
+    "source": "modules/chat-session, modules/prompt-composer",
+    "description": "Patrones extraídos de implementaciones reales para mejorar templates",
     "handler_naming_conventions": {
       "ui_handlers": "handleUI{Action} - ej: handleUICreate, handleUIList, handleUIDelete",
       "http_handlers": "handle{Action} - ej: handleCreateConversation, handleGetMessages",
@@ -396,16 +399,78 @@
       "handler_naming": "tool{ActionName} (ej: toolListConversations)",
       "return_format": "{ success: boolean, data?, error? }",
       "parameters_schema": "JSON Schema object with properties and required"
+    },
+    "service_module_pattern": {
+      "source": "prompt-composer",
+      "description": "Módulo de servicio sin persistencia propia que coordina con otros módulos",
+      "characteristics": [
+        "No tiene SQLite ni persistencia directa",
+        "Usa eventos para obtener datos de otros módulos",
+        "Expone misma funcionalidad via múltiples interfaces (UI, HTTP, Events, Tools)",
+        "Incluye templates o configuración por defecto en memoria"
+      ],
+      "example_flow": [
+        "1. Recibe request via cualquier interfaz",
+        "2. Solicita contexto a otros módulos via eventos",
+        "3. Procesa/transforma los datos",
+        "4. Devuelve resultado"
+      ]
+    },
+    "template_substitution_pattern": {
+      "source": "prompt-composer",
+      "description": "Sustitución de variables en strings con sintaxis Handlebars-like",
+      "simple_variable": "{{variable_name}} → valor",
+      "conditional_block": "{{#if variable}}content{{/if}} → content si truthy",
+      "implementation": "substituteVariables(template, variables) method"
+    },
+    "graceful_degradation_pattern": {
+      "source": "prompt-composer",
+      "description": "Devolver valores por defecto en lugar de fallar cuando falta contexto",
+      "example": {
+        "missing_project": "return { project_name: 'Unknown Project', ... }",
+        "timeout_storage": "resolve(null) en lugar de reject()"
+      },
+      "benefit": "Módulos pueden funcionar parcialmente sin todas las dependencias"
+    },
+    "multi_interface_consistency": {
+      "source": "prompt-composer",
+      "description": "Misma funcionalidad expuesta en múltiples interfaces",
+      "interfaces": {
+        "event": "prompt.compose.request → onComposeRequest()",
+        "ui_handler": "mqttRequest('prompt', 'compose') → handleUICompose()",
+        "http_api": "POST /compose → handleComposePrompt()",
+        "tool": "prompt.compose → toolComposePrompt()"
+      },
+      "pattern": "Todas las interfaces llaman a los mismos métodos core internos"
     }
   },
-  "reference_module": {
-    "path": "modules/chat-session/",
-    "files": {
-      "index.js": "1100 líneas - Implementación completa con todos los patrones",
-      "module.json": "Con tools[], events, apis en formato correcto",
-      "schemas/events.json": "Schemas de eventos publicados"
+  "reference_modules": {
+    "chat-session": {
+      "path": "modules/chat-session/",
+      "type": "Módulo con persistencia SQLite",
+      "files": {
+        "index.js": "1100 líneas - CRUD completo, context FIFO",
+        "module.json": "Con tools[], events, apis en formato correcto",
+        "schemas/events.json": "Schemas de eventos publicados"
+      },
+      "use_as": "Referencia para módulos con persistencia y gestión de datos"
     },
-    "use_as": "Referencia para crear nuevos templates Plop"
+    "prompt-composer": {
+      "path": "modules/prompt-composer/",
+      "type": "Módulo de servicio sin persistencia",
+      "files": {
+        "index.js": "~600 líneas - Composición de prompts, templates",
+        "module.json": "Con tools[], multiple interfaces"
+      },
+      "patterns_demonstrated": [
+        "Service module sin SQLite",
+        "Template substitution con {{variables}}",
+        "Multi-interface consistency",
+        "Graceful degradation",
+        "In-memory templates/config"
+      ],
+      "use_as": "Referencia para módulos de transformación/coordinación"
+    }
   },
   "action_items": [
     {

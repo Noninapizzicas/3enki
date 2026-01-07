@@ -235,10 +235,18 @@ class ProjectManagerModule {
       this.uiHandler.register('system', 'addProject', this.handleUISystemAddProject.bind(this));
       this.uiHandler.register('system', 'removeProject', this.handleUISystemRemoveProject.bind(this));
       this.uiHandler.register('system', 'getUnassigned', this.handleUISystemGetUnassigned.bind(this));
+      // Context handlers (Phase 4)
+      this.uiHandler.register('context', 'import', this.handleUIContextImport.bind(this));
+      this.uiHandler.register('context', 'remove', this.handleUIContextRemove.bind(this));
+      this.uiHandler.register('context', 'getShared', this.handleUIContextGetShared.bind(this));
+      this.uiHandler.register('context', 'getExported', this.handleUIContextGetExported.bind(this));
+      this.uiHandler.register('context', 'getSources', this.handleUIContextGetSources.bind(this));
+      this.uiHandler.register('context', 'getFull', this.handleUIContextGetFull.bind(this));
 
       this.logger.info('project-manager.ui_handlers.registered', {
         projectHandlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation', 'link', 'unlink', 'getLinks', 'getRelated', 'addDependency', 'removeDependency', 'getDependencies', 'getDependents'],
-        systemHandlers: ['create', 'list', 'get', 'update', 'delete', 'addProject', 'removeProject', 'getUnassigned']
+        systemHandlers: ['create', 'list', 'get', 'update', 'delete', 'addProject', 'removeProject', 'getUnassigned'],
+        contextHandlers: ['import', 'remove', 'getShared', 'getExported', 'getSources', 'getFull']
       });
     }
 
@@ -282,6 +290,13 @@ class ProjectManagerModule {
       this.uiHandler.unregister('system', 'addProject');
       this.uiHandler.unregister('system', 'removeProject');
       this.uiHandler.unregister('system', 'getUnassigned');
+      // Context handlers (Phase 4)
+      this.uiHandler.unregister('context', 'import');
+      this.uiHandler.unregister('context', 'remove');
+      this.uiHandler.unregister('context', 'getShared');
+      this.uiHandler.unregister('context', 'getExported');
+      this.uiHandler.unregister('context', 'getSources');
+      this.uiHandler.unregister('context', 'getFull');
     }
 
     // Unsubscribe all eventBus subscriptions
@@ -1853,6 +1868,343 @@ class ProjectManagerModule {
       }));
   }
 
+  // ==================== SHARED CONTEXT (PHASE 4) ====================
+
+  /**
+   * Import a conversation from one project to another (share context)
+   * @param {string} toProjectId - Project receiving the context
+   * @param {string} fromProjectId - Project sharing the context
+   * @param {string} conversationId - Conversation ID to share
+   * @param {string} reason - Reason for sharing
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async importContext(toProjectId, fromProjectId, conversationId, reason, correlationId) {
+    this.logger.info({ correlationId, toProjectId, fromProjectId, conversationId }, 'Importing context');
+
+    // Validate projects exist
+    const toProject = this.projects.get(toProjectId);
+    const fromProject = this.projects.get(fromProjectId);
+
+    if (!toProject) {
+      throw new Error(`Target project not found: ${toProjectId}`);
+    }
+    if (!fromProject) {
+      throw new Error(`Source project not found: ${fromProjectId}`);
+    }
+    if (toProjectId === fromProjectId) {
+      throw new Error('Cannot import context from same project');
+    }
+
+    // Check if already imported
+    const existing = await this.queryDatabase(
+      `SELECT id FROM shared_context
+       WHERE to_project_id = ? AND from_project_id = ? AND conversation_id = ?`,
+      [toProjectId, fromProjectId, conversationId],
+      true,
+      correlationId
+    );
+
+    if (existing.length > 0) {
+      throw new Error('This conversation is already shared with this project');
+    }
+
+    const shareId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await this.queryDatabase(`
+      INSERT INTO shared_context (id, from_project_id, to_project_id, conversation_id, reason, imported_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [shareId, fromProjectId, toProjectId, conversationId, reason || null, now], false, correlationId);
+
+    // Emit event
+    await this.eventBus.publish('context.imported', {
+      share_id: shareId,
+      from_project_id: fromProjectId,
+      from_project_name: fromProject.name,
+      to_project_id: toProjectId,
+      to_project_name: toProject.name,
+      conversation_id: conversationId,
+      reason,
+      imported_at: now
+    });
+
+    this.logger.info({ correlationId, shareId, toProjectId, fromProjectId }, 'Context imported successfully');
+
+    return {
+      id: shareId,
+      fromProjectId,
+      fromProjectName: fromProject.name,
+      toProjectId,
+      toProjectName: toProject.name,
+      conversationId,
+      reason,
+      importedAt: now
+    };
+  }
+
+  /**
+   * Remove shared context
+   * @param {string} shareId - Shared context ID to remove
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async removeSharedContext(shareId, correlationId) {
+    this.logger.info({ correlationId, shareId }, 'Removing shared context');
+
+    // Get share info before deleting
+    const shares = await this.queryDatabase(
+      'SELECT * FROM shared_context WHERE id = ?',
+      [shareId],
+      true,
+      correlationId
+    );
+
+    if (shares.length === 0) {
+      throw new Error(`Shared context not found: ${shareId}`);
+    }
+
+    const share = shares[0];
+
+    await this.queryDatabase(
+      'DELETE FROM shared_context WHERE id = ?',
+      [shareId],
+      false,
+      correlationId
+    );
+
+    // Emit event
+    await this.eventBus.publish('context.removed', {
+      share_id: shareId,
+      from_project_id: share.from_project_id,
+      to_project_id: share.to_project_id,
+      conversation_id: share.conversation_id,
+      removed_at: new Date().toISOString()
+    });
+
+    this.logger.info({ correlationId, shareId }, 'Shared context removed successfully');
+
+    return { success: true, shareId };
+  }
+
+  /**
+   * Get all shared context for a project (imported from other projects)
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getSharedContext(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting shared context');
+
+    const shares = await this.queryDatabase(`
+      SELECT
+        sc.*,
+        p.name as from_project_name,
+        p.description as from_project_description
+      FROM shared_context sc
+      LEFT JOIN projects p ON sc.from_project_id = p.id
+      WHERE sc.to_project_id = ?
+      ORDER BY sc.imported_at DESC
+    `, [projectId], true, correlationId);
+
+    return shares.map(share => ({
+      id: share.id,
+      fromProjectId: share.from_project_id,
+      fromProjectName: share.from_project_name,
+      fromProjectDescription: share.from_project_description,
+      toProjectId: share.to_project_id,
+      conversationId: share.conversation_id,
+      reason: share.reason,
+      importedAt: share.imported_at
+    }));
+  }
+
+  /**
+   * Get context that this project has shared with others
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getExportedContext(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting exported context');
+
+    const shares = await this.queryDatabase(`
+      SELECT
+        sc.*,
+        p.name as to_project_name,
+        p.description as to_project_description
+      FROM shared_context sc
+      LEFT JOIN projects p ON sc.to_project_id = p.id
+      WHERE sc.from_project_id = ?
+      ORDER BY sc.imported_at DESC
+    `, [projectId], true, correlationId);
+
+    return shares.map(share => ({
+      id: share.id,
+      fromProjectId: share.from_project_id,
+      toProjectId: share.to_project_id,
+      toProjectName: share.to_project_name,
+      toProjectDescription: share.to_project_description,
+      conversationId: share.conversation_id,
+      reason: share.reason,
+      importedAt: share.imported_at
+    }));
+  }
+
+  /**
+   * Get available context for a project (own + from related projects via links/dependencies)
+   * This is used to show what conversations CAN be imported
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getAvailableContextSources(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting available context sources');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    // Get related projects (via links)
+    const relatedProjects = await this.getRelatedProjects(projectId, correlationId);
+
+    // Get dependencies (projects this one depends on)
+    const dependencies = await this.getDependencies(projectId, correlationId);
+
+    // Get projects in the same system
+    let systemProjects = [];
+    if (project.system_id) {
+      const system = await this.getSystem(project.system_id, correlationId);
+      if (system) {
+        systemProjects = system.projects
+          .filter(p => p.id !== projectId)
+          .map(p => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            role: p.role,
+            source: 'system',
+            systemName: system.name
+          }));
+      }
+    }
+
+    // Get already imported context
+    const alreadyImported = await this.getSharedContext(projectId, correlationId);
+    const importedMap = new Map(alreadyImported.map(s => [s.fromProjectId, s]));
+
+    // Combine sources (avoid duplicates)
+    const sourceMap = new Map();
+
+    // Add related projects
+    for (const rel of relatedProjects) {
+      if (!sourceMap.has(rel.id)) {
+        sourceMap.set(rel.id, {
+          id: rel.id,
+          name: rel.name,
+          description: rel.description,
+          source: 'link',
+          linkType: rel.links?.[0]?.linkType,
+          hasImportedContext: importedMap.has(rel.id)
+        });
+      }
+    }
+
+    // Add dependencies
+    for (const dep of dependencies) {
+      if (!sourceMap.has(dep.dependsOnProjectId)) {
+        sourceMap.set(dep.dependsOnProjectId, {
+          id: dep.dependsOnProjectId,
+          name: dep.dependsOnProjectName,
+          description: dep.dependsOnProjectDescription,
+          source: 'dependency',
+          dependencyType: dep.dependencyType,
+          hasImportedContext: importedMap.has(dep.dependsOnProjectId)
+        });
+      }
+    }
+
+    // Add system projects
+    for (const sp of systemProjects) {
+      if (!sourceMap.has(sp.id)) {
+        sourceMap.set(sp.id, {
+          ...sp,
+          hasImportedContext: importedMap.has(sp.id)
+        });
+      }
+    }
+
+    return {
+      projectId,
+      projectName: project.name,
+      sources: Array.from(sourceMap.values()),
+      importedCount: alreadyImported.length
+    };
+  }
+
+  /**
+   * Get full context for a project (for AI/agent use)
+   * Returns own context + inherited context from shared sources
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getFullProjectContext(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting full project context');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    // Get shared context (imported from other projects)
+    const sharedContext = await this.getSharedContext(projectId, correlationId);
+
+    // Get dependencies
+    const dependencies = await this.getDependencies(projectId, correlationId);
+
+    // Get system info if applicable
+    let systemInfo = null;
+    if (project.system_id) {
+      const system = await this.getSystem(project.system_id, correlationId);
+      if (system) {
+        systemInfo = {
+          id: system.id,
+          name: system.name,
+          description: system.description,
+          role: project.system_role,
+          siblingProjects: system.projects
+            .filter(p => p.id !== projectId)
+            .map(p => ({ id: p.id, name: p.name, role: p.role }))
+        };
+      }
+    }
+
+    // Get related projects
+    const relatedProjects = await this.getRelatedProjects(projectId, correlationId);
+
+    return {
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description
+      },
+      system: systemInfo,
+      dependencies: dependencies.map(d => ({
+        projectId: d.dependsOnProjectId,
+        projectName: d.dependsOnProjectName,
+        type: d.dependencyType,
+        description: d.description
+      })),
+      relatedProjects: relatedProjects.map(r => ({
+        id: r.id,
+        name: r.name,
+        links: r.links
+      })),
+      sharedContext: sharedContext.map(s => ({
+        fromProject: s.fromProjectName,
+        conversationId: s.conversationId,
+        reason: s.reason
+      })),
+      inheritedContextCount: sharedContext.length
+    };
+  }
+
   // ==================== EVENT HANDLERS ====================
 
   /**
@@ -2682,6 +3034,162 @@ class ProjectManagerModule {
       const projects = await this.getUnassignedProjects(correlationId);
       return { projects, count: projects.length };
     } catch (error) {
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  // ==================== UI CONTEXT HANDLERS (Phase 4) ====================
+
+  /**
+   * UI Handler: Import context (share conversation from another project)
+   * Request: mqttRequest('context', 'import', { toProjectId, fromProjectId, conversationId, reason? })
+   */
+  async handleUIContextImport(data, request) {
+    const { toProjectId, fromProjectId, conversationId, reason } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!toProjectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Target project ID is required' };
+    }
+    if (!fromProjectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Source project ID is required' };
+    }
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Conversation ID is required' };
+    }
+
+    try {
+      const result = await this.importContext(toProjectId, fromProjectId, conversationId, reason, correlationId);
+      return { imported: true, ...result };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      if (error.message.includes('already shared')) {
+        throw { status: 409, code: 'CONFLICT', message: error.message };
+      }
+      if (error.message.includes('same project')) {
+        throw { status: 400, code: 'VALIDATION_ERROR', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Remove shared context
+   * Request: mqttRequest('context', 'remove', { shareId })
+   */
+  async handleUIContextRemove(data, request) {
+    const { shareId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!shareId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Share ID is required' };
+    }
+
+    try {
+      await this.removeSharedContext(shareId, correlationId);
+      return { removed: true, shareId };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get shared context for a project (imported from others)
+   * Request: mqttRequest('context', 'getShared', { projectId })
+   */
+  async handleUIContextGetShared(data, request) {
+    const { projectId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(projectId);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    try {
+      const sharedContext = await this.getSharedContext(projectId, correlationId);
+      return { projectId, sharedContext, count: sharedContext.length };
+    } catch (error) {
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get exported context (shared to other projects)
+   * Request: mqttRequest('context', 'getExported', { projectId })
+   */
+  async handleUIContextGetExported(data, request) {
+    const { projectId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(projectId);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    try {
+      const exportedContext = await this.getExportedContext(projectId, correlationId);
+      return { projectId, exportedContext, count: exportedContext.length };
+    } catch (error) {
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get available context sources (related projects that can share context)
+   * Request: mqttRequest('context', 'getSources', { projectId })
+   */
+  async handleUIContextGetSources(data, request) {
+    const { projectId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    try {
+      const result = await this.getAvailableContextSources(projectId, correlationId);
+      return result;
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get full project context (for AI/agent use)
+   * Request: mqttRequest('context', 'getFull', { projectId })
+   */
+  async handleUIContextGetFull(data, request) {
+    const { projectId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    try {
+      const fullContext = await this.getFullProjectContext(projectId, correlationId);
+      return fullContext;
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
       throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
     }
   }

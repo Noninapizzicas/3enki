@@ -1,0 +1,162 @@
+{
+  "name": "chat-session",
+  "version": "1.0.0",
+  "description": "Persistencia de conversaciones y mensajes con gestión de contexto FIFO",
+  "author": "Event Core Team",
+
+  "events": {
+    "publishes": [
+      "session.created",
+      "session.updated",
+      "session.deleted",
+      "session.message.saved"
+    ],
+    "subscribes": [
+      "session.create.request",
+      "session.list.request",
+      "session.get.request",
+      "session.update.request",
+      "session.delete.request",
+      "session.messages.request",
+      "session.save.request",
+      "session.context.toggle.request",
+      "session.context.stats.request",
+      "session.context.load.request"
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/conversations",
+      "handler": "handleCreateConversation",
+      "description": "Crear nueva conversación"
+    },
+    {
+      "method": "GET",
+      "path": "/conversations",
+      "handler": "handleListConversations",
+      "description": "Listar conversaciones de un proyecto"
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id",
+      "handler": "handleGetConversation",
+      "description": "Obtener conversación por ID"
+    },
+    {
+      "method": "PUT",
+      "path": "/conversations/:id",
+      "handler": "handleUpdateConversation",
+      "description": "Actualizar conversación"
+    },
+    {
+      "method": "DELETE",
+      "path": "/conversations/:id",
+      "handler": "handleDeleteConversation",
+      "description": "Eliminar conversación"
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id/messages",
+      "handler": "handleGetMessages",
+      "description": "Obtener mensajes de una conversación"
+    },
+    {
+      "method": "POST",
+      "path": "/conversations/:id/messages",
+      "handler": "handleSaveMessage",
+      "description": "Guardar mensaje en conversación"
+    },
+    {
+      "method": "GET",
+      "path": "/conversations/:id/context",
+      "handler": "handleGetContextStats",
+      "description": "Obtener estadísticas del contexto"
+    },
+    {
+      "method": "POST",
+      "path": "/messages/:id/toggle-context",
+      "handler": "handleToggleContext",
+      "description": "Activar/desactivar mensaje del contexto"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo"
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "session.list_conversations",
+      "description": "Listar todas las conversaciones de un proyecto",
+      "handler": "toolListConversations",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Límite de resultados",
+            "default": 20
+          }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "session.get_conversation",
+      "description": "Obtener detalles de una conversación",
+      "handler": "toolGetConversation",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "description": "ID de la conversación"
+          }
+        },
+        "required": ["conversation_id"]
+      }
+    },
+    {
+      "name": "session.get_messages",
+      "description": "Obtener mensajes de una conversación",
+      "handler": "toolGetMessages",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "description": "ID de la conversación"
+          },
+          "in_context_only": {
+            "type": "boolean",
+            "description": "Solo mensajes en contexto activo",
+            "default": false
+          }
+        },
+        "required": ["conversation_id"]
+      }
+    }
+  ],
+
+  "ui": {
+    "zone": "chat-config",
+    "icon": "💬"
+  },
+
+  "dependencies": [
+    "database-manager"
+  ],
+
+  "config": {
+    "contextWindow": 20,
+    "dbTimeout": 10000
+  }
+}

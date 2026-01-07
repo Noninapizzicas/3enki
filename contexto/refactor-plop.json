@@ -344,6 +344,69 @@
       "}"
     ]
   },
+  "learned_patterns": {
+    "source": "modules/chat-session (creado como referencia)",
+    "description": "Patrones extraídos de implementación real para mejorar templates",
+    "handler_naming_conventions": {
+      "ui_handlers": "handleUI{Action} - ej: handleUICreate, handleUIList, handleUIDelete",
+      "http_handlers": "handle{Action} - ej: handleCreateConversation, handleGetMessages",
+      "event_handlers": "on{Event}Request - ej: onCreateRequest, onSaveRequest",
+      "tool_handlers": "tool{Action} - ej: toolListConversations, toolGetMessages"
+    },
+    "module_structure": {
+      "sections_order": [
+        "1. constructor() - Estado inicial, Maps, Sets, pendingRequests",
+        "2. onLoad(context) - Inyección de dependencias",
+        "3. onUnload() - Cleanup con unsubscribe y clear",
+        "4. registerUIHandlers() - uiHandler.register('domain', 'action', handler)",
+        "5. subscribeToEvents() - eventBus.subscribe con tracking de unsubscribes",
+        "6. Helper methods - queryDatabase, etc",
+        "7. Core business logic - CRUD operations",
+        "8. Event handlers - on*Request methods",
+        "9. UI handlers - handleUI* methods",
+        "10. HTTP handlers - handle* methods",
+        "11. Tool handlers - tool* methods"
+      ]
+    },
+    "request_response_pattern": {
+      "description": "Patrón para comunicación async entre módulos",
+      "example": {
+        "request_event": "session.create.request",
+        "response_event": "session.create.response",
+        "payload": {
+          "request": "{ request_id, project_id, user_id, options, correlation_id }",
+          "response": "{ request_id, success, conversation?, error? }"
+        }
+      },
+      "pending_tracking": "Map<request_id, { resolve, reject, timeout }>"
+    },
+    "ui_handler_pattern": {
+      "registration": "this.uiHandler.register('domain', 'action', this.handler.bind(this))",
+      "handler_signature": "async handleUIAction(data, context)",
+      "return_format": "{ status: number, data?: any, error?: string }",
+      "unregistration": "this.uiHandler.unregister('domain', 'action')"
+    },
+    "event_subscription_pattern": {
+      "tracking": "this.unsubscribes = []",
+      "subscribe": "const unsub = await this.eventBus.subscribe('event', handler); this.unsubscribes.push(unsub)",
+      "cleanup": "for (const unsub of this.unsubscribes) { await unsub(); }"
+    },
+    "tools_for_ai": {
+      "naming": "module.action_name (ej: session.list_conversations)",
+      "handler_naming": "tool{ActionName} (ej: toolListConversations)",
+      "return_format": "{ success: boolean, data?, error? }",
+      "parameters_schema": "JSON Schema object with properties and required"
+    }
+  },
+  "reference_module": {
+    "path": "modules/chat-session/",
+    "files": {
+      "index.js": "1100 líneas - Implementación completa con todos los patrones",
+      "module.json": "Con tools[], events, apis en formato correcto",
+      "schemas/events.json": "Schemas de eventos publicados"
+    },
+    "use_as": "Referencia para crear nuevos templates Plop"
+  },
   "action_items": [
     {
       "priority": 1,

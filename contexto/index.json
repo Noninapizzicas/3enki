@@ -50,6 +50,11 @@
       "file": "ui-generator.json",
       "purpose": "Prompt: generate UI from backend modules",
       "when": "Task is to generate UI for a module"
+    },
+    {
+      "file": "chat-refactoring.json",
+      "purpose": "Plan de refactorización del sistema de chat",
+      "when": "Trabajar en conversation-manager, chat-session, chat-ai-bridge, prompt-composer"
     }
   ],
 

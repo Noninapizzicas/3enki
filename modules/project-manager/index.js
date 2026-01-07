@@ -338,12 +338,18 @@ class ProjectManagerModule {
           model TEXT,
           prompt_id TEXT,
           base_path TEXT,
-          session_state TEXT
+          session_state TEXT,
+          system_id TEXT,
+          system_role TEXT,
+          parent_project_id TEXT
         )
       `, [], false, correlationId);
 
-      // Note: All columns are now defined in CREATE TABLE above
-      // Legacy migration code removed - columns already exist in schema
+      // Migrate existing databases: add composition columns if missing
+      await this.migrateCompositionColumns(correlationId);
+
+      // Initialize composition tables (systems, links, dependencies, shared_context)
+      await this.initializeCompositionTables(correlationId);
 
       // Load all projects
       const rows = await this.queryDatabase(
@@ -362,13 +368,17 @@ class ProjectManagerModule {
           updated_at: row.updated_at,
           is_active: row.is_active === 1,
           metadata: row.metadata ? JSON.parse(row.metadata) : {},
-          // New session/config fields
+          // Session/config fields
           last_conversation_id: row.last_conversation_id || null,
           provider: row.provider || null,
           model: row.model || null,
           prompt_id: row.prompt_id || null,
           base_path: row.base_path || null,
-          session_state: row.session_state ? JSON.parse(row.session_state) : {}
+          session_state: row.session_state ? JSON.parse(row.session_state) : {},
+          // Composition fields (Fase 0)
+          system_id: row.system_id || null,
+          system_role: row.system_role || null,
+          parent_project_id: row.parent_project_id || null
         };
 
         this.projects.set(project.id, project);
@@ -387,6 +397,118 @@ class ProjectManagerModule {
     } catch (error) {
       this.logger.error({ correlationId, error: error.message }, 'Failed to load projects');
     }
+  }
+
+  /**
+   * Migrate existing databases: add composition columns if missing
+   * Safe to run multiple times - uses ALTER TABLE with error handling
+   */
+  async migrateCompositionColumns(correlationId) {
+    const columnsToAdd = [
+      { name: 'system_id', type: 'TEXT' },
+      { name: 'system_role', type: 'TEXT' },
+      { name: 'parent_project_id', type: 'TEXT' }
+    ];
+
+    for (const col of columnsToAdd) {
+      try {
+        await this.queryDatabase(
+          `ALTER TABLE projects ADD COLUMN ${col.name} ${col.type}`,
+          [], false, correlationId
+        );
+        this.logger.info({ correlationId, column: col.name }, 'Added composition column');
+      } catch (error) {
+        // Column already exists - this is expected for existing installations
+        if (!error.message?.includes('duplicate column')) {
+          this.logger.debug({ correlationId, column: col.name }, 'Composition column already exists');
+        }
+      }
+    }
+  }
+
+  /**
+   * Initialize composition tables for project relationships
+   * Creates: systems, project_links, project_dependencies, shared_context
+   */
+  async initializeCompositionTables(correlationId) {
+    this.logger.debug({ correlationId }, 'Initializing composition tables');
+
+    // Table: systems - Logical containers for related projects
+    await this.queryDatabase(`
+      CREATE TABLE IF NOT EXISTS systems (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        metadata TEXT
+      )
+    `, [], false, correlationId);
+
+    // Table: project_links - Relationships between projects
+    await this.queryDatabase(`
+      CREATE TABLE IF NOT EXISTS project_links (
+        id TEXT PRIMARY KEY,
+        source_project_id TEXT NOT NULL,
+        target_project_id TEXT NOT NULL,
+        link_type TEXT NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (source_project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `, [], false, correlationId);
+
+    // Table: project_dependencies - Explicit dependencies between projects
+    await this.queryDatabase(`
+      CREATE TABLE IF NOT EXISTS project_dependencies (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        depends_on_project_id TEXT NOT NULL,
+        dependency_type TEXT,
+        description TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (depends_on_project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `, [], false, correlationId);
+
+    // Table: shared_context - Conversations shared between projects
+    await this.queryDatabase(`
+      CREATE TABLE IF NOT EXISTS shared_context (
+        id TEXT PRIMARY KEY,
+        from_project_id TEXT NOT NULL,
+        to_project_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        reason TEXT,
+        imported_at TEXT NOT NULL,
+        FOREIGN KEY (from_project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (to_project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `, [], false, correlationId);
+
+    // Create indexes for performance
+    const indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_projects_system ON projects(system_id)',
+      'CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)',
+      'CREATE INDEX IF NOT EXISTS idx_links_source ON project_links(source_project_id)',
+      'CREATE INDEX IF NOT EXISTS idx_links_target ON project_links(target_project_id)',
+      'CREATE INDEX IF NOT EXISTS idx_deps_project ON project_dependencies(project_id)',
+      'CREATE INDEX IF NOT EXISTS idx_deps_depends ON project_dependencies(depends_on_project_id)',
+      'CREATE INDEX IF NOT EXISTS idx_shared_from ON shared_context(from_project_id)',
+      'CREATE INDEX IF NOT EXISTS idx_shared_to ON shared_context(to_project_id)'
+    ];
+
+    for (const indexSql of indexes) {
+      try {
+        await this.queryDatabase(indexSql, [], false, correlationId);
+      } catch (error) {
+        // Index might already exist - not a problem
+        this.logger.debug({ correlationId, error: error.message }, 'Index creation skipped');
+      }
+    }
+
+    this.logger.info({ correlationId }, 'Composition tables initialized');
   }
 
   // ==================== PROJECT CRUD ====================
@@ -1002,7 +1124,11 @@ class ProjectManagerModule {
       workspaceType: p.metadata?.workspaceType || 'general',
       isActive: p.is_active === true || p.is_active === 1,
       createdAt: p.created_at,
-      updatedAt: p.updated_at
+      updatedAt: p.updated_at,
+      // Composition fields (Fase 0)
+      systemId: p.system_id || null,
+      systemRole: p.system_role || null,
+      parentProjectId: p.parent_project_id || null
     }));
 
     const state = {
@@ -1166,7 +1292,11 @@ class ProjectManagerModule {
       workspaceType: p.metadata?.workspaceType || 'general',
       isActive: p.is_active === true || p.is_active === 1,
       createdAt: p.created_at,
-      updatedAt: p.updated_at
+      updatedAt: p.updated_at,
+      // Composition fields (Fase 0)
+      systemId: p.system_id || null,
+      systemRole: p.system_role || null,
+      parentProjectId: p.parent_project_id || null
     }));
 
     return {
@@ -1202,7 +1332,11 @@ class ProjectManagerModule {
         workspaceType: project.metadata?.workspaceType || 'general',
         isActive: project.is_active === true || project.is_active === 1,
         createdAt: project.created_at,
-        updatedAt: project.updated_at
+        updatedAt: project.updated_at,
+        // Composition fields (Fase 0)
+        systemId: project.system_id || null,
+        systemRole: project.system_role || null,
+        parentProjectId: project.parent_project_id || null
       }
     };
   }
@@ -1240,7 +1374,11 @@ class ProjectManagerModule {
         workspaceType: project.metadata?.workspaceType || 'general',
         isActive: project.is_active === true || project.is_active === 1,
         createdAt: project.created_at,
-        updatedAt: project.updated_at
+        updatedAt: project.updated_at,
+        // Composition fields (Fase 0)
+        systemId: project.system_id || null,
+        systemRole: project.system_role || null,
+        parentProjectId: project.parent_project_id || null
       },
       created: true
     };
@@ -1286,7 +1424,11 @@ class ProjectManagerModule {
         workspaceType: project.metadata?.workspaceType || 'general',
         isActive: project.is_active === true || project.is_active === 1,
         createdAt: project.created_at,
-        updatedAt: project.updated_at
+        updatedAt: project.updated_at,
+        // Composition fields (Fase 0)
+        systemId: project.system_id || null,
+        systemRole: project.system_role || null,
+        parentProjectId: project.parent_project_id || null
       },
       updated: true
     };

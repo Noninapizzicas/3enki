@@ -221,9 +221,14 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'unlink', this.handleUIUnlink.bind(this));
       this.uiHandler.register('project', 'getLinks', this.handleUIGetLinks.bind(this));
       this.uiHandler.register('project', 'getRelated', this.handleUIGetRelated.bind(this));
+      // Project Dependencies handlers (Phase 2)
+      this.uiHandler.register('project', 'addDependency', this.handleUIAddDependency.bind(this));
+      this.uiHandler.register('project', 'removeDependency', this.handleUIRemoveDependency.bind(this));
+      this.uiHandler.register('project', 'getDependencies', this.handleUIGetDependencies.bind(this));
+      this.uiHandler.register('project', 'getDependents', this.handleUIGetDependents.bind(this));
 
       this.logger.info('project-manager.ui_handlers.registered', {
-        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation', 'link', 'unlink', 'getLinks', 'getRelated']
+        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation', 'link', 'unlink', 'getLinks', 'getRelated', 'addDependency', 'removeDependency', 'getDependencies', 'getDependents']
       });
     }
 
@@ -253,6 +258,11 @@ class ProjectManagerModule {
       this.uiHandler.unregister('project', 'unlink');
       this.uiHandler.unregister('project', 'getLinks');
       this.uiHandler.unregister('project', 'getRelated');
+      // Project Dependencies handlers (Phase 2)
+      this.uiHandler.unregister('project', 'addDependency');
+      this.uiHandler.unregister('project', 'removeDependency');
+      this.uiHandler.unregister('project', 'getDependencies');
+      this.uiHandler.unregister('project', 'getDependents');
     }
 
     // Unsubscribe all eventBus subscriptions
@@ -725,8 +735,11 @@ class ProjectManagerModule {
 
   /**
    * Delete project
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   * @param {object} options - Optional: { force: boolean } - Force delete even with dependents
    */
-  async deleteProject(projectId, correlationId) {
+  async deleteProject(projectId, correlationId, options = {}) {
     this.logger.info({ correlationId, projectId }, 'Deleting project');
 
     const project = this.projects.get(projectId);
@@ -737,6 +750,16 @@ class ProjectManagerModule {
     // Cannot delete active project
     if (project.is_active) {
       throw new Error('Cannot delete active project. Deactivate first.');
+    }
+
+    // Check for dependents (Phase 2)
+    const dependentsInfo = await this.hasDependents(projectId, correlationId);
+    if (dependentsInfo.hasDependents && !options.force) {
+      const dependentNames = dependentsInfo.dependents.map(d => d.name).join(', ');
+      const error = new Error(`Cannot delete project: ${dependentsInfo.count} project(s) depend on it: ${dependentNames}. Use force=true to delete anyway.`);
+      error.code = 'HAS_DEPENDENTS';
+      error.dependents = dependentsInfo.dependents;
+      throw error;
     }
 
     try {
@@ -1251,6 +1274,198 @@ class ProjectManagerModule {
     return relatedProjects;
   }
 
+  // ==================== PROJECT DEPENDENCIES (PHASE 2) ====================
+
+  /**
+   * Add a dependency between projects
+   * @param {string} projectId - Project that has the dependency
+   * @param {string} dependsOnProjectId - Project that is depended upon
+   * @param {string} dependencyType - Type: 'data' | 'code' | 'api' | 'context'
+   * @param {string} description - Description of the dependency
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async addDependency(projectId, dependsOnProjectId, dependencyType, description, correlationId) {
+    this.logger.info({ correlationId, projectId, dependsOnProjectId, dependencyType }, 'Adding dependency');
+
+    // Validate projects exist
+    const project = this.projects.get(projectId);
+    const dependsOnProject = this.projects.get(dependsOnProjectId);
+
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+    if (!dependsOnProject) {
+      throw new Error(`Dependency project not found: ${dependsOnProjectId}`);
+    }
+    if (projectId === dependsOnProjectId) {
+      throw new Error('A project cannot depend on itself');
+    }
+
+    // Check if dependency already exists
+    const existingDeps = await this.queryDatabase(
+      `SELECT id FROM project_dependencies
+       WHERE project_id = ? AND depends_on_project_id = ?`,
+      [projectId, dependsOnProjectId],
+      true,
+      correlationId
+    );
+
+    if (existingDeps.length > 0) {
+      throw new Error(`Dependency already exists: ${project.name} → ${dependsOnProject.name}`);
+    }
+
+    const depId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await this.queryDatabase(`
+      INSERT INTO project_dependencies (id, project_id, depends_on_project_id, dependency_type, description, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [depId, projectId, dependsOnProjectId, dependencyType || 'data', description || null, now], false, correlationId);
+
+    // Emit event
+    await this.eventBus.publish('project.dependency.added', {
+      dependency_id: depId,
+      project_id: projectId,
+      project_name: project.name,
+      depends_on_project_id: dependsOnProjectId,
+      depends_on_project_name: dependsOnProject.name,
+      dependency_type: dependencyType,
+      description,
+      created_at: now
+    });
+
+    this.logger.info({ correlationId, depId, projectId, dependsOnProjectId }, 'Dependency added successfully');
+
+    return {
+      id: depId,
+      projectId,
+      dependsOnProjectId,
+      dependencyType: dependencyType || 'data',
+      description,
+      createdAt: now
+    };
+  }
+
+  /**
+   * Remove a dependency
+   * @param {string} dependencyId - Dependency ID to remove
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async removeDependency(dependencyId, correlationId) {
+    this.logger.info({ correlationId, dependencyId }, 'Removing dependency');
+
+    // Get dependency info before deleting
+    const deps = await this.queryDatabase(
+      'SELECT * FROM project_dependencies WHERE id = ?',
+      [dependencyId],
+      true,
+      correlationId
+    );
+
+    if (deps.length === 0) {
+      throw new Error(`Dependency not found: ${dependencyId}`);
+    }
+
+    const dep = deps[0];
+
+    await this.queryDatabase(
+      'DELETE FROM project_dependencies WHERE id = ?',
+      [dependencyId],
+      false,
+      correlationId
+    );
+
+    // Emit event
+    await this.eventBus.publish('project.dependency.removed', {
+      dependency_id: dependencyId,
+      project_id: dep.project_id,
+      depends_on_project_id: dep.depends_on_project_id,
+      removed_at: new Date().toISOString()
+    });
+
+    this.logger.info({ correlationId, dependencyId }, 'Dependency removed successfully');
+
+    return { success: true, dependencyId };
+  }
+
+  /**
+   * Get all dependencies of a project (what this project depends on)
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getDependencies(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting project dependencies');
+
+    const deps = await this.queryDatabase(`
+      SELECT
+        pd.*,
+        p.name as depends_on_project_name,
+        p.description as depends_on_project_description
+      FROM project_dependencies pd
+      LEFT JOIN projects p ON pd.depends_on_project_id = p.id
+      WHERE pd.project_id = ?
+      ORDER BY pd.created_at DESC
+    `, [projectId], true, correlationId);
+
+    return deps.map(dep => ({
+      id: dep.id,
+      projectId: dep.project_id,
+      dependsOnProjectId: dep.depends_on_project_id,
+      dependsOnProjectName: dep.depends_on_project_name,
+      dependsOnProjectDescription: dep.depends_on_project_description,
+      dependencyType: dep.dependency_type,
+      description: dep.description,
+      createdAt: dep.created_at
+    }));
+  }
+
+  /**
+   * Get all dependents of a project (projects that depend on this one)
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getDependents(projectId, correlationId) {
+    this.logger.debug({ correlationId, projectId }, 'Getting project dependents');
+
+    const deps = await this.queryDatabase(`
+      SELECT
+        pd.*,
+        p.name as dependent_project_name,
+        p.description as dependent_project_description
+      FROM project_dependencies pd
+      LEFT JOIN projects p ON pd.project_id = p.id
+      WHERE pd.depends_on_project_id = ?
+      ORDER BY pd.created_at DESC
+    `, [projectId], true, correlationId);
+
+    return deps.map(dep => ({
+      id: dep.id,
+      dependentProjectId: dep.project_id,
+      dependentProjectName: dep.dependent_project_name,
+      dependentProjectDescription: dep.dependent_project_description,
+      dependencyType: dep.dependency_type,
+      description: dep.description,
+      createdAt: dep.created_at
+    }));
+  }
+
+  /**
+   * Check if a project has dependents (used before deletion)
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async hasDependents(projectId, correlationId) {
+    const dependents = await this.getDependents(projectId, correlationId);
+    return {
+      hasDependents: dependents.length > 0,
+      count: dependents.length,
+      dependents: dependents.map(d => ({
+        id: d.dependentProjectId,
+        name: d.dependentProjectName
+      }))
+    };
+  }
+
   // ==================== EVENT HANDLERS ====================
 
   /**
@@ -1643,10 +1858,10 @@ class ProjectManagerModule {
 
   /**
    * UI Handler: Eliminar proyecto
-   * Request: mqttRequest('project', 'delete', { id })
+   * Request: mqttRequest('project', 'delete', { id, force? })
    */
   async handleUIDelete(data, request) {
-    const { id } = data;
+    const { id, force } = data;
     const correlationId = crypto.randomUUID();
 
     if (!id) {
@@ -1658,9 +1873,15 @@ class ProjectManagerModule {
       throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
     }
 
-    await this.deleteProject(id, correlationId);
-
-    return { deleted: true, id };
+    try {
+      await this.deleteProject(id, correlationId, { force: !!force });
+      return { deleted: true, id };
+    } catch (error) {
+      if (error.code === 'HAS_DEPENDENTS') {
+        throw { status: 409, code: 'HAS_DEPENDENTS', message: error.message, dependents: error.dependents };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
   }
 
   /**
@@ -1790,6 +2011,110 @@ class ProjectManagerModule {
 
     const relatedProjects = await this.getRelatedProjects(id, correlationId);
     return { projectId: id, relatedProjects, count: relatedProjects.length };
+  }
+
+  // ==================== UI DEPENDENCY HANDLERS (Phase 2) ====================
+
+  /**
+   * UI Handler: Add dependency between projects
+   * Request: mqttRequest('project', 'addDependency', { projectId, dependsOnProjectId, dependencyType, description })
+   */
+  async handleUIAddDependency(data, request) {
+    const { projectId, dependsOnProjectId, dependencyType, description } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+    if (!dependsOnProjectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Depends on project ID is required' };
+    }
+
+    const validTypes = ['data', 'code', 'api', 'context'];
+    if (dependencyType && !validTypes.includes(dependencyType)) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: `Invalid dependency type. Must be one of: ${validTypes.join(', ')}` };
+    }
+
+    try {
+      const dependency = await this.addDependency(projectId, dependsOnProjectId, dependencyType, description, correlationId);
+      return { added: true, dependency };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      if (error.message.includes('already exists')) {
+        throw { status: 409, code: 'CONFLICT', message: error.message };
+      }
+      if (error.message.includes('cannot depend on itself')) {
+        throw { status: 400, code: 'VALIDATION_ERROR', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Remove dependency
+   * Request: mqttRequest('project', 'removeDependency', { dependencyId })
+   */
+  async handleUIRemoveDependency(data, request) {
+    const { dependencyId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!dependencyId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Dependency ID is required' };
+    }
+
+    try {
+      await this.removeDependency(dependencyId, correlationId);
+      return { removed: true, dependencyId };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get all dependencies of a project
+   * Request: mqttRequest('project', 'getDependencies', { id })
+   */
+  async handleUIGetDependencies(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(id);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const dependencies = await this.getDependencies(id, correlationId);
+    return { projectId: id, dependencies, count: dependencies.length };
+  }
+
+  /**
+   * UI Handler: Get all dependents of a project (projects that depend on this one)
+   * Request: mqttRequest('project', 'getDependents', { id })
+   */
+  async handleUIGetDependents(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(id);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const dependents = await this.getDependents(id, correlationId);
+    return { projectId: id, dependents, count: dependents.length };
   }
 
   // ==================== UI SESSION & AI CONFIG HANDLERS ====================

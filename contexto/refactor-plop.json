@@ -625,36 +625,73 @@
       "note": "Frontend debería migrar a chat-session + chat-ai-bridge directamente"
     }
   },
-  "action_items": [
-    {
-      "priority": 1,
-      "action": "Actualizar module/module.json.hbs con tools[]",
-      "impact": "Todos los nuevos módulos tendrán tools",
-      "effort": "bajo"
+  "refactoring_phases": {
+    "description": "Refactorización de conversation-manager en módulos especializados",
+    "status": "completed",
+    "phases": {
+      "phase_1": {
+        "name": "chat-session",
+        "status": "completed",
+        "description": "Extraer persistencia CRUD y contexto FIFO",
+        "result": "modules/chat-session/ v1.0.0 - 1222 líneas"
+      },
+      "phase_2": {
+        "name": "prompt-composer",
+        "status": "completed",
+        "description": "Extraer composición de prompts",
+        "result": "modules/prompt-composer/ v1.1.0 - integrado con prompt-manager"
+      },
+      "phase_3": {
+        "name": "chat-ai-bridge",
+        "status": "completed",
+        "description": "Extraer orquestación de flujo AI",
+        "result": "modules/chat-ai-bridge/ v1.0.0 - flow orchestrator"
+      },
+      "phase_4": {
+        "name": "conversation-manager facade",
+        "status": "completed",
+        "description": "Convertir a facade delegando a módulos especializados",
+        "result": "modules/conversation-manager/ v2.0.0 - ~1400 líneas eliminadas"
+      }
     },
-    {
-      "priority": 2,
-      "action": "Actualizar module/index.js.hbs con registerUIHandlers()",
-      "impact": "Nuevos módulos soportarán UI vía MQTT",
-      "effort": "bajo"
-    },
-    {
-      "priority": 3,
-      "action": "Actualizar chat-module/ para usar eventos en lugar de acceso directo",
-      "impact": "Arquitectura correcta de chat modules",
-      "effort": "medio"
-    },
-    {
-      "priority": 4,
-      "action": "Documentar o deprecar from-blueprint",
-      "impact": "Claridad en opciones de generación",
-      "effort": "bajo"
-    },
-    {
-      "priority": 5,
-      "action": "Considerar generator unificado",
-      "impact": "Mantenimiento simplificado",
-      "effort": "alto"
+    "metrics": {
+      "lines_removed": 1493,
+      "modules_created": 3,
+      "patterns_documented": 24,
+      "backwards_compatible": true
     }
-  ]
+  },
+  "action_items": {
+    "plop_templates": [
+      {
+        "priority": 1,
+        "action": "Actualizar module/index.js.hbs con patrones fundamentales",
+        "status": "completed",
+        "note": "Añadido pendingRequests, sendRequest, crypto.randomUUID"
+      },
+      {
+        "priority": 2,
+        "action": "Actualizar module/module.json.hbs con tools[]",
+        "status": "pending",
+        "impact": "Todos los nuevos módulos tendrán tools"
+      },
+      {
+        "priority": 3,
+        "action": "Actualizar chat-module/ para usar eventos",
+        "status": "pending",
+        "impact": "Arquitectura correcta de chat modules"
+      },
+      {
+        "priority": 4,
+        "action": "Documentar o deprecar from-blueprint",
+        "status": "pending",
+        "impact": "Claridad en opciones de generación"
+      }
+    ],
+    "next_steps": [
+      "Migrar frontend de 'conversation' domain a 'session' + 'chat-bridge'",
+      "Activar tools en ai-gateway (Phase 0 opcional)",
+      "Eliminar conversation-manager cuando frontend migrado"
+    ]
+  }
 }

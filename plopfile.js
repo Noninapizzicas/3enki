@@ -99,6 +99,43 @@ module.exports = function (plop) {
         name: 'apisRaw',
         message: '🔌 APIs HTTP (formato: METHOD /path, separados por coma, ej: GET /items,POST /items,DELETE /items/:id):',
         default: 'GET /data'
+      },
+      {
+        type: 'input',
+        name: 'uiActionsRaw',
+        message: '🖱️ UI Actions MQTT (separados por coma, ej: list,get,create,update,delete):',
+        default: ''
+      },
+      {
+        type: 'input',
+        name: 'toolsRaw',
+        message: '🤖 Tools para AI (nombre:descripcion, ej: list_items:Lista todos los items):',
+        default: ''
+      },
+      {
+        type: 'list',
+        name: 'uiType',
+        message: '🎨 Tipo de UI:',
+        choices: [
+          { name: 'Ninguna', value: 'none' },
+          { name: 'Simple (zone + icon)', value: 'simple' },
+          { name: 'Avanzada (Auto-UI v2.0 dashboard)', value: 'advanced' }
+        ],
+        default: 'none'
+      },
+      {
+        type: 'list',
+        name: 'uiZone',
+        message: '📍 Zona de UI:',
+        choices: ['work-bar', 'chat-config', 'chat-tools'],
+        default: 'work-bar',
+        when: (answers) => answers.uiType === 'simple'
+      },
+      {
+        type: 'input',
+        name: 'dependenciesRaw',
+        message: '📦 Dependencias (módulos separados por coma, ej: database-manager,ai-gateway):',
+        default: ''
       }
     ],
 
@@ -139,6 +176,34 @@ module.exports = function (plop) {
               description: `${method} ${path}`
             };
           }).filter(a => a.method)
+        : [];
+
+      // Procesar UI Actions
+      data.uiActions = data.uiActionsRaw
+        ? data.uiActionsRaw.split(',').map(a => a.trim()).filter(a => a)
+        : [];
+
+      // Procesar Tools para AI
+      data.tools = data.toolsRaw
+        ? data.toolsRaw.split(',').map(t => {
+            const [name, description] = t.trim().split(':');
+            return {
+              name: name.trim(),
+              description: description?.trim() || `Tool ${name}`,
+              params: [],
+              required: []
+            };
+          }).filter(t => t.name)
+        : [];
+
+      // Procesar UI type
+      data.uiSimple = data.uiType === 'simple';
+      data.uiAdvanced = data.uiType === 'advanced';
+      data.ui = data.uiType !== 'none';
+
+      // Procesar dependencies
+      data.dependencies = data.dependenciesRaw
+        ? data.dependenciesRaw.split(',').map(d => d.trim()).filter(d => d)
         : [];
 
       // Asegurar icon por defecto

@@ -4,31 +4,15 @@
   "description": "{{description}}",
   "author": "{{author}}",
 
-  "provides": {
-    "events": [{{#each publishEvents}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}],
-    "queries": []
-  },
-
   "events": {
     "publishes": [
       {{#each publishEvents}}
-      {
-        "event": "{{this}}",
-        "description": "Evento {{this}}",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/{{snakeCase this}}"
-        }
-      }{{#unless @last}},{{/unless}}
+      "{{this}}"{{#unless @last}},{{/unless}}
       {{/each}}
     ],
-
     "subscribes": [
       {{#each subscriptions}}
-      {
-        "event": "{{this.event}}",
-        "description": "Escucha evento {{this.event}}",
-        "handler": "{{this.handler}}"
-      }{{#unless @last}},{{/unless}}
+      "{{this.event}}"{{#unless @last}},{{/unless}}
       {{/each}}
     ]
   },
@@ -39,8 +23,7 @@
       "method": "{{this.method}}",
       "path": "{{this.path}}",
       "handler": "{{this.handler}}",
-      "description": "{{this.description}}"{{#if this.params}},
-      "params": {{json this.params}}{{/if}}
+      "description": "{{this.description}}"
     },
     {{/each}}
     {
@@ -51,7 +34,35 @@
     }
   ],
 
-  {{#if ui}}
+  "tools": [
+    {{#each tools}}
+    {
+      "name": "{{../name}}.{{this.name}}",
+      "description": "{{this.description}}",
+      "handler": "tool{{pascalCase this.name}}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          {{#each this.params}}
+          "{{this.name}}": {
+            "type": "{{this.type}}",
+            "description": "{{this.description}}"
+          }{{#unless @last}},{{/unless}}
+          {{/each}}
+        },
+        "required": [{{#each this.required}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}]
+      }
+    }{{#unless @last}},{{/unless}}
+    {{/each}}
+  ],
+
+  {{#if uiSimple}}
+  "ui": {
+    "zone": "{{uiZone}}",
+    "icon": "{{icon}}"
+  },
+  {{/if}}
+  {{#if uiAdvanced}}
   "ui": {
     "enabled": true,
     "version": "2.0",
@@ -81,19 +92,7 @@
               "label": "Total",
               "value": "@compute.count(@data.items)",
               "icon": "📊",
-              "color": "primary",
-              "trend": "+12%",
-              "trendDirection": "up"
-            }
-          },
-          {
-            "id": "stats_status",
-            "widget": "stat-card",
-            "config": {
-              "label": "Estado",
-              "value": "Activo",
-              "icon": "✓",
-              "color": "success"
+              "color": "primary"
             }
           },
           {
@@ -121,88 +120,28 @@
                 }
               ]
             }
-          },
-          {
-            "id": "info_panel",
-            "widget": "card",
-            "config": {
-              "title": "ℹ️ Información",
-              "content": {
-                "type": "info",
-                "items": [
-                  {
-                    "label": "Versión",
-                    "value": "1.0.0",
-                    "icon": "🏷️"
-                  },
-                  {
-                    "label": "Estado",
-                    "value": "Activo",
-                    "color": "#22c55e"
-                  }
-                ]
-              }
-            }
           }
         ]
-      },
-
-      "create": {
-        "type": "form",
-        "permissions": ["admin"],
-        "config": {
-          "title": "Crear {{titleCase name}}",
-          "endpoint": "/modules/{{name}}/items",
-          "method": "POST",
-          "validation": true,
-          "fields": "auto"
-        }
       }
     },
 
     "mqtt": {
       "enabled": true,
       "topics": [
-        "{{name}}.created",
-        "{{name}}.updated",
-        "{{name}}.deleted"
+        {{#each publishEvents}}
+        "{{this}}"{{#unless @last}},{{/unless}}
+        {{/each}}
       ],
       "auto_refresh": true
     }
   },
   {{/if}}
 
-  "schema": {
-    "id": {
-      "type": "string",
-      "label": "ID",
-      "format": "hidden"
-    },
-    "name": {
-      "type": "string",
-      "label": "Nombre",
-      "required": true,
-      "minLength": 3,
-      "maxLength": 100
-    },
-    "status": {
-      "type": "enum",
-      "label": "Estado",
-      "enum": ["active", "inactive"],
-      "default": "active"
-    }
-  },
-
-  "observability": {
-    "logging": {
-      "level": "info",
-      "structured": true,
-      "correlation_id": true
-    },
-    "metrics": {
-      "enabled": true
-    }
-  },
+  "dependencies": [
+    {{#each dependencies}}
+    "{{this}}"{{#unless @last}},{{/unless}}
+    {{/each}}
+  ],
 
   "config": {
     {{#if persistence}}

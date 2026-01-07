@@ -13,8 +13,8 @@
     "compliant": 1,
     "needs_update": 4,
     "deprecated": 1,
-    "reference_modules_created": 2,
-    "patterns_documented": 12
+    "reference_modules_created": 3,
+    "patterns_documented": 16
   },
   "generators_analysis": {
     "module": {
@@ -442,6 +442,49 @@
         "tool": "prompt.compose → toolComposePrompt()"
       },
       "pattern": "Todas las interfaces llaman a los mismos métodos core internos"
+    },
+    "orchestrator_module_pattern": {
+      "source": "chat-ai-bridge",
+      "description": "Módulo que coordina flujo multi-paso entre otros módulos",
+      "characteristics": [
+        "No tiene lógica de negocio propia",
+        "Coordina llamadas a otros módulos via eventos",
+        "Mantiene estado del flujo en flowState object",
+        "Tracking de stages para debugging/logging"
+      ],
+      "flow_state_tracking": {
+        "structure": "{ flowId, stage, startTime, error, ...stepResults }",
+        "stages": ["init", "step1", "step2", ..., "completed", "error"],
+        "benefit": "Saber exactamente dónde falló un flujo"
+      }
+    },
+    "async_flow_coordination": {
+      "source": "chat-ai-bridge",
+      "description": "Coordinar múltiples pasos async con manejo de errores",
+      "pattern": {
+        "try_catch_finally": "try { steps } catch { log & respond error } finally { cleanup }",
+        "stage_tracking": "flowState.stage = 'step_name' antes de cada paso",
+        "graceful_failures": "Algunos pasos pueden fallar sin romper el flujo"
+      },
+      "example_flow": [
+        "1. onChatSendRequest() - entry point",
+        "2. saveUserMessage() - puede fallar, no crítico",
+        "3. loadConversationContext() - fallback a empty",
+        "4. composePrompt() - fallback a default",
+        "5. callAI() - crítico, falla el flujo",
+        "6. saveAssistantMessage() - puede fallar, no crítico",
+        "7. publish response"
+      ]
+    },
+    "stats_tracking_pattern": {
+      "source": "chat-ai-bridge",
+      "description": "Tracking de estadísticas para observability",
+      "structure": {
+        "counters": "messagesProcessed, errors, aiCallsTotal",
+        "increments": "this.stats.messagesProcessed++",
+        "exposure": "via health check y status endpoints"
+      },
+      "benefit": "Métricas sin dependencia de sistema externo de metrics"
     }
   },
   "reference_modules": {
@@ -470,6 +513,22 @@
         "In-memory templates/config"
       ],
       "use_as": "Referencia para módulos de transformación/coordinación"
+    },
+    "chat-ai-bridge": {
+      "path": "modules/chat-ai-bridge/",
+      "type": "Módulo orquestador de flujo",
+      "files": {
+        "index.js": "~700 líneas - Coordinación multi-módulo",
+        "module.json": "Con dependencies explícitas"
+      },
+      "patterns_demonstrated": [
+        "Orchestrator pattern",
+        "Flow state tracking con stages",
+        "Async flow coordination",
+        "Stats tracking interno",
+        "Graceful failure en pasos no críticos"
+      ],
+      "use_as": "Referencia para módulos que coordinan flujos complejos"
     }
   },
   "action_items": [

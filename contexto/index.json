@@ -57,9 +57,9 @@
       "when": "Trabajar en conversation-manager, chat-session, chat-ai-bridge, prompt-composer"
     },
     {
-      "file": "refactor-plop.json",
-      "purpose": "Análisis de templates Plop vs estándar",
-      "when": "Trabajar en generadores plop, crear nuevos templates, corregir templates existentes"
+      "file": "templates.json",
+      "purpose": "Sistema de templates Plop: generadores, estado, uso y mejores prácticas",
+      "when": "Crear módulos con plop, entender generadores disponibles, mejores prácticas"
     },
     {
       "file": "project-composition.json",

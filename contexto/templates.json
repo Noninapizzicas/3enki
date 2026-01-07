@@ -1,0 +1,294 @@
+{
+  "title": "Sistema de Templates Plop",
+  "version": "2.0.0",
+  "location": {
+    "plopfile": "plopfile.js",
+    "templates": "plop-templates/"
+  },
+  "usage": {
+    "interactive": "npx plop",
+    "direct": "npx plop <generator>",
+    "alias": "npm run plop"
+  },
+
+  "generators": {
+    "module": {
+      "status": "active",
+      "quality": "production",
+      "command": "npx plop module",
+      "description": "Generador principal de módulos Event-Core",
+      "output": [
+        "modules/{name}/index.js",
+        "modules/{name}/module.json",
+        "modules/{name}/README.md",
+        "modules/{name}/schemas/events.json",
+        "modules/{name}/schemas/{name}.json"
+      ],
+      "features": {
+        "persistence": "Persistencia JSON opcional",
+        "ui_handlers": "Handlers MQTT para UI",
+        "event_subscriptions": "Suscripción a eventos con cleanup automático",
+        "http_apis": "APIs REST con validación",
+        "tools": "Tools para AI con JSON Schema",
+        "async_requests": "Helper sendRequest() para event request/response"
+      },
+      "prompts": [
+        "name (kebab-case)",
+        "description",
+        "author",
+        "icon (emoji)",
+        "persistence (boolean)",
+        "publishEventsRaw (csv)",
+        "subscriptionsRaw (csv)",
+        "apisRaw (METHOD /path csv)",
+        "uiActionsRaw (csv)",
+        "toolsRaw (name:description csv)",
+        "uiType (none|simple|advanced)",
+        "dependenciesRaw (csv)"
+      ],
+      "patterns_implemented": [
+        "pendingRequests Map para tracking de async requests",
+        "unsubscribes array para cleanup en onUnload",
+        "correlationId propagation",
+        "structured logging con contexto",
+        "health check endpoint automático"
+      ]
+    },
+
+    "service-module": {
+      "status": "active",
+      "quality": "production",
+      "command": "npx plop service-module",
+      "description": "Módulos de servicio con arquitectura de plugins (OCR, Translate, etc.)",
+      "output": [
+        "modules/{name}-service/index.js",
+        "modules/{name}-service/module.json",
+        "modules/{name}-service/README.md",
+        "modules/{name}-service/lib/plugin-loader.js",
+        "modules/{name}-service/lib/api-executor.js",
+        "modules/{name}-service/builtin/{engine}.js",
+        "modules/{name}-service/schemas/events.json",
+        "plugins/{name}/.gitkeep (opcional)"
+      ],
+      "features": {
+        "plugin_discovery": "Auto-discovery de plugins en plugins/{name}/",
+        "builtin_engines": "Engines locales incluidos en builtin/",
+        "remote_apis": "Soporte para engines remotos via HTTP",
+        "fallback": "Fallback automático si engine falla",
+        "metrics": "Métricas integradas",
+        "auto_selection": "Selección automática por prioridad"
+      },
+      "prompts": [
+        "name (sin -service)",
+        "description",
+        "author",
+        "inputType (image, audio, text, pdf)",
+        "outputType (text, audio, image)",
+        "builtinEngine (default engine name)",
+        "createPlugin (boolean)"
+      ],
+      "plugin_structure": {
+        "directory": "plugins/{service-name}/{engine-name}/",
+        "required_files": {
+          "engine.json": "Configuración del engine (type, name, local, priority, capabilities, credentialKey)",
+          "handler.js": "Solo para engines locales - exports.extract(input, options)"
+        }
+      },
+      "reference_implementation": "modules/ocr-service/"
+    },
+
+    "svelte-component": {
+      "status": "active",
+      "quality": "production",
+      "command": "npx plop svelte-component",
+      "description": "Componentes Svelte reutilizables con TypeScript",
+      "output": [
+        "frontend/src/lib/components/{category}/{Name}.svelte",
+        "frontend/src/lib/components/{category}/index.ts (append export)"
+      ],
+      "features": {
+        "typed_props": "Props con tipos TypeScript",
+        "variants": "Sistema de variantes visuales",
+        "events": "Eventos personalizados tipados",
+        "slots": "Slots con nombres"
+      },
+      "prompts": [
+        "name (PascalCase)",
+        "category (ui, data, feedback, layout, navigation, input, ai)",
+        "propsRaw (name:type=default csv)",
+        "hasVariants (boolean)",
+        "variantsRaw (name:classes csv)",
+        "hasEvents (boolean)",
+        "eventsRaw (name:payload csv)",
+        "hasSlots (boolean)",
+        "slotsRaw (csv)",
+        "baseClasses (Tailwind)"
+      ],
+      "categories": ["ui", "data", "feedback", "layout", "navigation", "input", "ai"]
+    },
+
+    "full-module": {
+      "status": "active",
+      "quality": "good",
+      "command": "npx plop full-module",
+      "description": "Módulo completo: Backend Event-Core + Frontend Svelte",
+      "output": [
+        "modules/{name}/... (como module)",
+        "frontend/src/routes/{name}/+page.svelte"
+      ],
+      "features": {
+        "crud_apis": "APIs CRUD generadas automáticamente",
+        "entity_based": "Basado en entidad con campos",
+        "frontend_page": "Página Svelte con lista/formulario"
+      },
+      "prompts": [
+        "name",
+        "description",
+        "icon",
+        "author",
+        "entityName",
+        "fieldsRaw (name:type csv)",
+        "titleField",
+        "descriptionField"
+      ],
+      "limitations": [
+        "Frontend template básico, requiere personalización",
+        "No incluye stores Svelte"
+      ]
+    },
+
+    "chat-module": {
+      "status": "needs-update",
+      "quality": "legacy",
+      "command": "npx plop chat-module",
+      "description": "Módulo con interfaz de Chat IA",
+      "output": [
+        "modules/{name}/index.js",
+        "modules/{name}/module.json",
+        "modules/{name}/README.md",
+        "frontend/src/routes/{name}/+page.svelte"
+      ],
+      "known_issues": [
+        "Usa acceso directo a ai-gateway en lugar del flujo refactorizado",
+        "No usa chat-ai-bridge ni prompt-composer",
+        "Frontend template desactualizado"
+      ],
+      "recommended_action": "Usar 'module' generator y añadir integración con chat-ai-bridge manualmente"
+    },
+
+    "selector-panel": {
+      "status": "active",
+      "quality": "good",
+      "command": "npx plop selector-panel",
+      "description": "Wrapper de SelectorPanel para módulos específicos",
+      "output": [
+        "frontend/src/lib/components/selectors/{Name}.svelte",
+        "frontend/src/lib/components/selectors/index.ts (append export)"
+      ],
+      "features": {
+        "pre_configured": "Pre-configurado para módulos comunes",
+        "typed_events": "Eventos tipados (select, create, edit, delete, close)"
+      },
+      "prompts": [
+        "name (PascalCase)",
+        "module (ai-gateway, credential-manager, prompt-manager, conversation-manager)",
+        "panelMode (quick, create, manage)",
+        "title (optional)"
+      ]
+    },
+
+    "api": {
+      "status": "active",
+      "quality": "helper",
+      "command": "npx plop api",
+      "description": "Asistente para añadir API a módulo existente (solo instrucciones)",
+      "output": "Instrucciones en consola (no genera archivos)",
+      "note": "Helper interactivo, no genera código automáticamente"
+    },
+
+    "event": {
+      "status": "active",
+      "quality": "helper",
+      "command": "npx plop event",
+      "description": "Asistente para añadir evento a módulo existente (solo instrucciones)",
+      "output": "Instrucciones en consola (no genera archivos)",
+      "note": "Helper interactivo, no genera código automáticamente"
+    },
+
+    "from-blueprint": {
+      "status": "deprecated",
+      "quality": "experimental",
+      "command": "npx plop from-blueprint",
+      "description": "Genera módulo desde archivo YAML blueprint",
+      "requirements": ["npm install yaml"],
+      "known_issues": [
+        "Requiere paquete yaml no incluido en dependencies",
+        "Blueprints no documentados",
+        "Templates complejos con muchas condiciones"
+      ],
+      "recommended_action": "No usar. Usar 'module' o 'service-module' directamente"
+    }
+  },
+
+  "helpers": {
+    "pascalCase": "mi-modulo → MiModulo",
+    "titleCase": "mi-modulo → Mi Modulo",
+    "snakeCase": "my.event → my_event",
+    "currentDate": "YYYY-MM-DD",
+    "json": "JSON.stringify con formato",
+    "eq": "Comparación de igualdad"
+  },
+
+  "best_practices": {
+    "new_backend_module": {
+      "recommended": "module",
+      "reason": "Template más completo y actualizado"
+    },
+    "service_with_plugins": {
+      "recommended": "service-module",
+      "reason": "Arquitectura probada (ocr-service como referencia)"
+    },
+    "new_svelte_component": {
+      "recommended": "svelte-component",
+      "reason": "Genera componente tipado con estructura correcta"
+    },
+    "full_stack_feature": {
+      "recommended": "module + frontend manual",
+      "reason": "full-module genera frontend básico que requiere mucha personalización"
+    },
+    "chat_integration": {
+      "recommended": "module + integración manual con chat-ai-bridge",
+      "reason": "chat-module está desactualizado"
+    }
+  },
+
+  "module_reference": {
+    "crud_module": "modules/project-manager/ - CRUD completo con SQLite",
+    "service_module": "modules/ocr-service/ - Arquitectura de plugins",
+    "orchestrator": "modules/chat-ai-bridge/ - Orquestación de flujo",
+    "facade": "modules/conversation-manager/ - Facade pattern"
+  },
+
+  "patterns": {
+    "ui_handler_registration": {
+      "description": "Registro de handlers MQTT para UI",
+      "code": "this.uiHandler.register('domain', 'action', this.handler.bind(this))"
+    },
+    "event_subscription_with_cleanup": {
+      "description": "Suscripción con tracking para cleanup",
+      "code": "const unsub = await this.eventBus.subscribe('event', handler); this.unsubscribes.push(unsub);"
+    },
+    "async_request_response": {
+      "description": "Request/response pattern con timeout",
+      "code": "await this.sendRequest('request.event', 'response.event', payload, timeoutMs)"
+    },
+    "pending_requests_map": {
+      "description": "Tracking de requests pendientes",
+      "code": "this.pendingRequests = new Map(); // { resolve, reject, timeout }"
+    },
+    "structured_logging": {
+      "description": "Logging con contexto estructurado",
+      "code": "this.logger.info('module.action', { correlation_id, data })"
+    }
+  }
+}

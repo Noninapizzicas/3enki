@@ -1,7 +1,7 @@
 {
   "name": "prompt-composer",
-  "version": "1.0.0",
-  "description": "Composición de system prompts con contexto de proyecto y templates dinámicos",
+  "version": "1.1.0",
+  "description": "Composición de system prompts con contexto de proyecto, integración con prompt-manager para templates persistidos",
   "author": "Event Core Team",
 
   "events": {
@@ -12,7 +12,9 @@
     "subscribes": [
       "prompt.compose.request",
       "project.get.response",
-      "storage.info.response"
+      "storage.info.response",
+      "prompt.get.response",
+      "prompt.list.response"
     ]
   },
 
@@ -27,7 +29,7 @@
       "method": "GET",
       "path": "/templates",
       "handler": "handleListTemplates",
-      "description": "Listar templates disponibles"
+      "description": "Listar templates disponibles (locales + prompt-manager)"
     },
     {
       "method": "GET",
@@ -58,6 +60,10 @@
           "base_prompt": {
             "type": "string",
             "description": "Prompt base opcional"
+          },
+          "prompt_name": {
+            "type": "string",
+            "description": "Nombre del prompt en prompt-manager (alternativa a base_prompt)"
           },
           "include_tools": {
             "type": "boolean",
@@ -94,7 +100,8 @@
   },
 
   "dependencies": [
-    "project-manager"
+    "project-manager",
+    "prompt-manager"
   ],
 
   "config": {
@@ -102,6 +109,8 @@
     "includeStorageInfo": false,
     "includeTools": true,
     "defaultSystemPrompt": "You are a helpful AI assistant.",
+    "usePromptManager": true,
+    "defaultPromptName": "assistant-default",
     "requestTimeout": 10000
   }
 }

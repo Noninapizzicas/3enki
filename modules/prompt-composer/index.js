@@ -6,15 +6,15 @@ const { EVENTS } = require('../../core/constants');
  * Prompt Composer Module
  *
  * Composición de system prompts con contexto de proyecto y templates dinámicos.
- * Extrae y centraliza la lógica de composición de prompts de conversation-manager.
+ * Integración con prompt-manager para cargar prompts persistidos.
  *
  * @module prompt-composer
- * @version 1.0.0
+ * @version 1.1.0
  */
 class PromptComposerModule {
   constructor() {
     this.name = 'prompt-composer';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
 
     // Dependencies (injected in onLoad)
     this.logger = null;
@@ -26,9 +26,15 @@ class PromptComposerModule {
     this.pendingProjectRequests = new Map();
     this.pendingStorageRequests = new Map();
     this.pendingComposeRequests = new Map();
+    this.pendingPromptManagerRequests = new Map();
 
-    // Template cache
+    // Template cache (local defaults)
     this.templates = new Map();
+
+    // Cached prompts from prompt-manager
+    this.managedPromptsCache = new Map();
+    this.managedPromptsCacheTime = null;
+    this.CACHE_TTL = 60000; // 1 minute cache
 
     // Unsubscribe tracking for cleanup
     this.unsubscribes = [];
@@ -63,7 +69,8 @@ class PromptComposerModule {
 
     this.logger.info('prompt-composer.loaded', {
       module: this.name,
-      templatesLoaded: this.templates.size
+      templatesLoaded: this.templates.size,
+      promptManagerIntegration: this.config.usePromptManager !== false
     });
   }
 
@@ -84,13 +91,16 @@ class PromptComposerModule {
     this.unsubscribes = [];
 
     // Clear pending requests
-    for (const pending of [this.pendingProjectRequests, this.pendingStorageRequests, this.pendingComposeRequests]) {
+    for (const pending of [this.pendingProjectRequests, this.pendingStorageRequests, this.pendingComposeRequests, this.pendingPromptManagerRequests]) {
       for (const [, req] of pending.entries()) {
         if (req.timeout) clearTimeout(req.timeout);
         if (req.reject) req.reject(new Error('Module unloading'));
       }
       pending.clear();
     }
+
+    // Clear caches
+    this.managedPromptsCache.clear();
 
     this.logger.info('prompt-composer.unloaded', { module: this.name });
   }
@@ -205,8 +215,27 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
     );
     this.unsubscribes.push(unsubStorage);
 
+    // Subscribe to prompt-manager responses
+    const unsubPromptGet = await this.eventBus.subscribe(
+      'prompt.get.response',
+      this.onPromptManagerGetResponse.bind(this)
+    );
+    this.unsubscribes.push(unsubPromptGet);
+
+    const unsubPromptList = await this.eventBus.subscribe(
+      'prompt.list.response',
+      this.onPromptManagerListResponse.bind(this)
+    );
+    this.unsubscribes.push(unsubPromptList);
+
     this.logger.info('prompt-composer.events.subscribed', {
-      events: ['prompt.compose.request', 'project.get.response', 'storage.info.response']
+      events: [
+        'prompt.compose.request',
+        'project.get.response',
+        'storage.info.response',
+        'prompt.get.response',
+        'prompt.list.response'
+      ]
     });
   }
 
@@ -221,6 +250,7 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
       conversation,
       project_id,
       base_prompt,
+      prompt_name,
       include_tools,
       include_storage,
       tools,
@@ -231,6 +261,7 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
       this.logger.debug('prompt-composer.compose.request', {
         request_id,
         project_id: project_id || conversation?.project_id,
+        prompt_name,
         correlation_id
       });
 
@@ -239,9 +270,24 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
       // Load project context
       const projectContext = await this.loadProjectContext(projectId, include_storage, correlation_id);
 
+      // Determine base prompt: from prompt_name (prompt-manager) or base_prompt or conversation
+      let effectiveBasePrompt = base_prompt || conversation?.system_prompt;
+
+      // Try to load from prompt-manager if prompt_name provided or usePromptManager enabled
+      if (prompt_name || (this.config.usePromptManager !== false && !effectiveBasePrompt)) {
+        const managedPrompt = await this.loadPromptFromManager(
+          prompt_name || this.config.defaultPromptName,
+          projectContext,
+          correlation_id
+        );
+        if (managedPrompt) {
+          effectiveBasePrompt = managedPrompt;
+        }
+      }
+
       // Compose the prompt
       const composedPrompt = this.composeSystemPrompt(
-        conversation || { system_prompt: base_prompt },
+        { system_prompt: effectiveBasePrompt },
         projectContext,
         include_tools ? tools : null
       );
@@ -252,6 +298,7 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
         success: true,
         prompt: composedPrompt,
         context: projectContext,
+        prompt_source: prompt_name ? 'prompt-manager' : (base_prompt ? 'provided' : 'default'),
         correlation_id
       });
 
@@ -303,6 +350,153 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
     } else {
       pending.resolve(null); // Optional - don't fail
     }
+  }
+
+  async onPromptManagerGetResponse(event) {
+    const eventData = event.data || event;
+    const { request_id, success, prompt, data, error } = eventData;
+
+    const pending = this.pendingPromptManagerRequests.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingPromptManagerRequests.delete(request_id);
+
+    if (success) {
+      // prompt-manager returns data.prompt or prompt directly
+      pending.resolve(data?.prompt || prompt);
+    } else {
+      pending.resolve(null); // Optional - don't fail, will use defaults
+    }
+  }
+
+  async onPromptManagerListResponse(event) {
+    const eventData = event.data || event;
+    const { request_id, success, prompts, data, error } = eventData;
+
+    const pending = this.pendingPromptManagerRequests.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingPromptManagerRequests.delete(request_id);
+
+    if (success) {
+      pending.resolve(data?.prompts || prompts || []);
+    } else {
+      pending.resolve([]); // Return empty array on failure
+    }
+  }
+
+  // ==========================================
+  // Prompt Manager Integration
+  // ==========================================
+
+  /**
+   * Load a prompt from prompt-manager by name
+   * Returns the rendered content with variables substituted
+   *
+   * @param {string} promptName - Name of the prompt in prompt-manager
+   * @param {Object} projectContext - Project context for variable substitution
+   * @param {string} correlationId - Correlation ID for tracing
+   * @returns {string|null} Rendered prompt content or null if not found
+   */
+  async loadPromptFromManager(promptName, projectContext, correlationId) {
+    if (!promptName) return null;
+
+    this.logger.debug('prompt-composer.loadFromManager', {
+      promptName,
+      correlation_id: correlationId
+    });
+
+    const requestId = crypto.randomUUID();
+    const timeout = this.config.requestTimeout || 10000;
+
+    const promise = new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingPromptManagerRequests.delete(requestId);
+        this.logger.warn('prompt-composer.loadFromManager.timeout', { promptName });
+        resolve(null); // Don't fail - use defaults
+      }, timeout);
+
+      this.pendingPromptManagerRequests.set(requestId, { resolve, timeout: timeoutId });
+    });
+
+    // Request prompt from prompt-manager
+    await this.eventBus.publish('prompt.get.request', {
+      request_id: requestId,
+      name: promptName,
+      correlation_id: correlationId
+    });
+
+    const prompt = await promise;
+
+    if (!prompt) {
+      this.logger.debug('prompt-composer.loadFromManager.not_found', { promptName });
+      return null;
+    }
+
+    // Substitute variables using project context
+    const variables = {
+      project_name: projectContext?.project_name || 'Unknown Project',
+      project_description: projectContext?.project_description || '',
+      file_count: projectContext?.storage_info?.file_count || 0,
+      storage_size: this.formatBytes(projectContext?.storage_info?.total_size),
+      date: new Date().toLocaleDateString(),
+      datetime: new Date().toISOString()
+    };
+
+    const renderedContent = this.substituteVariables(prompt.content, variables);
+
+    this.logger.debug('prompt-composer.loadFromManager.success', {
+      promptName,
+      promptId: prompt.id,
+      contentLength: renderedContent.length
+    });
+
+    return renderedContent;
+  }
+
+  /**
+   * List all prompts from prompt-manager
+   * @param {string} correlationId - Correlation ID for tracing
+   * @returns {Array} List of prompts
+   */
+  async listPromptsFromManager(correlationId) {
+    // Check cache
+    const now = Date.now();
+    if (this.managedPromptsCacheTime && (now - this.managedPromptsCacheTime) < this.CACHE_TTL) {
+      return Array.from(this.managedPromptsCache.values());
+    }
+
+    this.logger.debug('prompt-composer.listFromManager', { correlation_id: correlationId });
+
+    const requestId = crypto.randomUUID();
+    const timeout = this.config.requestTimeout || 10000;
+
+    const promise = new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingPromptManagerRequests.delete(requestId);
+        resolve([]); // Return empty on timeout
+      }, timeout);
+
+      this.pendingPromptManagerRequests.set(requestId, { resolve, timeout: timeoutId });
+    });
+
+    await this.eventBus.publish('prompt.list.request', {
+      request_id: requestId,
+      correlation_id: correlationId
+    });
+
+    const prompts = await promise;
+
+    // Update cache
+    this.managedPromptsCache.clear();
+    for (const p of prompts) {
+      this.managedPromptsCache.set(p.id, p);
+    }
+    this.managedPromptsCacheTime = now;
+
+    return prompts;
   }
 
   // ==========================================
@@ -584,6 +778,7 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
   /**
    * UI Handler: List templates
    * Request: mqttRequest('prompt', 'templates', {})
+   * Returns both local templates and prompts from prompt-manager
    */
   async handleUITemplates(data, context) {
     const correlationId = context?.correlationId || crypto.randomUUID();
@@ -593,17 +788,36 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
         correlation_id: correlationId
       });
 
-      const templates = Array.from(this.templates.values()).map(t => ({
+      // Local templates
+      const localTemplates = Array.from(this.templates.values()).map(t => ({
         id: t.id,
         name: t.name,
         variables: t.variables,
-        preview: t.prompt.substring(0, 100) + (t.prompt.length > 100 ? '...' : '')
+        preview: t.prompt.substring(0, 100) + (t.prompt.length > 100 ? '...' : ''),
+        source: 'local'
       }));
+
+      // Prompts from prompt-manager
+      let managedPrompts = [];
+      if (this.config.usePromptManager !== false) {
+        const prompts = await this.listPromptsFromManager(correlationId);
+        managedPrompts = prompts.map(p => ({
+          id: p.id,
+          name: p.name,
+          title: p.title,
+          description: p.description,
+          slot_type: p.slot_type,
+          variables: p.variables,
+          preview: p.content ? p.content.substring(0, 100) + (p.content.length > 100 ? '...' : '') : '',
+          source: 'prompt-manager'
+        }));
+      }
 
       return {
         success: true,
-        templates,
-        count: templates.length
+        templates: localTemplates,
+        managedPrompts,
+        total: localTemplates.length + managedPrompts.length
       };
     } catch (error) {
       this.logger.error('prompt-composer.handleUITemplates.error', {
@@ -692,19 +906,38 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
       correlation_id: correlationId
     });
 
-    const templates = Array.from(this.templates.values()).map(t => ({
+    // Local templates
+    const localTemplates = Array.from(this.templates.values()).map(t => ({
       id: t.id,
       name: t.name,
       variables: t.variables,
-      prompt: t.prompt
+      prompt: t.prompt,
+      source: 'local'
     }));
+
+    // Prompts from prompt-manager
+    let managedPrompts = [];
+    if (this.config.usePromptManager !== false) {
+      const prompts = await this.listPromptsFromManager(correlationId);
+      managedPrompts = prompts.map(p => ({
+        id: p.id,
+        name: p.name,
+        title: p.title,
+        description: p.description,
+        slot_type: p.slot_type,
+        variables: p.variables,
+        content: p.content,
+        source: 'prompt-manager'
+      }));
+    }
 
     return {
       status: 200,
       data: {
         success: true,
-        templates,
-        count: templates.length
+        templates: localTemplates,
+        managedPrompts,
+        total: localTemplates.length + managedPrompts.length
       }
     };
   }
@@ -763,7 +996,7 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
   // ==========================================
 
   async toolComposePrompt(params, context) {
-    const { project_id, base_prompt, include_tools, include_storage } = params;
+    const { project_id, base_prompt, prompt_name, include_tools, include_storage } = params;
     const correlationId = context?.correlationId || crypto.randomUUID();
 
     try {
@@ -774,8 +1007,18 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
 
       const projectContext = await this.loadProjectContext(project_id, include_storage, correlationId);
 
+      // Determine base prompt: from prompt_name (prompt-manager) or base_prompt
+      let effectiveBasePrompt = base_prompt;
+
+      if (prompt_name) {
+        const managedPrompt = await this.loadPromptFromManager(prompt_name, projectContext, correlationId);
+        if (managedPrompt) {
+          effectiveBasePrompt = managedPrompt;
+        }
+      }
+
       const prompt = this.composeSystemPrompt(
-        { system_prompt: base_prompt },
+        { system_prompt: effectiveBasePrompt },
         projectContext,
         null // Tools not included when called as a tool
       );
@@ -783,6 +1026,7 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
       return {
         success: true,
         prompt,
+        prompt_source: prompt_name ? 'prompt-manager' : (base_prompt ? 'provided' : 'default'),
         context: {
           project_name: projectContext.project_name,
           project_description: projectContext.project_description

@@ -1,5 +1,5 @@
 /**
- * Módulo {{titleCase name}}
+ * {{titleCase name}} Module
  *
  * {{description}}
  *
@@ -7,6 +7,7 @@
  * @version 1.0.0
  */
 
+const crypto = require('crypto');
 {{#if persistence}}
 const fs = require('fs').promises;
 const path = require('path');
@@ -17,28 +18,38 @@ class {{pascalCase name}}Module {
     this.name = '{{name}}';
     this.version = '1.0.0';
 
-    // Estado interno
+    // Dependencies (injected in onLoad)
+    this.logger = null;
+    this.eventBus = null;
+    this.uiHandler = null;
+    this.config = null;
+
+    // Internal state
     {{#if persistence}}
     this.data = new Map();
     this.dataDir = path.join(process.cwd(), 'data');
     this.dataFile = path.join(this.dataDir, '{{name}}.json');
     {{/if}}
 
-    // Configuración
-    this.startTime = Date.now();
+    // Pending requests tracking (for async event responses)
+    this.pendingRequests = new Map();
 
-    // Dependencias (inyectadas en onLoad)
-    this.logger = null;
-    this.eventBus = null;
+    // Unsubscribe tracking for cleanup
+    this.unsubscribes = [];
+
+    // Startup time for health check
+    this.startTime = Date.now();
   }
 
   // ==========================================
-  // Lifecycle
+  // Lifecycle Hooks
   // ==========================================
 
-  async onLoad(core) {
-    this.logger = core.logger;
-    this.eventBus = core.eventBus;
+  async onLoad(context) {
+    this.logger = context.logger;
+    this.eventBus = context.eventBus;
+    this.uiHandler = context.uiHandler;
+    this.config = context.config || {};
 
     this.logger.info('{{name}}.loading', {
       module: this.name,
@@ -46,14 +57,15 @@ class {{pascalCase name}}Module {
     });
 
     {{#if persistence}}
-    // Cargar datos persistidos (si existen)
+    // Load persisted data
     await this.loadFromJSON();
     {{/if}}
 
-    {{#if hasSubscriptions}}
-    // Suscribirse a eventos
+    // Register UI handlers (MQTT request/response)
+    await this.registerUIHandlers();
+
+    // Subscribe to events
     await this.subscribeToEvents();
-    {{/if}}
 
     this.logger.info('{{name}}.loaded', {
       module: this.name
@@ -61,32 +73,69 @@ class {{pascalCase name}}Module {
   }
 
   async onUnload() {
-    this.logger.info('{{name}}.unloading', {
-      module: this.name
-    });
+    this.logger.info('{{name}}.unloading', { module: this.name });
+
+    // Unregister UI handlers
+    if (this.uiHandler) {
+      {{#each uiActions}}
+      this.uiHandler.unregister('{{../name}}', '{{this}}');
+      {{/each}}
+    }
+
+    // Unsubscribe all event handlers
+    for (const unsub of this.unsubscribes) {
+      await unsub();
+    }
+    this.unsubscribes = [];
+
+    // Cleanup pending requests
+    for (const [, req] of this.pendingRequests) {
+      if (req.timeout) clearTimeout(req.timeout);
+      if (req.reject) req.reject(new Error('Module unloading'));
+    }
+    this.pendingRequests.clear();
 
     {{#if persistence}}
-    // Persistir datos antes de cerrar
+    // Persist data before shutdown
     await this.persistToJSON();
     {{/if}}
 
-    this.logger.info('{{name}}.unloaded', {
-      module: this.name
+    this.logger.info('{{name}}.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // UI Handler Registration
+  // ==========================================
+
+  async registerUIHandlers() {
+    if (!this.uiHandler) return;
+
+    // Register handlers for UI requests via MQTT
+    {{#each uiActions}}
+    this.uiHandler.register('{{../name}}', '{{this}}', this.handleUI{{pascalCase this}}.bind(this));
+    {{/each}}
+
+    this.logger.info('{{name}}.ui_handlers.registered', {
+      domain: '{{name}}',
+      actions: [{{#each uiActions}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]
     });
   }
 
-  {{#if hasSubscriptions}}
   // ==========================================
   // Event Subscriptions
   // ==========================================
 
   async subscribeToEvents() {
     {{#each subscriptions}}
-    await this.eventBus.subscribe('{{this.event}}', this.{{this.handler}}.bind(this));
+    const unsub{{@index}} = await this.eventBus.subscribe(
+      '{{this.event}}',
+      this.on{{pascalCase this.handler}}.bind(this)
+    );
+    this.unsubscribes.push(unsub{{@index}});
     {{/each}}
 
-    this.logger.info('{{name}}.subscriptions.registered', {
-      patterns: [{{#each subscriptions}}'{{this.event}}'{{#unless @last}}, {{/unless}}{{/each}}]
+    this.logger.info('{{name}}.events.subscribed', {
+      events: [{{#each subscriptions}}'{{this.event}}'{{#unless @last}}, {{/unless}}{{/each}}]
     });
   }
 
@@ -95,61 +144,83 @@ class {{pascalCase name}}Module {
   // ==========================================
 
   {{#each subscriptions}}
-  async {{this.handler}}(envelope) {
-    try {
-      const eventType = envelope.event_type;
+  async on{{pascalCase this.handler}}(event) {
+    const data = event.data || event.payload || event;
 
+    try {
       this.logger.debug('{{../name}}.event.received', {
-        event_type: eventType,
-        event_id: envelope.event_id,
-        correlation_id: envelope.metadata?.correlationId
+        event: '{{this.event}}',
+        correlation_id: data.correlation_id
       });
 
-      // TODO: Implementar lógica del handler
+      // TODO: Implement event handler logic
 
     } catch (error) {
-      this.logger.error('{{../name}}.{{this.handler}}.error', {
+      this.logger.error('{{../name}}.on{{pascalCase this.handler}}.error', {
         error: error.message,
-        event_id: envelope.event_id,
         stack: error.stack
       });
     }
   }
 
   {{/each}}
-  {{/if}}
+  // ==========================================
+  // UI Handlers (MQTT Request/Response)
+  // ==========================================
+
+  {{#each uiActions}}
+  async handleUI{{pascalCase this}}(data, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+
+    try {
+      this.logger.debug('{{../name}}.handleUI{{pascalCase this}}', {
+        correlation_id: correlationId
+      });
+
+      // TODO: Implement UI handler logic
+      return {
+        success: true,
+        message: '{{this}} action executed',
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      this.logger.error('{{../name}}.handleUI{{pascalCase this}}.error', {
+        error: error.message,
+        correlation_id: correlationId
+      });
+      throw { status: 500, code: '{{constantCase this}}_ERROR', message: error.message };
+    }
+  }
+
+  {{/each}}
   // ==========================================
   // HTTP API Handlers
   // ==========================================
 
   {{#each apis}}
   async {{this.handler}}(req, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+
     try {
-      this.logger.info('{{../name}}.{{this.handler}}', {
-        correlation_id: context.correlationId
+      this.logger.debug('{{../name}}.{{this.handler}}', {
+        correlation_id: correlationId
       });
 
-      // TODO: Implementar lógica del endpoint
-      const data = {
-        message: '{{this.method}} {{this.path}} - Not implemented yet',
-        timestamp: new Date().toISOString()
-      };
-
+      // TODO: Implement API handler logic
       return {
         status: 200,
-        data
+        data: {
+          success: true,
+          message: '{{this.method}} {{this.path}} - Not implemented yet',
+          timestamp: new Date().toISOString()
+        }
       };
-
     } catch (error) {
       this.logger.error('{{../name}}.{{this.handler}}.error', {
         error: error.message,
-        correlation_id: context.correlationId
+        correlation_id: correlationId
       });
-
-      return {
-        status: 500,
-        data: { error: 'Error interno del servidor' }
-      };
+      return { status: 500, data: { success: false, error: error.message } };
     }
   }
 
@@ -169,38 +240,110 @@ class {{pascalCase name}}Module {
     };
   }
 
+  // ==========================================
+  // Tool Handlers (for AI)
+  // ==========================================
+
+  {{#each tools}}
+  async tool{{pascalCase this.name}}(params, context) {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+
+    try {
+      this.logger.debug('{{../name}}.tool{{pascalCase this.name}}', {
+        params,
+        correlation_id: correlationId
+      });
+
+      // TODO: Implement tool logic
+      return {
+        success: true,
+        message: 'Tool {{this.name}} executed',
+        params
+      };
+    } catch (error) {
+      this.logger.error('{{../name}}.tool{{pascalCase this.name}}.error', {
+        error: error.message,
+        correlation_id: correlationId
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  {{/each}}
+  // ==========================================
+  // Async Request Helper (Event Request/Response Pattern)
+  // ==========================================
+
+  /**
+   * Send event request and wait for response
+   * @param {string} requestEvent - Event to publish
+   * @param {string} responseEvent - Event to wait for
+   * @param {object} payload - Request payload
+   * @param {number} timeoutMs - Timeout in milliseconds
+   */
+  async sendRequest(requestEvent, responseEvent, payload, timeoutMs = 10000) {
+    const requestId = crypto.randomUUID();
+
+    const promise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error(`Request timeout: ${requestEvent}`));
+      }, timeoutMs);
+
+      this.pendingRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    // Subscribe to response (one-time)
+    const unsub = await this.eventBus.subscribe(responseEvent, (event) => {
+      const data = event.data || event;
+      if (data.request_id === requestId) {
+        const pending = this.pendingRequests.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingRequests.delete(requestId);
+          if (data.success !== false) {
+            pending.resolve(data);
+          } else {
+            pending.reject(new Error(data.error || 'Request failed'));
+          }
+        }
+        unsub(); // Cleanup subscription
+      }
+    });
+
+    await this.eventBus.publish(requestEvent, {
+      request_id: requestId,
+      ...payload
+    });
+
+    return promise;
+  }
   {{#if persistence}}
   // ==========================================
-  // Persistencia JSON
+  // Persistence (JSON)
   // ==========================================
 
   async loadFromJSON() {
     try {
-      // Verificar si existe el directorio data/
       try {
         await fs.access(this.dataDir);
       } catch (error) {
         await fs.mkdir(this.dataDir, { recursive: true });
-        this.logger.info('{{name}}.data_dir.created', {
-          path: this.dataDir
-        });
+        this.logger.info('{{name}}.data_dir.created', { path: this.dataDir });
       }
 
-      // Intentar cargar archivo
       try {
         await fs.access(this.dataFile);
       } catch (error) {
         this.logger.info('{{name}}.load.first_run', {
-          message: 'No hay datos persistidos, iniciando desde cero'
+          message: 'No persisted data, starting fresh'
         });
         return;
       }
 
-      // Leer y parsear archivo
       const fileContent = await fs.readFile(this.dataFile, 'utf8');
       const parsed = JSON.parse(fileContent);
 
-      // TODO: Cargar datos en estructuras internas
       if (parsed.data) {
         this.data = new Map(Object.entries(parsed.data));
       }
@@ -209,7 +352,6 @@ class {{pascalCase name}}Module {
         file: this.dataFile,
         saved_at: parsed.metadata?.saved_at
       });
-
     } catch (error) {
       this.logger.error('{{name}}.load.error', {
         error: error.message,
@@ -230,17 +372,11 @@ class {{pascalCase name}}Module {
         }
       };
 
-      // Escribir a archivo temporal
       const tempFile = `${this.dataFile}.tmp`;
       await fs.writeFile(tempFile, JSON.stringify(snapshot, null, 2), 'utf8');
-
-      // Rename atómico
       await fs.rename(tempFile, this.dataFile);
 
-      this.logger.debug('{{name}}.persisted_to_json', {
-        file: this.dataFile
-      });
-
+      this.logger.debug('{{name}}.persisted_to_json', { file: this.dataFile });
     } catch (error) {
       this.logger.error('{{name}}.persist.error', {
         error: error.message,

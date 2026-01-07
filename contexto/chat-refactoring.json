@@ -1,0 +1,513 @@
+{
+  "title": "Plan de Refactorización: Chat Modules",
+  "version": "1.1.0",
+  "status": "proposed",
+  "created": "2026-01-07",
+  "updated": "2026-01-07",
+  "problem": {
+    "summary": "Duplicación de lógica entre conversation-manager y ai-gateway",
+    "modules_affected": [
+      {
+        "module": "conversation-manager",
+        "location": "modules/conversation-manager/index.js",
+        "lines": 2469,
+        "issues": [
+          "Viola Single Responsibility Principle (SRP)",
+          "17+ responsabilidades en un solo archivo",
+          "Difícil de testear y mantener",
+          "Tool execution hardcodeada en lugar de eventos",
+          "Lógica de UI mezclada con lógica de negocio",
+          "Duplica lógica de tools que ya existe en ai-gateway"
+        ]
+      },
+      {
+        "module": "ai-gateway",
+        "location": "modules/ai-gateway/index.js",
+        "lines": 1523,
+        "issues": [
+          "Tiene lógica de tools que no se usa (conversation-manager la reimplementa)",
+          "Podría centralizar toda la lógica de tools"
+        ]
+      }
+    ],
+    "duplicated_logic": {
+      "description": "Ambos módulos implementan la misma funcionalidad de tools",
+      "conversation_manager": {
+        "loadAvailableTools": "línea 586 - Carga tools desde moduleLoader",
+        "formatToolsForLLM": "línea 620 - Convierte a formato OpenAI",
+        "convertToolNameFromLLM": "línea 644 - fs_write → fs.write",
+        "executeToolCall": "línea 770 - Ejecuta tool individual",
+        "executeToolCalls": "línea 831 - Ejecuta múltiples tools",
+        "formatToolResultsAsMessages": "línea 844 - Formatea resultados"
+      },
+      "ai_gateway": {
+        "getAvailableTools": "línea 1228 - Carga tools desde moduleLoader",
+        "translateToolsForProvider": "línea 1317 - Convierte por provider",
+        "parseToolCallsFromProvider": "línea 1390 - Parsea respuesta del LLM",
+        "executeToolCalls": "línea 1242 - Ejecuta múltiples tools",
+        "formatToolResultsForProvider": "línea 1468 - Formatea por provider"
+      },
+      "total_duplicated_lines": "~400 líneas"
+    }
+  },
+  "ai_gateway_analysis": {
+    "current_structure": {
+      "main_file": "modules/ai-gateway/index.js (1523 líneas)",
+      "providers": {
+        "base-provider.js": "303 líneas - Clase abstracta",
+        "deepseek-provider.js": "Priority 1 - API DeepSeek",
+        "anthropic-provider.js": "Priority 2 - API Claude",
+        "openai-provider.js": "Priority 3 - API OpenAI",
+        "ollama-provider.js": "Priority 4 - Local Ollama"
+      }
+    },
+    "current_responsibilities": {
+      "provider_management": {
+        "methods": ["initializeProviders", "getProvidersByPriority", "isAvailable"],
+        "description": "Gestión de múltiples providers LLM"
+      },
+      "credential_resolution": {
+        "methods": ["resolveCredential", "onCredentialResponse"],
+        "description": "Resolución de API keys via credential-manager",
+        "cascade": "custom → client → project → global"
+      },
+      "chat_completion": {
+        "methods": ["handleChatCompletion", "chatWithRetry"],
+        "description": "Llamadas a LLM con retry y fallback"
+      },
+      "tool_management_unused": {
+        "methods": ["getAvailableTools", "translateToolsForProvider", "executeToolCalls", "parseToolCallsFromProvider", "formatToolResultsForProvider"],
+        "lines": "1145-1507 (~360 líneas)",
+        "description": "EXISTE pero NO SE USA - conversation-manager lo reimplementa"
+      },
+      "ui_handlers": {
+        "methods": ["handleUIState", "handleUISelect", "handleUIConfigGet", "handleUIConfigPost"],
+        "description": "Estado y configuración para UI"
+      }
+    },
+    "events": {
+      "subscribes": [
+        "ai.chat.request - Principal, desde conversation-manager",
+        "ai.request - Legacy, desde otros módulos",
+        "credential.resolve.response - Respuesta de credentials"
+      ],
+      "publishes": [
+        "ai.chat.response - Respuesta con content/tool_calls",
+        "ai.completion.completed - Analytics",
+        "credential.resolve.request - Solicita API key"
+      ]
+    },
+    "provider_fallback_flow": {
+      "description": "Si provider='auto', intenta en orden de prioridad",
+      "order": [
+        "1. DeepSeek (priority: 1) - Más barato",
+        "2. Anthropic (priority: 2) - Claude",
+        "3. OpenAI (priority: 3) - GPT",
+        "4. Ollama (priority: 4) - Local/gratuito"
+      ],
+      "on_failure": "Continúa al siguiente provider hasta que uno responda"
+    }
+  },
+  "current_flow": {
+    "description": "Flujo ACTUAL (con duplicación)",
+    "diagram": [
+      "conversation-manager.sendMessage()",
+      "    │",
+      "    ├─► loadAvailableTools() ◄── DUPLICADO con ai-gateway",
+      "    ├─► formatToolsForLLM()  ◄── DUPLICADO con ai-gateway",
+      "    │",
+      "    └─► eventBus.publish('ai.chat.request', { messages, tools })",
+      "              │",
+      "              ▼",
+      "        ai-gateway.onAIChatRequest()",
+      "              │",
+      "              ├─► getProvidersByPriority()",
+      "              ├─► resolveCredential() → credential-manager",
+      "              ├─► chatWithRetry() → LLM Provider API",
+      "              │",
+      "              └─► eventBus.publish('ai.chat.response', { content, tool_calls })",
+      "                        │",
+      "                        ▼",
+      "        conversation-manager.onAIChatResponse()",
+      "              │",
+      "              ├─► Si tool_calls:",
+      "              │     executeToolCalls() ◄── DUPLICADO con ai-gateway",
+      "              │     formatToolResultsAsMessages() ◄── DUPLICADO",
+      "              │     LOOP → ai.chat.request",
+      "              │",
+      "              └─► Guarda mensaje y responde"
+    ]
+  },
+  "proposed_flow": {
+    "description": "Flujo PROPUESTO (tools centralizados en ai-gateway)",
+    "option_a": {
+      "name": "Tools en ai-gateway (recomendado)",
+      "description": "ai-gateway maneja todo el ciclo de tools internamente",
+      "diagram": [
+        "conversation-manager.handleUISend()",
+        "    │",
+        "    └─► eventBus.publish('chat.send.request', { conversationId, content })",
+        "              │",
+        "              ▼",
+        "        chat-ai-bridge.onChatSendRequest()",
+        "              │",
+        "              ├─► session.save.request → chat-session (guarda user msg)",
+        "              ├─► prompt.compose.request → prompt-composer",
+        "              │",
+        "              └─► eventBus.publish('ai.chat.request', {",
+        "                    messages,",
+        "                    tools: true,        ◄── Solo flag, ai-gateway carga tools",
+        "                    execute_tools: true ◄── ai-gateway ejecuta el loop",
+        "                  })",
+        "                        │",
+        "                        ▼",
+        "                  ai-gateway.onAIChatRequest()",
+        "                        │",
+        "                        ├─► getAvailableTools() ◄── Centralizado aquí",
+        "                        ├─► translateToolsForProvider()",
+        "                        ├─► chatWithRetry() → LLM",
+        "                        │",
+        "                        ├─► Si tool_calls y execute_tools:",
+        "                        │     executeToolCalls() ◄── Centralizado aquí",
+        "                        │     formatToolResultsForProvider()",
+        "                        │     LOOP interno hasta max_iterations",
+        "                        │",
+        "                        └─► eventBus.publish('ai.chat.response', {",
+        "                              content: 'respuesta final',",
+        "                              tool_calls_executed: [...],",
+        "                              iterations: 3",
+        "                            })",
+        "                                  │",
+        "                                  ▼",
+        "                  chat-ai-bridge recibe respuesta final",
+        "                        │",
+        "                        └─► session.save.request (guarda assistant msg)"
+      ],
+      "benefits": [
+        "Elimina ~400 líneas duplicadas de conversation-manager",
+        "ai-gateway ya tiene la lógica de tools por provider",
+        "Un solo lugar para mantener compatibilidad con providers",
+        "chat-ai-bridge se simplifica enormemente"
+      ]
+    },
+    "option_b": {
+      "name": "Tools en chat-ai-bridge",
+      "description": "Mantener tool loop en chat-ai-bridge, eliminar de ai-gateway",
+      "when_to_use": "Si se necesita control granular del loop desde el chat"
+    }
+  },
+  "proposed_modules": {
+    "conversation-manager": {
+      "role": "Orquestador y punto de entrada UI",
+      "estimated_lines": 600,
+      "responsibilities": [
+        "UI Request handlers (MQTT)",
+        "HTTP API handlers (proxy a eventos)",
+        "Orquestación del flujo de mensajes",
+        "Health y metrics del módulo"
+      ],
+      "removes": [
+        "loadAvailableTools → centralizado en ai-gateway",
+        "formatToolsForLLM → centralizado en ai-gateway",
+        "executeToolCalls → centralizado en ai-gateway",
+        "queryDatabase → usa eventos a chat-session",
+        "composeSystemPrompt → movido a prompt-composer"
+      ],
+      "events": {
+        "publishes": [
+          "chat.send.request",
+          "session.create.request",
+          "session.list.request",
+          "session.get.request",
+          "session.update.request",
+          "session.delete.request"
+        ],
+        "subscribes": [
+          "chat.send.response",
+          "session.*.response"
+        ]
+      }
+    },
+    "chat-session": {
+      "role": "Persistencia de conversaciones y mensajes",
+      "estimated_lines": 400,
+      "location": "modules/chat-session/",
+      "responsibilities": [
+        "CRUD de conversaciones en SQLite",
+        "CRUD de mensajes",
+        "Context FIFO management",
+        "Schema management por proyecto"
+      ],
+      "methods": [
+        "createConversation",
+        "updateConversation",
+        "deleteConversation",
+        "saveMessage",
+        "getMessages",
+        "applyContextFIFO",
+        "toggleMessageContext",
+        "getContextStats"
+      ],
+      "events": {
+        "publishes": ["session.*.response", "conversation.created", "message.saved"],
+        "subscribes": ["session.*.request"]
+      }
+    },
+    "chat-ai-bridge": {
+      "role": "Puente entre chat y ai-gateway (simplificado)",
+      "estimated_lines": 300,
+      "location": "modules/chat-ai-bridge/",
+      "responsibilities": [
+        "Coordinar flujo: session → prompt → ai-gateway",
+        "Manejar respuesta y guardar mensaje",
+        "NO maneja tools (delegado a ai-gateway)"
+      ],
+      "methods": [
+        "onChatSendRequest",
+        "buildAIRequest",
+        "handleAIResponse",
+        "saveAssistantMessage"
+      ],
+      "events": {
+        "publishes": [
+          "chat.send.response",
+          "ai.chat.request",
+          "session.save.request",
+          "prompt.compose.request"
+        ],
+        "subscribes": [
+          "chat.send.request",
+          "ai.chat.response",
+          "session.save.response",
+          "prompt.compose.response"
+        ]
+      }
+    },
+    "prompt-composer": {
+      "role": "Composición de system prompts con contexto",
+      "estimated_lines": 200,
+      "location": "modules/prompt-composer/",
+      "responsibilities": [
+        "Cargar contexto del proyecto",
+        "Componer system prompt con templates",
+        "Sustituir variables en templates"
+      ],
+      "methods": [
+        "loadProjectContext",
+        "composeSystemPrompt",
+        "substituteVariables"
+      ],
+      "events": {
+        "publishes": ["prompt.compose.response", "project.get.request"],
+        "subscribes": ["prompt.compose.request", "project.get.response"]
+      }
+    },
+    "ai-gateway": {
+      "role": "Gateway LLM con tools centralizados (existente, modificado)",
+      "location": "modules/ai-gateway/",
+      "modifications": {
+        "enable_tool_loop": {
+          "description": "Activar el loop de tools interno cuando execute_tools=true",
+          "new_payload_fields": {
+            "tools": "boolean|array - true para cargar automáticamente, o array específico",
+            "execute_tools": "boolean - si true, ai-gateway ejecuta el loop",
+            "max_tool_iterations": "number - máximo de iteraciones (default 10)"
+          }
+        },
+        "enhanced_response": {
+          "description": "Respuesta incluye historial de tools ejecutados",
+          "new_response_fields": {
+            "tool_calls_executed": "array - historial de todas las tools ejecutadas",
+            "iterations": "number - cuántas iteraciones del loop",
+            "final_content": "string - respuesta final del LLM"
+          }
+        }
+      },
+      "events": {
+        "subscribes": ["ai.chat.request", "credential.resolve.response"],
+        "publishes": ["ai.chat.response", "ai.completion.completed"]
+      }
+    }
+  },
+  "event_catalog": {
+    "ai_domain": {
+      "ai.chat.request": {
+        "publisher": "chat-ai-bridge",
+        "subscriber": "ai-gateway",
+        "payload": {
+          "request_id": "uuid",
+          "messages": "array - historial de mensajes",
+          "tools": "boolean|array - true=auto, array=específico",
+          "execute_tools": "boolean - ai-gateway ejecuta loop",
+          "max_tool_iterations": "number? - default 10",
+          "provider": "string? - 'auto'|'deepseek'|'anthropic'|'openai'|'ollama'",
+          "model": "string? - modelo específico",
+          "temperature": "number?",
+          "max_tokens": "number?",
+          "project_id": "uuid",
+          "correlation_id": "uuid"
+        }
+      },
+      "ai.chat.response": {
+        "publisher": "ai-gateway",
+        "subscriber": "chat-ai-bridge",
+        "payload": {
+          "request_id": "uuid",
+          "success": "boolean",
+          "content": "string - respuesta final",
+          "tool_calls_executed": "array? - historial de tools [{name, args, result}]",
+          "iterations": "number? - cuántas iteraciones",
+          "tokens": "number",
+          "cost": "number",
+          "model": "string",
+          "provider": "string",
+          "error": "string?"
+        }
+      }
+    },
+    "chat_domain": {
+      "chat.send.request": {
+        "publisher": "conversation-manager",
+        "subscriber": "chat-ai-bridge",
+        "payload": {
+          "request_id": "uuid",
+          "conversation_id": "uuid",
+          "content": "string",
+          "user_id": "string?",
+          "attachments": "array?",
+          "correlation_id": "uuid"
+        }
+      },
+      "chat.send.response": {
+        "publisher": "chat-ai-bridge",
+        "subscriber": "conversation-manager",
+        "payload": {
+          "request_id": "uuid",
+          "success": "boolean",
+          "user_message": "Message",
+          "assistant_message": "Message",
+          "tokens_used": "number",
+          "cost": "number",
+          "tools_executed": "array?",
+          "error": "string?"
+        }
+      }
+    },
+    "session_domain": {
+      "session.save.request": {
+        "publisher": "chat-ai-bridge",
+        "subscriber": "chat-session",
+        "payload": {
+          "request_id": "uuid",
+          "conversation_id": "uuid",
+          "role": "user|assistant",
+          "content": "string",
+          "tokens": "number?",
+          "cost": "number?",
+          "metadata": "object?",
+          "correlation_id": "uuid"
+        }
+      }
+    },
+    "prompt_domain": {
+      "prompt.compose.request": {
+        "publisher": "chat-ai-bridge",
+        "subscriber": "prompt-composer",
+        "payload": {
+          "request_id": "uuid",
+          "conversation": "Conversation",
+          "include_tools_description": "boolean?",
+          "correlation_id": "uuid"
+        }
+      }
+    }
+  },
+  "migration_strategy": {
+    "phase_0": {
+      "name": "Activar tools en ai-gateway",
+      "tasks": [
+        "Modificar ai-gateway para aceptar execute_tools=true",
+        "Implementar loop interno de tools en ai-gateway",
+        "Agregar tool_calls_executed a la respuesta",
+        "Testear con llamadas directas"
+      ],
+      "risk": "bajo",
+      "breaking_changes": false,
+      "note": "ai-gateway ya tiene el código, solo hay que activarlo"
+    },
+    "phase_1": {
+      "name": "Crear chat-session",
+      "tasks": [
+        "Crear módulo chat-session con estructura básica",
+        "Mover CRUD de conversaciones",
+        "Mover gestión de mensajes",
+        "Mover context FIFO",
+        "Actualizar conversation-manager para usar eventos"
+      ],
+      "risk": "bajo",
+      "breaking_changes": false
+    },
+    "phase_2": {
+      "name": "Crear prompt-composer",
+      "tasks": [
+        "Crear módulo prompt-composer",
+        "Mover loadProjectContext",
+        "Mover composeSystemPrompt",
+        "Testear composición de prompts"
+      ],
+      "risk": "bajo",
+      "breaking_changes": false
+    },
+    "phase_3": {
+      "name": "Crear chat-ai-bridge (simplificado)",
+      "tasks": [
+        "Crear módulo chat-ai-bridge",
+        "Implementar coordinación session → prompt → ai-gateway",
+        "NO implementar tool loop (usa ai-gateway)",
+        "Actualizar conversation-manager"
+      ],
+      "risk": "medio",
+      "breaking_changes": false
+    },
+    "phase_4": {
+      "name": "Limpieza",
+      "tasks": [
+        "Eliminar código de tools de conversation-manager (~400 líneas)",
+        "Simplificar handlers",
+        "Actualizar tests",
+        "Actualizar documentación"
+      ],
+      "risk": "bajo",
+      "breaking_changes": false
+    }
+  },
+  "benefits": {
+    "maintainability": "Cada módulo tiene una sola responsabilidad clara",
+    "no_duplication": "Lógica de tools en un solo lugar (ai-gateway)",
+    "provider_compatibility": "ai-gateway maneja diferencias entre providers",
+    "testability": "Módulos pequeños son más fáciles de testear",
+    "reusability": "chat-session y ai-gateway pueden ser usados por otros módulos",
+    "debugging": "Más fácil identificar dónde ocurren errores"
+  },
+  "metrics_comparison": {
+    "before": {
+      "conversation_manager_lines": 2469,
+      "ai_gateway_lines": 1523,
+      "duplicated_tool_logic": 400,
+      "total_lines": 3992
+    },
+    "after": {
+      "conversation_manager_lines": 600,
+      "chat_session_lines": 400,
+      "chat_ai_bridge_lines": 300,
+      "prompt_composer_lines": 200,
+      "ai_gateway_lines": 1523,
+      "total_lines": 3023
+    },
+    "reduction": {
+      "lines_removed": "~970 líneas (24%)",
+      "duplication_eliminated": "400 líneas",
+      "modules": "2 → 5 (más granular)"
+    }
+  }
+}

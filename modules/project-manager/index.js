@@ -226,9 +226,19 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'removeDependency', this.handleUIRemoveDependency.bind(this));
       this.uiHandler.register('project', 'getDependencies', this.handleUIGetDependencies.bind(this));
       this.uiHandler.register('project', 'getDependents', this.handleUIGetDependents.bind(this));
+      // System handlers (Phase 3)
+      this.uiHandler.register('system', 'create', this.handleUISystemCreate.bind(this));
+      this.uiHandler.register('system', 'list', this.handleUISystemList.bind(this));
+      this.uiHandler.register('system', 'get', this.handleUISystemGet.bind(this));
+      this.uiHandler.register('system', 'update', this.handleUISystemUpdate.bind(this));
+      this.uiHandler.register('system', 'delete', this.handleUISystemDelete.bind(this));
+      this.uiHandler.register('system', 'addProject', this.handleUISystemAddProject.bind(this));
+      this.uiHandler.register('system', 'removeProject', this.handleUISystemRemoveProject.bind(this));
+      this.uiHandler.register('system', 'getUnassigned', this.handleUISystemGetUnassigned.bind(this));
 
       this.logger.info('project-manager.ui_handlers.registered', {
-        handlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation', 'link', 'unlink', 'getLinks', 'getRelated', 'addDependency', 'removeDependency', 'getDependencies', 'getDependents']
+        projectHandlers: ['list', 'get', 'create', 'update', 'delete', 'activate', 'saveSession', 'restoreSession', 'setAIConfig', 'setLastConversation', 'link', 'unlink', 'getLinks', 'getRelated', 'addDependency', 'removeDependency', 'getDependencies', 'getDependents'],
+        systemHandlers: ['create', 'list', 'get', 'update', 'delete', 'addProject', 'removeProject', 'getUnassigned']
       });
     }
 
@@ -263,6 +273,15 @@ class ProjectManagerModule {
       this.uiHandler.unregister('project', 'removeDependency');
       this.uiHandler.unregister('project', 'getDependencies');
       this.uiHandler.unregister('project', 'getDependents');
+      // System handlers (Phase 3)
+      this.uiHandler.unregister('system', 'create');
+      this.uiHandler.unregister('system', 'list');
+      this.uiHandler.unregister('system', 'get');
+      this.uiHandler.unregister('system', 'update');
+      this.uiHandler.unregister('system', 'delete');
+      this.uiHandler.unregister('system', 'addProject');
+      this.uiHandler.unregister('system', 'removeProject');
+      this.uiHandler.unregister('system', 'getUnassigned');
     }
 
     // Unsubscribe all eventBus subscriptions
@@ -1466,6 +1485,374 @@ class ProjectManagerModule {
     };
   }
 
+  // ==================== SYSTEMS (PHASE 3) ====================
+
+  /**
+   * Create a new system (logical container for related projects)
+   * @param {string} name - System name
+   * @param {string} description - System description
+   * @param {object} metadata - Additional metadata
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async createSystem(name, description, metadata = {}, correlationId) {
+    this.logger.info({ correlationId, name }, 'Creating system');
+
+    if (!name || name.trim().length === 0) {
+      throw new Error('System name is required');
+    }
+
+    const systemId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await this.queryDatabase(`
+      INSERT INTO systems (id, name, description, created_at, updated_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [systemId, name.trim(), description || null, now, now, JSON.stringify(metadata)], false, correlationId);
+
+    // Emit event
+    await this.eventBus.publish('system.created', {
+      system_id: systemId,
+      name: name.trim(),
+      description,
+      created_at: now
+    });
+
+    this.logger.info({ correlationId, systemId, name }, 'System created successfully');
+
+    return {
+      id: systemId,
+      name: name.trim(),
+      description: description || '',
+      metadata,
+      createdAt: now,
+      updatedAt: now,
+      projects: []
+    };
+  }
+
+  /**
+   * Get a system by ID with its associated projects
+   * @param {string} systemId - System ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getSystem(systemId, correlationId) {
+    this.logger.debug({ correlationId, systemId }, 'Getting system');
+
+    const systems = await this.queryDatabase(
+      'SELECT * FROM systems WHERE id = ?',
+      [systemId],
+      true,
+      correlationId
+    );
+
+    if (systems.length === 0) {
+      return null;
+    }
+
+    const system = systems[0];
+
+    // Get associated projects
+    const projects = await this.queryDatabase(`
+      SELECT id, name, description, system_role, created_at, updated_at, metadata
+      FROM projects
+      WHERE system_id = ?
+      ORDER BY system_role, name
+    `, [systemId], true, correlationId);
+
+    return {
+      id: system.id,
+      name: system.name,
+      description: system.description || '',
+      metadata: system.metadata ? JSON.parse(system.metadata) : {},
+      createdAt: system.created_at,
+      updatedAt: system.updated_at,
+      projects: projects.map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description || '',
+        role: p.system_role,
+        metadata: p.metadata ? JSON.parse(p.metadata) : {},
+        createdAt: p.created_at,
+        updatedAt: p.updated_at
+      }))
+    };
+  }
+
+  /**
+   * List all systems
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async listSystems(correlationId) {
+    this.logger.debug({ correlationId }, 'Listing systems');
+
+    const systems = await this.queryDatabase(
+      'SELECT * FROM systems ORDER BY name',
+      [],
+      true,
+      correlationId
+    );
+
+    // Get project counts for each system
+    const result = [];
+    for (const system of systems) {
+      const projectCount = await this.queryDatabase(
+        'SELECT COUNT(*) as count FROM projects WHERE system_id = ?',
+        [system.id],
+        true,
+        correlationId
+      );
+
+      result.push({
+        id: system.id,
+        name: system.name,
+        description: system.description || '',
+        metadata: system.metadata ? JSON.parse(system.metadata) : {},
+        createdAt: system.created_at,
+        updatedAt: system.updated_at,
+        projectCount: projectCount[0]?.count || 0
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Update a system
+   * @param {string} systemId - System ID
+   * @param {object} updates - Fields to update: { name?, description?, metadata? }
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async updateSystem(systemId, updates, correlationId) {
+    this.logger.info({ correlationId, systemId, updates }, 'Updating system');
+
+    const system = await this.getSystem(systemId, correlationId);
+    if (!system) {
+      throw new Error(`System not found: ${systemId}`);
+    }
+
+    const now = new Date().toISOString();
+    const queryParts = ['updated_at = ?'];
+    const params = [now];
+
+    if (updates.name !== undefined) {
+      queryParts.push('name = ?');
+      params.push(updates.name.trim());
+    }
+
+    if (updates.description !== undefined) {
+      queryParts.push('description = ?');
+      params.push(updates.description);
+    }
+
+    if (updates.metadata !== undefined) {
+      queryParts.push('metadata = ?');
+      params.push(JSON.stringify(updates.metadata));
+    }
+
+    params.push(systemId);
+
+    await this.queryDatabase(
+      `UPDATE systems SET ${queryParts.join(', ')} WHERE id = ?`,
+      params,
+      false,
+      correlationId
+    );
+
+    // Emit event
+    await this.eventBus.publish('system.updated', {
+      system_id: systemId,
+      updated_fields: Object.keys(updates),
+      updated_at: now
+    });
+
+    this.logger.info({ correlationId, systemId }, 'System updated successfully');
+
+    return await this.getSystem(systemId, correlationId);
+  }
+
+  /**
+   * Delete a system (does not delete projects, just removes their system_id)
+   * @param {string} systemId - System ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async deleteSystem(systemId, correlationId) {
+    this.logger.info({ correlationId, systemId }, 'Deleting system');
+
+    const system = await this.getSystem(systemId, correlationId);
+    if (!system) {
+      throw new Error(`System not found: ${systemId}`);
+    }
+
+    // Remove system_id from all associated projects
+    await this.queryDatabase(
+      'UPDATE projects SET system_id = NULL, system_role = NULL WHERE system_id = ?',
+      [systemId],
+      false,
+      correlationId
+    );
+
+    // Update in-memory cache for affected projects
+    for (const project of this.projects.values()) {
+      if (project.system_id === systemId) {
+        project.system_id = null;
+        project.system_role = null;
+      }
+    }
+
+    // Delete the system
+    await this.queryDatabase(
+      'DELETE FROM systems WHERE id = ?',
+      [systemId],
+      false,
+      correlationId
+    );
+
+    // Emit event
+    await this.eventBus.publish('system.deleted', {
+      system_id: systemId,
+      name: system.name,
+      affected_projects: system.projects.length,
+      deleted_at: new Date().toISOString()
+    });
+
+    this.logger.info({ correlationId, systemId }, 'System deleted successfully');
+
+    return { success: true, systemId, affectedProjects: system.projects.length };
+  }
+
+  /**
+   * Add a project to a system
+   * @param {string} systemId - System ID
+   * @param {string} projectId - Project ID
+   * @param {string} role - Role within the system (e.g., 'billing', 'purchasing', 'order-entry')
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async addProjectToSystem(systemId, projectId, role, correlationId) {
+    this.logger.info({ correlationId, systemId, projectId, role }, 'Adding project to system');
+
+    // Validate system exists
+    const system = await this.getSystem(systemId, correlationId);
+    if (!system) {
+      throw new Error(`System not found: ${systemId}`);
+    }
+
+    // Validate project exists
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    // Check if project is already in a system
+    if (project.system_id && project.system_id !== systemId) {
+      throw new Error(`Project '${project.name}' is already in another system`);
+    }
+
+    const now = new Date().toISOString();
+
+    await this.queryDatabase(
+      'UPDATE projects SET system_id = ?, system_role = ?, updated_at = ? WHERE id = ?',
+      [systemId, role || null, now, projectId],
+      false,
+      correlationId
+    );
+
+    // Update in-memory cache
+    project.system_id = systemId;
+    project.system_role = role || null;
+    project.updated_at = now;
+
+    // Emit event
+    await this.eventBus.publish('project.joined_system', {
+      project_id: projectId,
+      project_name: project.name,
+      system_id: systemId,
+      system_name: system.name,
+      role,
+      joined_at: now
+    });
+
+    this.logger.info({ correlationId, systemId, projectId }, 'Project added to system successfully');
+
+    return {
+      projectId,
+      projectName: project.name,
+      systemId,
+      systemName: system.name,
+      role
+    };
+  }
+
+  /**
+   * Remove a project from its system
+   * @param {string} projectId - Project ID
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async removeProjectFromSystem(projectId, correlationId) {
+    this.logger.info({ correlationId, projectId }, 'Removing project from system');
+
+    const project = this.projects.get(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    if (!project.system_id) {
+      throw new Error(`Project '${project.name}' is not in any system`);
+    }
+
+    const previousSystemId = project.system_id;
+    const previousRole = project.system_role;
+    const now = new Date().toISOString();
+
+    await this.queryDatabase(
+      'UPDATE projects SET system_id = NULL, system_role = NULL, updated_at = ? WHERE id = ?',
+      [now, projectId],
+      false,
+      correlationId
+    );
+
+    // Update in-memory cache
+    project.system_id = null;
+    project.system_role = null;
+    project.updated_at = now;
+
+    // Emit event
+    await this.eventBus.publish('project.left_system', {
+      project_id: projectId,
+      project_name: project.name,
+      system_id: previousSystemId,
+      previous_role: previousRole,
+      left_at: now
+    });
+
+    this.logger.info({ correlationId, projectId, previousSystemId }, 'Project removed from system successfully');
+
+    return {
+      projectId,
+      projectName: project.name,
+      previousSystemId,
+      previousRole
+    };
+  }
+
+  /**
+   * Get projects not assigned to any system
+   * @param {string} correlationId - Correlation ID for tracing
+   */
+  async getUnassignedProjects(correlationId) {
+    this.logger.debug({ correlationId }, 'Getting unassigned projects');
+
+    return Array.from(this.projects.values())
+      .filter(p => !p.system_id)
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description || '',
+        metadata: p.metadata || {},
+        createdAt: p.created_at,
+        updatedAt: p.updated_at
+      }));
+  }
+
   // ==================== EVENT HANDLERS ====================
 
   /**
@@ -2115,6 +2502,188 @@ class ProjectManagerModule {
 
     const dependents = await this.getDependents(id, correlationId);
     return { projectId: id, dependents, count: dependents.length };
+  }
+
+  // ==================== UI SYSTEM HANDLERS (Phase 3) ====================
+
+  /**
+   * UI Handler: Create a new system
+   * Request: mqttRequest('system', 'create', { name, description?, metadata? })
+   */
+  async handleUISystemCreate(data, request) {
+    const { name, description, metadata } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!name || name.trim().length === 0) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'System name is required' };
+    }
+
+    try {
+      const system = await this.createSystem(name, description, metadata, correlationId);
+      return { created: true, system };
+    } catch (error) {
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: List all systems
+   * Request: mqttRequest('system', 'list')
+   */
+  async handleUISystemList(data, request) {
+    const correlationId = crypto.randomUUID();
+
+    try {
+      const systems = await this.listSystems(correlationId);
+      return { systems, count: systems.length };
+    } catch (error) {
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get a system by ID with projects
+   * Request: mqttRequest('system', 'get', { id })
+   */
+  async handleUISystemGet(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
+    }
+
+    try {
+      const system = await this.getSystem(id, correlationId);
+      if (!system) {
+        throw { status: 404, code: 'NOT_FOUND', message: 'System not found' };
+      }
+      return { system };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Update a system
+   * Request: mqttRequest('system', 'update', { id, name?, description?, metadata? })
+   */
+  async handleUISystemUpdate(data, request) {
+    const { id, name, description, metadata } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
+    }
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+    if (metadata !== undefined) updates.metadata = metadata;
+
+    try {
+      const system = await this.updateSystem(id, updates, correlationId);
+      return { updated: true, system };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Delete a system
+   * Request: mqttRequest('system', 'delete', { id })
+   */
+  async handleUISystemDelete(data, request) {
+    const { id } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
+    }
+
+    try {
+      const result = await this.deleteSystem(id, correlationId);
+      return { deleted: true, ...result };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Add a project to a system
+   * Request: mqttRequest('system', 'addProject', { systemId, projectId, role? })
+   */
+  async handleUISystemAddProject(data, request) {
+    const { systemId, projectId, role } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!systemId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
+    }
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    try {
+      const result = await this.addProjectToSystem(systemId, projectId, role, correlationId);
+      return { added: true, ...result };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      if (error.message.includes('already in another system')) {
+        throw { status: 409, code: 'CONFLICT', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Remove a project from its system
+   * Request: mqttRequest('system', 'removeProject', { projectId })
+   */
+  async handleUISystemRemoveProject(data, request) {
+    const { projectId } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    try {
+      const result = await this.removeProjectFromSystem(projectId, correlationId);
+      return { removed: true, ...result };
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      if (error.message.includes('not in any system')) {
+        throw { status: 400, code: 'VALIDATION_ERROR', message: error.message };
+      }
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
+  }
+
+  /**
+   * UI Handler: Get projects not assigned to any system
+   * Request: mqttRequest('system', 'getUnassigned')
+   */
+  async handleUISystemGetUnassigned(data, request) {
+    const correlationId = crypto.randomUUID();
+
+    try {
+      const projects = await this.getUnassignedProjects(correlationId);
+      return { projects, count: projects.length };
+    } catch (error) {
+      throw { status: 500, code: 'INTERNAL_ERROR', message: error.message };
+    }
   }
 
   // ==================== UI SESSION & AI CONFIG HANDLERS ====================

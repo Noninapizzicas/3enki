@@ -1,143 +1,69 @@
 {
   "name": "conversation-manager",
-  "version": "1.0.0",
-  "description": "Event-driven conversation management with project context, conversation context, and AI integration",
-  "author": "Aichat Team",
+  "version": "2.0.0",
+  "description": "Facade/Coordinator que mantiene compatibilidad con frontend existente, delegando a chat-session, prompt-composer y chat-ai-bridge",
+  "author": "Event Core Team",
   "main": "index.js",
-
-  "provides": {
-    "events": [
-      "conversation.created",
-      "conversation.updated",
-      "conversation.deleted",
-      "message.sent",
-      "message.received",
-      "conversation.context.loaded"
-    ],
-    "queries": [
-      "conversation.get.request",
-      "conversation.list.request",
-      "message.list.request",
-      "conversation.send.request"
-    ]
-  },
+  "deprecated": true,
+  "deprecationNote": "Use chat-session, prompt-composer, chat-ai-bridge directly for new development",
 
   "events": {
-    "publishes": [
-      {
-        "event": "ai.chat.request",
-        "description": "Request AI chat completion",
-        "schema": { "$ref": "./schemas/events.json#/definitions/ai_chat_request" }
-      },
-      {
-        "event": "conversation.created",
-        "description": "Conversation created",
-        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_created" }
-      },
-      {
-        "event": "conversation.updated",
-        "description": "Conversation metadata updated",
-        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_updated" }
-      },
-      {
-        "event": "conversation.deleted",
-        "description": "Conversation deleted",
-        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_deleted" }
-      },
-      {
-        "event": "message.sent",
-        "description": "User message sent",
-        "schema": { "$ref": "./schemas/events.json#/definitions/message_sent" }
-      },
-      {
-        "event": "message.received",
-        "description": "AI response received",
-        "schema": { "$ref": "./schemas/events.json#/definitions/message_received" }
-      },
-      {
-        "event": "conversation.context.loaded",
-        "description": "Project and conversation context loaded",
-        "schema": { "$ref": "./schemas/events.json#/definitions/context_loaded" }
-      },
-      {
-        "event": "conversation.get.response",
-        "description": "Response with conversation details",
-        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_get_response" }
-      },
-      {
-        "event": "conversation.list.response",
-        "description": "Response with conversations list",
-        "schema": { "$ref": "./schemas/events.json#/definitions/conversation_list_response" }
-      },
-      {
-        "event": "message.list.response",
-        "description": "Response with messages list",
-        "schema": { "$ref": "./schemas/events.json#/definitions/message_list_response" }
-      },
-      {
-        "event": "conversation.send.response",
-        "description": "Response with AI message",
-        "schema": { "$ref": "./schemas/events.json#/definitions/send_response" }
-      },
-      {
-        "event": "tool.list.request",
-        "description": "Request available tools from tool-orchestrator"
-      },
-      {
-        "event": "tool.call.request",
-        "description": "Execute a tool via tool-orchestrator"
-      }
-    ],
+    "publishes": [],
     "subscribes": [
       {
-        "event": "conversation.get.request",
-        "description": "Get conversation details",
-        "handler": "onGetConversationRequest"
+        "event": "chat.send.response",
+        "description": "Response from chat-ai-bridge",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "conversation.list.request",
-        "description": "List conversations",
-        "handler": "onListConversationsRequest"
+        "event": "session.create.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "message.list.request",
-        "description": "List messages",
-        "handler": "onListMessagesRequest"
+        "event": "session.list.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "conversation.send.request",
-        "description": "Send message and get AI response",
-        "handler": "onSendMessageRequest"
+        "event": "session.get.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "db.query.response",
-        "description": "Database query responses",
-        "handler": "onDbQueryResponse"
+        "event": "session.update.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "ai.chat.response",
-        "description": "AI chat responses",
-        "handler": "onAIChatResponse"
+        "event": "session.delete.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "project.get.response",
-        "description": "Project details for context",
-        "handler": "onProjectGetResponse"
+        "event": "session.messages.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "storage.info.response",
-        "description": "Storage info for project context",
-        "handler": "onStorageInfoResponse"
+        "event": "session.context.load.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "tool.list.response",
-        "description": "Available tools list for function calling",
-        "handler": "onToolListResponse"
+        "event": "session.context.toggle.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
       },
       {
-        "event": "tool.call.response",
-        "description": "Tool execution result",
-        "handler": "onToolCallResponse"
+        "event": "session.context.stats.response",
+        "description": "Response from chat-session",
+        "handler": "onDelegatedResponse"
+      },
+      {
+        "event": "project.active.response",
+        "description": "Response from project-manager",
+        "handler": "onDelegatedResponse"
       }
     ]
   },
@@ -147,79 +73,67 @@
       "method": "POST",
       "path": "/conversations",
       "handler": "handleCreateConversation",
-      "description": "Create conversation (publishes conversation.created)",
-      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/create_request" },
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/conversation_response" }
+      "description": "Create conversation (delegates to chat-session)"
     },
     {
       "method": "GET",
       "path": "/conversations",
       "handler": "handleListConversations",
-      "description": "List conversations (optionally filtered by project)",
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/list_response" }
+      "description": "List conversations (delegates to chat-session)"
     },
     {
       "method": "GET",
       "path": "/conversations/:id",
       "handler": "handleGetConversation",
-      "description": "Get conversation with context",
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/conversation_detail_response" }
+      "description": "Get conversation with messages (delegates to chat-session)"
     },
     {
       "method": "PUT",
       "path": "/conversations/:id",
       "handler": "handleUpdateConversation",
-      "description": "Update conversation metadata (publishes conversation.updated)",
-      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/update_request" },
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/conversation_response" }
+      "description": "Update conversation (delegates to chat-session)"
     },
     {
       "method": "DELETE",
       "path": "/conversations/:id",
       "handler": "handleDeleteConversation",
-      "description": "Delete conversation (publishes conversation.deleted)",
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/delete_response" }
+      "description": "Delete conversation (delegates to chat-session)"
     },
     {
       "method": "POST",
       "path": "/conversations/:id/messages",
       "handler": "handleSendMessage",
-      "description": "Send message and get AI response (publishes message.sent, message.received)",
-      "request_schema": { "$ref": "./schemas/conversation.json#/definitions/send_message_request" },
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/send_message_response" }
+      "description": "Send message and get AI response (delegates to chat-ai-bridge)"
     },
     {
       "method": "GET",
       "path": "/conversations/:id/messages",
       "handler": "handleGetMessages",
-      "description": "Get conversation messages",
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/messages_response" }
+      "description": "Get conversation messages (delegates to chat-session)"
     },
     {
       "method": "GET",
       "path": "/conversations/:id/context",
       "handler": "handleGetContext",
-      "description": "Get full context (project + conversation)",
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/context_response" }
+      "description": "Get conversation context (delegates to chat-session)"
     },
     {
       "method": "GET",
       "path": "/ui/state",
       "handler": "handleUIState",
-      "description": "UI-ready state for conversation management (grouped by date, with stats)",
-      "response_schema": { "$ref": "./schemas/conversation.json#/definitions/ui_state_response" }
+      "description": "UI-ready state for conversation management"
     },
     {
       "method": "PUT",
       "path": "/messages/:id/context",
       "handler": "handleToggleContext",
-      "description": "Toggle message context inclusion (in_context, manually_toggled)"
+      "description": "Toggle message context inclusion (delegates to chat-session)"
     },
     {
       "method": "GET",
       "path": "/conversations/:id/context-stats",
       "handler": "handleContextStats",
-      "description": "Get context statistics for a conversation (active, total, remaining)"
+      "description": "Get context statistics (delegates to chat-session)"
     },
     {
       "method": "GET",
@@ -235,46 +149,23 @@
     }
   ],
 
-  "observability": {
-    "logging": {
-      "level": "info",
-      "structured": true,
-      "correlation_id": true
-    },
-    "metrics": {
-      "enabled": true,
-      "counters": [
-        "conversation.created.total",
-        "conversation.updated.total",
-        "conversation.deleted.total",
-        "message.sent.total",
-        "message.received.total",
-        "conversation.context.loaded.total",
-        "conversation.error.total"
-      ],
-      "gauges": [
-        "conversation.active.count",
-        "conversation.messages.total",
-        "conversation.pending.requests"
-      ],
-      "timings": [
-        "conversation.message.duration",
-        "conversation.context.load.duration"
-      ]
+  "ui": {
+    "zone": "chat",
+    "icon": "💬",
+    "handlers": {
+      "domain": "conversation",
+      "actions": ["send", "load", "create", "list", "get", "update", "delete", "toggleContext", "contextStats"]
     }
   },
 
+  "dependencies": [
+    "chat-session",
+    "chat-ai-bridge",
+    "project-manager"
+  ],
+
   "config": {
-    "contextWindow": 20,
-    "maxMessagesPerConversation": 10000,
-    "dbTimeout": 10000,
-    "aiTimeout": 120000,
-    "toolTimeout": 5000,
-    "toolCallTimeout": 30000,
-    "maxToolCallIterations": 10,
-    "includeProjectContext": true,
-    "includeStorageInfo": true,
-    "includeTools": true,
-    "defaultSystemPrompt": "You are a helpful AI assistant. Answer questions accurately and concisely."
+    "requestTimeout": 30000,
+    "chatTimeout": 180000
   }
 }

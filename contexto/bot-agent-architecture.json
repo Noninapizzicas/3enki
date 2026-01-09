@@ -120,7 +120,7 @@
           }
         },
 
-        "api": {
+        "methods": {
           "updateFileStatus": "downloadManager.updateFileStatus(filePath, 'P') → renombra añadiendo estado",
           "parseFileName": "downloadManager.parseFileName(fileName) → extrae metadata",
           "listFiles": "downloadManager.listFiles(dirPath, filterStatus) → lista con metadata",

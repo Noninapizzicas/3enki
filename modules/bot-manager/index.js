@@ -191,6 +191,15 @@ class BotManagerModule {
       path: result.path,
       mimeType: result.mimeType
     });
+
+    // Enviar confirmación si está configurada
+    const botConfig = this.registry.get(botName);
+    await this.autoResponder.handleFileReceived(
+      botName,
+      chatId,
+      result.originalName,
+      botConfig?.autoResponses
+    );
   }
 
   /**

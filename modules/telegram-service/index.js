@@ -237,11 +237,11 @@ class TelegramServiceModule {
 
   async onGetFileRequest(event) {
     const data = event?.data || event?.payload || event;
-    const { request_id, botName, fileId, download } = data;
+    const { request_id, botName, fileId, download, destPath } = data;
 
-    this.logger.info('telegram.get_file.request', { botName, fileId, request_id });
+    this.logger.info('telegram.get_file.request', { botName, fileId, request_id, destPath });
 
-    const result = await this.handleToolGetFile({ botName, fileId, download });
+    const result = await this.handleToolGetFile({ botName, fileId, download, destPath });
 
     // Publish response
     await this.eventBus.publish('telegram.get_file.response', {
@@ -769,7 +769,7 @@ class TelegramServiceModule {
   }
 
   async handleToolGetFile(args) {
-    const { botName, fileId, download } = args;
+    const { botName, fileId, download, destPath: requestedPath } = args;
 
     try {
       const client = this.getBot(botName);
@@ -784,8 +784,15 @@ class TelegramServiceModule {
       };
 
       if (download) {
-        const storagePath = this.config.storagePath || '/storage/telegram';
-        const destPath = path.join(storagePath, botName, 'received', path.basename(file.file_path));
+        // Use requested destPath if provided, otherwise generate default
+        const destPath = requestedPath || path.join(
+          this.config.storagePath || './data/bots',
+          botName,
+          'received',
+          path.basename(file.file_path)
+        );
+        // Ensure directory exists
+        await fs.mkdir(path.dirname(destPath), { recursive: true });
         await client.downloadFile(fileId, destPath);
         result.localPath = destPath;
       }

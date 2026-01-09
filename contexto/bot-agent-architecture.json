@@ -78,7 +78,7 @@
         "platform": "telegram",
         "enabled": "boolean",
         "storage": {
-          "basePath": "/storage/bots/{botName}",
+          "basePath": "./data/bots/{botName}",
           "received": "{basePath}/received/{date}/"
         },
         "autoResponses": {
@@ -252,9 +252,9 @@
       {
         "step": 3,
         "actor": "bot-manager",
-        "action": "Descarga archivo, guarda en /storage/bots/facturas/received/",
+        "action": "Descarga archivo, guarda en ./data/bots/facturas/received/",
         "event_out": "bot.file.stored",
-        "payload": { "botName": "facturas", "path": "/storage/.../factura.pdf", "mimeType": "application/pdf" }
+        "payload": { "botName": "facturas", "path": "./data/bots/facturas/received/factura.pdf", "mimeType": "application/pdf" }
       },
       {
         "step": 4,

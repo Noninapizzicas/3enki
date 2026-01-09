@@ -33,12 +33,17 @@ class BotRegistry {
     // Crear directorio del bot
     await fs.mkdir(botPath, { recursive: true });
 
+    // Respuestas por defecto
+    const defaultAutoResponses = {
+      onFileReceived: 'Archivo recibido'
+    };
+
     const botConfig = {
       botName,
       platform: config.platform || 'telegram',
       enabled: config.enabled !== false,
       storagePath: botPath,
-      autoResponses: config.autoResponses || {}
+      autoResponses: { ...defaultAutoResponses, ...config.autoResponses }
     };
 
     this.bots.set(botName, botConfig);

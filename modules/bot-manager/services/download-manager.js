@@ -201,10 +201,12 @@ class DownloadManager {
    * Solicita descarga a telegram-service via evento request/response
    */
   async requestDownload(botName, fileId, destPath) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const requestId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      let unsubscribe = null;
+
       const timeout = setTimeout(() => {
-        this.eventBus.unsubscribe(responseHandler);
+        if (unsubscribe) unsubscribe();
         reject(new Error('Download timeout'));
       }, 30000);
 
@@ -212,14 +214,15 @@ class DownloadManager {
         const data = event?.data || event?.payload || event;
         if (data.request_id === requestId) {
           clearTimeout(timeout);
-          this.eventBus.unsubscribe(responseHandler);
+          if (unsubscribe) unsubscribe();
           resolve(data);
         }
       };
 
-      this.eventBus.subscribe('telegram.get_file.response', responseHandler);
+      // subscribe() retorna función de unsubscribe
+      unsubscribe = await this.eventBus.subscribe('telegram.get_file.response', responseHandler);
 
-      this.eventBus.publish('telegram.get_file.request', {
+      await this.eventBus.publish('telegram.get_file.request', {
         request_id: requestId,
         botName,
         fileId,

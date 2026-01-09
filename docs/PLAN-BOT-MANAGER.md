@@ -1,314 +1,438 @@
-# Plan: bot-manager Module
+# Plan: Arquitectura de Gestión de Bots y Agentes
 
 ## Resumen
 
-Módulo de orquestación que centraliza el routing de mensajes de bots a agentes, gestión de descargas, pipelines multi-agente y respuestas automáticas.
+Tres módulos con responsabilidades claras, comunicándose exclusivamente via eventos.
 
 ---
 
-## Problema que Resuelve
+## Arquitectura General
 
-**Antes (routing implícito):**
 ```
-telegram.text.received { botName: "ventas" }
-        │
-        ├──▶ Agente A (recibe todo, filtra internamente)
-        ├──▶ Agente B (recibe todo, filtra internamente)
-        └──▶ Agente C (recibe todo, filtra internamente)
-```
-
-**Después (routing centralizado):**
-```
-telegram.text.received { botName: "ventas" }
-        │
-        ▼
-   bot-manager (decide según config)
-        │
-        ▼
-   agent.ventas.invoke → Solo Agente A
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   telegram-service          bot-manager           agent-manager             │
+│   (ya existe)               (nuevo)               (nuevo)                   │
+│                                                                             │
+│   Comunicación              Gestión bots          Orquestación              │
+│   Telegram API              + Storage             + Contexto                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                                            │
+                                                            ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│                          ai-agent-framework                                 │
+│                          (ya existe)                                        │
+│                                                                             │
+│                          Motor de ejecución                                 │
+│                          Agentes + Prompts + Tools                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Estructura de Archivos
+## Flujo Completo de Eventos
 
+```
+1. Usuario envía PDF a bot "facturas"
+                │
+                ▼
+2. telegram-service
+   └─ Publica: telegram.document.received { botName, fileId, ... }
+                │
+                ▼
+3. bot-manager
+   └─ Escucha: telegram.document.received
+   └─ Descarga archivo
+   └─ Guarda en: /storage/bots/facturas/received/2024-01-08/
+   └─ Publica: bot.file.stored { botName, path, mimeType, chatId, ... }
+                │
+                ▼
+4. agent-manager
+   └─ Escucha: bot.file.stored
+   └─ Decide: "¿Necesita agente?" → Sí
+   └─ Decide: "¿Cuál?" → extractor-datos
+   └─ Construye contexto: { origen, archivo, responder_a, tarea }
+   └─ Publica: agent.execute.request { agentName, context, task }
+                │
+                ▼
+5. ai-agent-framework
+   └─ Escucha: agent.execute.request
+   └─ Busca agente "extractor-datos"
+   └─ Carga prompt
+   └─ Ejecuta AI + tools
+   └─ Publica: agent.extractor-datos.completed { result }
+                │
+                ▼
+6. agent-manager (opcional)
+   └─ Escucha: agent.extractor-datos.completed
+   └─ Decide si lanzar siguiente agente (pipeline)
+   └─ O finaliza
+```
+
+---
+
+## Módulo 1: bot-manager
+
+### Responsabilidad
+Gestionar bots y almacenamiento. NO sabe de agentes.
+
+### Escucha
+```
+telegram.document.received
+telegram.photo.received
+telegram.text.received
+telegram.command.received
+credential.saved
+credential.deleted
+```
+
+### Publica
+```
+bot.file.stored {
+  botName: "facturas",
+  chatId: 123456,
+  userId: 789,
+  file: {
+    path: "/storage/bots/facturas/received/2024-01-08/factura.pdf",
+    originalName: "factura.pdf",
+    mimeType: "application/pdf",
+    size: 45678
+  },
+  timestamp: "2024-01-08T10:30:00Z"
+}
+
+bot.message.received {
+  botName: "facturas",
+  chatId: 123456,
+  text: "Hola",
+  timestamp: "..."
+}
+
+bot.command.received {
+  botName: "facturas",
+  command: "/start",
+  chatId: 123456
+}
+```
+
+### Hace
+- Descarga archivos de Telegram
+- Guarda en estructura de carpetas configurada
+- Respuestas automáticas (/start, /help) sin AI
+- CRUD de configuración de bots
+
+### Estructura
 ```
 modules/bot-manager/
-├── index.js                      # Módulo principal (lifecycle, suscripciones)
-├── module.json                   # Manifest del módulo
-│
-├── services/
-│   ├── bot-registry.js           # CRUD de bots registrados
-│   ├── router.js                 # Lógica de routing evento→agente
-│   ├── pipeline-executor.js      # Orquestación de pipelines multi-agente
-│   ├── download-manager.js       # Gestión de descargas de archivos
-│   └── auto-responder.js         # Respuestas automáticas sin AI
-│
-├── config/
-│   └── defaults.json             # Configuración por defecto
-│
-└── storage/                      # (runtime, no en repo)
-    └── bots/
-        └── {botName}.json        # Config persistida por bot
+├── index.js
+├── module.json
+└── services/
+    ├── bot-registry.js      # Configuración de bots
+    ├── download-manager.js  # Descarga y almacenamiento
+    └── auto-responder.js    # Respuestas automáticas
 ```
 
----
-
-## Modelo de Datos
-
-### Configuración de Bot (BotConfig)
-
+### Configuración de Bot
 ```javascript
 {
   "botName": "facturas",
   "platform": "telegram",
   "enabled": true,
-  "credentialKey": "TELEGRAM_API_KEY_BOT_facturas",
 
   "storage": {
-    "basePath": "/storage/bots/{botName}",
-    "received": "{basePath}/received/{date}/",
-    "processed": "{basePath}/processed/{year}/{month}/",
-    "failed": "{basePath}/failed/"
+    "basePath": "/storage/bots/facturas",
+    "received": "{basePath}/received/{date}/"
   },
 
-  "behaviors": {
-    "document.received": {
-      "action": "pipeline",
-      "download": true,
-      "downloadTo": "received",
-      "allowedTypes": ["application/pdf", "image/jpeg", "image/png"],
-      "maxSize": "10MB",
-      "pipeline": {
-        "agents": ["validador-facturas", "extractor-datos", "archivador"],
-        "onError": "notify_and_stop",
-        "timeout": 60000
-      }
-    },
-    "text.received": {
-      "action": "reply",
-      "message": "📄 Solo proceso facturas. Envíame una foto o PDF."
-    },
-    "command.received": {
-      "/start": { "action": "reply", "message": "👋 Soy el bot de facturas..." },
-      "/help": { "action": "reply", "message": "📌 Comandos disponibles..." }
-    }
-  },
-
-  "createdAt": "2024-01-08T10:00:00Z",
-  "updatedAt": "2024-01-08T10:00:00Z"
-}
-```
-
-### Tipos de Acción (Behavior Actions)
-
-| Acción | Descripción |
-|--------|-------------|
-| `process` | Enviar a un agente para procesamiento AI |
-| `pipeline` | Pipeline multi-agente secuencial |
-| `reply` | Respuesta automática sin AI |
-| `route` | Agente decide a quién pasar (triage) |
-| `forward` | Reenviar a otro chat/bot |
-| `store` | Solo guardar, no responder |
-| `ignore` | Descartar silenciosamente |
-
-### Pipeline Context (datos compartidos entre agentes)
-
-```javascript
-{
-  "pipelineId": "uuid",
-  "botName": "facturas",
-  "chatId": 123456,
-  "startedAt": "...",
-
-  "file": {
-    "localPath": "/storage/...",
-    "originalName": "factura.pdf",
-    "mimeType": "application/pdf"
-  },
-
-  "stages": {
-    "validador": { "status": "completed", "result": { "valid": true } },
-    "extractor": { "status": "running", "result": null },
-    "archivador": { "status": "pending", "result": null }
-  },
-
-  "sharedData": {
-    "emisor": "Empresa ABC",
-    "rfc": "ABC123456",
-    "total": 1500.00
+  "autoResponses": {
+    "/start": "Bienvenido al bot de facturas...",
+    "/help": "Envíame fotos o PDFs de facturas..."
   }
 }
 ```
 
 ---
 
-## Eventos
+## Módulo 2: agent-manager
 
-### Eventos que CONSUME (se suscribe)
+### Responsabilidad
+Decidir qué agente usar, construir contexto, orquestar.
 
+### Escucha
+```
+bot.file.stored
+bot.message.received
+bot.command.received
+agent.*.completed
+agent.*.failed
+```
+
+### Publica
+```
+agent.execute.request {
+  agentName: "extractor-datos",
+  context: {
+    origen: "bot facturas",
+    chatId: 123456,
+    archivo: "/storage/bots/facturas/received/2024-01-08/factura.pdf",
+    mimeType: "application/pdf",
+    responder_via: "telegram",
+    responder_botName: "facturas"
+  },
+  task: "Extrae los datos de esta factura"
+}
+```
+
+### Hace
+- Escucha eventos del sistema
+- Decide si necesita agente o no
+- Decide QUÉ agente usar
+- Construye el CONTEXTO (de dónde viene, a dónde va)
+- Define la TAREA
+- Orquesta pipelines (agente1 → agente2 → agente3)
+
+### Estructura
+```
+modules/agent-manager/
+├── index.js
+├── module.json
+└── services/
+    ├── trigger-registry.js   # Qué evento activa qué agente
+    ├── context-builder.js    # Construye contexto para agente
+    └── pipeline-executor.js  # Orquesta secuencias de agentes
+```
+
+### Configuración de Triggers
 ```javascript
-// De telegram-service
-"telegram.text.received"
-"telegram.photo.received"
-"telegram.document.received"
-"telegram.video.received"
-"telegram.audio.received"
-"telegram.voice.received"
-"telegram.location.received"
-"telegram.contact.received"
-"telegram.command.received"
-"telegram.callback.received"
-
-// De credential-manager
-"credential.saved"
-"credential.deleted"
-
-// De agentes (para continuar pipelines)
-"agent.*.completed"
-"agent.*.failed"
+{
+  "triggers": [
+    {
+      "event": "bot.file.stored",
+      "filter": {
+        "botName": ["facturas", "gastos"],
+        "file.mimeType": ["application/pdf", "image/*"]
+      },
+      "agent": "extractor-datos",
+      "contextTemplate": {
+        "origen": "bot {{botName}}",
+        "archivo": "{{file.path}}",
+        "responder_via": "telegram",
+        "responder_botName": "{{botName}}",
+        "responder_chatId": "{{chatId}}"
+      }
+    }
+  ]
+}
 ```
 
-### Eventos que PUBLICA
+---
 
+## Módulo 3: ai-agent-framework (existente)
+
+### Responsabilidad
+Tener agentes listos y ejecutarlos cuando se lo piden.
+
+### Escucha
+```
+agent.execute.request
+```
+
+### Publica
+```
+agent.{name}.completed { result, ... }
+agent.{name}.failed { error, ... }
+```
+
+### Tiene
+- Agentes creados y configurados
+- Prompts de cada agente
+- Tools disponibles
+- Motor de ejecución (AI gateway)
+- Context manager (memoria)
+
+### Cambios Necesarios
+```diff
+- Agentes se suscriben directamente a telegram.*, bot.*, etc.
++ Agentes solo se ejecutan via agent.execute.request
+
+- subscribes: ["telegram.photo.received"]
++ subscribes: ["agent.execute.request"] // O ninguno, solo espera requests
+```
+
+### Nuevo: Escuchar agent.execute.request
 ```javascript
-// Ciclo de vida de bots
-"bot.registered"
-"bot.unregistered"
-"bot.enabled"
-"bot.disabled"
-"bot.config.updated"
+// En index.js de ai-agent-framework
+async onLoad() {
+  this.eventBus.subscribe('agent.execute.request', this.onExecuteRequest.bind(this));
+}
 
-// Routing de mensajes
-"bot.message.routed"
-"bot.message.replied"
-"bot.message.ignored"
-"bot.message.downloaded"
+async onExecuteRequest(event) {
+  const { agentName, context, task } = event;
 
-// Pipelines
-"bot.pipeline.started"
-"bot.pipeline.stage.started"
-"bot.pipeline.stage.completed"
-"bot.pipeline.stage.failed"
-"bot.pipeline.completed"
-"bot.pipeline.failed"
+  const agent = this.agents.get(agentName);
+  if (!agent) {
+    this.eventBus.publish(`agent.${agentName}.failed`, {
+      error: 'Agent not found'
+    });
+    return;
+  }
 
-// Invocación de agentes
-"agent.{agentName}.invoke"
+  // Ejecutar agente con contexto y tarea
+  const result = await agent.execute({ context, task });
+
+  this.eventBus.publish(`agent.${agentName}.completed`, { result });
+}
 ```
 
 ---
 
-## Tools que Expone
-
-### Gestión de Bots
-- `bot.register` - Registrar nuevo bot
-- `bot.unregister` - Eliminar bot
-- `bot.enable` - Activar bot
-- `bot.disable` - Desactivar bot
-- `bot.list` - Listar bots
-- `bot.get` - Obtener config de un bot
-
-### Configuración de Comportamientos
-- `bot.set_behavior` - Configurar acción por tipo de evento
-- `bot.set_command` - Configurar respuesta a comando
-- `bot.set_agent` - Asignar agente por defecto
-- `bot.set_pipeline` - Configurar pipeline multi-agente
-- `bot.set_storage` - Configurar rutas de almacenamiento
-
-### Pipelines
-- `bot.pipeline.status` - Ver estado de pipeline
-- `bot.pipeline.cancel` - Cancelar pipeline
-- `bot.pipeline.list` - Listar pipelines activos
-
----
-
-## Flujo de Ejecución
+## Comparación de Responsabilidades
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ 1. Usuario envía documento al bot "facturas"                    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 2. telegram-service publica:                                    │
-│    telegram.document.received { botName, chatId, fileId, ... }  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 3. bot-manager recibe evento                                    │
-│    ├─ Busca config: bots["facturas"]                           │
-│    ├─ Busca behavior: behaviors["document.received"]           │
-│    ├─ Si download=true → Descarga archivo                      │
-│    └─ Activa pipeline de agentes                               │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 4. Pipeline: validador → extractor → archivador                 │
-│    Cada agente recibe: agent.{name}.invoke                     │
-│    Cada agente responde: agent.{name}.completed                │
-│    bot-manager coordina la secuencia                           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 5. Pipeline completo → Respuesta al usuario                     │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────┬─────────────────────────────────────┐
+│         ai-agent-framework          │           agent-manager             │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│                                     │                                     │
+│  📦 TIENE                           │  🧠 SABE                            │
+│                                     │                                     │
+│  • Los agentes creados              │  • Qué evento necesita agente       │
+│  • Los prompts de cada uno          │  • Qué agente usar                  │
+│  • Las tools disponibles            │  • Qué contexto pasarle             │
+│  • La config de cada agente         │  • De dónde viene el evento         │
+│  • El motor de ejecución (AI)       │  • A dónde tiene que ir resultado   │
+│                                     │                                     │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│                                     │                                     │
+│  🔧 HACE                            │  🎯 HACE                            │
+│                                     │                                     │
+│  • CRUD de agentes                  │  • Escucha eventos del sistema      │
+│  • Mantener todo ordenado           │  • Decide si necesita agente        │
+│  • Ejecutar cuando le mandan        │  • Construye contexto + tarea       │
+│  • Llamar AI + tools                │  • Manda a ejecutar                 │
+│                                     │  • Orquesta pipelines               │
+│                                     │                                     │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│                                     │                                     │
+│  🎧 ESCUCHA                         │  🎧 ESCUCHA                         │
+│                                     │                                     │
+│  • agent.execute.request            │  • bot.file.stored                  │
+│                                     │  • bot.message.received             │
+│                                     │  • agent.*.completed                │
+│                                     │  • agent.*.failed                   │
+│                                     │                                     │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│                                     │                                     │
+│  📢 PUBLICA                         │  📢 PUBLICA                         │
+│                                     │                                     │
+│  • agent.{name}.completed           │  • agent.execute.request            │
+│  • agent.{name}.failed              │                                     │
+│                                     │                                     │
+└─────────────────────────────────────┴─────────────────────────────────────┘
 ```
 
 ---
 
-## Responsabilidades
+## Principio Fundamental
 
-| Componente | Responsabilidad |
-|------------|-----------------|
-| **telegram-service** | Solo comunicación con Telegram API |
-| **bot-manager** | Routing, descarga, storage, pipelines, respuestas auto |
-| **Agentes** | Lógica de negocio, procesamiento AI |
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    TODO SON EVENTOS                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Sistema              ───▶  eventos  ───▶  módulos          │
+│  UI (botón probar)    ───▶  eventos  ───▶  módulos          │
+│  Cualquier cosa       ───▶  eventos  ───▶  módulos          │
+│                                                             │
+│  No hay APIs especiales. No hay excepciones.                │
+│  Un evento, una lógica, un resultado.                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Fases de Implementación
 
-### FASE 1: Fundación
-- Crear módulo bot-manager
-- Implementar bot-registry.js
-- Implementar router.js básico
-- Probar flujo: Bot → bot-manager → Agente
+### FASE 1: bot-manager
+- Crear módulo
+- Escuchar telegram.*
+- Descargar y almacenar archivos
+- Publicar bot.file.stored
+- Respuestas automáticas
 
-### FASE 2: Descarga y Storage
-- Implementar download-manager.js
-- Integrar descarga en router
-- Probar flujo con archivos
+### FASE 2: agent-manager
+- Crear módulo
+- Escuchar bot.file.stored
+- Configurar triggers
+- Construir contexto
+- Publicar agent.execute.request
 
-### FASE 3: Pipelines Multi-Agente
-- Implementar pipeline-executor.js
-- Implementar sharedData entre agentes
-- Probar pipeline completo
+### FASE 3: Ajustar ai-agent-framework
+- Escuchar agent.execute.request
+- Ejecutar con contexto recibido
+- Eliminar suscripciones directas de agentes
 
-### FASE 4: Respuestas Automáticas
-- Implementar auto-responder.js
-- Comandos (/start, /help)
-
-### FASE 5: Tools y API
-- Registrar tools en tool-manager
+### FASE 4: UI
+- Panel de bots (bot-manager)
+- Panel de triggers (agent-manager)
+- Panel de agentes (ai-agent-framework)
+- Botón "Probar" que publica evento
 
 ---
 
 ## Limpieza Previa
 
-Antes de implementar:
 - [ ] Borrar `agents/receptor-facturas.json`
 - [ ] Desactivar `agents/architect.json` (mantener como referencia)
 
 ---
 
-## Notas
+## Ejemplo Completo: Pipeline Multi-Agente
 
-- bot-manager es un módulo NUEVO, no requiere cambios en módulos existentes
-- telegram-service sigue funcionando igual
-- ai-agent-framework sigue funcionando igual
-- Migración gradual: cada bot se configura en bot-manager cuando convenga
+```
+1. bot.file.stored { botName: "facturas", path: "x.pdf" }
+                │
+                ▼
+2. agent-manager
+   └─ Trigger: bot.file.stored + facturas → pipeline ["validador", "extractor", "archivador"]
+   └─ Publica: agent.execute.request {
+        agentName: "validador",
+        context: { archivo: "x.pdf", pipeline: { step: 1, total: 3 } }
+      }
+                │
+                ▼
+3. ai-agent-framework ejecuta "validador"
+   └─ Publica: agent.validador.completed { result: { valid: true } }
+                │
+                ▼
+4. agent-manager escucha completed
+   └─ Ve que es paso 1 de 3
+   └─ Publica: agent.execute.request {
+        agentName: "extractor",
+        context: { archivo: "x.pdf", validacion: { valid: true }, pipeline: { step: 2 } }
+      }
+                │
+                ▼
+5. ai-agent-framework ejecuta "extractor"
+   └─ Publica: agent.extractor.completed { result: { datos: {...} } }
+                │
+                ▼
+6. agent-manager escucha completed
+   └─ Ve que es paso 2 de 3
+   └─ Publica: agent.execute.request {
+        agentName: "archivador",
+        context: { archivo: "x.pdf", datos: {...}, pipeline: { step: 3 } }
+      }
+                │
+                ▼
+7. ai-agent-framework ejecuta "archivador"
+   └─ Publica: agent.archivador.completed { result: { guardado: true } }
+                │
+                ▼
+8. agent-manager escucha completed
+   └─ Ve que es paso 3 de 3 (último)
+   └─ Pipeline terminado
+```

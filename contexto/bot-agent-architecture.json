@@ -2,7 +2,8 @@
   "title": "Arquitectura Bot-Manager y Agent-Manager",
   "version": "1.0.0",
   "created": "2024-01-08",
-  "status": "planned",
+  "updated": "2026-01-09",
+  "status": "implemented",
   "summary": "Tres módulos con responsabilidades claras comunicándose exclusivamente via eventos",
 
   "architecture": {
@@ -18,7 +19,7 @@
 
   "modules": {
     "bot-manager": {
-      "status": "to-create",
+      "status": "implemented",
       "location": "modules/bot-manager/",
       "responsibility": "Gestionar bots y almacenamiento. NO sabe de agentes.",
 
@@ -101,7 +102,7 @@
     },
 
     "agent-manager": {
-      "status": "to-create",
+      "status": "implemented",
       "location": "modules/agent-manager/",
       "responsibility": "Decidir qué agente usar, construir contexto, orquestar pipelines.",
 
@@ -185,10 +186,9 @@
       "location": "modules/ai-agent-framework/",
       "responsibility": "Tener agentes listos y ejecutarlos cuando se lo piden.",
 
-      "changes_needed": {
-        "add_subscription": "agent.execute.request",
-        "remove_direct_subscriptions": "Los agentes ya no se suscriben a telegram.*, bot.*, etc.",
-        "new_handler": "onExecuteRequest(event) que ejecuta agente con contexto recibido"
+      "changes_applied": {
+        "add_subscription": "agent.execute.request ✓",
+        "new_handler": "onExecuteRequest(event) ✓"
       },
 
       "events": {
@@ -335,8 +335,9 @@
   },
 
   "cleanup": {
-    "delete": ["modules/ai-agent-framework/agents/receptor-facturas.json"],
-    "disable": ["modules/ai-agent-framework/agents/architect.json"]
+    "deleted": ["modules/ai-agent-framework/agents/receptor-facturas.json"],
+    "disabled": ["modules/ai-agent-framework/agents/architect.json"],
+    "status": "completed"
   },
 
   "ui_modules_needed": {

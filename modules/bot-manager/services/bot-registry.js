@@ -11,7 +11,7 @@ class BotRegistry {
     this.config = config;
     this.logger = logger;
     this.bots = new Map(); // botName -> botConfig
-    this.storagePath = config.storagePath || '/storage/bots';
+    this.storagePath = config.storagePath || './data/bots';
     this.configPath = path.join(this.storagePath, '_config');
   }
 

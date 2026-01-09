@@ -29,7 +29,7 @@
   },
 
   "config": {
-    "triggersPath": "/storage/agent-manager/triggers",
+    "triggersPath": "./data/agent-manager/triggers",
     "pipelineTimeout": 300000,
     "maxConcurrentPipelines": 10
   },

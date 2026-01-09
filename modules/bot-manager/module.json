@@ -34,9 +34,7 @@
   },
 
   "config": {
-    "storagePath": "./data/bots",
-    "dateFormat": "YYYY-MM-DD",
-    "maxFileSize": "50MB"
+    "storagePath": "./data/bots"
   },
 
   "dependencies": [

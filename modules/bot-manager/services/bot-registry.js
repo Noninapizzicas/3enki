@@ -1,6 +1,7 @@
 /**
  * Bot Registry
  * Gestiona la configuración de bots registrados
+ * Estructura simple: ./data/bots/<botName>/
  */
 
 const fs = require('fs').promises;
@@ -12,119 +13,53 @@ class BotRegistry {
     this.logger = logger;
     this.bots = new Map(); // botName -> botConfig
     this.storagePath = config.storagePath || './data/bots';
-    this.configPath = path.join(this.storagePath, '_config');
   }
 
   async initialize() {
-    // Crear directorio de config si no existe
-    await fs.mkdir(this.configPath, { recursive: true });
-
-    // Cargar bots existentes
-    await this.loadBots();
+    // Crear directorio base si no existe
+    await fs.mkdir(this.storagePath, { recursive: true });
 
     this.logger.info('bot-registry.initialized', {
-      bots_count: this.bots.size
+      storagePath: this.storagePath
     });
   }
 
-  async loadBots() {
-    try {
-      const files = await fs.readdir(this.configPath);
-      const jsonFiles = files.filter(f => f.endsWith('.json'));
-
-      for (const file of jsonFiles) {
-        try {
-          const filePath = path.join(this.configPath, file);
-          const content = await fs.readFile(filePath, 'utf8');
-          const botConfig = JSON.parse(content);
-          this.bots.set(botConfig.botName, botConfig);
-        } catch (error) {
-          this.logger.error('bot-registry.load-bot.failed', {
-            file,
-            error: error.message
-          });
-        }
-      }
-    } catch (error) {
-      // Directorio no existe o está vacío
-      this.logger.debug('bot-registry.no-existing-bots');
-    }
-  }
-
-  async saveBot(botConfig) {
-    const filePath = path.join(this.configPath, `${botConfig.botName}.json`);
-    await fs.writeFile(filePath, JSON.stringify(botConfig, null, 2), 'utf8');
-  }
-
+  /**
+   * Registra un bot (crea directorio si no existe)
+   */
   async register(botName, config = {}) {
+    const botPath = path.join(this.storagePath, botName);
+
+    // Crear directorio del bot
+    await fs.mkdir(botPath, { recursive: true });
+
     const botConfig = {
       botName,
       platform: config.platform || 'telegram',
       enabled: config.enabled !== false,
-      storage: {
-        basePath: path.join(this.storagePath, botName),
-        received: config.receivedPath || 'received/{date}'
-      },
-      autoResponses: config.autoResponses || {},
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      storagePath: botPath,
+      autoResponses: config.autoResponses || {}
     };
 
-    // Crear directorio de storage del bot
-    await fs.mkdir(botConfig.storage.basePath, { recursive: true });
-
     this.bots.set(botName, botConfig);
-    await this.saveBot(botConfig);
 
-    this.logger.info('bot-registry.registered', { botName });
+    this.logger.info('bot-registry.registered', {
+      botName,
+      path: botPath
+    });
 
     return botConfig;
   }
 
-  async unregister(botName) {
-    if (!this.bots.has(botName)) {
-      return false;
-    }
-
-    this.bots.delete(botName);
-
-    // Eliminar archivo de config
-    const filePath = path.join(this.configPath, `${botName}.json`);
-    try {
-      await fs.unlink(filePath);
-    } catch {}
-
-    this.logger.info('bot-registry.unregistered', { botName });
-
-    return true;
-  }
-
-  async update(botName, updates) {
-    const botConfig = this.bots.get(botName);
-    if (!botConfig) {
-      return null;
-    }
-
-    // Aplicar updates
-    if (updates.enabled !== undefined) botConfig.enabled = updates.enabled;
-    if (updates.autoResponses) botConfig.autoResponses = { ...botConfig.autoResponses, ...updates.autoResponses };
-    if (updates.storage) botConfig.storage = { ...botConfig.storage, ...updates.storage };
-
-    botConfig.updatedAt = new Date().toISOString();
-
-    await this.saveBot(botConfig);
-
-    this.logger.info('bot-registry.updated', { botName });
-
-    return botConfig;
+  /**
+   * Obtiene la ruta donde guardar archivos (directamente en el directorio del bot)
+   */
+  getStoragePath(botName) {
+    return path.join(this.storagePath, botName);
   }
 
   get(botName) {
     return this.bots.get(botName);
-  }
-
-  getAll() {
-    return Array.from(this.bots.values());
   }
 
   has(botName) {
@@ -133,24 +68,31 @@ class BotRegistry {
 
   isEnabled(botName) {
     const bot = this.bots.get(botName);
-    return bot ? bot.enabled : false;
+    return bot ? bot.enabled : true; // Por defecto habilitado
   }
 
-  getStoragePath(botName, type = 'received') {
-    const bot = this.bots.get(botName);
-    if (!bot) return null;
+  /**
+   * Actualiza config de un bot
+   */
+  async update(botName, updates) {
+    let botConfig = this.bots.get(botName);
 
-    const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const template = bot.storage[type] || bot.storage.received;
-    const relativePath = template.replace('{date}', date);
+    if (!botConfig) {
+      botConfig = await this.register(botName);
+    }
 
-    return path.join(bot.storage.basePath, relativePath);
+    if (updates.enabled !== undefined) botConfig.enabled = updates.enabled;
+    if (updates.autoResponses) {
+      botConfig.autoResponses = { ...botConfig.autoResponses, ...updates.autoResponses };
+    }
+
+    this.bots.set(botName, botConfig);
+    return botConfig;
   }
 
-  getAutoResponse(botName, command) {
+  getAutoResponse(botName, key) {
     const bot = this.bots.get(botName);
-    if (!bot || !bot.autoResponses) return null;
-    return bot.autoResponses[command] || null;
+    return bot?.autoResponses?.[key] || null;
   }
 }
 

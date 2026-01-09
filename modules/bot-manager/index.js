@@ -150,7 +150,7 @@ class BotManagerModule {
     }
 
     // Obtener ruta de storage
-    const storagePath = this.registry.getStoragePath(botName, 'received');
+    const storagePath = this.registry.getStoragePath(botName);
 
     // Descargar y guardar archivo
     const result = await this.downloadManager.downloadAndStore(
@@ -191,6 +191,15 @@ class BotManagerModule {
       path: result.path,
       mimeType: result.mimeType
     });
+
+    // Enviar confirmación si está configurada
+    const botConfig = this.registry.get(botName);
+    await this.autoResponder.handleFileReceived(
+      botName,
+      chatId,
+      result.originalName,
+      botConfig?.autoResponses
+    );
   }
 
   /**

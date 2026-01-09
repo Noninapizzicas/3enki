@@ -60,13 +60,23 @@ class AutoResponder {
   }
 
   /**
-   * Envía mensaje de confirmación de archivo recibido (opcional)
+   * Envía mensaje de confirmación de archivo recibido
+   * @param {object} autoResponses - Configuración de respuestas automáticas del bot
    */
-  async sendFileReceivedConfirmation(botName, chatId, fileName, enabled = false) {
-    if (!enabled) return;
+  async handleFileReceived(botName, chatId, fileName, autoResponses) {
+    const message = autoResponses?.onFileReceived;
 
-    const message = `📁 Archivo recibido: <b>${fileName}</b>\nProcesando...`;
+    if (!message) {
+      return false;
+    }
+
+    this.logger.info('auto-responder.file-received', {
+      botName,
+      fileName
+    });
+
     await this.sendResponse(botName, chatId, message);
+    return true;
   }
 }
 

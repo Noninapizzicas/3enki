@@ -1,10 +1,46 @@
 /**
  * Download Manager
- * Descarga archivos de Telegram y los guarda en el storage configurado
+ * Descarga archivos y gestiona su ciclo de vida via nombres de archivo.
+ *
+ * CONVENCIÓN DE NOMBRES:
+ * {YYYYMMDD}_{HHmmss}_{nombreOriginal}_{STATUS}.{ext}
+ *
+ * Ejemplo: 20260109_143052_factura_R.pdf
+ *
+ * CÓDIGOS DE ESTADO (se acumulan en orden):
+ * R = Received    - Archivo recibido y guardado
+ * P = Processed   - Procesado por un agente
+ * V = Validated   - Validado/revisado
+ * A = Archived    - Archivado (procesamiento completo)
+ * X = Exported    - Exportado a otro sistema
+ * E = Error       - Error en algún procesamiento
+ * D = Discarded   - Marcado para eliminar
+ *
+ * EVOLUCIÓN DE UN ARCHIVO:
+ * factura.pdf (original de Telegram)
+ *   → 20260109_143052_factura_R.pdf (recibido)
+ *   → 20260109_143052_factura_RP.pdf (procesado por agente)
+ *   → 20260109_143052_factura_RPV.pdf (validado)
+ *   → 20260109_143052_factura_RPVA.pdf (archivado)
  */
 
 const fs = require('fs').promises;
 const path = require('path');
+
+// Estados válidos y su significado
+const FILE_STATES = {
+  R: 'received',    // Recibido
+  P: 'processed',   // Procesado por agente
+  V: 'validated',   // Validado/revisado
+  A: 'archived',    // Archivado
+  X: 'exported',    // Exportado
+  E: 'error',       // Error
+  D: 'discarded'    // Descartado
+};
+
+// Regex para parsear nombres de archivo
+// Captura: date, time, name, status, extension
+const FILENAME_REGEX = /^(\d{8})_(\d{6})_(.+)_([RPVAXED]+)\.(.+)$/;
 
 class DownloadManager {
   constructor(config, logger, eventBus) {
@@ -14,16 +50,103 @@ class DownloadManager {
   }
 
   /**
-   * Descarga un archivo de Telegram y lo guarda en el storage del bot
+   * Genera timestamp en formato YYYYMMDD_HHmmss
+   */
+  getTimestamp() {
+    const now = new Date();
+    const date = now.toISOString().split('T')[0].replace(/-/g, '');
+    const time = now.toTimeString().split(' ')[0].replace(/:/g, '');
+    return { date, time };
+  }
+
+  /**
+   * Construye nombre de archivo con metadata
+   */
+  buildFileName(originalName, status = 'R') {
+    const { date, time } = this.getTimestamp();
+    const safeName = this.sanitizeFileName(originalName);
+
+    // Separar nombre y extensión
+    const lastDot = safeName.lastIndexOf('.');
+    const name = lastDot > 0 ? safeName.substring(0, lastDot) : safeName;
+    const ext = lastDot > 0 ? safeName.substring(lastDot + 1) : 'bin';
+
+    return `${date}_${time}_${name}_${status}.${ext}`;
+  }
+
+  /**
+   * Parsea un nombre de archivo y extrae metadata
+   * @returns {object|null} { date, time, name, status, extension, states[] }
+   */
+  parseFileName(fileName) {
+    const match = fileName.match(FILENAME_REGEX);
+    if (!match) return null;
+
+    const [, date, time, name, status, extension] = match;
+
+    return {
+      date,           // "20260109"
+      time,           // "143052"
+      name,           // "factura"
+      status,         // "RP"
+      extension,      // "pdf"
+      states: status.split('').map(s => FILE_STATES[s] || 'unknown'),
+      receivedAt: `${date.substring(0,4)}-${date.substring(4,6)}-${date.substring(6,8)}T${time.substring(0,2)}:${time.substring(2,4)}:${time.substring(4,6)}`,
+      hasState: (state) => status.includes(state)
+    };
+  }
+
+  /**
+   * Actualiza el estado de un archivo (renombra)
+   * @param {string} filePath - Ruta completa del archivo
+   * @param {string} newState - Estado a añadir (R, P, V, A, X, E, D)
+   * @returns {object} { success, oldPath, newPath }
+   */
+  async updateFileStatus(filePath, newState) {
+    const dir = path.dirname(filePath);
+    const fileName = path.basename(filePath);
+    const parsed = this.parseFileName(fileName);
+
+    if (!parsed) {
+      this.logger.error('download-manager.invalid-filename', { filePath });
+      return { success: false, error: 'Invalid filename format' };
+    }
+
+    // No duplicar estado
+    if (parsed.status.includes(newState)) {
+      return { success: true, oldPath: filePath, newPath: filePath, noChange: true };
+    }
+
+    // Construir nuevo nombre con estado añadido
+    const newStatus = parsed.status + newState;
+    const newFileName = `${parsed.date}_${parsed.time}_${parsed.name}_${newStatus}.${parsed.extension}`;
+    const newPath = path.join(dir, newFileName);
+
+    try {
+      await fs.rename(filePath, newPath);
+
+      this.logger.info('download-manager.status-updated', {
+        oldStatus: parsed.status,
+        newStatus,
+        newState,
+        newPath
+      });
+
+      return { success: true, oldPath: filePath, newPath, oldStatus: parsed.status, newStatus };
+    } catch (error) {
+      this.logger.error('download-manager.rename-failed', { error: error.message });
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Descarga un archivo de Telegram y lo guarda con estado R (Received)
    */
   async downloadAndStore(botName, fileId, originalName, mimeType, storagePath) {
-    // Crear directorio si no existe
     await fs.mkdir(storagePath, { recursive: true });
 
-    // Generar nombre único para evitar colisiones
-    const timestamp = Date.now();
-    const safeName = this.sanitizeFileName(originalName || `file_${timestamp}`);
-    const destPath = path.join(storagePath, `${timestamp}_${safeName}`);
+    const fileName = this.buildFileName(originalName || `file_${Date.now()}`, 'R');
+    const destPath = path.join(storagePath, fileName);
 
     this.logger.info('download-manager.downloading', {
       botName,
@@ -32,29 +155,32 @@ class DownloadManager {
     });
 
     try {
-      // Solicitar descarga a telegram-service via evento
       const result = await this.requestDownload(botName, fileId, destPath);
 
       if (!result.success) {
         throw new Error(result.error || 'Download failed');
       }
 
-      // Obtener tamaño del archivo
       const stats = await fs.stat(destPath);
+      const parsed = this.parseFileName(fileName);
 
       this.logger.info('download-manager.downloaded', {
         botName,
         fileId,
         path: destPath,
-        size: stats.size
+        size: stats.size,
+        status: 'R'
       });
 
       return {
         success: true,
         path: destPath,
-        originalName: safeName,
+        fileName,
+        originalName: parsed.name,
         mimeType,
-        size: stats.size
+        size: stats.size,
+        status: 'R',
+        metadata: parsed
       };
 
     } catch (error) {
@@ -91,10 +217,8 @@ class DownloadManager {
         }
       };
 
-      // Suscribirse a la respuesta
       this.eventBus.subscribe('telegram.get_file.response', responseHandler);
 
-      // Publicar request
       this.eventBus.publish('telegram.get_file.request', {
         request_id: requestId,
         botName,
@@ -106,13 +230,12 @@ class DownloadManager {
   }
 
   /**
-   * Guarda texto como archivo JSON
+   * Guarda texto como archivo JSON con estado R
    */
   async storeText(botName, text, metadata, storagePath) {
     await fs.mkdir(storagePath, { recursive: true });
 
-    const timestamp = Date.now();
-    const fileName = `message_${timestamp}.json`;
+    const fileName = this.buildFileName('message.json', 'R');
     const destPath = path.join(storagePath, fileName);
 
     const content = {
@@ -125,16 +248,62 @@ class DownloadManager {
 
     this.logger.info('download-manager.text-stored', {
       botName,
-      path: destPath
+      path: destPath,
+      status: 'R'
     });
 
     return {
       success: true,
       path: destPath,
-      originalName: fileName,
+      fileName,
+      originalName: 'message.json',
       mimeType: 'application/json',
-      size: Buffer.byteLength(JSON.stringify(content))
+      size: Buffer.byteLength(JSON.stringify(content)),
+      status: 'R'
     };
+  }
+
+  /**
+   * Lista archivos en un directorio con su metadata parseada
+   */
+  async listFiles(dirPath, filterStatus = null) {
+    try {
+      const files = await fs.readdir(dirPath);
+      const results = [];
+
+      for (const file of files) {
+        const parsed = this.parseFileName(file);
+        if (parsed) {
+          if (!filterStatus || parsed.status.includes(filterStatus)) {
+            results.push({
+              fileName: file,
+              path: path.join(dirPath, file),
+              ...parsed
+            });
+          }
+        }
+      }
+
+      // Ordenar por fecha/hora descendente
+      results.sort((a, b) => {
+        const dateA = a.date + a.time;
+        const dateB = b.date + b.time;
+        return dateB.localeCompare(dateA);
+      });
+
+      return results;
+    } catch (error) {
+      return [];
+    }
+  }
+
+  /**
+   * Obtiene archivos pendientes (solo R, sin procesar)
+   */
+  async getPendingFiles(dirPath) {
+    return this.listFiles(dirPath, 'R').then(files =>
+      files.filter(f => f.status === 'R')
+    );
   }
 
   /**
@@ -147,5 +316,9 @@ class DownloadManager {
       .substring(0, 200);
   }
 }
+
+// Exportar también las constantes para uso externo
+DownloadManager.FILE_STATES = FILE_STATES;
+DownloadManager.FILENAME_REGEX = FILENAME_REGEX;
 
 module.exports = DownloadManager;

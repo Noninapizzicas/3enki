@@ -17,7 +17,7 @@
   ],
   "context_enabled": true,
   "context_window": 20,
-  "enabled": true,
+  "enabled": false,
   "metadata": {
     "type": "meta-agent",
     "version": "1.0.0",

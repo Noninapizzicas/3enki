@@ -57,10 +57,107 @@ class AIAgentFrameworkModule {
     // Load agents from disk
     await this.loadAgentsFromDisk();
 
+    // Subscribe to agent.execute.request (from agent-manager)
+    await this.subscribeToExecuteRequest();
+
     this.logger.info('ai-agent-framework.loaded', {
       agents_count: this.agents.size,
       tools_count: this.toolManager.tools.size
     });
+  }
+
+  /**
+   * Subscribe to agent.execute.request event
+   */
+  async subscribeToExecuteRequest() {
+    this.executeRequestUnsubscribe = await this.eventBus.subscribe(
+      'agent.execute.request',
+      this.onExecuteRequest.bind(this)
+    );
+
+    this.logger.info('ai-agent-framework.subscribed', {
+      event: 'agent.execute.request'
+    });
+  }
+
+  /**
+   * Handle agent.execute.request from agent-manager
+   */
+  async onExecuteRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { agentName, context, task, pipelineId } = data;
+
+    this.logger.info('ai-agent-framework.execute-request', {
+      agentName,
+      pipelineId,
+      hasContext: !!context
+    });
+
+    // Find agent by name
+    const agent = Array.from(this.agents.values()).find(a => a.name === agentName);
+
+    if (!agent) {
+      this.logger.error('ai-agent-framework.agent-not-found', { agentName });
+
+      await this.eventBus.publish(`agent.${agentName}.failed`, {
+        agent_name: agentName,
+        error: `Agent '${agentName}' not found`,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    if (!agent.enabled) {
+      this.logger.warn('ai-agent-framework.agent-disabled', { agentName });
+
+      await this.eventBus.publish(`agent.${agentName}.failed`, {
+        agent_name: agentName,
+        error: `Agent '${agentName}' is disabled`,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    try {
+      // Create execution event with context from agent-manager
+      const executionEvent = {
+        type: 'agent.execute.request',
+        payload: {
+          context,
+          task,
+          pipelineId
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      // Execute agent
+      const result = await agent.handleEvent(executionEvent);
+
+      // Publish success (agent.handleEvent already publishes, but we ensure pipelineId is included)
+      await this.eventBus.publish(`agent.${agentName}.completed`, {
+        agent_id: agent.id,
+        agent_name: agentName,
+        result,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      this.logger.error('ai-agent-framework.execution-failed', {
+        agentName,
+        error: error.message
+      });
+
+      await this.eventBus.publish(`agent.${agentName}.failed`, {
+        agent_id: agent.id,
+        agent_name: agentName,
+        error: error.message,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 
   /**

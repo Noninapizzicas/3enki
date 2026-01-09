@@ -1,0 +1,378 @@
+{
+  "title": "Arquitectura Bot-Manager y Agent-Manager",
+  "version": "1.0.0",
+  "created": "2024-01-08",
+  "updated": "2026-01-09",
+  "status": "implemented",
+  "summary": "Tres módulos con responsabilidades claras comunicándose exclusivamente via eventos",
+
+  "architecture": {
+    "principle": "TODO SON EVENTOS - No hay APIs especiales, no hay excepciones",
+    "flow": [
+      "telegram-service → telegram.* → bot-manager",
+      "bot-manager → bot.* → agent-manager",
+      "agent-manager → agent.execute.request → ai-agent-framework",
+      "ai-agent-framework → agent.{name}.completed → agent-manager (pipelines)"
+    ],
+    "diagram": "telegram-service → bot-manager → agent-manager → ai-agent-framework"
+  },
+
+  "modules": {
+    "bot-manager": {
+      "status": "implemented",
+      "location": "modules/bot-manager/",
+      "responsibility": "Gestionar bots y almacenamiento. NO sabe de agentes.",
+
+      "structure": {
+        "index.js": "Módulo principal",
+        "module.json": "Metadata y configuración",
+        "services/bot-registry.js": "Configuración de bots",
+        "services/download-manager.js": "Descarga y almacenamiento",
+        "services/auto-responder.js": "Respuestas automáticas"
+      },
+
+      "events": {
+        "subscribes": [
+          "telegram.document.received",
+          "telegram.photo.received",
+          "telegram.text.received",
+          "telegram.command.received",
+          "credential.saved",
+          "credential.deleted"
+        ],
+        "publishes": [
+          "bot.file.stored",
+          "bot.message.received",
+          "bot.command.received"
+        ]
+      },
+
+      "event_schemas": {
+        "bot.file.stored": {
+          "botName": "string - nombre del bot",
+          "chatId": "number - ID del chat",
+          "userId": "number - ID del usuario",
+          "file": {
+            "path": "string - ruta local del archivo",
+            "originalName": "string - nombre original",
+            "mimeType": "string - tipo MIME",
+            "size": "number - tamaño en bytes"
+          },
+          "timestamp": "string - ISO timestamp"
+        },
+        "bot.message.received": {
+          "botName": "string",
+          "chatId": "number",
+          "text": "string",
+          "timestamp": "string"
+        },
+        "bot.command.received": {
+          "botName": "string",
+          "command": "string - ej: /start",
+          "chatId": "number"
+        }
+      },
+
+      "bot_config_schema": {
+        "botName": "string - identificador único",
+        "platform": "telegram",
+        "enabled": "boolean",
+        "storage": {
+          "basePath": "/storage/bots/{botName}",
+          "received": "{basePath}/received/{date}/"
+        },
+        "autoResponses": {
+          "/start": "string - mensaje de bienvenida",
+          "/help": "string - mensaje de ayuda"
+        }
+      },
+
+      "does": [
+        "Descarga archivos de Telegram",
+        "Guarda en estructura de carpetas configurada",
+        "Respuestas automáticas (/start, /help) sin AI",
+        "CRUD de configuración de bots"
+      ],
+
+      "does_not": [
+        "Ejecutar agentes",
+        "Decidir qué agente usar",
+        "Conocer lógica de negocio"
+      ]
+    },
+
+    "agent-manager": {
+      "status": "implemented",
+      "location": "modules/agent-manager/",
+      "responsibility": "Decidir qué agente usar, construir contexto, orquestar pipelines.",
+
+      "structure": {
+        "index.js": "Módulo principal",
+        "module.json": "Metadata y configuración",
+        "services/trigger-registry.js": "Qué evento activa qué agente",
+        "services/context-builder.js": "Construye contexto para agente",
+        "services/pipeline-executor.js": "Orquesta secuencias de agentes"
+      },
+
+      "events": {
+        "subscribes": [
+          "bot.file.stored",
+          "bot.message.received",
+          "bot.command.received",
+          "agent.*.completed",
+          "agent.*.failed"
+        ],
+        "publishes": [
+          "agent.execute.request"
+        ]
+      },
+
+      "event_schemas": {
+        "agent.execute.request": {
+          "agentName": "string - nombre del agente a ejecutar",
+          "context": {
+            "origen": "string - de dónde viene (ej: bot facturas)",
+            "chatId": "number - para responder",
+            "archivo": "string - ruta del archivo si aplica",
+            "mimeType": "string - tipo de archivo",
+            "responder_via": "string - telegram/whatsapp/etc",
+            "responder_botName": "string - qué bot usar para responder"
+          },
+          "task": "string - descripción de la tarea",
+          "pipeline": {
+            "id": "string - UUID del pipeline",
+            "step": "number - paso actual",
+            "total": "number - total de pasos",
+            "agents": ["array de nombres de agentes"]
+          }
+        }
+      },
+
+      "trigger_config_schema": {
+        "event": "string - evento que activa (ej: bot.file.stored)",
+        "filter": {
+          "botName": ["array de bots que aplica"],
+          "file.mimeType": ["array de tipos MIME"]
+        },
+        "agent": "string - agente a ejecutar (si es uno solo)",
+        "pipeline": ["array de agentes si es secuencia"],
+        "contextTemplate": {
+          "origen": "bot {{botName}}",
+          "archivo": "{{file.path}}",
+          "responder_via": "telegram",
+          "responder_botName": "{{botName}}",
+          "responder_chatId": "{{chatId}}"
+        }
+      },
+
+      "does": [
+        "Escucha eventos del sistema",
+        "Decide si necesita agente o no",
+        "Decide QUÉ agente usar",
+        "Construye el CONTEXTO (de dónde viene, a dónde va)",
+        "Define la TAREA",
+        "Orquesta pipelines (agente1 → agente2 → agente3)"
+      ],
+
+      "does_not": [
+        "Ejecutar agentes directamente",
+        "Gestionar prompts o tools",
+        "Comunicarse con AI"
+      ]
+    },
+
+    "ai-agent-framework": {
+      "status": "exists",
+      "location": "modules/ai-agent-framework/",
+      "responsibility": "Tener agentes listos y ejecutarlos cuando se lo piden.",
+
+      "changes_applied": {
+        "add_subscription": "agent.execute.request ✓",
+        "new_handler": "onExecuteRequest(event) ✓"
+      },
+
+      "events": {
+        "subscribes": [
+          "agent.execute.request"
+        ],
+        "publishes": [
+          "agent.{name}.completed",
+          "agent.{name}.failed"
+        ]
+      },
+
+      "has": [
+        "Agentes creados y configurados",
+        "Prompts de cada agente",
+        "Tools disponibles",
+        "Motor de ejecución (AI gateway)",
+        "Context manager (memoria)"
+      ],
+
+      "does": [
+        "CRUD de agentes",
+        "Mantener todo ordenado",
+        "Ejecutar cuando le mandan",
+        "Llamar AI + tools"
+      ]
+    }
+  },
+
+  "comparison": {
+    "ai-agent-framework": {
+      "tiene": ["agentes", "prompts", "tools", "motor AI"],
+      "hace": ["CRUD", "ejecutar", "llamar AI"],
+      "escucha": ["agent.execute.request"],
+      "publica": ["agent.{name}.completed", "agent.{name}.failed"],
+      "analogia": "Fábrica + Almacén - Tengo los trabajadores listos"
+    },
+    "agent-manager": {
+      "sabe": ["qué evento necesita agente", "qué agente usar", "qué contexto", "de dónde viene", "a dónde va"],
+      "hace": ["escuchar eventos", "decidir", "construir contexto", "orquestar pipelines"],
+      "escucha": ["bot.*", "agent.*.completed", "agent.*.failed"],
+      "publica": ["agent.execute.request"],
+      "analogia": "Jefe de proyecto - Sé qué trabajo hay y a quién asignarlo"
+    }
+  },
+
+  "flow_example": {
+    "description": "Usuario envía PDF a bot facturas",
+    "steps": [
+      {
+        "step": 1,
+        "actor": "Usuario",
+        "action": "Envía PDF a bot Telegram"
+      },
+      {
+        "step": 2,
+        "actor": "telegram-service",
+        "action": "Publica telegram.document.received",
+        "event": { "botName": "facturas", "fileId": "xxx", "chatId": 123 }
+      },
+      {
+        "step": 3,
+        "actor": "bot-manager",
+        "action": "Descarga archivo, guarda en /storage/bots/facturas/received/",
+        "event_out": "bot.file.stored",
+        "payload": { "botName": "facturas", "path": "/storage/.../factura.pdf", "mimeType": "application/pdf" }
+      },
+      {
+        "step": 4,
+        "actor": "agent-manager",
+        "action": "Decide: necesita agente 'extractor-datos', construye contexto",
+        "event_out": "agent.execute.request",
+        "payload": { "agentName": "extractor-datos", "context": { "archivo": "...", "responder_chatId": 123 }, "task": "Extrae datos" }
+      },
+      {
+        "step": 5,
+        "actor": "ai-agent-framework",
+        "action": "Ejecuta agente con AI + tools",
+        "event_out": "agent.extractor-datos.completed",
+        "payload": { "result": { "emisor": "Empresa X", "total": 1500 } }
+      },
+      {
+        "step": 6,
+        "actor": "agent-manager (opcional)",
+        "action": "Si es pipeline, lanza siguiente agente. Si no, finaliza."
+      }
+    ]
+  },
+
+  "pipeline_example": {
+    "description": "Pipeline multi-agente: validador → extractor → archivador",
+    "trigger": "bot.file.stored (botName=facturas, mimeType=pdf)",
+    "agents": ["validador", "extractor", "archivador"],
+    "flow": [
+      "1. agent-manager recibe bot.file.stored",
+      "2. Publica agent.execute.request { agentName: 'validador', pipeline: { step: 1, total: 3 } }",
+      "3. ai-agent-framework ejecuta validador → agent.validador.completed",
+      "4. agent-manager ve step 1/3, publica agent.execute.request { agentName: 'extractor', pipeline: { step: 2 } }",
+      "5. ai-agent-framework ejecuta extractor → agent.extractor.completed",
+      "6. agent-manager ve step 2/3, publica agent.execute.request { agentName: 'archivador', pipeline: { step: 3 } }",
+      "7. ai-agent-framework ejecuta archivador → agent.archivador.completed",
+      "8. agent-manager ve step 3/3 (último), pipeline terminado"
+    ]
+  },
+
+  "implementation_phases": {
+    "phase_1": {
+      "name": "bot-manager",
+      "tasks": [
+        "Crear módulo",
+        "Escuchar telegram.*",
+        "Descargar y almacenar archivos",
+        "Publicar bot.file.stored",
+        "Respuestas automáticas"
+      ]
+    },
+    "phase_2": {
+      "name": "agent-manager",
+      "tasks": [
+        "Crear módulo",
+        "Escuchar bot.file.stored",
+        "Configurar triggers",
+        "Construir contexto",
+        "Publicar agent.execute.request"
+      ]
+    },
+    "phase_3": {
+      "name": "ai-agent-framework (ajustes)",
+      "tasks": [
+        "Escuchar agent.execute.request",
+        "Ejecutar con contexto recibido",
+        "Eliminar suscripciones directas de agentes"
+      ]
+    },
+    "phase_4": {
+      "name": "UI",
+      "tasks": [
+        "Panel de bots (bot-manager)",
+        "Panel de triggers (agent-manager)",
+        "Panel de agentes (ai-agent-framework)",
+        "Botón 'Probar' que publica evento"
+      ]
+    }
+  },
+
+  "cleanup": {
+    "deleted": ["modules/ai-agent-framework/agents/receptor-facturas.json"],
+    "disabled": ["modules/ai-agent-framework/agents/architect.json"],
+    "status": "completed"
+  },
+
+  "ui_modules_needed": {
+    "bots": {
+      "panel": "BotsPanel.svelte",
+      "for": "bot-manager",
+      "features": ["Lista de bots", "Config storage", "Auto-respuestas"]
+    },
+    "triggers": {
+      "panel": "TriggersPanel.svelte",
+      "for": "agent-manager",
+      "features": ["Qué evento activa qué agente", "Filtros", "Pipelines"]
+    },
+    "agents": {
+      "panel": "AgentsPanel.svelte",
+      "for": "ai-agent-framework",
+      "features": ["CRUD agentes", "Prompts", "Tools", "Botón probar"]
+    },
+    "pipelines": {
+      "panel": "PipelinesPanel.svelte",
+      "for": "agent-manager",
+      "features": ["Monitor tiempo real", "Estado de ejecución"]
+    }
+  },
+
+  "key_decisions": {
+    "no_special_apis": "Todo se hace via eventos, incluso probar un agente desde UI",
+    "no_direct_subscriptions": "Los agentes no se suscriben directamente a telegram.*, bot.*, etc.",
+    "agent_manager_is_brain": "agent-manager decide qué, cuándo, cómo, con qué contexto",
+    "ai_agent_framework_is_engine": "ai-agent-framework solo ejecuta cuando le dicen",
+    "bot_manager_is_storage": "bot-manager no sabe de agentes, solo almacena y notifica"
+  },
+
+  "documentation": {
+    "main_plan": "docs/PLAN-BOT-MANAGER.md",
+    "this_context": "contexto/bot-agent-architecture.json"
+  }
+}

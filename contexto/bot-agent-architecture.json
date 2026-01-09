@@ -77,13 +77,64 @@
         "botName": "string - identificador único",
         "platform": "telegram",
         "enabled": "boolean",
-        "storage": {
-          "basePath": "./data/bots/{botName}",
-          "received": "{basePath}/received/{date}/"
-        },
+        "storagePath": "./data/bots/{botName}",
         "autoResponses": {
           "/start": "string - mensaje de bienvenida",
-          "/help": "string - mensaje de ayuda"
+          "/help": "string - mensaje de ayuda",
+          "onFileReceived": "string - respuesta al recibir archivo"
+        }
+      },
+
+      "file_naming_convention": {
+        "pattern": "{YYYYMMDD}_{HHmmss}_{nombreOriginal}_{STATUS}.{ext}",
+        "example": "20260109_143052_factura_R.pdf",
+
+        "status_codes": {
+          "R": "Received - Archivo recibido y guardado",
+          "P": "Processed - Procesado por un agente",
+          "V": "Validated - Validado/revisado",
+          "A": "Archived - Archivado (procesamiento completo)",
+          "X": "Exported - Exportado a otro sistema",
+          "E": "Error - Error en algún procesamiento",
+          "D": "Discarded - Marcado para eliminar"
+        },
+
+        "evolution_example": [
+          "factura.pdf → 20260109_143052_factura_R.pdf (recibido)",
+          "20260109_143052_factura_R.pdf → 20260109_143052_factura_RP.pdf (procesado)",
+          "20260109_143052_factura_RP.pdf → 20260109_143052_factura_RPV.pdf (validado)",
+          "20260109_143052_factura_RPV.pdf → 20260109_143052_factura_RPVA.pdf (archivado)"
+        ],
+
+        "parsing": {
+          "regex": "/^(\\d{8})_(\\d{6})_(.+)_([RPVAXED]+)\\.(.+)$/",
+          "groups": ["date", "time", "name", "status", "extension"],
+          "example_parse": {
+            "input": "20260109_143052_factura_RP.pdf",
+            "date": "20260109",
+            "time": "143052",
+            "name": "factura",
+            "status": "RP",
+            "extension": "pdf",
+            "states": ["received", "processed"]
+          }
+        },
+
+        "api": {
+          "updateFileStatus": "downloadManager.updateFileStatus(filePath, 'P') → renombra añadiendo estado",
+          "parseFileName": "downloadManager.parseFileName(fileName) → extrae metadata",
+          "listFiles": "downloadManager.listFiles(dirPath, filterStatus) → lista con metadata",
+          "getPendingFiles": "downloadManager.getPendingFiles(dirPath) → archivos solo con estado R"
+        },
+
+        "when_to_update_status": {
+          "R": "bot-manager al guardar archivo (automático)",
+          "P": "agent-manager cuando agent.{name}.completed",
+          "V": "cuando usuario valida/revisa",
+          "A": "cuando se archiva definitivamente",
+          "X": "cuando se exporta a otro sistema",
+          "E": "cuando agent.{name}.failed",
+          "D": "cuando se marca para eliminar"
         }
       },
 

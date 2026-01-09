@@ -99,6 +99,13 @@ class BotRegistry {
     const bot = this.bots.get(botName);
     return bot?.autoResponses?.[key] || null;
   }
+
+  /**
+   * Obtiene todos los bots registrados
+   */
+  getAll() {
+    return Array.from(this.bots.values());
+  }
 }
 
 module.exports = BotRegistry;

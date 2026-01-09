@@ -11,7 +11,7 @@ class TriggerRegistry {
     this.config = config;
     this.logger = logger;
     this.triggers = []; // Array de trigger configs
-    this.storagePath = config.triggersPath || '/storage/agent-manager/triggers';
+    this.storagePath = config.triggersPath || './data/agent-manager/triggers';
     this.configFile = path.join(this.storagePath, 'triggers.json');
   }
 

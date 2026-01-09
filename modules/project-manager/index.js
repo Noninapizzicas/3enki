@@ -460,7 +460,7 @@ class ProjectManagerModule {
 
   /**
    * Migrate existing databases: add composition columns if missing
-   * Safe to run multiple times - uses ALTER TABLE with error handling
+   * Safe to run multiple times - checks existing columns first via PRAGMA
    */
   async migrateCompositionColumns(correlationId) {
     const columnsToAdd = [
@@ -469,7 +469,26 @@ class ProjectManagerModule {
       { name: 'parent_project_id', type: 'TEXT' }
     ];
 
+    // Get existing columns from table schema
+    let existingColumns = [];
+    try {
+      const tableInfo = await this.queryDatabase(
+        'PRAGMA table_info(projects)',
+        [], true, correlationId
+      );
+      existingColumns = tableInfo.map(col => col.name);
+    } catch (error) {
+      this.logger.warn({ correlationId, error: error.message }, 'Could not get table info, skipping migration');
+      return;
+    }
+
     for (const col of columnsToAdd) {
+      // Skip if column already exists
+      if (existingColumns.includes(col.name)) {
+        this.logger.debug({ correlationId, column: col.name }, 'Composition column already exists');
+        continue;
+      }
+
       try {
         await this.queryDatabase(
           `ALTER TABLE projects ADD COLUMN ${col.name} ${col.type}`,
@@ -477,10 +496,8 @@ class ProjectManagerModule {
         );
         this.logger.info({ correlationId, column: col.name }, 'Added composition column');
       } catch (error) {
-        // Column already exists - this is expected for existing installations
-        if (!error.message?.includes('duplicate column')) {
-          this.logger.debug({ correlationId, column: col.name }, 'Composition column already exists');
-        }
+        // Log but don't crash if column add fails
+        this.logger.warn({ correlationId, column: col.name, error: error.message }, 'Failed to add composition column');
       }
     }
   }

@@ -150,7 +150,7 @@ class BotManagerModule {
     }
 
     // Obtener ruta de storage
-    const storagePath = this.registry.getStoragePath(botName, 'received');
+    const storagePath = this.registry.getStoragePath(botName);
 
     // Descargar y guardar archivo
     const result = await this.downloadManager.downloadAndStore(

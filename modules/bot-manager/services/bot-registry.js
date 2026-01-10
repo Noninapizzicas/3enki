@@ -57,10 +57,10 @@ class BotRegistry {
   }
 
   /**
-   * Obtiene la ruta donde guardar archivos (directamente en el directorio del bot)
+   * Obtiene la ruta donde guardar archivos recibidos
    */
   getStoragePath(botName) {
-    return path.join(this.storagePath, botName);
+    return path.join(this.storagePath, botName, 'received');
   }
 
   get(botName) {

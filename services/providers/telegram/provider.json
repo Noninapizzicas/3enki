@@ -2,10 +2,10 @@
   "name": "telegram",
   "version": "1.0.0",
   "description": "Telegram Bot API - Funciones HTTP directas",
-  "credential": "TELEGRAM_BOT_TOKEN",
+  "credential": null,
   "base_url": "https://api.telegram.org",
   "auth": {
-    "type": "url_path",
-    "note": "El token va en el path: /bot{token}/method"
+    "type": "none",
+    "note": "El token va en el path via bot_token del request: /bot{token}/method"
   }
 }

@@ -249,6 +249,8 @@ class AIGatewayModule {
       request_id,
       messages,
       tools,
+      execute_tools,
+      max_tool_iterations,
       provider: requestedProvider,
       model,
       temperature,
@@ -284,6 +286,8 @@ class AIGatewayModule {
         body: {
           messages,
           tools,
+          execute_tools,
+          max_tool_iterations,
           provider: requestedProvider,
           model,
           temperature,
@@ -299,6 +303,8 @@ class AIGatewayModule {
         message: result.data?.content,
         content: result.data?.content,
         tool_calls: result.data?.tool_calls || null,
+        tool_calls_executed: result.data?.tool_results || [],
+        iterations: result.data?.iterations || 1,
         tokens: result.data?.usage?.total_tokens || 0,
         cost: result.data?.cost || 0,
         model: result.data?.model,
@@ -558,9 +564,13 @@ class AIGatewayModule {
       let totalCost = 0;
       let allToolResults = [];
 
-      // Get tools - use provided or load from moduleLoader
-      let tools = requestedTools;
-      if (!tools && this.moduleLoader) {
+      // Get tools - use provided array, or if true/truthy load from moduleLoader
+      let tools = null;
+      if (Array.isArray(requestedTools) && requestedTools.length > 0) {
+        // Explicit tools array provided
+        tools = requestedTools;
+      } else if (requestedTools && this.moduleLoader) {
+        // tools=true or truthy - load from moduleLoader
         const availableTools = this.getAvailableTools();
         if (availableTools.length > 0) {
           tools = availableTools;

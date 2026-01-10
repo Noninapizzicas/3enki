@@ -38,6 +38,29 @@ const FILE_STATES = {
   D: 'discarded'    // Descartado
 };
 
+// Mapa de MIME types a extensiones
+const MIME_TO_EXT = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/bmp': 'bmp',
+  'image/tiff': 'tiff',
+  'application/pdf': 'pdf',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'mp4a',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'text/plain': 'txt',
+  'application/json': 'json',
+  'application/zip': 'zip',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx'
+};
+
 // Regex para parsear nombres de archivo
 // Captura: date, time, name, status, extension
 const FILENAME_REGEX = /^(\d{8})_(\d{6})_(.+)_([RPVAXED]+)\.(.+)$/;
@@ -61,15 +84,25 @@ class DownloadManager {
 
   /**
    * Construye nombre de archivo con metadata
+   * @param {string} originalName - Nombre original del archivo
+   * @param {string} status - Estado inicial (default: 'R')
+   * @param {string} mimeType - MIME type para inferir extensión si falta
    */
-  buildFileName(originalName, status = 'R') {
+  buildFileName(originalName, status = 'R', mimeType = null) {
     const { date, time } = this.getTimestamp();
     const safeName = this.sanitizeFileName(originalName);
 
     // Separar nombre y extensión
     const lastDot = safeName.lastIndexOf('.');
     const name = lastDot > 0 ? safeName.substring(0, lastDot) : safeName;
-    const ext = lastDot > 0 ? safeName.substring(lastDot + 1) : 'bin';
+    let ext = lastDot > 0 ? safeName.substring(lastDot + 1) : null;
+
+    // Si no hay extensión, inferir del MIME type
+    if (!ext && mimeType) {
+      ext = MIME_TO_EXT[mimeType] || 'bin';
+    } else if (!ext) {
+      ext = 'bin';
+    }
 
     return `${date}_${time}_${name}_${status}.${ext}`;
   }
@@ -145,7 +178,7 @@ class DownloadManager {
   async downloadAndStore(botName, fileId, originalName, mimeType, storagePath) {
     await fs.mkdir(storagePath, { recursive: true });
 
-    const fileName = this.buildFileName(originalName || `file_${Date.now()}`, 'R');
+    const fileName = this.buildFileName(originalName || `file_${Date.now()}`, 'R', mimeType);
     const destPath = path.join(storagePath, fileName);
 
     this.logger.info('download-manager.downloading', {
@@ -323,5 +356,6 @@ class DownloadManager {
 // Exportar también las constantes para uso externo
 DownloadManager.FILE_STATES = FILE_STATES;
 DownloadManager.FILENAME_REGEX = FILENAME_REGEX;
+DownloadManager.MIME_TO_EXT = MIME_TO_EXT;
 
 module.exports = DownloadManager;

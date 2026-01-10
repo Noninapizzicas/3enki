@@ -140,7 +140,7 @@ class TelegramClient extends EventEmitter {
       return;
     }
 
-    // Photo
+    // Photo (Telegram always compresses to JPEG)
     if (message.photo) {
       const bestPhoto = message.photo[message.photo.length - 1];
       this.emit('photo', {
@@ -149,6 +149,7 @@ class TelegramClient extends EventEmitter {
         fileSize: bestPhoto.file_size,
         width: bestPhoto.width,
         height: bestPhoto.height,
+        mimeType: 'image/jpeg',  // Telegram photos are always JPEG
         caption: message.caption || null,
         sizes: message.photo.map(p => ({ fileId: p.file_id, width: p.width, height: p.height }))
       });
@@ -173,6 +174,7 @@ class TelegramClient extends EventEmitter {
       this.emit('video', {
         ...msgBase,
         fileId: message.video.file_id,
+        mimeType: message.video.mime_type || 'video/mp4',
         duration: message.video.duration,
         width: message.video.width,
         height: message.video.height,
@@ -186,6 +188,7 @@ class TelegramClient extends EventEmitter {
       this.emit('audio', {
         ...msgBase,
         fileId: message.audio.file_id,
+        mimeType: message.audio.mime_type || 'audio/mpeg',
         duration: message.audio.duration,
         title: message.audio.title,
         performer: message.audio.performer
@@ -193,11 +196,12 @@ class TelegramClient extends EventEmitter {
       return;
     }
 
-    // Voice
+    // Voice (Telegram voice messages are always OGG OPUS)
     if (message.voice) {
       this.emit('voice', {
         ...msgBase,
         fileId: message.voice.file_id,
+        mimeType: 'audio/ogg',  // Voice messages are always OGG
         duration: message.voice.duration
       });
       return;

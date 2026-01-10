@@ -1410,26 +1410,12 @@ class AIGatewayModule {
         }));
 
       case 'openai':
-        // OpenAI format: { type: 'function', function: { name, description, parameters } }
+      case 'deepseek':
+        // OpenAI/DeepSeek format: { type: 'function', function: { name, description, parameters } }
         return tools.map(tool => ({
           type: 'function',
           function: {
             name: tool.name,
-            description: tool.description || '',
-            parameters: tool.parameters || {
-              type: 'object',
-              properties: {},
-              required: []
-            }
-          }
-        }));
-
-      case 'deepseek':
-        // DeepSeek format: same as OpenAI but dots not allowed in names
-        return tools.map(tool => ({
-          type: 'function',
-          function: {
-            name: tool.name.replace(/\./g, '_'),
             description: tool.description || '',
             parameters: tool.parameters || {
               type: 'object',
@@ -1498,7 +1484,8 @@ class AIGatewayModule {
         break;
 
       case 'openai':
-        // OpenAI: message.tool_calls array
+      case 'deepseek':
+        // OpenAI/DeepSeek: message.tool_calls array
         if (response.tool_calls && Array.isArray(response.tool_calls)) {
           toolCalls = response.tool_calls.map(tc => ({
             id: tc.id,
@@ -1513,28 +1500,6 @@ class AIGatewayModule {
           toolCalls = response.choices[0].message.tool_calls.map(tc => ({
             id: tc.id,
             name: tc.function?.name,
-            arguments: typeof tc.function?.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
-              : tc.function?.arguments || {}
-          }));
-        }
-        break;
-
-      case 'deepseek':
-        // DeepSeek: same as OpenAI but transform names back (underscore → dot)
-        if (response.tool_calls && Array.isArray(response.tool_calls)) {
-          toolCalls = response.tool_calls.map(tc => ({
-            id: tc.id,
-            name: tc.function?.name?.replace(/_/g, '.'),
-            arguments: typeof tc.function?.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
-              : tc.function?.arguments || {}
-          }));
-        }
-        else if (response.choices?.[0]?.message?.tool_calls) {
-          toolCalls = response.choices[0].message.tool_calls.map(tc => ({
-            id: tc.id,
-            name: tc.function?.name?.replace(/_/g, '.'),
             arguments: typeof tc.function?.arguments === 'string'
               ? JSON.parse(tc.function.arguments)
               : tc.function?.arguments || {}

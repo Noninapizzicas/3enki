@@ -866,7 +866,19 @@ class ChatSessionModule {
 
   async onSaveRequest(event) {
     const data = event.data || event.payload || event;
-    const { request_id, conversation_id, message, correlation_id } = data;
+    const { request_id, conversation_id, correlation_id } = data;
+
+    // Build message object from either nested 'message' field or flat fields
+    // chat-ai-bridge sends flat fields: { role, content, tokens, cost, metadata, ... }
+    const message = data.message || {
+      role: data.role,
+      content: data.content,
+      user_id: data.user_id,
+      attachments: data.attachments,
+      tokens: data.tokens,
+      cost: data.cost,
+      metadata: data.metadata
+    };
 
     try {
       const savedMessage = await this.saveMessage(conversation_id, message, correlation_id);

@@ -1459,6 +1459,24 @@ class AIGatewayModule {
   }
 
   /**
+   * Safely parse JSON arguments from tool calls
+   * @param {string|object} args - Arguments to parse
+   * @returns {object} Parsed arguments or empty object on error
+   */
+  safeParseArguments(args) {
+    if (typeof args !== 'string') return args || {};
+    try {
+      return JSON.parse(args);
+    } catch (e) {
+      this.logger?.warn('ai-gateway.tool-args-parse-error', {
+        error: e.message,
+        truncated: args.substring(0, 100)
+      });
+      return { _parse_error: e.message, _raw: args };
+    }
+  }
+
+  /**
    * Parse tool calls from provider response to internal format
    * @param {Object} response - Provider response
    * @param {string} providerName - Source provider name
@@ -1490,9 +1508,7 @@ class AIGatewayModule {
           toolCalls = response.tool_calls.map(tc => ({
             id: tc.id,
             name: tc.function?.name,
-            arguments: typeof tc.function?.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
-              : tc.function?.arguments || {}
+            arguments: this.safeParseArguments(tc.function?.arguments)
           }));
         }
         // Also check choices[0].message.tool_calls for raw API responses
@@ -1500,9 +1516,7 @@ class AIGatewayModule {
           toolCalls = response.choices[0].message.tool_calls.map(tc => ({
             id: tc.id,
             name: tc.function?.name,
-            arguments: typeof tc.function?.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
-              : tc.function?.arguments || {}
+            arguments: this.safeParseArguments(tc.function?.arguments)
           }));
         }
         break;
@@ -1513,9 +1527,7 @@ class AIGatewayModule {
           toolCalls = response.message.tool_calls.map(tc => ({
             id: tc.id || `ollama-${Date.now()}`,
             name: tc.function?.name,
-            arguments: typeof tc.function?.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
-              : tc.function?.arguments || {}
+            arguments: this.safeParseArguments(tc.function?.arguments)
           }));
         }
         break;
@@ -1526,9 +1538,7 @@ class AIGatewayModule {
           toolCalls = response.tool_calls.map(tc => ({
             id: tc.id,
             name: tc.function?.name,
-            arguments: typeof tc.function?.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
-              : tc.function?.arguments || {}
+            arguments: this.safeParseArguments(tc.function?.arguments)
           }));
         }
     }

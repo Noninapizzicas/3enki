@@ -37,7 +37,7 @@
       "external_apis": {
         "description": "APIs externas que requieren credencial",
         "structure": "{provider}/provider.json + functions/*.json",
-        "examples": ["google/", "anthropic/", "elevenlabs/", "telegram/"]
+        "examples": ["google/", "anthropic/", "elevenlabs/"]
       },
       "local_services": {
         "description": "Servicios locales sin credencial externa",
@@ -57,12 +57,6 @@
       "│   ├── provider.json",
       "│   └── functions/",
       "│       └── vision.json",
-      "├── telegram/",
-      "│   ├── provider.json",
-      "│   └── functions/",
-      "│       ├── send_message.json",
-      "│       ├── send_photo.json",
-      "│       └── get_file.json",
       "├── elevenlabs/",
       "│   ├── provider.json",
       "│   └── functions/",
@@ -500,51 +494,12 @@
       }
     },
 
-    "telegram": {
-      "credential": "TELEGRAM_BOT_TOKEN",
-      "description": "Telegram Bot API - Funciones HTTP directas",
-      "note": "telegram-service usa estas funciones internamente para la lógica de polling/estado",
-      "functions": {
-        "send_message": {
-          "event": "telegram.send_message.request",
-          "description": "Enviar mensaje de texto",
-          "input": {
-            "bot_token": "string - Token del bot",
-            "chat_id": "number - ID del chat",
-            "text": "string - Mensaje",
-            "parse_mode": "HTML | Markdown (opcional)",
-            "reply_markup": "object - Teclado inline (opcional)"
-          },
-          "output": {
-            "message_id": "number - ID del mensaje enviado"
-          }
-        },
-        "send_photo": {
-          "event": "telegram.send_photo.request",
-          "description": "Enviar foto",
-          "input": {
-            "bot_token": "string",
-            "chat_id": "number",
-            "photo": "string - URL o file_id",
-            "caption": "string (opcional)"
-          },
-          "output": {
-            "message_id": "number"
-          }
-        },
-        "get_file": {
-          "event": "telegram.get_file.request",
-          "description": "Obtener info de archivo para descarga",
-          "input": {
-            "bot_token": "string",
-            "file_id": "string"
-          },
-          "output": {
-            "file_path": "string - Path para construir URL de descarga",
-            "file_size": "number"
-          }
-        }
-      }
+    "_telegram_note": {
+      "IMPORTANTE": "Telegram NO usa el provider system",
+      "razon": "Telegram tiene tokens por bot (multi-tenant) y estado (polling, colas)",
+      "manejo": "telegram-service gestiona todo internamente",
+      "eventos": "telegram.send_message.request, telegram.get_file.request, etc. son manejados por telegram-service",
+      "ver": "modules/telegram-service/"
     },
 
     "local": {

@@ -9,7 +9,9 @@
       "ui_questions": "Read ui.json",
       "mqtt_questions": "Read mqtt.json",
       "module_questions": "Read modules.json",
-      "generate_ui": "Read ui-generator.json"
+      "generate_ui": "Read ui-generator.json",
+      "external_services": "Read services.json (OCR, TTS, PDF, CSV, APIs externas)",
+      "bot_agent_flow": "Read bot-agent-architecture.json"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -65,6 +67,16 @@
       "file": "project-composition.json",
       "purpose": "Sistema de composición progresiva de proyectos (links, dependencias, sistemas, contexto compartido)",
       "when": "Trabajar con relaciones entre proyectos, sistemas, contexto heredado, project-manager v2.0"
+    },
+    {
+      "file": "services.json",
+      "purpose": "Arquitectura de servicios externos y locales (providers, funciones, catálogo)",
+      "when": "Usar servicios externos (Google Vision, TTS, Translate), crear PDFs, CSVs, Excel, OCR local. NO para LLMs (esos usan ai-gateway)"
+    },
+    {
+      "file": "bot-agent-architecture.json",
+      "purpose": "Arquitectura de bot-manager, agent-manager, ai-agent-framework",
+      "when": "Trabajar con bots de Telegram, pipelines de agentes, triggers automáticos"
     }
   ],
 
@@ -79,7 +91,9 @@
       "ui_request": "ui/request/{domain}/{action}",
       "ui_response": "ui/response/{request_id}",
       "events": "core/{coreId}/events/{module}/{event}",
-      "module_api": "/modules/{name}/{endpoint}"
+      "module_api": "/modules/{name}/{endpoint}",
+      "service_request": "{provider}.{function}.request",
+      "service_response": "{provider}.{function}.response"
     },
     "ports": {
       "http": 3000,

@@ -1,0 +1,36 @@
+{
+  "name": "get_file",
+  "description": "Obtener info de archivo para descarga",
+  "event": "telegram.get_file.request",
+  "method": "POST",
+  "endpoint": "/bot{{bot_token}}/getFile",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "input": {
+    "bot_token": {
+      "type": "string",
+      "description": "Token del bot",
+      "required": true
+    },
+    "file_id": {
+      "type": "string",
+      "description": "ID del archivo a obtener",
+      "required": true
+    }
+  },
+  "request_template": {
+    "file_id": "{{file_id}}"
+  },
+  "output": {
+    "file_path": {
+      "type": "string",
+      "description": "Path para construir URL de descarga"
+    },
+    "file_size": {
+      "type": "number",
+      "description": "Tamaño del archivo en bytes"
+    }
+  },
+  "response_path": "result"
+}

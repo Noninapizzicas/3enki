@@ -33,6 +33,7 @@ const { MQTTClient } = require('./core/mqtt');
 const EventBus = require('./core/events/bus');
 const HookManager = require('./core/hooks');
 const { ModuleLoader, ModuleRegistry } = require('./core/modules');
+const { createProviderSystem } = require('./core/providers');
 const HTTPGateway = require('./core/gateway/http');
 const { Logger, Tracer, Metrics, ActivityLogger } = require('./core/observability');
 const { loadConfig, getConfigValue } = require('./core/config');
@@ -150,7 +151,8 @@ async function main() {
     validationManager: null,
     serviceRegistry: null,
     heartbeatTimer: null,
-    uiHandler: null  // UI Request/Response handler
+    uiHandler: null,  // UI Request/Response handler
+    providerSystem: null  // Provider system for external/local services
   };
 
   try {
@@ -367,7 +369,39 @@ async function main() {
     }
 
     // ========================================================================
-    // Step 6: Initialize Service Registry & Allocate Port
+    // Step 6.5: Initialize Provider System
+    // ========================================================================
+    console.log('🔌 [6.5/8] Loading Service Providers...');
+
+    const providersPath = path.resolve(__dirname, './services/providers');
+
+    if (fs.existsSync(providersPath)) {
+      core.providerSystem = createProviderSystem({
+        providersPath,
+        eventBus: core.eventBus,
+        logger: core.logger
+      });
+
+      const providerResults = await core.providerSystem.loader.loadAll();
+      const loadedProviders = providerResults.filter(r => r.success);
+
+      core.logger.info('core.providers.loaded', {
+        count: loadedProviders.length,
+        providers: loadedProviders.map(p => p.providerName)
+      });
+
+      console.log(`   ✅ Loaded ${loadedProviders.length} provider(s):`);
+      loadedProviders.forEach(p => {
+        const status = p.available ? '✓' : '✗';
+        console.log(`      ${status} ${p.providerName} (${p.functions?.length || 0} functions)`);
+      });
+      console.log('');
+    } else {
+      console.log('   ℹ️  No providers directory found, skipping...\n');
+    }
+
+    // ========================================================================
+    // Step 7: Initialize Service Registry & Allocate Port
     // ========================================================================
     console.log('📋 [7/8] Initializing Service Registry...');
 
@@ -525,9 +559,16 @@ async function main() {
           core.logger.info('core.ui_handler.stopped');
         }
 
-        // Step 5: Unload Modules
+        // Step 5: Unload Providers
+        if (core.providerSystem) {
+          console.log('   [4/7] Unloading providers...');
+          await core.providerSystem.loader.unloadAll();
+          core.logger.info('core.providers.unloaded');
+        }
+
+        // Step 5.5: Unload Modules
         if (core.moduleLoader) {
-          console.log('   [4/6] Unloading modules...');
+          console.log('   [5/7] Unloading modules...');
           await core.moduleLoader.unloadAll();
           core.logger.info('core.modules.unloaded');
         }

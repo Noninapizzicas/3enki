@@ -120,8 +120,9 @@ class DeepSeekProvider extends BaseProvider {
     };
 
     // Add tools if provided (DeepSeek supports OpenAI function calling format)
+    // DeepSeek only accepts [a-zA-Z0-9_-] in tool names, so transform dots to underscores
     if (options.tools && options.tools.length > 0) {
-      requestData.tools = options.tools;
+      requestData.tools = this.translateToolNames(options.tools);
       requestData.tool_choice = options.tool_choice || 'auto';
     }
 
@@ -162,12 +163,44 @@ class DeepSeekProvider extends BaseProvider {
       finish_reason: response.choices[0]?.finish_reason || 'stop'
     };
 
-    // Include tool_calls if present
+    // Include tool_calls if present (transform names back: underscore → dot)
     if (toolCalls && toolCalls.length > 0) {
-      result.tool_calls = toolCalls;
+      result.tool_calls = this.restoreToolNames(toolCalls);
     }
 
     return result;
+  }
+
+  /**
+   * Transform tool names for DeepSeek API (dot → underscore)
+   * DeepSeek only accepts pattern: ^[a-zA-Z0-9_-]+$
+   */
+  translateToolNames(tools) {
+    return tools.map(tool => {
+      if (tool.type === 'function' && tool.function?.name) {
+        return {
+          ...tool,
+          function: {
+            ...tool.function,
+            name: tool.function.name.replace(/\./g, '_')
+          }
+        };
+      }
+      return tool;
+    });
+  }
+
+  /**
+   * Restore tool names from DeepSeek response (underscore → dot)
+   */
+  restoreToolNames(toolCalls) {
+    return toolCalls.map(tc => ({
+      ...tc,
+      function: {
+        ...tc.function,
+        name: tc.function?.name?.replace(/_/g, '.') || tc.function?.name
+      }
+    }));
   }
 
   /**

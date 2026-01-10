@@ -1,0 +1,667 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-01-10",
+  "_DESCRIPTION": "Arquitectura de Servicios Event-Core",
+
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANT": "Este archivo define la arquitectura de servicios externos y locales",
+    "rule_1": "Los PROVIDERS son tontos: solo ejecutan, no deciden",
+    "rule_2": "Los MÓDULOS son inteligentes: saben qué provider usar y por qué",
+    "rule_3": "NO hay orquestador automático - cada módulo decide",
+    "rule_4": "Los LLMs (DeepSeek, OpenAI, Claude, Ollama) NO van aquí - usan ai-gateway",
+    "how_to_call": "eventBus.publish('{provider}.{function}.request', payload)",
+    "how_to_receive": "eventBus.subscribe('{provider}.{function}.response', handler)"
+  },
+
+  "principles": {
+    "grouping": {
+      "rule": "Agrupar por PROVEEDOR, no por funcionalidad",
+      "reason": "Los servicios del mismo proveedor comparten credencial",
+      "example": "Google Vision, Google TTS, Google Translate → todos en google/"
+    },
+    "separation": {
+      "providers": "Exponen funciones HTTP bien definidas",
+      "modules": "Contienen la lógica de negocio y deciden qué provider usar",
+      "events": "Conectan todo sin acoplamiento"
+    },
+    "simplicity": {
+      "no_orchestrator": "No hay orquestador mágico que decida qué servicio usar",
+      "module_decides": "El módulo conoce su contexto y decide el provider adecuado",
+      "example": "menu-generator sabe que para menús usa google.vision, invoice-processor usa anthropic.vision"
+    }
+  },
+
+  "directory_structure": {
+    "root": "services/providers/",
+    "layout": {
+      "external_apis": {
+        "description": "APIs externas que requieren credencial",
+        "structure": "{provider}/provider.json + functions/*.json",
+        "examples": ["google/", "anthropic/", "elevenlabs/", "telegram/"]
+      },
+      "local_services": {
+        "description": "Servicios locales sin credencial externa",
+        "structure": "local/{service}/index.js",
+        "examples": ["local/pdf/", "local/csv/", "local/xlsx/", "local/tesseract/"]
+      }
+    },
+    "tree": [
+      "services/providers/",
+      "├── google/",
+      "│   ├── provider.json",
+      "│   └── functions/",
+      "│       ├── vision.json",
+      "│       ├── tts.json",
+      "│       └── translate.json",
+      "├── anthropic/",
+      "│   ├── provider.json",
+      "│   └── functions/",
+      "│       └── vision.json",
+      "├── telegram/",
+      "│   ├── provider.json",
+      "│   └── functions/",
+      "│       ├── send_message.json",
+      "│       ├── send_photo.json",
+      "│       └── get_file.json",
+      "├── elevenlabs/",
+      "│   ├── provider.json",
+      "│   └── functions/",
+      "│       └── tts.json",
+      "└── local/",
+      "    ├── pdf/",
+      "    │   └── index.js",
+      "    ├── csv/",
+      "    │   └── index.js",
+      "    ├── xlsx/",
+      "    │   └── index.js",
+      "    └── tesseract/",
+      "        └── index.js"
+    ]
+  },
+
+  "file_formats": {
+    "provider_json": {
+      "description": "Configuración de un proveedor externo (API)",
+      "location": "services/providers/{provider}/provider.json",
+      "required_for": "APIs externas que necesitan credencial",
+      "NOT_required_for": "Servicios locales (local/)",
+      "schema": {
+        "name": {
+          "type": "string",
+          "description": "Nombre del proveedor",
+          "example": "google"
+        },
+        "version": {
+          "type": "string",
+          "description": "Versión del provider",
+          "example": "1.0.0"
+        },
+        "description": {
+          "type": "string",
+          "description": "Descripción del proveedor"
+        },
+        "credential": {
+          "type": "string",
+          "description": "Nombre de la variable de entorno con la credencial",
+          "example": "GOOGLE_API_KEY"
+        },
+        "base_url": {
+          "type": "string",
+          "description": "URL base para todas las funciones",
+          "example": "https://vision.googleapis.com/v1"
+        },
+        "auth": {
+          "type": "object",
+          "description": "Configuración de autenticación",
+          "properties": {
+            "type": {
+              "enum": ["bearer", "query_param", "header", "basic"],
+              "description": "Tipo de autenticación"
+            },
+            "param": {
+              "type": "string",
+              "description": "Nombre del parámetro (para query_param o header)"
+            },
+            "header_name": {
+              "type": "string",
+              "description": "Nombre del header (para header type)"
+            }
+          }
+        }
+      },
+      "example": {
+        "name": "google",
+        "version": "1.0.0",
+        "description": "Google Cloud APIs (Vision, TTS, Translate)",
+        "credential": "GOOGLE_API_KEY",
+        "base_url": "https://vision.googleapis.com/v1",
+        "auth": {
+          "type": "query_param",
+          "param": "key"
+        }
+      }
+    },
+
+    "function_json": {
+      "description": "Definición de una función de un proveedor externo",
+      "location": "services/providers/{provider}/functions/{function}.json",
+      "schema": {
+        "name": {
+          "type": "string",
+          "description": "Nombre de la función",
+          "example": "extract"
+        },
+        "description": {
+          "type": "string",
+          "description": "Qué hace esta función"
+        },
+        "event": {
+          "type": "string",
+          "description": "Evento request para llamar esta función",
+          "pattern": "{provider}.{function}.request",
+          "example": "google.vision.extract.request"
+        },
+        "response_event": {
+          "type": "string",
+          "description": "Evento response (auto-generado si no se especifica)",
+          "pattern": "{provider}.{function}.response",
+          "example": "google.vision.extract.response"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "description": "Método HTTP"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Endpoint relativo a base_url",
+          "example": "/images:annotate"
+        },
+        "headers": {
+          "type": "object",
+          "description": "Headers adicionales",
+          "example": { "Content-Type": "application/json" }
+        },
+        "input": {
+          "type": "object",
+          "description": "Schema de los parámetros de entrada",
+          "properties": {
+            "{param_name}": {
+              "type": "string",
+              "description": "Descripción del parámetro",
+              "required": "boolean"
+            }
+          }
+        },
+        "request_template": {
+          "type": "object",
+          "description": "Template del body HTTP con placeholders {{param}}",
+          "note": "Los placeholders se reemplazan con valores del input"
+        },
+        "output": {
+          "type": "object",
+          "description": "Schema de la respuesta"
+        },
+        "response_path": {
+          "type": "string",
+          "description": "JSONPath para extraer el resultado de la respuesta HTTP",
+          "example": "responses[0].fullTextAnnotation.text"
+        }
+      },
+      "example": {
+        "name": "extract",
+        "description": "OCR - Extraer texto de imagen",
+        "event": "google.vision.extract.request",
+        "method": "POST",
+        "endpoint": "/images:annotate",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "input": {
+          "image": {
+            "type": "string",
+            "description": "Imagen en base64",
+            "required": true
+          },
+          "hint": {
+            "type": "string",
+            "enum": ["TEXT_DETECTION", "DOCUMENT_TEXT_DETECTION", "HANDWRITING"],
+            "description": "Tipo de detección",
+            "required": false,
+            "default": "TEXT_DETECTION"
+          }
+        },
+        "request_template": {
+          "requests": [{
+            "image": { "content": "{{image}}" },
+            "features": [{ "type": "{{hint}}" }]
+          }]
+        },
+        "output": {
+          "text": {
+            "type": "string",
+            "description": "Texto extraído"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Confianza de la extracción (0-1)"
+          }
+        },
+        "response_path": "responses[0].fullTextAnnotation.text"
+      }
+    },
+
+    "local_index_js": {
+      "description": "Servicio local - definición y handler en un solo archivo",
+      "location": "services/providers/local/{service}/index.js",
+      "reason": "No necesita provider.json porque no hay credencial ni configuración externa",
+      "schema": {
+        "name": {
+          "type": "string",
+          "description": "Nombre completo del servicio",
+          "pattern": "local.{service}",
+          "example": "local.pdf"
+        },
+        "description": {
+          "type": "string",
+          "description": "Descripción del servicio"
+        },
+        "functions": {
+          "type": "object",
+          "description": "Definición de funciones disponibles",
+          "properties": {
+            "{function_name}": {
+              "event": "string - evento request",
+              "description": "string",
+              "input": "object - schema de entrada",
+              "output": "object - schema de salida"
+            }
+          }
+        },
+        "{function_name}": {
+          "type": "async function",
+          "description": "Implementación de la función",
+          "signature": "async ({input_params}) => {output}"
+        }
+      },
+      "example_file": "// services/providers/local/pdf/index.js\n\nconst PDFDocument = require('pdfkit');\nconst fs = require('fs');\nconst path = require('path');\n\nmodule.exports = {\n  name: 'local.pdf',\n  description: 'Servicio local para crear PDFs',\n\n  functions: {\n    create: {\n      event: 'local.pdf.create.request',\n      description: 'Crear PDF desde datos o template',\n      input: {\n        type: {\n          type: 'string',\n          enum: ['from_text', 'from_html', 'from_template'],\n          required: true\n        },\n        content: {\n          type: 'string | object',\n          description: 'Contenido del PDF',\n          required: true\n        },\n        template: {\n          type: 'string',\n          description: 'Nombre del template (si type=from_template)',\n          required: false\n        },\n        filename: {\n          type: 'string',\n          description: 'Nombre del archivo de salida',\n          required: true\n        },\n        options: {\n          type: 'object',\n          properties: {\n            orientation: { enum: ['portrait', 'landscape'], default: 'portrait' },\n            format: { enum: ['A4', 'letter', 'legal'], default: 'A4' },\n            margin: { type: 'number', default: 50 }\n          }\n        }\n      },\n      output: {\n        success: { type: 'boolean' },\n        path: { type: 'string', description: 'Ruta del PDF generado' },\n        size: { type: 'number', description: 'Tamaño en bytes' }\n      }\n    }\n  },\n\n  // Implementación de las funciones\n  async create({ type, content, template, filename, options = {} }) {\n    const outputDir = './data/generated/pdf';\n    await fs.promises.mkdir(outputDir, { recursive: true });\n    \n    const outputPath = path.join(outputDir, filename);\n    const doc = new PDFDocument({\n      size: options.format || 'A4',\n      layout: options.orientation || 'portrait',\n      margin: options.margin || 50\n    });\n\n    const writeStream = fs.createWriteStream(outputPath);\n    doc.pipe(writeStream);\n\n    if (type === 'from_text') {\n      doc.text(content);\n    } else if (type === 'from_template') {\n      // Cargar template y renderizar\n      const templateFn = require(`./templates/${template}`);\n      await templateFn(doc, content);\n    }\n\n    doc.end();\n\n    await new Promise(resolve => writeStream.on('finish', resolve));\n    const stats = await fs.promises.stat(outputPath);\n\n    return {\n      success: true,\n      path: outputPath,\n      size: stats.size\n    };\n  }\n};"
+    }
+  },
+
+  "auto_discovery": {
+    "description": "El sistema descubre automáticamente los providers al iniciar",
+    "loader_location": "core/providers/loader.js",
+    "process": [
+      "1. Escanea services/providers/",
+      "2. Por cada carpeta (excepto local/):",
+      "   - Lee provider.json",
+      "   - Lee functions/*.json",
+      "   - Verifica si credencial existe en process.env",
+      "   - Registra eventos: {provider}.{function}.request",
+      "3. Para local/:",
+      "   - Lee cada */index.js",
+      "   - Extrae name y functions",
+      "   - Registra eventos: local.{service}.{function}.request",
+      "4. Publica: providers.loaded con lista de providers disponibles"
+    ],
+    "registry": {
+      "location": "core/providers/registry.js",
+      "data_structure": {
+        "providers": {
+          "{provider_name}": {
+            "credential": "string | null",
+            "available": "boolean - true si credencial existe o es local",
+            "base_url": "string | null",
+            "functions": {
+              "{function_name}": {
+                "event": "string",
+                "method": "string",
+                "endpoint": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "event_subscriptions": {
+      "description": "El loader suscribe automáticamente a los eventos request",
+      "pattern": "Por cada función → eventBus.subscribe('{provider}.{function}.request', handler)",
+      "handler_behavior": {
+        "external_api": "Construye HTTP request desde template, ejecuta, parsea response, publica {provider}.{function}.response",
+        "local": "Llama a la función del index.js, publica {provider}.{function}.response"
+      }
+    }
+  },
+
+  "events": {
+    "pattern": {
+      "request": "{provider}.{function}.request",
+      "response": "{provider}.{function}.response"
+    },
+    "examples": {
+      "google_vision": {
+        "request": "google.vision.extract.request",
+        "response": "google.vision.extract.response"
+      },
+      "local_pdf": {
+        "request": "local.pdf.create.request",
+        "response": "local.pdf.create.response"
+      },
+      "telegram": {
+        "request": "telegram.send_message.request",
+        "response": "telegram.send_message.response"
+      }
+    },
+    "payload_structure": {
+      "request": {
+        "request_id": "string - UUID auto-generado si no se provee",
+        "...input_params": "Parámetros definidos en input del function.json"
+      },
+      "response": {
+        "request_id": "string - Mismo que el request",
+        "success": "boolean",
+        "data": "object - Resultado según output del function.json",
+        "error": "string | null - Mensaje de error si success=false"
+      }
+    }
+  },
+
+  "usage_from_module": {
+    "description": "Cómo un módulo usa los servicios",
+    "pattern_with_helper": {
+      "code": "const result = await this.sendRequest(\n  'google.vision.extract.request',\n  'google.vision.extract.response',\n  { image: base64Image, hint: 'DOCUMENT_TEXT_DETECTION' },\n  10000 // timeout ms\n);",
+      "returns": "{ success: true, data: { text: '...' } }"
+    },
+    "pattern_manual": {
+      "code": "// Publicar request\nconst requestId = uuid();\nawait this.eventBus.publish('google.vision.extract.request', {\n  request_id: requestId,\n  image: base64Image\n});\n\n// Escuchar response\nthis.eventBus.subscribe('google.vision.extract.response', (event) => {\n  if (event.request_id === requestId) {\n    // Procesar resultado\n  }\n});"
+    },
+    "decision_example": {
+      "description": "El módulo decide qué provider usar según su lógica de negocio",
+      "code": "// modules/menu-generator/index.js\nasync processMenuImage(imageBase64) {\n  // Este módulo SABE que para menús, Google Vision funciona mejor\n  const result = await this.sendRequest(\n    'google.vision.extract.request',\n    'google.vision.extract.response',\n    { image: imageBase64, hint: 'DOCUMENT_TEXT_DETECTION' }\n  );\n  \n  return this.parseMenuText(result.data.text);\n}\n\n// modules/invoice-processor/index.js  \nasync processInvoice(imageBase64) {\n  // Este módulo SABE que para facturas, Anthropic entiende mejor la estructura\n  const result = await this.sendRequest(\n    'anthropic.vision.extract.request',\n    'anthropic.vision.extract.response',\n    { image: imageBase64, prompt: 'Extrae: emisor, CIF, total, fecha, líneas' }\n  );\n  \n  return result.data;\n}"
+    }
+  },
+
+  "what_stays_as_is": {
+    "description": "Módulos existentes que NO cambian",
+    "modules": {
+      "ai-gateway": {
+        "location": "modules/ai-gateway/",
+        "handles": ["DeepSeek", "OpenAI", "Claude/Anthropic", "Ollama"],
+        "reason": "Ya funciona, arquitectura diferente (providers internos)",
+        "NOT_in_services": true
+      },
+      "telegram-service": {
+        "location": "modules/telegram-service/",
+        "reason": "Necesita estado (polling, multi-bot, cola)",
+        "relationship": "El provider telegram/ define las funciones HTTP, telegram-service las usa internamente",
+        "NOT_in_services": "La lógica no, pero las funciones HTTP sí pueden estar definidas"
+      },
+      "bot-manager": {
+        "location": "modules/bot-manager/",
+        "reason": "Lógica de almacenamiento y auto-respuestas"
+      },
+      "agent-manager": {
+        "location": "modules/agent-manager/",
+        "reason": "Orquestación de agentes y pipelines"
+      },
+      "ocr-service": {
+        "location": "modules/ocr-service/",
+        "status": "PUEDE MIGRAR a usar providers en lugar de engines propios",
+        "migration_path": "Usar google.vision, anthropic.vision, local.tesseract en lugar de builtin/"
+      }
+    }
+  },
+
+  "catalog": {
+    "_description": "Catálogo de servicios disponibles para referencia de AI/desarrolladores",
+
+    "google": {
+      "credential": "GOOGLE_API_KEY",
+      "description": "Google Cloud APIs",
+      "functions": {
+        "vision.extract": {
+          "event": "google.vision.extract.request",
+          "description": "OCR - Extraer texto de imagen",
+          "input": {
+            "image": "base64 - Imagen a procesar",
+            "hint": "TEXT_DETECTION | DOCUMENT_TEXT_DETECTION | HANDWRITING (opcional)"
+          },
+          "output": {
+            "text": "string - Texto extraído",
+            "confidence": "number - Confianza 0-1"
+          }
+        },
+        "tts.synthesize": {
+          "event": "google.tts.synthesize.request",
+          "description": "Text-to-Speech - Convertir texto a audio",
+          "input": {
+            "text": "string - Texto a convertir",
+            "language": "string - Código de idioma (es-ES, en-US)",
+            "voice": "string - Nombre de voz (opcional)",
+            "speed": "number - Velocidad 0.5-2.0 (opcional)"
+          },
+          "output": {
+            "audio": "base64 - Audio MP3",
+            "duration": "number - Duración en segundos"
+          }
+        },
+        "translate.text": {
+          "event": "google.translate.text.request",
+          "description": "Traducir texto",
+          "input": {
+            "text": "string - Texto a traducir",
+            "source": "string - Idioma origen (auto-detect si no se especifica)",
+            "target": "string - Idioma destino"
+          },
+          "output": {
+            "text": "string - Texto traducido",
+            "detected_source": "string - Idioma detectado"
+          }
+        }
+      }
+    },
+
+    "anthropic": {
+      "credential": "ANTHROPIC_API_KEY",
+      "description": "Anthropic APIs (NO chat - eso va en ai-gateway)",
+      "functions": {
+        "vision.extract": {
+          "event": "anthropic.vision.extract.request",
+          "description": "OCR con análisis - Extrae texto y entiende estructura",
+          "input": {
+            "image": "base64 - Imagen a procesar",
+            "prompt": "string - Instrucciones adicionales (opcional)"
+          },
+          "output": {
+            "text": "string - Texto extraído",
+            "analysis": "object - Análisis estructurado si se pidió"
+          }
+        }
+      }
+    },
+
+    "elevenlabs": {
+      "credential": "ELEVENLABS_API_KEY",
+      "description": "ElevenLabs Text-to-Speech premium",
+      "functions": {
+        "tts.synthesize": {
+          "event": "elevenlabs.tts.synthesize.request",
+          "description": "TTS de alta calidad con voces realistas",
+          "input": {
+            "text": "string - Texto a convertir",
+            "voice_id": "string - ID de la voz",
+            "model": "string - eleven_multilingual_v2 | eleven_monolingual_v1"
+          },
+          "output": {
+            "audio": "base64 - Audio MP3",
+            "duration": "number - Duración en segundos"
+          }
+        }
+      }
+    },
+
+    "telegram": {
+      "credential": "TELEGRAM_BOT_TOKEN",
+      "description": "Telegram Bot API - Funciones HTTP directas",
+      "note": "telegram-service usa estas funciones internamente para la lógica de polling/estado",
+      "functions": {
+        "send_message": {
+          "event": "telegram.send_message.request",
+          "description": "Enviar mensaje de texto",
+          "input": {
+            "bot_token": "string - Token del bot",
+            "chat_id": "number - ID del chat",
+            "text": "string - Mensaje",
+            "parse_mode": "HTML | Markdown (opcional)",
+            "reply_markup": "object - Teclado inline (opcional)"
+          },
+          "output": {
+            "message_id": "number - ID del mensaje enviado"
+          }
+        },
+        "send_photo": {
+          "event": "telegram.send_photo.request",
+          "description": "Enviar foto",
+          "input": {
+            "bot_token": "string",
+            "chat_id": "number",
+            "photo": "string - URL o file_id",
+            "caption": "string (opcional)"
+          },
+          "output": {
+            "message_id": "number"
+          }
+        },
+        "get_file": {
+          "event": "telegram.get_file.request",
+          "description": "Obtener info de archivo para descarga",
+          "input": {
+            "bot_token": "string",
+            "file_id": "string"
+          },
+          "output": {
+            "file_path": "string - Path para construir URL de descarga",
+            "file_size": "number"
+          }
+        }
+      }
+    },
+
+    "local": {
+      "credential": null,
+      "description": "Servicios locales sin dependencia externa",
+      "functions": {
+        "pdf.create": {
+          "event": "local.pdf.create.request",
+          "description": "Crear PDF desde datos o template",
+          "input": {
+            "type": "from_text | from_html | from_template",
+            "content": "string | object - Contenido",
+            "template": "string - Nombre del template (opcional)",
+            "filename": "string - Nombre del archivo",
+            "options": {
+              "orientation": "portrait | landscape",
+              "format": "A4 | letter | legal",
+              "margin": "number"
+            }
+          },
+          "output": {
+            "path": "string - Ruta del PDF generado",
+            "size": "number - Bytes"
+          }
+        },
+        "csv.create": {
+          "event": "local.csv.create.request",
+          "description": "Crear CSV desde array de objetos",
+          "input": {
+            "data": "array - Array de objetos",
+            "columns": "array - Columnas a incluir (opcional, infiere de data)",
+            "filename": "string - Nombre del archivo"
+          },
+          "output": {
+            "path": "string - Ruta del CSV",
+            "rows": "number - Cantidad de filas"
+          }
+        },
+        "csv.parse": {
+          "event": "local.csv.parse.request",
+          "description": "Leer CSV y convertir a array de objetos",
+          "input": {
+            "path": "string - Ruta del archivo",
+            "content": "string - Contenido CSV (alternativa a path)"
+          },
+          "output": {
+            "data": "array - Array de objetos",
+            "columns": "array - Nombres de columnas",
+            "rows": "number - Cantidad de filas"
+          }
+        },
+        "xlsx.create": {
+          "event": "local.xlsx.create.request",
+          "description": "Crear Excel con múltiples hojas",
+          "input": {
+            "sheets": [
+              {
+                "name": "string - Nombre de la hoja",
+                "data": "array - Array de objetos",
+                "columns": "array - Columnas (opcional)"
+              }
+            ],
+            "filename": "string - Nombre del archivo"
+          },
+          "output": {
+            "path": "string - Ruta del archivo",
+            "sheets": "number - Cantidad de hojas"
+          }
+        },
+        "xlsx.parse": {
+          "event": "local.xlsx.parse.request",
+          "description": "Leer Excel y convertir a datos",
+          "input": {
+            "path": "string - Ruta del archivo",
+            "sheet": "string | number - Hoja a leer (opcional, default: primera)"
+          },
+          "output": {
+            "sheets": "array - Lista de hojas con sus datos",
+            "data": "array - Datos de la hoja solicitada"
+          }
+        },
+        "tesseract.extract": {
+          "event": "local.tesseract.extract.request",
+          "description": "OCR local con Tesseract.js",
+          "input": {
+            "image": "base64 | path - Imagen a procesar",
+            "language": "string - Código de idioma (eng, spa, etc.)"
+          },
+          "output": {
+            "text": "string - Texto extraído",
+            "confidence": "number - Confianza 0-100"
+          }
+        }
+      }
+    }
+  },
+
+  "implementation_notes": {
+    "core_changes": {
+      "new_files": [
+        "core/providers/loader.js - Descubrimiento y carga de providers",
+        "core/providers/registry.js - Registro de providers y funciones",
+        "core/providers/executor.js - Ejecutor de funciones (HTTP y local)"
+      ],
+      "startup_integration": {
+        "file": "index.js",
+        "step": "Después de cargar módulos, cargar providers",
+        "code_snippet": "const providerLoader = require('./core/providers/loader');\nawait providerLoader.discover();\nawait providerLoader.registerEventHandlers(eventBus);"
+      }
+    },
+    "dependencies": {
+      "for_local_services": {
+        "pdf": "pdfkit",
+        "csv": "csv-parser, csv-writer",
+        "xlsx": "exceljs",
+        "tesseract": "tesseract.js (ya existe en ocr-service)"
+      }
+    }
+  }
+}

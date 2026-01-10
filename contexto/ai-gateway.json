@@ -1,0 +1,81 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-01-10",
+  "_DESCRIPTION": "AI Gateway - Multi-provider LLM client",
+
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANT": "ai-gateway tiene sus propios providers internos para LLMs",
+    "rule_1": "Los providers de LLM (DeepSeek, OpenAI, Anthropic, Ollama) NO van en services/",
+    "rule_2": "Cada provider LLM maneja sus propias peculiaridades internamente",
+    "rule_3": "La transformación de datos (tools, messages) es responsabilidad del provider"
+  },
+
+  "location": "modules/ai-gateway/",
+
+  "architecture": {
+    "main_module": "modules/ai-gateway/index.js",
+    "providers_dir": "modules/ai-gateway/providers/",
+    "providers": {
+      "deepseek": "providers/deepseek-provider.js",
+      "openai": "providers/openai-provider.js",
+      "anthropic": "providers/anthropic-provider.js",
+      "ollama": "providers/ollama-provider.js"
+    },
+    "base_class": "providers/base-provider.js"
+  },
+
+  "provider_responsibilities": {
+    "description": "Cada provider encapsula las peculiaridades de su API",
+    "examples": {
+      "message_format": "Anthropic usa content blocks, OpenAI usa strings",
+      "tool_format": "Anthropic usa input_schema, OpenAI usa parameters",
+      "tool_names": "DeepSeek solo acepta [a-zA-Z0-9_-], otros aceptan dots"
+    }
+  },
+
+  "tool_name_transformations": {
+    "_CRITICAL": "Esta directiva es obligatoria para compatibilidad con APIs",
+    "problem": {
+      "internal_format": "Los tools internos usan dots: fs.write, fs.read, telegram.send_message",
+      "deepseek_restriction": "DeepSeek API solo acepta pattern: ^[a-zA-Z0-9_-]+$",
+      "error_if_violated": "HTTP 400: Invalid 'tools[0].function.name': string does not match pattern"
+    },
+    "solution": {
+      "location": "modules/ai-gateway/providers/deepseek-provider.js",
+      "translate_on_send": {
+        "method": "translateToolNames(tools)",
+        "transform": "dot → underscore",
+        "example": "fs.write → fs_write"
+      },
+      "restore_on_receive": {
+        "method": "restoreToolNames(toolCalls)",
+        "transform": "underscore → dot",
+        "example": "fs_write → fs.write"
+      }
+    },
+    "principle": "La transformación es responsabilidad del provider, NO del ai-gateway principal"
+  },
+
+  "events": {
+    "request": "ai.chat.request",
+    "response": "ai.chat.response",
+    "streaming": "ai.chat.stream.chunk"
+  },
+
+  "tool_execution": {
+    "description": "ai-gateway puede ejecutar tools automáticamente",
+    "options": {
+      "tools": "Array de tools o true para cargar de moduleLoader",
+      "execute_tools": "boolean - si auto-ejecutar tool calls",
+      "max_tool_iterations": "number - máximo de iteraciones (default: 10)"
+    },
+    "flow": [
+      "1. Recibe request con tools",
+      "2. Transforma tools al formato del provider (translateToolsForProvider)",
+      "3. Provider transforma nombres si necesario (translateToolNames en DeepSeek)",
+      "4. Envía request a API",
+      "5. Provider restaura nombres en response (restoreToolNames en DeepSeek)",
+      "6. Si execute_tools=true, ejecuta tools y repite"
+    ]
+  }
+}

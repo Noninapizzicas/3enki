@@ -62,3 +62,6 @@ temp/
 # .claude/
 data/logs/*.jsonl
 data/logs/index.json
+
+# Tesseract language files (download on first run)
+modules/ocr-service/data/tessdata/*.traineddata

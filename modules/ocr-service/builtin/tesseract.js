@@ -57,8 +57,9 @@ async function initWorker(language = 'eng') {
     }
 
     worker = await Tesseract.createWorker(language, 1, {
-      cachePath: config.cachePath,
-      cacheMethod: 'readOnly',
+      langPath: config.cachePath,
+      cacheMethod: 'none',
+      gzip: false,
       logger: (m) => {
         // Solo loguear progreso significativo
         if (m.status === 'recognizing text' && m.progress > 0 && m.progress < 1) {

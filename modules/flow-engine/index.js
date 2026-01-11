@@ -129,10 +129,7 @@ class FlowEngineModule {
     // Eventos de respuesta de servicios según patrón del sistema:
     // {provider}.{action}.response / {provider}.{action}.failed
     const serviceResponsePatterns = [
-      // OCR service (módulo existente)
-      'ocr.extract.completed',
-      'ocr.extract.failed',
-      // Local providers
+      // Local providers (services/providers/local/)
       'local.tesseract.extract.response',
       'local.tesseract.extract.failed',
       'local.pdf.create.response',
@@ -141,13 +138,17 @@ class FlowEngineModule {
       'local.csv.parse.response',
       'local.xlsx.create.response',
       'local.xlsx.parse.response',
-      // Google providers
+      // Google providers (services/providers/google/)
       'google.vision.extract.response',
       'google.vision.extract.failed',
       'google.tts.synthesize.response',
       'google.translate.text.response',
-      // Anthropic providers
+      // Anthropic providers (services/providers/anthropic/)
       'anthropic.vision.extract.response',
+      'anthropic.vision.extract.failed',
+      // ElevenLabs providers (services/providers/elevenlabs/)
+      'elevenlabs.tts.synthesize.response',
+      'elevenlabs.tts.synthesize.failed',
       // Telegram
       'telegram.send_message.response',
       'telegram.send_message.error',

@@ -8,7 +8,7 @@
   "trigger": {
     "event": "bot.file.stored",
     "filter": {
-      "botName": "facturas-asesoria",
+      "botName": "facturas_asesorias_bot",
       "file.mimeType": {
         "$in": ["image/jpeg", "image/png", "image/webp", "application/pdf"]
       }

@@ -97,11 +97,25 @@ Llama a servicios locales via eventos.
 }
 ```
 
-Servicios disponibles:
-- `ocr`: extract
-- `filesystem`: read, write, append, delete, exists, list, rename
-- `telegram`: send
-- `database`: query
+Servicios disponibles (patron: `{provider}.{action}.request`):
+
+**Locales:**
+- `filesystem`: read, write, append, delete, exists, list, rename (sincrono)
+- `ocr`: extract (usa ocr-service existente)
+- `local.tesseract`: extract (OCR directo)
+- `local.pdf`: create
+- `local.csv`: create, parse
+- `local.xlsx`: create, parse
+
+**APIs externas (requieren credencial):**
+- `google.vision`: extract (OCR)
+- `google.tts`: synthesize (Text-to-Speech)
+- `google.translate`: text
+- `anthropic.vision`: extract (OCR con analisis)
+- `elevenlabs.tts`: synthesize
+
+**Telegram:**
+- `telegram`: send_message
 
 ### transform
 

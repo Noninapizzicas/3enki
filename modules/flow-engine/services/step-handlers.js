@@ -54,44 +54,23 @@ class StepHandlers {
   }
 
   // ==========================================
-  // SERVICE: Llama a servicios locales via eventos
+  // SERVICE: Llama a servicios via eventos
+  // Patrón: {provider}.{function}.request → {provider}.{function}.response
   // ==========================================
 
   async handleService(step, context, executionId) {
     const { service, action, input, config, timeout = 60000 } = step;
 
-    // Mapeo de servicios a eventos
-    const serviceEvents = {
-      ocr: {
-        request: 'ocr.extract.request',
-        completed: 'ocr.extract.completed',
-        failed: 'ocr.extract.failed'
-      },
-      telegram: {
-        request: 'telegram.send_message.request',
-        completed: 'telegram.send_message.response',
-        failed: 'telegram.send_message.error'
-      },
-      filesystem: {
-        // filesystem es síncrono, lo manejamos directo
-      },
-      database: {
-        request: 'db.query.request',
-        completed: 'db.query.response',
-        failed: 'db.query.error'
-      }
-    };
-
-    // Filesystem: manejo directo
-    if (service === 'filesystem') {
+    // Filesystem: manejo directo (síncrono)
+    if (service === 'filesystem' || service === 'fs') {
       return await this.handleFilesystem(action, step, context);
     }
 
-    // Otros servicios: via eventos
-    const events = serviceEvents[service];
-    if (!events) {
-      throw new Error(`Unknown service: ${service}`);
-    }
+    // Construir eventos según patrón del sistema:
+    // {provider}.{action}.request → {provider}.{action}.response
+    const requestEvent = `${service}.${action}.request`;
+    const responseEvent = `${service}.${action}.response`;
+    const failedEvent = `${service}.${action}.failed`;
 
     const requestId = crypto.randomUUID();
 
@@ -115,16 +94,25 @@ class StepHandlers {
         },
         service,
         action,
+        requestEvent,
+        responseEvent,
         executionId
       });
     });
 
-    // Publicar request
-    await this.eventBus.publish(events.request, {
+    // Publicar request según patrón del sistema
+    await this.eventBus.publish(requestEvent, {
       request_id: requestId,
       input,
-      options: config || {},
+      ...config,
       correlation_id: executionId
+    });
+
+    this.logger.debug('step-handlers.service.request', {
+      requestId,
+      event: requestEvent,
+      service,
+      action
     });
 
     // Esperar respuesta

@@ -126,13 +126,37 @@ class FlowEngineModule {
       this.unsubscribes.push(unsub);
     }
 
-    // Eventos de respuesta de servicios (para steps async)
-    const serviceEvents = [
-      { event: 'ocr.extract.completed', handler: this.onServiceCompleted.bind(this) },
-      { event: 'ocr.extract.failed', handler: this.onServiceFailed.bind(this) },
+    // Eventos de respuesta de servicios según patrón del sistema:
+    // {provider}.{action}.response / {provider}.{action}.failed
+    const serviceResponsePatterns = [
+      // OCR service (módulo existente)
+      'ocr.extract.completed',
+      'ocr.extract.failed',
+      // Local providers
+      'local.tesseract.extract.response',
+      'local.tesseract.extract.failed',
+      'local.pdf.create.response',
+      'local.pdf.create.failed',
+      'local.csv.create.response',
+      'local.csv.parse.response',
+      'local.xlsx.create.response',
+      'local.xlsx.parse.response',
+      // Google providers
+      'google.vision.extract.response',
+      'google.vision.extract.failed',
+      'google.tts.synthesize.response',
+      'google.translate.text.response',
+      // Anthropic providers
+      'anthropic.vision.extract.response',
+      // Telegram
+      'telegram.send_message.response',
+      'telegram.send_message.error',
     ];
 
-    for (const { event, handler } of serviceEvents) {
+    for (const event of serviceResponsePatterns) {
+      const handler = event.includes('failed') || event.includes('error')
+        ? this.onServiceFailed.bind(this)
+        : this.onServiceCompleted.bind(this);
       const unsub = await this.eventBus.subscribe(event, handler);
       this.unsubscribes.push(unsub);
     }
@@ -152,7 +176,7 @@ class FlowEngineModule {
 
     this.logger.info('flow-engine.subscribed', {
       triggerEvents,
-      serviceEvents: serviceEvents.map(e => e.event)
+      serviceResponsePatterns: serviceResponsePatterns.length
     });
   }
 

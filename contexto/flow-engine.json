@@ -1,0 +1,345 @@
+{
+  "module": "flow-engine",
+  "version": "1.0.0",
+  "description": "Motor de automatizacion de flujos de trabajo basado en eventos",
+
+  "mision": {
+    "principal": "Orquestar secuencias de pasos que se ejecutan cuando ocurren eventos",
+    "objetivos": [
+      "Escuchar eventos del sistema (triggers)",
+      "Ejecutar secuencias de pasos cuando eventos coinciden con filtros",
+      "Orquestar servicios (providers), agentes AI, APIs HTTP",
+      "Transformar datos entre pasos",
+      "Persistir resultados"
+    ]
+  },
+
+  "arquitectura": {
+    "componentes": {
+      "index.js": {
+        "responsabilidad": "Orquestador principal del modulo",
+        "funciones": [
+          "Inicializacion y ciclo de vida",
+          "Suscripcion a eventos trigger",
+          "Routing de respuestas de providers",
+          "API HTTP para gestion"
+        ]
+      },
+      "flow-registry.js": {
+        "responsabilidad": "Gestion de definiciones de flujos",
+        "funciones": [
+          "Almacena flujos en memoria (Map)",
+          "Indexa por evento trigger para busqueda rapida",
+          "Evalua filtros estilo MongoDB",
+          "Carga flujos desde archivos JSON"
+        ]
+      },
+      "flow-executor.js": {
+        "responsabilidad": "Motor de ejecucion de flujos",
+        "funciones": [
+          "Ejecuta pasos secuencialmente",
+          "Mantiene contexto de ejecucion",
+          "Maneja errores segun configuracion",
+          "Emite eventos de progreso"
+        ]
+      },
+      "step-handlers.js": {
+        "responsabilidad": "Implementacion de cada tipo de paso",
+        "tipos_soportados": ["service", "transform", "condition", "parallel", "agent", "http", "delay", "log", "set"]
+      },
+      "variable-resolver.js": {
+        "responsabilidad": "Interpolacion de variables y evaluacion de condiciones",
+        "funciones": [
+          "Resuelve sintaxis {{ variable }}",
+          "Proporciona variables especiales (now, uuid, date, etc.)",
+          "Evalua condiciones con operadores"
+        ]
+      }
+    },
+    "diagrama": "index.js -> registry (busca flujos) -> executor (ejecuta) -> step-handlers (procesa cada paso) -> variable-resolver (interpola)"
+  },
+
+  "flujo_definicion": {
+    "estructura": {
+      "id": "Identificador unico del flujo",
+      "name": "Nombre descriptivo",
+      "description": "Descripcion del proposito",
+      "version": "Version semantica",
+      "enabled": "Boolean para activar/desactivar",
+      "trigger": {
+        "event": "Nombre del evento que dispara el flujo",
+        "filter": "Filtros MongoDB-style para coincidir"
+      },
+      "steps": "Array de pasos a ejecutar"
+    },
+    "ejemplo": {
+      "id": "procesar-facturas",
+      "trigger": {
+        "event": "bot.file.stored",
+        "filter": {
+          "botName": "facturas_asesorias_bot",
+          "file.mimeType": { "$in": ["image/jpeg", "image/png"] }
+        }
+      },
+      "steps": ["..."]
+    }
+  },
+
+  "tipos_de_pasos": {
+    "service": {
+      "descripcion": "Llama a providers via eventos",
+      "patron_eventos": "{service}.{action}.request -> {service}.{action}.response",
+      "propiedades": {
+        "service": "Nombre del provider (ej: local.tesseract, google.vision)",
+        "action": "Accion a ejecutar (ej: extract, create)",
+        "input": "Datos de entrada",
+        "config": "Configuracion adicional",
+        "timeout": "Timeout en ms (default: 60000)"
+      },
+      "caso_especial": "filesystem/fs se ejecuta sincronamente sin eventos"
+    },
+    "transform": {
+      "descripcion": "Transforma datos",
+      "operaciones": {
+        "map": "Mapea campos a nuevo objeto",
+        "filter": "Filtra array por condicion",
+        "merge": "Combina objetos",
+        "extract": "Extrae campos especificos",
+        "template": "Aplica template string",
+        "json.parse": "Parsea JSON string",
+        "json.stringify": "Convierte a JSON string",
+        "split": "Divide string en array",
+        "join": "Une array en string",
+        "regex": "Extrae con expresion regular"
+      }
+    },
+    "condition": {
+      "descripcion": "Bifurcacion condicional",
+      "propiedades": {
+        "if": "Condicion a evaluar",
+        "then": "ID del paso si verdadero",
+        "else": "ID del paso si falso"
+      }
+    },
+    "parallel": {
+      "descripcion": "Ejecuta pasos en paralelo",
+      "propiedades": {
+        "steps": "Array de pasos a ejecutar simultaneamente"
+      },
+      "output": {
+        "results": "Objeto con resultado por paso",
+        "allSuccess": "Boolean si todos exitosos",
+        "successCount": "Numero de exitos",
+        "failCount": "Numero de fallos"
+      }
+    },
+    "agent": {
+      "descripcion": "Invoca agente AI",
+      "patron_eventos": "agent.execute.request -> agent.*.completed",
+      "propiedades": {
+        "agent": "Nombre del agente",
+        "task": "Tarea a ejecutar",
+        "timeout": "Timeout en ms (default: 120000)"
+      }
+    },
+    "http": {
+      "descripcion": "Llamada HTTP externa",
+      "propiedades": {
+        "url": "URL destino",
+        "method": "GET, POST, PUT, DELETE, etc.",
+        "headers": "Headers HTTP",
+        "body": "Cuerpo de la peticion",
+        "timeout": "Timeout en ms (default: 30000)"
+      }
+    },
+    "delay": {
+      "descripcion": "Espera un tiempo",
+      "propiedades": {
+        "ms": "Milisegundos a esperar"
+      }
+    },
+    "log": {
+      "descripcion": "Escribe en el log",
+      "propiedades": {
+        "level": "info, warn, error, debug",
+        "message": "Mensaje (soporta variables)",
+        "data": "Datos adicionales"
+      }
+    },
+    "set": {
+      "descripcion": "Define variables para pasos posteriores",
+      "propiedades": {
+        "variables": "Objeto con variables a definir"
+      }
+    }
+  },
+
+  "variables": {
+    "sintaxis": "{{ path.to.value }}",
+    "contextos": {
+      "trigger": "Datos del evento que disparo el flujo",
+      "steps.ID.output": "Resultado de un paso anterior",
+      "variables": "Variables definidas con step 'set'",
+      "env.VAR": "Variables de entorno"
+    },
+    "especiales": {
+      "now": "ISO timestamp actual",
+      "timestamp": "Unix timestamp en ms",
+      "uuid": "UUID v4 aleatorio",
+      "date": "Fecha YYYY-MM-DD",
+      "time": "Hora HH:mm:ss"
+    },
+    "funciones": {
+      "default(value, fallback)": "Valor por defecto si null/undefined",
+      "lowercase(value)": "Convierte a minusculas",
+      "uppercase(value)": "Convierte a mayusculas",
+      "length(value)": "Longitud de string/array"
+    }
+  },
+
+  "filtros_trigger": {
+    "descripcion": "Filtros estilo MongoDB para coincidir eventos",
+    "operadores": {
+      "$eq": "Igual",
+      "$ne": "No igual",
+      "$in": "Valor en lista",
+      "$nin": "Valor no en lista",
+      "$gt": "Mayor que",
+      "$gte": "Mayor o igual que",
+      "$lt": "Menor que",
+      "$lte": "Menor o igual que",
+      "$contains": "String contiene",
+      "$startsWith": "String comienza con",
+      "$endsWith": "String termina con",
+      "$regex": "Coincide expresion regular",
+      "$exists": "Campo existe o no"
+    },
+    "ejemplo": {
+      "botName": "mi-bot",
+      "file.mimeType": { "$in": ["image/jpeg", "image/png"] },
+      "file.size": { "$lt": 10000000 }
+    }
+  },
+
+  "manejo_errores": {
+    "comportamiento_default": "Error en un paso falla todo el flujo",
+    "opciones": {
+      "continue": "Ignora error y sigue con siguiente paso",
+      "step-id": "Salta a paso especifico para manejar error"
+    },
+    "ejemplo": {
+      "id": "paso-opcional",
+      "type": "service",
+      "onError": "continue"
+    }
+  },
+
+  "providers_soportados": {
+    "locales": {
+      "filesystem": {
+        "acciones": ["read", "write", "append", "delete", "exists", "list", "rename"],
+        "nota": "Se ejecuta sincronamente, no usa eventos"
+      },
+      "local.tesseract": {
+        "acciones": ["extract"],
+        "descripcion": "OCR local con Tesseract.js"
+      },
+      "local.pdf": {
+        "acciones": ["create"],
+        "descripcion": "Generacion de PDFs"
+      },
+      "local.csv": {
+        "acciones": ["create", "parse"],
+        "descripcion": "Manipulacion de archivos CSV"
+      },
+      "local.xlsx": {
+        "acciones": ["create", "parse"],
+        "descripcion": "Manipulacion de archivos Excel"
+      }
+    },
+    "externos": {
+      "google.vision": {
+        "acciones": ["extract"],
+        "descripcion": "OCR con Google Cloud Vision"
+      },
+      "google.tts": {
+        "acciones": ["synthesize"],
+        "descripcion": "Text-to-Speech con Google"
+      },
+      "google.translate": {
+        "acciones": ["text"],
+        "descripcion": "Traduccion con Google"
+      },
+      "anthropic.vision": {
+        "acciones": ["extract"],
+        "descripcion": "OCR con analisis via Claude"
+      },
+      "elevenlabs.tts": {
+        "acciones": ["synthesize"],
+        "descripcion": "Text-to-Speech con ElevenLabs"
+      },
+      "telegram": {
+        "acciones": ["send_message"],
+        "descripcion": "Envio de mensajes Telegram"
+      }
+    }
+  },
+
+  "eventos": {
+    "publicados": {
+      "flow.started": "Flujo iniciado",
+      "flow.step.started": "Paso iniciado",
+      "flow.step.completed": "Paso completado",
+      "flow.step.failed": "Paso fallido",
+      "flow.completed": "Flujo completado exitosamente",
+      "flow.failed": "Flujo fallido"
+    },
+    "suscritos": {
+      "triggers": ["bot.file.stored", "bot.message.received", "bot.command.received", "flow.trigger"],
+      "providers": "Todos los eventos {provider}.{action}.response y {provider}.{action}.failed"
+    }
+  },
+
+  "api_http": {
+    "base_path": "/modules/flow-engine",
+    "endpoints": [
+      { "method": "GET", "path": "/health", "descripcion": "Health check" },
+      { "method": "GET", "path": "/flows", "descripcion": "Lista flujos" },
+      { "method": "GET", "path": "/flows/:flowId", "descripcion": "Obtiene flujo" },
+      { "method": "POST", "path": "/flows", "descripcion": "Crea flujo" },
+      { "method": "PUT", "path": "/flows/:flowId", "descripcion": "Actualiza flujo" },
+      { "method": "DELETE", "path": "/flows/:flowId", "descripcion": "Elimina flujo" },
+      { "method": "POST", "path": "/flows/:flowId/trigger", "descripcion": "Dispara flujo manualmente" },
+      { "method": "GET", "path": "/executions", "descripcion": "Lista ejecuciones" },
+      { "method": "GET", "path": "/executions/:executionId", "descripcion": "Estado de ejecucion" },
+      { "method": "POST", "path": "/executions/:executionId/cancel", "descripcion": "Cancela ejecucion" }
+    ]
+  },
+
+  "contexto_ejecucion": {
+    "descripcion": "Objeto disponible durante la ejecucion del flujo",
+    "estructura": {
+      "trigger": "Datos del evento que disparo el flujo",
+      "steps": "Resultados de cada paso ejecutado (indexado por step.id)",
+      "variables": "Variables definidas con step 'set'",
+      "flow": { "id": "ID del flujo", "name": "Nombre del flujo" },
+      "execution": { "id": "ID de ejecucion", "startedAt": "Timestamp inicio" }
+    },
+    "acceso": "{{ steps.paso-id.output.campo }}"
+  },
+
+  "buenas_practicas": [
+    "Usar IDs descriptivos para pasos (ej: 'leer-archivo', 'procesar-ocr')",
+    "Definir timeouts apropiados para servicios externos",
+    "Usar onError para pasos no criticos",
+    "Guardar resultados intermedios con filesystem para debugging",
+    "Usar step 'log' para trazabilidad",
+    "Validar datos con step 'condition' antes de procesar"
+  ],
+
+  "ubicacion_archivos": {
+    "modulo": "modules/flow-engine/",
+    "flujos_json": "modules/flow-engine/flows/",
+    "servicios": "modules/flow-engine/services/"
+  }
+}

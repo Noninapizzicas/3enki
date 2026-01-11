@@ -8,7 +8,7 @@
 
 ## Objetivo
 
-Implementar un sistema donde la IA pueda crear agentes funcionales de forma autónoma, integrando los módulos existentes (telegram-service, ocr-service, ai-gateway, prompt-manager).
+Implementar un sistema donde la IA pueda crear agentes funcionales de forma autónoma, integrando los módulos existentes (telegram-service, ai-gateway, prompt-manager) y providers (services/providers/).
 
 ---
 
@@ -121,13 +121,13 @@ const OUTPUT_PATH = path.join(__dirname, '..', 'modules', 'ai-agent-framework', 
 // Módulos relevantes para el Arquitecto
 const RELEVANT_MODULES = [
   'telegram-service',
-  'ocr-service',
   'ai-gateway',
   'prompt-manager',
   'database-manager',
   'credential-manager',
   'filesystem'
 ];
+// OCR: usar services/providers/local/tesseract
 
 function generateKnowledge() {
   let content = `# Conocimiento del Sistema\n\n`;
@@ -189,7 +189,7 @@ function generateKnowledge() {
   content += `Flujo:\n`;
   content += `1. Recibir evento telegram.photo.received\n`;
   content += `2. GET /modules/telegram-service/file/{fileId}?download=true\n`;
-  content += `3. POST /modules/ocr-service/extract {input: base64}\n`;
+  content += `3. tesseractService.extract({ image: base64, language: 'spa' })\n`;
   content += `4. POST /modules/telegram-service/send {chatId, text}\n`;
   content += `\`\`\`\n\n`;
 

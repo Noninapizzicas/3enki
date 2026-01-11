@@ -81,7 +81,6 @@
     "menu-generator",
     "metricas",
     "notas",
-    "ocr-service",
     "plugin-manager",
     "project-manager",
     "prompt-composer",
@@ -109,7 +108,7 @@
     },
     "processing": {
       "description": "Módulos de procesamiento de datos",
-      "modules": ["ocr-service", "pdf-viewer"]
+      "modules": ["pdf-viewer"]
     },
     "storage": {
       "description": "Módulos de almacenamiento",
@@ -153,24 +152,6 @@
         "POST /send - Enviar mensaje",
         "GET /file/:fileId - Obtener archivo",
         "GET /bots - Listar bots activos"
-      ]
-    },
-    "ocr-service": {
-      "version": "1.0.0",
-      "description": "Servicio OCR con múltiples engines",
-      "engines": ["tesseract", "openai-vision", "claude-vision", "google-vision"],
-      "events": {
-        "publishes": [
-          "ocr.extract.completed",
-          "ocr.extract.failed"
-        ],
-        "subscribes": [
-          "ocr.extract.request"
-        ]
-      },
-      "key_apis": [
-        "POST /extract - Extraer texto de imagen/PDF",
-        "GET /engines - Listar engines disponibles"
       ]
     },
     "ai-agent-framework": {
@@ -308,7 +289,7 @@
       "flow": [
         "1. Recibir evento telegram.photo.received",
         "2. GET /modules/telegram-service/file/{fileId}?download=true",
-        "3. POST /modules/ocr-service/extract {input: base64}",
+        "3. Usar services/providers/local/tesseract: tesseractService.extract({ image: base64 })",
         "4. POST /modules/telegram-service/send {chatId, text}"
       ]
     },

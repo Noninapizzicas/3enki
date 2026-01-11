@@ -1,2 +1,2 @@
-# Plugins para ocr-service
-# Cada plugin debe estar en su propio directorio con engine.json
+# Plugins de OCR externos
+# Providers principales están en services/providers/ (google, anthropic, local)

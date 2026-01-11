@@ -20,7 +20,7 @@ const {
   validateMenuStructure,
   enrichMenu
 } = require('./prompts/menu-extraction');
-const OCRService = require('./services/ocr-service');
+const tesseractService = require('../../../services/providers/local/tesseract');
 
 class MenuGeneratorModule {
   constructor() {
@@ -53,10 +53,6 @@ class MenuGeneratorModule {
     this.eventBus = null;
     this.aiGateway = null;
 
-    // ==========================================
-    // Servicios internos
-    // ==========================================
-    this.ocrService = null;
   }
 
   /**
@@ -130,10 +126,6 @@ class MenuGeneratorModule {
 
     this.logger.info('modulo.loading', { module: this.name });
 
-    // Inicializar servicio OCR
-    this.ocrService = new OCRService(this.logger);
-    this.logger.info('menu-generator.ocr_service_created');
-
     // Suscribirse a eventos
     await this.subscribeToEvents();
 
@@ -143,10 +135,8 @@ class MenuGeneratorModule {
   async onUnload() {
     this.logger.info('modulo.unloading', { module: this.name });
 
-    // Limpiar servicio OCR
-    if (this.ocrService) {
-      await this.ocrService.terminate();
-    }
+    // Limpiar servicio OCR centralizado
+    await tesseractService.cleanup();
   }
 
   // ==========================================
@@ -1969,22 +1959,29 @@ class MenuGeneratorModule {
 
     try {
       // ==========================================
-      // PASO 1: Extraer texto usando OCR
+      // PASO 1: Extraer texto usando OCR (servicio centralizado)
       // ==========================================
-      const ocrResult = await this.ocrService.extractText(file_base64, file_name, mediaType);
+      const ocrResult = await tesseractService.extract({
+        image: file_base64,
+        language: 'spa+eng'  // Español + Inglés para menús
+      });
+
+      if (!ocrResult.success) {
+        throw new Error(ocrResult.error || 'Error en OCR');
+      }
 
       if (!ocrResult.text || ocrResult.text.length < 10) {
         throw new Error('No se pudo extraer texto suficiente del archivo. Asegúrate de que la imagen sea legible.');
       }
 
       // Formatear el texto extraído para el LLM
-      const extractedContent = this.ocrService.formatForLLM(ocrResult, file_name);
+      const extractedContent = this._formatOCRForLLM(ocrResult, file_name);
 
       this.logger.info('ocr.completed', {
         request_id,
         text_length: ocrResult.text.length,
         confidence: ocrResult.confidence,
-        pages: ocrResult.pages,
+        lines: ocrResult.lines,
         correlation_id
       });
 
@@ -2240,6 +2237,18 @@ IMPORTANTE: Responde ÚNICAMENTE con el JSON válido dentro de \`\`\`json ... \`
       'entrada': '🥙'
     };
     return emojiMap[categoria.toLowerCase()] || '🍽️';
+  }
+
+  /**
+   * Formatea el resultado del OCR para enviarlo al LLM
+   * @private
+   */
+  _formatOCRForLLM(ocrResult, fileName) {
+    const header = `## Texto extraído de: ${fileName}\n`;
+    const stats = `- Confianza OCR: ${ocrResult.confidence?.toFixed(1) || 'N/A'}%\n- Líneas detectadas: ${ocrResult.lines || 'N/A'}\n- Palabras detectadas: ${ocrResult.words || 'N/A'}\n\n`;
+    const content = `### Contenido:\n\`\`\`\n${ocrResult.text}\n\`\`\``;
+
+    return header + stats + content;
   }
 }
 

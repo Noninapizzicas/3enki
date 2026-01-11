@@ -20,7 +20,6 @@ const OUTPUT_FILE = path.join(OUTPUT_DIR, 'architect-knowledge.md');
 // Módulos relevantes para integración con agentes
 const RELEVANT_MODULES = [
   'telegram-service',
-  'ocr-service',
   'ai-gateway',
   'prompt-manager',
   'database-manager',
@@ -28,6 +27,10 @@ const RELEVANT_MODULES = [
   'filesystem',
   'conversation-manager'
 ];
+
+// Providers de OCR (no son módulos, son services)
+// OCR local: services/providers/local/tesseract
+// OCR remoto: google.vision, anthropic.vision
 
 function generateKnowledge() {
   console.log('🔍 Scanning modules...\n');
@@ -144,10 +147,9 @@ Flujo:
    GET /modules/telegram-service/file/{fileId}?download=true
    → { base64: "..." }
 
-3. Procesar con OCR:
-   POST /modules/ocr-service/extract
-   Body: { input: base64, engine: "auto" }
-   → { text, confidence }
+3. Procesar con OCR (local):
+   tesseractService.extract({ image: base64, language: 'spa' })
+   → { success, text, confidence }
 
 4. Responder al usuario:
    POST /modules/telegram-service/send
@@ -221,7 +223,7 @@ Cuando el usuario pida: "Crea un agente que procese fotos de Telegram con OCR"
 \`\`\`
 [TOOL:create_prompt]({
   "name": "media-processor-system",
-  "content": "Eres un agente de procesamiento de medios.\\n\\nCuando recibes una imagen de Telegram:\\n1. Descarga el archivo usando GET /modules/telegram-service/file/{fileId}?download=true\\n2. Envía a OCR usando POST /modules/ocr-service/extract con {input: base64}\\n3. Responde al usuario con POST /modules/telegram-service/send\\n\\nDatos del evento:\\n- Bot: {{botName}}\\n- Chat: {{chatId}}\\n- File: {{fileId}}\\n- Caption: {{caption}}\\n\\nSé conciso y útil.",
+  "content": "Eres un agente de procesamiento de medios.\\n\\nCuando recibes una imagen de Telegram:\\n1. Descarga el archivo usando GET /modules/telegram-service/file/{fileId}?download=true\\n2. Usa OCR local: tesseractService.extract({ image: base64, language: 'spa' })\\n3. Responde al usuario con POST /modules/telegram-service/send\\n\\nDatos del evento:\\n- Bot: {{botName}}\\n- Chat: {{chatId}}\\n- File: {{fileId}}\\n- Caption: {{caption}}\\n\\nSé conciso y útil.",
   "slot_type": "system",
   "tags": ["agent", "media", "ocr", "telegram"]
 })

@@ -94,7 +94,7 @@
           "handler.js": "Solo para engines locales - exports.extract(input, options)"
         }
       },
-      "reference_implementation": "modules/ocr-service/"
+      "reference_implementation": "services/providers/ (ver google/, local/)"
     },
 
     "svelte-component": {
@@ -246,7 +246,7 @@
     },
     "service_with_plugins": {
       "recommended": "service-module",
-      "reason": "Arquitectura probada (ocr-service como referencia)"
+      "reason": "Arquitectura de providers en services/providers/"
     },
     "new_svelte_component": {
       "recommended": "svelte-component",
@@ -264,7 +264,7 @@
 
   "module_reference": {
     "crud_module": "modules/project-manager/ - CRUD completo con SQLite",
-    "service_module": "modules/ocr-service/ - Arquitectura de plugins",
+    "service_provider": "services/providers/ - Arquitectura de providers",
     "orchestrator": "modules/chat-ai-bridge/ - Orquestación de flujo",
     "facade": "modules/conversation-manager/ - Facade pattern"
   },

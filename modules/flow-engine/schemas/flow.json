@@ -1,0 +1,181 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Flow Definition",
+  "description": "Schema para definir flujos en flow-engine",
+  "type": "object",
+  "required": ["id", "steps"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identificador unico del flujo"
+    },
+    "name": {
+      "type": "string",
+      "description": "Nombre descriptivo"
+    },
+    "description": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "timeout": {
+      "type": "integer",
+      "description": "Timeout en ms para todo el flujo",
+      "default": 300000
+    },
+    "trigger": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "description": "Evento que dispara el flujo"
+        },
+        "filter": {
+          "type": "object",
+          "description": "Filtros para el evento"
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/step"
+      }
+    }
+  },
+  "definitions": {
+    "step": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID del paso (para referencias)"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["service", "transform", "condition", "parallel", "agent", "http", "delay", "log", "set"]
+        },
+        "onError": {
+          "oneOf": [
+            { "type": "string", "enum": ["continue"] },
+            { "type": "string", "description": "ID de step para saltar en caso de error" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "service" } } },
+          "then": {
+            "properties": {
+              "service": { "type": "string", "enum": ["ocr", "filesystem", "telegram", "database"] },
+              "action": { "type": "string" },
+              "input": {},
+              "config": { "type": "object" },
+              "timeout": { "type": "integer" }
+            },
+            "required": ["service", "action"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "transform" } } },
+          "then": {
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["map", "filter", "merge", "extract", "template", "json.parse", "json.stringify", "split", "join", "regex"]
+              },
+              "input": {},
+              "config": { "type": "object" }
+            },
+            "required": ["operation"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "condition" } } },
+          "then": {
+            "properties": {
+              "if": { "type": "string", "description": "Condicion a evaluar" },
+              "then": { "type": "string", "description": "ID del step si true" },
+              "else": { "type": "string", "description": "ID del step si false" }
+            },
+            "required": ["if"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "parallel" } } },
+          "then": {
+            "properties": {
+              "steps": {
+                "type": "array",
+                "items": { "$ref": "#/definitions/step" }
+              }
+            },
+            "required": ["steps"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "agent" } } },
+          "then": {
+            "properties": {
+              "agent": { "type": "string", "description": "Nombre del agente" },
+              "task": { "type": "string", "description": "Tarea para el agente" },
+              "config": { "type": "object" },
+              "timeout": { "type": "integer" }
+            },
+            "required": ["agent"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "http" } } },
+          "then": {
+            "properties": {
+              "url": { "type": "string" },
+              "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+              "headers": { "type": "object" },
+              "body": {},
+              "timeout": { "type": "integer" }
+            },
+            "required": ["url"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "delay" } } },
+          "then": {
+            "properties": {
+              "ms": { "type": "integer", "description": "Milisegundos a esperar" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "log" } } },
+          "then": {
+            "properties": {
+              "level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+              "message": { "type": "string" },
+              "data": { "type": "object" }
+            },
+            "required": ["message"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "set" } } },
+          "then": {
+            "properties": {
+              "variables": {
+                "type": "object",
+                "description": "Variables a definir en el contexto"
+              }
+            },
+            "required": ["variables"]
+          }
+        }
+      ]
+    }
+  }
+}

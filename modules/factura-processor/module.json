@@ -1,0 +1,90 @@
+{
+  "name": "factura-processor",
+  "version": "1.0.0",
+  "description": "Procesa facturas recibidas via Telegram con OCR (Tesseract)",
+  "author": "Event-Core",
+  "icon": "receipt",
+  "enabled": true,
+
+  "config": {
+    "botName": "facturas-asesoria",
+    "outputPath": "./data/facturas-procesadas",
+    "language": "spa",
+    "processOnStartup": true,
+    "supportedMimeTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "application/pdf"
+    ]
+  },
+
+  "provides": [
+    "factura-processing"
+  ],
+
+  "subscribes": [
+    "bot.file.stored",
+    "ocr.extract.completed",
+    "ocr.extract.failed"
+  ],
+
+  "publishes": [
+    "factura.queued",
+    "factura.processing",
+    "factura.processed",
+    "factura.failed"
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo"
+    },
+    {
+      "method": "GET",
+      "path": "/pending",
+      "handler": "handleGetPending",
+      "description": "Lista facturas pendientes de procesar"
+    },
+    {
+      "method": "GET",
+      "path": "/processed",
+      "handler": "handleGetProcessed",
+      "description": "Lista facturas procesadas"
+    },
+    {
+      "method": "POST",
+      "path": "/process/:filename",
+      "handler": "handleProcessFile",
+      "description": "Procesa manualmente un archivo específico"
+    },
+    {
+      "method": "POST",
+      "path": "/reprocess",
+      "handler": "handleReprocessAll",
+      "description": "Reprocesa todas las facturas pendientes"
+    }
+  ],
+
+  "uiActions": [
+    {
+      "domain": "factura",
+      "action": "list-pending",
+      "handler": "handleUIListPending"
+    },
+    {
+      "domain": "factura",
+      "action": "list-processed",
+      "handler": "handleUIListProcessed"
+    },
+    {
+      "domain": "factura",
+      "action": "process",
+      "handler": "handleUIProcess"
+    }
+  ]
+}

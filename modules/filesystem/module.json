@@ -49,7 +49,6 @@
       "name": "fs.write",
       "description": "Escribe contenido a un archivo (crea si no existe)",
       "handler": "handleWrite",
-      "confirmation": true,
       "parameters": {
         "type": "object",
         "properties": {

@@ -66,7 +66,7 @@
       "type": "service",
       "service": "filesystem",
       "action": "write",
-      "path": "./data/facturas-procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
+      "path": "./data/projects/facturas-nonina/procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
       "content": "{{ steps.preparar-resultado.output }}"
     },
 
@@ -75,7 +75,7 @@
       "type": "service",
       "service": "filesystem",
       "action": "write",
-      "path": "./data/facturas-procesadas/{{ date }}_{{ trigger.file.originalName }}.txt",
+      "path": "./data/projects/facturas-nonina/procesadas/{{ date }}_{{ trigger.file.originalName }}.txt",
       "content": "FACTURA: {{ trigger.file.originalName }}\nFecha: {{ now }}\nConfianza: {{ steps.ocr.output.confidence }}\n\n{{ steps.ocr.output.text }}"
     },
 

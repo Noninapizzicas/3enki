@@ -101,8 +101,7 @@ Servicios disponibles (patron: `{provider}.{action}.request`):
 
 **Locales:**
 - `filesystem`: read, write, append, delete, exists, list, rename (sincrono)
-- `ocr`: extract (usa ocr-service existente)
-- `local.tesseract`: extract (OCR directo)
+- `local.tesseract`: extract (OCR via services/providers/local/tesseract)
 - `local.pdf`: create
 - `local.csv`: create, parse
 - `local.xlsx`: create, parse

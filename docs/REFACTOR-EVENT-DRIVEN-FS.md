@@ -61,7 +61,6 @@ cualquier-modulo → fs.write.request → filesystem → fs.writeFile
 | ui-designer | Snapshots internos |
 | Lecturas de module.json | Config de arranque del módulo |
 | prompt-manager (schema) | Config interna |
-| ocr-service (engine.json) | Config interna |
 | admin-panel | HTML estático + config |
 
 ## Patrón de Implementación

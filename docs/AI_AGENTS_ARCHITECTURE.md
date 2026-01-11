@@ -47,7 +47,7 @@ El sistema de agentes permite que la IA cree, configure y gestione agentes de fo
 │  │ telegram.photo   │  │ telegram.document│  │ telegram.text    │       │
 │  │                  │  │                  │  │                  │       │
 │  │ Usa:             │  │ Usa:             │  │ Usa:             │       │
-│  │ ocr-service      │  │ ocr-service      │  │ ai-gateway       │       │
+│  │ tesseract (local)│  │ tesseract (local)│  │ ai-gateway       │       │
 │  │ telegram-service │  │ database-manager │  │ telegram-service │       │
 │  └──────────────────┘  └──────────────────┘  └──────────────────┘       │
 │                                                                          │
@@ -58,7 +58,7 @@ El sistema de agentes permite que la IA cree, configure y gestione agentes de fo
 │                         MÓDULOS BASE                                     │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  telegram-service    ocr-service    ai-gateway    prompt-manager        │
+│  telegram-service    tesseract      ai-gateway    prompt-manager        │
 │  database-manager    credential-manager    filesystem    ...            │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -121,9 +121,9 @@ Gestiona los prompts que definen el comportamiento de los agentes:
 - **Tools:** `telegram_send_message`, `telegram_get_file`
 - **Uso:** Recibir y enviar mensajes de Telegram
 
-#### ocr-service
-- **API:** `POST /modules/ocr-service/extract`
-- **Engines:** tesseract (local), openai-vision, claude-vision, google-vision
+#### OCR Providers (services/providers/)
+- **Local:** `tesseractService.extract({ image, language })`
+- **Remoto:** `google.vision.extract`, `anthropic.vision.extract`
 - **Uso:** Extraer texto de imágenes y PDFs
 
 #### ai-gateway
@@ -188,7 +188,7 @@ Telegram → Foto → telegram.photo.received
                          │
                          ├─→ [http_request] GET /telegram-service/file/{fileId}
                          │
-                         ├─→ [http_request] POST /ocr-service/extract
+                         ├─→ [local] tesseractService.extract({ image })
                          │
                          └─→ [http_request] POST /telegram-service/send
                                             "Texto extraído: ..."
@@ -219,14 +219,19 @@ Bot de Telegram multi-instancia con gestión de credenciales.
 
 ---
 
-## ocr-service (v1.0.0)
-Servicio OCR con múltiples engines.
+## OCR Providers (services/providers/)
+Servicios de OCR disponibles como providers.
 
-### APIs:
-- POST /extract: Extraer texto de imagen/PDF
-  Input: { input: base64, engine: "auto"|"tesseract"|"openai-vision" }
-  Output: { text, confidence, engine, duration }
-- GET /engines: Listar engines disponibles
+### Local (Tesseract):
+```javascript
+const tesseract = require('services/providers/local/tesseract');
+const result = await tesseract.extract({ image: base64, language: 'spa' });
+// Output: { success, text, confidence, words, lines }
+```
+
+### Remoto (Google/Anthropic Vision):
+- Evento: `google.vision.extract.request` / `anthropic.vision.extract.request`
+- Requiere credencial: `GOOGLE_API_KEY` / `ANTHROPIC_API_KEY`
 
 ---
 
@@ -330,14 +335,13 @@ modules/
 │   └── services/
 │       └── telegram-client.js
 │
-├── ocr-service/
-│   ├── module.json
-│   ├── index.js
-│   ├── builtin/
-│   │   └── tesseract.js
-│   └── lib/
-│       ├── plugin-loader.js
-│       └── api-executor.js
+├── services/providers/
+│   ├── local/
+│   │   └── tesseract/index.js   # OCR local
+│   ├── google/
+│   │   └── functions/vision.extract.json
+│   └── anthropic/
+│       └── functions/vision.extract.json
 │
 └── prompt-manager/
     ├── module.json
@@ -409,7 +413,7 @@ Los agentes solo procesan eventos a los que están suscritos:
 - [x] AI Agent Framework básico
 - [x] Prompt Manager con UI
 - [x] telegram-service
-- [x] ocr-service
+- [x] OCR providers (tesseract, google, anthropic)
 - [ ] Tools: create_prompt, create_agent, list_agents
 
 ### Fase 2: Agente Arquitecto

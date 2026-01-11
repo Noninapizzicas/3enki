@@ -23,8 +23,8 @@ Este documento describe todas las herramientas (tools) disponibles para el AI en
 | PDF | pdf-viewer | 3 | ✅ |
 | Ejecución | code-executor | 5 | ✅ |
 | **Agentes** | **ai-agent-framework** | **7** | ✅ + 🔜 |
-| **OCR** | **ocr-service** | **1** | 🔜 |
 | **Telegram** | **telegram-service** | **3** | 🔜 |
+| **OCR** | **services/providers/local/tesseract** | **1** | ✅ |
 | **Total** | | **29** | |
 
 **Leyenda:** ✅ Implementado | 🔜 Planificado

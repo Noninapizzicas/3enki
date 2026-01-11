@@ -397,11 +397,6 @@
       "agent-manager": {
         "location": "modules/agent-manager/",
         "reason": "Orquestación de agentes y pipelines"
-      },
-      "ocr-service": {
-        "location": "modules/ocr-service/",
-        "status": "PUEDE MIGRAR a usar providers en lugar de engines propios",
-        "migration_path": "Usar google.vision, anthropic.vision, local.tesseract en lugar de builtin/"
       }
     }
   },
@@ -615,7 +610,7 @@
         "pdf": "pdfkit",
         "csv": "csv-parser, csv-writer",
         "xlsx": "exceljs",
-        "tesseract": "tesseract.js (ya existe en ocr-service)"
+        "tesseract": "tesseract.js (services/providers/local/tesseract)"
       }
     }
   }

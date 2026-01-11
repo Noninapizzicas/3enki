@@ -48,21 +48,22 @@ Multi-bot Telegram service - centralized management, credential-manager integrat
 
 ---
 
-### ocr-service (v1.0.0)
+### OCR Providers (services/providers/)
 
-Servicio OCR con soporte multi-engine (Tesseract, Google Vision, Claude Vision)
+Servicios de OCR disponibles como providers.
 
-**APIs HTTP:**
-| Método | Path | Descripción |
-|--------|------|-------------|
-| POST | `/modules/ocr-service/extract` | Procesar entrada y extraer resultado |
-| GET | `/modules/ocr-service/engines` | Listar engines disponibles |
-| GET | `/modules/ocr-service/engines/:name` | Obtener detalles de un engine |
-| GET | `/modules/ocr-service/health` | Health check del servicio |
+**Local (Tesseract):**
+```javascript
+const tesseract = require('services/providers/local/tesseract');
+const result = await tesseract.extract({ image: base64, language: 'spa' });
+// Output: { success, text, confidence, words, lines }
+```
 
-**Eventos emitidos:** `ocr.extract.completed`, `ocr.extract.failed`
-
-**Eventos escuchados:** `ocr.extract.request`
+**Remoto (via eventos):**
+| Provider | Evento Request | Credencial |
+|----------|---------------|------------|
+| Google Vision | `google.vision.extract.request` | `GOOGLE_API_KEY` |
+| Anthropic Vision | `anthropic.vision.extract.request` | `ANTHROPIC_API_KEY` |
 
 ---
 
@@ -246,10 +247,9 @@ Flujo:
    GET /modules/telegram-service/file/{fileId}?download=true
    → { base64: "..." }
 
-3. Procesar con OCR:
-   POST /modules/ocr-service/extract
-   Body: { input: base64, engine: "auto" }
-   → { text, confidence }
+3. Procesar con OCR (local):
+   tesseractService.extract({ image: base64, language: 'spa' })
+   → { success, text, confidence }
 
 4. Responder al usuario:
    POST /modules/telegram-service/send
@@ -323,7 +323,7 @@ Cuando el usuario pida: "Crea un agente que procese fotos de Telegram con OCR"
 ```
 [TOOL:create_prompt]({
   "name": "media-processor-system",
-  "content": "Eres un agente de procesamiento de medios.\n\nCuando recibes una imagen de Telegram:\n1. Descarga el archivo usando GET /modules/telegram-service/file/{fileId}?download=true\n2. Envía a OCR usando POST /modules/ocr-service/extract con {input: base64}\n3. Responde al usuario con POST /modules/telegram-service/send\n\nDatos del evento:\n- Bot: {{botName}}\n- Chat: {{chatId}}\n- File: {{fileId}}\n- Caption: {{caption}}\n\nSé conciso y útil.",
+  "content": "Eres un agente de procesamiento de medios.\n\nCuando recibes una imagen de Telegram:\n1. Descarga el archivo usando GET /modules/telegram-service/file/{fileId}?download=true\n2. Usa OCR local: tesseractService.extract({ image: base64, language: 'spa' })\n3. Responde al usuario con POST /modules/telegram-service/send\n\nDatos del evento:\n- Bot: {{botName}}\n- Chat: {{chatId}}\n- File: {{fileId}}\n- Caption: {{caption}}\n\nSé conciso y útil.",
   "slot_type": "system",
   "tags": ["agent", "media", "ocr", "telegram"]
 })

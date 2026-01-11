@@ -186,7 +186,7 @@
 **Contenido de AI_AGENTS_ARCHITECTURE.md:**
 - Sistema de agentes auto-generativos
 - Agente Arquitecto (meta-agente que crea agentes)
-- Integración con telegram-service, ocr-service, ai-gateway
+- Integración con telegram-service, ai-gateway, services/providers/
 - Flujos de creación de agentes
 - Configuración de providers (DeepSeek por defecto)
 - Roadmap de implementación
@@ -571,5 +571,5 @@ Para preguntas o issues:
 - **AI Agent Framework**: Sistema de agentes event-driven
 - **Agente Arquitecto**: Meta-agente que crea otros agentes
 - **telegram-service**: Integración multi-bot con Telegram
-- **ocr-service**: OCR con múltiples engines (Tesseract, OpenAI Vision, Claude Vision)
+- **OCR Providers**: Tesseract local, Google Vision, Anthropic Vision en services/providers/
 - **29 AI Tools**: Nuevas herramientas para agentes, OCR y Telegram

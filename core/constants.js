@@ -507,14 +507,6 @@ const API_ROUTES = {
     GET_METRICS: '/modules/notas/metrics',
   },
 
-  OCR: {
-    BASE: '/modules/ocr-service',
-    EXTRACT: '/modules/ocr-service/extract',
-    LIST_ENGINES: '/modules/ocr-service/engines',
-    GET_ENGINE: '/modules/ocr-service/engines/:name',
-    HEALTH_CHECK: '/modules/ocr-service/health',
-  },
-
   PDF: {
     BASE: '/modules/pdf-viewer',
     VIEW_PDF: '/modules/pdf-viewer/pdf/view',
@@ -733,13 +725,6 @@ const MODULES = {
     events: {
       publishes: ['nota.creada', 'nota.actualizada', 'nota.eliminada'],
       subscribes: ['nota.obtener', 'nota.listar'],
-    },
-  },
-  'ocr-service': {
-    version: '1.0.0',
-    events: {
-      publishes: ['ocr.extract.completed', 'ocr.extract.failed'],
-      subscribes: ['ocr.extract.request'],
     },
   },
   'pdf-viewer': {

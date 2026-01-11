@@ -177,9 +177,9 @@ mkdir -p services/providers/local/tesseract
 
 **Dependencia:** `tesseract.js` (ya existe en el proyecto)
 
-**Nota:** Puede reutilizar código de `modules/ocr-service/builtin/`
+**Nota:** Ya implementado en `services/providers/local/tesseract/`
 
-**Estimación:** Complejidad media
+**Estimación:** ✅ Completado
 
 ---
 
@@ -223,22 +223,14 @@ eventBus.publish('local.pdf.create.request', {
 
 **Objetivo:** Migrar módulos existentes para usar el nuevo sistema (opcional).
 
-#### 6.1 ocr-service
+#### 6.1 OCR (✅ Completado)
 
-**Estado actual:** Tiene su propio sistema de engines en `builtin/`
+**Estado:** El módulo `ocr-service` fue eliminado. OCR ahora usa providers:
+- `services/providers/local/tesseract/` - OCR local
+- `services/providers/google/functions/vision.extract.json` - Google Vision
+- `services/providers/anthropic/functions/vision.extract.json` - Anthropic Vision
 
-**Opción A:** Mantener como está (funciona)
-
-**Opción B:** Refactorizar para usar:
-- `google.vision.extract.request`
-- `anthropic.vision.extract.request`
-- `local.tesseract.extract.request`
-
-**Beneficio:** Consistencia, menos código duplicado
-
-**Riesgo:** Ya funciona, cambiar podría introducir bugs
-
-**Recomendación:** Fase posterior, no prioritario
+**Beneficio:** Consistencia con arquitectura de providers, menos código duplicado
 
 #### 6.2 telegram-service
 
@@ -292,7 +284,7 @@ eventBus.publish('local.pdf.create.request', {
 |--------|--------------|---------|------------|
 | APIs externas cambian | Baja | Media | functions.json fácil de actualizar |
 | Dependencias con vulnerabilidades | Media | Media | npm audit, versiones fijas |
-| Performance de servicios locales | Baja | Media | Tesseract ya probado en ocr-service |
+| Performance de servicios locales | Baja | Media | Tesseract probado en services/providers/local/ |
 | Conflicto con módulos existentes | Baja | Alta | Los módulos existentes no cambian |
 
 ---

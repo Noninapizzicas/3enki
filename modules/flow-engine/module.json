@@ -1,0 +1,131 @@
+{
+  "name": "flow-engine",
+  "version": "1.0.0",
+  "description": "Motor de flujos generico que conecta servicios, APIs, agentes y logica",
+  "author": "Event-Core",
+  "icon": "workflow",
+  "enabled": true,
+
+  "config": {
+    "flowsPath": "./modules/flow-engine/flows",
+    "autoLoadFlows": true,
+    "defaultTimeout": 300000,
+    "maxConcurrentFlows": 50
+  },
+
+  "provides": [
+    "flow-execution",
+    "flow-management"
+  ],
+
+  "subscribes": [
+    "bot.file.stored",
+    "bot.message.received",
+    "bot.command.received",
+    "ocr.extract.completed",
+    "ocr.extract.failed",
+    "agent.*.completed",
+    "agent.*.failed",
+    "flow.trigger"
+  ],
+
+  "publishes": [
+    "flow.started",
+    "flow.step.started",
+    "flow.step.completed",
+    "flow.step.failed",
+    "flow.completed",
+    "flow.failed"
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    },
+    {
+      "method": "GET",
+      "path": "/flows",
+      "handler": "handleListFlows",
+      "description": "Lista flujos definidos"
+    },
+    {
+      "method": "GET",
+      "path": "/flows/:flowId",
+      "handler": "handleGetFlow",
+      "description": "Obtiene definicion de un flujo"
+    },
+    {
+      "method": "POST",
+      "path": "/flows",
+      "handler": "handleCreateFlow",
+      "description": "Crea nuevo flujo"
+    },
+    {
+      "method": "PUT",
+      "path": "/flows/:flowId",
+      "handler": "handleUpdateFlow",
+      "description": "Actualiza flujo"
+    },
+    {
+      "method": "DELETE",
+      "path": "/flows/:flowId",
+      "handler": "handleDeleteFlow",
+      "description": "Elimina flujo"
+    },
+    {
+      "method": "POST",
+      "path": "/flows/:flowId/trigger",
+      "handler": "handleTriggerFlow",
+      "description": "Dispara flujo manualmente"
+    },
+    {
+      "method": "GET",
+      "path": "/executions",
+      "handler": "handleListExecutions",
+      "description": "Lista ejecuciones activas"
+    },
+    {
+      "method": "GET",
+      "path": "/executions/:executionId",
+      "handler": "handleGetExecution",
+      "description": "Obtiene estado de ejecucion"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/:executionId/cancel",
+      "handler": "handleCancelExecution",
+      "description": "Cancela ejecucion"
+    }
+  ],
+
+  "uiActions": [
+    {
+      "domain": "flow",
+      "action": "list",
+      "handler": "handleUIListFlows"
+    },
+    {
+      "domain": "flow",
+      "action": "get",
+      "handler": "handleUIGetFlow"
+    },
+    {
+      "domain": "flow",
+      "action": "create",
+      "handler": "handleUICreateFlow"
+    },
+    {
+      "domain": "flow",
+      "action": "trigger",
+      "handler": "handleUITriggerFlow"
+    },
+    {
+      "domain": "flow",
+      "action": "executions",
+      "handler": "handleUIListExecutions"
+    }
+  ]
+}

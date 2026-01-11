@@ -1,0 +1,89 @@
+{
+  "id": "procesar-facturas",
+  "name": "Procesar Facturas OCR",
+  "description": "Procesa imagenes de facturas recibidas via Telegram con OCR",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "trigger": {
+    "event": "bot.file.stored",
+    "filter": {
+      "botName": "facturas-asesoria",
+      "file.mimeType": {
+        "$in": ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+      }
+    }
+  },
+
+  "steps": [
+    {
+      "id": "leer-archivo",
+      "type": "service",
+      "service": "filesystem",
+      "action": "read",
+      "path": "{{ trigger.file.path }}",
+      "encoding": "base64"
+    },
+
+    {
+      "id": "ocr",
+      "type": "service",
+      "service": "ocr",
+      "action": "extract",
+      "input": "{{ steps.leer-archivo.output.content }}",
+      "config": {
+        "language": "spa",
+        "engine": "tesseract"
+      },
+      "timeout": 120000
+    },
+
+    {
+      "id": "preparar-resultado",
+      "type": "transform",
+      "operation": "map",
+      "config": {
+        "mapping": {
+          "archivoOriginal": "{{ trigger.file.originalName }}",
+          "rutaOriginal": "{{ trigger.file.path }}",
+          "fechaRecepcion": "{{ trigger.timestamp }}",
+          "caption": "{{ default(trigger.caption, 'sin caption') }}",
+          "chatId": "{{ trigger.chatId }}",
+          "userId": "{{ trigger.userId }}",
+          "userName": "{{ trigger.userName }}",
+          "textoExtraido": "{{ steps.ocr.output.text }}",
+          "confianza": "{{ steps.ocr.output.confidence }}",
+          "palabras": "{{ steps.ocr.output.words }}",
+          "engine": "{{ steps.ocr.output.engine }}",
+          "duracionMs": "{{ steps.ocr.output.duration }}",
+          "procesadoEn": "{{ now }}"
+        }
+      }
+    },
+
+    {
+      "id": "guardar-json",
+      "type": "service",
+      "service": "filesystem",
+      "action": "write",
+      "path": "./data/projects/facturas-nonina/procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
+      "content": "{{ steps.preparar-resultado.output }}"
+    },
+
+    {
+      "id": "guardar-texto",
+      "type": "service",
+      "service": "filesystem",
+      "action": "write",
+      "path": "./data/projects/facturas-nonina/procesadas/{{ date }}_{{ trigger.file.originalName }}.txt",
+      "content": "FACTURA: {{ trigger.file.originalName }}\nFecha: {{ now }}\nConfianza: {{ steps.ocr.output.confidence }}\n\n{{ steps.ocr.output.text }}"
+    },
+
+    {
+      "id": "log-resultado",
+      "type": "log",
+      "level": "info",
+      "message": "Factura procesada: {{ trigger.file.originalName }} - {{ steps.ocr.output.words }} palabras, confianza: {{ steps.ocr.output.confidence }}"
+    }
+  ]
+}

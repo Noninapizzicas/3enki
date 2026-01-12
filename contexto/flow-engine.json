@@ -77,7 +77,7 @@
       "trigger": {
         "event": "bot.file.stored",
         "filter": {
-          "botName": "facturas_asesorias_bot",
+          "botName": "facturas_asesoria_bot",
           "file.mimeType": { "$in": ["image/jpeg", "image/png"] }
         }
       },
@@ -177,7 +177,8 @@
     "sintaxis": "{{ path.to.value }}",
     "contextos": {
       "trigger": "Datos del evento que disparo el flujo",
-      "steps.ID.output": "Resultado de un paso anterior",
+      "steps.ID": "Resultado de un paso anterior (output guardado directamente)",
+      "steps.ID.data": "Para servicios que devuelven data anidada (ej: OCR)",
       "variables": "Variables definidas con step 'set'",
       "env.VAR": "Variables de entorno"
     },
@@ -193,7 +194,8 @@
       "lowercase(value)": "Convierte a minusculas",
       "uppercase(value)": "Convierte a mayusculas",
       "length(value)": "Longitud de string/array",
-      "globalPath(path)": "Convierte rutas data/... a @/... para acceso global"
+      "globalPath(path)": "Convierte rutas data/... a @/... para acceso global",
+      "json(value)": "Serializa objeto a JSON string (para fs.write)"
     }
   },
 
@@ -359,7 +361,7 @@
       "flow": { "id": "ID del flujo", "name": "Nombre del flujo" },
       "execution": { "id": "ID de ejecucion", "startedAt": "Timestamp inicio" }
     },
-    "acceso": "{{ steps.paso-id.output.campo }}"
+    "acceso": "{{ steps.paso-id.campo }} o {{ steps.paso-id.data.campo }} para servicios"
   },
 
   "buenas_practicas": [

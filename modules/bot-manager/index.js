@@ -175,7 +175,9 @@ class BotManagerModule {
       botName,
       chatId,
       userId: from.id,
-      userName: from.username,
+      userName: from.username || null,
+      userFirstName: from.first_name || null,
+      userLastName: from.last_name || null,
       file: {
         path: result.path,
         originalName: result.originalName,

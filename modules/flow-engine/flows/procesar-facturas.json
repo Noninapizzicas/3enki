@@ -30,7 +30,7 @@
       "type": "service",
       "service": "fs",
       "action": "read",
-      "path": "{{ trigger.file.path }}",
+      "path": "{{ globalPath(trigger.file.path) }}",
       "encoding": "base64"
     },
 

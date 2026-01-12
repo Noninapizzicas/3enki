@@ -189,11 +189,37 @@
       "fs.file.updated",
       "fs.file.deleted",
       "fs.directory.created",
-      "fs.workdir.changed"
+      "fs.workdir.changed",
+      "fs.read.response",
+      "fs.write.response",
+      "fs.copy.response",
+      "fs.delete.response",
+      "fs.list.response",
+      "fs.mkdir.response",
+      "fs.move.response",
+      "fs.rename.response",
+      "fs.exists.response",
+      "fs.info.response",
+      "fs.append.response",
+      "fs.search.response",
+      "fs.stats.response"
     ],
     "subscribes": [
       "project.activated",
-      "project.deactivated"
+      "project.deactivated",
+      "fs.read.request",
+      "fs.write.request",
+      "fs.copy.request",
+      "fs.delete.request",
+      "fs.list.request",
+      "fs.mkdir.request",
+      "fs.move.request",
+      "fs.rename.request",
+      "fs.exists.request",
+      "fs.info.request",
+      "fs.append.request",
+      "fs.search.request",
+      "fs.stats.request"
     ]
   },
 

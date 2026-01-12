@@ -90,13 +90,12 @@
       "descripcion": "Llama a providers via eventos",
       "patron_eventos": "{service}.{action}.request -> {service}.{action}.response",
       "propiedades": {
-        "service": "Nombre del provider (ej: local.tesseract, google.vision)",
-        "action": "Accion a ejecutar (ej: extract, create)",
+        "service": "Nombre del provider (ej: fs, local.tesseract, google.vision)",
+        "action": "Accion a ejecutar (ej: read, extract, create)",
         "input": "Datos de entrada",
         "config": "Configuracion adicional",
         "timeout": "Timeout en ms (default: 60000)"
-      },
-      "caso_especial": "filesystem/fs se ejecuta sincronamente sin eventos"
+      }
     },
     "transform": {
       "descripcion": "Transforma datos",
@@ -235,11 +234,14 @@
   },
 
   "providers_soportados": {
+    "filesystem": {
+      "fs": {
+        "acciones": ["read", "write", "append", "delete", "exists", "list", "mkdir", "move", "rename", "info", "search", "stats"],
+        "descripcion": "Operaciones de filesystem via modules/filesystem/",
+        "patron": "fs.{action}.request -> fs.{action}.response"
+      }
+    },
     "locales": {
-      "filesystem": {
-        "acciones": ["read", "write", "append", "delete", "exists", "list", "rename"],
-        "nota": "Se ejecuta sincronamente, no usa eventos"
-      },
       "local.tesseract": {
         "acciones": ["extract"],
         "descripcion": "OCR local con Tesseract.js"

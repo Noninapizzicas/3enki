@@ -22,6 +22,8 @@
     "bot.file.stored",
     "bot.message.received",
     "bot.command.received",
+    "fs.*.response",
+    "fs.*.failed",
     "local.*.*.response",
     "local.*.*.failed",
     "google.*.*.response",

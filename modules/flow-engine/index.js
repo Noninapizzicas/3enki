@@ -129,6 +129,33 @@ class FlowEngineModule {
     // Eventos de respuesta de servicios según patrón del sistema:
     // {provider}.{action}.response / {provider}.{action}.failed
     const serviceResponsePatterns = [
+      // Filesystem module (modules/filesystem/)
+      'fs.read.response',
+      'fs.read.failed',
+      'fs.write.response',
+      'fs.write.failed',
+      'fs.copy.response',
+      'fs.copy.failed',
+      'fs.delete.response',
+      'fs.delete.failed',
+      'fs.list.response',
+      'fs.list.failed',
+      'fs.mkdir.response',
+      'fs.mkdir.failed',
+      'fs.move.response',
+      'fs.move.failed',
+      'fs.rename.response',
+      'fs.rename.failed',
+      'fs.exists.response',
+      'fs.exists.failed',
+      'fs.info.response',
+      'fs.info.failed',
+      'fs.append.response',
+      'fs.append.failed',
+      'fs.search.response',
+      'fs.search.failed',
+      'fs.stats.response',
+      'fs.stats.failed',
       // Local providers (services/providers/local/)
       'local.tesseract.extract.response',
       'local.tesseract.extract.failed',

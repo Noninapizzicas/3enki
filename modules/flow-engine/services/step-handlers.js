@@ -57,10 +57,10 @@ class StepHandlers {
   // ==========================================
 
   async handleService(step, context, executionId) {
-    const { service, action, timeout = 60000 } = step;
+    const { service, action, timeout = 60000, config } = step;
 
     // Extract control properties, pass everything else as payload
-    const { id, type, service: _s, action: _a, timeout: _t, onError, ...payload } = step;
+    const { id, type, service: _s, action: _a, timeout: _t, onError, config: _c, ...directProps } = step;
 
     // Construir eventos según patrón del sistema:
     // {provider}.{action}.request → {provider}.{action}.response
@@ -96,10 +96,11 @@ class StepHandlers {
       });
     });
 
-    // Publicar request con todas las propiedades del step (path, content, input, config, etc.)
+    // Publicar request: spread config first, then direct props (direct props override config)
     await this.eventBus.publish(requestEvent, {
       request_id: requestId,
-      ...payload,
+      ...config,
+      ...directProps,
       correlation_id: executionId
     });
 

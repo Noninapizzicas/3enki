@@ -127,12 +127,19 @@ module.exports = {
     // Determinar si es base64 o path
     let imageInput = image;
 
-    if (!image.startsWith('data:') && !image.startsWith('/') && !image.startsWith('./')) {
+    // Primero detectar base64 por magic bytes (JPEG empieza con /9j/ que parece path)
+    const base64Prefixes = ['/9j/', 'iVBORw', 'R0lGOD', 'UklGR', 'Qk', 'SUkq', 'TU0A', 'JVBERi'];
+    const looksLikeBase64 = base64Prefixes.some(p => image.startsWith(p));
+
+    if (image.startsWith('data:')) {
+      // Ya tiene prefijo data URI
+      imageInput = image;
+    } else if (looksLikeBase64) {
       // Es base64 sin prefijo - detectar tipo y agregar header
       const detectedType = mimeType === 'auto' ? this.detectMimeType(image) : mimeType;
       imageInput = `data:${detectedType};base64,${image}`;
     } else if (image.startsWith('/') || image.startsWith('./')) {
-      // Es un path - verificar que existe
+      // Es un path de archivo - verificar que existe
       if (!fs.existsSync(image)) {
         return {
           success: false,

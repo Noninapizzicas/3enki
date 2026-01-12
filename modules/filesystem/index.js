@@ -60,8 +60,43 @@ class FilesystemModule {
     const unsubReadReq = await this.eventBus.subscribe('fs.read.request', this.onReadRequest.bind(this));
     this.unsubscribes.push(unsubReadReq);
 
+    const unsubDeleteReq = await this.eventBus.subscribe('fs.delete.request', this.onDeleteRequest.bind(this));
+    this.unsubscribes.push(unsubDeleteReq);
+
+    const unsubListReq = await this.eventBus.subscribe('fs.list.request', this.onListRequest.bind(this));
+    this.unsubscribes.push(unsubListReq);
+
+    const unsubMkdirReq = await this.eventBus.subscribe('fs.mkdir.request', this.onMkdirRequest.bind(this));
+    this.unsubscribes.push(unsubMkdirReq);
+
+    const unsubMoveReq = await this.eventBus.subscribe('fs.move.request', this.onMoveRequest.bind(this));
+    this.unsubscribes.push(unsubMoveReq);
+
+    const unsubRenameReq = await this.eventBus.subscribe('fs.rename.request', this.onMoveRequest.bind(this));
+    this.unsubscribes.push(unsubRenameReq);
+
+    const unsubExistsReq = await this.eventBus.subscribe('fs.exists.request', this.onExistsRequest.bind(this));
+    this.unsubscribes.push(unsubExistsReq);
+
+    const unsubInfoReq = await this.eventBus.subscribe('fs.info.request', this.onInfoRequest.bind(this));
+    this.unsubscribes.push(unsubInfoReq);
+
+    const unsubAppendReq = await this.eventBus.subscribe('fs.append.request', this.onAppendRequest.bind(this));
+    this.unsubscribes.push(unsubAppendReq);
+
+    const unsubSearchReq = await this.eventBus.subscribe('fs.search.request', this.onSearchRequest.bind(this));
+    this.unsubscribes.push(unsubSearchReq);
+
+    const unsubStatsReq = await this.eventBus.subscribe('fs.stats.request', this.onStatsRequest.bind(this));
+    this.unsubscribes.push(unsubStatsReq);
+
     this.logger.info('filesystem.events.subscribed', {
-      events: ['project.activated', 'project.deactivated', 'fs.write.request', 'fs.copy.request', 'fs.read.request']
+      events: [
+        'project.activated', 'project.deactivated',
+        'fs.read.request', 'fs.write.request', 'fs.copy.request', 'fs.delete.request',
+        'fs.list.request', 'fs.mkdir.request', 'fs.move.request', 'fs.rename.request',
+        'fs.exists.request', 'fs.info.request', 'fs.append.request', 'fs.search.request', 'fs.stats.request'
+      ]
     });
 
     // Register UI handlers
@@ -206,6 +241,177 @@ class FilesystemModule {
     const result = await this.handleRead({ path });
 
     await this.eventBus.publish('fs.read.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onDeleteRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path } = data;
+
+    this.logger.info('fs.delete.request', { path, request_id });
+
+    const result = await this.handleDelete({ path });
+
+    await this.eventBus.publish('fs.delete.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onListRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path } = data;
+
+    this.logger.info('fs.list.request', { path, request_id });
+
+    const result = await this.handleList({ path });
+
+    await this.eventBus.publish('fs.list.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onMkdirRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path } = data;
+
+    this.logger.info('fs.mkdir.request', { path, request_id });
+
+    const result = await this.handleMkdir({ path });
+
+    await this.eventBus.publish('fs.mkdir.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onMoveRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, from, source, to, destination } = data;
+
+    const fromPath = from || source;
+    const toPath = to || destination;
+
+    this.logger.info('fs.move.request', { from: fromPath, to: toPath, request_id });
+
+    const result = await this.handleMove({ from: fromPath, to: toPath });
+
+    // Respond to both move and rename events
+    const responseEvent = event?.event?.includes('rename') ? 'fs.rename.response' : 'fs.move.response';
+    await this.eventBus.publish(responseEvent, {
+      request_id,
+      ...result
+    });
+  }
+
+  async onExistsRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path } = data;
+
+    this.logger.info('fs.exists.request', { path, request_id });
+
+    try {
+      const safePath = this.validatePath(path);
+      const stats = await fs.stat(safePath);
+
+      await this.eventBus.publish('fs.exists.response', {
+        request_id,
+        success: true,
+        exists: true,
+        path,
+        type: stats.isDirectory() ? 'directory' : 'file'
+      });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        await this.eventBus.publish('fs.exists.response', {
+          request_id,
+          success: true,
+          exists: false,
+          path
+        });
+      } else {
+        await this.eventBus.publish('fs.exists.response', {
+          request_id,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+  }
+
+  async onInfoRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path } = data;
+
+    this.logger.info('fs.info.request', { path, request_id });
+
+    const result = await this.handleInfo({ path });
+
+    await this.eventBus.publish('fs.info.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onAppendRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path, content, encoding } = data;
+
+    this.logger.info('fs.append.request', { path, request_id });
+
+    try {
+      const safePath = this.validatePath(path);
+
+      // Ensure directory exists
+      await fs.mkdir(require('path').dirname(safePath), { recursive: true });
+
+      // Append to file
+      await fs.appendFile(safePath, content, encoding || 'utf-8');
+
+      const stats = await fs.stat(safePath);
+
+      await this.eventBus.publish('fs.append.response', {
+        request_id,
+        success: true,
+        message: `Content appended to ${path}`,
+        path,
+        size: stats.size
+      });
+    } catch (error) {
+      await this.eventBus.publish('fs.append.response', {
+        request_id,
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  async onSearchRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, query, path, content } = data;
+
+    this.logger.info('fs.search.request', { query, path, request_id });
+
+    const result = await this.handleSearch({ query, path, content });
+
+    await this.eventBus.publish('fs.search.response', {
+      request_id,
+      ...result
+    });
+  }
+
+  async onStatsRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, path } = data;
+
+    this.logger.info('fs.stats.request', { path, request_id });
+
+    const result = await this.handleStats({ path });
+
+    await this.eventBus.publish('fs.stats.response', {
       request_id,
       ...result
     });

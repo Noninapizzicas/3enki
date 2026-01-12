@@ -3,8 +3,6 @@
  * Ejecuta cada tipo de step en un flujo
  */
 
-const fs = require('fs').promises;
-const path = require('path');
 const crypto = require('crypto');
 
 class StepHandlers {
@@ -60,11 +58,6 @@ class StepHandlers {
 
   async handleService(step, context, executionId) {
     const { service, action, input, config, timeout = 60000 } = step;
-
-    // Filesystem: manejo directo (síncrono)
-    if (service === 'filesystem' || service === 'fs') {
-      return await this.handleFilesystem(action, step, context);
-    }
 
     // Construir eventos según patrón del sistema:
     // {provider}.{action}.request → {provider}.{action}.response
@@ -135,108 +128,6 @@ class StepHandlers {
     }
 
     return true;
-  }
-
-  // ==========================================
-  // FILESYSTEM: Operaciones de archivo
-  // ==========================================
-
-  async handleFilesystem(action, step, context) {
-    switch (action) {
-      case 'read': {
-        const filePath = step.path || step.input;
-        const content = await fs.readFile(filePath);
-        const encoding = step.encoding || 'base64';
-        return {
-          output: {
-            content: content.toString(encoding),
-            path: filePath,
-            size: content.length
-          }
-        };
-      }
-
-      case 'write': {
-        const filePath = step.path;
-        let content = step.content;
-
-        // Si content es objeto, convertir a JSON
-        if (typeof content === 'object') {
-          content = JSON.stringify(content, null, 2);
-        }
-
-        // Asegurar directorio
-        await fs.mkdir(path.dirname(filePath), { recursive: true });
-
-        // Escribir
-        await fs.writeFile(filePath, content, 'utf-8');
-
-        return {
-          output: {
-            path: filePath,
-            size: content.length,
-            written: true
-          }
-        };
-      }
-
-      case 'append': {
-        const filePath = step.path;
-        let content = step.content;
-
-        if (typeof content === 'object') {
-          content = JSON.stringify(content, null, 2);
-        }
-
-        await fs.mkdir(path.dirname(filePath), { recursive: true });
-        await fs.appendFile(filePath, content + '\n', 'utf-8');
-
-        return {
-          output: { path: filePath, appended: true }
-        };
-      }
-
-      case 'delete': {
-        const filePath = step.path;
-        await fs.unlink(filePath);
-        return {
-          output: { path: filePath, deleted: true }
-        };
-      }
-
-      case 'exists': {
-        const filePath = step.path;
-        try {
-          await fs.access(filePath);
-          return { output: { exists: true, path: filePath } };
-        } catch {
-          return { output: { exists: false, path: filePath } };
-        }
-      }
-
-      case 'list': {
-        const dirPath = step.path;
-        const files = await fs.readdir(dirPath);
-        return {
-          output: {
-            files,
-            count: files.length,
-            path: dirPath
-          }
-        };
-      }
-
-      case 'rename': {
-        const { from, to } = step;
-        await fs.rename(from, to);
-        return {
-          output: { from, to, renamed: true }
-        };
-      }
-
-      default:
-        throw new Error(`Unknown filesystem action: ${action}`);
-    }
   }
 
   // ==========================================

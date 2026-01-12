@@ -40,7 +40,7 @@ Cada paso puede ser:
     {
       "id": "ocr",
       "type": "service",
-      "service": "ocr",
+      "service": "local.tesseract",
       "action": "extract",
       "input": "{{ steps.leer-archivo.output.content }}",
       "config": { "language": "spa" }
@@ -90,7 +90,7 @@ Llama a servicios locales via eventos.
 ```json
 {
   "type": "service",
-  "service": "ocr",
+  "service": "local.tesseract",
   "action": "extract",
   "input": "{{ steps.leer.output.content }}",
   "config": { "language": "spa" }
@@ -99,8 +99,10 @@ Llama a servicios locales via eventos.
 
 Servicios disponibles (patron: `{provider}.{action}.request`):
 
-**Locales:**
-- `filesystem`: read, write, append, delete, exists, list, rename (sincrono)
+**Filesystem (modules/filesystem/):**
+- `fs`: read, write, append, delete, exists, list, mkdir, move, rename, info, search, stats
+
+**Locales (services/providers/local/):**
 - `local.tesseract`: extract (OCR via services/providers/local/tesseract)
 - `local.pdf`: create
 - `local.csv`: create, parse

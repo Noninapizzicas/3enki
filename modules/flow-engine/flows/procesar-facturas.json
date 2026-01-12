@@ -28,12 +28,11 @@
     {
       "id": "ocr",
       "type": "service",
-      "service": "ocr",
+      "service": "local.tesseract",
       "action": "extract",
       "input": "{{ steps.leer-archivo.output.content }}",
       "config": {
-        "language": "spa",
-        "engine": "tesseract"
+        "language": "spa"
       },
       "timeout": 120000
     },
@@ -54,8 +53,8 @@
           "textoExtraido": "{{ steps.ocr.output.text }}",
           "confianza": "{{ steps.ocr.output.confidence }}",
           "palabras": "{{ steps.ocr.output.words }}",
-          "engine": "{{ steps.ocr.output.engine }}",
-          "duracionMs": "{{ steps.ocr.output.duration }}",
+          "lineas": "{{ steps.ocr.output.lines }}",
+          "provider": "local.tesseract",
           "procesadoEn": "{{ now }}"
         }
       }

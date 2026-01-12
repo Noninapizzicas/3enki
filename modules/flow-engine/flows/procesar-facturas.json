@@ -2,7 +2,7 @@
   "id": "procesar-facturas",
   "name": "Procesar Facturas OCR",
   "description": "Procesa imagenes de facturas recibidas via Telegram con OCR",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "enabled": true,
 
   "trigger": {
@@ -57,7 +57,9 @@
           "caption": "{{ default(trigger.caption, 'sin caption') }}",
           "chatId": "{{ trigger.chatId }}",
           "userId": "{{ trigger.userId }}",
-          "userName": "{{ trigger.userName }}",
+          "userName": "{{ default(trigger.userName, 'sin username') }}",
+          "userFirstName": "{{ default(trigger.userFirstName, '') }}",
+          "userLastName": "{{ default(trigger.userLastName, '') }}",
           "textoExtraido": "{{ default(steps.ocr.data.text, 'OCR no disponible') }}",
           "confianza": "{{ default(steps.ocr.data.confidence, 0) }}",
           "palabras": "{{ default(steps.ocr.data.words, 0) }}",

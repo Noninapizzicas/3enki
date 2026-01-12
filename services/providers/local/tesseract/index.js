@@ -84,7 +84,19 @@ module.exports = {
   /**
    * Extraer texto de imagen
    */
-  async extract({ image, language = 'eng' }) {
+  async extract({ image, language = 'eng' } = {}) {
+    // Validar parámetro image
+    if (!image || typeof image !== 'string') {
+      return {
+        success: false,
+        error: `Invalid image parameter: expected string, got ${typeof image}`,
+        text: '',
+        confidence: 0,
+        words: 0,
+        lines: 0
+      };
+    }
+
     const worker = await this.getWorker(language);
 
     // Determinar si es base64 o path

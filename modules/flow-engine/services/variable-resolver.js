@@ -121,6 +121,18 @@ class VariableResolver {
       const value = this.getValue(inner, context);
       return value?.length || 0;
     }
+    // globalPath(path) - Convierte rutas data/... a @/... para acceso global
+    if (path.startsWith('globalPath(') && path.endsWith(')')) {
+      const inner = path.slice(11, -1);
+      const value = this.getValue(inner, context);
+      if (typeof value === 'string') {
+        // Quitar prefijo 'data/' si existe y agregar '@/'
+        const cleanPath = value.replace(/^(\.\/)?data\//, '');
+        return `@/${cleanPath}`;
+      }
+      return value;
+    }
+
     if (path.startsWith('default(') && path.endsWith(')')) {
       // default(trigger.caption, "sin caption")
       const inner = path.slice(8, -1);

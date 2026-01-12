@@ -192,7 +192,39 @@
       "default(value, fallback)": "Valor por defecto si null/undefined",
       "lowercase(value)": "Convierte a minusculas",
       "uppercase(value)": "Convierte a mayusculas",
-      "length(value)": "Longitud de string/array"
+      "length(value)": "Longitud de string/array",
+      "globalPath(path)": "Convierte rutas data/... a @/... para acceso global"
+    }
+  },
+
+  "rutas_filesystem": {
+    "principio": "Los flujos deben ser AUTOCONTENIDOS - no depender del proyecto activo",
+    "prefijos": {
+      "@/": {
+        "descripcion": "Ruta global absoluta desde data/",
+        "uso": "RECOMENDADO para todos los flujos",
+        "ejemplo": "@/bots/mi_bot/received/archivo.jpg -> data/bots/mi_bot/received/archivo.jpg"
+      },
+      "/": {
+        "descripcion": "Ruta relativa al proyecto activo (storage/)",
+        "uso": "EVITAR - depende del contexto del sistema",
+        "ejemplo": "/procesadas/archivo.json -> data/projects/{proyecto_activo}/storage/procesadas/archivo.json"
+      }
+    },
+    "rutas_comunes": {
+      "bots_entrada": "@/bots/{nombre_bot}/received/",
+      "proyectos_storage": "@/projects/{nombre_proyecto}/storage/",
+      "proyectos_procesadas": "@/projects/{nombre_proyecto}/storage/procesadas/"
+    },
+    "conversion_dinamica": {
+      "funcion": "globalPath()",
+      "descripcion": "Convierte rutas que vienen de triggers (data/...) al formato @/",
+      "ejemplo": "{{ globalPath(trigger.file.path) }} -> @/bots/mi_bot/received/archivo.jpg",
+      "cuando_usar": "Cuando el trigger proporciona una ruta en formato data/..."
+    },
+    "patron_recomendado": {
+      "entrada": "{{ globalPath(trigger.file.path) }}",
+      "salida": "@/projects/{nombre_proyecto}/storage/procesadas/{{ date }}_{{ trigger.file.originalName }}.json"
     }
   },
 
@@ -336,7 +368,10 @@
     "Usar onError para pasos no criticos",
     "Guardar resultados intermedios con filesystem para debugging",
     "Usar step 'log' para trazabilidad",
-    "Validar datos con step 'condition' antes de procesar"
+    "Validar datos con step 'condition' antes de procesar",
+    "RUTAS: Usar @/ para rutas globales - flujos deben ser autocontenidos",
+    "RUTAS: Usar globalPath() para convertir rutas de triggers",
+    "RUTAS: Definir rutas de salida explicitas con @/projects/{proyecto}/storage/"
   ],
 
   "ubicacion_archivos": {

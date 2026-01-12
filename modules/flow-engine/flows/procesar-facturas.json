@@ -2,7 +2,7 @@
   "id": "procesar-facturas",
   "name": "Procesar Facturas OCR",
   "description": "Procesa imagenes de facturas recibidas via Telegram con OCR",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "enabled": true,
 
   "trigger": {
@@ -58,10 +58,10 @@
           "chatId": "{{ trigger.chatId }}",
           "userId": "{{ trigger.userId }}",
           "userName": "{{ trigger.userName }}",
-          "textoExtraido": "{{ default(steps.ocr.text, 'OCR no disponible') }}",
-          "confianza": "{{ default(steps.ocr.confidence, 0) }}",
-          "palabras": "{{ default(steps.ocr.words, 0) }}",
-          "lineas": "{{ default(steps.ocr.lines, 0) }}",
+          "textoExtraido": "{{ default(steps.ocr.data.text, 'OCR no disponible') }}",
+          "confianza": "{{ default(steps.ocr.data.confidence, 0) }}",
+          "palabras": "{{ default(steps.ocr.data.words, 0) }}",
+          "lineas": "{{ default(steps.ocr.data.lines, 0) }}",
           "provider": "local.tesseract",
           "procesadoEn": "{{ now }}"
         }
@@ -83,14 +83,14 @@
       "service": "fs",
       "action": "write",
       "path": "@/projects/facturas-nonina/storage/procesadas/{{ date }}_{{ trigger.file.originalName }}.txt",
-      "content": "FACTURA: {{ trigger.file.originalName }}\nFecha: {{ now }}\nConfianza: {{ default(steps.ocr.confidence, 'N/A') }}\n\n{{ default(steps.ocr.text, 'Sin texto extraido') }}"
+      "content": "FACTURA: {{ trigger.file.originalName }}\nFecha: {{ now }}\nConfianza: {{ default(steps.ocr.data.confidence, 'N/A') }}\n\n{{ default(steps.ocr.data.text, 'Sin texto extraido') }}"
     },
 
     {
       "id": "log-resultado",
       "type": "log",
       "level": "info",
-      "message": "Factura procesada: {{ trigger.file.originalName }} - {{ default(steps.ocr.words, 0) }} palabras"
+      "message": "Factura procesada: {{ trigger.file.originalName }} - {{ default(steps.ocr.data.words, 0) }} palabras"
     }
   ]
 }

@@ -39,6 +39,11 @@ module.exports = {
           description: 'Imagen en base64 o path al archivo',
           required: true
         },
+        mimeType: {
+          type: 'string',
+          description: 'Tipo MIME de la imagen (image/jpeg, image/png, etc.)',
+          default: 'auto'
+        },
         language: {
           type: 'string',
           description: 'Codigo de idioma (eng, spa, deu, fra, etc.)',
@@ -82,9 +87,23 @@ module.exports = {
   },
 
   /**
+   * Detectar tipo MIME desde magic bytes del base64
+   */
+  detectMimeType(base64) {
+    // Magic bytes en base64
+    if (base64.startsWith('/9j/')) return 'image/jpeg';
+    if (base64.startsWith('iVBORw')) return 'image/png';
+    if (base64.startsWith('R0lGOD')) return 'image/gif';
+    if (base64.startsWith('UklGR')) return 'image/webp';
+    if (base64.startsWith('Qk')) return 'image/bmp';
+    // Default a PNG si no se detecta
+    return 'image/png';
+  },
+
+  /**
    * Extraer texto de imagen
    */
-  async extract({ image, language = 'eng' } = {}) {
+  async extract({ image, mimeType = 'auto', language = 'eng' } = {}) {
     // Validar parámetro image
     if (!image || typeof image !== 'string') {
       return {
@@ -103,8 +122,9 @@ module.exports = {
     let imageInput = image;
 
     if (!image.startsWith('data:') && !image.startsWith('/') && !image.startsWith('./')) {
-      // Asumir que es base64 sin prefijo
-      imageInput = `data:image/png;base64,${image}`;
+      // Es base64 sin prefijo - detectar tipo y agregar header
+      const detectedType = mimeType === 'auto' ? this.detectMimeType(image) : mimeType;
+      imageInput = `data:${detectedType};base64,${image}`;
     } else if (image.startsWith('/') || image.startsWith('./')) {
       // Es un path - verificar que existe
       if (!fs.existsSync(image)) {

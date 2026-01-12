@@ -133,6 +133,16 @@ class VariableResolver {
       return value;
     }
 
+    // json(path) - Serializa un objeto a JSON string
+    if (path.startsWith('json(') && path.endsWith(')')) {
+      const inner = path.slice(5, -1);
+      const value = this.getValue(inner, context);
+      if (typeof value === 'object' && value !== null) {
+        return JSON.stringify(value, null, 2);
+      }
+      return String(value);
+    }
+
     if (path.startsWith('default(') && path.endsWith(')')) {
       // default(trigger.caption, "sin caption")
       const inner = path.slice(8, -1);

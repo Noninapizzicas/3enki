@@ -88,15 +88,21 @@ module.exports = {
 
   /**
    * Detectar tipo MIME desde magic bytes del base64
+   * Soporta imágenes y documentos comunes
    */
   detectMimeType(base64) {
-    // Magic bytes en base64
+    // Magic bytes en base64 - imágenes
     if (base64.startsWith('/9j/')) return 'image/jpeg';
     if (base64.startsWith('iVBORw')) return 'image/png';
     if (base64.startsWith('R0lGOD')) return 'image/gif';
     if (base64.startsWith('UklGR')) return 'image/webp';
     if (base64.startsWith('Qk')) return 'image/bmp';
-    // Default a PNG si no se detecta
+    if (base64.startsWith('SUkq') || base64.startsWith('TU0A')) return 'image/tiff';
+
+    // Documentos
+    if (base64.startsWith('JVBERi')) return 'application/pdf';
+
+    // Default a PNG si no se detecta (Tesseract lo manejará)
     return 'image/png';
   },
 

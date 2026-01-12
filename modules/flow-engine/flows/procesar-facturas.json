@@ -17,6 +17,15 @@
 
   "steps": [
     {
+      "id": "crear-directorio",
+      "type": "service",
+      "service": "fs",
+      "action": "mkdir",
+      "path": "/procesadas",
+      "onError": "continue"
+    },
+
+    {
       "id": "leer-archivo",
       "type": "service",
       "service": "fs",

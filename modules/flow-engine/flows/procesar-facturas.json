@@ -2,7 +2,7 @@
   "id": "procesar-facturas",
   "name": "Procesar Facturas OCR",
   "description": "Procesa imagenes de facturas recibidas via Telegram con OCR",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "enabled": true,
 
   "trigger": {
@@ -21,7 +21,7 @@
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "/procesadas",
+      "path": "@/projects/facturas-nonina/storage/procesadas",
       "onError": "continue"
     },
 
@@ -73,7 +73,7 @@
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "/procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
+      "path": "@/projects/facturas-nonina/storage/procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
       "content": "{{ steps.preparar-resultado.output }}"
     },
 
@@ -82,7 +82,7 @@
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "/procesadas/{{ date }}_{{ trigger.file.originalName }}.txt",
+      "path": "@/projects/facturas-nonina/storage/procesadas/{{ date }}_{{ trigger.file.originalName }}.txt",
       "content": "FACTURA: {{ trigger.file.originalName }}\nFecha: {{ now }}\nConfianza: {{ default(steps.ocr.output.confidence, 'N/A') }}\n\n{{ default(steps.ocr.output.text, 'Sin texto extraido') }}"
     },
 

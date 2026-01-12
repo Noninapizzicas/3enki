@@ -352,7 +352,7 @@ class FlowEngineModule {
   }
 
   async handleGetFlow(req, context) {
-    const { flowId } = context.params;
+    const { flowId } = req.params;
     const flow = this.registry.get(flowId);
 
     if (!flow) {
@@ -380,7 +380,7 @@ class FlowEngineModule {
 
   async handleUpdateFlow(req, context) {
     try {
-      const { flowId } = context.params;
+      const { flowId } = req.params;
       const updates = req.body;
       const updated = await this.registry.update(flowId, updates);
 
@@ -396,7 +396,7 @@ class FlowEngineModule {
   }
 
   async handleDeleteFlow(req, context) {
-    const { flowId } = context.params;
+    const { flowId } = req.params;
     const deleted = await this.registry.delete(flowId);
 
     if (!deleted) {
@@ -407,7 +407,7 @@ class FlowEngineModule {
   }
 
   async handleTriggerFlow(req, context) {
-    const { flowId } = context.params;
+    const { flowId } = req.params;
     const flow = this.registry.get(flowId);
 
     if (!flow) {
@@ -457,7 +457,7 @@ class FlowEngineModule {
   }
 
   async handleGetExecution(req, context) {
-    const { executionId } = context.params;
+    const { executionId } = req.params;
     const execution = this.executor.getExecution(executionId);
 
     if (!execution) {
@@ -468,7 +468,7 @@ class FlowEngineModule {
   }
 
   async handleCancelExecution(req, context) {
-    const { executionId } = context.params;
+    const { executionId } = req.params;
     const cancelled = await this.executor.cancel(executionId);
 
     if (!cancelled) {

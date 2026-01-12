@@ -2,7 +2,7 @@
   "id": "procesar-facturas",
   "name": "Procesar Facturas OCR",
   "description": "Procesa imagenes de facturas recibidas via Telegram con OCR",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "enabled": true,
 
   "trigger": {
@@ -74,7 +74,7 @@
       "service": "fs",
       "action": "write",
       "path": "@/projects/facturas-nonina/storage/procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
-      "content": "{{ steps.preparar-resultado }}"
+      "content": "{{ json(steps.preparar-resultado) }}"
     },
 
     {

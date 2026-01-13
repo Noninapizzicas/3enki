@@ -464,6 +464,12 @@
       "path": "/metrics",
       "handler": "handleGetMetrics",
       "description": "Module metrics"
+    },
+    {
+      "method": "GET",
+      "path": "/oauth/callback",
+      "handler": "handleOAuthCallback",
+      "description": "OAuth2 callback endpoint for Google authorization"
     }
   ],
 

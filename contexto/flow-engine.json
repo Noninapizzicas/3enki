@@ -280,6 +280,34 @@
         "acciones": ["extract"],
         "descripcion": "OCR local con Tesseract.js"
       },
+      "local.scribe-ocr": {
+        "acciones": ["extract"],
+        "descripcion": "OCR avanzado con scribe.js-ocr (WASM)",
+        "input": "input (imagen/PDF base64 o path), lang, oem, psm",
+        "output": "data.text, data.confidence, data.pages",
+        "nota": "Soporta PDFs directamente. No requiere Tesseract instalado"
+      },
+      "local.pdf-to-png": {
+        "acciones": ["convert"],
+        "descripcion": "Convertir PDF a imágenes PNG",
+        "input": "pdf (base64 o path), pages (array), scale, outputFolder, password",
+        "output": "data.images[], data.totalPages",
+        "nota": "Sin dependencias binarias. Ideal para preview y OCR de escaneados"
+      },
+      "local.pdf-parse": {
+        "acciones": ["extract"],
+        "descripcion": "Extraer texto de PDF (simple)",
+        "input": "pdf (base64 o path), maxPages (opcional)",
+        "output": "data.text, data.pages, data.info",
+        "nota": "Acceder via steps.ID.data.text"
+      },
+      "local.pdfjs": {
+        "acciones": ["extract", "render", "info"],
+        "descripcion": "PDF avanzado con pdfjs-dist",
+        "input": "pdf (base64 o path), pages (rango), includePositions, scale",
+        "output": "data.text, data.pages, data.pageTexts, data.metadata, data.image",
+        "nota": "extract: texto con posiciones, render: página a PNG, info: metadata"
+      },
       "local.pdf": {
         "acciones": ["create"],
         "descripcion": "Generacion de PDFs"

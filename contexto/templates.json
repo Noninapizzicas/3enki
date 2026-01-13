@@ -97,6 +97,52 @@
       "reference_implementation": "services/providers/ (ver google/, local/)"
     },
 
+    "local-provider": {
+      "status": "active",
+      "quality": "production",
+      "command": "npx plop local-provider",
+      "description": "Provider local en services/providers/local/ (como tesseract, pdf-parse)",
+      "output": [
+        "services/providers/local/{name}/index.js"
+      ],
+      "features": {
+        "lazy_loading": "Carga lazy de dependencias npm",
+        "input_validation": "Validación de parámetros (Lección #7)",
+        "base64_detection": "Detección de base64 por magic bytes (Lección #12)",
+        "consistent_response": "Respuesta consistente con data.* (Lección #14)",
+        "file_resolver": "Resolución de rutas: base64, path, @/"
+      },
+      "prompts": [
+        "name (kebab-case)",
+        "description",
+        "npmDependency (opcional)",
+        "functionName (ej: extract, convert)",
+        "functionDescription",
+        "mainParam (ej: image, pdf, text)",
+        "mainParamDesc",
+        "hasFileInput (boolean)",
+        "outputFieldsRaw (nombre:tipo:descripcion csv)"
+      ],
+      "event_pattern": {
+        "request": "local.{name}.{function}.request",
+        "response": "local.{name}.{function}.response"
+      },
+      "response_structure": {
+        "success": "boolean",
+        "data": "object - Acceder via steps.ID.data.X",
+        "error": "string - Solo si success=false"
+      },
+      "lessons_applied": [
+        "#7 - Validar parámetros al inicio",
+        "#12 - Detectar base64 por magic bytes antes de verificar path",
+        "#14 - Estructura de respuesta consistente con data.*"
+      ],
+      "reference_implementations": [
+        "services/providers/local/tesseract/index.js",
+        "services/providers/local/pdf-parse/index.js"
+      ]
+    },
+
     "svelte-component": {
       "status": "active",
       "quality": "production",

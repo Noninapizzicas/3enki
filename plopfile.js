@@ -39,6 +39,13 @@ module.exports = function (plop) {
     return text.split(/[-_]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   });
 
+  // Helper: camelCase (miModulo)
+  plop.setHelper('camelCase', (text) => {
+    if (!text) return '';
+    const pascal = text.split(/[-_]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+    return pascal.charAt(0).toLowerCase() + pascal.slice(1);
+  });
+
   // ==========================================
   // Generator: module
   // ==========================================
@@ -1359,6 +1366,143 @@ module.exports = function (plop) {
       });
 
       return actions;
+    }
+  });
+
+  // ==========================================
+  // Generator: local-provider
+  // ==========================================
+  plop.setGenerator('local-provider', {
+    description: 'Crear un provider local en services/providers/local/ (como tesseract, pdf-parse)',
+
+    prompts: [
+      {
+        type: 'input',
+        name: 'name',
+        message: '🔧 Nombre del provider (kebab-case, ej: image-resize, qr-code):',
+        validate: (value) => {
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+            return 'Usa kebab-case (ej: pdf-parse, image-resize)';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'description',
+        message: '📝 Descripción del servicio:',
+        default: (answers) => `Servicio local para ${answers.name}`
+      },
+      {
+        type: 'input',
+        name: 'npmDependency',
+        message: '📦 Dependencia npm (vacío si no requiere):',
+        default: ''
+      },
+      {
+        type: 'input',
+        name: 'functionName',
+        message: '⚡ Nombre de la función principal (ej: extract, convert, generate):',
+        default: 'process'
+      },
+      {
+        type: 'input',
+        name: 'functionDescription',
+        message: '📄 Descripción de la función:',
+        default: (answers) => `Procesar con ${answers.name}`
+      },
+      {
+        type: 'input',
+        name: 'mainParam',
+        message: '🔑 Parámetro principal (ej: image, pdf, text, url):',
+        default: 'input'
+      },
+      {
+        type: 'input',
+        name: 'mainParamDesc',
+        message: '📄 Descripción del parámetro principal:',
+        default: (answers) => `${answers.mainParam} en base64 o path al archivo`
+      },
+      {
+        type: 'confirm',
+        name: 'hasFileInput',
+        message: '📁 ¿El input puede ser archivo o base64?',
+        default: true
+      },
+      {
+        type: 'input',
+        name: 'outputFieldsRaw',
+        message: '📤 Campos de salida (nombre:tipo:descripcion, separados por coma):',
+        default: 'result:string:Resultado del procesamiento'
+      }
+    ],
+
+    actions: (data) => {
+      // Procesar campos de salida
+      data.outputFields = data.outputFieldsRaw
+        ? data.outputFieldsRaw.split(',').map(f => {
+            const parts = f.trim().split(':');
+            const type = parts[1] || 'string';
+            return {
+              name: parts[0],
+              type: type,
+              description: parts[2] || parts[0],
+              emptyValue: type === 'string' ? "''" : type === 'number' ? '0' : type === 'array' ? '[]' : '{}'
+            };
+          })
+        : [{ name: 'result', type: 'string', description: 'Resultado', emptyValue: "''" }];
+
+      // Construir función
+      data.functions = [{
+        name: data.functionName,
+        description: data.functionDescription,
+        mainParam: data.mainParam,
+        mainParamDesc: data.mainParamDesc,
+        extraParams: [],
+        outputFields: data.outputFields
+      }];
+
+      // Helper para camelCase
+      data.camelCase = (str) => str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+
+      const providerPath = `services/providers/local/${data.name}`;
+
+      return [
+        {
+          type: 'add',
+          path: `${providerPath}/index.js`,
+          templateFile: 'plop-templates/local-provider/index.js.hbs'
+        },
+        () => {
+          console.log('\n✅ Local Provider creado exitosamente');
+          console.log(`\n📁 Ubicación: ${providerPath}/`);
+          console.log('   └── index.js');
+          console.log(`\n⚡ Evento: local.${data.name}.${data.functionName}.request`);
+          console.log(`📤 Respuesta: local.${data.name}.${data.functionName}.response`);
+          console.log('\n🔧 Estructura de respuesta:');
+          console.log('   {');
+          console.log('     success: true,');
+          console.log('     data: {');
+          data.outputFields.forEach(f => {
+            console.log(`       ${f.name}: ${f.type},  // ${f.description}`);
+          });
+          console.log('     }');
+          console.log('   }');
+          console.log('\n📖 Acceso en flow-engine:');
+          console.log(`   steps.ID.data.${data.outputFields[0]?.name || 'result'}`);
+          if (data.npmDependency) {
+            console.log(`\n📦 Instalar dependencia:`);
+            console.log(`   npm install ${data.npmDependency}`);
+          }
+          console.log('\n🚀 Próximos pasos:');
+          console.log('   1. Implementar la lógica en index.js (buscar TODO)');
+          console.log('   2. Reiniciar Event-Core: npm start');
+          console.log('   3. Actualizar contexto/services.json (catálogo)');
+          console.log('   4. Actualizar contexto/flow-engine.json (providers_soportados)\n');
+          return '';
+        }
+      ];
     }
   });
 };

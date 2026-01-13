@@ -1022,7 +1022,9 @@ class CredentialManagerModule {
       { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
       { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
       { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
-      { id: 'OLLAMA', name: 'Ollama', icon: '🦙' }
+      { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
+      { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
+      { id: 'GMAIL', name: 'Gmail', icon: '📧' }
     ];
 
     // Niveles disponibles con metadata UI
@@ -1138,7 +1140,9 @@ class CredentialManagerModule {
       'OPENAI': '🤖',
       'DEEPSEEK': '🔮',
       'ANTHROPIC': '🧠',
-      'OLLAMA': '🦙'
+      'OLLAMA': '🦙',
+      'GOOGLE': '☁️',
+      'GMAIL': '📧'
     };
 
     return {

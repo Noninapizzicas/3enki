@@ -1,0 +1,255 @@
+/**
+ * Local {{pascalCase name}} Service
+ *
+ * {{description}}
+ * No requiere credenciales externas.
+ *
+ * Eventos:
+{{#each functions}}
+ * - local.{{../name}}.{{this.name}}.request -> local.{{../name}}.{{this.name}}.response
+{{/each}}
+ *
+ * LECCIONES APLICADAS (de contexto/lecciones-aprendidas-flow-engine.json):
+ * - Bug #7: Validar parametros al inicio (no undefined.method())
+ * - Bug #12: Detectar base64 por magic bytes ANTES de verificar si es path
+ * - Bug #14: Documentar estructura exacta de respuesta
+ *
+ * @example
+ * // Desde flow-engine:
+ * {
+ *   "type": "service",
+ *   "service": "local.{{name}}",
+ *   "action": "{{functions.0.name}}",
+ *   "{{functions.0.mainParam}}": "valor"
+ * }
+ *
+ * // Acceso al resultado:
+ * \{{ steps.mi-step.data.result }}
+ *
+ * @version 1.0.0
+ * @created {{currentDate}}
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+{{#if npmDependency}}
+// Lazy load {{npmDependency}} para evitar errores si no esta instalado
+let {{camelCase npmDependency}} = null;
+
+const load{{pascalCase npmDependency}} = () => {
+  if (!{{camelCase npmDependency}}) {
+    try {
+      {{camelCase npmDependency}} = require('{{npmDependency}}');
+    } catch (e) {
+      throw new Error('{{npmDependency}} not installed. Run: npm install {{npmDependency}}');
+    }
+  }
+  return {{camelCase npmDependency}};
+};
+{{/if}}
+
+module.exports = {
+  name: 'local.{{name}}',
+  description: '{{description}}',
+
+  functions: {
+{{#each functions}}
+    {{this.name}}: {
+      event: 'local.{{../name}}.{{this.name}}.request',
+      description: '{{this.description}}',
+      input: {
+        {{this.mainParam}}: {
+          type: 'string',
+          description: '{{this.mainParamDesc}}',
+          required: true
+        }{{#each this.extraParams}},
+        {{this.name}}: {
+          type: '{{this.type}}',
+          description: '{{this.description}}',
+          default: {{this.default}}
+        }{{/each}}
+      },
+      output: {
+        success: { type: 'boolean', description: 'Si la operacion fue exitosa' },
+        data: {
+          type: 'object',
+          description: 'Datos del resultado (NOTA: acceder via steps.ID.data.X)',
+          properties: {
+{{#each this.outputFields}}
+            {{this.name}}: { type: '{{this.type}}', description: '{{this.description}}' }{{#unless @last}},{{/unless}}
+{{/each}}
+          }
+        },
+        error: { type: 'string', description: 'Mensaje de error si success=false' }
+      }
+    }{{#unless @last}},{{/unless}}
+{{/each}}
+  },
+
+{{#if hasFileInput}}
+  /**
+   * Detectar si el string es base64 por magic bytes
+   *
+   * LECCION #12: Detectar magic bytes ANTES de verificar si es path
+   */
+  isBase64(str) {
+    if (!str || typeof str !== 'string') return false;
+    // Magic bytes comunes en base64
+    const magicPrefixes = [
+      '/9j/',     // JPEG
+      'iVBORw',   // PNG
+      'R0lGOD',   // GIF
+      'UklGR',    // WebP
+      'Qk',       // BMP
+      'SUkq',     // TIFF (little-endian)
+      'TU0A',     // TIFF (big-endian)
+      'JVBERi'    // PDF
+    ];
+    return magicPrefixes.some(p => str.startsWith(p));
+  },
+
+  /**
+   * Convertir base64 a Buffer
+   */
+  base64ToBuffer(base64) {
+    // Remover data URI prefix si existe
+    const base64Data = base64.replace(/^data:[^;]+;base64,/, '');
+    return Buffer.from(base64Data, 'base64');
+  },
+
+  /**
+   * Resolver input: base64, path, o @/ path
+   * @returns {Promise<{buffer: Buffer, error: string|null}>}
+   */
+  async resolveInput(input) {
+    // Data URI completo
+    if (input.startsWith('data:')) {
+      return { buffer: this.base64ToBuffer(input), error: null };
+    }
+
+    // Base64 puro (detectado por magic bytes)
+    if (this.isBase64(input)) {
+      return { buffer: this.base64ToBuffer(input), error: null };
+    }
+
+    // Path de archivo
+    if (input.startsWith('/') || input.startsWith('./') || input.startsWith('@/')) {
+      let filePath = input;
+
+      // Convertir @/ a ruta real (data/)
+      if (input.startsWith('@/')) {
+        filePath = input.replace('@/', './data/');
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return { buffer: null, error: `File not found: ${filePath}` };
+      }
+
+      const stats = fs.statSync(filePath);
+      if (!stats.isFile()) {
+        return { buffer: null, error: `Path is not a file: ${filePath}` };
+      }
+
+      return { buffer: fs.readFileSync(filePath), error: null };
+    }
+
+    // Intentar como base64
+    try {
+      return { buffer: Buffer.from(input, 'base64'), error: null };
+    } catch (e) {
+      return { buffer: null, error: 'Invalid input: not a valid file path or base64' };
+    }
+  },
+{{/if}}
+
+{{#each functions}}
+  /**
+   * {{this.description}}
+   *
+   * LECCION #7: Validar TODOS los parametros al inicio
+   * LECCION #14: Devolver estructura consistente
+   *              El resultado se accede como: steps.ID.data.X (NO steps.ID.X)
+   */
+  async {{this.name}}({ {{this.mainParam}}{{#each this.extraParams}}, {{this.name}} = {{this.default}}{{/each}} } = {}) {
+    // === VALIDACION DE ENTRADA (Leccion #7) ===
+    if (!{{this.mainParam}}) {
+      return {
+        success: false,
+        error: 'Parameter "{{this.mainParam}}" is required',
+        data: { {{#each this.outputFields}}{{this.name}}: {{this.emptyValue}}{{#unless @last}}, {{/unless}}{{/each}} }
+      };
+    }
+
+    if (typeof {{this.mainParam}} !== 'string') {
+      return {
+        success: false,
+        error: `Invalid {{this.mainParam}} parameter: expected string, got ${typeof {{this.mainParam}}}`,
+        data: { {{#each this.outputFields}}{{this.name}}: {{this.emptyValue}}{{#unless @last}}, {{/unless}}{{/each}} }
+      };
+    }
+
+    if ({{this.mainParam}}.trim() === '') {
+      return {
+        success: false,
+        error: 'Parameter "{{this.mainParam}}" cannot be empty',
+        data: { {{#each this.outputFields}}{{this.name}}: {{this.emptyValue}}{{#unless @last}}, {{/unless}}{{/each}} }
+      };
+    }
+
+{{#if ../npmDependency}}
+    // Cargar libreria
+    const lib = load{{pascalCase ../npmDependency}}();
+{{/if}}
+
+    try {
+{{#if ../hasFileInput}}
+      // Resolver input (base64 o path)
+      const { buffer, error: resolveError } = await this.resolveInput({{this.mainParam}});
+      if (resolveError) {
+        return {
+          success: false,
+          error: resolveError,
+          data: { {{#each this.outputFields}}{{this.name}}: {{this.emptyValue}}{{#unless @last}}, {{/unless}}{{/each}} }
+        };
+      }
+
+      // TODO: Implementar logica con buffer
+      // const result = await lib.process(buffer);
+{{else}}
+      // TODO: Implementar logica
+      // const result = await lib.process({{this.mainParam}});
+{{/if}}
+
+      // === RESPUESTA EXITOSA ===
+      // LECCION #14: Estructura clara y documentada
+      // Acceso: steps.ID.data.X
+      return {
+        success: true,
+        data: {
+{{#each this.outputFields}}
+          {{this.name}}: null // TODO: Asignar valor real
+{{#unless @last}},{{/unless}}
+{{/each}}
+        }
+      };
+
+    } catch (error) {
+      // === MANEJO DE ERRORES ===
+      // Devolver error descriptivo, NUNCA crashear
+      return {
+        success: false,
+        error: `{{../pascalCase name}} {{this.name}} failed: ${error.message}`,
+        data: { {{#each this.outputFields}}{{this.name}}: {{this.emptyValue}}{{#unless @last}}, {{/unless}}{{/each}} }
+      };
+    }
+  }{{#unless @last}},{{/unless}}
+
+{{/each}}
+  /**
+   * Cleanup - liberar recursos
+   */
+  async cleanup() {
+    // TODO: Liberar recursos si es necesario
+  }
+};

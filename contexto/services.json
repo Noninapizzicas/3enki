@@ -587,6 +587,111 @@
             "text": "string - Texto extraído",
             "confidence": "number - Confianza 0-100"
           }
+        },
+        "scribe-ocr.extract": {
+          "event": "local.scribe-ocr.extract.request",
+          "description": "OCR avanzado con scribe.js-ocr (Tesseract WASM)",
+          "input": {
+            "input": "base64 | path - Imagen o PDF a procesar",
+            "lang": "string - Código idioma: spa, eng, fra, deu (default: eng)",
+            "oem": "number - OCR Engine: 0=Legacy, 1=LSTM (default: 1)",
+            "psm": "number - Page Segmentation: 3=Auto, 6=Block (default: 6)"
+          },
+          "output": {
+            "data": {
+              "text": "string - Texto extraído",
+              "confidence": "number - Confianza 0-100",
+              "pages": "number - Páginas procesadas",
+              "lang": "string - Idioma usado"
+            }
+          },
+          "_VENTAJAS": "Soporta PDF directo, no requiere Tesseract instalado, usa WASM"
+        },
+        "pdf-to-png.convert": {
+          "event": "local.pdf-to-png.convert.request",
+          "description": "Convertir páginas de PDF a imágenes PNG",
+          "input": {
+            "pdf": "base64 | path - PDF a convertir",
+            "pages": "array - Páginas a convertir [1,2,3] (vacío = todas)",
+            "scale": "number - Escala viewport (2.0 = 200%, default: 2.0)",
+            "outputFolder": "string - Carpeta para guardar PNGs (opcional)",
+            "password": "string - Contraseña para PDFs encriptados (opcional)"
+          },
+          "output": {
+            "data": {
+              "images": "array - [{pageNumber, name, content (base64), path, width, height}]",
+              "totalPages": "number - Total de páginas convertidas"
+            }
+          },
+          "_VENTAJAS": "Sin dependencias binarias. Ideal para preview y OCR de PDFs escaneados"
+        },
+        "pdf-parse.extract": {
+          "event": "local.pdf-parse.extract.request",
+          "description": "Extraer texto de PDF usando pdf-parse (simple)",
+          "input": {
+            "pdf": "base64 | path - PDF a procesar (soporta @/ para rutas globales)",
+            "maxPages": "number - Maximo de paginas (0 = todas, opcional)"
+          },
+          "output": {
+            "success": "boolean",
+            "data": {
+              "text": "string - Texto extraido",
+              "pages": "number - Numero de paginas",
+              "info": "object - Metadata (title, author, etc.)",
+              "textLength": "number - Longitud del texto"
+            },
+            "error": "string - Solo si success=false"
+          },
+          "_NOTA_ACCESO": "Acceder resultado via steps.ID.data.text (NO steps.ID.text)"
+        },
+        "pdfjs.extract": {
+          "event": "local.pdfjs.extract.request",
+          "description": "Extraer texto de PDF con posicionamiento (avanzado)",
+          "input": {
+            "pdf": "base64 | path - PDF a procesar",
+            "pages": "string - Rango: 'all', '1-5', '1,3,5' (default: all)",
+            "includePositions": "boolean - Incluir x,y de cada texto (default: false)"
+          },
+          "output": {
+            "data": {
+              "text": "string - Texto completo",
+              "pages": "number - Total de paginas",
+              "pagesExtracted": "number - Paginas procesadas",
+              "pageTexts": "array - Texto por pagina",
+              "metadata": "object - Metadata del PDF"
+            }
+          }
+        },
+        "pdfjs.render": {
+          "event": "local.pdfjs.render.request",
+          "description": "Renderizar pagina de PDF a imagen PNG",
+          "input": {
+            "pdf": "base64 | path - PDF a procesar",
+            "page": "number - Numero de pagina (1-based, default: 1)",
+            "scale": "number - Escala (1.5 = 150%, default: 1.5)"
+          },
+          "output": {
+            "data": {
+              "image": "string - PNG en base64",
+              "width": "number - Ancho en pixels",
+              "height": "number - Alto en pixels"
+            }
+          },
+          "_NOTA": "Requiere npm install canvas"
+        },
+        "pdfjs.info": {
+          "event": "local.pdfjs.info.request",
+          "description": "Obtener metadata y outline del PDF",
+          "input": {
+            "pdf": "base64 | path - PDF a procesar"
+          },
+          "output": {
+            "data": {
+              "pages": "number - Numero de paginas",
+              "metadata": "object - Title, author, etc.",
+              "outline": "array - Indice/bookmarks"
+            }
+          }
         }
       }
     }
@@ -608,9 +713,13 @@
     "dependencies": {
       "for_local_services": {
         "pdf": "pdfkit",
+        "pdf-parse": "pdf-parse (services/providers/local/pdf-parse)",
+        "pdfjs": "pdfjs-dist (services/providers/local/pdfjs) + canvas (opcional para render)",
+        "pdf-to-png": "pdf-to-png-converter (services/providers/local/pdf-to-png)",
         "csv": "csv-parser, csv-writer",
         "xlsx": "exceljs",
-        "tesseract": "tesseract.js (services/providers/local/tesseract)"
+        "tesseract": "tesseract.js (services/providers/local/tesseract)",
+        "scribe-ocr": "scribe.js-ocr (services/providers/local/scribe-ocr) - OCR WASM"
       }
     }
   }

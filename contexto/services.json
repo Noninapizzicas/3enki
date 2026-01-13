@@ -587,6 +587,110 @@
             "text": "string - Texto extraído",
             "confidence": "number - Confianza 0-100"
           }
+        },
+        "gmail.send": {
+          "event": "gmail.send.request",
+          "description": "Enviar correo electrónico via Gmail API",
+          "input": {
+            "to": "string | array - Destinatario(s)",
+            "subject": "string - Asunto",
+            "body": "string - Contenido (texto o HTML)",
+            "html": "boolean - Si body es HTML (default: false)",
+            "cc": "array - Copia (opcional)",
+            "bcc": "array - Copia oculta (opcional)",
+            "attachments": "array - [{filename, content (base64), mimeType}]"
+          },
+          "output": {
+            "messageId": "string - ID del mensaje enviado",
+            "threadId": "string - ID del hilo"
+          }
+        },
+        "gmail.list": {
+          "event": "gmail.list.request",
+          "description": "Listar correos de Gmail",
+          "input": {
+            "maxResults": "number - Máximo de resultados (default: 10)",
+            "labelIds": "array - Labels (INBOX, SENT, DRAFT, etc.)",
+            "pageToken": "string - Token de paginación"
+          },
+          "output": {
+            "messages": "array - Lista de {id, threadId}",
+            "nextPageToken": "string - Token siguiente página",
+            "resultSizeEstimate": "number - Estimado de resultados"
+          }
+        },
+        "gmail.read": {
+          "event": "gmail.read.request",
+          "description": "Leer un correo específico de Gmail",
+          "input": {
+            "messageId": "string - ID del mensaje",
+            "format": "full | metadata | minimal (default: full)"
+          },
+          "output": {
+            "id": "string",
+            "threadId": "string",
+            "from": "string",
+            "to": "array",
+            "subject": "string",
+            "date": "string",
+            "body": "string - Contenido decodificado",
+            "attachments": "array - [{id, filename, mimeType, size}]"
+          }
+        },
+        "gmail.search": {
+          "event": "gmail.search.request",
+          "description": "Buscar correos con query estilo Gmail",
+          "input": {
+            "query": "string - Query (from:x subject:y has:attachment)",
+            "maxResults": "number (default: 10)",
+            "pageToken": "string"
+          },
+          "output": {
+            "messages": "array - [{id, threadId, snippet, from, subject, date}]",
+            "nextPageToken": "string"
+          }
+        },
+        "gmail.attachments.download": {
+          "event": "gmail.attachments.download.request",
+          "description": "Descargar adjunto de un correo Gmail",
+          "input": {
+            "messageId": "string - ID del mensaje",
+            "attachmentId": "string - ID del adjunto"
+          },
+          "output": {
+            "content": "base64 - Contenido del adjunto",
+            "size": "number - Bytes"
+          }
+        }
+      }
+    },
+
+    "gmail": {
+      "credential": "GMAIL_REFRESH_TOKEN",
+      "auth_type": "oauth2",
+      "required_env": ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"],
+      "description": "Gmail API - Envío y lectura de correos con OAuth2",
+      "note": "Implementado como servicio local por complejidad de OAuth2",
+      "functions": {
+        "send": {
+          "event": "gmail.send.request",
+          "description": "Enviar correo electrónico"
+        },
+        "list": {
+          "event": "gmail.list.request",
+          "description": "Listar correos"
+        },
+        "read": {
+          "event": "gmail.read.request",
+          "description": "Leer correo específico"
+        },
+        "search": {
+          "event": "gmail.search.request",
+          "description": "Buscar correos"
+        },
+        "attachments.download": {
+          "event": "gmail.attachments.download.request",
+          "description": "Descargar adjunto"
         }
       }
     }

@@ -14,8 +14,10 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const { EVENTS } = require('../../core/constants');
+const googleOAuth = require('./oauth/google');
 
 class CredentialManagerModule {
   constructor() {
@@ -25,6 +27,7 @@ class CredentialManagerModule {
     // State
     this.credentials = new Map(); // key -> value
     this.envFilePath = null;
+    this.oauthPending = new Map(); // stateId -> { provider, level, identifier, scopes, createdAt }
 
     // Dependencies (injected)
     this.logger = null;
@@ -75,9 +78,11 @@ class CredentialManagerModule {
       this.uiHandler.register('credential', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('credential', 'delete', this.handleUIDelete.bind(this));
       this.uiHandler.register('credential', 'test', this.handleUITest.bind(this));
+      this.uiHandler.register('credential', 'oauth.start', this.handleUIOAuthStart.bind(this));
+      this.uiHandler.register('credential', 'oauth.status', this.handleUIOAuthStatus.bind(this));
 
       this.logger.info('credential-manager.ui_handlers.registered', {
-        handlers: ['list', 'get', 'create', 'update', 'delete', 'test']
+        handlers: ['list', 'get', 'create', 'update', 'delete', 'test', 'oauth.start', 'oauth.status']
       });
     }
 
@@ -106,9 +111,12 @@ class CredentialManagerModule {
       this.uiHandler.unregister('credential', 'update');
       this.uiHandler.unregister('credential', 'delete');
       this.uiHandler.unregister('credential', 'test');
+      this.uiHandler.unregister('credential', 'oauth.start');
+      this.uiHandler.unregister('credential', 'oauth.status');
     }
 
     this.credentials.clear();
+    this.oauthPending.clear();
     this.logger.info('module.unloaded', { module: this.name });
   }
 
@@ -1296,6 +1304,393 @@ class CredentialManagerModule {
     }
 
     return { valid, provider, message };
+  }
+
+  // ==========================================
+  // OAuth2 UI Handlers
+  // ==========================================
+
+  /**
+   * UI Handler: Iniciar flujo OAuth2
+   * Request: mqttRequest('credential', 'oauth.start', { provider, level, identifier?, scopes? })
+   *
+   * Flujo:
+   * 1. UI llama oauth.start con provider/level/identifier
+   * 2. Backend genera URL de autorización y state único
+   * 3. UI abre popup/redirect a auth_url
+   * 4. Usuario autoriza en Google
+   * 5. Google callback a /oauth/callback con code
+   * 6. Backend intercambia code por tokens y guarda refresh_token
+   * 7. Backend emite credential.saved y actualiza estado
+   */
+  async handleUIOAuthStart(data, request) {
+    const { provider, level, identifier, scopes = ['gmail'] } = data;
+
+    if (!provider) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Provider is required' };
+    }
+    if (!level) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Level is required' };
+    }
+
+    // Validar level
+    const validation = this.validateLevel(level, identifier);
+    if (!validation.valid) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: validation.error };
+    }
+
+    // Solo soportamos Google/Gmail por ahora
+    const supportedProviders = ['GMAIL', 'GOOGLE'];
+    if (!supportedProviders.includes(provider.toUpperCase())) {
+      throw {
+        status: 400,
+        code: 'UNSUPPORTED_PROVIDER',
+        message: `OAuth not supported for provider: ${provider}. Supported: ${supportedProviders.join(', ')}`
+      };
+    }
+
+    // Buscar client_id y client_secret
+    // Prioridad: específico por identifier > global
+    let clientId = null;
+    let clientSecret = null;
+
+    if (identifier) {
+      // Buscar credenciales específicas
+      clientId = process.env[`GMAIL_CLIENT_ID_${identifier}`] || process.env.GMAIL_CLIENT_ID;
+      clientSecret = process.env[`GMAIL_CLIENT_SECRET_${identifier}`] || process.env.GMAIL_CLIENT_SECRET;
+    } else {
+      clientId = process.env.GMAIL_CLIENT_ID;
+      clientSecret = process.env.GMAIL_CLIENT_SECRET;
+    }
+
+    if (!clientId || !clientSecret) {
+      throw {
+        status: 400,
+        code: 'MISSING_OAUTH_CREDENTIALS',
+        message: 'OAuth client credentials not configured. Set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in environment.'
+      };
+    }
+
+    // Generar state único para validar callback
+    const stateId = crypto.randomBytes(16).toString('hex');
+
+    // Construir redirect URI
+    const baseUrl = process.env.BASE_URL || process.env.API_URL || 'http://localhost:3000';
+    const redirectUri = `${baseUrl}/modules/credential-manager/oauth/callback`;
+
+    // State incluye info para el callback
+    const state = {
+      id: stateId,
+      provider: provider.toUpperCase(),
+      level,
+      identifier: identifier || null
+    };
+
+    // Guardar pending OAuth
+    this.oauthPending.set(stateId, {
+      provider: provider.toUpperCase(),
+      level,
+      identifier: identifier || null,
+      scopes,
+      clientId,
+      clientSecret,
+      redirectUri,
+      createdAt: Date.now()
+    });
+
+    // Limpiar OAuth pendientes antiguos (> 10 minutos)
+    this.cleanupPendingOAuth();
+
+    // Generar URL de autorización
+    const authUrl = googleOAuth.getAuthUrl({
+      clientId,
+      redirectUri,
+      state,
+      scopes
+    });
+
+    this.logger.info('oauth.start.initiated', {
+      provider,
+      level,
+      identifier,
+      stateId,
+      scopes
+    });
+
+    return {
+      auth_url: authUrl,
+      state_id: stateId,
+      expires_in: 600, // 10 minutos
+      instructions: 'Open auth_url in browser. After authorization, credential will be saved automatically.'
+    };
+  }
+
+  /**
+   * UI Handler: Verificar estado de OAuth pendiente
+   * Request: mqttRequest('credential', 'oauth.status', { state_id })
+   */
+  async handleUIOAuthStatus(data, request) {
+    const { state_id } = data;
+
+    if (!state_id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'state_id is required' };
+    }
+
+    const pending = this.oauthPending.get(state_id);
+
+    if (!pending) {
+      // Si no está pendiente, puede ser que ya se completó
+      return {
+        state_id,
+        status: 'completed_or_expired',
+        message: 'OAuth flow completed or expired'
+      };
+    }
+
+    const elapsed = Date.now() - pending.createdAt;
+    const remainingMs = Math.max(0, 600000 - elapsed); // 10 minutos
+
+    return {
+      state_id,
+      status: 'pending',
+      provider: pending.provider,
+      level: pending.level,
+      identifier: pending.identifier,
+      remaining_seconds: Math.floor(remainingMs / 1000)
+    };
+  }
+
+  /**
+   * HTTP Handler: Callback de OAuth2
+   * Google redirige aquí después de la autorización
+   * GET /modules/credential-manager/oauth/callback?code=xxx&state=xxx
+   */
+  async handleOAuthCallback(req, context) {
+    const { code, state: stateParam, error } = req.query || {};
+
+    this.logger.info('oauth.callback.received', {
+      hasCode: !!code,
+      hasState: !!stateParam,
+      hasError: !!error,
+      correlation_id: context.correlationId
+    });
+
+    // Manejar error de Google
+    if (error) {
+      this.logger.error('oauth.callback.google_error', {
+        error,
+        correlation_id: context.correlationId
+      });
+
+      return {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        data: this.renderOAuthResultPage(false, `Error de autorización: ${error}`)
+      };
+    }
+
+    if (!code || !stateParam) {
+      return {
+        status: 400,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        data: this.renderOAuthResultPage(false, 'Parámetros incompletos: code y state requeridos')
+      };
+    }
+
+    // Parsear state
+    let state;
+    try {
+      state = googleOAuth.parseState(stateParam);
+    } catch {
+      return {
+        status: 400,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        data: this.renderOAuthResultPage(false, 'State inválido')
+      };
+    }
+
+    // Buscar pending OAuth
+    const pending = this.oauthPending.get(state.id);
+    if (!pending) {
+      return {
+        status: 400,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        data: this.renderOAuthResultPage(false, 'Sesión OAuth expirada o inválida. Por favor, inicia el proceso nuevamente.')
+      };
+    }
+
+    try {
+      // Intercambiar código por tokens
+      const tokens = await googleOAuth.exchangeCode({
+        code,
+        clientId: pending.clientId,
+        clientSecret: pending.clientSecret,
+        redirectUri: pending.redirectUri
+      });
+
+      if (!tokens.refresh_token) {
+        throw new Error('No se recibió refresh_token. El usuario puede necesitar revocar acceso y reautorizar.');
+      }
+
+      // Guardar refresh_token como credencial
+      const key = this.buildKey(pending.provider, pending.level, pending.identifier);
+      const isNew = !this.credentials.has(key);
+
+      this.credentials.set(key, tokens.refresh_token);
+      process.env[key] = tokens.refresh_token;
+      await this.saveEnvFile();
+
+      // Limpiar pending
+      this.oauthPending.delete(state.id);
+
+      // Metrics
+      if (isNew) {
+        this.metrics.increment('credential.saved.total');
+      } else {
+        this.metrics.increment('credential.updated.total');
+      }
+      this.updateCredentialMetrics();
+
+      // Publicar evento
+      await this.eventBus.publish(EVENTS.CREDENTIAL.SAVED, {
+        key,
+        provider: pending.provider,
+        level: pending.level,
+        identifier: pending.identifier,
+        created: isNew,
+        updated: !isNew,
+        oauth: true
+      }, { correlationId: context.correlationId });
+
+      // Actualizar estado UI
+      await this.publishState(context.correlationId);
+
+      this.logger.info('oauth.callback.success', {
+        key,
+        provider: pending.provider,
+        level: pending.level,
+        created: isNew,
+        correlation_id: context.correlationId
+      });
+
+      return {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        data: this.renderOAuthResultPage(true, `Credencial ${isNew ? 'creada' : 'actualizada'} correctamente`, {
+          provider: pending.provider,
+          level: pending.level,
+          identifier: pending.identifier
+        })
+      };
+
+    } catch (error) {
+      this.logger.error('oauth.callback.error', {
+        error: error.message,
+        correlation_id: context.correlationId
+      });
+
+      this.metrics.increment('credential.errors.total');
+
+      return {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        data: this.renderOAuthResultPage(false, `Error al procesar autorización: ${error.message}`)
+      };
+    }
+  }
+
+  /**
+   * Renderiza página HTML de resultado OAuth
+   */
+  renderOAuthResultPage(success, message, details = null) {
+    const color = success ? '#16a34a' : '#dc2626';
+    const icon = success ? '✓' : '✗';
+    const title = success ? 'Autorización Exitosa' : 'Error de Autorización';
+
+    let detailsHtml = '';
+    if (details) {
+      detailsHtml = `
+        <div style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px; text-align: left;">
+          <p><strong>Provider:</strong> ${details.provider}</p>
+          <p><strong>Nivel:</strong> ${details.level}</p>
+          ${details.identifier ? `<p><strong>Identificador:</strong> ${details.identifier}</p>` : ''}
+        </div>
+      `;
+    }
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>${title} - Event-Core</title>
+          <style>
+            body {
+              font-family: system-ui, -apple-system, sans-serif;
+              padding: 40px;
+              text-align: center;
+              background: #f9fafb;
+              margin: 0;
+            }
+            .container {
+              max-width: 500px;
+              margin: 0 auto;
+              background: white;
+              padding: 40px;
+              border-radius: 12px;
+              box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+            h1 { color: ${color}; margin-bottom: 10px; }
+            .icon { font-size: 64px; margin-bottom: 20px; }
+            p { color: #374151; line-height: 1.6; }
+            .close-hint {
+              margin-top: 30px;
+              color: #6b7280;
+              font-size: 14px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="icon">${icon}</div>
+            <h1>${title}</h1>
+            <p>${message}</p>
+            ${detailsHtml}
+            <p class="close-hint">Puedes cerrar esta ventana y volver a la aplicación.</p>
+          </div>
+          <script>
+            // Notificar a la ventana padre si existe
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'oauth-callback',
+                success: ${success},
+                message: '${message.replace(/'/g, "\\'")}'
+              }, '*');
+            }
+          </script>
+        </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Limpia OAuth pendientes expirados (> 10 minutos)
+   */
+  cleanupPendingOAuth() {
+    const maxAge = 10 * 60 * 1000; // 10 minutos
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const [stateId, pending] of this.oauthPending.entries()) {
+      if (now - pending.createdAt > maxAge) {
+        this.oauthPending.delete(stateId);
+        cleaned++;
+      }
+    }
+
+    if (cleaned > 0) {
+      this.logger.info('oauth.pending.cleanup', { cleaned });
+    }
   }
 
   // ==========================================

@@ -1278,6 +1278,11 @@ class CredentialManagerModule {
           message = 'Ollama es local - no requiere validación';
           break;
 
+        case 'GMAIL':
+          valid = await this.testGmail(api_key);
+          message = valid ? 'Refresh token válido' : 'Refresh token inválido o credenciales incompletas';
+          break;
+
         default:
           valid = api_key && api_key.length > 10;
           message = 'Provider no reconocido - validación básica';
@@ -1421,6 +1426,57 @@ class CredentialManagerModule {
       // 200 = válida, 401 = inválida, otros pueden ser rate limit pero key válida
       return response.status !== 401;
     } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Test Gmail OAuth2 credentials
+   * Requires GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in environment
+   * The api_key parameter is the refresh_token
+   */
+  async testGmail(refreshToken) {
+    try {
+      const clientId = process.env.GMAIL_CLIENT_ID;
+      const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+
+      if (!clientId || !clientSecret) {
+        this.logger.warn('gmail.test.missing_credentials', {
+          hasClientId: !!clientId,
+          hasClientSecret: !!clientSecret
+        });
+        // Si no hay client_id/secret, solo validamos formato del refresh token
+        return refreshToken && refreshToken.startsWith('1//');
+      }
+
+      // Intentar obtener un access token con el refresh token
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token'
+        }).toString()
+      });
+
+      const data = await response.json();
+
+      if (data.access_token) {
+        this.logger.info('gmail.test.success', { hasAccessToken: true });
+        return true;
+      }
+
+      this.logger.warn('gmail.test.failed', {
+        error: data.error,
+        error_description: data.error_description
+      });
+      return false;
+    } catch (error) {
+      this.logger.error('gmail.test.error', { error: error.message });
       return false;
     }
   }

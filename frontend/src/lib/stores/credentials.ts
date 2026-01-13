@@ -104,6 +104,7 @@ const DEFAULT_PROVIDERS: ProviderOption[] = [
   { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
   { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
   { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
+  { id: 'GMAIL', name: 'Gmail', icon: '📧' },
   { id: 'TELEGRAM', name: 'Telegram', icon: '📱' }
 ];
 

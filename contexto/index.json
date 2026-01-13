@@ -12,7 +12,8 @@
       "generate_ui": "Read ui-generator.json",
       "external_services": "Read services.json (OCR, TTS, PDF, CSV, APIs externas)",
       "bot_agent_flow": "Read bot-agent-architecture.json",
-      "flow_automation": "Read flow-engine.json (flujos, orquestacion, triggers, steps)"
+      "flow_automation": "Read flow-engine.json (flujos, orquestacion, triggers, steps)",
+      "credentials_questions": "Read credentials.json (API keys, OAuth2, niveles, cascada)"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -83,6 +84,11 @@
       "file": "flow-engine.json",
       "purpose": "Motor de automatizacion de flujos de trabajo basado en eventos",
       "when": "Crear flujos de automatizacion, orquestar providers, transformar datos, triggers de eventos"
+    },
+    {
+      "file": "credentials.json",
+      "purpose": "Sistema de credenciales multi-nivel con cascada de resolucion",
+      "when": "Gestionar API keys, OAuth2 (Gmail), niveles GLOBAL/PROJECT/CLIENT/CUSTOM, testear credenciales"
     }
   ],
 

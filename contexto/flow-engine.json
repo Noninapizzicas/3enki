@@ -319,6 +319,11 @@
       "local.xlsx": {
         "acciones": ["create", "parse"],
         "descripcion": "Manipulacion de archivos Excel"
+      },
+      "gmail": {
+        "acciones": ["send", "list", "read", "search", "attachments.download"],
+        "descripcion": "Gmail API - Envio y lectura de correos",
+        "credenciales": ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"]
       }
     },
     "externos": {

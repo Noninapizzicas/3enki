@@ -33,8 +33,8 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA"],
-            "description": "Filtrar por proveedor de IA (opcional)"
+            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA", "GMAIL"],
+            "description": "Filtrar por proveedor (opcional)"
           }
         },
         "required": []
@@ -182,7 +182,8 @@
                     "OPENAI": "primary",
                     "DEEPSEEK": "info",
                     "ANTHROPIC": "success",
-                    "OLLAMA": "warning"
+                    "OLLAMA": "warning",
+                    "GMAIL": "danger"
                   }
                 },
                 {
@@ -249,7 +250,7 @@
             "id": "providers_panel",
             "widget": "card",
             "config": {
-              "title": "🤖 Proveedores de IA",
+              "title": "🔌 Proveedores",
               "content": {
                 "type": "info",
                 "items": [
@@ -272,6 +273,11 @@
                     "label": "Ollama",
                     "value": "Local Models",
                     "icon": "🦙"
+                  },
+                  {
+                    "label": "Gmail",
+                    "value": "OAuth2 (3 keys)",
+                    "icon": "📧"
                   }
                 ]
               }
@@ -298,7 +304,8 @@
                 { "value": "OPENAI", "label": "🤖 OpenAI" },
                 { "value": "DEEPSEEK", "label": "🔮 DeepSeek" },
                 { "value": "ANTHROPIC", "label": "🧠 Anthropic" },
-                { "value": "OLLAMA", "label": "🦙 Ollama" }
+                { "value": "OLLAMA", "label": "🦙 Ollama" },
+                { "value": "GMAIL", "label": "📧 Gmail" }
               ]
             },
             {
@@ -361,7 +368,7 @@
     "provider": {
       "type": "enum",
       "label": "Provider",
-      "enum": ["OPENAI", "ANTHROPIC", "DEEPSEEK", "OLLAMA", "CUSTOM"],
+      "enum": ["OPENAI", "ANTHROPIC", "DEEPSEEK", "OLLAMA", "GMAIL", "CUSTOM"],
       "required": true
     },
     "level": {

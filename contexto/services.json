@@ -598,7 +598,8 @@
             "html": "boolean - Si body es HTML (default: false)",
             "cc": "array - Copia (opcional)",
             "bcc": "array - Copia oculta (opcional)",
-            "attachments": "array - [{filename, content (base64), mimeType}]"
+            "attachments": "array - [{filename, content (base64), mimeType}]",
+            "account": "string - Cuenta de Google a usar (opcional, usa default si no especifica)"
           },
           "output": {
             "messageId": "string - ID del mensaje enviado",
@@ -611,7 +612,8 @@
           "input": {
             "maxResults": "number - Máximo de resultados (default: 10)",
             "labelIds": "array - Labels (INBOX, SENT, DRAFT, etc.)",
-            "pageToken": "string - Token de paginación"
+            "pageToken": "string - Token de paginación",
+            "account": "string - Cuenta de Google a usar (opcional)"
           },
           "output": {
             "messages": "array - Lista de {id, threadId}",
@@ -624,7 +626,8 @@
           "description": "Leer un correo específico de Gmail",
           "input": {
             "messageId": "string - ID del mensaje",
-            "format": "full | metadata | minimal (default: full)"
+            "format": "full | metadata | minimal (default: full)",
+            "account": "string - Cuenta de Google a usar (opcional)"
           },
           "output": {
             "id": "string",
@@ -643,7 +646,8 @@
           "input": {
             "query": "string - Query (from:x subject:y has:attachment)",
             "maxResults": "number (default: 10)",
-            "pageToken": "string"
+            "pageToken": "string",
+            "account": "string - Cuenta de Google a usar (opcional)"
           },
           "output": {
             "messages": "array - [{id, threadId, snippet, from, subject, date}]",
@@ -655,7 +659,8 @@
           "description": "Descargar adjunto de un correo Gmail",
           "input": {
             "messageId": "string - ID del mensaje",
-            "attachmentId": "string - ID del adjunto"
+            "attachmentId": "string - ID del adjunto",
+            "account": "string - Cuenta de Google a usar (opcional)"
           },
           "output": {
             "content": "base64 - Contenido del adjunto",
@@ -668,29 +673,55 @@
     "gmail": {
       "credential": "GMAIL_REFRESH_TOKEN",
       "auth_type": "oauth2",
-      "required_env": ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"],
-      "description": "Gmail API - Envío y lectura de correos con OAuth2",
-      "note": "Implementado como servicio local por complejidad de OAuth2",
+      "description": "Gmail API - Envío y lectura de correos con OAuth2 Multi-Cuenta",
+      "note": "Implementado como servicio local por complejidad de OAuth2. Soporta múltiples cuentas de Google.",
+      "multi_account": {
+        "description": "Soporte para múltiples cuentas de Google, cada una con sus propias credenciales OAuth2",
+        "credential_resolution": [
+          "1. JSON agrupado: GMAIL_OAUTH_CUSTOM_{account} = {client_id, client_secret, refresh_token}",
+          "2. Individual por cuenta: GMAIL_CLIENT_ID_{account}, GMAIL_CLIENT_SECRET_{account}, GMAIL_REFRESH_TOKEN_{account}",
+          "3. Fallback global: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN"
+        ],
+        "usage_example": {
+          "single_account": "await gmail.send({ to: 'user@example.com', subject: 'Test', body: 'Hello' })",
+          "specific_account": "await gmail.send({ to: 'user@example.com', subject: 'Test', body: 'Hello', account: 'trabajo' })"
+        },
+        "env_examples": {
+          "json_grouped": "GMAIL_OAUTH_CUSTOM_trabajo={\"client_id\":\"xxx\",\"client_secret\":\"yyy\",\"refresh_token\":\"zzz\"}",
+          "individual": "GMAIL_CLIENT_ID_trabajo=xxx\nGMAIL_CLIENT_SECRET_trabajo=yyy\nGMAIL_REFRESH_TOKEN_trabajo=zzz",
+          "global_fallback": "GMAIL_CLIENT_ID=xxx\nGMAIL_CLIENT_SECRET=yyy\nGMAIL_REFRESH_TOKEN=zzz"
+        }
+      },
+      "required_env": {
+        "option_1_json": ["GMAIL_OAUTH_CUSTOM_{account}"],
+        "option_2_individual": ["GMAIL_CLIENT_ID_{account}", "GMAIL_CLIENT_SECRET_{account}", "GMAIL_REFRESH_TOKEN_{account}"],
+        "option_3_global": ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"]
+      },
       "functions": {
         "send": {
           "event": "gmail.send.request",
-          "description": "Enviar correo electrónico"
+          "description": "Enviar correo electrónico",
+          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
         },
         "list": {
           "event": "gmail.list.request",
-          "description": "Listar correos"
+          "description": "Listar correos",
+          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
         },
         "read": {
           "event": "gmail.read.request",
-          "description": "Leer correo específico"
+          "description": "Leer correo específico",
+          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
         },
         "search": {
           "event": "gmail.search.request",
-          "description": "Buscar correos"
+          "description": "Buscar correos",
+          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
         },
         "attachments.download": {
           "event": "gmail.attachments.download.request",
-          "description": "Descargar adjunto"
+          "description": "Descargar adjunto",
+          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
         }
       }
     }

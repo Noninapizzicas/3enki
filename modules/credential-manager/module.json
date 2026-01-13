@@ -33,7 +33,7 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA", "GMAIL"],
+            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA", "GOOGLE", "GMAIL"],
             "description": "Filtrar por proveedor (opcional)"
           }
         },
@@ -305,7 +305,8 @@
                 { "value": "DEEPSEEK", "label": "🔮 DeepSeek" },
                 { "value": "ANTHROPIC", "label": "🧠 Anthropic" },
                 { "value": "OLLAMA", "label": "🦙 Ollama" },
-                { "value": "GMAIL", "label": "📧 Gmail" }
+                { "value": "GOOGLE", "label": "☁️ Google Cloud" },
+                { "value": "GMAIL", "label": "📧 Gmail (OAuth2)" }
               ]
             },
             {
@@ -337,6 +338,74 @@
           ],
           "onSuccess": {
             "message": "Credencial guardada correctamente",
+            "redirect": "/ui/modules/credential-manager"
+          }
+        }
+      },
+
+      "oauth": {
+        "type": "form",
+        "permissions": ["admin"],
+        "config": {
+          "title": "Autorizar OAuth2 (Gmail/Google)",
+          "description": "Autoriza acceso a servicios de Google que requieren OAuth2 (Gmail, Calendar, Drive)",
+          "mqttAction": "credential.oauth.start",
+          "validation": true,
+          "fields": [
+            {
+              "name": "provider",
+              "label": "Servicio",
+              "type": "select",
+              "required": true,
+              "options": [
+                { "value": "GMAIL", "label": "📧 Gmail" },
+                { "value": "GOOGLE", "label": "☁️ Google (Calendar, Drive, Sheets)" }
+              ]
+            },
+            {
+              "name": "level",
+              "label": "Nivel",
+              "type": "select",
+              "required": true,
+              "options": [
+                { "value": "GLOBAL", "label": "🌐 GLOBAL" },
+                { "value": "PROJECT", "label": "📁 PROJECT" },
+                { "value": "CLIENT", "label": "👤 CLIENT" },
+                { "value": "CUSTOM", "label": "⚙️ CUSTOM" }
+              ]
+            },
+            {
+              "name": "identifier",
+              "label": "Identificador",
+              "type": "text",
+              "required": false,
+              "placeholder": "empresa-xyz, proyecto-1",
+              "hint": "Requerido para PROJECT, CLIENT y CUSTOM"
+            },
+            {
+              "name": "scopes",
+              "label": "Permisos",
+              "type": "multiselect",
+              "required": false,
+              "default": ["gmail"],
+              "options": [
+                { "value": "gmail", "label": "📧 Gmail (enviar, leer, modificar)" },
+                { "value": "drive", "label": "📁 Drive (archivos)" },
+                { "value": "calendar", "label": "📅 Calendar" },
+                { "value": "sheets", "label": "📊 Sheets" }
+              ]
+            }
+          ],
+          "submitButton": {
+            "label": "Iniciar Autorización",
+            "icon": "🔐"
+          },
+          "onSubmit": {
+            "type": "oauth_popup",
+            "description": "Abre popup con URL de autorización de Google"
+          },
+          "onSuccess": {
+            "message": "Autorización completada. La credencial ha sido guardada.",
             "redirect": "/ui/modules/credential-manager"
           }
         }

@@ -823,19 +823,40 @@ class ModuleLoader {
       return input;
     }
 
-    // Convert simple key:type format to full schema
+    // Convert provider format to JSON Schema
     const properties = {};
     const required = [];
 
     for (const [key, value] of Object.entries(input)) {
       if (typeof value === 'string') {
-        properties[key] = { type: value };
+        // Simple type string
+        properties[key] = { type: this.normalizeSchemaType(value) };
       } else if (typeof value === 'object') {
-        properties[key] = value;
-      }
-      // Mark as required if not optional
-      if (value?.required !== false) {
-        required.push(key);
+        // Object with type, description, etc.
+        const prop = {};
+
+        // Normalize type (convert "string|array" to ["string", "array"])
+        if (value.type) {
+          prop.type = this.normalizeSchemaType(value.type);
+        }
+
+        // Copy valid JSON Schema properties
+        if (value.description) prop.description = value.description;
+        if (value.enum) prop.enum = value.enum;
+        if (value.default !== undefined) prop.default = value.default;
+        if (value.items) prop.items = value.items;
+        if (value.minLength !== undefined) prop.minLength = value.minLength;
+        if (value.maxLength !== undefined) prop.maxLength = value.maxLength;
+        if (value.minimum !== undefined) prop.minimum = value.minimum;
+        if (value.maximum !== undefined) prop.maximum = value.maximum;
+        if (value.pattern) prop.pattern = value.pattern;
+
+        properties[key] = prop;
+
+        // Check if required (explicitly true or not set to false)
+        if (value.required === true) {
+          required.push(key);
+        }
       }
     }
 
@@ -844,6 +865,24 @@ class ModuleLoader {
       properties,
       required
     };
+  }
+
+  /**
+   * Normalize type notation to valid JSON Schema
+   * Converts "string|array" to ["string", "array"]
+   *
+   * @param {string} type - Type notation
+   * @returns {string|Array} JSON Schema type
+   */
+  normalizeSchemaType(type) {
+    if (typeof type !== 'string') return type;
+
+    // Handle pipe notation: "string|array" -> ["string", "array"]
+    if (type.includes('|')) {
+      return type.split('|').map(t => t.trim());
+    }
+
+    return type;
   }
 
   /**

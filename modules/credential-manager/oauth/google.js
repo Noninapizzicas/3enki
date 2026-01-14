@@ -24,6 +24,10 @@ const SCOPES = {
   sheets: [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/spreadsheets.readonly'
+  ],
+  // Google Cloud Platform - Document AI, Vision, Speech, etc.
+  cloud: [
+    'https://www.googleapis.com/auth/cloud-platform'
   ]
 };
 

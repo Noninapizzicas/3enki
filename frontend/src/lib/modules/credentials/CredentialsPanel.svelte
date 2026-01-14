@@ -76,8 +76,18 @@
   let oauthAuthorizeForm = {
     selectedAccount: '',
     level: 'GLOBAL',
-    identifier: ''
+    identifier: '',
+    scopes: ['gmail'] as string[]
   };
+
+  // Available OAuth scopes
+  const availableScopes = [
+    { id: 'gmail', name: 'Gmail', icon: '📧', description: 'Enviar y leer correos' },
+    { id: 'cloud', name: 'Cloud Platform', icon: '☁️', description: 'Document AI, Vision, Speech, etc.' },
+    { id: 'drive', name: 'Drive', icon: '📁', description: 'Acceso a archivos' },
+    { id: 'calendar', name: 'Calendar', icon: '📅', description: 'Eventos y calendarios' },
+    { id: 'sheets', name: 'Sheets', icon: '📊', description: 'Hojas de cálculo' }
+  ];
 
   // UI state
   let showPassword = false;
@@ -405,6 +415,12 @@
       return;
     }
 
+    // Validar que hay al menos un scope seleccionado
+    if (oauthAuthorizeForm.scopes.length === 0) {
+      error = 'Selecciona al menos un servicio';
+      return;
+    }
+
     authorizing = true;
     error = null;
 
@@ -414,18 +430,26 @@
         level,
         needsIdentifier ? oauthAuthorizeForm.identifier : null,
         oauthAuthorizeForm.selectedAccount,
-        ['gmail']
+        oauthAuthorizeForm.scopes
       );
 
       // Abrir URL de autorización en nueva ventana
       window.open(result.auth_url, 'oauth-popup', 'width=600,height=700');
 
       // Resetear formulario
-      oauthAuthorizeForm = { selectedAccount: '', level: 'GLOBAL', identifier: '' };
+      oauthAuthorizeForm = { selectedAccount: '', level: 'GLOBAL', identifier: '', scopes: ['gmail'] };
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error al iniciar autorización OAuth';
     } finally {
       authorizing = false;
+    }
+  }
+
+  function toggleScope(scopeId: string) {
+    if (oauthAuthorizeForm.scopes.includes(scopeId)) {
+      oauthAuthorizeForm.scopes = oauthAuthorizeForm.scopes.filter(s => s !== scopeId);
+    } else {
+      oauthAuthorizeForm.scopes = [...oauthAuthorizeForm.scopes, scopeId];
     }
   }
 
@@ -1180,10 +1204,10 @@
           </div>
         </div>
 
-        <!-- Autorizar cuenta Gmail -->
+        <!-- Autorizar cuenta Google -->
         {#if $oauthConfigs.length > 0}
           <div class="oauth-authorize-section">
-            <div class="section-title">🔐 Autorizar Acceso a Gmail</div>
+            <div class="section-title">🔐 Autorizar Acceso a Google</div>
 
             <div class="form">
               <div class="field">
@@ -1199,6 +1223,26 @@
                   {/each}
                 </select>
               </div>
+
+              <!-- Selector de servicios/scopes -->
+              <fieldset class="field">
+                <legend class="label">Servicios a autorizar</legend>
+                <div class="scopes-grid">
+                  {#each availableScopes as scope}
+                    <button
+                      type="button"
+                      class="scope-btn"
+                      class:active={oauthAuthorizeForm.scopes.includes(scope.id)}
+                      on:click={() => toggleScope(scope.id)}
+                      title={scope.description}
+                    >
+                      <span class="scope-icon">{scope.icon}</span>
+                      <span class="scope-name">{scope.name}</span>
+                    </button>
+                  {/each}
+                </div>
+                <span class="field-hint">Selecciona los servicios que necesitas. Cloud Platform incluye Document AI, Vision, Speech, etc.</span>
+              </fieldset>
 
               <div class="field">
                 <label class="label" for="oauth-level">Nivel de Credencial</label>
@@ -1233,7 +1277,7 @@
                   on:click={handleStartOAuth}
                   disabled={!oauthAuthorizeForm.selectedAccount || authorizing}
                 >
-                  {authorizing ? '⏳...' : '🔐 Autorizar Gmail'}
+                  {authorizing ? '⏳...' : '🔐 Autorizar Google'}
                 </button>
               </div>
             </div>
@@ -1938,5 +1982,47 @@
     font-size: 0.65rem;
     color: var(--_text-muted);
     margin-top: 0.25rem;
+  }
+
+  /* Scopes Grid */
+  .scopes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.35rem;
+  }
+
+  .scope-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.4rem 0.25rem;
+    background: var(--_bg-surface);
+    border: 2px solid var(--_border);
+    border-radius: var(--_radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--_text-muted);
+  }
+
+  .scope-btn:hover {
+    border-color: var(--_primary);
+    color: var(--_text);
+  }
+
+  .scope-btn.active {
+    border-color: var(--_primary);
+    background: rgb(59 130 246 / 0.15);
+    color: var(--_text);
+  }
+
+  .scope-icon {
+    font-size: 1rem;
+  }
+
+  .scope-name {
+    font-size: 0.6rem;
+    text-align: center;
+    line-height: 1.2;
   }
 </style>

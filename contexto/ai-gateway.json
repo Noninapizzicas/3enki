@@ -1,6 +1,7 @@
 {
-  "_VERSION": "1.0.0",
+  "_VERSION": "1.1.0",
   "_CREATED": "2026-01-10",
+  "_UPDATED": "2026-01-14",
   "_DESCRIPTION": "AI Gateway - Multi-provider LLM client",
 
   "_AI_INSTRUCTIONS": {
@@ -79,6 +80,67 @@
     ]
   },
 
+  "tools_architecture": {
+    "_DESCRIPTION": "Sistema unificado de tools para AI",
+    "_UPDATED": "2026-01-14",
+    "_STATUS": "IMPLEMENTED",
+
+    "current_problem": {
+      "description": "Hay DOS sistemas de tools desconectados",
+      "system_1": {
+        "name": "ModuleLoader.toolsRegistry",
+        "location": "core/modules/loader.js",
+        "source": "Tools definidos en module.json de cada módulo",
+        "used_by": "ai-gateway.getAvailableTools() → moduleLoader.getToolsForAI()",
+        "examples": ["echo.ping", "project.list", "agent.execute"]
+      },
+      "system_2": {
+        "name": "ai-agent-framework/ToolManager",
+        "location": "modules/ai-agent-framework/tool-manager.js",
+        "source": "Tools built-in + providers de services/providers/",
+        "used_by": "Solo agentes de ai-agent-framework",
+        "examples": ["gmail_send", "gmail_list", "tesseract_extract", "pdf_create"]
+      },
+      "consequence": "El chat NO tiene acceso a Gmail, OCR, PDF, etc. porque usa sistema_1"
+    },
+
+    "proposed_solution": {
+      "strategy": "Unificar en ModuleLoader.toolsRegistry",
+      "reason": "ModuleLoader ya se pasa a todos los módulos y ai-gateway lo usa",
+      "changes": {
+        "1_moduleLoader": {
+          "file": "core/modules/loader.js",
+          "add_method": "registerProviderTools(providerRegistry)",
+          "description": "Registra funciones de providers como tools en toolsRegistry"
+        },
+        "2_index_js": {
+          "file": "index.js",
+          "add_call": "moduleLoader.registerProviderTools(providerRegistry)",
+          "when": "Después de cargar providers y antes de cargar módulos"
+        }
+      },
+      "result": "getToolsForAI() devuelve tools de módulos + providers"
+    },
+
+    "unified_flow": [
+      "1. index.js inicia",
+      "2. ProviderLoader.loadAll() → carga providers de services/providers/",
+      "3. ProviderRegistry tiene providers con sus funciones",
+      "4. ModuleLoader.registerProviderTools(providerRegistry) ← NUEVO",
+      "5. toolsRegistry tiene tools de providers (gmail_send, etc.)",
+      "6. ModuleLoader.loadAll() → carga módulos",
+      "7. toolsRegistry tiene tools de módulos (de module.json)",
+      "8. ai-gateway.getAvailableTools() → moduleLoader.getToolsForAI()",
+      "9. Chat tiene acceso a TODOS los tools (módulos + providers)"
+    ],
+
+    "tool_naming_convention": {
+      "module_tools": "{module}.{action} → ej: project.list, agent.execute",
+      "provider_tools": "{provider}_{function} → ej: gmail_send, tesseract_extract",
+      "note": "DeepSeek requiere solo [a-zA-Z0-9_-], se transforma automáticamente"
+    }
+  },
+
   "service_provider_auto_registration": {
     "_DESCRIPTION": "Los service providers en services/providers/ se auto-registran como AI tools",
     "_UPDATED": "2026-01-14",
@@ -87,8 +149,8 @@
       "1_discovery": "ProviderLoader escanea services/providers/ al iniciar",
       "2_registration": "Registra providers en ProviderRegistry con sus funciones",
       "3_injection": "providerRegistry se pasa a módulos via coreContext",
-      "4_tool_creation": "ai-agent-framework.ToolManager llama registerProviderTools()",
-      "5_available": "Las funciones del provider están disponibles como AI tools"
+      "4_tool_creation": "ModuleLoader.registerProviderTools() registra en toolsRegistry",
+      "5_available": "getToolsForAI() devuelve tools de módulos + providers"
     },
 
     "provider_structure": {
@@ -128,7 +190,7 @@
         "Verificar que index.js exporta 'functions' con definiciones completas",
         "Verificar que cada función tiene 'event', 'description', 'input'",
         "Verificar que el provider está en services/providers/local/{nombre}/",
-        "Verificar logs: tool-manager.provider-tool.registered"
+        "Verificar logs: module-loader.provider-tools.registered"
       ]
     }
   }

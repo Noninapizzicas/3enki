@@ -700,6 +700,196 @@ class ModuleLoader {
   }
 
   /**
+   * Register provider tools for AI use
+   *
+   * This method unifies the two tool systems by registering service providers
+   * (from services/providers/) into the toolsRegistry alongside module tools.
+   *
+   * @param {Object} providerRegistry - ProviderRegistry instance
+   */
+  registerProviderTools(providerRegistry) {
+    if (!providerRegistry) {
+      if (this.logger) {
+        this.logger.warn('module-loader.provider-registry.not-available');
+      }
+      return;
+    }
+
+    const stats = providerRegistry.getStats();
+    if (this.logger) {
+      this.logger.info('module-loader.registering-provider-tools', {
+        providers: stats.total_providers,
+        functions: stats.total_functions
+      });
+    }
+
+    // Get all providers info from registry (returns an Array)
+    const providersInfo = providerRegistry.getAll();
+    let registeredCount = 0;
+
+    for (const providerInfo of providersInfo) {
+      if (!providerInfo.available) {
+        if (this.logger) {
+          this.logger.debug('module-loader.provider.skipped', {
+            provider: providerInfo.name,
+            reason: 'not available'
+          });
+        }
+        continue;
+      }
+
+      // Get full provider data with function definitions
+      const provider = providerRegistry.get(providerInfo.name);
+      if (!provider || !provider.functions) {
+        if (this.logger) {
+          this.logger.debug('module-loader.provider.skipped', {
+            provider: providerInfo.name,
+            reason: 'no functions defined'
+          });
+        }
+        continue;
+      }
+
+      // Register each function as a tool
+      for (const [fnName, fnDef] of Object.entries(provider.functions)) {
+        const toolName = this.buildProviderToolName(providerInfo.name, fnName);
+        const eventName = fnDef.event || `${providerInfo.name}.${fnName}.request`;
+
+        // Build parameters schema for AI
+        const parameters = this.buildProviderParametersSchema(fnDef.input);
+
+        this.toolsRegistry.set(toolName, {
+          name: toolName,
+          description: fnDef.description || `${providerInfo.name} ${fnName}`,
+          parameters,
+          handler: this.createProviderToolHandler(eventName, providerInfo.name, fnName),
+          module: `provider:${providerInfo.name}`,
+          confirmation: fnDef.confirmation || false
+        });
+
+        registeredCount++;
+
+        if (this.logger) {
+          this.logger.debug('module-loader.provider-tool.registered', {
+            provider: providerInfo.name,
+            function: fnName,
+            tool: toolName,
+            event: eventName
+          });
+        }
+      }
+    }
+
+    if (this.logger) {
+      this.logger.info('module-loader.provider-tools.registered', {
+        total: registeredCount
+      });
+    }
+  }
+
+  /**
+   * Build tool name for provider function
+   * Uses underscore format: provider_function
+   *
+   * @param {string} providerName - Provider name (e.g., 'local.gmail')
+   * @param {string} fnName - Function name (e.g., 'send')
+   * @returns {string} Tool name (e.g., 'gmail_send')
+   */
+  buildProviderToolName(providerName, fnName) {
+    // Remove 'local.' prefix if present
+    const cleanProvider = providerName.replace(/^local\./, '');
+    // Replace dots and dashes with underscores
+    const normalizedProvider = cleanProvider.replace(/[.-]/g, '_');
+    return `${normalizedProvider}_${fnName}`;
+  }
+
+  /**
+   * Build parameters schema from provider input definition
+   *
+   * @param {Object} input - Provider function input schema
+   * @returns {Object} Parameters schema for AI tools
+   */
+  buildProviderParametersSchema(input) {
+    if (!input) {
+      return {
+        type: 'object',
+        properties: {},
+        required: []
+      };
+    }
+
+    // If input is already in the right format, return it
+    if (input.type === 'object' && input.properties) {
+      return input;
+    }
+
+    // Convert simple key:type format to full schema
+    const properties = {};
+    const required = [];
+
+    for (const [key, value] of Object.entries(input)) {
+      if (typeof value === 'string') {
+        properties[key] = { type: value };
+      } else if (typeof value === 'object') {
+        properties[key] = value;
+      }
+      // Mark as required if not optional
+      if (value?.required !== false) {
+        required.push(key);
+      }
+    }
+
+    return {
+      type: 'object',
+      properties,
+      required
+    };
+  }
+
+  /**
+   * Create handler function for provider tool
+   * Uses event bus to communicate with provider
+   *
+   * @param {string} eventName - Request event name
+   * @param {string} providerName - Provider name
+   * @param {string} fnName - Function name
+   * @returns {Function} Handler function
+   */
+  createProviderToolHandler(eventName, providerName, fnName) {
+    const self = this;
+
+    return async function(args) {
+      if (!self.core?.eventBus) {
+        throw new Error('EventBus not available');
+      }
+
+      // Calculate response event name
+      const responseEvent = eventName.replace(/\.request$/, '.response');
+
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timeout waiting for ${responseEvent}`));
+        }, 30000);
+
+        // Subscribe to response
+        const unsubscribe = self.core.eventBus.subscribe(responseEvent, (response) => {
+          clearTimeout(timeout);
+          unsubscribe();
+
+          if (response.error) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response);
+          }
+        });
+
+        // Publish request
+        self.core.eventBus.publish(eventName, args);
+      });
+    };
+  }
+
+  /**
    * Get all tools for AI providers
    * Returns tools in a format suitable for function calling
    *

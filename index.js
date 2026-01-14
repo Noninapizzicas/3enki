@@ -388,6 +388,12 @@ async function main() {
         metrics: core.metrics
       });
 
+      // Register provider functions as AI tools (unifies tool systems)
+      // This makes provider tools (gmail_send, ocr_extract, etc.) available to ai-gateway
+      if (core.providerSystem?.registry) {
+        core.moduleLoader.registerProviderTools(core.providerSystem.registry);
+      }
+
       await core.moduleLoader.loadAll();
 
       const loadedModules = core.moduleLoader.getLoadedModules();

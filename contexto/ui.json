@@ -71,7 +71,36 @@
   "css": {
     "approach": "Tailwind CSS",
     "dark_mode": "supported",
-    "responsive": "mobile-first"
+    "responsive": "mobile-first",
+    "migration": {
+      "status": "pending",
+      "current_state": "CSS custom con variables (--color-*, --_*)",
+      "target_state": "Tailwind utility classes",
+      "script": "scripts/migrate-to-tailwind.js",
+      "script_options": {
+        "--install": "Instala Tailwind, PostCSS, crea config y app.css",
+        "--report": "Analiza archivos y genera reporte de migración",
+        "--migrate": "Ejecuta migración automática con backup",
+        "--dry-run": "Preview de cambios sin aplicar"
+      },
+      "variables_to_migrate": {
+        "--_text": "text-neutral-200",
+        "--_text-muted": "text-neutral-400",
+        "--_bg": "bg-neutral-900",
+        "--_bg-surface": "bg-white/5",
+        "--_border": "border-white/10",
+        "--_primary": "text-blue-500",
+        "--_success": "text-green-500",
+        "--_danger": "text-red-500",
+        "--_radius": "rounded-lg"
+      },
+      "files_affected": 33,
+      "priority_files": [
+        "lib/modules/credentials/CredentialsPanel.svelte (738 líneas)",
+        "lib/modules/prompts/PromptsPanel.svelte (714 líneas)",
+        "lib/modules/files/FilesPanel.svelte (445 líneas)"
+      ]
+    }
   },
   "generation_rules": [
     "Never invent UX not defined in backend",

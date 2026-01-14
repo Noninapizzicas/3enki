@@ -69,9 +69,15 @@
     "auto_reconnect": true
   },
   "css": {
-    "approach": "Tailwind CSS",
+    "approach": "CSS custom con variables (--color-*, --_*)",
+    "pattern": "Scoped styles en cada componente Svelte",
+    "variables": {
+      "global": "--color-text, --color-bg, --color-primary, --color-hover, --color-active",
+      "panel": "--_bg, --_text, --_border, --_primary (con fallbacks)"
+    },
     "dark_mode": "supported",
-    "responsive": "mobile-first"
+    "responsive": "mobile-first",
+    "migration_pending": "Tailwind CSS (script pendiente)"
   },
   "generation_rules": [
     "Never invent UX not defined in backend",

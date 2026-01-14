@@ -295,6 +295,15 @@
         "credenciales": ["GOOGLE_API_KEY"],
         "nota": "Alta precisión, soporta multi-cuenta, compatible con @/ para rutas globales"
       },
+      "local.google-documentai": {
+        "acciones": ["parse"],
+        "descripcion": "Extracción estructurada con Google Document AI",
+        "input": "document (base64 o path), processor (invoice|form|ocr), account",
+        "output": "data.text, data.entities, data.tables, data.pages",
+        "credenciales": ["OAuth con scope cloud-platform (mismas que Gmail)"],
+        "config_requerida": ["GOOGLE_PROJECT_ID", "GOOGLE_DOCUMENTAI_PROCESSOR_{TYPE}"],
+        "nota": "Ideal para facturas. Extrae vendor, total, date, line_items estructurados"
+      },
       "local.pdf-to-png": {
         "acciones": ["convert"],
         "descripcion": "Convertir PDF a imágenes PNG",

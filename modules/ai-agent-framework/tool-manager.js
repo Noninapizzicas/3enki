@@ -59,37 +59,47 @@ class ToolManager {
 
     const stats = this.providerRegistry.getStats();
     this.logger.info('tool-manager.registering-provider-tools', {
-      providers: stats.total,
-      functions: stats.functions
+      providers: stats.total_providers,
+      functions: stats.total_functions
     });
 
-    // Get all providers from registry
-    const providers = this.providerRegistry.getAll();
+    // Get all providers info from registry (returns an Array)
+    const providersInfo = this.providerRegistry.getAll();
 
-    for (const [providerName, provider] of Object.entries(providers)) {
+    for (const providerInfo of providersInfo) {
       // Skip if provider not available (missing credentials)
-      if (!provider.available) {
+      if (!providerInfo.available) {
         this.logger.debug('tool-manager.provider.skipped', {
-          provider: providerName,
+          provider: providerInfo.name,
           reason: 'not available'
         });
         continue;
       }
 
+      // Get full provider data with function definitions
+      const provider = this.providerRegistry.get(providerInfo.name);
+      if (!provider || !provider.functions) {
+        this.logger.debug('tool-manager.provider.skipped', {
+          provider: providerInfo.name,
+          reason: 'no functions defined'
+        });
+        continue;
+      }
+
       // Register each function as a tool
-      for (const [fnName, fnDef] of Object.entries(provider.functions || {})) {
-        const toolName = this.buildToolName(providerName, fnName);
-        const eventName = fnDef.event || `${providerName}.${fnName}.request`;
+      for (const [fnName, fnDef] of Object.entries(provider.functions)) {
+        const toolName = this.buildToolName(providerInfo.name, fnName);
+        const eventName = fnDef.event || `${providerInfo.name}.${fnName}.request`;
 
         // Build parameters schema from function input definition
         const parameters = this.buildParametersSchema(fnDef.input);
 
         this.registerTool({
           name: toolName,
-          description: fnDef.description || `${providerName} ${fnName}`,
+          description: fnDef.description || `${providerInfo.name} ${fnName}`,
           parameters,
           // Event-driven handler
-          handler: this.createProviderToolHandler(eventName, providerName, fnName)
+          handler: this.createProviderToolHandler(eventName, providerInfo.name, fnName)
         });
 
         this.logger.debug('tool-manager.provider-tool.registered', {

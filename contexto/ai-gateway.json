@@ -77,5 +77,59 @@
       "5. Provider restaura nombres en response (restoreToolNames en DeepSeek)",
       "6. Si execute_tools=true, ejecuta tools y repite"
     ]
+  },
+
+  "service_provider_auto_registration": {
+    "_DESCRIPTION": "Los service providers en services/providers/ se auto-registran como AI tools",
+    "_UPDATED": "2026-01-14",
+
+    "how_it_works": {
+      "1_discovery": "ProviderLoader escanea services/providers/ al iniciar",
+      "2_registration": "Registra providers en ProviderRegistry con sus funciones",
+      "3_injection": "providerRegistry se pasa a módulos via coreContext",
+      "4_tool_creation": "ai-agent-framework.ToolManager llama registerProviderTools()",
+      "5_available": "Las funciones del provider están disponibles como AI tools"
+    },
+
+    "provider_structure": {
+      "local_provider": {
+        "path": "services/providers/local/{service}/index.js",
+        "example": "services/providers/local/gmail/index.js",
+        "required_exports": {
+          "name": "string - identificador (ej: local.gmail)",
+          "description": "string - descripción del servicio",
+          "functions": {
+            "{fnName}": {
+              "event": "string - evento request (ej: gmail.send.request)",
+              "description": "string - descripción de la función",
+              "input": "object - schema de parámetros",
+              "output": "object - schema de respuesta"
+            }
+          }
+        }
+      },
+      "external_provider": {
+        "path": "services/providers/{provider}/provider.json",
+        "functions_path": "services/providers/{provider}/functions/*.json"
+      }
+    },
+
+    "tool_naming": {
+      "pattern": "{provider}_{function}",
+      "examples": [
+        "local.gmail + send → gmail_send",
+        "local.google-vision + extract → google_vision_extract",
+        "anthropic + vision.extract → anthropic_vision_extract"
+      ]
+    },
+
+    "troubleshooting": {
+      "provider_not_showing": [
+        "Verificar que index.js exporta 'functions' con definiciones completas",
+        "Verificar que cada función tiene 'event', 'description', 'input'",
+        "Verificar que el provider está en services/providers/local/{nombre}/",
+        "Verificar logs: tool-manager.provider-tool.registered"
+      ]
+    }
   }
 }

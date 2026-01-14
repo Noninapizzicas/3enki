@@ -313,9 +313,41 @@ async function main() {
     });
 
     // ========================================================================
-    // Step 6: Load Modules
+    // Step 6: Initialize Provider System (BEFORE modules for tool integration)
     // ========================================================================
-    console.log('📦 [6/8] Loading Modules...');
+    console.log('🔌 [6/8] Loading Service Providers...');
+
+    const providersPath = path.resolve(__dirname, './services/providers');
+
+    if (fs.existsSync(providersPath)) {
+      core.providerSystem = createProviderSystem({
+        providersPath,
+        eventBus: core.eventBus,
+        logger: core.logger
+      });
+
+      const providerResults = await core.providerSystem.loader.loadAll();
+      const loadedProviders = providerResults.filter(r => r.success);
+
+      core.logger.info('core.providers.loaded', {
+        count: loadedProviders.length,
+        providers: loadedProviders.map(p => p.providerName)
+      });
+
+      console.log(`   ✅ Loaded ${loadedProviders.length} provider(s):`);
+      loadedProviders.forEach(p => {
+        const status = p.available ? '✓' : '✗';
+        console.log(`      ${status} ${p.providerName} (${p.functions?.length || 0} functions)`);
+      });
+      console.log('');
+    } else {
+      console.log('   ℹ️  No providers directory found, skipping...\n');
+    }
+
+    // ========================================================================
+    // Step 6.5: Load Modules (after providers for tool auto-registration)
+    // ========================================================================
+    console.log('📦 [6.5/8] Loading Modules...');
 
     const modulesPath = path.resolve(__dirname, config.modules.path);
 
@@ -327,15 +359,19 @@ async function main() {
       console.log(`   ℹ️  Continuing without modules...\n`);
     } else {
       // Create the core context that will be passed to modules
+      // Include providerRegistry for AI tool auto-registration
       const coreContext = {
         id: config.core.id,
+        config,
         logger: core.logger,
         metrics: core.metrics,
         hooks: core.hooks,
         eventBus: core.eventBus,
         tracer: core.tracer,
-        activity: core.activity,  // ActivityLogger for centralized monitoring
-        uiHandler: core.uiHandler  // UI Request/Response handler for modules
+        activity: core.activity,
+        uiHandler: core.uiHandler,
+        // Provider registry for AI agent tool auto-discovery
+        providerRegistry: core.providerSystem?.registry || null
       };
 
       // Create Module Registry
@@ -366,38 +402,6 @@ async function main() {
         console.log(`      - ${mod.name} v${mod.version}`);
       });
       console.log('');
-    }
-
-    // ========================================================================
-    // Step 6.5: Initialize Provider System
-    // ========================================================================
-    console.log('🔌 [6.5/8] Loading Service Providers...');
-
-    const providersPath = path.resolve(__dirname, './services/providers');
-
-    if (fs.existsSync(providersPath)) {
-      core.providerSystem = createProviderSystem({
-        providersPath,
-        eventBus: core.eventBus,
-        logger: core.logger
-      });
-
-      const providerResults = await core.providerSystem.loader.loadAll();
-      const loadedProviders = providerResults.filter(r => r.success);
-
-      core.logger.info('core.providers.loaded', {
-        count: loadedProviders.length,
-        providers: loadedProviders.map(p => p.providerName)
-      });
-
-      console.log(`   ✅ Loaded ${loadedProviders.length} provider(s):`);
-      loadedProviders.forEach(p => {
-        const status = p.available ? '✓' : '✗';
-        console.log(`      ${status} ${p.providerName} (${p.functions?.length || 0} functions)`);
-      });
-      console.log('');
-    } else {
-      console.log('   ℹ️  No providers directory found, skipping...\n');
     }
 
     // ========================================================================
@@ -559,18 +563,18 @@ async function main() {
           core.logger.info('core.ui_handler.stopped');
         }
 
-        // Step 5: Unload Providers
-        if (core.providerSystem) {
-          console.log('   [4/7] Unloading providers...');
-          await core.providerSystem.loader.unloadAll();
-          core.logger.info('core.providers.unloaded');
-        }
-
-        // Step 5.5: Unload Modules
+        // Step 5: Unload Modules (before providers - reverse order of init)
         if (core.moduleLoader) {
-          console.log('   [5/7] Unloading modules...');
+          console.log('   [4/7] Unloading modules...');
           await core.moduleLoader.unloadAll();
           core.logger.info('core.modules.unloaded');
+        }
+
+        // Step 5.5: Unload Providers
+        if (core.providerSystem) {
+          console.log('   [5/7] Unloading providers...');
+          await core.providerSystem.loader.unloadAll();
+          core.logger.info('core.providers.unloaded');
         }
 
         // Step 6: Disconnect MQTT Client (also stops embedded broker if used)

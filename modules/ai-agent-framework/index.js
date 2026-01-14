@@ -48,8 +48,14 @@ class AIAgentFrameworkModule {
       this.logger,
       context.config
     );
-    await this.toolManager.initialize();
     this.toolManager.setEventBus(this.eventBus);
+
+    // Inject provider registry for auto-discovery of provider tools
+    if (context.providerRegistry) {
+      this.toolManager.setProviderRegistry(context.providerRegistry);
+    }
+
+    await this.toolManager.initialize();
 
     // Get dependencies from other modules
     await this.resolveDependencies(context);

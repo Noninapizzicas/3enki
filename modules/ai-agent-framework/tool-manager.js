@@ -17,6 +17,9 @@ class ToolManager {
 
     // Available tools: Map<toolName, toolSpec>
     this.tools = new Map();
+
+    // Provider registry reference (injected)
+    this.providerRegistry = null;
   }
 
   /**
@@ -26,10 +29,179 @@ class ToolManager {
     // Register built-in tools
     this.registerBuiltinTools();
 
+    // Auto-register provider tools if registry available
+    if (this.providerRegistry) {
+      this.registerProviderTools();
+    }
+
     this.logger.info('tool-manager.initialized', {
       tools_count: this.tools.size,
       plugin_tools_enabled: !!this.eventBus
     });
+  }
+
+  /**
+   * Set provider registry for auto-discovery
+   */
+  setProviderRegistry(registry) {
+    this.providerRegistry = registry;
+  }
+
+  /**
+   * Auto-register providers as AI tools
+   * Converts provider functions to tool definitions
+   */
+  registerProviderTools() {
+    if (!this.providerRegistry) {
+      this.logger.warn('tool-manager.provider-registry.not-available');
+      return;
+    }
+
+    const stats = this.providerRegistry.getStats();
+    this.logger.info('tool-manager.registering-provider-tools', {
+      providers: stats.total,
+      functions: stats.functions
+    });
+
+    // Get all providers from registry
+    const providers = this.providerRegistry.getAll();
+
+    for (const [providerName, provider] of Object.entries(providers)) {
+      // Skip if provider not available (missing credentials)
+      if (!provider.available) {
+        this.logger.debug('tool-manager.provider.skipped', {
+          provider: providerName,
+          reason: 'not available'
+        });
+        continue;
+      }
+
+      // Register each function as a tool
+      for (const [fnName, fnDef] of Object.entries(provider.functions || {})) {
+        const toolName = this.buildToolName(providerName, fnName);
+        const eventName = fnDef.event || `${providerName}.${fnName}.request`;
+
+        // Build parameters schema from function input definition
+        const parameters = this.buildParametersSchema(fnDef.input);
+
+        this.registerTool({
+          name: toolName,
+          description: fnDef.description || `${providerName} ${fnName}`,
+          parameters,
+          // Event-driven handler
+          handler: this.createProviderToolHandler(eventName, providerName, fnName)
+        });
+
+        this.logger.debug('tool-manager.provider-tool.registered', {
+          tool: toolName,
+          event: eventName
+        });
+      }
+    }
+
+    this.logger.info('tool-manager.provider-tools.registered', {
+      count: this.tools.size
+    });
+  }
+
+  /**
+   * Build tool name from provider and function
+   */
+  buildToolName(providerName, fnName) {
+    // local.google-vision + extract -> google_vision_extract
+    // gmail + send -> gmail_send
+    const cleanProvider = providerName
+      .replace('local.', '')
+      .replace(/-/g, '_');
+    return `${cleanProvider}_${fnName}`;
+  }
+
+  /**
+   * Build OpenAI-compatible parameters schema
+   */
+  buildParametersSchema(input) {
+    if (!input) {
+      return {
+        type: 'object',
+        properties: {},
+        required: []
+      };
+    }
+
+    const properties = {};
+    const required = [];
+
+    for (const [paramName, paramDef] of Object.entries(input)) {
+      if (typeof paramDef === 'object') {
+        properties[paramName] = {
+          type: paramDef.type || 'string',
+          description: paramDef.description || paramName
+        };
+        if (paramDef.required) {
+          required.push(paramName);
+        }
+      } else {
+        // Simple string definition like "base64 | path - Documento"
+        properties[paramName] = {
+          type: 'string',
+          description: String(paramDef)
+        };
+      }
+    }
+
+    return {
+      type: 'object',
+      properties,
+      required
+    };
+  }
+
+  /**
+   * Create event-driven handler for provider tool
+   */
+  createProviderToolHandler(eventName, providerName, fnName) {
+    return async (args) => {
+      if (!this.eventBus) {
+        return { success: false, error: 'EventBus not available' };
+      }
+
+      const crypto = require('crypto');
+      const request_id = crypto.randomUUID();
+      const responseEvent = eventName.replace('.request', '.response');
+
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          this.eventBus.off(responseEvent, handler);
+          resolve({
+            success: false,
+            error: `${providerName}.${fnName} timeout`
+          });
+        }, this.config.timeout_ms || 30000);
+
+        const handler = (event) => {
+          const data = event?.data || event;
+          if (data.request_id === request_id) {
+            clearTimeout(timeout);
+            this.eventBus.off(responseEvent, handler);
+
+            this.logger.info('tool-manager.provider-tool.executed', {
+              tool: `${providerName}.${fnName}`,
+              success: data.success
+            });
+
+            resolve(data);
+          }
+        };
+
+        this.eventBus.on(responseEvent, handler);
+
+        // Publish request with args
+        this.eventBus.publish(eventName, {
+          request_id,
+          ...args
+        });
+      });
+    };
   }
 
   /**

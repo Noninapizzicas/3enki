@@ -287,6 +287,14 @@
         "output": "data.text, data.confidence, data.pages",
         "nota": "Soporta PDFs directamente. No requiere Tesseract instalado"
       },
+      "local.google-vision": {
+        "acciones": ["extract"],
+        "descripcion": "OCR con Google Cloud Vision API",
+        "input": "image (base64 o path), hint (TEXT_DETECTION|DOCUMENT_TEXT_DETECTION|HANDWRITING), languageHints, account",
+        "output": "data.text, data.confidence, data.blocks, data.pages, data.locale",
+        "credenciales": ["GOOGLE_API_KEY"],
+        "nota": "Alta precisión, soporta multi-cuenta, compatible con @/ para rutas globales"
+      },
       "local.pdf-to-png": {
         "acciones": ["convert"],
         "descripcion": "Convertir PDF a imágenes PNG",

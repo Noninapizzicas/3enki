@@ -744,6 +744,32 @@
       },
       "_VENTAJAS": "Soporta PDF directo, no requiere Tesseract instalado, usa WASM"
     },
+    "google-vision.extract": {
+      "event": "local.google-vision.extract.request",
+      "description": "OCR con Google Cloud Vision API",
+      "input": {
+        "image": "base64 | path - Imagen a procesar (soporta @/ para rutas globales)",
+        "hint": "string - TEXT_DETECTION | DOCUMENT_TEXT_DETECTION | HANDWRITING (default: TEXT_DETECTION)",
+        "languageHints": "array - Códigos de idioma para mejorar detección [es, en, etc.]",
+        "account": "string - Cuenta de Google a usar (para multi-cuenta, opcional)"
+      },
+      "output": {
+        "success": "boolean",
+        "data": {
+          "text": "string - Texto extraído completo",
+          "confidence": "number - Confianza promedio 0-100",
+          "blocks": "number - Número de bloques de texto detectados",
+          "pages": "number - Número de páginas",
+          "locale": "string - Idioma detectado",
+          "textLength": "number - Longitud del texto",
+          "hint": "string - Tipo de detección usado"
+        },
+        "error": "string - Solo si success=false"
+      },
+      "_CREDENCIAL": "GOOGLE_API_KEY o GOOGLE_API_KEY_{account}",
+      "_VENTAJAS": "Alta precisión, detección de idioma, soporte multi-cuenta, compatible con flow-engine",
+      "_NOTA_ACCESO": "Acceder resultado via steps.ID.data.text"
+    },
     "pdf-to-png.convert": {
       "event": "local.pdf-to-png.convert.request",
       "description": "Convertir páginas de PDF a imágenes PNG",
@@ -829,6 +855,35 @@
           "outline": "array - Indice/bookmarks"
         }
       }
+    },
+    "google-documentai.parse": {
+      "event": "local.google-documentai.parse.request",
+      "description": "Extracción estructurada de documentos con Google Document AI",
+      "input": {
+        "document": "base64 | path - Documento a procesar (PDF, imagen)",
+        "processor": "string - Tipo de procesador: invoice, form, ocr",
+        "account": "string - Cuenta OAuth a usar (opcional)"
+      },
+      "output": {
+        "success": "boolean",
+        "data": {
+          "text": "string - Texto completo extraído",
+          "entities": "object - Entidades extraídas (vendor, total, date, line_items, etc.)",
+          "tables": "array - Tablas detectadas [{headers, rows}]",
+          "pages": "number - Número de páginas"
+        },
+        "error": "string - Solo si success=false"
+      },
+      "_CREDENCIAL": "Usa OAuth de Gmail con scope cloud-platform",
+      "_CONFIG_REQUERIDA": {
+        "GOOGLE_PROJECT_ID": "ID del proyecto en Google Cloud",
+        "GOOGLE_DOCUMENTAI_LOCATION": "us | eu (default: us)",
+        "GOOGLE_DOCUMENTAI_PROCESSOR_INVOICE": "ID del procesador de facturas",
+        "GOOGLE_DOCUMENTAI_PROCESSOR_FORM": "ID del procesador de formularios",
+        "GOOGLE_DOCUMENTAI_PROCESSOR_OCR": "ID del procesador OCR"
+      },
+      "_VENTAJAS": "Extracción estructurada (no solo texto), ideal para facturas y formularios",
+      "_PRECIO": "$30/1000 páginas para Invoice Parser, ~$1.20/mes para 40 facturas"
     }
   },
 

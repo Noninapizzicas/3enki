@@ -22,10 +22,11 @@ const googleOAuth = require('./oauth/google');
 class CredentialManagerModule {
   constructor() {
     this.name = 'credential-manager';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
 
     // State
     this.credentials = new Map(); // key -> value
+    this.oauthConfigs = new Map(); // accountId -> { clientId, clientSecret, accountName }
     this.envFilePath = null;
     this.oauthPending = new Map(); // stateId -> { provider, level, identifier, scopes, createdAt }
 
@@ -80,9 +81,13 @@ class CredentialManagerModule {
       this.uiHandler.register('credential', 'test', this.handleUITest.bind(this));
       this.uiHandler.register('credential', 'oauth.start', this.handleUIOAuthStart.bind(this));
       this.uiHandler.register('credential', 'oauth.status', this.handleUIOAuthStatus.bind(this));
+      // OAuth Config handlers - para configurar Client ID y Secret por cuenta
+      this.uiHandler.register('credential', 'oauth.config.list', this.handleUIOAuthConfigList.bind(this));
+      this.uiHandler.register('credential', 'oauth.config.save', this.handleUIOAuthConfigSave.bind(this));
+      this.uiHandler.register('credential', 'oauth.config.delete', this.handleUIOAuthConfigDelete.bind(this));
 
       this.logger.info('credential-manager.ui_handlers.registered', {
-        handlers: ['list', 'get', 'create', 'update', 'delete', 'test', 'oauth.start', 'oauth.status']
+        handlers: ['list', 'get', 'create', 'update', 'delete', 'test', 'oauth.start', 'oauth.status', 'oauth.config.list', 'oauth.config.save', 'oauth.config.delete']
       });
     }
 
@@ -135,22 +140,54 @@ class CredentialManagerModule {
       const content = await fs.readFile(this.envFilePath, 'utf-8');
       const lines = content.split('\n');
 
+      // Temporary storage for OAuth configs
+      const oauthClientIds = new Map(); // accountId -> clientId
+      const oauthClientSecrets = new Map(); // accountId -> clientSecret
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
           const [key, ...valueParts] = trimmed.split('=');
           const value = valueParts.join('=');
+
+          // API Key credentials
           if (key.includes('_API_KEY_')) {
             this.credentials.set(key, value);
-            // Also set in process.env for other modules
+            process.env[key] = value;
+          }
+          // OAuth Client ID (GMAIL_CLIENT_ID or GMAIL_CLIENT_ID_accountName)
+          else if (key.startsWith('GMAIL_CLIENT_ID')) {
+            const accountId = key === 'GMAIL_CLIENT_ID' ? 'default' : key.replace('GMAIL_CLIENT_ID_', '');
+            oauthClientIds.set(accountId, value);
+            process.env[key] = value;
+          }
+          // OAuth Client Secret (GMAIL_CLIENT_SECRET or GMAIL_CLIENT_SECRET_accountName)
+          else if (key.startsWith('GMAIL_CLIENT_SECRET')) {
+            const accountId = key === 'GMAIL_CLIENT_SECRET' ? 'default' : key.replace('GMAIL_CLIENT_SECRET_', '');
+            oauthClientSecrets.set(accountId, value);
             process.env[key] = value;
           }
         }
       }
 
+      // Build oauthConfigs from matched pairs
+      for (const [accountId, clientId] of oauthClientIds.entries()) {
+        const clientSecret = oauthClientSecrets.get(accountId);
+        if (clientSecret) {
+          this.oauthConfigs.set(accountId, {
+            accountId,
+            accountName: accountId === 'default' ? 'Cuenta Principal' : accountId,
+            clientId,
+            clientSecret,
+            configured: true
+          });
+        }
+      }
+
       this.logger.info('env.file.loaded', {
         path: this.envFilePath,
-        credentials_count: this.credentials.size
+        credentials_count: this.credentials.size,
+        oauth_configs_count: this.oauthConfigs.size
       });
     } catch (error) {
       this.logger.error('env.file.load.error', {
@@ -167,7 +204,22 @@ class CredentialManagerModule {
       let content = '# Credentials managed by credential-manager\n';
       content += `# Last updated: ${new Date().toISOString()}\n\n`;
 
-      // Group by level
+      // OAuth Configs section first
+      if (this.oauthConfigs.size > 0) {
+        content += '# OAuth2 Configurations (Google/Gmail)\n';
+        for (const [accountId, config] of this.oauthConfigs.entries()) {
+          if (accountId === 'default') {
+            content += `GMAIL_CLIENT_ID=${config.clientId}\n`;
+            content += `GMAIL_CLIENT_SECRET=${config.clientSecret}\n`;
+          } else {
+            content += `GMAIL_CLIENT_ID_${accountId}=${config.clientId}\n`;
+            content += `GMAIL_CLIENT_SECRET_${accountId}=${config.clientSecret}\n`;
+          }
+        }
+        content += '\n';
+      }
+
+      // Group API keys by level
       const grouped = { GLOBAL: [], PROJECT: [], CLIENT: [], CUSTOM: [] };
 
       for (const [key, value] of this.credentials.entries()) {
@@ -194,6 +246,7 @@ class CredentialManagerModule {
       this.logger.info('env.file.saved', {
         path: this.envFilePath,
         credentials_count: this.credentials.size,
+        oauth_configs_count: this.oauthConfigs.size,
         duration
       });
 
@@ -1084,11 +1137,25 @@ class CredentialManagerModule {
       }
     }
 
+    // OAuth Configs for UI (masked secrets)
+    const oauthConfigs = [];
+    for (const [accountId, config] of this.oauthConfigs.entries()) {
+      oauthConfigs.push({
+        accountId,
+        accountName: config.accountName || accountId,
+        clientId: config.clientId,
+        clientIdPreview: this.maskApiKey(config.clientId),
+        hasSecret: !!config.clientSecret,
+        configured: true
+      });
+    }
+
     return {
       providers,
       levels,
       credentials: credentialsGrouped,
-      stats
+      stats,
+      oauthConfigs
     };
   }
 
@@ -1324,7 +1391,7 @@ class CredentialManagerModule {
    * 7. Backend emite credential.saved y actualiza estado
    */
   async handleUIOAuthStart(data, request) {
-    const { provider, level, identifier, scopes = ['gmail'] } = data;
+    const { provider, level, identifier, scopes = ['gmail'], oauthAccountId } = data;
 
     if (!provider) {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'Provider is required' };
@@ -1350,24 +1417,59 @@ class CredentialManagerModule {
     }
 
     // Buscar client_id y client_secret
-    // Prioridad: específico por identifier > global
+    // Prioridad:
+    // 1. oauthAccountId específico (si se proporciona)
+    // 2. identifier como accountId
+    // 3. "default"
     let clientId = null;
     let clientSecret = null;
+    let usedAccountId = null;
 
-    if (identifier) {
-      // Buscar credenciales específicas
-      clientId = process.env[`GMAIL_CLIENT_ID_${identifier}`] || process.env.GMAIL_CLIENT_ID;
-      clientSecret = process.env[`GMAIL_CLIENT_SECRET_${identifier}`] || process.env.GMAIL_CLIENT_SECRET;
-    } else {
-      clientId = process.env.GMAIL_CLIENT_ID;
-      clientSecret = process.env.GMAIL_CLIENT_SECRET;
+    // Lista de accountIds a intentar
+    const accountIdsToTry = [];
+    if (oauthAccountId) accountIdsToTry.push(oauthAccountId);
+    if (identifier) accountIdsToTry.push(identifier);
+    accountIdsToTry.push('default');
+
+    // Buscar primero en oauthConfigs (configurados desde UI)
+    for (const accId of accountIdsToTry) {
+      const config = this.oauthConfigs.get(accId);
+      if (config && config.clientId && config.clientSecret) {
+        clientId = config.clientId;
+        clientSecret = config.clientSecret;
+        usedAccountId = accId;
+        break;
+      }
+    }
+
+    // Si no se encontró en oauthConfigs, buscar en process.env (legacy)
+    if (!clientId || !clientSecret) {
+      for (const accId of accountIdsToTry) {
+        const envClientId = accId === 'default'
+          ? process.env.GMAIL_CLIENT_ID
+          : process.env[`GMAIL_CLIENT_ID_${accId}`];
+        const envClientSecret = accId === 'default'
+          ? process.env.GMAIL_CLIENT_SECRET
+          : process.env[`GMAIL_CLIENT_SECRET_${accId}`];
+
+        if (envClientId && envClientSecret) {
+          clientId = envClientId;
+          clientSecret = envClientSecret;
+          usedAccountId = accId;
+          break;
+        }
+      }
     }
 
     if (!clientId || !clientSecret) {
+      // Listar cuentas disponibles para mensaje de error más útil
+      const availableAccounts = Array.from(this.oauthConfigs.keys());
       throw {
         status: 400,
         code: 'MISSING_OAUTH_CREDENTIALS',
-        message: 'OAuth client credentials not configured. Set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in environment.'
+        message: availableAccounts.length > 0
+          ? `No OAuth config found for accounts: ${accountIdsToTry.join(', ')}. Available: ${availableAccounts.join(', ')}`
+          : 'No OAuth configurations found. Please configure OAuth credentials first in the Credentials panel (OAuth Config tab).'
       };
     }
 
@@ -1414,7 +1516,8 @@ class CredentialManagerModule {
       level,
       identifier,
       stateId,
-      scopes
+      scopes,
+      usedAccountId
     });
 
     return {
@@ -1457,6 +1560,141 @@ class CredentialManagerModule {
       level: pending.level,
       identifier: pending.identifier,
       remaining_seconds: Math.floor(remainingMs / 1000)
+    };
+  }
+
+  // ==========================================
+  // OAuth Config Handlers - Configurar Client ID y Secret
+  // ==========================================
+
+  /**
+   * UI Handler: Listar configuraciones OAuth
+   * Request: mqttRequest('credential', 'oauth.config.list')
+   */
+  async handleUIOAuthConfigList(data, request) {
+    const configs = [];
+    for (const [accountId, config] of this.oauthConfigs.entries()) {
+      configs.push({
+        accountId,
+        accountName: config.accountName || accountId,
+        clientId: config.clientId,
+        clientIdPreview: this.maskApiKey(config.clientId),
+        hasSecret: !!config.clientSecret,
+        configured: true
+      });
+    }
+
+    return {
+      configs,
+      total: configs.length
+    };
+  }
+
+  /**
+   * UI Handler: Guardar configuración OAuth
+   * Request: mqttRequest('credential', 'oauth.config.save', { accountId, accountName?, clientId, clientSecret })
+   *
+   * accountId: Identificador único de la cuenta (ej: "empresa", "personal", "default")
+   * accountName: Nombre amigable para mostrar en UI
+   * clientId: OAuth Client ID de Google Cloud Console
+   * clientSecret: OAuth Client Secret de Google Cloud Console
+   */
+  async handleUIOAuthConfigSave(data, request) {
+    const { accountId, accountName, clientId, clientSecret } = data;
+
+    if (!accountId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'accountId is required (e.g., "default", "empresa", "personal")' };
+    }
+    if (!clientId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'clientId is required (from Google Cloud Console)' };
+    }
+    if (!clientSecret) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'clientSecret is required (from Google Cloud Console)' };
+    }
+
+    // Validar formato básico de Client ID
+    if (!clientId.includes('.apps.googleusercontent.com')) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'clientId format invalid. Should end with .apps.googleusercontent.com' };
+    }
+
+    const isNew = !this.oauthConfigs.has(accountId);
+
+    // Guardar en memoria
+    this.oauthConfigs.set(accountId, {
+      accountId,
+      accountName: accountName || accountId,
+      clientId,
+      clientSecret,
+      configured: true
+    });
+
+    // Guardar en process.env para uso inmediato
+    if (accountId === 'default') {
+      process.env.GMAIL_CLIENT_ID = clientId;
+      process.env.GMAIL_CLIENT_SECRET = clientSecret;
+    } else {
+      process.env[`GMAIL_CLIENT_ID_${accountId}`] = clientId;
+      process.env[`GMAIL_CLIENT_SECRET_${accountId}`] = clientSecret;
+    }
+
+    // Persistir en archivo .env
+    await this.saveEnvFile();
+
+    this.logger.info('oauth.config.saved', {
+      accountId,
+      isNew
+    });
+
+    // Publicar estado actualizado
+    await this.publishState();
+
+    return {
+      accountId,
+      accountName: accountName || accountId,
+      created: isNew,
+      updated: !isNew,
+      message: `OAuth configuration ${isNew ? 'created' : 'updated'} for account: ${accountId}`
+    };
+  }
+
+  /**
+   * UI Handler: Eliminar configuración OAuth
+   * Request: mqttRequest('credential', 'oauth.config.delete', { accountId })
+   */
+  async handleUIOAuthConfigDelete(data, request) {
+    const { accountId } = data;
+
+    if (!accountId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'accountId is required' };
+    }
+
+    if (!this.oauthConfigs.has(accountId)) {
+      throw { status: 404, code: 'NOT_FOUND', message: `OAuth config not found: ${accountId}` };
+    }
+
+    // Eliminar de memoria
+    this.oauthConfigs.delete(accountId);
+
+    // Eliminar de process.env
+    if (accountId === 'default') {
+      delete process.env.GMAIL_CLIENT_ID;
+      delete process.env.GMAIL_CLIENT_SECRET;
+    } else {
+      delete process.env[`GMAIL_CLIENT_ID_${accountId}`];
+      delete process.env[`GMAIL_CLIENT_SECRET_${accountId}`];
+    }
+
+    // Persistir en archivo .env
+    await this.saveEnvFile();
+
+    this.logger.info('oauth.config.deleted', { accountId });
+
+    // Publicar estado actualizado
+    await this.publishState();
+
+    return {
+      accountId,
+      deleted: true
     };
   }
 

@@ -45,6 +45,15 @@ export interface LevelOption {
 
 export type ServiceType = 'providers' | 'telegram';
 
+export interface OAuthConfig {
+  accountId: string;
+  accountName: string;
+  clientId: string;
+  clientIdPreview: string;
+  hasSecret: boolean;
+  configured: boolean;
+}
+
 export interface CredentialsState {
   providers: ProviderOption[];
   levels: LevelOption[];
@@ -58,10 +67,11 @@ export interface CredentialsState {
     total: number;
     byLevel: Record<string, number>;
   };
+  oauthConfigs: OAuthConfig[];
   loading: boolean;
   error: string | null;
   selectedKey: string | null;
-  activeTab: 'lista' | 'nuevo' | 'config';
+  activeTab: 'lista' | 'nuevo' | 'config' | 'oauth';
   activeService: ServiceType;
   testResult: { valid: boolean; message: string } | null;
 }
@@ -71,6 +81,27 @@ interface ListResponse {
   levels: LevelOption[];
   credentials: CredentialsState['credentials'];
   stats: CredentialsState['stats'];
+  oauthConfigs: OAuthConfig[];
+}
+
+interface OAuthConfigSaveResponse {
+  accountId: string;
+  accountName: string;
+  created: boolean;
+  updated: boolean;
+  message: string;
+}
+
+interface OAuthConfigDeleteResponse {
+  accountId: string;
+  deleted: boolean;
+}
+
+interface OAuthStartResponse {
+  auth_url: string;
+  state_id: string;
+  expires_in: number;
+  instructions: string;
 }
 
 interface CreateResponse {
@@ -129,6 +160,7 @@ const initialState: CredentialsState = {
     CUSTOM: []
   },
   stats: { total: 0, byLevel: {} },
+  oauthConfigs: [],
   loading: false,
   error: null,
   selectedKey: null,
@@ -168,6 +200,7 @@ export async function loadCredentials(): Promise<void> {
         CUSTOM: response.data.credentials?.CUSTOM || []
       },
       stats: response.data.stats || { total: 0, byLevel: {} },
+      oauthConfigs: response.data.oauthConfigs || [],
       loading: false,
       error: null
     }));
@@ -305,7 +338,7 @@ export function selectCredential(key: string | null): void {
 /**
  * Cambia la tab activa
  */
-export function setActiveTab(tab: 'lista' | 'nuevo' | 'config'): void {
+export function setActiveTab(tab: 'lista' | 'nuevo' | 'config' | 'oauth'): void {
   credentialsStore.update(s => ({ ...s, activeTab: tab, testResult: null }));
 }
 
@@ -327,6 +360,92 @@ export function setActiveService(service: ServiceType): void {
  */
 export function clearTestResult(): void {
   credentialsStore.update(s => ({ ...s, testResult: null }));
+}
+
+// =============================================================================
+// OAUTH CONFIG ACTIONS
+// =============================================================================
+
+/**
+ * Guarda una configuración OAuth (Client ID + Secret)
+ */
+export async function saveOAuthConfig(
+  accountId: string,
+  accountName: string,
+  clientId: string,
+  clientSecret: string
+): Promise<OAuthConfigSaveResponse> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const response = await mqttRequest<OAuthConfigSaveResponse>('credential', 'oauth.config.save', {
+      accountId,
+      accountName,
+      clientId,
+      clientSecret
+    });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] OAuth config saved:', response.data.accountId);
+    return response.data;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] OAuth config save failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
+ * Elimina una configuración OAuth
+ */
+export async function deleteOAuthConfig(accountId: string): Promise<void> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<OAuthConfigDeleteResponse>('credential', 'oauth.config.delete', { accountId });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] OAuth config deleted:', accountId);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] OAuth config delete failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
+ * Inicia flujo OAuth2 para Gmail/Google
+ * Retorna URL de autorización para abrir en popup/redirect
+ */
+export async function startOAuth(
+  provider: string,
+  level: string,
+  identifier: string | null,
+  oauthAccountId?: string,
+  scopes: string[] = ['gmail']
+): Promise<OAuthStartResponse> {
+  try {
+    const response = await mqttRequest<OAuthStartResponse>('credential', 'oauth.start', {
+      provider,
+      level,
+      identifier,
+      oauthAccountId,
+      scopes
+    });
+
+    console.log('[Credentials] OAuth started, auth_url:', response.data.auth_url);
+    return response.data;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error('[Credentials] OAuth start failed:', errorMessage);
+    throw error;
+  }
 }
 
 // =============================================================================
@@ -395,6 +514,12 @@ export const botCredentials = derived(credentialsStore, $s =>
 
 /** Servicio activo */
 export const activeService = derived(credentialsStore, $s => $s.activeService);
+
+/** Configuraciones OAuth */
+export const oauthConfigs = derived(credentialsStore, $s => $s.oauthConfigs);
+
+/** Tiene configuración OAuth */
+export const hasOAuthConfig = derived(credentialsStore, $s => $s.oauthConfigs.length > 0);
 
 /** Credencial seleccionada actual */
 export const selectedCredential = derived(

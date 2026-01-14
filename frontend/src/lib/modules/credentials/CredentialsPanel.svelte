@@ -25,12 +25,16 @@
     setActiveTab,
     setActiveService,
     clearTestResult,
+    saveOAuthConfig,
+    deleteOAuthConfig,
+    startOAuth,
     globalCredentials,
     projectCredentials,
     clientCredentials,
     customCredentials,
     botCredentials,
     selectedCredential,
+    oauthConfigs,
     type ServiceType
   } from '$lib/stores/credentials';
   import { closePanel } from '$lib/stores';
@@ -60,11 +64,27 @@
   // Form state for "Config" tab
   let editApiKey = '';
 
+  // Form state for "OAuth" tab
+  let oauthForm = {
+    accountId: '',
+    accountName: '',
+    clientId: '',
+    clientSecret: ''
+  };
+
+  // OAuth authorize form
+  let oauthAuthorizeForm = {
+    selectedAccount: '',
+    level: 'GLOBAL',
+    identifier: ''
+  };
+
   // UI state
   let showPassword = false;
   let saving = false;
   let testing = false;
   let deleting = false;
+  let authorizing = false;
   let error: string | null = null;
 
   // Expanded groups
@@ -333,6 +353,88 @@
   }
 
   // ==========================================================================
+  // HANDLERS - OAUTH CONFIG
+  // ==========================================================================
+
+  async function handleSaveOAuthConfig() {
+    if (!oauthForm.accountId || !oauthForm.clientId || !oauthForm.clientSecret || saving) return;
+
+    saving = true;
+    error = null;
+
+    try {
+      await saveOAuthConfig(
+        oauthForm.accountId,
+        oauthForm.accountName || oauthForm.accountId,
+        oauthForm.clientId,
+        oauthForm.clientSecret
+      );
+
+      // Reset form
+      oauthForm = { accountId: '', accountName: '', clientId: '', clientSecret: '' };
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al guardar configuración OAuth';
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function handleDeleteOAuthConfig(accountId: string) {
+    if (!confirm(`¿Eliminar configuración OAuth "${accountId}"?`)) return;
+
+    deleting = true;
+    error = null;
+
+    try {
+      await deleteOAuthConfig(accountId);
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al eliminar configuración OAuth';
+    } finally {
+      deleting = false;
+    }
+  }
+
+  async function handleStartOAuth() {
+    if (!oauthAuthorizeForm.selectedAccount || authorizing) return;
+
+    // Validar identifier si es necesario
+    const level = oauthAuthorizeForm.level;
+    const needsIdentifier = level !== 'GLOBAL';
+    if (needsIdentifier && !oauthAuthorizeForm.identifier) {
+      error = 'Identificador requerido para este nivel';
+      return;
+    }
+
+    authorizing = true;
+    error = null;
+
+    try {
+      const result = await startOAuth(
+        'GMAIL',
+        level,
+        needsIdentifier ? oauthAuthorizeForm.identifier : null,
+        oauthAuthorizeForm.selectedAccount,
+        ['gmail']
+      );
+
+      // Abrir URL de autorización en nueva ventana
+      window.open(result.auth_url, 'oauth-popup', 'width=600,height=700');
+
+      // Resetear formulario
+      oauthAuthorizeForm = { selectedAccount: '', level: 'GLOBAL', identifier: '' };
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al iniciar autorización OAuth';
+    } finally {
+      authorizing = false;
+    }
+  }
+
+  function handleCancelOAuthConfig() {
+    oauthForm = { accountId: '', accountName: '', clientId: '', clientSecret: '' };
+    error = null;
+  }
+
+  // ==========================================================================
   // HELPERS
   // ==========================================================================
 
@@ -404,6 +506,13 @@
         disabled={!selected}
       >
         Config
+      </button>
+      <button
+        class="tab"
+        class:active={activeTab === 'oauth'}
+        on:click={() => handleTabChange('oauth')}
+      >
+        OAuth
       </button>
     </div>
     <span class="stats">
@@ -934,6 +1043,203 @@
           </button>
         </div>
       {/if}
+
+    <!-- ================================================================== -->
+    <!-- TAB: OAUTH CONFIG -->
+    <!-- ================================================================== -->
+    {:else if activeTab === 'oauth'}
+      <div class="oauth-section">
+        <!-- Cuentas OAuth configuradas -->
+        <div class="oauth-accounts">
+          <div class="section-title">📧 Cuentas Google/Gmail Configuradas</div>
+
+          {#if $oauthConfigs.length === 0}
+            <div class="empty-small">
+              <span>No hay cuentas OAuth configuradas</span>
+            </div>
+          {:else}
+            <div class="oauth-list">
+              {#each $oauthConfigs as config (config.accountId)}
+                <div class="oauth-item">
+                  <div class="oauth-item-info">
+                    <span class="oauth-item-name">📧 {config.accountName}</span>
+                    <span class="oauth-item-id">{config.accountId}</span>
+                    <span class="oauth-item-preview">{config.clientIdPreview}</span>
+                  </div>
+                  <button
+                    class="btn-icon danger"
+                    on:click={() => handleDeleteOAuthConfig(config.accountId)}
+                    title="Eliminar"
+                    disabled={deleting}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Formulario para añadir cuenta OAuth -->
+        <div class="oauth-form-section">
+          <div class="section-title">➕ Añadir Cuenta OAuth</div>
+
+          <div class="info-box">
+            <p>Para conectar Gmail necesitas credenciales OAuth de Google Cloud Console:</p>
+            <ol>
+              <li>Ve a <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></li>
+              <li>Crea un proyecto o selecciona uno existente</li>
+              <li>Habilita la API de Gmail</li>
+              <li>Crea credenciales OAuth 2.0 (tipo "Aplicación web")</li>
+              <li>Añade URI de redirección: <code>http://localhost:3000/modules/credential-manager/oauth/callback</code></li>
+              <li>Copia Client ID y Client Secret aquí</li>
+            </ol>
+          </div>
+
+          <div class="form">
+            <div class="field">
+              <label class="label" for="oauth-account-id">ID de Cuenta</label>
+              <input
+                id="oauth-account-id"
+                type="text"
+                class="input"
+                placeholder="empresa, personal, default..."
+                bind:value={oauthForm.accountId}
+              />
+              <span class="field-hint">Identificador único (sin espacios)</span>
+            </div>
+
+            <div class="field">
+              <label class="label" for="oauth-account-name">Nombre (opcional)</label>
+              <input
+                id="oauth-account-name"
+                type="text"
+                class="input"
+                placeholder="Mi Cuenta de Empresa"
+                bind:value={oauthForm.accountName}
+              />
+            </div>
+
+            <div class="field">
+              <label class="label" for="oauth-client-id">Client ID</label>
+              <input
+                id="oauth-client-id"
+                type="text"
+                class="input"
+                placeholder="123456789.apps.googleusercontent.com"
+                bind:value={oauthForm.clientId}
+              />
+            </div>
+
+            <div class="field">
+              <label class="label" for="oauth-client-secret">Client Secret</label>
+              <div class="password-wrapper">
+                {#if showPassword}
+                  <input
+                    id="oauth-client-secret"
+                    type="text"
+                    class="input password-input"
+                    placeholder="GOCSPX-xxxxx"
+                    bind:value={oauthForm.clientSecret}
+                  />
+                {:else}
+                  <input
+                    id="oauth-client-secret"
+                    type="password"
+                    class="input password-input"
+                    placeholder="GOCSPX-xxxxx"
+                    bind:value={oauthForm.clientSecret}
+                  />
+                {/if}
+                <button
+                  type="button"
+                  class="toggle-password"
+                  on:click={togglePassword}
+                >
+                  {showPassword ? '🙈' : '👁'}
+                </button>
+              </div>
+            </div>
+
+            {#if error}
+              <div class="error-msg">{error}</div>
+            {/if}
+
+            <div class="actions">
+              <button class="btn secondary" on:click={handleCancelOAuthConfig} disabled={saving}>
+                Cancelar
+              </button>
+              <button
+                class="btn primary"
+                on:click={handleSaveOAuthConfig}
+                disabled={!oauthForm.accountId || !oauthForm.clientId || !oauthForm.clientSecret || saving}
+              >
+                {saving ? '⏳...' : '💾 Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Autorizar cuenta Gmail -->
+        {#if $oauthConfigs.length > 0}
+          <div class="oauth-authorize-section">
+            <div class="section-title">🔐 Autorizar Acceso a Gmail</div>
+
+            <div class="form">
+              <div class="field">
+                <label class="label" for="oauth-select-account">Cuenta OAuth</label>
+                <select
+                  id="oauth-select-account"
+                  class="input"
+                  bind:value={oauthAuthorizeForm.selectedAccount}
+                >
+                  <option value="">Selecciona una cuenta...</option>
+                  {#each $oauthConfigs as config}
+                    <option value={config.accountId}>{config.accountName}</option>
+                  {/each}
+                </select>
+              </div>
+
+              <div class="field">
+                <label class="label" for="oauth-level">Nivel de Credencial</label>
+                <select
+                  id="oauth-level"
+                  class="input"
+                  bind:value={oauthAuthorizeForm.level}
+                >
+                  <option value="GLOBAL">🟢 Global</option>
+                  <option value="PROJECT">🔵 Proyecto</option>
+                  <option value="CLIENT">🟡 Cliente</option>
+                  <option value="CUSTOM">🔴 Custom</option>
+                </select>
+              </div>
+
+              {#if oauthAuthorizeForm.level !== 'GLOBAL'}
+                <div class="field">
+                  <label class="label" for="oauth-identifier">Identificador</label>
+                  <input
+                    id="oauth-identifier"
+                    type="text"
+                    class="input"
+                    placeholder="proyecto-1, cliente-abc..."
+                    bind:value={oauthAuthorizeForm.identifier}
+                  />
+                </div>
+              {/if}
+
+              <div class="actions">
+                <button
+                  class="btn primary"
+                  on:click={handleStartOAuth}
+                  disabled={!oauthAuthorizeForm.selectedAccount || authorizing}
+                >
+                  {authorizing ? '⏳...' : '🔐 Autorizar Gmail'}
+                </button>
+              </div>
+            </div>
+          </div>
+        {/if}
+      </div>
     {/if}
   </div>
 </div>
@@ -1495,5 +1801,142 @@
 
   .btn.danger:hover:not(:disabled) {
     filter: brightness(1.1);
+  }
+
+  /* ==========================================================================
+     OAuth Section Styles
+     ========================================================================== */
+  .oauth-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0.75rem;
+    overflow-y: auto;
+  }
+
+  .oauth-accounts,
+  .oauth-form-section,
+  .oauth-authorize-section {
+    background: var(--_bg-surface);
+    border: 1px solid var(--_border);
+    border-radius: var(--_radius);
+    padding: 0.75rem;
+  }
+
+  .section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--_text);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--_border);
+  }
+
+  .oauth-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .oauth-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--_radius);
+    gap: 0.5rem;
+  }
+
+  .oauth-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .oauth-item-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--_text);
+  }
+
+  .oauth-item-id {
+    font-size: 0.7rem;
+    color: var(--_text-muted);
+  }
+
+  .oauth-item-preview {
+    font-size: 0.7rem;
+    font-family: monospace;
+    color: var(--_text-muted);
+  }
+
+  .btn-icon {
+    background: transparent;
+    border: none;
+    padding: 0.35rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: var(--_radius);
+    transition: all 0.15s;
+  }
+
+  .btn-icon.danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  .btn-icon:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .info-box {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: var(--_radius);
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--_text-muted);
+    line-height: 1.5;
+  }
+
+  .info-box p {
+    margin: 0 0 0.5rem 0;
+  }
+
+  .info-box ol {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+
+  .info-box li {
+    margin-bottom: 0.25rem;
+  }
+
+  .info-box a {
+    color: var(--_primary);
+    text-decoration: underline;
+  }
+
+  .info-box code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+  }
+
+  .empty-small {
+    text-align: center;
+    padding: 1rem;
+    color: var(--_text-muted);
+    font-size: 0.8rem;
+  }
+
+  .field-hint {
+    font-size: 0.65rem;
+    color: var(--_text-muted);
+    margin-top: 0.25rem;
   }
 </style>

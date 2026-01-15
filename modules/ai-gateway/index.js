@@ -1324,7 +1324,11 @@ class AIGatewayModule {
     const results = [];
 
     for (const call of toolCalls) {
-      const { id, name, arguments: args } = call;
+      const { id, name: rawName, arguments: args } = call;
+
+      // Normalize tool name: convert dots to underscores for provider tools
+      // DeepSeek may return "gmail.send" but we register as "gmail_send"
+      const name = this.normalizeToolName(rawName);
 
       try {
         // Check if tool requires confirmation
@@ -1594,6 +1598,32 @@ class AIGatewayModule {
   }
 
   // ============ HELPER METHODS ============
+
+  /**
+   * Normalize tool name for lookup
+   * Converts dots to underscores for provider tools
+   * Example: "gmail.send" -> "gmail_send"
+   *
+   * @param {string} name - Tool name from AI response
+   * @returns {string} Normalized tool name
+   */
+  normalizeToolName(name) {
+    if (!name || typeof name !== 'string') return name;
+
+    // First try exact match
+    if (this.moduleLoader?.getTool(name)) {
+      return name;
+    }
+
+    // Try converting dots to underscores (provider tool format)
+    const normalized = name.replace(/\./g, '_');
+    if (this.moduleLoader?.getTool(normalized)) {
+      return normalized;
+    }
+
+    // Return original if no match found (will error later with proper message)
+    return name;
+  }
 
   /**
    * Chat with retry

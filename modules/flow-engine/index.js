@@ -118,7 +118,13 @@ class FlowEngineModule {
       'bot.file.stored',
       'bot.message.received',
       'bot.command.received',
-      'flow.trigger' // Trigger manual
+      'flow.trigger', // Trigger manual
+      // Eventos de encadenamiento de flujos (facturación)
+      'factura.nueva',
+      'factura.procesada',
+      'factura.guardada',
+      'factura.completada',
+      'factura.error'
     ];
 
     for (const event of triggerEvents) {

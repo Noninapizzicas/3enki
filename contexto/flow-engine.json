@@ -45,7 +45,7 @@
       },
       "step-handlers.js": {
         "responsabilidad": "Implementacion de cada tipo de paso",
-        "tipos_soportados": ["service", "transform", "condition", "parallel", "agent", "http", "delay", "log", "set"]
+        "tipos_soportados": ["service", "transform", "condition", "parallel", "agent", "http", "delay", "log", "set", "emit"]
       },
       "variable-resolver.js": {
         "responsabilidad": "Interpolacion de variables y evaluacion de condiciones",
@@ -170,6 +170,28 @@
       "propiedades": {
         "variables": "Objeto con variables a definir"
       }
+    },
+    "emit": {
+      "descripcion": "Publica evento para encadenar flujos",
+      "propiedades": {
+        "event": "Nombre del evento a publicar (ej: factura.nueva)",
+        "data": "Datos a incluir en el evento (soporta variables {{ }})"
+      },
+      "output": {
+        "emitted": "boolean - true si se emitió correctamente",
+        "event": "string - nombre del evento emitido",
+        "data": "object - datos enviados"
+      },
+      "ejemplo": {
+        "id": "emitir-factura",
+        "type": "emit",
+        "event": "factura.nueva",
+        "data": {
+          "source": "telegram",
+          "archivo": "{{ steps.normalizar.archivo }}"
+        }
+      },
+      "uso": "Encadenar flujos modulares - un flujo emite, otro escucha como trigger"
     }
   },
 
@@ -381,7 +403,7 @@
       "flow.failed": "Flujo fallido"
     },
     "suscritos": {
-      "triggers": ["bot.file.stored", "bot.message.received", "bot.command.received", "flow.trigger"],
+      "triggers": ["bot.file.stored", "bot.message.received", "bot.command.received", "flow.trigger", "factura.nueva", "factura.procesada", "factura.guardada", "factura.completada", "factura.error"],
       "providers": "Todos los eventos {provider}.{action}.response y {provider}.{action}.failed"
     }
   },

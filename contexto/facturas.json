@@ -1,0 +1,313 @@
+{
+  "modulo": "facturas",
+  "version": "0.9.0",
+  "estado": "en-desarrollo",
+  "descripcion": "Sistema de gestión de facturas por proyecto con OCR y exportación Excel",
+
+  "arquitectura_general": {
+    "diagrama": "Telegram/Gmail → Flow entrada → facturas-db → Flow OCR → Flow export → Excel",
+    "principios": [
+      "Todo organizado por proyecto (cada cliente = un proyecto)",
+      "Base de datos SQLite embebida en cada proyecto",
+      "Flujos configurables via config/facturas.json",
+      "Comunicación via eventos MQTT"
+    ]
+  },
+
+  "estado_implementacion": {
+    "completado": {
+      "backend_flow_engine": {
+        "emit_step": {
+          "archivo": "modules/flow-engine/services/step-handlers.js",
+          "descripcion": "Nuevo tipo de paso para encadenar flujos via eventos",
+          "estado": "✅ Implementado"
+        },
+        "scheduler": {
+          "archivo": "modules/flow-engine/services/scheduler.js",
+          "descripcion": "Servicio de scheduling con node-cron",
+          "estado": "✅ Implementado"
+        },
+        "project_flows": {
+          "archivos": [
+            "modules/flow-engine/services/flow-registry.js",
+            "modules/flow-engine/services/flow-executor.js"
+          ],
+          "descripcion": "Carga de flujos desde data/projects/*/flows/",
+          "estado": "✅ Implementado"
+        }
+      },
+      "backend_facturas_db": {
+        "archivo": "services/providers/local/facturas-db/index.js",
+        "descripcion": "Servicio para operaciones CRUD en tabla facturas",
+        "eventos": {
+          "request": "local.facturas-db.{action}.request",
+          "response": "local.facturas-db.{action}.response"
+        },
+        "acciones": ["init", "registrar", "actualizar", "listar", "obtener", "pendientes", "estadisticas", "exportar", "marcarExportadas"],
+        "estado": "✅ Implementado"
+      },
+      "plantilla_proyecto": {
+        "ubicacion": "templates/facturas/",
+        "contenido": {
+          "config": "config/facturas.json - Configuración del cliente",
+          "flows": [
+            "entrada-telegram.json - Recibe desde bot Telegram",
+            "entrada-gmail.json - Recoge desde Gmail (cron diario)",
+            "procesar-lote.json - Batch semanal (cron domingo 3am)",
+            "procesar-factura.json - OCR individual con AI",
+            "consolidar-excel.json - Export Excel (cron domingo 6am)"
+          ],
+          "storage": "Directorios inbox/, procesadas/, exports/"
+        },
+        "estado": "✅ Implementado"
+      },
+      "frontend_ui": {
+        "archivos": [
+          "frontend/src/lib/stores/facturas.ts",
+          "frontend/src/lib/modules/facturas/FacturasPanel.svelte",
+          "frontend/src/routes/facturas/+page.svelte"
+        ],
+        "funcionalidades": [
+          "Lista con filtros (estado, origen, búsqueda)",
+          "Detalle con edición inline",
+          "Subida manual drag & drop",
+          "Estadísticas en tiempo real",
+          "Exportación Excel"
+        ],
+        "estado": "✅ Implementado (UI diseñada)"
+      }
+    },
+
+    "pendiente": {
+      "ui_handler_backend": {
+        "prioridad": "ALTA",
+        "descripcion": "Handler que conecta peticiones UI con facturas-db",
+        "problema": "Frontend envía ui/request/facturas/* pero no hay handler escuchando",
+        "solucion_propuesta": {
+          "opcion_a": {
+            "descripcion": "Crear handler en modules/ui-handler/handlers/facturas.js",
+            "patron": "Similar a project.js y credentials.js existentes",
+            "eventos": {
+              "escucha": "ui/request/facturas/{action}",
+              "responde": "ui/response/{request_id}"
+            }
+          },
+          "opcion_b": {
+            "descripcion": "Añadir handler en flow-engine/index.js",
+            "ventaja": "Mantiene todo el código de facturas junto"
+          }
+        },
+        "acciones_necesarias": [
+          "listar → local.facturas-db.listar",
+          "obtener → local.facturas-db.obtener",
+          "actualizar → local.facturas-db.actualizar",
+          "estadisticas → local.facturas-db.estadisticas",
+          "exportar → local.facturas-db.exportar + local.xlsx.create",
+          "subir → fs.write + local.facturas-db.registrar",
+          "reprocesar → emit factura.procesar"
+        ]
+      },
+      "integracion_xlsx": {
+        "prioridad": "MEDIA",
+        "descripcion": "Verificar que local.xlsx.create genera el formato correcto",
+        "columnas_excel": [
+          "Nº Registro", "Fecha Factura", "Nº Factura", "NIF Proveedor",
+          "Proveedor", "Concepto", "Categoría", "Base Imponible",
+          "% IVA", "Cuota IVA", "Total", "Estado Pago", "Origen", "Archivo"
+        ]
+      },
+      "testing_flows": {
+        "prioridad": "MEDIA",
+        "descripcion": "Probar flujos end-to-end",
+        "tests": [
+          "Subir factura manual → registrar en BD",
+          "Trigger OCR → extraer datos → actualizar BD",
+          "Export Excel → generar archivo → marcar exportadas"
+        ]
+      },
+      "notificaciones_telegram": {
+        "prioridad": "BAJA",
+        "descripcion": "Enviar Excel por Telegram al finalizar exportación",
+        "dependencia": "Requiere config.notificaciones.telegram.chatId"
+      }
+    }
+  },
+
+  "flujo_datos": {
+    "entrada_telegram": {
+      "trigger": "bot.file.stored con botName del proyecto",
+      "pasos": [
+        "1. Verificar tipo archivo (imagen/PDF)",
+        "2. Copiar a storage/facturas/inbox/",
+        "3. Registrar en BD (estado: pendiente)",
+        "4. Emitir factura.recibida"
+      ]
+    },
+    "entrada_gmail": {
+      "trigger": "Cron diario (0 3 * * *)",
+      "pasos": [
+        "1. Buscar emails con adjuntos",
+        "2. Descargar adjuntos",
+        "3. Copiar a inbox/",
+        "4. Registrar en BD",
+        "5. Marcar emails como leídos"
+      ]
+    },
+    "procesamiento_ocr": {
+      "trigger": "Cron semanal (0 3 * * 0) o factura.procesar",
+      "pasos": [
+        "1. Obtener facturas pendientes",
+        "2. Por cada factura:",
+        "   a. Ejecutar OCR (Google Vision)",
+        "   b. Extraer datos con AI (Claude)",
+        "   c. Mover a procesadas/",
+        "   d. Guardar JSON OCR",
+        "   e. Actualizar BD con datos extraídos",
+        "3. Emitir factura.procesada"
+      ]
+    },
+    "exportacion_excel": {
+      "trigger": "Cron semanal (0 6 * * 0) o manual",
+      "pasos": [
+        "1. Obtener facturas procesadas no exportadas",
+        "2. Generar Excel con local.xlsx",
+        "3. Guardar en exports/",
+        "4. Marcar facturas como exportadas",
+        "5. (Opcional) Notificar por Telegram/Email"
+      ]
+    }
+  },
+
+  "configuracion_proyecto": {
+    "archivo": "data/projects/{projectId}/config/facturas.json",
+    "campos": {
+      "enabled": "boolean - Activar sistema facturas",
+      "telegram": {
+        "botName": "Nombre del bot de Telegram",
+        "allowedUsers": "Array de userIds permitidos"
+      },
+      "gmail": {
+        "enabled": "boolean - Activar recogida Gmail",
+        "account": "Cuenta Gmail a usar",
+        "searchQuery": "Query para buscar emails"
+      },
+      "ocr": {
+        "provider": "local.google-vision | local.tesseract",
+        "languages": "Array de idiomas ['es', 'en']",
+        "hint": "DOCUMENT_TEXT_DETECTION | TEXT_DETECTION"
+      },
+      "schedule": {
+        "timezone": "Europe/Madrid",
+        "gmail": "0 3 * * * (diario 3am)",
+        "procesamiento": "0 3 * * 0 (domingo 3am)",
+        "exportacion": "0 6 * * 0 (domingo 6am)"
+      },
+      "storage": {
+        "inbox": "storage/facturas/inbox",
+        "procesadas": "storage/facturas/procesadas",
+        "exports": "storage/facturas/exports"
+      },
+      "notificaciones": {
+        "telegram": { "enabled": false, "chatId": "" },
+        "email": { "enabled": false, "to": "" }
+      }
+    }
+  },
+
+  "esquema_bd": {
+    "tabla": "facturas",
+    "columnas": {
+      "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+      "nombre_archivo": "TEXT NOT NULL",
+      "source": "TEXT (telegram|gmail|manual)",
+      "path_original": "TEXT",
+      "path_procesada": "TEXT",
+      "path_ocr": "TEXT",
+      "estado": "TEXT (pendiente|procesando|procesada|error|exportada)",
+      "numero_factura": "TEXT",
+      "fecha_factura": "TEXT",
+      "nif_proveedor": "TEXT",
+      "nombre_proveedor": "TEXT",
+      "concepto": "TEXT",
+      "base_imponible": "REAL",
+      "porcentaje_iva": "REAL",
+      "cuota_iva": "REAL",
+      "total": "REAL",
+      "categoria": "TEXT",
+      "estado_pago": "TEXT (pendiente|pagada)",
+      "fecha_pago": "TEXT",
+      "ocr_confidence": "REAL",
+      "error_mensaje": "TEXT",
+      "exportada_semana": "TEXT",
+      "origen": "TEXT (JSON metadata)",
+      "created_at": "TEXT DEFAULT CURRENT_TIMESTAMP",
+      "updated_at": "TEXT DEFAULT CURRENT_TIMESTAMP"
+    }
+  },
+
+  "eventos_mqtt": {
+    "internos": {
+      "factura.recibida": "Nueva factura en inbox",
+      "factura.procesar": "Solicita procesamiento OCR",
+      "factura.procesada": "OCR completado",
+      "factura.error": "Error en procesamiento",
+      "factura.exportada": "Excel generado"
+    },
+    "ui_requests": {
+      "ui/request/facturas/listar": "Lista facturas del proyecto",
+      "ui/request/facturas/obtener": "Obtiene una factura",
+      "ui/request/facturas/actualizar": "Actualiza datos factura",
+      "ui/request/facturas/estadisticas": "Obtiene contadores",
+      "ui/request/facturas/exportar": "Genera Excel",
+      "ui/request/facturas/subir": "Sube factura manual",
+      "ui/request/facturas/reprocesar": "Re-ejecuta OCR"
+    },
+    "service_requests": {
+      "local.facturas-db.*.request": "Peticiones al servicio DB",
+      "local.facturas-db.*.response": "Respuestas del servicio DB"
+    }
+  },
+
+  "proximos_pasos": {
+    "inmediato": [
+      "1. Crear ui-handler para facturas (conectar UI ↔ facturas-db)",
+      "2. Probar flujo manual: subir → ver en lista → editar"
+    ],
+    "corto_plazo": [
+      "3. Probar flujo OCR: procesar → ver datos extraídos",
+      "4. Probar exportación Excel",
+      "5. Configurar proyecto de prueba real"
+    ],
+    "mejoras_futuras": [
+      "Vista previa de imagen/PDF en detalle",
+      "Bulk actions (procesar varios, exportar selección)",
+      "Filtro por rango de fechas",
+      "Dashboard con gráficos (gastos por categoría, etc.)",
+      "Integración con contabilidad externa"
+    ]
+  },
+
+  "archivos_clave": {
+    "backend": [
+      "modules/flow-engine/services/step-handlers.js",
+      "modules/flow-engine/services/scheduler.js",
+      "modules/flow-engine/services/flow-registry.js",
+      "modules/flow-engine/services/flow-executor.js",
+      "services/providers/local/facturas-db/index.js"
+    ],
+    "frontend": [
+      "frontend/src/lib/stores/facturas.ts",
+      "frontend/src/lib/modules/facturas/FacturasPanel.svelte",
+      "frontend/src/routes/facturas/+page.svelte"
+    ],
+    "plantilla": [
+      "templates/facturas/config/facturas.json",
+      "templates/facturas/flows/*.json",
+      "templates/facturas/README.md"
+    ],
+    "documentacion": [
+      "contexto/flow-engine.json",
+      "contexto/facturas.json (este archivo)"
+    ]
+  }
+}

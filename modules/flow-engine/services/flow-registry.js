@@ -12,23 +12,92 @@ class FlowRegistry {
     this.logger = logger;
     this.flows = new Map(); // flowId -> flowDefinition
     this.triggerIndex = new Map(); // event -> [flowIds]
+    this.projectConfigs = new Map(); // projectId -> config
   }
 
   async initialize() {
-    // Cargar flujos desde archivos si está configurado
+    // Cargar flujos globales desde archivos si está configurado
     if (this.config.autoLoadFlows) {
       await this.loadFromDirectory(this.config.flowsPath);
     }
 
+    // Cargar flujos de todos los proyectos
+    await this.loadProjectFlows();
+
     this.logger.info('flow-registry.initialized', {
-      flows_count: this.flows.size
+      flows_count: this.flows.size,
+      projects_with_flows: this.projectConfigs.size
     });
   }
 
   /**
-   * Carga flujos desde un directorio
+   * Carga flujos de todos los proyectos
    */
-  async loadFromDirectory(dirPath) {
+  async loadProjectFlows() {
+    const projectsPath = this.config.projectsPath || './data/projects';
+    const resolvedPath = path.resolve(projectsPath);
+
+    try {
+      await fs.access(resolvedPath);
+    } catch {
+      this.logger.debug('flow-registry.projects.not_found', { path: resolvedPath });
+      return;
+    }
+
+    const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
+    const projects = entries.filter(e => e.isDirectory());
+
+    for (const project of projects) {
+      const projectId = project.name;
+      const projectPath = path.join(resolvedPath, projectId);
+
+      // Cargar configuración del proyecto si existe
+      await this.loadProjectConfig(projectId, projectPath);
+
+      // Cargar flujos del proyecto
+      const flowsPath = path.join(projectPath, 'flows');
+      try {
+        await fs.access(flowsPath);
+        await this.loadFromDirectory(flowsPath, projectId);
+      } catch {
+        // Proyecto sin flujos, ok
+      }
+    }
+  }
+
+  /**
+   * Carga la configuración de facturas de un proyecto
+   */
+  async loadProjectConfig(projectId, projectPath) {
+    const configPath = path.join(projectPath, 'config', 'facturas.json');
+
+    try {
+      const content = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(content);
+      this.projectConfigs.set(projectId, config);
+
+      this.logger.debug('flow-registry.project.config.loaded', {
+        projectId,
+        enabled: config.enabled
+      });
+    } catch {
+      // Sin config de facturas, ok
+    }
+  }
+
+  /**
+   * Obtiene la configuración de un proyecto
+   */
+  getProjectConfig(projectId) {
+    return this.projectConfigs.get(projectId);
+  }
+
+  /**
+   * Carga flujos desde un directorio
+   * @param {string} dirPath - Ruta al directorio
+   * @param {string} projectId - ID del proyecto (opcional, para flujos de proyecto)
+   */
+  async loadFromDirectory(dirPath, projectId = null) {
     const resolvedPath = path.resolve(dirPath);
 
     try {
@@ -54,15 +123,30 @@ class FlowRegistry {
           flow.id = path.basename(file, path.extname(file));
         }
 
+        // Si es de proyecto, añadir prefijo y metadata
+        if (projectId) {
+          flow._projectId = projectId;
+          flow._originalId = flow.id;
+          flow.id = `${projectId}:${flow.id}`; // ID único: proyecto:flujo
+
+          // Cargar config del proyecto al flujo
+          const projectConfig = this.projectConfigs.get(projectId);
+          if (projectConfig) {
+            flow._projectConfig = projectConfig;
+          }
+        }
+
         await this.register(flow);
 
         this.logger.info('flow-registry.flow.loaded', {
           flowId: flow.id,
+          projectId: projectId || 'global',
           file
         });
       } catch (error) {
         this.logger.error('flow-registry.flow.load_error', {
           file,
+          projectId,
           error: error.message
         });
       }
@@ -180,6 +264,33 @@ class FlowRegistry {
    */
   getAll() {
     return Array.from(this.flows.values());
+  }
+
+  /**
+   * Lista flujos de un proyecto específico
+   */
+  getByProject(projectId) {
+    return Array.from(this.flows.values()).filter(f => f._projectId === projectId);
+  }
+
+  /**
+   * Lista flujos globales (sin proyecto)
+   */
+  getGlobal() {
+    return Array.from(this.flows.values()).filter(f => !f._projectId);
+  }
+
+  /**
+   * Lista todos los proyectos con flujos
+   */
+  getProjects() {
+    const projects = new Set();
+    for (const flow of this.flows.values()) {
+      if (flow._projectId) {
+        projects.add(flow._projectId);
+      }
+    }
+    return Array.from(projects);
   }
 
   /**

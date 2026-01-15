@@ -1,0 +1,169 @@
+{
+  "id": "procesar-factura",
+  "name": "Procesar Factura Individual - OCR",
+  "description": "Procesa una factura con OCR y actualiza la BD",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "trigger": {
+    "event": "factura.procesar"
+  },
+
+  "config": {
+    "ocr_provider": "local.google-vision",
+    "ocr_hint": "DOCUMENT_TEXT_DETECTION"
+  },
+
+  "steps": [
+    {
+      "id": "log-inicio",
+      "type": "log",
+      "level": "info",
+      "message": "Procesando factura: {{ trigger.nombre_archivo }} ({{ trigger.lote.index }}/{{ trigger.lote.total }})"
+    },
+    {
+      "id": "crear-directorio-procesadas",
+      "type": "service",
+      "service": "fs",
+      "action": "mkdir",
+      "path": "@/projects/facturas/storage/procesadas/originales",
+      "onError": "continue"
+    },
+    {
+      "id": "crear-directorio-ocr",
+      "type": "service",
+      "service": "fs",
+      "action": "mkdir",
+      "path": "@/projects/facturas/storage/procesadas/ocr",
+      "onError": "continue"
+    },
+    {
+      "id": "leer-archivo",
+      "type": "service",
+      "service": "fs",
+      "action": "read",
+      "path": "{{ trigger.path }}",
+      "encoding": "base64",
+      "timeout": 30000
+    },
+    {
+      "id": "ejecutar-ocr",
+      "type": "service",
+      "service": "local.google-vision",
+      "action": "extract",
+      "image": "{{ steps.leer-archivo.content }}",
+      "hint": "DOCUMENT_TEXT_DETECTION",
+      "languageHints": ["es", "en"],
+      "timeout": 120000,
+      "onError": "continue"
+    },
+    {
+      "id": "preparar-nombre-procesado",
+      "type": "set",
+      "variables": {
+        "nombreBase": "{{ trigger.nombre_archivo.replace('_pendiente', '_procesada') }}",
+        "nombreJson": "{{ trigger.nombre_archivo.replace('_pendiente', '').split('.')[0] }}.json"
+      }
+    },
+    {
+      "id": "mover-original",
+      "type": "service",
+      "service": "fs",
+      "action": "move",
+      "source": "{{ trigger.path }}",
+      "destination": "@/projects/facturas/storage/procesadas/originales/{{ variables.nombreBase }}",
+      "timeout": 30000
+    },
+    {
+      "id": "preparar-resultado-ocr",
+      "type": "transform",
+      "operation": "map",
+      "config": {
+        "mapping": {
+          "id": "{{ trigger.id }}",
+          "nombre_archivo": "{{ trigger.nombre_archivo }}",
+          "source": "{{ trigger.source }}",
+          "ocr": {
+            "texto": "{{ default(steps.ejecutar-ocr.data.text, 'OCR no disponible') }}",
+            "confianza": "{{ default(steps.ejecutar-ocr.data.confidence, 0) }}",
+            "idioma": "{{ default(steps.ejecutar-ocr.data.locale, 'unknown') }}",
+            "provider": "google-vision",
+            "procesadoEn": "{{ now }}"
+          },
+          "paths": {
+            "original": "@/projects/facturas/storage/procesadas/originales/{{ variables.nombreBase }}",
+            "ocr_json": "@/projects/facturas/storage/procesadas/ocr/{{ variables.nombreJson }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "guardar-json-ocr",
+      "type": "service",
+      "service": "fs",
+      "action": "write",
+      "path": "@/projects/facturas/storage/procesadas/ocr/{{ variables.nombreJson }}",
+      "content": "{{ json(steps.preparar-resultado-ocr) }}",
+      "timeout": 10000
+    },
+    {
+      "id": "actualizar-bd",
+      "type": "service",
+      "service": "local.facturas-db",
+      "action": "actualizar",
+      "proyecto": "facturas",
+      "id": "{{ trigger.id }}",
+      "campos": {
+        "estado": "procesada",
+        "fecha_procesado": "{{ now }}",
+        "path_procesada": "@/projects/facturas/storage/procesadas/originales/{{ variables.nombreBase }}",
+        "path_ocr_json": "@/projects/facturas/storage/procesadas/ocr/{{ variables.nombreJson }}",
+        "ocr_provider": "google-vision",
+        "ocr_confianza": "{{ default(steps.ejecutar-ocr.data.confidence, 0) }}",
+        "ocr_texto": "{{ default(steps.ejecutar-ocr.data.text, '') }}"
+      },
+      "timeout": 10000
+    },
+    {
+      "id": "log-procesada",
+      "type": "log",
+      "level": "info",
+      "message": "Factura procesada: {{ trigger.nombre_archivo }} - Confianza: {{ default(steps.ejecutar-ocr.data.confidence, 0) }}%"
+    },
+    {
+      "id": "emitir-procesada",
+      "type": "emit",
+      "event": "factura.procesada",
+      "data": {
+        "id": "{{ trigger.id }}",
+        "nombre_archivo": "{{ trigger.nombre_archivo }}",
+        "source": "{{ trigger.source }}",
+        "ocr_confianza": "{{ default(steps.ejecutar-ocr.data.confidence, 0) }}",
+        "lote": "{{ trigger.lote }}"
+      }
+    },
+    {
+      "id": "verificar-mas-pendientes",
+      "type": "condition",
+      "if": "{{ trigger.lote.index < trigger.lote.total }}",
+      "then": "continuar-lote",
+      "else": "log-lote-completado"
+    },
+    {
+      "id": "log-lote-completado",
+      "type": "log",
+      "level": "info",
+      "message": "Lote de procesamiento completado: {{ trigger.lote.total }} facturas"
+    },
+    {
+      "id": "continuar-lote",
+      "type": "emit",
+      "event": "flow.trigger",
+      "data": {
+        "flowId": "procesar-lote",
+        "continuar": true,
+        "procesadas": "{{ trigger.lote.index }}"
+      }
+    }
+  ]
+}

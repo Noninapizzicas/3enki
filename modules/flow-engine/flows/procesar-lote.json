@@ -1,0 +1,83 @@
+{
+  "id": "procesar-lote",
+  "name": "Procesar Lote OCR - Semanal",
+  "description": "Lee facturas pendientes y dispara procesamiento individual para cada una",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "schedule": {
+    "cron": "0 3 * * 0",
+    "timezone": "Europe/Madrid"
+  },
+
+  "trigger": {
+    "event": "flow.trigger",
+    "filter": {
+      "flowId": "procesar-lote"
+    }
+  },
+
+  "config": {
+    "proyecto": "facturas",
+    "max_facturas": 100
+  },
+
+  "steps": [
+    {
+      "id": "log-inicio",
+      "type": "log",
+      "level": "info",
+      "message": "Iniciando procesamiento semanal de facturas - Domingo {{ date }}"
+    },
+    {
+      "id": "obtener-pendientes",
+      "type": "service",
+      "service": "local.facturas-db",
+      "action": "pendientes",
+      "proyecto": "facturas",
+      "limit": 100,
+      "timeout": 30000
+    },
+    {
+      "id": "log-encontradas",
+      "type": "log",
+      "level": "info",
+      "message": "Facturas pendientes encontradas: {{ steps.obtener-pendientes.data.total }}"
+    },
+    {
+      "id": "verificar-pendientes",
+      "type": "condition",
+      "if": "{{ steps.obtener-pendientes.data.total > 0 }}",
+      "then": "emitir-procesar-primera",
+      "else": "log-sin-pendientes"
+    },
+    {
+      "id": "log-sin-pendientes",
+      "type": "log",
+      "level": "info",
+      "message": "No hay facturas pendientes de procesar"
+    },
+    {
+      "id": "emitir-procesar-primera",
+      "type": "emit",
+      "event": "factura.procesar",
+      "data": {
+        "id": "{{ steps.obtener-pendientes.data.facturas[0].id }}",
+        "nombre_archivo": "{{ steps.obtener-pendientes.data.facturas[0].nombre_archivo }}",
+        "path": "{{ steps.obtener-pendientes.data.facturas[0].path_original }}",
+        "source": "{{ steps.obtener-pendientes.data.facturas[0].source }}",
+        "proyecto": "facturas",
+        "lote": {
+          "total": "{{ steps.obtener-pendientes.data.total }}",
+          "index": 1
+        }
+      }
+    },
+    {
+      "id": "log-emitido",
+      "type": "log",
+      "level": "info",
+      "message": "Emitido evento para procesar: {{ steps.obtener-pendientes.data.facturas[0].nombre_archivo }}"
+    }
+  ]
+}

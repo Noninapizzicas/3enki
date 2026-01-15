@@ -25,6 +25,7 @@ class StepHandlers {
       delay: this.handleDelay.bind(this),
       log: this.handleLog.bind(this),
       set: this.handleSet.bind(this),
+      emit: this.handleEmit.bind(this),
     };
   }
 
@@ -432,6 +433,47 @@ class StepHandlers {
     return {
       output: resolved,
       setVariables: resolved
+    };
+  }
+
+  // ==========================================
+  // EMIT: Publica evento para encadenar flujos
+  // ==========================================
+
+  async handleEmit(step, context) {
+    const { event, data = {} } = step;
+
+    if (!event) {
+      throw new Error('Emit step requires "event" property');
+    }
+
+    // Resolver datos del evento
+    const resolvedData = this.resolver.resolve(data, context);
+
+    // Añadir metadata del flujo origen
+    const eventPayload = {
+      ...resolvedData,
+      _flowMeta: {
+        sourceFlow: context.flow?.id,
+        sourceExecution: context.execution?.id,
+        emittedAt: new Date().toISOString()
+      }
+    };
+
+    // Publicar evento
+    await this.eventBus.publish(event, eventPayload);
+
+    this.logger.info('step-handlers.emit', {
+      event,
+      sourceFlow: context.flow?.id
+    });
+
+    return {
+      output: {
+        emitted: true,
+        event,
+        data: resolvedData
+      }
     };
   }
 }

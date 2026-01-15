@@ -45,7 +45,7 @@
       },
       "step-handlers.js": {
         "responsabilidad": "Implementacion de cada tipo de paso",
-        "tipos_soportados": ["service", "transform", "condition", "parallel", "agent", "http", "delay", "log", "set"]
+        "tipos_soportados": ["service", "transform", "condition", "parallel", "agent", "http", "delay", "log", "set", "emit"]
       },
       "variable-resolver.js": {
         "responsabilidad": "Interpolacion de variables y evaluacion de condiciones",
@@ -70,7 +70,18 @@
         "event": "Nombre del evento que dispara el flujo",
         "filter": "Filtros MongoDB-style para coincidir"
       },
+      "schedule": {
+        "cron": "Expresion cron (minuto hora dia-mes mes dia-semana)",
+        "timezone": "Zona horaria (default: Europe/Madrid)"
+      },
       "steps": "Array de pasos a ejecutar"
+    },
+    "schedule_examples": {
+      "domingo_3am": "0 3 * * 0",
+      "domingo_6am": "0 6 * * 0",
+      "diario_3am": "0 3 * * *",
+      "lunes_viernes_8am": "0 8 * * 1-5",
+      "cada_hora": "0 * * * *"
     },
     "ejemplo": {
       "id": "procesar-facturas",
@@ -170,6 +181,28 @@
       "propiedades": {
         "variables": "Objeto con variables a definir"
       }
+    },
+    "emit": {
+      "descripcion": "Publica evento para encadenar flujos",
+      "propiedades": {
+        "event": "Nombre del evento a publicar (ej: factura.nueva)",
+        "data": "Datos a incluir en el evento (soporta variables {{ }})"
+      },
+      "output": {
+        "emitted": "boolean - true si se emitió correctamente",
+        "event": "string - nombre del evento emitido",
+        "data": "object - datos enviados"
+      },
+      "ejemplo": {
+        "id": "emitir-factura",
+        "type": "emit",
+        "event": "factura.nueva",
+        "data": {
+          "source": "telegram",
+          "archivo": "{{ steps.normalizar.archivo }}"
+        }
+      },
+      "uso": "Encadenar flujos modulares - un flujo emite, otro escucha como trigger"
     }
   },
 
@@ -381,7 +414,7 @@
       "flow.failed": "Flujo fallido"
     },
     "suscritos": {
-      "triggers": ["bot.file.stored", "bot.message.received", "bot.command.received", "flow.trigger"],
+      "triggers": ["bot.file.stored", "bot.message.received", "bot.command.received", "flow.trigger", "factura.nueva", "factura.procesada", "factura.guardada", "factura.completada", "factura.error"],
       "providers": "Todos los eventos {provider}.{action}.response y {provider}.{action}.failed"
     }
   },
@@ -409,9 +442,60 @@
       "steps": "Resultados de cada paso ejecutado (indexado por step.id)",
       "variables": "Variables definidas con step 'set'",
       "flow": { "id": "ID del flujo", "name": "Nombre del flujo" },
+      "project": {
+        "id": "ID del proyecto (null si flujo global)",
+        "config": "Configuracion del proyecto (de config/facturas.json)"
+      },
+      "config": "Shortcut a project.config",
       "execution": { "id": "ID de ejecucion", "startedAt": "Timestamp inicio" }
     },
-    "acceso": "{{ steps.paso-id.campo }} o {{ steps.paso-id.data.campo }} para servicios"
+    "acceso": "{{ steps.paso-id.campo }} o {{ steps.paso-id.data.campo }} para servicios",
+    "acceso_config": "{{ config.telegram.botName }} o {{ project.id }}"
+  },
+
+  "flujos_por_proyecto": {
+    "descripcion": "Los flujos se organizan por proyecto, no globalmente",
+    "ubicacion": "data/projects/{projectId}/flows/",
+    "configuracion": "data/projects/{projectId}/config/facturas.json",
+    "id_compuesto": "Los flujos de proyecto tienen ID {projectId}:{flowId}",
+    "carga_automatica": "flow-registry carga flujos de todos los proyectos al iniciar",
+    "plantilla": {
+      "ubicacion": "templates/facturas/",
+      "uso": "cp -r templates/facturas/* data/projects/{nuevo_proyecto}/",
+      "flujos_incluidos": [
+        "entrada-telegram - Recibe facturas desde Telegram",
+        "entrada-gmail - Recoge facturas desde Gmail",
+        "procesar-lote - Procesa lote semanal con OCR",
+        "procesar-factura - OCR individual de cada factura",
+        "consolidar-excel - Exporta a Excel para asesoria"
+      ]
+    },
+    "configuracion_proyecto": {
+      "telegram.botName": "Nombre del bot de Telegram",
+      "gmail.enabled": "Si habilitar recogida de Gmail",
+      "gmail.account": "Cuenta Gmail a usar",
+      "schedule.gmail": "Cron para Gmail (default: 0 3 * * *)",
+      "schedule.procesamiento": "Cron para OCR (default: 0 3 * * 0)",
+      "schedule.exportacion": "Cron para Excel (default: 0 6 * * 0)",
+      "storage.inbox": "Ruta relativa para entrada",
+      "storage.procesadas": "Ruta relativa para procesadas",
+      "storage.exports": "Ruta relativa para exports"
+    }
+  },
+
+  "scheduling": {
+    "descripcion": "Ejecucion programada de flujos via cron",
+    "componente": "services/scheduler.js",
+    "uso": {
+      "cron": "Expresion cron (min hora dia mes dia-semana)",
+      "timezone": "Zona horaria (default: Europe/Madrid)"
+    },
+    "trigger_event": "flow.trigger con flowId para activar flujo programado",
+    "ejemplos": {
+      "domingo_3am": "0 3 * * 0",
+      "diario_3am": "0 3 * * *",
+      "lunes_viernes_8am": "0 8 * * 1-5"
+    }
   },
 
   "buenas_practicas": [
@@ -428,7 +512,10 @@
 
   "ubicacion_archivos": {
     "modulo": "modules/flow-engine/",
-    "flujos_json": "modules/flow-engine/flows/",
-    "servicios": "modules/flow-engine/services/"
+    "flujos_globales": "modules/flow-engine/flows/",
+    "servicios": "modules/flow-engine/services/",
+    "flujos_proyecto": "data/projects/{projectId}/flows/",
+    "config_proyecto": "data/projects/{projectId}/config/",
+    "plantillas": "templates/facturas/"
   }
 }

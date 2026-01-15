@@ -43,6 +43,11 @@ class FlowExecutor {
           id: flow.id,
           name: flow.name
         },
+        project: {
+          id: flow._projectId || null,
+          config: flow._projectConfig || {}
+        },
+        config: flow._projectConfig || {},  // Atajo para acceder a config
         steps: {},       // Resultados de cada step por ID
         variables: {},   // Variables definidas con step 'set'
         execution: {

@@ -1,41 +1,118 @@
 /**
  * Facturas Database Service
  *
- * Servicio local para gestión de facturas en SQLite.
- * Maneja el registro, estado y metadatos de facturas.
+ * Servicio local para gestión de facturas usando el database-manager existente.
+ * Cada proyecto tiene su propia BD SQLite.
  *
  * Eventos:
+ * - local.facturas-db.init.request -> local.facturas-db.init.response
  * - local.facturas-db.registrar.request -> local.facturas-db.registrar.response
  * - local.facturas-db.actualizar.request -> local.facturas-db.actualizar.response
  * - local.facturas-db.listar.request -> local.facturas-db.listar.response
  * - local.facturas-db.obtener.request -> local.facturas-db.obtener.response
  * - local.facturas-db.pendientes.request -> local.facturas-db.pendientes.response
+ * - local.facturas-db.exportar.request -> local.facturas-db.exportar.response
+ * - local.facturas-db.marcarExportadas.request -> local.facturas-db.marcarExportadas.response
  *
- * @version 1.0.0
+ * @version 2.0.0
  * @created 2026-01-15
  */
 
-const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 
-// SQLite - usar better-sqlite3 si está disponible, sino sqlite3
-let Database;
-try {
-  Database = require('better-sqlite3');
-} catch {
-  // Fallback básico
-  Database = null;
-}
+// Schema de la tabla facturas
+const FACTURAS_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS facturas (
+    id TEXT PRIMARY KEY,
+
+    -- IDENTIFICACIÓN ARCHIVO
+    nombre_archivo TEXT NOT NULL,
+    path_original TEXT,
+    path_procesada TEXT,
+    path_ocr_json TEXT,
+
+    -- ORIGEN/ENTRADA
+    source TEXT NOT NULL,
+    fecha_entrada DATETIME NOT NULL,
+    origen_bot TEXT,
+    origen_chat_id TEXT,
+    origen_user_id TEXT,
+    origen_user_name TEXT,
+    origen_caption TEXT,
+    origen_email_cuenta TEXT,
+    origen_email_de TEXT,
+    origen_email_asunto TEXT,
+    origen_email_message_id TEXT,
+
+    -- ESTADO PROCESAMIENTO
+    estado TEXT DEFAULT 'pendiente',
+    fecha_procesado DATETIME,
+    ocr_provider TEXT,
+    ocr_confianza REAL,
+    ocr_texto TEXT,
+    ocr_error TEXT,
+
+    -- DATOS FACTURA (extraídos/revisados)
+    factura_numero TEXT,
+    factura_fecha DATE,
+    factura_fecha_operacion DATE,
+    proveedor_nif TEXT,
+    proveedor_nombre TEXT,
+    concepto TEXT,
+    categoria TEXT,
+
+    -- IMPORTES
+    base_imponible REAL,
+    tipo_iva REAL,
+    cuota_iva REAL,
+    cuota_deducible REAL,
+    retencion_irpf REAL,
+    total_factura REAL,
+
+    -- PAGO
+    metodo_pago TEXT,
+    estado_pago TEXT DEFAULT 'pendiente',
+    fecha_vencimiento DATE,
+    fecha_pago DATE,
+
+    -- EXPORT
+    semana_export TEXT,
+    fecha_exportado DATETIME,
+
+    -- METADATA
+    notas TEXT,
+    revisado_por TEXT,
+    fecha_revision DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_facturas_estado ON facturas(estado);
+  CREATE INDEX IF NOT EXISTS idx_facturas_fecha_entrada ON facturas(fecha_entrada);
+  CREATE INDEX IF NOT EXISTS idx_facturas_source ON facturas(source);
+  CREATE INDEX IF NOT EXISTS idx_facturas_semana ON facturas(semana_export);
+`;
 
 module.exports = {
   name: 'local.facturas-db',
-  description: 'Gestión de facturas en SQLite',
+  description: 'Gestión de facturas usando database-manager del sistema',
+  version: '2.0.0',
 
-  // Base de datos por proyecto
-  databases: new Map(),
+  // Proyectos inicializados
+  initializedProjects: new Set(),
+
+  // EventBus reference (injected by provider-loader)
+  eventBus: null,
+  logger: null,
 
   functions: {
+    init: {
+      event: 'local.facturas-db.init.request',
+      description: 'Inicializar schema de facturas en un proyecto',
+      input: {
+        proyecto: { type: 'string', required: true, description: 'ID del proyecto' }
+      }
+    },
     registrar: {
       event: 'local.facturas-db.registrar.request',
       description: 'Registrar nueva factura en la base de datos',
@@ -45,10 +122,6 @@ module.exports = {
         source: { type: 'string', required: true, enum: ['telegram', 'gmail'] },
         path_original: { type: 'string', required: true },
         origen: { type: 'object', description: 'Metadata del origen (bot, email, etc.)' }
-      },
-      output: {
-        success: { type: 'boolean' },
-        data: { type: 'object', description: 'Factura registrada con ID' }
       }
     },
     actualizar: {
@@ -101,17 +174,6 @@ module.exports = {
       input: {
         proyecto: { type: 'string', required: true },
         semana: { type: 'string', description: 'Semana ISO (si no se especifica, usa actual)' }
-      },
-      output: {
-        success: { type: 'boolean' },
-        data: {
-          type: 'object',
-          properties: {
-            semana: { type: 'string' },
-            facturas: { type: 'array', description: 'Facturas formateadas para Excel' },
-            total: { type: 'number' }
-          }
-        }
       }
     },
     marcarExportadas: {
@@ -126,120 +188,81 @@ module.exports = {
   },
 
   /**
-   * Obtiene o crea la base de datos para un proyecto
+   * Ejecuta query en la BD del proyecto usando database-manager
    */
-  getDatabase(proyecto) {
-    if (this.databases.has(proyecto)) {
-      return this.databases.get(proyecto);
-    }
+  async executeQuery(proyecto, query, params = [], readOnly = true) {
+    return new Promise((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      const timeout = setTimeout(() => {
+        reject(new Error('Database query timeout'));
+      }, 30000);
 
-    // Crear directorio si no existe
-    const dbDir = path.join(process.cwd(), 'data', 'projects', proyecto, 'storage');
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
+      // Suscribirse a la respuesta
+      const handleResponse = (event) => {
+        const data = event.data || event;
+        if (data.request_id === requestId) {
+          clearTimeout(timeout);
+          if (data.success) {
+            resolve(data.data || []);
+          } else {
+            reject(new Error(data.error || 'Query failed'));
+          }
+        }
+      };
 
-    const dbPath = path.join(dbDir, 'facturas.db');
+      // Publicar query
+      this.eventBus.subscribe('db.query.response', handleResponse).then(unsub => {
+        this.eventBus.publish('db.query.request', {
+          project_id: proyecto,
+          query,
+          params,
+          read_only: readOnly,
+          request_id: requestId
+        });
 
-    if (!Database) {
-      throw new Error('SQLite not available. Install better-sqlite3: npm install better-sqlite3');
-    }
-
-    const db = new Database(dbPath);
-
-    // Crear esquema si no existe
-    this.initializeSchema(db);
-
-    this.databases.set(proyecto, db);
-    return db;
+        // Auto-unsub después de respuesta o timeout
+        setTimeout(() => unsub(), 35000);
+      });
+    });
   },
 
   /**
-   * Inicializa el esquema de la base de datos
+   * Inicializa el schema de facturas si no existe
    */
-  initializeSchema(db) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS facturas (
-        id TEXT PRIMARY KEY,
+  async ensureSchema(proyecto) {
+    if (this.initializedProjects.has(proyecto)) {
+      return true;
+    }
 
-        -- IDENTIFICACIÓN ARCHIVO
-        nombre_archivo TEXT NOT NULL,
-        path_original TEXT,
-        path_procesada TEXT,
-        path_ocr_json TEXT,
+    return new Promise((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      const timeout = setTimeout(() => {
+        reject(new Error('Schema init timeout'));
+      }, 30000);
 
-        -- ORIGEN/ENTRADA
-        source TEXT NOT NULL,
-        fecha_entrada DATETIME NOT NULL,
-        origen_bot TEXT,
-        origen_chat_id TEXT,
-        origen_user_id TEXT,
-        origen_user_name TEXT,
-        origen_caption TEXT,
-        origen_email_cuenta TEXT,
-        origen_email_de TEXT,
-        origen_email_asunto TEXT,
-        origen_email_message_id TEXT,
+      const handleResponse = (event) => {
+        const data = event.data || event;
+        if (data.request_id === requestId) {
+          clearTimeout(timeout);
+          if (data.success) {
+            this.initializedProjects.add(proyecto);
+            resolve(true);
+          } else {
+            reject(new Error(data.error || 'Schema init failed'));
+          }
+        }
+      };
 
-        -- ESTADO PROCESAMIENTO
-        estado TEXT DEFAULT 'pendiente',
-        fecha_procesado DATETIME,
-        ocr_provider TEXT,
-        ocr_confianza REAL,
-        ocr_texto TEXT,
-        ocr_error TEXT,
+      this.eventBus.subscribe('db.schema.init.response', handleResponse).then(unsub => {
+        this.eventBus.publish('db.schema.init.request', {
+          project_id: proyecto,
+          schema: FACTURAS_SCHEMA,
+          request_id: requestId
+        });
 
-        -- DATOS FACTURA (extraídos/revisados)
-        factura_numero TEXT,
-        factura_fecha DATE,
-        factura_fecha_operacion DATE,
-        proveedor_nif TEXT,
-        proveedor_nombre TEXT,
-        concepto TEXT,
-        categoria TEXT,
-
-        -- IMPORTES
-        base_imponible REAL,
-        tipo_iva REAL,
-        cuota_iva REAL,
-        cuota_deducible REAL,
-        retencion_irpf REAL,
-        total_factura REAL,
-
-        -- PAGO
-        metodo_pago TEXT,
-        estado_pago TEXT DEFAULT 'pendiente',
-        fecha_vencimiento DATE,
-        fecha_pago DATE,
-
-        -- EXPORT
-        semana_export TEXT,
-        fecha_exportado DATETIME,
-
-        -- METADATA
-        notas TEXT,
-        revisado_por TEXT,
-        fecha_revision DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_facturas_estado ON facturas(estado);
-      CREATE INDEX IF NOT EXISTS idx_facturas_fecha_entrada ON facturas(fecha_entrada);
-      CREATE INDEX IF NOT EXISTS idx_facturas_source ON facturas(source);
-      CREATE INDEX IF NOT EXISTS idx_facturas_semana ON facturas(semana_export);
-    `);
-  },
-
-  /**
-   * Genera nombre de archivo con formato estándar
-   * Formato: {source}_{fecha}_{hora}_{estado}.{ext}
-   */
-  generarNombreArchivo(source, extension, estado = 'pendiente') {
-    const now = new Date();
-    const fecha = now.toISOString().split('T')[0]; // 2026-01-15
-    const hora = now.toTimeString().slice(0, 5).replace(':', ''); // 1030
-    return `${source}_${fecha}_${hora}_${estado}.${extension}`;
+        setTimeout(() => unsub(), 35000);
+      });
+    });
   },
 
   /**
@@ -259,27 +282,42 @@ module.exports = {
   // ==========================================
 
   /**
+   * Inicializar schema
+   */
+  async init({ proyecto }) {
+    try {
+      await this.ensureSchema(proyecto);
+      return {
+        success: true,
+        data: { proyecto, initialized: true }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Error inicializando schema: ${error.message}`
+      };
+    }
+  },
+
+  /**
    * Registrar nueva factura
    */
   async registrar({ proyecto, nombre_archivo, source, path_original, origen = {} }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
+
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
 
-      const stmt = db.prepare(`
+      const query = `
         INSERT INTO facturas (
           id, nombre_archivo, source, path_original, fecha_entrada, estado,
           origen_bot, origen_chat_id, origen_user_id, origen_user_name, origen_caption,
           origen_email_cuenta, origen_email_de, origen_email_asunto, origen_email_message_id
-        ) VALUES (
-          ?, ?, ?, ?, ?, 'pendiente',
-          ?, ?, ?, ?, ?,
-          ?, ?, ?, ?
-        )
-      `);
+        ) VALUES (?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
 
-      stmt.run(
+      const params = [
         id, nombre_archivo, source, path_original, now,
         origen.botName || null,
         origen.chatId || null,
@@ -290,7 +328,9 @@ module.exports = {
         origen.de || null,
         origen.asunto || null,
         origen.messageId || null
-      );
+      ];
+
+      await this.executeQuery(proyecto, query, params, false);
 
       return {
         success: true,
@@ -317,26 +357,16 @@ module.exports = {
    */
   async actualizar({ proyecto, id, campos }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
 
-      // Construir query dinámico
       const keys = Object.keys(campos);
       const setClause = keys.map(k => `${k} = ?`).join(', ');
       const values = keys.map(k => campos[k]);
 
-      // Añadir updated_at
-      const sql = `UPDATE facturas SET ${setClause}, updated_at = ? WHERE id = ?`;
+      const query = `UPDATE facturas SET ${setClause}, updated_at = ? WHERE id = ?`;
       values.push(new Date().toISOString(), id);
 
-      const stmt = db.prepare(sql);
-      const result = stmt.run(...values);
-
-      if (result.changes === 0) {
-        return {
-          success: false,
-          error: `Factura ${id} no encontrada`
-        };
-      }
+      await this.executeQuery(proyecto, query, values, false);
 
       return {
         success: true,
@@ -356,31 +386,30 @@ module.exports = {
    */
   async listar({ proyecto, estado, desde, hasta, limit = 100 }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
 
-      let sql = 'SELECT * FROM facturas WHERE 1=1';
+      let query = 'SELECT * FROM facturas WHERE 1=1';
       const params = [];
 
       if (estado) {
-        sql += ' AND estado = ?';
+        query += ' AND estado = ?';
         params.push(estado);
       }
 
       if (desde) {
-        sql += ' AND fecha_entrada >= ?';
+        query += ' AND fecha_entrada >= ?';
         params.push(desde);
       }
 
       if (hasta) {
-        sql += ' AND fecha_entrada <= ?';
+        query += ' AND fecha_entrada <= ?';
         params.push(hasta);
       }
 
-      sql += ' ORDER BY fecha_entrada DESC LIMIT ?';
+      query += ' ORDER BY fecha_entrada DESC LIMIT ?';
       params.push(limit);
 
-      const stmt = db.prepare(sql);
-      const rows = stmt.all(...params);
+      const rows = await this.executeQuery(proyecto, query, params, true);
 
       return {
         success: true,
@@ -403,12 +432,16 @@ module.exports = {
    */
   async obtener({ proyecto, id }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
 
-      const stmt = db.prepare('SELECT * FROM facturas WHERE id = ?');
-      const row = stmt.get(id);
+      const rows = await this.executeQuery(
+        proyecto,
+        'SELECT * FROM facturas WHERE id = ?',
+        [id],
+        true
+      );
 
-      if (!row) {
+      if (rows.length === 0) {
         return {
           success: false,
           error: `Factura ${id} no encontrada`
@@ -417,7 +450,7 @@ module.exports = {
 
       return {
         success: true,
-        data: row
+        data: rows[0]
       };
 
     } catch (error) {
@@ -433,15 +466,14 @@ module.exports = {
    */
   async pendientes({ proyecto, limit = 100 }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
 
-      const stmt = db.prepare(`
-        SELECT * FROM facturas
-        WHERE estado = 'pendiente'
-        ORDER BY fecha_entrada ASC
-        LIMIT ?
-      `);
-      const rows = stmt.all(limit);
+      const rows = await this.executeQuery(
+        proyecto,
+        `SELECT * FROM facturas WHERE estado = 'pendiente' ORDER BY fecha_entrada ASC LIMIT ?`,
+        [limit],
+        true
+      );
 
       return {
         success: true,
@@ -464,42 +496,36 @@ module.exports = {
    */
   async estadisticas({ proyecto, semana }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
 
       const semanaActual = semana || this.calcularSemanaISO();
 
-      // Stats generales
-      const general = db.prepare(`
-        SELECT
+      const general = await this.executeQuery(
+        proyecto,
+        `SELECT
           COUNT(*) as total,
           SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes,
           SUM(CASE WHEN estado = 'procesada' THEN 1 ELSE 0 END) as procesadas,
           SUM(CASE WHEN estado = 'exportada' THEN 1 ELSE 0 END) as exportadas,
           SUM(CASE WHEN estado = 'error' THEN 1 ELSE 0 END) as errores
-        FROM facturas
-      `).get();
+        FROM facturas`,
+        [],
+        true
+      );
 
-      // Stats por source
-      const porSource = db.prepare(`
-        SELECT source, COUNT(*) as total
-        FROM facturas
-        GROUP BY source
-      `).all();
-
-      // Stats de la semana
-      const semanaStats = db.prepare(`
-        SELECT COUNT(*) as total
-        FROM facturas
-        WHERE semana_export = ? OR (semana_export IS NULL AND estado != 'exportada')
-      `).get(semanaActual);
+      const porSource = await this.executeQuery(
+        proyecto,
+        `SELECT source, COUNT(*) as total FROM facturas GROUP BY source`,
+        [],
+        true
+      );
 
       return {
         success: true,
         data: {
           semana: semanaActual,
-          general,
-          porSource,
-          semanaActual: semanaStats
+          general: general[0] || {},
+          porSource
         }
       };
 
@@ -513,20 +539,19 @@ module.exports = {
 
   /**
    * Exportar facturas procesadas en formato para asesoría
-   * Devuelve datos listos para generar Excel
    */
   async exportar({ proyecto, semana }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
+
       const semanaExport = semana || this.calcularSemanaISO();
 
-      // Obtener facturas procesadas no exportadas
-      const stmt = db.prepare(`
-        SELECT * FROM facturas
-        WHERE estado = 'procesada'
-        ORDER BY fecha_entrada ASC
-      `);
-      const facturas = stmt.all();
+      const facturas = await this.executeQuery(
+        proyecto,
+        `SELECT * FROM facturas WHERE estado = 'procesada' ORDER BY fecha_entrada ASC`,
+        [],
+        true
+      );
 
       // Formatear para Excel (formato asesoría)
       const facturasFormateadas = facturas.map((f, index) => ({
@@ -575,19 +600,19 @@ module.exports = {
    */
   async marcarExportadas({ proyecto, ids, semana }) {
     try {
-      const db = this.getDatabase(proyecto);
+      await this.ensureSchema(proyecto);
+
       const now = new Date().toISOString();
-
-      const stmt = db.prepare(`
-        UPDATE facturas
-        SET estado = 'exportada', semana_export = ?, fecha_exportado = ?, updated_at = ?
-        WHERE id = ?
-      `);
-
       let updated = 0;
+
       for (const id of ids) {
-        const result = stmt.run(semana, now, now, id);
-        updated += result.changes;
+        await this.executeQuery(
+          proyecto,
+          `UPDATE facturas SET estado = 'exportada', semana_export = ?, fecha_exportado = ?, updated_at = ? WHERE id = ?`,
+          [semana, now, now, id],
+          false
+        );
+        updated++;
       }
 
       return {
@@ -604,15 +629,5 @@ module.exports = {
         error: `Error marcando exportadas: ${error.message}`
       };
     }
-  },
-
-  /**
-   * Cleanup
-   */
-  async cleanup() {
-    for (const [_, db] of this.databases) {
-      db.close();
-    }
-    this.databases.clear();
   }
 };

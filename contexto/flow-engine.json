@@ -70,7 +70,18 @@
         "event": "Nombre del evento que dispara el flujo",
         "filter": "Filtros MongoDB-style para coincidir"
       },
+      "schedule": {
+        "cron": "Expresion cron (minuto hora dia-mes mes dia-semana)",
+        "timezone": "Zona horaria (default: Europe/Madrid)"
+      },
       "steps": "Array de pasos a ejecutar"
+    },
+    "schedule_examples": {
+      "domingo_3am": "0 3 * * 0",
+      "domingo_6am": "0 6 * * 0",
+      "diario_3am": "0 3 * * *",
+      "lunes_viernes_8am": "0 8 * * 1-5",
+      "cada_hora": "0 * * * *"
     },
     "ejemplo": {
       "id": "procesar-facturas",

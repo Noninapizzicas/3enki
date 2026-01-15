@@ -1,0 +1,172 @@
+{
+  "id": "entrada-gmail",
+  "name": "Entrada Facturas - Gmail",
+  "description": "Busca facturas en Gmail diariamente, las descarga y registra en BD",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "schedule": {
+    "cron": "0 3 * * *",
+    "timezone": "Europe/Madrid"
+  },
+
+  "trigger": {
+    "event": "flow.trigger",
+    "filter": {
+      "flowId": "entrada-gmail"
+    }
+  },
+
+  "config": {
+    "proyecto": "facturas",
+    "gmail_account": "",
+    "search_query": "has:attachment (subject:factura OR subject:invoice OR subject:fra OR from:facturacion) is:unread newer_than:7d"
+  },
+
+  "steps": [
+    {
+      "id": "log-inicio",
+      "type": "log",
+      "level": "info",
+      "message": "Iniciando búsqueda de facturas en Gmail"
+    },
+    {
+      "id": "crear-directorio",
+      "type": "service",
+      "service": "fs",
+      "action": "mkdir",
+      "path": "@/projects/facturas/storage/inbox",
+      "onError": "continue"
+    },
+    {
+      "id": "crear-temp",
+      "type": "service",
+      "service": "fs",
+      "action": "mkdir",
+      "path": "@/temp/gmail",
+      "onError": "continue"
+    },
+    {
+      "id": "buscar-emails",
+      "type": "service",
+      "service": "gmail",
+      "action": "search",
+      "query": "has:attachment (subject:factura OR subject:invoice OR subject:fra) is:unread newer_than:7d",
+      "maxResults": 20,
+      "account": "{{ default(trigger.account, '') }}",
+      "timeout": 60000
+    },
+    {
+      "id": "verificar-resultados",
+      "type": "condition",
+      "if": "{{ length(default(steps.buscar-emails.data.messages, [])) > 0 }}",
+      "then": "procesar-primer-email",
+      "else": "log-sin-facturas"
+    },
+    {
+      "id": "log-sin-facturas",
+      "type": "log",
+      "level": "info",
+      "message": "No hay emails con facturas pendientes"
+    },
+    {
+      "id": "procesar-primer-email",
+      "type": "log",
+      "level": "info",
+      "message": "Procesando {{ length(steps.buscar-emails.data.messages) }} email(s) con facturas"
+    },
+    {
+      "id": "leer-email",
+      "type": "service",
+      "service": "gmail",
+      "action": "read",
+      "messageId": "{{ steps.buscar-emails.data.messages[0].id }}",
+      "format": "full",
+      "account": "{{ default(trigger.account, '') }}",
+      "timeout": 30000
+    },
+    {
+      "id": "verificar-adjuntos",
+      "type": "condition",
+      "if": "{{ length(default(steps.leer-email.data.attachments, [])) > 0 }}",
+      "then": "descargar-adjunto",
+      "else": "log-sin-adjuntos"
+    },
+    {
+      "id": "log-sin-adjuntos",
+      "type": "log",
+      "level": "warn",
+      "message": "Email sin adjuntos válidos: {{ steps.leer-email.data.subject }}"
+    },
+    {
+      "id": "descargar-adjunto",
+      "type": "service",
+      "service": "gmail",
+      "action": "attachments.download",
+      "messageId": "{{ steps.leer-email.data.id }}",
+      "attachmentId": "{{ steps.leer-email.data.attachments[0].id }}",
+      "account": "{{ default(trigger.account, '') }}",
+      "timeout": 60000
+    },
+    {
+      "id": "generar-nombre",
+      "type": "set",
+      "variables": {
+        "extension": "{{ steps.leer-email.data.attachments[0].filename.split('.').pop() }}",
+        "nombreArchivo": "gmail_{{ date }}_{{ time.replace(':', '').substring(0, 4) }}_pendiente.{{ steps.leer-email.data.attachments[0].filename.split('.').pop() }}"
+      }
+    },
+    {
+      "id": "guardar-adjunto",
+      "type": "service",
+      "service": "fs",
+      "action": "write",
+      "path": "@/projects/facturas/storage/inbox/{{ variables.nombreArchivo }}",
+      "content": "{{ steps.descargar-adjunto.data.content }}",
+      "encoding": "base64",
+      "timeout": 30000
+    },
+    {
+      "id": "registrar-bd",
+      "type": "service",
+      "service": "local.facturas-db",
+      "action": "registrar",
+      "proyecto": "facturas",
+      "nombre_archivo": "{{ variables.nombreArchivo }}",
+      "source": "gmail",
+      "path_original": "@/projects/facturas/storage/inbox/{{ variables.nombreArchivo }}",
+      "origen": {
+        "cuenta": "{{ default(trigger.account, 'default') }}",
+        "de": "{{ steps.leer-email.data.from }}",
+        "asunto": "{{ steps.leer-email.data.subject }}",
+        "messageId": "{{ steps.leer-email.data.id }}"
+      },
+      "timeout": 10000
+    },
+    {
+      "id": "log-registrada",
+      "type": "log",
+      "level": "info",
+      "message": "Factura Gmail registrada: {{ variables.nombreArchivo }} de {{ steps.leer-email.data.from }}"
+    },
+    {
+      "id": "emitir-factura-recibida",
+      "type": "emit",
+      "event": "factura.recibida",
+      "data": {
+        "id": "{{ steps.registrar-bd.data.id }}",
+        "source": "gmail",
+        "archivo": {
+          "nombre": "{{ variables.nombreArchivo }}",
+          "path": "@/projects/facturas/storage/inbox/{{ variables.nombreArchivo }}",
+          "mimeType": "{{ steps.leer-email.data.attachments[0].mimeType }}"
+        },
+        "origen": {
+          "de": "{{ steps.leer-email.data.from }}",
+          "asunto": "{{ steps.leer-email.data.subject }}"
+        },
+        "recibido": "{{ now }}"
+      }
+    }
+  ]
+}

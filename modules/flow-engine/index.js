@@ -19,6 +19,7 @@ const FlowRegistry = require('./services/flow-registry');
 const FlowExecutor = require('./services/flow-executor');
 const StepHandlers = require('./services/step-handlers');
 const VariableResolver = require('./services/variable-resolver');
+const FlowScheduler = require('./services/scheduler');
 
 class FlowEngineModule {
   constructor() {
@@ -36,6 +37,7 @@ class FlowEngineModule {
     this.executor = null;
     this.stepHandlers = null;
     this.variableResolver = null;
+    this.scheduler = null;
 
     // Subscriptions
     this.unsubscribes = [];
@@ -82,6 +84,10 @@ class FlowEngineModule {
       this.variableResolver
     );
 
+    // Inicializar scheduler para flujos programados
+    this.scheduler = new FlowScheduler(this.logger, this.eventBus);
+    this.scheduler.initialize(this.registry.getAll());
+
     // Suscribirse a eventos
     await this.subscribeToEvents();
 
@@ -96,6 +102,11 @@ class FlowEngineModule {
 
   async onUnload() {
     this.logger.info('flow-engine.unloading');
+
+    // Detener scheduler
+    if (this.scheduler) {
+      this.scheduler.stop();
+    }
 
     // Unsubscribe
     for (const unsub of this.unsubscribes) {
@@ -121,6 +132,8 @@ class FlowEngineModule {
       'flow.trigger', // Trigger manual
       // Eventos de encadenamiento de flujos (facturación)
       'factura.nueva',
+      'factura.recibida',
+      'factura.procesar',
       'factura.procesada',
       'factura.guardada',
       'factura.completada',
@@ -191,6 +204,36 @@ class FlowEngineModule {
       // Telegram
       'telegram.send_message.response',
       'telegram.send_message.error',
+      // Facturas DB
+      'local.facturas-db.registrar.response',
+      'local.facturas-db.registrar.failed',
+      'local.facturas-db.actualizar.response',
+      'local.facturas-db.actualizar.failed',
+      'local.facturas-db.listar.response',
+      'local.facturas-db.listar.failed',
+      'local.facturas-db.obtener.response',
+      'local.facturas-db.obtener.failed',
+      'local.facturas-db.pendientes.response',
+      'local.facturas-db.pendientes.failed',
+      'local.facturas-db.estadisticas.response',
+      'local.facturas-db.estadisticas.failed',
+      'local.facturas-db.exportar.response',
+      'local.facturas-db.exportar.failed',
+      'local.facturas-db.marcarExportadas.response',
+      'local.facturas-db.marcarExportadas.failed',
+      // XLSX
+      'local.xlsx.create.response',
+      'local.xlsx.create.failed',
+      // Google Vision local
+      'local.google-vision.extract.response',
+      'local.google-vision.extract.failed',
+      // Gmail
+      'gmail.search.response',
+      'gmail.search.failed',
+      'gmail.read.response',
+      'gmail.read.failed',
+      'gmail.attachments.download.response',
+      'gmail.attachments.download.failed',
     ];
 
     for (const event of serviceResponsePatterns) {

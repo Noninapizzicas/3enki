@@ -203,3 +203,29 @@ export {
   contextStats
 } from './conversations';
 export type { Conversation, Message, ConversationSection, ConversationsState, ContextStats } from './conversations';
+
+// Facturas Store (MQTT-based)
+export {
+  facturasStore,
+  initFacturasSubscriptions,
+  loadFacturas,
+  loadStats as loadFacturasStats,
+  getFactura,
+  updateFactura,
+  reprocesarFactura,
+  subirFactura,
+  exportarExcel,
+  marcarPagada,
+  setActiveTab as setFacturasTab,
+  selectFactura,
+  setFilter as setFacturasFilter,
+  clearError as clearFacturasError,
+  filteredFacturas,
+  selectedFactura,
+  activeTab as facturasActiveTab,
+  facturasStats,
+  facturasLoading,
+  facturasError,
+  currentFilter as facturasFilter
+} from './facturas';
+export type { Factura, FacturaEstado, FacturaSource, FacturasState } from './facturas';

@@ -8,6 +8,7 @@
 
   "config": {
     "flowsPath": "./modules/flow-engine/flows",
+    "projectsPath": "./data/projects",
     "autoLoadFlows": true,
     "defaultTimeout": 300000,
     "maxConcurrentFlows": 50
@@ -22,6 +23,10 @@
     "bot.file.stored",
     "bot.message.received",
     "bot.command.received",
+    "factura.recibida",
+    "factura.procesar",
+    "factura.procesada",
+    "factura.error",
     "fs.*.response",
     "fs.*.failed",
     "local.*.*.response",

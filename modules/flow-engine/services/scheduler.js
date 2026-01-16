@@ -64,11 +64,24 @@ class FlowScheduler {
   scheduleFlow(flow) {
     const { id, name, schedule } = flow;
 
+    // Resolver variables en la expresión cron
+    let cronExpression = schedule.cron;
+    let timezone = schedule.timezone || 'Europe/Madrid';
+
+    // Si es un template, resolver con la config del proyecto
+    if (cronExpression.includes('{{') && flow._projectConfig) {
+      cronExpression = this.resolveTemplate(cronExpression, flow._projectConfig);
+    }
+    if (timezone.includes('{{') && flow._projectConfig) {
+      timezone = this.resolveTemplate(timezone, flow._projectConfig);
+    }
+
     // Validar expresión cron
-    if (!cron.validate(schedule.cron)) {
+    if (!cron.validate(cronExpression)) {
       this.logger.error('scheduler.invalid-cron', {
         flowId: id,
-        cron: schedule.cron
+        cron: cronExpression,
+        original: schedule.cron
       });
       return;
     }
@@ -78,29 +91,54 @@ class FlowScheduler {
       this.unscheduleFlow(id);
     }
 
-    // Crear tarea cron
-    const task = cron.schedule(schedule.cron, async () => {
+    // Crear tarea cron con expresión resuelta
+    const task = cron.schedule(cronExpression, async () => {
       await this.executeScheduledFlow(flow);
     }, {
       scheduled: true,
-      timezone: schedule.timezone || 'Europe/Madrid'
+      timezone: timezone
     });
 
     this.scheduledTasks.set(id, {
       task,
       flow,
+      cronExpression, // Guardar expresión resuelta
+      timezone,
       lastRun: null,
-      nextRun: this.getNextRun(schedule.cron),
+      nextRun: this.getNextRun(cronExpression),
       runCount: 0
     });
 
     this.logger.info('scheduler.flow-scheduled', {
       flowId: id,
       flowName: name,
-      cron: schedule.cron,
-      timezone: schedule.timezone || 'Europe/Madrid',
-      nextRun: this.getNextRun(schedule.cron)
+      cron: cronExpression,
+      timezone: timezone,
+      nextRun: this.getNextRun(cronExpression)
     });
+  }
+
+  /**
+   * Resuelve variables de template {{ config.* }} con la config del proyecto
+   * @param {string} template - String con variables {{ }}
+   * @param {Object} config - Configuración del proyecto
+   * @returns {string} - String con variables resueltas
+   */
+  resolveTemplate(template, config) {
+    return template.replace(/\{\{\s*config\.([a-zA-Z_.]+)\s*\}\}/g, (match, path) => {
+      const value = this.getNestedValue(config, path);
+      return value !== undefined ? value : match;
+    });
+  }
+
+  /**
+   * Obtiene valor anidado de un objeto usando path con puntos
+   * @param {Object} obj - Objeto fuente
+   * @param {string} path - Path como "schedule.gmail"
+   * @returns {*} - Valor encontrado o undefined
+   */
+  getNestedValue(obj, path) {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
   }
 
   /**
@@ -220,8 +258,9 @@ class FlowScheduler {
       tasks.push({
         flowId,
         flowName: info.flow.name,
-        cron: info.flow.schedule.cron,
-        timezone: info.flow.schedule.timezone || 'Europe/Madrid',
+        cron: info.cronExpression, // Usar expresión resuelta
+        cronTemplate: info.flow.schedule.cron, // Template original
+        timezone: info.timezone,
         lastRun: info.lastRun,
         nextRun: info.nextRun,
         runCount: info.runCount

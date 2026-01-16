@@ -387,6 +387,125 @@ class ToolManager {
       },
       handler: this.dbExecuteTool.bind(this)
     });
+
+    // ============ FLOW ENGINE TOOLS ============
+
+    this.registerTool({
+      name: 'flow_list',
+      description: 'List all available flows, optionally filtered by project',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Filter by project ID (optional)' }
+        },
+        required: []
+      },
+      handler: this.flowListTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'flow_trigger',
+      description: 'Trigger/execute a flow manually with optional input data',
+      parameters: {
+        type: 'object',
+        properties: {
+          flow_id: { type: 'string', description: 'Flow ID to trigger (e.g., "facturas-nonina:procesar-factura")' },
+          data: { type: 'object', description: 'Input data for the flow trigger' }
+        },
+        required: ['flow_id']
+      },
+      handler: this.flowTriggerTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'flow_status',
+      description: 'Get status of flow executions',
+      parameters: {
+        type: 'object',
+        properties: {
+          execution_id: { type: 'string', description: 'Specific execution ID (optional)' },
+          flow_id: { type: 'string', description: 'Filter by flow ID (optional)' }
+        },
+        required: []
+      },
+      handler: this.flowStatusTool.bind(this)
+    });
+
+    // ============ PROJECT CONFIG TOOLS ============
+
+    this.registerTool({
+      name: 'project_config_get',
+      description: 'Get project configuration',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+          config_file: { type: 'string', description: 'Config file name (default: main config)' }
+        },
+        required: ['project_id']
+      },
+      handler: this.projectConfigGetTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'project_config_update',
+      description: 'Update project configuration (e.g., change schedule, enable/disable features)',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+          config_file: { type: 'string', description: 'Config file name' },
+          updates: { type: 'object', description: 'Key-value pairs to update (supports dot notation like "schedule.gmail")' }
+        },
+        required: ['project_id', 'updates']
+      },
+      handler: this.projectConfigUpdateTool.bind(this)
+    });
+
+    // ============ FACTURAS TOOLS ============
+
+    this.registerTool({
+      name: 'facturas_list',
+      description: 'List invoices/facturas from a project database',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Project ID (e.g., "facturas-nonina")' },
+          status: { type: 'string', description: 'Filter by status: pendiente, procesada, exportada, error' },
+          limit: { type: 'number', description: 'Max results (default: 50)' }
+        },
+        required: ['project_id']
+      },
+      handler: this.facturasListTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'facturas_process',
+      description: 'Process pending invoices with OCR',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+          factura_id: { type: 'number', description: 'Specific invoice ID (optional, processes all pending if omitted)' }
+        },
+        required: ['project_id']
+      },
+      handler: this.facturasProcessTool.bind(this)
+    });
+
+    this.registerTool({
+      name: 'facturas_export',
+      description: 'Export processed invoices to Excel',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+          format: { type: 'string', description: 'Export format: libro-registro, resumen (default: libro-registro)' }
+        },
+        required: ['project_id']
+      },
+      handler: this.facturasExportTool.bind(this)
+    });
   }
 
   /**
@@ -1078,6 +1197,304 @@ class ToolManager {
         params,
         request_id: requestId
       });
+    });
+  }
+
+  // ============ FLOW ENGINE TOOL HANDLERS ============
+
+  /**
+   * Tool: List Flows
+   */
+  async flowListTool(args) {
+    const { project_id } = args || {};
+
+    const port = this.coreConfig?.http?.port || 3000;
+    let url = `http://localhost:${port}/api/flow-engine/flows`;
+    if (project_id) {
+      url += `?project=${project_id}`;
+    }
+
+    try {
+      const response = await this.httpRequestTool({
+        method: 'GET',
+        url,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const flows = response?.flows || [];
+
+      return {
+        success: true,
+        count: flows.length,
+        flows: flows.map(f => ({
+          id: f.id,
+          name: f.name,
+          project: f.projectId,
+          enabled: f.enabled,
+          trigger: f.trigger?.event || f.trigger?.type
+        }))
+      };
+    } catch (error) {
+      return { success: false, error: error.message, flows: [] };
+    }
+  }
+
+  /**
+   * Tool: Trigger Flow
+   */
+  async flowTriggerTool(args) {
+    const { flow_id, data = {} } = args;
+
+    if (!this.eventBus) {
+      return { success: false, error: 'EventBus not available' };
+    }
+
+    const crypto = require('crypto');
+    const requestId = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({
+          success: true,
+          message: `Flow ${flow_id} triggered (async)`,
+          execution_id: requestId
+        });
+      }, 5000);
+
+      const handler = (event) => {
+        const eventData = event?.data || event;
+        if (eventData.triggerId === requestId || eventData.flowId === flow_id) {
+          clearTimeout(timeout);
+          this.eventBus.off('flow.started', handler);
+
+          this.logger.info('tool-manager.flow.triggered', {
+            flow_id,
+            execution_id: eventData.executionId
+          });
+
+          resolve({
+            success: true,
+            flow_id,
+            execution_id: eventData.executionId,
+            message: `Flow ${flow_id} started`
+          });
+        }
+      };
+
+      this.eventBus.on('flow.started', handler);
+
+      this.eventBus.publish('flow.trigger', {
+        flowId: flow_id,
+        triggerId: requestId,
+        data
+      });
+    });
+  }
+
+  /**
+   * Tool: Flow Status
+   */
+  async flowStatusTool(args) {
+    const { execution_id, flow_id } = args || {};
+
+    const port = this.coreConfig?.http?.port || 3000;
+    let url = `http://localhost:${port}/api/flow-engine/executions`;
+    if (execution_id) {
+      url = `http://localhost:${port}/api/flow-engine/executions/${execution_id}`;
+    }
+
+    try {
+      const response = await this.httpRequestTool({
+        method: 'GET',
+        url,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      let executions = response?.executions || (response?.execution ? [response.execution] : []);
+
+      if (flow_id && !execution_id) {
+        executions = executions.filter(e => e.flowId === flow_id);
+      }
+
+      return {
+        success: true,
+        count: executions.length,
+        executions: executions.map(e => ({
+          id: e.id,
+          flow_id: e.flowId,
+          status: e.status,
+          started: e.startedAt,
+          completed: e.completedAt,
+          current_step: e.currentStep
+        }))
+      };
+    } catch (error) {
+      return { success: false, error: error.message, executions: [] };
+    }
+  }
+
+  // ============ PROJECT CONFIG TOOL HANDLERS ============
+
+  /**
+   * Tool: Get Project Config
+   */
+  async projectConfigGetTool(args) {
+    const { project_id, config_file } = args;
+
+    const fs = require('fs').promises;
+    const path = require('path');
+
+    const configDir = path.join(process.cwd(), 'data', 'projects', project_id, 'config');
+    const configFileName = config_file || `${project_id.split('-').pop()}.json`;
+    const configPath = path.join(configDir, configFileName);
+
+    try {
+      // Try specific config file first
+      let content;
+      try {
+        content = await fs.readFile(configPath, 'utf-8');
+      } catch {
+        // Fallback: find any .json in config dir
+        const files = await fs.readdir(configDir);
+        const jsonFile = files.find(f => f.endsWith('.json'));
+        if (jsonFile) {
+          content = await fs.readFile(path.join(configDir, jsonFile), 'utf-8');
+        } else {
+          return { success: false, error: 'No config file found' };
+        }
+      }
+
+      const config = JSON.parse(content);
+
+      return {
+        success: true,
+        project_id,
+        config
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Tool: Update Project Config
+   */
+  async projectConfigUpdateTool(args) {
+    const { project_id, config_file, updates } = args;
+
+    const fs = require('fs').promises;
+    const path = require('path');
+
+    const configDir = path.join(process.cwd(), 'data', 'projects', project_id, 'config');
+
+    try {
+      // Find config file
+      const files = await fs.readdir(configDir);
+      const jsonFile = config_file || files.find(f => f.endsWith('.json'));
+      if (!jsonFile) {
+        return { success: false, error: 'No config file found' };
+      }
+
+      const configPath = path.join(configDir, jsonFile);
+      const content = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(content);
+
+      // Apply updates (supports dot notation)
+      for (const [key, value] of Object.entries(updates)) {
+        const parts = key.split('.');
+        let target = config;
+        for (let i = 0; i < parts.length - 1; i++) {
+          if (!target[parts[i]]) target[parts[i]] = {};
+          target = target[parts[i]];
+        }
+        target[parts[parts.length - 1]] = value;
+      }
+
+      // Write back
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
+
+      this.logger.info('tool-manager.project_config.updated', {
+        project_id,
+        updates: Object.keys(updates)
+      });
+
+      return {
+        success: true,
+        project_id,
+        updated_keys: Object.keys(updates),
+        message: `Config updated: ${Object.keys(updates).join(', ')}`
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============ FACTURAS TOOL HANDLERS ============
+
+  /**
+   * Tool: List Facturas
+   */
+  async facturasListTool(args) {
+    const { project_id, status, limit = 50 } = args;
+
+    let query = 'SELECT * FROM facturas';
+    const params = [];
+
+    if (status) {
+      query += ' WHERE status = ?';
+      params.push(status);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(limit);
+
+    const result = await this.dbExecuteTool({
+      project_id,
+      query,
+      params
+    });
+
+    if (result.success) {
+      return {
+        success: true,
+        project_id,
+        count: result.data?.length || 0,
+        facturas: result.data || []
+      };
+    }
+
+    return result;
+  }
+
+  /**
+   * Tool: Process Facturas (trigger OCR flow)
+   */
+  async facturasProcessTool(args) {
+    const { project_id, factura_id } = args;
+
+    // Trigger the procesar-factura or procesar-lote flow
+    const flowId = factura_id
+      ? `${project_id}:procesar-factura`
+      : `${project_id}:procesar-lote`;
+
+    const data = factura_id ? { factura_id } : {};
+
+    return this.flowTriggerTool({
+      flow_id: flowId,
+      data
+    });
+  }
+
+  /**
+   * Tool: Export Facturas
+   */
+  async facturasExportTool(args) {
+    const { project_id, format = 'libro-registro' } = args;
+
+    // Trigger the consolidar-excel flow
+    return this.flowTriggerTool({
+      flow_id: `${project_id}:consolidar-excel`,
+      data: { format }
     });
   }
 

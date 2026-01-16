@@ -32,9 +32,11 @@ class FlowRegistry {
 
   /**
    * Carga flujos de todos los proyectos
+   * También carga desde templates/ si el proyecto no tiene flows propios
    */
   async loadProjectFlows() {
     const projectsPath = this.config.projectsPath || './data/projects';
+    const templatesPath = this.config.templatesPath || './templates';
     const resolvedPath = path.resolve(projectsPath);
 
     try {
@@ -54,13 +56,63 @@ class FlowRegistry {
       // Cargar configuración del proyecto si existe
       await this.loadProjectConfig(projectId, projectPath);
 
-      // Cargar flujos del proyecto
+      // Cargar flujos del proyecto desde data/projects/{project}/flows/
       const flowsPath = path.join(projectPath, 'flows');
+      let hasProjectFlows = false;
+
       try {
         await fs.access(flowsPath);
-        await this.loadFromDirectory(flowsPath, projectId);
+        const flowFiles = await fs.readdir(flowsPath);
+        if (flowFiles.some(f => f.endsWith('.json'))) {
+          hasProjectFlows = true;
+          await this.loadFromDirectory(flowsPath, projectId);
+        }
       } catch {
-        // Proyecto sin flujos, ok
+        // Proyecto sin directorio flows
+      }
+
+      // Si no tiene flows propios, buscar en templates/
+      if (!hasProjectFlows) {
+        await this.loadTemplateFlows(projectId, templatesPath);
+      }
+    }
+  }
+
+  /**
+   * Carga flows desde templates para un proyecto
+   * Busca templates que coincidan con el nombre del proyecto
+   */
+  async loadTemplateFlows(projectId, templatesPath) {
+    const resolvedTemplatesPath = path.resolve(templatesPath);
+
+    try {
+      await fs.access(resolvedTemplatesPath);
+    } catch {
+      return;
+    }
+
+    // Buscar template que coincida con el nombre del proyecto
+    // ej: facturas-nonina -> buscar en templates/facturas/
+    const templateNames = [
+      projectId,                           // facturas-nonina
+      projectId.split('-')[0],             // facturas
+      projectId.replace(/-[^-]+$/, '')     // facturas (quitar sufijo)
+    ];
+
+    for (const templateName of templateNames) {
+      const templateFlowsPath = path.join(resolvedTemplatesPath, templateName, 'flows');
+
+      try {
+        await fs.access(templateFlowsPath);
+        this.logger.info('flow-registry.template.loading', {
+          projectId,
+          templateName,
+          path: templateFlowsPath
+        });
+        await this.loadFromDirectory(templateFlowsPath, projectId);
+        return; // Encontrado, no buscar más
+      } catch {
+        // Template no encontrado, continuar
       }
     }
   }

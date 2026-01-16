@@ -3,7 +3,7 @@
   "name": "Procesar Lote OCR - Semanal",
   "description": "Lee facturas pendientes y dispara procesamiento individual para cada una",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
 
   "schedule": {
     "cron": "0 3 * * 0",

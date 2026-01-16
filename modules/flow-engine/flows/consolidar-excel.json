@@ -3,7 +3,7 @@
   "name": "Consolidar Facturas - Excel Semanal",
   "description": "Genera Excel con facturas procesadas para enviar a asesoría",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
 
   "schedule": {
     "cron": "0 6 * * 0",

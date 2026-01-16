@@ -3,7 +3,7 @@
   "name": "Entrada Facturas - Gmail",
   "description": "Busca facturas en Gmail diariamente, las descarga y registra en BD",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
 
   "schedule": {
     "cron": "0 3 * * *",

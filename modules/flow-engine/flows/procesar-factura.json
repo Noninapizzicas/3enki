@@ -3,7 +3,7 @@
   "name": "Procesar Factura Individual - OCR",
   "description": "Procesa una factura con OCR y actualiza la BD",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
 
   "trigger": {
     "event": "factura.procesar"

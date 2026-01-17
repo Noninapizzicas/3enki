@@ -85,6 +85,7 @@
     "project-manager",
     "prompt-composer",
     "prompt-manager",
+    "scheduler",
     "system-inspector",
     "telegram-service",
     "ui-designer"
@@ -120,7 +121,7 @@
     },
     "system": {
       "description": "Módulos del sistema",
-      "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas"]
+      "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas", "scheduler"]
     }
   },
   "key_modules": {
@@ -279,6 +280,51 @@
       "events": {
         "publishes": ["chat.send.response", "ai.chat.request", "session.save.request", "prompt.compose.request"],
         "subscribes": ["chat.send.request", "ai.chat.response", "session.save.response", "prompt.compose.response"]
+      }
+    },
+    "scheduler": {
+      "version": "1.0.0",
+      "description": "Sistema avanzado de scheduling con múltiples tipos de triggers",
+      "trigger_types": {
+        "cron": "Expresiones cron estándar (0 3 * * *)",
+        "interval": "Intervalos fijos (30s, 5m, 1h)",
+        "datetime": "Fecha/hora específica con repetición (once, daily, weekly, monthly, yearly)",
+        "event": "Basado en eventos MQTT con condiciones y debounce",
+        "condition": "Evaluación periódica de condiciones JS",
+        "composite": "Combinación con lógica AND/OR/XOR"
+      },
+      "action_types": {
+        "mqtt": "Publicar evento MQTT",
+        "http": "Llamada HTTP externa",
+        "module": "Llamar método de módulo via eventos"
+      },
+      "features": [
+        "Templates en topics y payloads ({{now}}, {{job.id}}, {{event.payload}})",
+        "Persistencia en JSON (data/scheduler/jobs.json)",
+        "Retry con backoff configurable",
+        "Historial de ejecuciones",
+        "AI tools para gestión de jobs"
+      ],
+      "events": {
+        "publishes": [
+          "scheduler.job.created",
+          "scheduler.job.updated",
+          "scheduler.job.deleted",
+          "scheduler.job.enabled",
+          "scheduler.job.disabled",
+          "scheduler.job.triggered",
+          "scheduler.job.completed",
+          "scheduler.job.failed"
+        ]
+      },
+      "key_apis": [
+        "GET /jobs - Listar jobs",
+        "POST /jobs - Crear job",
+        "POST /jobs/:id/trigger - Disparar manualmente",
+        "GET /triggers/types - Tipos de triggers disponibles"
+      ],
+      "ui_handlers": {
+        "scheduler": ["list", "get", "create", "update", "delete", "enable", "disable", "trigger", "triggers", "stats", "executions"]
       }
     }
   },

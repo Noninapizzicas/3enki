@@ -1,0 +1,580 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-01-17",
+  "_DESCRIPTION": "Catálogo completo de servicios, módulos, utilidades y acciones del sistema Event-Core",
+
+  "resumen": {
+    "total_modulos": 30,
+    "total_providers": 11,
+    "total_apis": "200+",
+    "total_eventos": "150+ publicados, 100+ suscritos",
+    "total_tools_ai": "50+"
+  },
+
+  "modulos": {
+    "infraestructura": {
+      "admin-panel": {
+        "version": "1.0.0",
+        "descripcion": "Panel de administración web para gestionar Event Core",
+        "apis": ["GET /dashboard", "GET /modules", "GET /plugins", "GET /agents", "GET /prompts"],
+        "eventos_publica": ["admin.action"],
+        "eventos_suscribe": ["plugin.loaded", "ui.component.loaded"]
+      },
+      "dashboard": {
+        "version": "2.0.0",
+        "descripcion": "Dashboard de observabilidad - monitoreo en tiempo real de todos los cores",
+        "apis": ["GET /cores", "GET /logs (SSE)", "GET /metrics", "GET /events (SSE)"],
+        "eventos_suscribe": ["core/+/logs/#", "core/+/events/#", "core/+/metrics/#"],
+        "caracteristicas": ["Visor de logs en tiempo real", "Stream de eventos", "Métricas", "Estado de cores"]
+      },
+      "log-manager": {
+        "version": "2.0.0",
+        "descripcion": "Logging centralizado por sesión, organizado por módulo",
+        "apis": ["Gestión de sesiones", "Consultas de logs", "Tracking de módulos"],
+        "config": {
+          "retencion_dias": 30,
+          "rotacion": "diaria",
+          "formato": "JSONL"
+        }
+      },
+      "system-inspector": {
+        "version": "1.0.0",
+        "descripcion": "Captura estado del sistema (HTTP, MQTT, errores, logs) para inspección AI",
+        "apis": ["GET /status", "GET /errors", "GET /network", "DELETE /clear"],
+        "buffer_max": 500
+      },
+      "metricas": {
+        "version": "1.0.0",
+        "descripcion": "Sistema centralizado de métricas escuchando eventos del sistema",
+        "apis": ["GET /all", "GET /counters", "GET /gauges", "GET /timings", "GET /events", "POST /reset"],
+        "eventos_publica": ["metricas.snapshot", "metricas.alerta"],
+        "intervalo_snapshot": "10s"
+      }
+    },
+
+    "ai_llm": {
+      "ai-gateway": {
+        "version": "1.0.0",
+        "descripcion": "Gateway unificado para múltiples proveedores LLM",
+        "providers": {
+          "deepseek": {"prioridad": 1, "modelos": ["deepseek-chat", "deepseek-coder"]},
+          "anthropic": {"prioridad": 2, "modelos": ["claude-3-5-sonnet", "claude-3-opus", "claude-3-haiku"]},
+          "openai": {"prioridad": 3, "modelos": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]},
+          "ollama": {"prioridad": 4, "modelos": ["llama2", "codellama", "mistral", "mixtral"]}
+        },
+        "apis": ["POST /chat", "POST /chat/stream", "GET /providers", "GET /models", "GET /usage", "GET /tools"],
+        "caracteristicas": ["Fallback automático", "Streaming SSE", "Tracking de costos", "Rate limiting"]
+      },
+      "ai-agent-framework": {
+        "version": "1.0.0",
+        "descripcion": "Framework para agentes AI event-driven con gestión de contexto y tool calling",
+        "apis": ["CRUD de agentes", "Gestión de contexto", "Stats", "Listado de tools"],
+        "config": {
+          "max_agentes": 100,
+          "context_ttl_mins": 1440,
+          "timeout_ejecucion_s": 60,
+          "reintentos": 3
+        }
+      },
+      "agent-manager": {
+        "version": "1.0.0",
+        "descripcion": "Orquestación de agentes - decide qué agente usar, construye contexto, gestiona pipelines",
+        "eventos_publica": ["agent.execute.request", "pipeline.started", "pipeline.completed", "pipeline.failed"],
+        "eventos_suscribe": ["bot.file.stored", "bot.message.received", "agent.*.completed", "agent.*.failed"],
+        "nota": "NO ejecuta agentes directamente (separación limpia)"
+      },
+      "prompt-manager": {
+        "version": "2.0.0",
+        "descripcion": "Gestión de prompts con versionado, slots, presets y analytics",
+        "apis": ["CRUD prompts/presets", "Renderizado de templates", "Analytics"],
+        "tools": ["prompt.list", "prompt.get", "prompt.render"],
+        "caracteristicas": ["10 versiones por prompt", "Composición por slots", "Interpolación de templates"]
+      },
+      "prompt-composer": {
+        "version": "1.1.0",
+        "descripcion": "Composición de system prompts con integración de contexto de proyecto",
+        "apis": ["POST /compose", "GET /templates", "GET /context/:projectId"],
+        "tools": ["prompt.compose", "prompt.get_context"],
+        "caracteristicas": ["Inyección de contexto", "Listado de tools", "Inclusión de info de storage"]
+      }
+    },
+
+    "chat": {
+      "chat-session": {
+        "version": "1.0.0",
+        "descripcion": "Persistencia de conversaciones y gestión de mensajes con contexto FIFO",
+        "apis": ["CRUD conversaciones", "CRUD mensajes", "Gestión de contexto"],
+        "tools": ["session.list_conversations", "session.get_conversation", "session.get_messages"],
+        "config": {
+          "ventana_contexto": 20,
+          "fifo_toggle": true
+        }
+      },
+      "chat-ai-bridge": {
+        "version": "1.0.0",
+        "descripcion": "Puente entre chat y AI gateway coordinando flujo de mensajes",
+        "apis": ["POST /send", "GET /status", "GET /health"],
+        "tools": ["chat.send_message"],
+        "config": {
+          "max_tool_iterations": 10,
+          "ai_timeout_s": 60,
+          "ai_timeout_con_tools_s": 180
+        }
+      },
+      "conversation-manager": {
+        "version": "2.0.0",
+        "descripcion": "[DEPRECADO] Facade/Coordinador manteniendo compatibilidad frontend",
+        "estado": "DEPRECADO - usar módulos individuales",
+        "delega_a": ["chat-session", "prompt-composer", "chat-ai-bridge"]
+      }
+    },
+
+    "automatizacion": {
+      "flow-engine": {
+        "version": "1.0.0",
+        "descripcion": "Motor de flujos genérico conectando servicios, APIs, agentes y lógica",
+        "apis": ["CRUD flujos", "Trigger", "Gestión de ejecuciones"],
+        "eventos_publica": ["flow.started", "flow.step.started", "flow.step.completed", "flow.step.failed", "flow.completed", "flow.failed"],
+        "ui_actions": ["list", "get", "create", "trigger", "executions"],
+        "config": {
+          "max_flujos_concurrentes": 50,
+          "timeout_default_s": 300
+        }
+      },
+      "scheduler": {
+        "version": "1.0.0",
+        "descripcion": "Scheduling avanzado con múltiples tipos de triggers",
+        "tipos_trigger": {
+          "cron": "Expresiones cron (0 3 * * *)",
+          "interval": "Intervalos fijos (30s, 5m, 1h)",
+          "datetime": "Fecha/hora específica con repetición",
+          "event": "Basado en eventos MQTT con condiciones",
+          "condition": "Evaluación periódica de condiciones JS",
+          "composite": "Combinación AND/OR/XOR"
+        },
+        "tipos_accion": ["mqtt", "http", "module"],
+        "apis": ["CRUD jobs", "enable/disable", "trigger manual", "historial", "stats"],
+        "tools": ["scheduler.list_jobs", "scheduler.create_job", "scheduler.trigger_job"],
+        "config": {
+          "timezone": "Europe/Madrid",
+          "max_jobs_concurrentes": 100,
+          "reintentos_default": 3
+        }
+      }
+    },
+
+    "datos_storage": {
+      "database-manager": {
+        "version": "2.0.0",
+        "descripcion": "Gestor de bases de datos SQLite usando sql.js (JavaScript puro)",
+        "apis": ["CRUD bases de datos", "Ejecución de queries", "Gestión de schemas"],
+        "tools": {
+          "db.query": "SELECT only",
+          "db.tables": "Listar tablas",
+          "db.schema": "Ver schema",
+          "db.execute": "Escritura (requiere confirmación)"
+        },
+        "config": {
+          "timeout_query_s": 10,
+          "max_databases": 100
+        }
+      },
+      "credential-manager": {
+        "version": "2.0.0",
+        "descripcion": "Gestión de credenciales multi-nivel con almacenamiento .env",
+        "niveles_prioridad": ["CUSTOM (1)", "CLIENT (2)", "PROJECT (3)", "GLOBAL (4)"],
+        "apis": ["CRUD credenciales", "Resolución con cascada", "Listado", "Niveles"],
+        "tools": ["credential.list (solo metadata, nunca valores)"],
+        "providers_soportados": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA", "GOOGLE", "GMAIL"],
+        "caracteristicas": ["OAuth2 para Gmail/Google", "Enmascaramiento de API keys"]
+      },
+      "filesystem": {
+        "version": "1.0.0",
+        "descripcion": "Operaciones de filesystem core para todo el sistema",
+        "tools": [
+          "fs.list", "fs.read", "fs.write", "fs.delete",
+          "fs.mkdir", "fs.move", "fs.copy", "fs.search",
+          "fs.info", "fs.cleanup", "fs.stats",
+          "fs.setWorkDir", "fs.getWorkDir"
+        ],
+        "eventos_publica": ["fs.file.created", "fs.file.updated", "fs.file.deleted", "fs.workdir.changed"],
+        "handlers": 13
+      },
+      "project-manager": {
+        "version": "2.0.0",
+        "descripcion": "Gestión del ciclo de vida de proyectos con integración de BD",
+        "apis": ["CRUD proyectos", "Activación", "Persistencia de sesión", "Override AI config"],
+        "eventos_publica": ["project.created", "project.updated", "project.deleted", "project.activated", "project.deactivated"],
+        "caracteristicas": ["Cambio de proyecto", "Restauración de sesión", "AI config por proyecto"]
+      }
+    },
+
+    "comunicacion": {
+      "telegram-service": {
+        "version": "3.0.0",
+        "descripcion": "Servicio Telegram multi-bot con gestión centralizada",
+        "eventos_publica": [
+          "telegram.text.received", "telegram.photo.received", "telegram.document.received",
+          "telegram.video.received", "telegram.audio.received", "telegram.voice.received",
+          "telegram.location.received", "telegram.contact.received", "telegram.command.received",
+          "telegram.callback.received", "telegram.message.sent", "telegram.send.failed",
+          "telegram.bot.started", "telegram.bot.stopped", "telegram.bot.error", "telegram.queue.overflow"
+        ],
+        "tools": [
+          "telegram.send_message", "telegram.send_photo", "telegram.send_document",
+          "telegram.send_video", "telegram.send_location", "telegram.edit_message",
+          "telegram.delete_message", "telegram.answer_callback", "telegram.get_file",
+          "telegram.get_chat", "telegram.set_commands", "telegram.list_bots"
+        ],
+        "config": {
+          "intervalo_polling_s": 1,
+          "rate_limit_msg_s": 25,
+          "max_queue": 100
+        }
+      },
+      "bot-manager": {
+        "version": "1.0.0",
+        "descripcion": "Gestión de bots y almacenamiento de archivos",
+        "eventos_publica": ["bot.file.stored", "bot.message.received", "bot.command.received", "bot.registered", "bot.unregistered"],
+        "eventos_suscribe": ["telegram.*", "credential.*"],
+        "nota": "NO conoce agentes (separación limpia)"
+      }
+    },
+
+    "codigo_ejecucion": {
+      "code-executor": {
+        "version": "1.0.0",
+        "descripcion": "Ejecución de comandos shell y scripts para AI con controles de seguridad",
+        "tools": {
+          "shell.exec": "Ejecutar comando (timeout default 30s, max 300s)",
+          "shell.script": "Ejecutar script (auto-detecta bash/python/node)",
+          "shell.background": "Proceso en background (retorna PID)",
+          "shell.kill": "Matar proceso background",
+          "shell.list": "Listar procesos activos"
+        },
+        "seguridad": {
+          "comandos_bloqueados": ["rm -rf /", "mkfs", "dd", "forkbomb", "chmod", "sudo"],
+          "patrones_bloqueados": ["pipes peligrosos", "redirecciones shell"]
+        },
+        "config": {
+          "max_procesos": 10,
+          "shell_default": "/bin/sh"
+        }
+      },
+      "plugin-manager": {
+        "version": "2.0.0",
+        "descripcion": "Descubre y gestiona plugins de funciones basados en JSON",
+        "apis": ["CRUD plugins", "Recarga desde disco"],
+        "eventos_publica": ["plugin.loaded", "plugin.unloaded", "plugin.error", "plugin.reloaded"],
+        "directorio": "../../plugins"
+      },
+      "calling-generator": {
+        "version": "2.0.0",
+        "descripcion": "Genera funciones JavaScript ejecutables desde definiciones de plugins",
+        "apis": ["Listar funciones", "Obtener metadata", "Ejecutar"],
+        "eventos_publica": ["function.generated", "function.executed", "function.failed"],
+        "config": {
+          "timeout_local_s": 5,
+          "timeout_http_s": 30,
+          "reintentos": 3
+        }
+      }
+    },
+
+    "ui_diseño": {
+      "ui-designer": {
+        "version": "1.0.0",
+        "descripcion": "Diseñador visual de UI para módulos con drag-and-drop",
+        "apis": ["CRUD templates", "Gestión de layouts", "Schemas de componentes", "Export"],
+        "formatos_export": ["YAML blueprints", "Código Svelte", "JSON para module.json"],
+        "estados": ["draft", "published", "archived"]
+      },
+      "scratch-designer": {
+        "version": "2.0.0",
+        "descripcion": "Diseñador visual tipo Scratch generando JSON",
+        "categorias_bloques": ["modules", "events", "actions", "components", "containers", "data", "conditions"],
+        "apis": ["CRUD diseños", "Export", "Validación"],
+        "config": {
+          "autosave_s": 30,
+          "max_diseños": 100
+        }
+      },
+      "text-editor": {
+        "version": "1.0.0",
+        "descripcion": "Editor de texto para MD y JSON con syntax highlighting",
+        "apis": ["Abrir archivo", "Guardar", "Validar JSON", "Formatear"],
+        "formatos_soportados": ["md", "json", "txt", "html", "css", "js", "yaml", "yml", "xml"],
+        "config": {
+          "autosave_s": 30,
+          "max_file_mb": 5
+        }
+      },
+      "menu-generator": {
+        "version": "2.0.0",
+        "descripcion": "Generador de menús con AI desde imágenes/PDFs de menús físicos",
+        "apis": ["Upload", "CRUD menús", "Export", "Conversaciones", "Templates"],
+        "eventos_publica": ["menu.generado", "menu.validado", "menu.error"],
+        "formatos_export": ["JSON", "CSV", "Markdown", "POS format"],
+        "acepta": ["PDF", "JPG", "PNG", "WEBP"]
+      },
+      "pdf-viewer": {
+        "version": "1.0.0",
+        "descripcion": "Visor de PDFs y extracción de texto",
+        "apis": ["Ver", "Extraer texto", "Metadata", "Listar PDFs"],
+        "tools": ["pdf.list", "pdf.metadata", "pdf.extract"],
+        "config": {
+          "cache_ttl_h": 1,
+          "max_file_mb": 50
+        }
+      },
+      "notas": {
+        "version": "1.0.0",
+        "descripcion": "Notas rápidas con eventos en tiempo real",
+        "apis": ["CRUD notas", "Pin/unpin"],
+        "eventos_publica": ["nota.creada", "nota.actualizada", "nota.eliminada"],
+        "caracteristicas": ["Codificación por color", "Filtrado de notas fijadas"]
+      }
+    }
+  },
+
+  "service_providers": {
+    "cloud": {
+      "anthropic": {
+        "version": "1.0.0",
+        "auth": "Header x-api-key",
+        "base_url": "https://api.anthropic.com/v1",
+        "funciones": {
+          "vision.extract": {
+            "descripcion": "OCR con análisis usando Claude Vision",
+            "input": ["image (base64)", "media_type", "prompt", "model"],
+            "modelo_default": "claude-3-5-sonnet-20241022",
+            "output": ["text (extraído)", "analysis (estructurado)"]
+          }
+        }
+      },
+      "google": {
+        "version": "1.0.0",
+        "auth": "Query parameter 'key'",
+        "base_url": "https://vision.googleapis.com/v1",
+        "funciones": {
+          "vision.extract": {
+            "descripcion": "Análisis de imágenes"
+          },
+          "tts.synthesize": {
+            "descripcion": "Text-to-Speech",
+            "idiomas": ["es-ES", "en-US"],
+            "output": "MP3 base64",
+            "velocidad": "0.5-2.0"
+          },
+          "translate.text": {
+            "descripcion": "Traducción de texto"
+          }
+        }
+      },
+      "elevenlabs": {
+        "version": "1.0.0",
+        "auth": "Header xi-api-key",
+        "base_url": "https://api.elevenlabs.io/v1",
+        "funciones": {
+          "tts.synthesize": {
+            "descripcion": "Síntesis TTS premium",
+            "caracteristicas": ["Múltiples voces", "Encoding configurable"]
+          }
+        }
+      }
+    },
+    "local": {
+      "local.pdf": {
+        "descripcion": "Crea y manipula PDFs localmente",
+        "funciones": ["from_text", "from_html", "from_template"],
+        "credenciales": "No requiere"
+      },
+      "local.csv": {
+        "descripcion": "Procesamiento de CSV",
+        "funciones": ["parse", "generate", "transform"]
+      },
+      "local.xlsx": {
+        "descripcion": "Manejo de archivos Excel",
+        "funciones": ["read", "write", "transform"]
+      },
+      "local.pdf-parse": {
+        "descripcion": "Extracción de texto de PDF",
+        "funciones": ["extract_text", "extract_metadata"]
+      },
+      "local.pdfjs": {
+        "descripcion": "Renderizado de PDF con PDF.js",
+        "funciones": ["render", "extract"]
+      },
+      "local.tesseract": {
+        "descripcion": "OCR usando Tesseract",
+        "funciones": ["extract"],
+        "evento": "tesseract.extract.request → tesseract.extract.response"
+      },
+      "local.scribe-ocr": {
+        "descripcion": "Procesamiento OCR alternativo",
+        "funciones": ["extract"]
+      },
+      "local.google-vision": {
+        "descripcion": "Procesamiento Vision API local",
+        "funciones": ["ocr", "labels", "faces"]
+      },
+      "local.gmail": {
+        "descripcion": "Integración Gmail con OAuth2",
+        "funciones": ["send", "list", "get", "search"],
+        "requiere": "OAuth2 credentials"
+      },
+      "local.facturas-db": {
+        "descripcion": "Base de datos de facturas",
+        "funciones": ["create", "list", "get", "update", "delete"]
+      }
+    }
+  },
+
+  "tools_ai": {
+    "chat_sesiones": [
+      "session.list_conversations",
+      "session.get_conversation",
+      "session.get_messages",
+      "chat.send_message"
+    ],
+    "database": [
+      "db.query (SELECT)",
+      "db.tables",
+      "db.schema",
+      "db.execute (escritura, requiere confirmación)"
+    ],
+    "filesystem": [
+      "fs.list", "fs.read", "fs.write", "fs.delete",
+      "fs.mkdir", "fs.move", "fs.copy", "fs.search",
+      "fs.info", "fs.cleanup", "fs.stats",
+      "fs.setWorkDir", "fs.getWorkDir"
+    ],
+    "code_execution": [
+      "shell.exec (requiere confirmación)",
+      "shell.script (requiere confirmación)",
+      "shell.background",
+      "shell.kill",
+      "shell.list"
+    ],
+    "telegram": [
+      "telegram.send_message",
+      "telegram.send_photo",
+      "telegram.send_document",
+      "telegram.send_video",
+      "telegram.send_location",
+      "telegram.edit_message",
+      "telegram.delete_message",
+      "telegram.answer_callback",
+      "telegram.get_file",
+      "telegram.get_chat",
+      "telegram.set_commands",
+      "telegram.list_bots"
+    ],
+    "pdf": [
+      "pdf.list",
+      "pdf.metadata",
+      "pdf.extract"
+    ],
+    "credentials": [
+      "credential.list (solo metadata)"
+    ],
+    "prompts": [
+      "prompt.list",
+      "prompt.get",
+      "prompt.render",
+      "prompt.compose",
+      "prompt.get_context"
+    ],
+    "scheduler": [
+      "scheduler.list_jobs",
+      "scheduler.create_job",
+      "scheduler.trigger_job"
+    ]
+  },
+
+  "patrones_eventos": {
+    "request_response": {
+      "patron": "{servicio}.{funcion}.request → {servicio}.{funcion}.response",
+      "ejemplos": [
+        "tesseract.extract.request → tesseract.extract.response",
+        "gmail.send.request → gmail.send.response",
+        "ai.chat.request → ai.chat.response"
+      ]
+    },
+    "ui": {
+      "patron": "ui/request/{domain}/{action} → ui/response/{request_id}",
+      "ejemplos": [
+        "ui/request/project/list → ui/response/req_123",
+        "ui/request/scheduler/create → ui/response/req_456"
+      ]
+    },
+    "lifecycle": {
+      "patron": "{entidad}.{accion}",
+      "ejemplos": [
+        "project.created", "project.updated", "project.deleted",
+        "flow.started", "flow.completed", "flow.failed",
+        "scheduler.job.triggered", "scheduler.job.completed"
+      ]
+    },
+    "core_interno": {
+      "patron": "core/{core-id}/events/{module}/{evento}",
+      "ejemplos": [
+        "core/core-a/events/project/created",
+        "core/core-a/events/scheduler/job-triggered"
+      ]
+    }
+  },
+
+  "puertos": {
+    "http": 3000,
+    "mqtt": 1883,
+    "websocket": 9001
+  },
+
+  "configuracion_global": {
+    "logging": {
+      "formato": "JSON estructurado",
+      "campos_requeridos": ["module", "action", "outcome", "correlationId"],
+      "niveles": ["debug", "info", "warn", "error"]
+    },
+    "metricas": {
+      "tipos": ["counters", "gauges", "histograms", "timings"],
+      "intervalo_flush_s": 60
+    },
+    "persistencia": {
+      "tipo": "SQLite (sql.js) o archivos JSON",
+      "ubicacion_datos": "./data/"
+    }
+  },
+
+  "integraciones_comunes": {
+    "telegram_ocr": {
+      "descripcion": "Procesar imagen de Telegram con OCR y responder",
+      "flujo": [
+        "1. telegram.photo.received",
+        "2. GET /modules/telegram-service/file/{fileId}",
+        "3. tesseract.extract.request",
+        "4. POST /modules/telegram-service/send"
+      ]
+    },
+    "flow_scheduled": {
+      "descripcion": "Ejecutar flujo programado",
+      "flujo": [
+        "1. scheduler.job.triggered (cron)",
+        "2. Publicar flow.trigger",
+        "3. flow-engine ejecuta steps",
+        "4. flow.completed"
+      ]
+    },
+    "chat_con_contexto": {
+      "descripcion": "Chat con contexto heredado de proyectos",
+      "flujo": [
+        "1. chat.send.request",
+        "2. prompt.compose.request (include_inherited_context: true)",
+        "3. context.full.request → project-manager",
+        "4. ai.chat.request con contexto completo",
+        "5. chat.send.response"
+      ]
+    }
+  }
+}

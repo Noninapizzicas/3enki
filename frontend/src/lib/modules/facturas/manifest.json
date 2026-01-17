@@ -3,7 +3,10 @@
   "name": "Facturas",
   "description": "Gestión de facturas por proyecto",
   "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 3,
   "icon": "🧾",
+  "label": "Facturas",
   "panel": {
     "component": "FacturasPanel",
     "zones": ["work-bar", "system-bar"],

@@ -13,7 +13,8 @@
       "external_services": "Read services.json (OCR, TTS, PDF, CSV, APIs externas)",
       "bot_agent_flow": "Read bot-agent-architecture.json",
       "flow_automation": "Read flow-engine.json (flujos, orquestacion, triggers, steps)",
-      "credentials_questions": "Read credentials.json (API keys, OAuth2, niveles, cascada)"
+      "credentials_questions": "Read credentials.json (API keys, OAuth2, niveles, cascada)",
+      "scheduling_questions": "Read scheduler.json (jobs, triggers cron/interval/event, acciones programadas)"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -89,6 +90,11 @@
       "file": "credentials.json",
       "purpose": "Sistema de credenciales multi-nivel con cascada de resolucion",
       "when": "Gestionar API keys, OAuth2 (Gmail), niveles GLOBAL/PROJECT/CLIENT/CUSTOM, testear credenciales"
+    },
+    {
+      "file": "scheduler.json",
+      "purpose": "Sistema avanzado de scheduling con múltiples tipos de triggers (cron, interval, datetime, event, condition, composite)",
+      "when": "Programar tareas, crear jobs automáticos, disparar acciones en horarios específicos, triggers basados en eventos"
     }
   ],
 

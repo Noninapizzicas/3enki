@@ -1,0 +1,330 @@
+{
+  "module": "scheduler",
+  "version": "1.0.0",
+  "description": "Sistema avanzado de scheduling con múltiples tipos de triggers",
+
+  "arquitectura": {
+    "componentes": {
+      "index.js": {
+        "responsabilidad": "Módulo principal - orquestación y API",
+        "funciones": [
+          "Inicialización y ciclo de vida",
+          "Handlers UI (MQTT) y HTTP",
+          "Ejecución de jobs",
+          "Template resolution"
+        ]
+      },
+      "services/job-manager.js": {
+        "responsabilidad": "Gestión de definiciones de jobs",
+        "funciones": [
+          "CRUD de jobs",
+          "Persistencia en JSON",
+          "Búsqueda y filtrado"
+        ]
+      },
+      "services/trigger-manager.js": {
+        "responsabilidad": "Gestión de triggers activos",
+        "funciones": [
+          "Iniciar/parar triggers",
+          "Cron, interval, datetime, event, condition, composite",
+          "Debouncing para eventos"
+        ]
+      }
+    },
+    "diagrama": "UI/API → index.js → job-manager (CRUD) + trigger-manager (scheduling) → eventBus (actions)"
+  },
+
+  "tipos_de_triggers": {
+    "cron": {
+      "descripcion": "Expresiones cron estándar",
+      "propiedades": {
+        "type": "cron",
+        "expression": "string - Expresión cron (minuto hora día-mes mes día-semana)",
+        "timezone": "string - Zona horaria (default: Europe/Madrid)"
+      },
+      "ejemplos": {
+        "cada_5_minutos": "*/5 * * * *",
+        "diario_3am": "0 3 * * *",
+        "domingos_3am": "0 3 * * 0",
+        "laborables_9am": "0 9 * * 1-5"
+      }
+    },
+    "interval": {
+      "descripcion": "Intervalos fijos",
+      "propiedades": {
+        "type": "interval",
+        "value": "number - Valor del intervalo",
+        "unit": "string - ms|s|m|h|d"
+      },
+      "ejemplos": {
+        "cada_30_segundos": { "value": 30, "unit": "s" },
+        "cada_hora": { "value": 1, "unit": "h" }
+      }
+    },
+    "datetime": {
+      "descripcion": "Fecha/hora específica con repetición opcional",
+      "propiedades": {
+        "type": "datetime",
+        "date": "string - YYYY-MM-DD (opcional)",
+        "time": "string - HH:mm:ss",
+        "repeat": "string - once|daily|weekly|monthly|yearly",
+        "timezone": "string"
+      },
+      "ejemplos": {
+        "navidad": { "date": "2025-12-25", "time": "00:00:00", "repeat": "yearly" }
+      }
+    },
+    "event": {
+      "descripcion": "Basado en eventos MQTT",
+      "propiedades": {
+        "type": "event",
+        "topic": "string - Topic MQTT a escuchar",
+        "condition": "string - Expresión JS opcional (ej: payload.size > 1000)",
+        "debounce": "number - ms antes de disparar"
+      },
+      "ejemplos": {
+        "archivo_subido": { "topic": "file.uploaded", "condition": "payload.type === 'pdf'" }
+      }
+    },
+    "condition": {
+      "descripcion": "Basado en condiciones evaluadas periódicamente",
+      "propiedades": {
+        "type": "condition",
+        "check": "string - Expresión JS a evaluar",
+        "interval": "number - Intervalo de chequeo en ms (default: 10000)",
+        "persist": "boolean - Mantener triggered hasta reset"
+      },
+      "ejemplos": {
+        "cpu_alto": { "check": "metrics.cpu > 80", "interval": 10000 }
+      }
+    },
+    "composite": {
+      "descripcion": "Combinación de triggers con lógica AND/OR",
+      "propiedades": {
+        "type": "composite",
+        "logic": "string - AND|OR|NAND|NOR|XOR",
+        "triggers": "array - Sub-triggers a combinar"
+      },
+      "ejemplos": {
+        "laborables_carga_baja": {
+          "logic": "AND",
+          "triggers": [
+            { "type": "cron", "expression": "0 9 * * 1-5" },
+            { "type": "condition", "check": "system.load < 50" }
+          ]
+        }
+      }
+    }
+  },
+
+  "tipos_de_acciones": {
+    "mqtt": {
+      "descripcion": "Publica evento MQTT",
+      "propiedades": {
+        "type": "mqtt",
+        "topic": "string - Topic destino (soporta {{templates}})",
+        "payload": "object|string - Payload a publicar (soporta {{templates}})",
+        "qos": "number - 0|1|2 (default: 1)"
+      }
+    },
+    "http": {
+      "descripcion": "Llamada HTTP externa",
+      "propiedades": {
+        "type": "http",
+        "url": "string - URL destino (soporta {{templates}})",
+        "method": "string - GET|POST|PUT|DELETE|PATCH",
+        "headers": "object - Headers HTTP",
+        "body": "object - Cuerpo de la petición",
+        "timeout": "number - Timeout en ms"
+      }
+    },
+    "module": {
+      "descripcion": "Llama a método de otro módulo via eventos",
+      "propiedades": {
+        "type": "module",
+        "module": "string - Nombre del módulo",
+        "method": "string - Método a llamar",
+        "params": "object - Parámetros",
+        "timeout": "number - Timeout en ms"
+      }
+    }
+  },
+
+  "templates": {
+    "sintaxis": "{{ variable }}",
+    "variables_especiales": {
+      "now": "ISO timestamp actual",
+      "uuid": "UUID v4 aleatorio",
+      "timestamp": "Unix timestamp en ms",
+      "date": "Fecha YYYY-MM-DD",
+      "time": "Hora HH:mm:ss"
+    },
+    "contextos": {
+      "job.id": "ID del job",
+      "job.name": "Nombre del job",
+      "trigger.type": "Tipo de trigger que activó",
+      "event.payload": "Payload del evento (solo para event triggers)"
+    },
+    "ejemplo": {
+      "topic": "notifications/{{job.name}}",
+      "payload": {
+        "message": "Job ejecutado a las {{now}}",
+        "jobId": "{{job.id}}"
+      }
+    }
+  },
+
+  "opciones_job": {
+    "enabled": "boolean - Habilitar/deshabilitar",
+    "maxRetries": "number - Reintentos en caso de error (default: 3)",
+    "retryDelay": "number - Delay entre reintentos en ms (default: 5000)",
+    "timeout": "number - Timeout de ejecución en ms (default: 300000)",
+    "overlap": "boolean - Permitir ejecuciones solapadas (default: false)",
+    "circuitBreaker": {
+      "failureThreshold": "number - Fallos antes de abrir circuito",
+      "resetTimeout": "number - Tiempo antes de reintentar",
+      "halfOpenMaxAttempts": "number - Intentos en estado half-open"
+    },
+    "timeWindows": "array - Ventanas de tiempo permitidas"
+  },
+
+  "eventos": {
+    "publicados": {
+      "scheduler.job.created": "Job creado",
+      "scheduler.job.updated": "Job actualizado",
+      "scheduler.job.deleted": "Job eliminado",
+      "scheduler.job.enabled": "Job habilitado",
+      "scheduler.job.disabled": "Job deshabilitado",
+      "scheduler.job.triggered": "Job disparado (manual o automático)",
+      "scheduler.job.completed": "Ejecución completada",
+      "scheduler.job.failed": "Ejecución fallida"
+    }
+  },
+
+  "api_http": {
+    "base_path": "/modules/scheduler",
+    "endpoints": [
+      { "method": "GET", "path": "/health", "descripcion": "Health check" },
+      { "method": "GET", "path": "/jobs", "descripcion": "Lista todos los jobs" },
+      { "method": "GET", "path": "/jobs/:jobId", "descripcion": "Obtiene un job" },
+      { "method": "POST", "path": "/jobs", "descripcion": "Crea nuevo job" },
+      { "method": "PUT", "path": "/jobs/:jobId", "descripcion": "Actualiza job" },
+      { "method": "DELETE", "path": "/jobs/:jobId", "descripcion": "Elimina job" },
+      { "method": "POST", "path": "/jobs/:jobId/enable", "descripcion": "Habilita job" },
+      { "method": "POST", "path": "/jobs/:jobId/disable", "descripcion": "Deshabilita job" },
+      { "method": "POST", "path": "/jobs/:jobId/trigger", "descripcion": "Dispara job manualmente" },
+      { "method": "GET", "path": "/triggers/types", "descripcion": "Lista tipos de triggers" },
+      { "method": "GET", "path": "/executions", "descripcion": "Lista ejecuciones recientes" },
+      { "method": "GET", "path": "/stats", "descripcion": "Estadísticas del scheduler" }
+    ]
+  },
+
+  "ui_handlers": {
+    "domain": "scheduler",
+    "actions": [
+      "list - Lista jobs",
+      "get - Obtiene job",
+      "create - Crea job",
+      "update - Actualiza job",
+      "delete - Elimina job",
+      "enable - Habilita job",
+      "disable - Deshabilita job",
+      "trigger - Dispara job",
+      "triggers - Lista tipos de triggers",
+      "stats - Estadísticas",
+      "executions - Lista ejecuciones"
+    ],
+    "patron_mqtt": "ui/request/scheduler/{action} → ui/response/{request_id}"
+  },
+
+  "persistencia": {
+    "archivo": "data/scheduler/jobs.json",
+    "auto_save": true,
+    "formato": {
+      "version": "1.0.0",
+      "savedAt": "ISO timestamp",
+      "jobs": "array de definiciones de jobs"
+    }
+  },
+
+  "integracion_flow_engine": {
+    "descripcion": "El scheduler puede disparar flujos via eventos",
+    "ejemplo": {
+      "name": "Procesar facturas semanal",
+      "trigger": { "type": "cron", "expression": "0 3 * * 0" },
+      "action": {
+        "type": "mqtt",
+        "topic": "flow.trigger",
+        "payload": { "flowId": "procesar-lote-facturas" }
+      }
+    }
+  },
+
+  "buenas_practicas": [
+    "Usar IDs descriptivos para jobs",
+    "Definir timeouts apropiados según la tarea",
+    "Usar debounce para event triggers que pueden dispararse frecuentemente",
+    "Configurar maxRetries para jobs críticos",
+    "Usar composite triggers para condiciones complejas",
+    "No solapar ejecuciones (overlap: false) para jobs que modifican datos",
+    "Usar timeWindows para restringir horarios de ejecución"
+  ],
+
+  "ejemplos_completos": {
+    "backup_diario": {
+      "name": "Backup diario de BD",
+      "description": "Copia de seguridad a las 3am",
+      "trigger": {
+        "type": "cron",
+        "expression": "0 3 * * *",
+        "timezone": "Europe/Madrid"
+      },
+      "action": {
+        "type": "mqtt",
+        "topic": "backup.start",
+        "payload": { "database": "primary", "type": "full" }
+      },
+      "options": {
+        "maxRetries": 3,
+        "timeout": 600000
+      }
+    },
+    "limpieza_logs": {
+      "name": "Limpieza de logs",
+      "description": "Elimina logs de más de 7 días cada domingo",
+      "trigger": {
+        "type": "cron",
+        "expression": "0 4 * * 0"
+      },
+      "action": {
+        "type": "http",
+        "method": "DELETE",
+        "url": "http://localhost:3000/api/logs",
+        "body": { "olderThan": "7d" }
+      }
+    },
+    "procesar_archivos": {
+      "name": "Procesar archivos nuevos",
+      "description": "Procesa cuando llega un PDF",
+      "trigger": {
+        "type": "event",
+        "topic": "file.uploaded",
+        "condition": "payload.mimeType === 'application/pdf'",
+        "debounce": 5000
+      },
+      "action": {
+        "type": "mqtt",
+        "topic": "processor.start",
+        "payload": { "file": "{{event.payload.path}}" }
+      }
+    }
+  },
+
+  "ubicacion_archivos": {
+    "modulo": "modules/scheduler/",
+    "servicios": "modules/scheduler/services/",
+    "schemas": "modules/scheduler/schemas/",
+    "datos": "data/scheduler/jobs.json",
+    "documentacion": "contexto/scheduler.json"
+  }
+}

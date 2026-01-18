@@ -1,17 +1,18 @@
 /**
  * Flow Executor
- * Motor de ejecución de flujos
+ * Motor de ejecución de flujos con persistencia de historial
  */
 
 const crypto = require('crypto');
 
 class FlowExecutor {
-  constructor(config, logger, eventBus, stepHandlers, variableResolver) {
+  constructor(config, logger, eventBus, stepHandlers, variableResolver, executionStore = null) {
     this.config = config;
     this.logger = logger;
     this.eventBus = eventBus;
     this.stepHandlers = stepHandlers;
     this.resolver = variableResolver;
+    this.executionStore = executionStore; // Persistencia opcional
 
     // Ejecuciones activas
     this.executions = new Map(); // executionId -> executionState
@@ -26,6 +27,13 @@ class FlowExecutor {
       backoff: 2,       // Multiplicador exponencial
       maxDelay: 30000   // Máximo 30 segundos entre reintentos
     };
+  }
+
+  /**
+   * Configura el store de persistencia
+   */
+  setExecutionStore(store) {
+    this.executionStore = store;
   }
 
   /**
@@ -379,6 +387,9 @@ class FlowExecutor {
       duration
     });
 
+    // Persistir ejecución
+    await this.persistExecution(execution);
+
     // Publicar evento
     await this.eventBus.publish('flow.completed', {
       executionId,
@@ -422,6 +433,9 @@ class FlowExecutor {
       duration
     });
 
+    // Persistir ejecución
+    await this.persistExecution(execution);
+
     // Publicar evento
     await this.eventBus.publish('flow.failed', {
       executionId,
@@ -438,6 +452,22 @@ class FlowExecutor {
     setTimeout(() => {
       this.executions.delete(executionId);
     }, 300000);
+  }
+
+  /**
+   * Persiste una ejecución en el store
+   */
+  async persistExecution(execution) {
+    if (!this.executionStore) return;
+
+    try {
+      await this.executionStore.add(execution);
+    } catch (error) {
+      this.logger.error('flow-executor.persist.failed', {
+        executionId: execution.id,
+        error: error.message
+      });
+    }
   }
 
   /**

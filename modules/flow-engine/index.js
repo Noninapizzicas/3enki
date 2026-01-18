@@ -20,6 +20,7 @@ const FlowExecutor = require('./services/flow-executor');
 const StepHandlers = require('./services/step-handlers');
 const VariableResolver = require('./services/variable-resolver');
 const FlowScheduler = require('./services/scheduler');
+const ExecutionStore = require('./services/execution-store');
 const manifestLoader = require('../../services/manifest-loader');
 
 class FlowEngineModule {
@@ -39,6 +40,7 @@ class FlowEngineModule {
     this.stepHandlers = null;
     this.variableResolver = null;
     this.scheduler = null;
+    this.executionStore = null;
 
     // Subscriptions
     this.unsubscribes = [];
@@ -77,12 +79,22 @@ class FlowEngineModule {
     this.registry = new FlowRegistry(this.config, this.logger);
     await this.registry.initialize();
 
+    // Inicializar store de ejecuciones (persistencia)
+    this.executionStore = new ExecutionStore({
+      basePath: './data/flow-engine/executions',
+      maxExecutions: 1000,
+      retentionDays: 30
+    });
+    this.executionStore.setLogger(this.logger);
+    await this.executionStore.initialize();
+
     this.executor = new FlowExecutor(
       this.config,
       this.logger,
       this.eventBus,
       this.stepHandlers,
-      this.variableResolver
+      this.variableResolver,
+      this.executionStore
     );
 
     // Inicializar scheduler para flujos programados
@@ -107,6 +119,11 @@ class FlowEngineModule {
     // Detener scheduler
     if (this.scheduler) {
       this.scheduler.stop();
+    }
+
+    // Cerrar execution store (guarda pendientes)
+    if (this.executionStore) {
+      await this.executionStore.close();
     }
 
     // Unsubscribe
@@ -214,6 +231,8 @@ class FlowEngineModule {
     this.uiHandler.register('flow', 'create', this.handleUICreateFlow.bind(this));
     this.uiHandler.register('flow', 'trigger', this.handleUITriggerFlow.bind(this));
     this.uiHandler.register('flow', 'executions', this.handleUIListExecutions.bind(this));
+    this.uiHandler.register('flow', 'execution', this.handleUIGetExecution.bind(this));
+    this.uiHandler.register('flow', 'stats', this.handleUIExecutionStats.bind(this));
 
     this.logger.info('flow-engine.ui_handlers.registered');
   }
@@ -426,7 +445,10 @@ class FlowEngineModule {
   }
 
   async handleListExecutions(req, context) {
-    const executions = this.executor.listAll().map(e => ({
+    const query = req.query || {};
+
+    // Obtener ejecuciones activas (en memoria)
+    const active = this.executor.listAll().map(e => ({
       id: e.id,
       flowId: e.flowId,
       flowName: e.flowName,
@@ -435,22 +457,52 @@ class FlowEngineModule {
       progress: `${e.currentStepIndex}/${e.totalSteps}`,
       startedAt: e.startedAt,
       completedAt: e.completedAt,
-      error: e.error
+      error: e.error,
+      source: 'active'
     }));
+
+    // Obtener historial desde store
+    let history = [];
+    if (this.executionStore) {
+      const result = this.executionStore.list({
+        flowId: query.flowId,
+        status: query.status,
+        from: query.from,
+        to: query.to,
+        limit: parseInt(query.limit) || 50,
+        offset: parseInt(query.offset) || 0
+      });
+      history = result.executions.map(e => ({ ...e, source: 'history' }));
+    }
+
+    // Combinar (activas primero, luego historial sin duplicados)
+    const activeIds = new Set(active.map(e => e.id));
+    const combined = [
+      ...active,
+      ...history.filter(e => !activeIds.has(e.id))
+    ];
 
     return {
       status: 200,
       data: {
-        executions,
-        count: executions.length,
-        stats: this.executor.getStats()
+        executions: combined,
+        active: active.length,
+        total: combined.length,
+        stats: this.executionStore ? this.executionStore.getStats() : this.executor.getStats()
       }
     };
   }
 
   async handleGetExecution(req, context) {
     const { executionId } = req.params;
-    const execution = this.executor.getExecution(executionId);
+
+    // Primero buscar en ejecuciones activas
+    let execution = this.executor.getExecution(executionId);
+
+    // Si no está activa, buscar en historial
+    if (!execution && this.executionStore) {
+      execution = this.executionStore.get(executionId);
+    }
 
     if (!execution) {
       return { status: 404, data: { error: 'EXECUTION_NOT_FOUND' } };
@@ -468,6 +520,23 @@ class FlowEngineModule {
     }
 
     return { status: 200, data: { cancelled: true } };
+  }
+
+  /**
+   * Obtiene estadísticas de ejecuciones
+   */
+  async handleExecutionStats(req, context) {
+    const query = req.query || {};
+
+    if (!this.executionStore) {
+      return { status: 200, data: this.executor.getStats() };
+    }
+
+    const stats = this.executionStore.getStats({
+      from: query.from
+    });
+
+    return { status: 200, data: stats };
   }
 
   // ==========================================
@@ -506,7 +575,24 @@ class FlowEngineModule {
   }
 
   async handleUIListExecutions(data, context) {
-    const result = await this.handleListExecutions({}, context);
+    const result = await this.handleListExecutions({ query: data }, context);
+    return { status: result.status, data: result.data };
+  }
+
+  async handleUIGetExecution(data, context) {
+    const { executionId } = data;
+    if (!executionId) {
+      return { status: 400, error: 'executionId is required' };
+    }
+    const result = await this.handleGetExecution(
+      { params: { executionId } },
+      context
+    );
+    return { status: result.status, data: result.data };
+  }
+
+  async handleUIExecutionStats(data, context) {
+    const result = await this.handleExecutionStats({ query: data }, context);
     return { status: result.status, data: result.data };
   }
 

@@ -97,9 +97,9 @@ class FlowEngineModule {
       this.executionStore
     );
 
-    // Inicializar scheduler para flujos programados
+    // Inicializar scheduler para flujos programados (delega al módulo scheduler)
     this.scheduler = new FlowScheduler(this.logger, this.eventBus);
-    this.scheduler.initialize(this.registry.getAll());
+    await this.scheduler.initialize(this.registry.getAll());
 
     // Suscribirse a eventos
     await this.subscribeToEvents();

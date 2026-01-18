@@ -72,7 +72,8 @@
       },
       "schedule": {
         "cron": "Expresion cron (minuto hora dia-mes mes dia-semana)",
-        "timezone": "Zona horaria (default: Europe/Madrid)"
+        "timezone": "Zona horaria (default: Europe/Madrid)",
+        "_nota": "Delega al modulo scheduler (modules/scheduler/) para la ejecucion"
       },
       "steps": "Array de pasos a ejecutar"
     },

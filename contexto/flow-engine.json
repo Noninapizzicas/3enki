@@ -223,12 +223,86 @@
       "time": "Hora HH:mm:ss"
     },
     "funciones": {
-      "default(value, fallback)": "Valor por defecto si null/undefined",
-      "lowercase(value)": "Convierte a minusculas",
-      "uppercase(value)": "Convierte a mayusculas",
-      "length(value)": "Longitud de string/array",
-      "globalPath(path)": "Convierte rutas data/... a @/... para acceso global",
-      "json(value)": "Serializa objeto a JSON string (para fs.write)"
+      "string": {
+        "lowercase(value)": "Convierte a minusculas",
+        "uppercase(value)": "Convierte a mayusculas",
+        "trim(value)": "Elimina espacios al inicio y final",
+        "split(value, delimiter)": "Divide string en array (default: ',')",
+        "substring(value, start, end?)": "Extrae subcadena",
+        "replace(value, search, replacement)": "Reemplaza todas las ocurrencias",
+        "join(array, delimiter)": "Une array en string (default: ',')",
+        "first(value)": "Primer elemento de array o primer caracter",
+        "last(value)": "Ultimo elemento de array o ultimo caracter",
+        "length(value)": "Longitud de string/array"
+      },
+      "math": {
+        "add(value, n)": "Suma: value + n",
+        "subtract(value, n)": "Resta: value - n",
+        "multiply(value, n)": "Multiplicacion: value * n",
+        "divide(value, n)": "Division: value / n (retorna 0 si n=0)",
+        "round(value, decimals?)": "Redondea (decimals default: 0)",
+        "floor(value)": "Redondea hacia abajo",
+        "ceil(value)": "Redondea hacia arriba",
+        "abs(value)": "Valor absoluto",
+        "min(a, b, ...)": "Minimo de varios valores",
+        "max(a, b, ...)": "Maximo de varios valores"
+      },
+      "object_array": {
+        "keys(object)": "Array de claves del objeto",
+        "values(object)": "Array de valores del objeto",
+        "count(value)": "Numero de elementos (array.length u object keys)",
+        "isEmpty(value)": "true si null, undefined, '', [] o {}",
+        "get(path, default)": "Valor con fallback si undefined"
+      },
+      "conversion": {
+        "int(value)": "Convierte a entero",
+        "float(value)": "Convierte a decimal",
+        "string(value)": "Convierte a string",
+        "bool(value)": "Convierte a boolean"
+      },
+      "utils": {
+        "default(value, fallback)": "Valor por defecto si null/undefined/''",
+        "globalPath(path)": "Convierte rutas data/... a @/... para acceso global",
+        "json(value)": "Serializa objeto a JSON string (para fs.write)"
+      }
+    },
+    "ejemplos_funciones": {
+      "split_y_first": "{{ first(split(trigger.filename, '.')) }}",
+      "calculo": "{{ round(multiply(steps.ocr.confidence, 100), 2) }}",
+      "condicional": "{{ get(trigger.caption, 'Sin descripcion') }}",
+      "transformacion": "{{ uppercase(substring(trigger.name, 0, 3)) }}"
+    }
+  },
+
+  "condiciones": {
+    "descripcion": "Evaluacion de condiciones en steps 'condition' y filtros",
+    "operadores_comparacion": {
+      "===": "Igual estricto",
+      "!==": "No igual estricto",
+      "==": "Igual (con coercion)",
+      "!=": "No igual (con coercion)",
+      ">": "Mayor que",
+      ">=": "Mayor o igual que",
+      "<": "Menor que",
+      "<=": "Menor o igual que"
+    },
+    "operadores_texto": {
+      "contains": "String contiene: '{{ text }} contains \"palabra\"'",
+      "startsWith": "String empieza con: '{{ text }} startsWith \"pre\"'",
+      "endsWith": "String termina con: '{{ text }} endsWith \".pdf\"'",
+      "matches": "Regex: '{{ text }} matches \"^[0-9]+$\"'"
+    },
+    "operadores_logicos": {
+      "&&": "AND: 'condicion1 && condicion2'",
+      "||": "OR: 'condicion1 || condicion2'",
+      "!": "NOT: '!condicion'"
+    },
+    "ejemplos": {
+      "simple": "{{ steps.ocr.confidence }} > 0.8",
+      "texto": "{{ trigger.filename }} endsWith \".pdf\"",
+      "logico_and": "{{ steps.ocr.confidence }} > 0.8 && {{ trigger.file.size }} < 10000000",
+      "logico_or": "{{ trigger.mimeType }} == 'image/png' || {{ trigger.mimeType }} == 'image/jpeg'",
+      "negacion": "!{{ isEmpty(steps.ocr.text) }}"
     }
   },
 

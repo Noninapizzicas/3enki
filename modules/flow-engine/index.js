@@ -20,6 +20,7 @@ const FlowExecutor = require('./services/flow-executor');
 const StepHandlers = require('./services/step-handlers');
 const VariableResolver = require('./services/variable-resolver');
 const FlowScheduler = require('./services/scheduler');
+const manifestLoader = require('../../services/manifest-loader');
 
 class FlowEngineModule {
   constructor() {
@@ -124,117 +125,56 @@ class FlowEngineModule {
   // ==========================================
 
   async subscribeToEvents() {
-    // Eventos que pueden disparar flujos
-    const triggerEvents = [
+    // === 1. TRIGGER EVENTS ===
+    // Eventos que pueden disparar flujos (base + dinámicos de flujos registrados)
+    const baseTriggerEvents = [
       'bot.file.stored',
       'bot.message.received',
       'bot.command.received',
-      'flow.trigger', // Trigger manual
-      // Eventos de encadenamiento de flujos (facturación)
-      'factura.nueva',
-      'factura.recibida',
-      'factura.procesar',
-      'factura.procesada',
-      'factura.guardada',
-      'factura.completada',
-      'factura.error'
+      'flow.trigger' // Trigger manual
     ];
+
+    // Extraer triggers adicionales de los flujos registrados
+    const flowTriggers = this.registry.getAll()
+      .map(f => f.trigger?.event)
+      .filter(e => e && !baseTriggerEvents.includes(e));
+
+    const triggerEvents = [...new Set([...baseTriggerEvents, ...flowTriggers])];
 
     for (const event of triggerEvents) {
       const unsub = await this.eventBus.subscribe(event, (e) => this.onTriggerEvent(event, e));
       this.unsubscribes.push(unsub);
     }
 
-    // Eventos de respuesta de servicios según patrón del sistema:
-    // {provider}.{action}.response / {provider}.{action}.failed
-    const serviceResponsePatterns = [
-      // Filesystem module (modules/filesystem/)
-      'fs.read.response',
-      'fs.read.failed',
-      'fs.write.response',
-      'fs.write.failed',
-      'fs.copy.response',
-      'fs.copy.failed',
-      'fs.delete.response',
-      'fs.delete.failed',
-      'fs.list.response',
-      'fs.list.failed',
-      'fs.mkdir.response',
-      'fs.mkdir.failed',
-      'fs.move.response',
-      'fs.move.failed',
-      'fs.rename.response',
-      'fs.rename.failed',
-      'fs.exists.response',
-      'fs.exists.failed',
-      'fs.info.response',
-      'fs.info.failed',
-      'fs.append.response',
-      'fs.append.failed',
-      'fs.search.response',
-      'fs.search.failed',
-      'fs.stats.response',
-      'fs.stats.failed',
-      // Local providers (services/providers/local/)
-      'local.tesseract.extract.response',
-      'local.tesseract.extract.failed',
-      'local.pdf.create.response',
-      'local.pdf.create.failed',
-      'local.csv.create.response',
-      'local.csv.create.failed',
-      'local.csv.parse.response',
-      'local.csv.parse.failed',
-      'local.xlsx.create.response',
-      'local.xlsx.create.failed',
-      'local.xlsx.parse.response',
-      'local.xlsx.parse.failed',
-      // Google providers (services/providers/google/)
-      'google.vision.extract.response',
-      'google.vision.extract.failed',
-      'google.tts.synthesize.response',
-      'google.tts.synthesize.failed',
-      'google.translate.text.response',
-      'google.translate.text.failed',
-      // Anthropic providers (services/providers/anthropic/)
-      'anthropic.vision.extract.response',
-      'anthropic.vision.extract.failed',
-      // ElevenLabs providers (services/providers/elevenlabs/)
-      'elevenlabs.tts.synthesize.response',
-      'elevenlabs.tts.synthesize.failed',
-      // Telegram
-      'telegram.send_message.response',
-      'telegram.send_message.error',
-      // Facturas DB
-      'local.facturas-db.registrar.response',
-      'local.facturas-db.registrar.failed',
-      'local.facturas-db.actualizar.response',
-      'local.facturas-db.actualizar.failed',
-      'local.facturas-db.listar.response',
-      'local.facturas-db.listar.failed',
-      'local.facturas-db.obtener.response',
-      'local.facturas-db.obtener.failed',
-      'local.facturas-db.pendientes.response',
-      'local.facturas-db.pendientes.failed',
-      'local.facturas-db.estadisticas.response',
-      'local.facturas-db.estadisticas.failed',
-      'local.facturas-db.exportar.response',
-      'local.facturas-db.exportar.failed',
-      'local.facturas-db.marcarExportadas.response',
-      'local.facturas-db.marcarExportadas.failed',
-      // XLSX
-      'local.xlsx.create.response',
-      'local.xlsx.create.failed',
-      // Google Vision local
-      'local.google-vision.extract.response',
-      'local.google-vision.extract.failed',
-      // Gmail
-      'gmail.search.response',
-      'gmail.search.failed',
-      'gmail.read.response',
-      'gmail.read.failed',
-      'gmail.attachments.download.response',
-      'gmail.attachments.download.failed',
+    // === 2. SERVICE RESPONSE EVENTS (desde manifests) ===
+    // Cargar manifests de providers para autodescubrir eventos
+    manifestLoader.setLogger(this.logger);
+    await manifestLoader.load();
+
+    // Obtener eventos de respuesta dinámicamente desde los manifests
+    const manifestEvents = manifestLoader.getServiceEventNames();
+
+    // Eventos adicionales que no están en manifests (módulos internos)
+    const additionalEvents = [
+      // Filesystem module (modules/filesystem/) - no tiene manifest
+      'fs.read.response', 'fs.read.failed',
+      'fs.write.response', 'fs.write.failed',
+      'fs.copy.response', 'fs.copy.failed',
+      'fs.delete.response', 'fs.delete.failed',
+      'fs.list.response', 'fs.list.failed',
+      'fs.mkdir.response', 'fs.mkdir.failed',
+      'fs.move.response', 'fs.move.failed',
+      'fs.rename.response', 'fs.rename.failed',
+      'fs.exists.response', 'fs.exists.failed',
+      'fs.info.response', 'fs.info.failed',
+      'fs.append.response', 'fs.append.failed',
+      'fs.search.response', 'fs.search.failed',
+      'fs.stats.response', 'fs.stats.failed',
+      // Telegram module
+      'telegram.send_message.response', 'telegram.send_message.error'
     ];
+
+    const serviceResponsePatterns = [...new Set([...manifestEvents, ...additionalEvents])];
 
     for (const event of serviceResponsePatterns) {
       const handler = event.includes('failed') || event.includes('error')
@@ -244,6 +184,7 @@ class FlowEngineModule {
       this.unsubscribes.push(unsub);
     }
 
+    // === 3. AGENT EVENTS ===
     // Eventos de agentes (para steps de tipo agent)
     const unsubAgentCompleted = await this.eventBus.subscribe(
       'agent.*.completed',
@@ -258,8 +199,10 @@ class FlowEngineModule {
     this.unsubscribes.push(unsubAgentFailed);
 
     this.logger.info('flow-engine.subscribed', {
-      triggerEvents,
-      serviceResponsePatterns: serviceResponsePatterns.length
+      triggerEvents: triggerEvents.length,
+      serviceEvents: serviceResponsePatterns.length,
+      fromManifests: manifestEvents.length,
+      providers: manifestLoader.getAllManifests().map(m => m.name)
     });
   }
 

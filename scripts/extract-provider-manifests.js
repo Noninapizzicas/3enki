@@ -48,16 +48,29 @@ const PROVIDERS_PATHS = [
 function extractContract(indexPath) {
   const content = fs.readFileSync(indexPath, 'utf8');
 
-  // Extraer name
-  const nameMatch = content.match(/name:\s*['"`]([^'"`]+)['"`]/);
+  // Buscar module.exports = { para extraer propiedades del objeto principal
+  // Esto evita confundir con otras propiedades 'name:' en el archivo
+  const moduleExportsStart = content.indexOf('module.exports');
+  if (moduleExportsStart === -1) {
+    return { name: null, description: null, version: '1.0.0', functions: null, error: 'No module.exports found' };
+  }
+
+  // Tomar solo desde module.exports en adelante para buscar name/description
+  const exportSection = content.slice(moduleExportsStart);
+
+  // Extraer name - buscar después de module.exports, antes de functions
+  const functionsPos = exportSection.indexOf('functions:');
+  const searchSection = functionsPos > 0 ? exportSection.slice(0, functionsPos) : exportSection.slice(0, 500);
+
+  const nameMatch = searchSection.match(/^\s*name:\s*['"`]([^'"`]+)['"`]/m);
   const name = nameMatch ? nameMatch[1] : null;
 
   // Extraer description
-  const descMatch = content.match(/description:\s*['"`]([^'"`]+)['"`]/);
+  const descMatch = searchSection.match(/^\s*description:\s*['"`]([^'"`]+)['"`]/m);
   const description = descMatch ? descMatch[1] : null;
 
   // Extraer version si existe
-  const versionMatch = content.match(/version:\s*['"`]([^'"`]+)['"`]/);
+  const versionMatch = searchSection.match(/^\s*version:\s*['"`]([^'"`]+)['"`]/m);
   const version = versionMatch ? versionMatch[1] : '1.0.0';
 
   // Extraer el objeto functions completo

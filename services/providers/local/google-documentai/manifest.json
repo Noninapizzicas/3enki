@@ -1,6 +1,6 @@
 {
   "$schema": "../../../schemas/provider-manifest.schema.json",
-  "name": "oauth2.googleapis.com",
+  "name": "local.google-documentai",
   "version": "1.0.0",
   "description": "Google Document AI - Extracción estructurada de documentos (facturas, formularios, etc.)",
   "type": "provider",

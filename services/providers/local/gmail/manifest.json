@@ -1,6 +1,6 @@
 {
   "$schema": "../../../schemas/provider-manifest.schema.json",
-  "name": "oauth2.googleapis.com",
+  "name": "local.gmail",
   "version": "1.0.0",
   "description": "Gmail API - Envío y lectura de correos con OAuth2 (Multi-cuenta)",
   "type": "provider",

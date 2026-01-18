@@ -1,6 +1,6 @@
 {
   "$schema": "../../../schemas/provider-manifest.schema.json",
-  "name": "saludo.pdf",
+  "name": "local.pdf",
   "version": "1.0.0",
   "description": "Servicio local para crear PDFs",
   "type": "provider",

@@ -202,7 +202,7 @@ class FlowEngineModule {
     }
 
     // === 3. AGENT EVENTS ===
-    // Eventos de agentes (para steps de tipo agent)
+    // Eventos de agentes (para steps de tipo agent con nombre)
     const unsubAgentCompleted = await this.eventBus.subscribe(
       'agent.*.completed',
       this.onAgentCompleted.bind(this)
@@ -214,6 +214,14 @@ class FlowEngineModule {
       this.onAgentFailed.bind(this)
     );
     this.unsubscribes.push(unsubAgentFailed);
+
+    // === 4. AI CHAT EVENTS ===
+    // Eventos de ai-gateway (para steps de tipo agent inline con model/prompt)
+    const unsubAIChatResponse = await this.eventBus.subscribe(
+      'ai.chat.response',
+      this.onAIChatResponse.bind(this)
+    );
+    this.unsubscribes.push(unsubAIChatResponse);
 
     this.logger.info('flow-engine.subscribed', {
       triggerEvents: triggerEvents.length,
@@ -323,6 +331,18 @@ class FlowEngineModule {
 
     if (request_id) {
       this.stepHandlers.handleAgentResponse(request_id, data, true);
+    }
+  }
+
+  /**
+   * Maneja respuestas de ai-gateway (para inline AI steps)
+   */
+  async onAIChatResponse(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, success, error } = data;
+
+    if (request_id) {
+      this.stepHandlers.handleAIChatResponse(request_id, data, !success);
     }
   }
 

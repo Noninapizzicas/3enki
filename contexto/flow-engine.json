@@ -144,12 +144,60 @@
       }
     },
     "agent": {
-      "descripcion": "Invoca agente AI",
-      "patron_eventos": "agent.execute.request -> agent.*.completed",
-      "propiedades": {
-        "agent": "Nombre del agente",
-        "task": "Tarea a ejecutar",
-        "timeout": "Timeout en ms (default: 120000)"
+      "descripcion": "Invoca AI - soporta dos modos: agente registrado o inline AI",
+      "modos": {
+        "named_agent": {
+          "descripcion": "Invoca un agente pre-registrado por nombre",
+          "patron_eventos": "agent.execute.request -> agent.*.completed",
+          "propiedades": {
+            "agent": "Nombre del agente registrado (requerido)",
+            "task": "Tarea/instruccion a ejecutar",
+            "config": "Configuracion adicional para el agente",
+            "timeout": "Timeout en ms (default: 120000)"
+          },
+          "ejemplo": {
+            "id": "analizar-documento",
+            "type": "agent",
+            "agent": "document-analyzer",
+            "task": "Analiza el siguiente documento: {{ steps.ocr.data.text }}"
+          }
+        },
+        "inline_ai": {
+          "descripcion": "Llamada directa a AI sin agente pre-registrado",
+          "patron_eventos": "ai.chat.request -> ai.chat.response",
+          "propiedades": {
+            "prompt": "Prompt/mensaje para el modelo (requerido)",
+            "system": "System prompt (opcional)",
+            "model": "Modelo a usar: claude-3-sonnet, gpt-4o, deepseek-chat, etc.",
+            "provider": "Provider especifico: anthropic, openai, deepseek (opcional, auto si no se especifica)",
+            "temperature": "Creatividad 0-2 (default: 0.7)",
+            "max_tokens": "Maximo tokens respuesta (default: 2048)",
+            "tools": "Array de tools disponibles para el AI",
+            "execute_tools": "Si auto-ejecutar tools (default: true)",
+            "timeout": "Timeout en ms (default: 120000)"
+          },
+          "output": {
+            "content": "Respuesta del modelo",
+            "model": "Modelo usado",
+            "provider": "Provider usado",
+            "tokens": "Tokens consumidos",
+            "tool_calls": "Tool calls si hubo",
+            "tool_calls_executed": "Resultados de tools ejecutadas"
+          },
+          "ejemplo": {
+            "id": "clasificar-factura",
+            "type": "agent",
+            "system": "Eres un clasificador de facturas. Responde SOLO con JSON.",
+            "prompt": "Clasifica esta factura:\n\n{{ steps.ocr.data.text }}\n\nResponde: {\"tipo\": \"...\", \"proveedor\": \"...\", \"total\": ...}",
+            "model": "claude-3-5-sonnet-20241022",
+            "temperature": 0.2
+          }
+        }
+      },
+      "deteccion_modo": "Si tiene 'model', 'prompt' o 'system' -> inline_ai, sino -> named_agent",
+      "casos_uso": {
+        "inline_ai": "Tareas puntuales, clasificacion, extraccion estructurada, transformaciones con AI",
+        "named_agent": "Agentes complejos con herramientas, memoria, pipelines multi-paso"
       }
     },
     "http": {

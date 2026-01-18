@@ -274,11 +274,138 @@ class StepHandlers {
   }
 
   // ==========================================
-  // AGENT: Invoca agente AI
+  // AGENT: Invoca agente AI o llamada AI inline
+  // Modo 1: agent (nombre) → agent.execute.request
+  // Modo 2: model/prompt → ai.chat.request (directo a ai-gateway)
   // ==========================================
 
   async handleAgent(step, context, executionId) {
+    // Detectar modo: inline AI vs named agent
+    const isInlineAI = step.model || step.prompt || step.system;
+
+    if (isInlineAI) {
+      return this.handleInlineAI(step, context, executionId);
+    } else {
+      return this.handleNamedAgent(step, context, executionId);
+    }
+  }
+
+  /**
+   * Modo Inline AI: llamada directa a ai-gateway
+   * Propiedades: model, system, prompt, temperature, max_tokens, tools
+   */
+  async handleInlineAI(step, context, executionId) {
+    const {
+      model,
+      provider,
+      system,
+      prompt,
+      temperature,
+      max_tokens,
+      tools,
+      execute_tools,
+      timeout = 120000
+    } = step;
+
+    if (!prompt) {
+      throw new Error('Inline AI step requires "prompt" property');
+    }
+
+    const requestId = crypto.randomUUID();
+
+    // Construir messages para el chat
+    const messages = [];
+
+    if (system) {
+      messages.push({ role: 'system', content: system });
+    }
+
+    messages.push({ role: 'user', content: prompt });
+
+    // Crear promesa para esperar respuesta
+    const responsePromise = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingResponses.delete(requestId);
+        reject(new Error(`AI chat timeout after ${timeout}ms`));
+      }, timeout);
+
+      this.pendingResponses.set(requestId, {
+        resolve: (result) => {
+          clearTimeout(timeoutId);
+          this.pendingResponses.delete(requestId);
+          resolve(result);
+        },
+        reject: (error) => {
+          clearTimeout(timeoutId);
+          this.pendingResponses.delete(requestId);
+          reject(error);
+        },
+        type: 'ai-chat',
+        executionId
+      });
+    });
+
+    // Publicar request a ai-gateway
+    await this.eventBus.publish('ai.chat.request', {
+      request_id: requestId,
+      messages,
+      provider: provider || undefined,
+      model: model || undefined,
+      temperature,
+      max_tokens,
+      tools: tools || undefined,
+      execute_tools: execute_tools ?? true,
+      correlation_id: executionId
+    });
+
+    this.logger.debug('step-handlers.inline-ai.request', {
+      requestId,
+      model,
+      hasSystem: !!system,
+      promptLength: prompt?.length
+    });
+
+    // Esperar respuesta
+    const result = await responsePromise;
+
+    return {
+      output: {
+        content: result.content || result.message,
+        model: result.model,
+        provider: result.provider,
+        tokens: result.tokens,
+        tool_calls: result.tool_calls,
+        tool_calls_executed: result.tool_calls_executed
+      }
+    };
+  }
+
+  /**
+   * Maneja respuestas de ai-gateway (ai.chat.response)
+   */
+  handleAIChatResponse(requestId, result, isError = false) {
+    const pending = this.pendingResponses.get(requestId);
+    if (!pending || pending.type !== 'ai-chat') return false;
+
+    if (isError || result.error) {
+      pending.reject(new Error(result.error || 'AI chat error'));
+    } else {
+      pending.resolve(result);
+    }
+
+    return true;
+  }
+
+  /**
+   * Modo Named Agent: invoca agente registrado
+   * Propiedades: agent, task, config
+   */
+  async handleNamedAgent(step, context, executionId) {
     const { agent, task, config, timeout = 120000 } = step;
+
+    if (!agent) {
+      throw new Error('Named agent step requires "agent" property');
+    }
 
     const requestId = crypto.randomUUID();
 

@@ -77,6 +77,7 @@
     "dashboard",
     "database-manager",
     "filesystem",
+    "flow-engine",
     "log-manager",
     "menu-generator",
     "metricas",
@@ -121,7 +122,7 @@
     },
     "system": {
       "description": "Módulos del sistema",
-      "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas", "scheduler"]
+      "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas", "scheduler", "flow-engine"]
     }
   },
   "key_modules": {
@@ -325,6 +326,73 @@
       ],
       "ui_handlers": {
         "scheduler": ["list", "get", "create", "update", "delete", "enable", "disable", "trigger", "triggers", "stats", "executions"]
+      }
+    },
+    "flow-engine": {
+      "version": "2.0.0",
+      "description": "Motor de flujos declarativos event-driven con ejecución de pasos",
+      "arquitectura": {
+        "flow-registry": "Gestión y validación de definiciones de flujos",
+        "flow-executor": "Ejecución de pasos con contexto y variables",
+        "step-handlers": "Handlers para cada tipo de step (service, http, transform, condition, etc.)",
+        "variable-resolver": "Resolución de templates {{ }} con funciones extensibles",
+        "flow-validator": "Validación JSON Schema de flujos",
+        "scheduler": "Facade que delega al módulo scheduler"
+      },
+      "step_types": {
+        "service": "Llama a un servicio via eventos (service + function)",
+        "http": "Petición HTTP externa",
+        "transform": "Transforma datos con mapping/template",
+        "condition": "Ejecución condicional (if/then/else)",
+        "parallel": "Ejecución paralela de branches",
+        "loop": "Iteración sobre arrays",
+        "wait": "Pausa temporal",
+        "emit": "Publica evento MQTT",
+        "set": "Establece variables en contexto",
+        "agent": "Modo dual: named agent o inline AI (model/prompt/system)"
+      },
+      "features": [
+        "Triggers por evento MQTT con filtros",
+        "Scheduling delegado a módulo scheduler",
+        "Variable resolver con 25+ funciones (string, math, object, conversion)",
+        "Operadores lógicos en condiciones (&&, ||, !)",
+        "JSON Schema validation en registro",
+        "Retry con exponential backoff",
+        "Persistencia de historial de ejecuciones",
+        "Soporte multi-proyecto con templates"
+      ],
+      "events": {
+        "publishes": [
+          "flow.started",
+          "flow.completed",
+          "flow.failed",
+          "flow.step.started",
+          "flow.step.completed",
+          "flow.step.failed"
+        ],
+        "subscribes": [
+          "flow.trigger",
+          "ai.chat.response",
+          "agent.execute.response",
+          "scheduler.job.triggered",
+          "scheduler.job.created"
+        ]
+      },
+      "key_apis": [
+        "GET /flows - Listar flujos",
+        "POST /flows - Registrar flujo",
+        "POST /flows/:id/execute - Ejecutar flujo",
+        "GET /flows/:id/history - Historial de ejecuciones",
+        "POST /flows/validate - Validar flujo sin registrar",
+        "GET /flows/schema - Obtener JSON Schema"
+      ],
+      "ui_handlers": {
+        "flow": ["list", "get", "create", "update", "delete", "execute", "history", "validate", "schema"]
+      },
+      "integraciones": {
+        "scheduler": "Delega scheduling via eventos ui.request",
+        "ai-gateway": "Inline AI mode usa ai.chat.request/response",
+        "ai-agent-framework": "Named agent mode usa agent.execute.request/response"
       }
     }
   },

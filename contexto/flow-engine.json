@@ -300,6 +300,51 @@
     }
   },
 
+  "retry_backoff": {
+    "descripcion": "Reintentos automaticos con backoff exponencial para pasos que fallan",
+    "configuracion": {
+      "retry": {
+        "attempts": "Numero de intentos totales (default: 1 = sin retry)",
+        "delay": "Delay inicial entre reintentos en ms (default: 1000)",
+        "backoff": "Multiplicador exponencial (default: 2)",
+        "maxDelay": "Delay maximo entre reintentos en ms (default: 30000)"
+      }
+    },
+    "formatos": {
+      "simple": "retry: 3 (solo numero de intentos)",
+      "completo": "retry: { attempts: 3, delay: 1000, backoff: 2, maxDelay: 30000 }"
+    },
+    "calculo_delay": "delay * backoff^(intento-1)",
+    "ejemplo_delays": {
+      "intento_1": "0ms (inmediato)",
+      "intento_2": "1000ms",
+      "intento_3": "2000ms",
+      "intento_4": "4000ms"
+    },
+    "ejemplo_uso": {
+      "id": "ejecutar-ocr",
+      "type": "service",
+      "service": "local.google-vision",
+      "action": "extract",
+      "image": "{{ globalPath(trigger.file.path) }}",
+      "retry": {
+        "attempts": 3,
+        "delay": 2000,
+        "backoff": 2
+      },
+      "onError": "marcar-error"
+    },
+    "eventos": {
+      "flow.step.retrying": "Publicado antes de cada reintento con attempt, maxAttempts, delayMs, previousError"
+    },
+    "notas": [
+      "El retry se aplica ANTES del onError",
+      "Si todos los intentos fallan, se ejecuta onError",
+      "El historial incluye 'attempts' con numero de intentos realizados",
+      "Util para APIs externas con rate limiting o timeouts temporales"
+    ]
+  },
+
   "providers_soportados": {
     "filesystem": {
       "fs": {
@@ -408,15 +453,28 @@
     "publicados": {
       "flow.started": "Flujo iniciado",
       "flow.step.started": "Paso iniciado",
-      "flow.step.completed": "Paso completado",
-      "flow.step.failed": "Paso fallido",
+      "flow.step.retrying": "Reintentando paso (con attempt, maxAttempts, delayMs)",
+      "flow.step.completed": "Paso completado (incluye attempts si hubo retry)",
+      "flow.step.failed": "Paso fallido (incluye attempts si hubo retry)",
       "flow.completed": "Flujo completado exitosamente",
       "flow.failed": "Flujo fallido"
     },
     "suscritos": {
-      "triggers": ["bot.file.stored", "bot.message.received", "bot.command.received", "flow.trigger", "factura.nueva", "factura.procesada", "factura.guardada", "factura.completada", "factura.error"],
-      "providers": "Todos los eventos {provider}.{action}.response y {provider}.{action}.failed"
+      "triggers": "Dinamico: eventos base + triggers de flujos registrados",
+      "providers": "Dinamico: cargados desde manifest.json de cada provider via manifest-loader"
     }
+  },
+
+  "manifest_loader": {
+    "descripcion": "Autodescubrimiento de providers y sus eventos",
+    "ubicacion": "services/manifest-loader.js",
+    "funciones": {
+      "load()": "Carga todos los manifest.json de providers",
+      "getServiceEventNames()": "Lista de eventos para suscripcion",
+      "validateStep(step)": "Valida step contra contrato del provider",
+      "getManifest(name)": "Obtiene contrato de un provider"
+    },
+    "beneficio": "No mas eventos hardcodeados - agregar provider = autodescubierto"
   },
 
   "api_http": {
@@ -502,6 +560,7 @@
     "Usar IDs descriptivos para pasos (ej: 'leer-archivo', 'procesar-ocr')",
     "Definir timeouts apropiados para servicios externos",
     "Usar onError para pasos no criticos",
+    "Usar retry para APIs externas que pueden fallar temporalmente (rate limiting, timeouts)",
     "Guardar resultados intermedios con filesystem para debugging",
     "Usar step 'log' para trazabilidad",
     "Validar datos con step 'condition' antes de procesar",

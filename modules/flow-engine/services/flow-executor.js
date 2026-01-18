@@ -18,6 +18,58 @@ class FlowExecutor {
 
     // Timeout por defecto
     this.defaultTimeout = config.defaultTimeout || 300000; // 5 min
+
+    // Retry defaults
+    this.defaultRetry = {
+      attempts: 1,      // Sin retry por defecto
+      delay: 1000,      // 1 segundo
+      backoff: 2,       // Multiplicador exponencial
+      maxDelay: 30000   // Máximo 30 segundos entre reintentos
+    };
+  }
+
+  /**
+   * Sleep helper
+   */
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Calcula el delay para un intento específico
+   */
+  calculateDelay(retryConfig, attempt) {
+    if (attempt === 0) return 0; // Primer intento, sin delay
+
+    const baseDelay = retryConfig.delay || this.defaultRetry.delay;
+    const backoff = retryConfig.backoff || this.defaultRetry.backoff;
+    const maxDelay = retryConfig.maxDelay || this.defaultRetry.maxDelay;
+
+    // Exponential backoff: delay * backoff^(attempt-1)
+    const delay = baseDelay * Math.pow(backoff, attempt - 1);
+    return Math.min(delay, maxDelay);
+  }
+
+  /**
+   * Parsea configuración de retry del step
+   */
+  parseRetryConfig(step) {
+    if (!step.retry) {
+      return { ...this.defaultRetry, attempts: 1 };
+    }
+
+    // Formato simple: retry: 3 (número de intentos)
+    if (typeof step.retry === 'number') {
+      return { ...this.defaultRetry, attempts: step.retry };
+    }
+
+    // Formato completo: retry: { attempts, delay, backoff }
+    return {
+      attempts: step.retry.attempts || this.defaultRetry.attempts,
+      delay: step.retry.delay || this.defaultRetry.delay,
+      backoff: step.retry.backoff || this.defaultRetry.backoff,
+      maxDelay: step.retry.maxDelay || this.defaultRetry.maxDelay
+    };
   }
 
   /**
@@ -98,7 +150,7 @@ class FlowExecutor {
   }
 
   /**
-   * Ejecuta el paso actual
+   * Ejecuta el paso actual con soporte de retry/backoff
    */
   async executeStep(executionId) {
     const execution = this.executions.get(executionId);
@@ -116,12 +168,17 @@ class FlowExecutor {
     const stepId = step.id || `step_${execution.currentStepIndex}`;
     execution.currentStepId = stepId;
 
+    // Configuración de retry
+    const retryConfig = this.parseRetryConfig(step);
+    const maxAttempts = retryConfig.attempts;
+
     this.logger.info('flow-executor.step.starting', {
       executionId,
       stepIndex: execution.currentStepIndex + 1,
       totalSteps: execution.totalSteps,
       stepId,
-      stepType: step.type
+      stepType: step.type,
+      maxAttempts
     });
 
     // Publicar evento de inicio de paso
@@ -131,116 +188,171 @@ class FlowExecutor {
       stepIndex: execution.currentStepIndex,
       stepId,
       stepType: step.type,
+      maxAttempts,
       timestamp: new Date().toISOString()
     });
 
     const stepStartTime = Date.now();
+    let lastError = null;
 
-    try {
-      // Ejecutar el paso
-      const result = await this.stepHandlers.execute(step, execution.context, executionId);
+    // === RETRY LOOP ===
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Calcular delay para este intento (0 para el primero)
+      const delay = this.calculateDelay(retryConfig, attempt);
 
-      // Guardar resultado en contexto
-      execution.context.steps[stepId] = result.output;
+      if (delay > 0) {
+        this.logger.info('flow-executor.step.retrying', {
+          executionId,
+          stepId,
+          attempt: attempt + 1,
+          maxAttempts,
+          delayMs: delay
+        });
 
-      // Si el step define variables, añadirlas al contexto
-      if (result.setVariables) {
-        Object.assign(execution.context.variables, result.setVariables);
+        // Publicar evento de retry
+        await this.eventBus.publish('flow.step.retrying', {
+          executionId,
+          flowId: execution.flowId,
+          stepId,
+          attempt: attempt + 1,
+          maxAttempts,
+          delayMs: delay,
+          previousError: lastError?.message,
+          timestamp: new Date().toISOString()
+        });
+
+        await this.sleep(delay);
       }
 
-      // Guardar en historial
-      execution.history.push({
-        stepIndex: execution.currentStepIndex,
-        stepId,
-        stepType: step.type,
-        status: 'completed',
-        output: result.output,
-        duration: Date.now() - stepStartTime,
-        timestamp: new Date().toISOString()
-      });
+      try {
+        // Ejecutar el paso
+        const result = await this.stepHandlers.execute(step, execution.context, executionId);
 
-      this.logger.info('flow-executor.step.completed', {
-        executionId,
-        stepId,
-        duration: Date.now() - stepStartTime
-      });
+        // === ÉXITO ===
+        // Guardar resultado en contexto
+        execution.context.steps[stepId] = result.output;
 
-      // Publicar evento de paso completado
-      await this.eventBus.publish('flow.step.completed', {
-        executionId,
-        flowId: execution.flowId,
-        stepIndex: execution.currentStepIndex,
-        stepId,
-        stepType: step.type,
-        duration: Date.now() - stepStartTime,
-        timestamp: new Date().toISOString()
-      });
-
-      // Determinar siguiente paso
-      if (result.nextStep) {
-        // Salto condicional a un step específico
-        const nextIndex = execution.steps.findIndex(s => s.id === result.nextStep);
-        if (nextIndex === -1) {
-          throw new Error(`Step not found: ${result.nextStep}`);
+        // Si el step define variables, añadirlas al contexto
+        if (result.setVariables) {
+          Object.assign(execution.context.variables, result.setVariables);
         }
-        execution.currentStepIndex = nextIndex;
-      } else {
-        // Siguiente paso secuencial
-        execution.currentStepIndex++;
-      }
 
-      // Continuar con siguiente paso
-      await this.executeStep(executionId);
+        // Guardar en historial
+        execution.history.push({
+          stepIndex: execution.currentStepIndex,
+          stepId,
+          stepType: step.type,
+          status: 'completed',
+          output: result.output,
+          attempts: attempt + 1,
+          duration: Date.now() - stepStartTime,
+          timestamp: new Date().toISOString()
+        });
 
-    } catch (error) {
-      // Error en el paso
-      execution.history.push({
-        stepIndex: execution.currentStepIndex,
-        stepId,
-        stepType: step.type,
-        status: 'failed',
-        error: error.message,
-        duration: Date.now() - stepStartTime,
-        timestamp: new Date().toISOString()
-      });
+        this.logger.info('flow-executor.step.completed', {
+          executionId,
+          stepId,
+          attempts: attempt + 1,
+          duration: Date.now() - stepStartTime
+        });
 
-      this.logger.error('flow-executor.step.failed', {
-        executionId,
-        stepId,
-        error: error.message
-      });
+        // Publicar evento de paso completado
+        await this.eventBus.publish('flow.step.completed', {
+          executionId,
+          flowId: execution.flowId,
+          stepIndex: execution.currentStepIndex,
+          stepId,
+          stepType: step.type,
+          attempts: attempt + 1,
+          duration: Date.now() - stepStartTime,
+          timestamp: new Date().toISOString()
+        });
 
-      // Publicar evento de paso fallido
-      await this.eventBus.publish('flow.step.failed', {
-        executionId,
-        flowId: execution.flowId,
-        stepIndex: execution.currentStepIndex,
-        stepId,
-        stepType: step.type,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-
-      // Verificar si hay onError en el step
-      if (step.onError === 'continue') {
-        // Continuar con siguiente paso
-        execution.currentStepIndex++;
-        await this.executeStep(executionId);
-      } else if (step.onError && typeof step.onError === 'string') {
-        // Saltar a step de error
-        const errorStepIndex = execution.steps.findIndex(s => s.id === step.onError);
-        if (errorStepIndex !== -1) {
-          execution.context.error = { step: stepId, message: error.message };
-          execution.currentStepIndex = errorStepIndex;
-          await this.executeStep(executionId);
+        // Determinar siguiente paso
+        if (result.nextStep) {
+          // Salto condicional a un step específico
+          const nextIndex = execution.steps.findIndex(s => s.id === result.nextStep);
+          if (nextIndex === -1) {
+            throw new Error(`Step not found: ${result.nextStep}`);
+          }
+          execution.currentStepIndex = nextIndex;
         } else {
+          // Siguiente paso secuencial
+          execution.currentStepIndex++;
+        }
+
+        // Continuar con siguiente paso
+        await this.executeStep(executionId);
+        return; // Salir del retry loop
+
+      } catch (error) {
+        lastError = error;
+
+        this.logger.warn('flow-executor.step.attempt.failed', {
+          executionId,
+          stepId,
+          attempt: attempt + 1,
+          maxAttempts,
+          error: error.message
+        });
+
+        // Si quedan intentos, continuar el loop
+        if (attempt < maxAttempts - 1) {
+          continue;
+        }
+
+        // === TODOS LOS INTENTOS FALLARON ===
+        execution.history.push({
+          stepIndex: execution.currentStepIndex,
+          stepId,
+          stepType: step.type,
+          status: 'failed',
+          error: error.message,
+          attempts: attempt + 1,
+          duration: Date.now() - stepStartTime,
+          timestamp: new Date().toISOString()
+        });
+
+        this.logger.error('flow-executor.step.failed', {
+          executionId,
+          stepId,
+          attempts: attempt + 1,
+          error: error.message
+        });
+
+        // Publicar evento de paso fallido
+        await this.eventBus.publish('flow.step.failed', {
+          executionId,
+          flowId: execution.flowId,
+          stepIndex: execution.currentStepIndex,
+          stepId,
+          stepType: step.type,
+          error: error.message,
+          attempts: attempt + 1,
+          timestamp: new Date().toISOString()
+        });
+
+        // Verificar si hay onError en el step
+        if (step.onError === 'continue') {
+          // Continuar con siguiente paso
+          execution.currentStepIndex++;
+          await this.executeStep(executionId);
+        } else if (step.onError && typeof step.onError === 'string') {
+          // Saltar a step de error
+          const errorStepIndex = execution.steps.findIndex(s => s.id === step.onError);
+          if (errorStepIndex !== -1) {
+            execution.context.error = { step: stepId, message: error.message, attempts: attempt + 1 };
+            execution.currentStepIndex = errorStepIndex;
+            await this.executeStep(executionId);
+          } else {
+            await this.fail(executionId, error.message);
+          }
+        } else {
+          // Por defecto, fallar el flujo
           await this.fail(executionId, error.message);
         }
-      } else {
-        // Por defecto, fallar el flujo
-        await this.fail(executionId, error.message);
       }
-    }
+    } // Fin del retry loop
   }
 
   /**

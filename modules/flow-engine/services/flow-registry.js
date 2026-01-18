@@ -5,6 +5,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const FlowValidator = require('./flow-validator');
 
 class FlowRegistry {
   constructor(config, logger) {
@@ -13,6 +14,7 @@ class FlowRegistry {
     this.flows = new Map(); // flowId -> flowDefinition
     this.triggerIndex = new Map(); // event -> [flowIds]
     this.projectConfigs = new Map(); // projectId -> config
+    this.validator = new FlowValidator(logger);
   }
 
   async initialize() {
@@ -207,15 +209,24 @@ class FlowRegistry {
 
   /**
    * Registra un nuevo flujo
+   * @param {Object} flow - Definición del flujo
+   * @param {Object} options - Opciones de registro
+   * @param {boolean} options.skipValidation - Si true, no valida el schema (para flujos internos)
    */
-  async register(flow) {
-    // Validar estructura mínima
-    if (!flow.id) {
-      throw new Error('Flow must have an id');
-    }
-
-    if (!flow.steps || !Array.isArray(flow.steps) || flow.steps.length === 0) {
-      throw new Error('Flow must have at least one step');
+  async register(flow, options = {}) {
+    // Validar schema completo
+    if (!options.skipValidation) {
+      const { valid, errors } = this.validator.validate(flow);
+      if (!valid) {
+        const errorMsg = errors.length === 1
+          ? errors[0]
+          : `${errors.length} errores:\n- ${errors.join('\n- ')}`;
+        this.logger.error('flow-registry.validation.failed', {
+          flowId: flow.id,
+          errors
+        });
+        throw new Error(`Flujo inválido: ${errorMsg}`);
+      }
     }
 
     // Guardar flujo
@@ -448,6 +459,23 @@ class FlowRegistry {
 
     flow.enabled = enabled;
     return flow;
+  }
+
+  /**
+   * Valida un flujo sin registrarlo
+   * @param {Object} flow - Definición del flujo
+   * @returns {{ valid: boolean, errors: string[] }}
+   */
+  validate(flow) {
+    return this.validator.validate(flow);
+  }
+
+  /**
+   * Obtiene el schema JSON de flujos
+   * @returns {Object} JSON Schema
+   */
+  getSchema() {
+    return this.validator.getSchema();
   }
 }
 

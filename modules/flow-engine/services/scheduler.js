@@ -1,28 +1,31 @@
 /**
  * Flow Scheduler Service
  *
- * Ejecuta flujos programados usando expresiones cron.
+ * Delega al módulo scheduler para ejecución de flujos programados.
+ * Actúa como facade que traduce flujos con schedule a jobs del scheduler.
  *
  * Sintaxis cron: "minuto hora día-mes mes día-semana"
  * Ejemplos:
  * - "0 3 * * 0"   → Domingos a las 3:00 AM
  * - "0 3 * * *"   → Todos los días a las 3:00 AM
- * - "0 6 * * 0"   → Domingos a las 6:00 AM
  * - "30 4 * * 1-5" → Lunes a Viernes a las 4:30 AM
  *
  * @module flow-engine/scheduler
- * @version 1.0.0
+ * @version 2.0.0
  */
 
-const cron = require('node-cron');
+const crypto = require('crypto');
 
 class FlowScheduler {
   constructor(logger, eventBus) {
     this.logger = logger;
     this.eventBus = eventBus;
 
-    // Tareas programadas activas
-    this.scheduledTasks = new Map();
+    // Mapping: flowId -> schedulerJobId
+    this.flowToJob = new Map();
+
+    // Pending job creations (waiting for scheduler response)
+    this.pendingCreations = new Map();
 
     // Stats
     this.stats = {
@@ -30,38 +33,112 @@ class FlowScheduler {
       executed: 0,
       errors: 0
     };
+
+    // Event subscriptions
+    this.unsubscribes = [];
   }
 
   /**
-   * Inicializa el scheduler con los flujos que tienen schedule
+   * Inicializa el scheduler suscribiéndose a eventos del módulo scheduler
    * @param {Array} flows - Lista de flujos del registry
    */
-  initialize(flows) {
-    this.logger.info('scheduler.initializing', {
+  async initialize(flows) {
+    this.logger.info('flow-scheduler.initializing', {
       totalFlows: flows.length
     });
+
+    // Suscribirse a eventos del scheduler
+    await this.subscribeToSchedulerEvents();
 
     let scheduledCount = 0;
 
     for (const flow of flows) {
       if (flow.schedule && flow.enabled !== false) {
-        this.scheduleFlow(flow);
+        await this.scheduleFlow(flow);
         scheduledCount++;
       }
     }
 
     this.stats.scheduled = scheduledCount;
 
-    this.logger.info('scheduler.initialized', {
+    this.logger.info('flow-scheduler.initialized', {
       scheduledFlows: scheduledCount
     });
   }
 
   /**
-   * Programa un flujo para ejecución
+   * Suscribirse a eventos del módulo scheduler
+   */
+  async subscribeToSchedulerEvents() {
+    // Cuando un job del scheduler se ejecuta, verificar si es un flow
+    const unsubTriggered = await this.eventBus.subscribe(
+      'scheduler.job.triggered',
+      this.onSchedulerJobTriggered.bind(this)
+    );
+    this.unsubscribes.push(unsubTriggered);
+
+    // Cuando se completa la creación de un job
+    const unsubCreated = await this.eventBus.subscribe(
+      'scheduler.job.created',
+      this.onSchedulerJobCreated.bind(this)
+    );
+    this.unsubscribes.push(unsubCreated);
+
+    this.logger.debug('flow-scheduler.events.subscribed');
+  }
+
+  /**
+   * Maneja evento de job triggered del scheduler
+   */
+  async onSchedulerJobTriggered(event) {
+    const data = event?.data || event?.payload || event;
+    const { jobId, jobName } = data;
+
+    // Verificar si este job corresponde a un flow
+    let flowId = null;
+    for (const [fId, jId] of this.flowToJob.entries()) {
+      if (jId === jobId) {
+        flowId = fId;
+        break;
+      }
+    }
+
+    if (flowId) {
+      this.stats.executed++;
+      this.logger.info('flow-scheduler.flow.triggered', {
+        flowId,
+        jobId,
+        scheduledTime: new Date().toISOString()
+      });
+    }
+  }
+
+  /**
+   * Maneja evento de job created del scheduler
+   */
+  onSchedulerJobCreated(event) {
+    const data = event?.data || event?.payload || event;
+    const job = data.job || data;
+
+    // Buscar si hay una creación pendiente para este job
+    if (job?.metadata?.flowId) {
+      const pending = this.pendingCreations.get(job.metadata.flowId);
+      if (pending) {
+        this.flowToJob.set(job.metadata.flowId, job.id);
+        this.pendingCreations.delete(job.metadata.flowId);
+        this.logger.debug('flow-scheduler.job.linked', {
+          flowId: job.metadata.flowId,
+          jobId: job.id
+        });
+      }
+    }
+  }
+
+  /**
+   * Programa un flujo para ejecución delegando al módulo scheduler
    * @param {Object} flow - Definición del flujo
    */
-  scheduleFlow(flow) {
+  async scheduleFlow(flow) {
     const { id, name, schedule } = flow;
 
     // Resolver variables en la expresión cron
@@ -76,9 +153,9 @@ class FlowScheduler {
       timezone = this.resolveTemplate(timezone, flow._projectConfig);
     }
 
-    // Validar expresión cron
-    if (!cron.validate(cronExpression)) {
-      this.logger.error('scheduler.invalid-cron', {
+    // Validar expresión cron (validación básica)
+    if (!this.isValidCron(cronExpression)) {
+      this.logger.error('flow-scheduler.invalid-cron', {
         flowId: id,
         cron: cronExpression,
         original: schedule.cron
@@ -86,43 +163,70 @@ class FlowScheduler {
       return;
     }
 
-    // Si ya existe, cancelar anterior
-    if (this.scheduledTasks.has(id)) {
-      this.unscheduleFlow(id);
+    // Si ya existe un job para este flow, eliminarlo primero
+    if (this.flowToJob.has(id)) {
+      await this.unscheduleFlow(id);
     }
 
-    // Crear tarea cron con expresión resuelta
-    const task = cron.schedule(cronExpression, async () => {
-      await this.executeScheduledFlow(flow);
-    }, {
-      scheduled: true,
-      timezone: timezone
+    // Marcar como pendiente
+    this.pendingCreations.set(id, { flow, cronExpression, timezone });
+
+    // Crear job en el módulo scheduler via evento
+    // El scheduler creará el job y publicará scheduler.job.created
+    await this.eventBus.publish('ui.request', {
+      module: 'scheduler',
+      action: 'create',
+      data: {
+        name: `flow:${name || id}`,
+        description: `Scheduled execution of flow: ${name || id}`,
+        trigger: {
+          type: 'cron',
+          expression: cronExpression,
+          timezone: timezone
+        },
+        action: {
+          type: 'mqtt',
+          topic: 'flow.trigger',
+          payload: {
+            flowId: id,
+            trigger: 'schedule',
+            scheduledAt: '{{ now }}',
+            scheduleConfig: schedule
+          }
+        },
+        options: {
+          enabled: true,
+          maxRetries: 0 // Los flujos manejan su propio retry
+        },
+        metadata: {
+          flowId: id,
+          flowName: name,
+          source: 'flow-engine',
+          createdAt: new Date().toISOString()
+        }
+      }
     });
 
-    this.scheduledTasks.set(id, {
-      task,
-      flow,
-      cronExpression, // Guardar expresión resuelta
-      timezone,
-      lastRun: null,
-      nextRun: this.getNextRun(cronExpression),
-      runCount: 0
-    });
-
-    this.logger.info('scheduler.flow-scheduled', {
+    this.logger.info('flow-scheduler.flow.scheduling', {
       flowId: id,
       flowName: name,
       cron: cronExpression,
-      timezone: timezone,
-      nextRun: this.getNextRun(cronExpression)
+      timezone: timezone
     });
   }
 
   /**
+   * Valida expresión cron básica
+   */
+  isValidCron(expression) {
+    if (!expression || typeof expression !== 'string') return false;
+    const parts = expression.trim().split(/\s+/);
+    // Cron estándar tiene 5 partes (minuto hora día mes día-semana)
+    return parts.length === 5 || parts.length === 6;
+  }
+
+  /**
    * Resuelve variables de template {{ config.* }} con la config del proyecto
-   * @param {string} template - String con variables {{ }}
-   * @param {Object} config - Configuración del proyecto
-   * @returns {string} - String con variables resueltas
    */
   resolveTemplate(template, config) {
     return template.replace(/\{\{\s*config\.([a-zA-Z_.]+)\s*\}\}/g, (match, path) => {
@@ -133,143 +237,54 @@ class FlowScheduler {
 
   /**
    * Obtiene valor anidado de un objeto usando path con puntos
-   * @param {Object} obj - Objeto fuente
-   * @param {string} path - Path como "schedule.gmail"
-   * @returns {*} - Valor encontrado o undefined
    */
   getNestedValue(obj, path) {
     return path.split('.').reduce((current, key) => current?.[key], obj);
   }
 
   /**
-   * Ejecuta un flujo programado
-   * @param {Object} flow - Definición del flujo
-   */
-  async executeScheduledFlow(flow) {
-    const { id, name } = flow;
-    const startTime = Date.now();
-
-    this.logger.info('scheduler.executing', {
-      flowId: id,
-      flowName: name,
-      scheduledTime: new Date().toISOString()
-    });
-
-    try {
-      // Publicar evento flow.trigger con datos del schedule
-      await this.eventBus.publish('flow.trigger', {
-        flowId: id,
-        trigger: 'schedule',
-        scheduledAt: new Date().toISOString(),
-        scheduleConfig: flow.schedule
-      });
-
-      // Actualizar stats
-      const taskInfo = this.scheduledTasks.get(id);
-      if (taskInfo) {
-        taskInfo.lastRun = new Date().toISOString();
-        taskInfo.runCount++;
-        taskInfo.nextRun = this.getNextRun(flow.schedule.cron);
-      }
-
-      this.stats.executed++;
-
-      this.logger.info('scheduler.executed', {
-        flowId: id,
-        flowName: name,
-        duration: Date.now() - startTime
-      });
-
-    } catch (error) {
-      this.stats.errors++;
-
-      this.logger.error('scheduler.execution-error', {
-        flowId: id,
-        flowName: name,
-        error: error.message
-      });
-    }
-  }
-
-  /**
    * Cancela la programación de un flujo
    * @param {string} flowId - ID del flujo
    */
-  unscheduleFlow(flowId) {
-    const taskInfo = this.scheduledTasks.get(flowId);
+  async unscheduleFlow(flowId) {
+    const jobId = this.flowToJob.get(flowId);
 
-    if (taskInfo) {
-      taskInfo.task.stop();
-      this.scheduledTasks.delete(flowId);
-
-      this.logger.info('scheduler.flow-unscheduled', {
-        flowId
+    if (jobId) {
+      // Eliminar job del scheduler
+      await this.eventBus.publish('ui.request', {
+        module: 'scheduler',
+        action: 'delete',
+        data: { jobId }
       });
-    }
-  }
 
-  /**
-   * Calcula la próxima ejecución (aproximada)
-   * @param {string} cronExpression - Expresión cron
-   * @returns {string} - ISO timestamp de próxima ejecución
-   */
-  getNextRun(cronExpression) {
-    // node-cron no tiene método nativo para esto
-    // Devolvemos una aproximación basada en la expresión
-    try {
-      const parts = cronExpression.split(' ');
-      const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+      this.flowToJob.delete(flowId);
+      this.pendingCreations.delete(flowId);
 
-      const now = new Date();
-      const next = new Date();
-
-      // Ajustar hora y minuto
-      if (hour !== '*') next.setHours(parseInt(hour));
-      if (minute !== '*') next.setMinutes(parseInt(minute));
-      next.setSeconds(0);
-
-      // Si ya pasó hoy, siguiente día
-      if (next <= now) {
-        next.setDate(next.getDate() + 1);
-      }
-
-      // Si es día específico de semana (0=domingo)
-      if (dayOfWeek !== '*') {
-        const targetDay = parseInt(dayOfWeek);
-        while (next.getDay() !== targetDay) {
-          next.setDate(next.getDate() + 1);
-        }
-      }
-
-      return next.toISOString();
-    } catch {
-      return 'unknown';
+      this.logger.info('flow-scheduler.flow.unscheduled', {
+        flowId,
+        jobId
+      });
     }
   }
 
   /**
    * Obtiene estado de todas las tareas programadas
-   * @returns {Array} - Lista de tareas con su estado
    */
   getStatus() {
     const tasks = [];
 
-    for (const [flowId, info] of this.scheduledTasks) {
+    for (const [flowId, jobId] of this.flowToJob) {
       tasks.push({
         flowId,
-        flowName: info.flow.name,
-        cron: info.cronExpression, // Usar expresión resuelta
-        cronTemplate: info.flow.schedule.cron, // Template original
-        timezone: info.timezone,
-        lastRun: info.lastRun,
-        nextRun: info.nextRun,
-        runCount: info.runCount
+        jobId,
+        source: 'scheduler-module'
       });
     }
 
     return {
       stats: this.stats,
-      tasks
+      tasks,
+      delegatedTo: 'modules/scheduler'
     };
   }
 
@@ -278,34 +293,47 @@ class FlowScheduler {
    * @param {string} flowId - ID del flujo
    */
   async triggerNow(flowId) {
-    const taskInfo = this.scheduledTasks.get(flowId);
+    const jobId = this.flowToJob.get(flowId);
 
-    if (!taskInfo) {
+    if (!jobId) {
       throw new Error(`Flow ${flowId} is not scheduled`);
     }
 
-    this.logger.info('scheduler.manual-trigger', {
-      flowId
+    this.logger.info('flow-scheduler.manual-trigger', {
+      flowId,
+      jobId
     });
 
-    await this.executeScheduledFlow(taskInfo.flow);
+    // Trigger el job en el scheduler
+    await this.eventBus.publish('ui.request', {
+      module: 'scheduler',
+      action: 'trigger',
+      data: { jobId }
+    });
   }
 
   /**
    * Detiene todas las tareas programadas
    */
-  stop() {
-    this.logger.info('scheduler.stopping', {
-      activeTasks: this.scheduledTasks.size
+  async stop() {
+    this.logger.info('flow-scheduler.stopping', {
+      activeTasks: this.flowToJob.size
     });
 
-    for (const [flowId, info] of this.scheduledTasks) {
-      info.task.stop();
+    // Desuscribirse de eventos
+    for (const unsub of this.unsubscribes) {
+      if (typeof unsub === 'function') {
+        await unsub();
+      }
     }
+    this.unsubscribes = [];
 
-    this.scheduledTasks.clear();
+    // No eliminamos los jobs del scheduler - persisten independientemente
+    // Solo limpiamos el mapping local
+    this.flowToJob.clear();
+    this.pendingCreations.clear();
 
-    this.logger.info('scheduler.stopped');
+    this.logger.info('flow-scheduler.stopped');
   }
 }
 

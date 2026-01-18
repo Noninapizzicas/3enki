@@ -72,7 +72,8 @@
       },
       "schedule": {
         "cron": "Expresion cron (minuto hora dia-mes mes dia-semana)",
-        "timezone": "Zona horaria (default: Europe/Madrid)"
+        "timezone": "Zona horaria (default: Europe/Madrid)",
+        "_nota": "Delega al modulo scheduler (modules/scheduler/) para la ejecucion"
       },
       "steps": "Array de pasos a ejecutar"
     },
@@ -144,12 +145,60 @@
       }
     },
     "agent": {
-      "descripcion": "Invoca agente AI",
-      "patron_eventos": "agent.execute.request -> agent.*.completed",
-      "propiedades": {
-        "agent": "Nombre del agente",
-        "task": "Tarea a ejecutar",
-        "timeout": "Timeout en ms (default: 120000)"
+      "descripcion": "Invoca AI - soporta dos modos: agente registrado o inline AI",
+      "modos": {
+        "named_agent": {
+          "descripcion": "Invoca un agente pre-registrado por nombre",
+          "patron_eventos": "agent.execute.request -> agent.*.completed",
+          "propiedades": {
+            "agent": "Nombre del agente registrado (requerido)",
+            "task": "Tarea/instruccion a ejecutar",
+            "config": "Configuracion adicional para el agente",
+            "timeout": "Timeout en ms (default: 120000)"
+          },
+          "ejemplo": {
+            "id": "analizar-documento",
+            "type": "agent",
+            "agent": "document-analyzer",
+            "task": "Analiza el siguiente documento: {{ steps.ocr.data.text }}"
+          }
+        },
+        "inline_ai": {
+          "descripcion": "Llamada directa a AI sin agente pre-registrado",
+          "patron_eventos": "ai.chat.request -> ai.chat.response",
+          "propiedades": {
+            "prompt": "Prompt/mensaje para el modelo (requerido)",
+            "system": "System prompt (opcional)",
+            "model": "Modelo a usar: claude-3-sonnet, gpt-4o, deepseek-chat, etc.",
+            "provider": "Provider especifico: anthropic, openai, deepseek (opcional, auto si no se especifica)",
+            "temperature": "Creatividad 0-2 (default: 0.7)",
+            "max_tokens": "Maximo tokens respuesta (default: 2048)",
+            "tools": "Array de tools disponibles para el AI",
+            "execute_tools": "Si auto-ejecutar tools (default: true)",
+            "timeout": "Timeout en ms (default: 120000)"
+          },
+          "output": {
+            "content": "Respuesta del modelo",
+            "model": "Modelo usado",
+            "provider": "Provider usado",
+            "tokens": "Tokens consumidos",
+            "tool_calls": "Tool calls si hubo",
+            "tool_calls_executed": "Resultados de tools ejecutadas"
+          },
+          "ejemplo": {
+            "id": "clasificar-factura",
+            "type": "agent",
+            "system": "Eres un clasificador de facturas. Responde SOLO con JSON.",
+            "prompt": "Clasifica esta factura:\n\n{{ steps.ocr.data.text }}\n\nResponde: {\"tipo\": \"...\", \"proveedor\": \"...\", \"total\": ...}",
+            "model": "claude-3-5-sonnet-20241022",
+            "temperature": 0.2
+          }
+        }
+      },
+      "deteccion_modo": "Si tiene 'model', 'prompt' o 'system' -> inline_ai, sino -> named_agent",
+      "casos_uso": {
+        "inline_ai": "Tareas puntuales, clasificacion, extraccion estructurada, transformaciones con AI",
+        "named_agent": "Agentes complejos con herramientas, memoria, pipelines multi-paso"
       }
     },
     "http": {
@@ -223,12 +272,86 @@
       "time": "Hora HH:mm:ss"
     },
     "funciones": {
-      "default(value, fallback)": "Valor por defecto si null/undefined",
-      "lowercase(value)": "Convierte a minusculas",
-      "uppercase(value)": "Convierte a mayusculas",
-      "length(value)": "Longitud de string/array",
-      "globalPath(path)": "Convierte rutas data/... a @/... para acceso global",
-      "json(value)": "Serializa objeto a JSON string (para fs.write)"
+      "string": {
+        "lowercase(value)": "Convierte a minusculas",
+        "uppercase(value)": "Convierte a mayusculas",
+        "trim(value)": "Elimina espacios al inicio y final",
+        "split(value, delimiter)": "Divide string en array (default: ',')",
+        "substring(value, start, end?)": "Extrae subcadena",
+        "replace(value, search, replacement)": "Reemplaza todas las ocurrencias",
+        "join(array, delimiter)": "Une array en string (default: ',')",
+        "first(value)": "Primer elemento de array o primer caracter",
+        "last(value)": "Ultimo elemento de array o ultimo caracter",
+        "length(value)": "Longitud de string/array"
+      },
+      "math": {
+        "add(value, n)": "Suma: value + n",
+        "subtract(value, n)": "Resta: value - n",
+        "multiply(value, n)": "Multiplicacion: value * n",
+        "divide(value, n)": "Division: value / n (retorna 0 si n=0)",
+        "round(value, decimals?)": "Redondea (decimals default: 0)",
+        "floor(value)": "Redondea hacia abajo",
+        "ceil(value)": "Redondea hacia arriba",
+        "abs(value)": "Valor absoluto",
+        "min(a, b, ...)": "Minimo de varios valores",
+        "max(a, b, ...)": "Maximo de varios valores"
+      },
+      "object_array": {
+        "keys(object)": "Array de claves del objeto",
+        "values(object)": "Array de valores del objeto",
+        "count(value)": "Numero de elementos (array.length u object keys)",
+        "isEmpty(value)": "true si null, undefined, '', [] o {}",
+        "get(path, default)": "Valor con fallback si undefined"
+      },
+      "conversion": {
+        "int(value)": "Convierte a entero",
+        "float(value)": "Convierte a decimal",
+        "string(value)": "Convierte a string",
+        "bool(value)": "Convierte a boolean"
+      },
+      "utils": {
+        "default(value, fallback)": "Valor por defecto si null/undefined/''",
+        "globalPath(path)": "Convierte rutas data/... a @/... para acceso global",
+        "json(value)": "Serializa objeto a JSON string (para fs.write)"
+      }
+    },
+    "ejemplos_funciones": {
+      "split_y_first": "{{ first(split(trigger.filename, '.')) }}",
+      "calculo": "{{ round(multiply(steps.ocr.confidence, 100), 2) }}",
+      "condicional": "{{ get(trigger.caption, 'Sin descripcion') }}",
+      "transformacion": "{{ uppercase(substring(trigger.name, 0, 3)) }}"
+    }
+  },
+
+  "condiciones": {
+    "descripcion": "Evaluacion de condiciones en steps 'condition' y filtros",
+    "operadores_comparacion": {
+      "===": "Igual estricto",
+      "!==": "No igual estricto",
+      "==": "Igual (con coercion)",
+      "!=": "No igual (con coercion)",
+      ">": "Mayor que",
+      ">=": "Mayor o igual que",
+      "<": "Menor que",
+      "<=": "Menor o igual que"
+    },
+    "operadores_texto": {
+      "contains": "String contiene: '{{ text }} contains \"palabra\"'",
+      "startsWith": "String empieza con: '{{ text }} startsWith \"pre\"'",
+      "endsWith": "String termina con: '{{ text }} endsWith \".pdf\"'",
+      "matches": "Regex: '{{ text }} matches \"^[0-9]+$\"'"
+    },
+    "operadores_logicos": {
+      "&&": "AND: 'condicion1 && condicion2'",
+      "||": "OR: 'condicion1 || condicion2'",
+      "!": "NOT: '!condicion'"
+    },
+    "ejemplos": {
+      "simple": "{{ steps.ocr.confidence }} > 0.8",
+      "texto": "{{ trigger.filename }} endsWith \".pdf\"",
+      "logico_and": "{{ steps.ocr.confidence }} > 0.8 && {{ trigger.file.size }} < 10000000",
+      "logico_or": "{{ trigger.mimeType }} == 'image/png' || {{ trigger.mimeType }} == 'image/jpeg'",
+      "negacion": "!{{ isEmpty(steps.ocr.text) }}"
     }
   },
 
@@ -298,6 +421,51 @@
       "type": "service",
       "onError": "continue"
     }
+  },
+
+  "retry_backoff": {
+    "descripcion": "Reintentos automaticos con backoff exponencial para pasos que fallan",
+    "configuracion": {
+      "retry": {
+        "attempts": "Numero de intentos totales (default: 1 = sin retry)",
+        "delay": "Delay inicial entre reintentos en ms (default: 1000)",
+        "backoff": "Multiplicador exponencial (default: 2)",
+        "maxDelay": "Delay maximo entre reintentos en ms (default: 30000)"
+      }
+    },
+    "formatos": {
+      "simple": "retry: 3 (solo numero de intentos)",
+      "completo": "retry: { attempts: 3, delay: 1000, backoff: 2, maxDelay: 30000 }"
+    },
+    "calculo_delay": "delay * backoff^(intento-1)",
+    "ejemplo_delays": {
+      "intento_1": "0ms (inmediato)",
+      "intento_2": "1000ms",
+      "intento_3": "2000ms",
+      "intento_4": "4000ms"
+    },
+    "ejemplo_uso": {
+      "id": "ejecutar-ocr",
+      "type": "service",
+      "service": "local.google-vision",
+      "action": "extract",
+      "image": "{{ globalPath(trigger.file.path) }}",
+      "retry": {
+        "attempts": 3,
+        "delay": 2000,
+        "backoff": 2
+      },
+      "onError": "marcar-error"
+    },
+    "eventos": {
+      "flow.step.retrying": "Publicado antes de cada reintento con attempt, maxAttempts, delayMs, previousError"
+    },
+    "notas": [
+      "El retry se aplica ANTES del onError",
+      "Si todos los intentos fallan, se ejecuta onError",
+      "El historial incluye 'attempts' con numero de intentos realizados",
+      "Util para APIs externas con rate limiting o timeouts temporales"
+    ]
   },
 
   "providers_soportados": {
@@ -408,15 +576,28 @@
     "publicados": {
       "flow.started": "Flujo iniciado",
       "flow.step.started": "Paso iniciado",
-      "flow.step.completed": "Paso completado",
-      "flow.step.failed": "Paso fallido",
+      "flow.step.retrying": "Reintentando paso (con attempt, maxAttempts, delayMs)",
+      "flow.step.completed": "Paso completado (incluye attempts si hubo retry)",
+      "flow.step.failed": "Paso fallido (incluye attempts si hubo retry)",
       "flow.completed": "Flujo completado exitosamente",
       "flow.failed": "Flujo fallido"
     },
     "suscritos": {
-      "triggers": ["bot.file.stored", "bot.message.received", "bot.command.received", "flow.trigger", "factura.nueva", "factura.procesada", "factura.guardada", "factura.completada", "factura.error"],
-      "providers": "Todos los eventos {provider}.{action}.response y {provider}.{action}.failed"
+      "triggers": "Dinamico: eventos base + triggers de flujos registrados",
+      "providers": "Dinamico: cargados desde manifest.json de cada provider via manifest-loader"
     }
+  },
+
+  "manifest_loader": {
+    "descripcion": "Autodescubrimiento de providers y sus eventos",
+    "ubicacion": "services/manifest-loader.js",
+    "funciones": {
+      "load()": "Carga todos los manifest.json de providers",
+      "getServiceEventNames()": "Lista de eventos para suscripcion",
+      "validateStep(step)": "Valida step contra contrato del provider",
+      "getManifest(name)": "Obtiene contrato de un provider"
+    },
+    "beneficio": "No mas eventos hardcodeados - agregar provider = autodescubierto"
   },
 
   "api_http": {
@@ -486,6 +667,7 @@
   "scheduling": {
     "descripcion": "Ejecucion programada de flujos via cron",
     "componente": "services/scheduler.js",
+    "delegacion": "Delega al modulo modules/scheduler/ para ejecucion real",
     "uso": {
       "cron": "Expresion cron (min hora dia mes dia-semana)",
       "timezone": "Zona horaria (default: Europe/Madrid)"
@@ -498,10 +680,34 @@
     }
   },
 
+  "validacion_schema": {
+    "descripcion": "Los flujos se validan contra JSON Schema al registrarlos",
+    "componente": "services/flow-validator.js",
+    "validaciones": {
+      "estructura": "Propiedades requeridas: id, steps",
+      "tipos": "Tipos de datos correctos para cada propiedad",
+      "steps": "Cada step requiere id y type valido",
+      "step_types": "service, condition, parallel, agent, http, delay, log, set, emit",
+      "propiedades_por_tipo": "Cada tipo tiene sus propiedades requeridas (ej: service requiere service y function)"
+    },
+    "api_ui": {
+      "validate": "Valida flujo sin registrar -> { valid: boolean, errors: string[] }",
+      "schema": "Obtiene el JSON Schema completo"
+    },
+    "errores": {
+      "formato": "Mensajes descriptivos en espanol con path al error",
+      "ejemplo": "Falta propiedad requerida 'function' en flow.steps[0]"
+    },
+    "opciones_registro": {
+      "skipValidation": "Si true, no valida (para flujos de sistema)"
+    }
+  },
+
   "buenas_practicas": [
     "Usar IDs descriptivos para pasos (ej: 'leer-archivo', 'procesar-ocr')",
     "Definir timeouts apropiados para servicios externos",
     "Usar onError para pasos no criticos",
+    "Usar retry para APIs externas que pueden fallar temporalmente (rate limiting, timeouts)",
     "Guardar resultados intermedios con filesystem para debugging",
     "Usar step 'log' para trazabilidad",
     "Validar datos con step 'condition' antes de procesar",

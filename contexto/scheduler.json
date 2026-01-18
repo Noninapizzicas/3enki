@@ -248,15 +248,49 @@
   },
 
   "integracion_flow_engine": {
-    "descripcion": "El scheduler puede disparar flujos via eventos",
-    "ejemplo": {
-      "name": "Procesar facturas semanal",
-      "trigger": { "type": "cron", "expression": "0 3 * * 0" },
+    "descripcion": "Integración bidireccional entre scheduler y flow-engine",
+    "arquitectura": {
+      "scheduler_como_backend": {
+        "descripcion": "Flow-engine delega la programación al módulo scheduler",
+        "flujo": [
+          "1. Flow con 'schedule' se registra en flow-registry",
+          "2. FlowScheduler (facade) crea job en scheduler via ui.request",
+          "3. Scheduler persiste el job y programa el trigger",
+          "4. Cuando trigger dispara, scheduler publica scheduler.job.triggered",
+          "5. FlowScheduler detecta el evento y flow-engine ejecuta el flujo"
+        ],
+        "beneficios": [
+          "Único motor de scheduling (evita duplicación)",
+          "Todos los tipos de triggers disponibles para flows",
+          "Persistencia centralizada de jobs",
+          "UI unificada para gestión"
+        ]
+      },
+      "eventos_clave": {
+        "flow_to_scheduler": "ui.request con module:scheduler, action:create/delete/trigger",
+        "scheduler_to_flow": "scheduler.job.triggered con metadata.flowId",
+        "job_confirmation": "scheduler.job.created con metadata.flowId"
+      }
+    },
+    "ejemplo_flow_con_schedule": {
+      "id": "procesar-facturas-semanal",
+      "name": "Procesar facturas",
+      "schedule": {
+        "cron": "0 3 * * 0",
+        "timezone": "Europe/Madrid"
+      },
+      "steps": [{ "type": "service", "service": "facturas", "function": "procesarLote" }]
+    },
+    "ejemplo_job_generado": {
+      "name": "flow:procesar-facturas-semanal",
+      "description": "Scheduled execution of flow: procesar-facturas-semanal",
+      "trigger": { "type": "cron", "expression": "0 3 * * 0", "timezone": "Europe/Madrid" },
       "action": {
         "type": "mqtt",
         "topic": "flow.trigger",
-        "payload": { "flowId": "procesar-lote-facturas" }
-      }
+        "payload": { "flowId": "procesar-facturas-semanal", "trigger": "schedule" }
+      },
+      "metadata": { "flowId": "procesar-facturas-semanal", "source": "flow-engine" }
     }
   },
 

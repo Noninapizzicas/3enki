@@ -20,6 +20,8 @@ const FlowExecutor = require('./services/flow-executor');
 const StepHandlers = require('./services/step-handlers');
 const VariableResolver = require('./services/variable-resolver');
 const FlowScheduler = require('./services/scheduler');
+const ExecutionStore = require('./services/execution-store');
+const manifestLoader = require('../../services/manifest-loader');
 
 class FlowEngineModule {
   constructor() {
@@ -38,6 +40,7 @@ class FlowEngineModule {
     this.stepHandlers = null;
     this.variableResolver = null;
     this.scheduler = null;
+    this.executionStore = null;
 
     // Subscriptions
     this.unsubscribes = [];
@@ -76,17 +79,27 @@ class FlowEngineModule {
     this.registry = new FlowRegistry(this.config, this.logger);
     await this.registry.initialize();
 
+    // Inicializar store de ejecuciones (persistencia)
+    this.executionStore = new ExecutionStore({
+      basePath: './data/flow-engine/executions',
+      maxExecutions: 1000,
+      retentionDays: 30
+    });
+    this.executionStore.setLogger(this.logger);
+    await this.executionStore.initialize();
+
     this.executor = new FlowExecutor(
       this.config,
       this.logger,
       this.eventBus,
       this.stepHandlers,
-      this.variableResolver
+      this.variableResolver,
+      this.executionStore
     );
 
-    // Inicializar scheduler para flujos programados
+    // Inicializar scheduler para flujos programados (delega al módulo scheduler)
     this.scheduler = new FlowScheduler(this.logger, this.eventBus);
-    this.scheduler.initialize(this.registry.getAll());
+    await this.scheduler.initialize(this.registry.getAll());
 
     // Suscribirse a eventos
     await this.subscribeToEvents();
@@ -108,6 +121,11 @@ class FlowEngineModule {
       this.scheduler.stop();
     }
 
+    // Cerrar execution store (guarda pendientes)
+    if (this.executionStore) {
+      await this.executionStore.close();
+    }
+
     // Unsubscribe
     for (const unsub of this.unsubscribes) {
       if (typeof unsub === 'function') {
@@ -124,117 +142,56 @@ class FlowEngineModule {
   // ==========================================
 
   async subscribeToEvents() {
-    // Eventos que pueden disparar flujos
-    const triggerEvents = [
+    // === 1. TRIGGER EVENTS ===
+    // Eventos que pueden disparar flujos (base + dinámicos de flujos registrados)
+    const baseTriggerEvents = [
       'bot.file.stored',
       'bot.message.received',
       'bot.command.received',
-      'flow.trigger', // Trigger manual
-      // Eventos de encadenamiento de flujos (facturación)
-      'factura.nueva',
-      'factura.recibida',
-      'factura.procesar',
-      'factura.procesada',
-      'factura.guardada',
-      'factura.completada',
-      'factura.error'
+      'flow.trigger' // Trigger manual
     ];
+
+    // Extraer triggers adicionales de los flujos registrados
+    const flowTriggers = this.registry.getAll()
+      .map(f => f.trigger?.event)
+      .filter(e => e && !baseTriggerEvents.includes(e));
+
+    const triggerEvents = [...new Set([...baseTriggerEvents, ...flowTriggers])];
 
     for (const event of triggerEvents) {
       const unsub = await this.eventBus.subscribe(event, (e) => this.onTriggerEvent(event, e));
       this.unsubscribes.push(unsub);
     }
 
-    // Eventos de respuesta de servicios según patrón del sistema:
-    // {provider}.{action}.response / {provider}.{action}.failed
-    const serviceResponsePatterns = [
-      // Filesystem module (modules/filesystem/)
-      'fs.read.response',
-      'fs.read.failed',
-      'fs.write.response',
-      'fs.write.failed',
-      'fs.copy.response',
-      'fs.copy.failed',
-      'fs.delete.response',
-      'fs.delete.failed',
-      'fs.list.response',
-      'fs.list.failed',
-      'fs.mkdir.response',
-      'fs.mkdir.failed',
-      'fs.move.response',
-      'fs.move.failed',
-      'fs.rename.response',
-      'fs.rename.failed',
-      'fs.exists.response',
-      'fs.exists.failed',
-      'fs.info.response',
-      'fs.info.failed',
-      'fs.append.response',
-      'fs.append.failed',
-      'fs.search.response',
-      'fs.search.failed',
-      'fs.stats.response',
-      'fs.stats.failed',
-      // Local providers (services/providers/local/)
-      'local.tesseract.extract.response',
-      'local.tesseract.extract.failed',
-      'local.pdf.create.response',
-      'local.pdf.create.failed',
-      'local.csv.create.response',
-      'local.csv.create.failed',
-      'local.csv.parse.response',
-      'local.csv.parse.failed',
-      'local.xlsx.create.response',
-      'local.xlsx.create.failed',
-      'local.xlsx.parse.response',
-      'local.xlsx.parse.failed',
-      // Google providers (services/providers/google/)
-      'google.vision.extract.response',
-      'google.vision.extract.failed',
-      'google.tts.synthesize.response',
-      'google.tts.synthesize.failed',
-      'google.translate.text.response',
-      'google.translate.text.failed',
-      // Anthropic providers (services/providers/anthropic/)
-      'anthropic.vision.extract.response',
-      'anthropic.vision.extract.failed',
-      // ElevenLabs providers (services/providers/elevenlabs/)
-      'elevenlabs.tts.synthesize.response',
-      'elevenlabs.tts.synthesize.failed',
-      // Telegram
-      'telegram.send_message.response',
-      'telegram.send_message.error',
-      // Facturas DB
-      'local.facturas-db.registrar.response',
-      'local.facturas-db.registrar.failed',
-      'local.facturas-db.actualizar.response',
-      'local.facturas-db.actualizar.failed',
-      'local.facturas-db.listar.response',
-      'local.facturas-db.listar.failed',
-      'local.facturas-db.obtener.response',
-      'local.facturas-db.obtener.failed',
-      'local.facturas-db.pendientes.response',
-      'local.facturas-db.pendientes.failed',
-      'local.facturas-db.estadisticas.response',
-      'local.facturas-db.estadisticas.failed',
-      'local.facturas-db.exportar.response',
-      'local.facturas-db.exportar.failed',
-      'local.facturas-db.marcarExportadas.response',
-      'local.facturas-db.marcarExportadas.failed',
-      // XLSX
-      'local.xlsx.create.response',
-      'local.xlsx.create.failed',
-      // Google Vision local
-      'local.google-vision.extract.response',
-      'local.google-vision.extract.failed',
-      // Gmail
-      'gmail.search.response',
-      'gmail.search.failed',
-      'gmail.read.response',
-      'gmail.read.failed',
-      'gmail.attachments.download.response',
-      'gmail.attachments.download.failed',
+    // === 2. SERVICE RESPONSE EVENTS (desde manifests) ===
+    // Cargar manifests de providers para autodescubrir eventos
+    manifestLoader.setLogger(this.logger);
+    await manifestLoader.load();
+
+    // Obtener eventos de respuesta dinámicamente desde los manifests
+    const manifestEvents = manifestLoader.getServiceEventNames();
+
+    // Eventos adicionales que no están en manifests (módulos internos)
+    const additionalEvents = [
+      // Filesystem module (modules/filesystem/) - no tiene manifest
+      'fs.read.response', 'fs.read.failed',
+      'fs.write.response', 'fs.write.failed',
+      'fs.copy.response', 'fs.copy.failed',
+      'fs.delete.response', 'fs.delete.failed',
+      'fs.list.response', 'fs.list.failed',
+      'fs.mkdir.response', 'fs.mkdir.failed',
+      'fs.move.response', 'fs.move.failed',
+      'fs.rename.response', 'fs.rename.failed',
+      'fs.exists.response', 'fs.exists.failed',
+      'fs.info.response', 'fs.info.failed',
+      'fs.append.response', 'fs.append.failed',
+      'fs.search.response', 'fs.search.failed',
+      'fs.stats.response', 'fs.stats.failed',
+      // Telegram module
+      'telegram.send_message.response', 'telegram.send_message.error'
     ];
+
+    const serviceResponsePatterns = [...new Set([...manifestEvents, ...additionalEvents])];
 
     for (const event of serviceResponsePatterns) {
       const handler = event.includes('failed') || event.includes('error')
@@ -244,7 +201,8 @@ class FlowEngineModule {
       this.unsubscribes.push(unsub);
     }
 
-    // Eventos de agentes (para steps de tipo agent)
+    // === 3. AGENT EVENTS ===
+    // Eventos de agentes (para steps de tipo agent con nombre)
     const unsubAgentCompleted = await this.eventBus.subscribe(
       'agent.*.completed',
       this.onAgentCompleted.bind(this)
@@ -257,9 +215,19 @@ class FlowEngineModule {
     );
     this.unsubscribes.push(unsubAgentFailed);
 
+    // === 4. AI CHAT EVENTS ===
+    // Eventos de ai-gateway (para steps de tipo agent inline con model/prompt)
+    const unsubAIChatResponse = await this.eventBus.subscribe(
+      'ai.chat.response',
+      this.onAIChatResponse.bind(this)
+    );
+    this.unsubscribes.push(unsubAIChatResponse);
+
     this.logger.info('flow-engine.subscribed', {
-      triggerEvents,
-      serviceResponsePatterns: serviceResponsePatterns.length
+      triggerEvents: triggerEvents.length,
+      serviceEvents: serviceResponsePatterns.length,
+      fromManifests: manifestEvents.length,
+      providers: manifestLoader.getAllManifests().map(m => m.name)
     });
   }
 
@@ -271,6 +239,10 @@ class FlowEngineModule {
     this.uiHandler.register('flow', 'create', this.handleUICreateFlow.bind(this));
     this.uiHandler.register('flow', 'trigger', this.handleUITriggerFlow.bind(this));
     this.uiHandler.register('flow', 'executions', this.handleUIListExecutions.bind(this));
+    this.uiHandler.register('flow', 'execution', this.handleUIGetExecution.bind(this));
+    this.uiHandler.register('flow', 'stats', this.handleUIExecutionStats.bind(this));
+    this.uiHandler.register('flow', 'validate', this.handleUIValidateFlow.bind(this));
+    this.uiHandler.register('flow', 'schema', this.handleUIGetSchema.bind(this));
 
     this.logger.info('flow-engine.ui_handlers.registered');
   }
@@ -361,6 +333,18 @@ class FlowEngineModule {
 
     if (request_id) {
       this.stepHandlers.handleAgentResponse(request_id, data, true);
+    }
+  }
+
+  /**
+   * Maneja respuestas de ai-gateway (para inline AI steps)
+   */
+  async onAIChatResponse(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, success, error } = data;
+
+    if (request_id) {
+      this.stepHandlers.handleAIChatResponse(request_id, data, !success);
     }
   }
 
@@ -483,7 +467,10 @@ class FlowEngineModule {
   }
 
   async handleListExecutions(req, context) {
-    const executions = this.executor.listAll().map(e => ({
+    const query = req.query || {};
+
+    // Obtener ejecuciones activas (en memoria)
+    const active = this.executor.listAll().map(e => ({
       id: e.id,
       flowId: e.flowId,
       flowName: e.flowName,
@@ -492,22 +479,52 @@ class FlowEngineModule {
       progress: `${e.currentStepIndex}/${e.totalSteps}`,
       startedAt: e.startedAt,
       completedAt: e.completedAt,
-      error: e.error
+      error: e.error,
+      source: 'active'
     }));
+
+    // Obtener historial desde store
+    let history = [];
+    if (this.executionStore) {
+      const result = this.executionStore.list({
+        flowId: query.flowId,
+        status: query.status,
+        from: query.from,
+        to: query.to,
+        limit: parseInt(query.limit) || 50,
+        offset: parseInt(query.offset) || 0
+      });
+      history = result.executions.map(e => ({ ...e, source: 'history' }));
+    }
+
+    // Combinar (activas primero, luego historial sin duplicados)
+    const activeIds = new Set(active.map(e => e.id));
+    const combined = [
+      ...active,
+      ...history.filter(e => !activeIds.has(e.id))
+    ];
 
     return {
       status: 200,
       data: {
-        executions,
-        count: executions.length,
-        stats: this.executor.getStats()
+        executions: combined,
+        active: active.length,
+        total: combined.length,
+        stats: this.executionStore ? this.executionStore.getStats() : this.executor.getStats()
       }
     };
   }
 
   async handleGetExecution(req, context) {
     const { executionId } = req.params;
-    const execution = this.executor.getExecution(executionId);
+
+    // Primero buscar en ejecuciones activas
+    let execution = this.executor.getExecution(executionId);
+
+    // Si no está activa, buscar en historial
+    if (!execution && this.executionStore) {
+      execution = this.executionStore.get(executionId);
+    }
 
     if (!execution) {
       return { status: 404, data: { error: 'EXECUTION_NOT_FOUND' } };
@@ -525,6 +542,23 @@ class FlowEngineModule {
     }
 
     return { status: 200, data: { cancelled: true } };
+  }
+
+  /**
+   * Obtiene estadísticas de ejecuciones
+   */
+  async handleExecutionStats(req, context) {
+    const query = req.query || {};
+
+    if (!this.executionStore) {
+      return { status: 200, data: this.executor.getStats() };
+    }
+
+    const stats = this.executionStore.getStats({
+      from: query.from
+    });
+
+    return { status: 200, data: stats };
   }
 
   // ==========================================
@@ -563,8 +597,58 @@ class FlowEngineModule {
   }
 
   async handleUIListExecutions(data, context) {
-    const result = await this.handleListExecutions({}, context);
+    const result = await this.handleListExecutions({ query: data }, context);
     return { status: result.status, data: result.data };
+  }
+
+  async handleUIGetExecution(data, context) {
+    const { executionId } = data;
+    if (!executionId) {
+      return { status: 400, error: 'executionId is required' };
+    }
+    const result = await this.handleGetExecution(
+      { params: { executionId } },
+      context
+    );
+    return { status: result.status, data: result.data };
+  }
+
+  async handleUIExecutionStats(data, context) {
+    const result = await this.handleExecutionStats({ query: data }, context);
+    return { status: result.status, data: result.data };
+  }
+
+  /**
+   * Valida un flujo sin registrarlo
+   */
+  async handleUIValidateFlow(data, context) {
+    try {
+      const { valid, errors } = this.registry.validate(data);
+      return {
+        status: valid ? 200 : 400,
+        data: {
+          valid,
+          errors: valid ? [] : errors
+        }
+      };
+    } catch (error) {
+      return {
+        status: 500,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Obtiene el JSON Schema de flujos
+   */
+  async handleUIGetSchema(data, context) {
+    return {
+      status: 200,
+      data: {
+        schema: this.registry.getSchema()
+      }
+    };
   }
 
   // ==========================================

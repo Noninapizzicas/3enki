@@ -667,6 +667,7 @@
   "scheduling": {
     "descripcion": "Ejecucion programada de flujos via cron",
     "componente": "services/scheduler.js",
+    "delegacion": "Delega al modulo modules/scheduler/ para ejecucion real",
     "uso": {
       "cron": "Expresion cron (min hora dia mes dia-semana)",
       "timezone": "Zona horaria (default: Europe/Madrid)"
@@ -676,6 +677,29 @@
       "domingo_3am": "0 3 * * 0",
       "diario_3am": "0 3 * * *",
       "lunes_viernes_8am": "0 8 * * 1-5"
+    }
+  },
+
+  "validacion_schema": {
+    "descripcion": "Los flujos se validan contra JSON Schema al registrarlos",
+    "componente": "services/flow-validator.js",
+    "validaciones": {
+      "estructura": "Propiedades requeridas: id, steps",
+      "tipos": "Tipos de datos correctos para cada propiedad",
+      "steps": "Cada step requiere id y type valido",
+      "step_types": "service, condition, parallel, agent, http, delay, log, set, emit",
+      "propiedades_por_tipo": "Cada tipo tiene sus propiedades requeridas (ej: service requiere service y function)"
+    },
+    "api_ui": {
+      "validate": "Valida flujo sin registrar -> { valid: boolean, errors: string[] }",
+      "schema": "Obtiene el JSON Schema completo"
+    },
+    "errores": {
+      "formato": "Mensajes descriptivos en espanol con path al error",
+      "ejemplo": "Falta propiedad requerida 'function' en flow.steps[0]"
+    },
+    "opciones_registro": {
+      "skipValidation": "Si true, no valida (para flujos de sistema)"
     }
   },
 

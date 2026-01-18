@@ -241,6 +241,8 @@ class FlowEngineModule {
     this.uiHandler.register('flow', 'executions', this.handleUIListExecutions.bind(this));
     this.uiHandler.register('flow', 'execution', this.handleUIGetExecution.bind(this));
     this.uiHandler.register('flow', 'stats', this.handleUIExecutionStats.bind(this));
+    this.uiHandler.register('flow', 'validate', this.handleUIValidateFlow.bind(this));
+    this.uiHandler.register('flow', 'schema', this.handleUIGetSchema.bind(this));
 
     this.logger.info('flow-engine.ui_handlers.registered');
   }
@@ -614,6 +616,39 @@ class FlowEngineModule {
   async handleUIExecutionStats(data, context) {
     const result = await this.handleExecutionStats({ query: data }, context);
     return { status: result.status, data: result.data };
+  }
+
+  /**
+   * Valida un flujo sin registrarlo
+   */
+  async handleUIValidateFlow(data, context) {
+    try {
+      const { valid, errors } = this.registry.validate(data);
+      return {
+        status: valid ? 200 : 400,
+        data: {
+          valid,
+          errors: valid ? [] : errors
+        }
+      };
+    } catch (error) {
+      return {
+        status: 500,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Obtiene el JSON Schema de flujos
+   */
+  async handleUIGetSchema(data, context) {
+    return {
+      status: 200,
+      data: {
+        schema: this.registry.getSchema()
+      }
+    };
   }
 
   // ==========================================

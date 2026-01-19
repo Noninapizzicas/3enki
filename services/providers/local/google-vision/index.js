@@ -273,27 +273,15 @@ module.exports = {
   async extract({ image, hint = 'TEXT_DETECTION', languageHints = [], account = null } = {}) {
     // === VALIDACIÓN DE ENTRADA (Lección #7) ===
     if (!image) {
-      return {
-        success: false,
-        error: 'Parameter "image" is required',
-        data: { text: '', confidence: 0, blocks: 0, pages: 0, locale: '' }
-      };
+      throw new Error('Parameter "image" is required');
     }
 
     if (typeof image !== 'string') {
-      return {
-        success: false,
-        error: `Invalid image parameter: expected string, got ${typeof image}`,
-        data: { text: '', confidence: 0, blocks: 0, pages: 0, locale: '' }
-      };
+      throw new Error(`Invalid image parameter: expected string, got ${typeof image}`);
     }
 
     if (image.trim() === '') {
-      return {
-        success: false,
-        error: 'Parameter "image" cannot be empty',
-        data: { text: '', confidence: 0, blocks: 0, pages: 0, locale: '' }
-      };
+      throw new Error('Parameter "image" cannot be empty');
     }
 
     // Validar hint
@@ -306,21 +294,13 @@ module.exports = {
       // Resolver API key
       const apiKey = this.resolveApiKey(account);
       if (!apiKey) {
-        return {
-          success: false,
-          error: 'Google API key not configured. Set GOOGLE_API_KEY in .env or use credential-manager',
-          data: { text: '', confidence: 0, blocks: 0, pages: 0, locale: '' }
-        };
+        throw new Error('Google API key not configured. Set GOOGLE_API_KEY in .env or use credential-manager');
       }
 
       // Resolver imagen
       const resolved = await this.resolveImage(image);
       if (resolved.error) {
-        return {
-          success: false,
-          error: resolved.error,
-          data: { text: '', confidence: 0, blocks: 0, pages: 0, locale: '' }
-        };
+        throw new Error(resolved.error);
       }
 
       // Construir request
@@ -353,11 +333,7 @@ module.exports = {
       // Verificar errores en la respuesta
       if (response.responses?.[0]?.error) {
         const errorMsg = response.responses[0].error.message || 'Google Vision API error';
-        return {
-          success: false,
-          error: errorMsg,
-          data: { text: '', confidence: 0, blocks: 0, pages: 0, locale: '' }
-        };
+        throw new Error(errorMsg);
       }
 
       // Extraer datos de la respuesta
@@ -382,25 +358,20 @@ module.exports = {
                      fullTextAnnotation?.pages?.[0]?.property?.detectedLanguages?.[0]?.languageCode ||
                      '';
 
+      // Devolver datos directamente - el executor los envuelve en {success, data}
       return {
-        success: true,
-        data: {
-          text: text.trim(),
-          confidence,
-          blocks,
-          pages,
-          locale,
-          textLength: text.length,
-          hint
-        }
+        text: text.trim(),
+        confidence,
+        blocks,
+        pages,
+        locale,
+        textLength: text.length,
+        hint
       };
 
     } catch (error) {
-      return {
-        success: false,
-        error: `Google Vision API error: ${error.message}`,
-        data: { text: '', confidence: 0, blocks: 0, pages: 0, locale: '' }
-      };
+      // Lanzar error para que el executor lo maneje
+      throw new Error(`Google Vision API error: ${error.message}`);
     }
   },
 

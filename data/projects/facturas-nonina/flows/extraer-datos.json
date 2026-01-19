@@ -32,7 +32,7 @@
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "{{ projectPath(trigger.botName, '/procesadas/') }}",
+      "path": "{{ projectPath(trigger.botName, 'procesadas') }}",
       "onError": "continue"
     },
     {

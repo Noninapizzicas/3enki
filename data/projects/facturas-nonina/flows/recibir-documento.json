@@ -2,7 +2,7 @@
   "id": "recibir-documento",
   "name": "Recibir Documento",
   "description": "Recibe archivos del bot Telegram, los renombra con timestamp y guarda metadata",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "enabled": true,
 
   "trigger": {
@@ -86,6 +86,18 @@
       "type": "log",
       "level": "info",
       "message": "Documento recibido: {{ variables.nuevoNombre }} de @{{ trigger.username }}"
+    },
+    {
+      "id": "emitir-procesar",
+      "type": "emit",
+      "event": "facturas-nonina.documento.pendiente",
+      "data": {
+        "archivo": "{{ projectPath(variables.dirDestino, variables.nuevoNombre) }}",
+        "mimeType": "{{ trigger.file.mimeType }}",
+        "chatId": "{{ trigger.chatId }}",
+        "username": "{{ trigger.username }}",
+        "metadataId": "{{ steps.preparar-metadata.id }}"
+      }
     },
     {
       "id": "notificar-error",

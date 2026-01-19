@@ -2,7 +2,7 @@
   "id": "procesar-pdf",
   "name": "Procesar PDF con OCR",
   "description": "Convierte PDF a imagen y extrae texto con Google Vision",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "enabled": true,
 
   "trigger": {
@@ -20,6 +20,13 @@
       "message": "Procesando PDF: {{ trigger.archivo }}"
     },
     {
+      "id": "set-variables",
+      "type": "set",
+      "variables": {
+        "pngPath": "{{ trigger.archivo }}.png"
+      }
+    },
+    {
       "id": "convertir-pdf",
       "type": "service",
       "service": "local.pdf-to-png",
@@ -30,11 +37,24 @@
       "onError": "notificar-error"
     },
     {
+      "id": "log-conversion",
+      "type": "log",
+      "level": "info",
+      "message": "PDF convertido: {{ steps.convertir-pdf.data.totalPages }} páginas, imagen content length: {{ length(steps.convertir-pdf.data.images[0].content) }}"
+    },
+    {
+      "id": "verificar-conversion",
+      "type": "condition",
+      "if": "{{ steps.convertir-pdf.success }} == true",
+      "then": "guardar-imagen",
+      "else": "notificar-error"
+    },
+    {
       "id": "guardar-imagen",
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "{{ trigger.archivo }}.png",
+      "path": "{{ variables.pngPath }}",
       "content": "{{ steps.convertir-pdf.data.images[0].content }}",
       "encoding": "base64",
       "onError": "notificar-error"
@@ -44,7 +64,7 @@
       "type": "service",
       "service": "local.google-vision",
       "action": "extract",
-      "image": "{{ steps.convertir-pdf.data.images[0].content }}",
+      "image": "{{ variables.pngPath }}",
       "hint": "DOCUMENT_TEXT_DETECTION",
       "languageHints": ["es", "en"],
       "onError": "notificar-error"
@@ -65,6 +85,7 @@
       "config": {
         "mapping": {
           "archivo": "{{ trigger.archivo }}",
+          "imagenPNG": "{{ variables.pngPath }}",
           "procesado": "{{ now }}",
           "exito": true,
           "confianza": "{{ steps.extraer-texto.data.confidence }}",

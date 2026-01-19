@@ -6,7 +6,7 @@
  * - Strings: lowercase, uppercase, trim, split, substring, replace, join, first, last
  * - Math: add, subtract, multiply, divide, round, floor, ceil, abs, min, max
  * - Objects: keys, values, count, isEmpty, get
- * - Utils: globalPath, json, default, length
+ * - Utils: globalPath, projectPath, json, default, length
  * - Specials: now, timestamp, uuid, date, time, env.*
  */
 
@@ -159,6 +159,29 @@ class VariableResolver {
           return `@/${cleanPath}`;
         }
         return value;
+      },
+      projectPath: (args, ctx) => {
+        // projectPath('inbox') -> @/projects/{projectId}/inbox
+        // projectPath('inbox', trigger.file.name) -> @/projects/{projectId}/inbox/{filename}
+        // projectPath('datos', date, '_factura.json') -> @/projects/{projectId}/datos/{date}_factura.json
+        const projectId = ctx?.project?.id;
+
+        // Construir ruta uniendo todos los argumentos
+        const parts = args.map(arg => {
+          // Intentar resolver como variable primero
+          const resolved = this.getValue(arg, ctx);
+          if (resolved !== undefined) return resolved;
+          // Si no es variable, parsear como literal
+          return this._parseArg(arg) || '';
+        }).filter(p => p !== '');
+
+        const relativePath = parts.join('').replace(/^\//, '');
+
+        if (!projectId) {
+          this.logger?.warn('variable-resolver.projectPath.no_project', { relativePath });
+          return `@/${relativePath}`; // Fallback sin proyecto
+        }
+        return `@/projects/${projectId}/${relativePath}`;
       },
       json: (args, ctx) => {
         const value = this.getValue(args[0], ctx);

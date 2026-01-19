@@ -94,6 +94,7 @@
       "event": "facturas-nonina.ocr.completado",
       "data": {
         "archivo": "{{ trigger.archivo }}",
+        "botName": "{{ trigger.botName }}",
         "success": true,
         "textLength": "{{ steps.extraer-texto.data.textLength }}",
         "confidence": "{{ steps.extraer-texto.data.confidence }}",

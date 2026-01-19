@@ -54,7 +54,9 @@ class VariableResolver {
         const value = this.getValue(args[0], ctx);
         const search = this._parseArg(args[1]) || '';
         const replacement = this._parseArg(args[2]) || '';
-        return typeof value === 'string' ? value.replace(new RegExp(search, 'g'), replacement) : value;
+        // Escapar caracteres especiales de regex para búsqueda literal
+        const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return typeof value === 'string' ? value.replace(new RegExp(escapedSearch, 'g'), replacement) : value;
       },
       join: (args, ctx) => {
         // join(path, delimiter)

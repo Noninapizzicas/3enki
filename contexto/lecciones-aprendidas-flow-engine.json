@@ -1,8 +1,8 @@
 {
   "documento": "Lecciones Aprendidas - Flow Engine y Tesseract",
-  "fecha": "2026-01-12",
+  "fecha": "2026-01-19",
   "contexto": "Bugs encontrados durante implementacion del flujo procesar-facturas",
-  "total_bugs": 15,
+  "total_bugs": 16,
 
   "bugs": [
     {
@@ -154,6 +154,17 @@
       "solucion": "Agregar userFirstName y userLastName al evento bot.file.stored",
       "archivo": "modules/bot-manager/index.js",
       "prevencion": "Incluir multiples campos de identificacion con defaults para trazabilidad"
+    },
+    {
+      "id": 16,
+      "categoria": "Variables",
+      "descripcion": "replace() interpreta caracteres especiales de regex",
+      "error": "EEXIST: file already exists, mkdir '...archivo.pdf' - intenta crear directorio con nombre de archivo",
+      "causa": "replace() usa new RegExp(search, 'g') sin escapar caracteres especiales. El '.' en '.pdf' se interpreta como 'cualquier caracter'",
+      "ejemplo_problema": "replace(trigger.archivo, last(split(trigger.archivo, '/')), '') no remueve el nombre del archivo correctamente",
+      "solucion": "Escapar caracteres especiales de regex antes de crear el RegExp: search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')",
+      "archivo": "modules/flow-engine/services/variable-resolver.js",
+      "prevencion": "Cuando se use string como patron de busqueda (no regex), SIEMPRE escapar caracteres especiales: . * + ? ^ $ { } ( ) | [ ] \\"
     }
   ],
 
@@ -194,7 +205,8 @@
     "Usar json() si el destino espera string JSON",
     "Usar default() para campos opcionales",
     "Verificar path de acceso a resultados de steps (steps.ID.campo o steps.ID.data.campo)",
-    "Incluir onError: continue para pasos no criticos"
+    "Incluir onError: continue para pasos no criticos",
+    "CUIDADO con replace(): los caracteres . * + ? ^ $ se interpretan como regex (Bug #16)"
   ],
 
   "checklist_nuevo_servicio": [

@@ -3,18 +3,21 @@
   "name": "Entrada Facturas Telegram",
   "description": "Recibe facturas desde Telegram y las guarda en inbox para procesamiento nocturno",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "trigger": {
     "event": "bot.file.stored",
     "filter": {
       "botName": "facturas_asesoria_bot",
       "file.mimeType": {
-        "$in": ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+        "$in": [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "application/pdf"
+        ]
       }
     }
   },
-
   "steps": [
     {
       "id": "crear-inbox",

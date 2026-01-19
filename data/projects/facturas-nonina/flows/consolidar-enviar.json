@@ -3,13 +3,11 @@
   "name": "Consolidar y Enviar a Asesoría",
   "description": "Empaqueta todas las facturas procesadas en ZIP y envía por email a la asesoría",
   "version": "1.1.0",
-  "enabled": true,
-
+  "enabled": false,
   "schedule": {
     "cron": "0 5 * * 0",
     "timezone": "Europe/Madrid"
   },
-
   "steps": [
     {
       "id": "crear-exports",

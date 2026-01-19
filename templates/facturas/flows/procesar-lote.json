@@ -3,20 +3,19 @@
   "name": "Procesar Facturas - Lote Semanal",
   "description": "Procesa todas las facturas pendientes con OCR en lote",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "schedule": {
     "cron": "{{ config.schedule.procesamiento }}",
     "timezone": "{{ config.schedule.timezone }}"
   },
-
   "trigger": {
     "event": "flow.trigger",
     "filter": {
-      "flowId": { "$endsWith": ":procesar-lote" }
+      "flowId": {
+        "$endsWith": ":procesar-lote"
+      }
     }
   },
-
   "steps": [
     {
       "id": "log-inicio",

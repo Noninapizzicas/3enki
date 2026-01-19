@@ -3,13 +3,11 @@
   "name": "Entrada Facturas Gmail",
   "description": "Recoge facturas desde Gmail y las guarda en inbox para procesamiento nocturno",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "schedule": {
     "cron": "0 3 * * *",
     "timezone": "Europe/Madrid"
   },
-
   "steps": [
     {
       "id": "crear-inbox",
@@ -53,7 +51,11 @@
       "action": "attachments.download",
       "messageIds": "{{ steps.buscar-emails.data.messages }}",
       "outputDir": "{{ projectPath('inbox') }}",
-      "mimeTypes": ["image/jpeg", "image/png", "application/pdf"],
+      "mimeTypes": [
+        "image/jpeg",
+        "image/png",
+        "application/pdf"
+      ],
       "markAsRead": true
     },
     {

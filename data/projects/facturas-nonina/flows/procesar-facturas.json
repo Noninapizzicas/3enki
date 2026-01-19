@@ -3,13 +3,11 @@
   "name": "Procesar Facturas con OCR e IA",
   "description": "Procesa todas las facturas en inbox con Google Vision OCR y DeepSeek IA",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "schedule": {
     "cron": "0 2 * * 0",
     "timezone": "Europe/Madrid"
   },
-
   "steps": [
     {
       "id": "crear-directorios",

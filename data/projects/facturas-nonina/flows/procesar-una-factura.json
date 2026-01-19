@@ -3,13 +3,11 @@
   "name": "Procesar Una Factura",
   "description": "Procesa una factura específica con OCR + IA. Disparar manualmente o desde otro flujo.",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "trigger": {
     "event": "facturas-nonina.procesar.archivo",
     "filter": {}
   },
-
   "steps": [
     {
       "id": "log-inicio",

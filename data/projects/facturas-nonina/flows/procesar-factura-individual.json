@@ -3,13 +3,11 @@
   "name": "Procesar Factura Individual",
   "description": "Procesa una factura individual con OCR + IA",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "trigger": {
     "event": "facturas-nonina.procesar.lote",
     "filter": {}
   },
-
   "steps": [
     {
       "id": "log-inicio",

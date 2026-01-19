@@ -219,12 +219,18 @@ module.exports = {
       }
 
       // Carpeta de salida
+      let resolvedOutputFolder = outputFolder;
       if (outputFolder && outputFolder.trim() !== '') {
-        // Crear carpeta si no existe
-        if (!fs.existsSync(outputFolder)) {
-          fs.mkdirSync(outputFolder, { recursive: true });
+        // Convertir @/ a ruta real (data/)
+        if (outputFolder.startsWith('@/')) {
+          resolvedOutputFolder = outputFolder.replace('@/', './data/');
         }
-        options.outputFolder = outputFolder;
+
+        // Crear carpeta si no existe
+        if (!fs.existsSync(resolvedOutputFolder)) {
+          fs.mkdirSync(resolvedOutputFolder, { recursive: true });
+        }
+        options.outputFolder = resolvedOutputFolder;
 
         // Usar nombre del PDF como prefijo para evitar colisiones
         let pdfBasename = 'page';

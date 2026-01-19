@@ -3,15 +3,20 @@
   "name": "TEST: Ciclo Completo Factura",
   "description": "Flow de prueba que ejecuta todo el ciclo: Telegram -> Guardar -> OCR -> Excel",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "trigger": {
     "event": "bot.file.stored",
     "filter": {
-      "file.mimeType": { "$in": ["image/jpeg", "image/png", "image/webp", "application/pdf"] }
+      "file.mimeType": {
+        "$in": [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "application/pdf"
+        ]
+      }
     }
   },
-
   "steps": [
     {
       "id": "verificar-bot",
@@ -26,14 +31,12 @@
       "level": "debug",
       "message": "Ignorando archivo de bot {{ trigger.botName }} (esperado: {{ config.telegram.botName }})"
     },
-
     {
       "id": "log-inicio",
       "type": "log",
       "level": "info",
       "message": "=== INICIO CICLO COMPLETO === Factura recibida: {{ trigger.file.originalName }}"
     },
-
     {
       "id": "crear-directorio-inbox",
       "type": "service",
@@ -42,7 +45,6 @@
       "path": "@/projects/{{ project.id }}/{{ config.storage.inbox }}",
       "onError": "continue"
     },
-
     {
       "id": "generar-nombre",
       "type": "set",
@@ -50,7 +52,6 @@
         "nombreArchivo": "factura_{{ timestamp }}.jpg"
       }
     },
-
     {
       "id": "copiar-archivo",
       "type": "service",
@@ -60,14 +61,12 @@
       "destination": "@/projects/{{ project.id }}/{{ config.storage.inbox }}/{{ variables.nombreArchivo }}",
       "timeout": 30000
     },
-
     {
       "id": "log-guardado",
       "type": "log",
       "level": "info",
       "message": "PASO 1 OK: Archivo guardado en inbox: {{ variables.nombreArchivo }}"
     },
-
     {
       "id": "registrar-bd",
       "type": "service",
@@ -85,14 +84,12 @@
       },
       "timeout": 10000
     },
-
     {
       "id": "log-registrado",
       "type": "log",
       "level": "info",
       "message": "PASO 2 OK: Registrado en BD con ID: {{ steps.registrar-bd.data.id }}"
     },
-
     {
       "id": "ejecutar-ocr",
       "type": "service",
@@ -103,14 +100,12 @@
       "timeout": 120000,
       "onError": "log-error-ocr"
     },
-
     {
       "id": "log-ocr",
       "type": "log",
       "level": "info",
       "message": "PASO 3 OK: OCR completado - {{ steps.ejecutar-ocr.data.text.substring(0, 100) }}..."
     },
-
     {
       "id": "extraer-datos",
       "type": "agent",
@@ -122,14 +117,12 @@
       "timeout": 60000,
       "onError": "log-error-extraccion"
     },
-
     {
       "id": "log-extraccion",
       "type": "log",
       "level": "info",
       "message": "PASO 4 OK: Datos extraidos - Proveedor: {{ steps.extraer-datos.data.nombre_proveedor }} - Total: {{ steps.extraer-datos.data.total }}"
     },
-
     {
       "id": "crear-dir-procesadas",
       "type": "service",
@@ -138,7 +131,6 @@
       "path": "@/projects/{{ project.id }}/{{ config.storage.procesadas }}/originales",
       "onError": "continue"
     },
-
     {
       "id": "mover-a-procesadas",
       "type": "service",
@@ -148,14 +140,12 @@
       "destination": "@/projects/{{ project.id }}/{{ config.storage.procesadas }}/originales/{{ variables.nombreArchivo }}",
       "timeout": 30000
     },
-
     {
-      "id": "actualizar-bd-procesada",
+      "id": "{{ steps.registrar-bd.data.id }}",
       "type": "service",
       "service": "local.facturas-db",
       "action": "actualizar",
       "proyecto": "{{ project.id }}",
-      "id": "{{ steps.registrar-bd.data.id }}",
       "datos": {
         "estado": "procesada",
         "numero_factura": "{{ steps.extraer-datos.data.numero_factura }}",
@@ -172,14 +162,12 @@
       },
       "timeout": 10000
     },
-
     {
       "id": "log-bd-actualizada",
       "type": "log",
       "level": "info",
       "message": "PASO 5 OK: BD actualizada con datos extraidos"
     },
-
     {
       "id": "crear-dir-exports",
       "type": "service",
@@ -188,7 +176,6 @@
       "path": "@/projects/{{ project.id }}/{{ config.storage.exports }}",
       "onError": "continue"
     },
-
     {
       "id": "generar-excel",
       "type": "service",
@@ -244,14 +231,12 @@
       "outputPath": "@/projects/{{ project.id }}/{{ config.storage.exports }}/test_factura_{{ timestamp }}.xlsx",
       "timeout": 30000
     },
-
     {
       "id": "log-excel",
       "type": "log",
       "level": "info",
       "message": "PASO 6 OK: Excel generado: test_factura_{{ timestamp }}.xlsx"
     },
-
     {
       "id": "responder-telegram",
       "type": "service",
@@ -263,21 +248,18 @@
       "timeout": 10000,
       "onError": "continue"
     },
-
     {
       "id": "log-completado",
       "type": "log",
       "level": "info",
       "message": "=== CICLO COMPLETO FINALIZADO === ID: {{ steps.registrar-bd.data.id }} - Total: {{ steps.extraer-datos.data.total }} EUR"
     },
-
     {
       "id": "log-error-ocr",
       "type": "log",
       "level": "error",
       "message": "ERROR en OCR: {{ error.message }}"
     },
-
     {
       "id": "log-error-extraccion",
       "type": "log",

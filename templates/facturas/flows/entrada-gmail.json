@@ -3,20 +3,19 @@
   "name": "Entrada Facturas - Gmail",
   "description": "Recoge facturas desde Gmail, las guarda en inbox y registra en BD",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "schedule": {
     "cron": "{{ config.schedule.gmail }}",
     "timezone": "{{ config.schedule.timezone }}"
   },
-
   "trigger": {
     "event": "flow.trigger",
     "filter": {
-      "flowId": { "$endsWith": ":entrada-gmail" }
+      "flowId": {
+        "$endsWith": ":entrada-gmail"
+      }
     }
   },
-
   "steps": [
     {
       "id": "verificar-gmail-habilitado",

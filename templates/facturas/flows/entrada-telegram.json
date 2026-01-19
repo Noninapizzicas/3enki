@@ -3,15 +3,20 @@
   "name": "Entrada Facturas - Telegram",
   "description": "Recibe facturas desde bot Telegram, las guarda en inbox y registra en BD",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "trigger": {
     "event": "bot.file.stored",
     "filter": {
-      "file.mimeType": { "$in": ["image/jpeg", "image/png", "image/webp", "application/pdf"] }
+      "file.mimeType": {
+        "$in": [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "application/pdf"
+        ]
+      }
     }
   },
-
   "steps": [
     {
       "id": "verificar-bot",

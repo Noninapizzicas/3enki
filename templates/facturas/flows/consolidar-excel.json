@@ -3,20 +3,19 @@
   "name": "Consolidar Facturas - Excel Semanal",
   "description": "Genera Excel con facturas procesadas para enviar a asesoría",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "schedule": {
     "cron": "{{ config.schedule.exportacion }}",
     "timezone": "{{ config.schedule.timezone }}"
   },
-
   "trigger": {
     "event": "flow.trigger",
     "filter": {
-      "flowId": { "$endsWith": ":consolidar-excel" }
+      "flowId": {
+        "$endsWith": ":consolidar-excel"
+      }
     }
   },
-
   "steps": [
     {
       "id": "log-inicio",

@@ -3,15 +3,13 @@
   "name": "Procesar Factura Individual",
   "description": "Procesa una factura con OCR y extrae datos estructurados",
   "version": "1.0.0",
-  "enabled": true,
-
+  "enabled": false,
   "trigger": {
     "event": "factura.procesar",
     "filter": {
       "projectId": "{{ project.id }}"
     }
   },
-
   "steps": [
     {
       "id": "log-inicio",
@@ -20,12 +18,11 @@
       "message": "Procesando factura {{ trigger.id }}: {{ trigger.archivo.nombre }}"
     },
     {
-      "id": "actualizar-estado-procesando",
+      "id": "{{ trigger.id }}",
       "type": "service",
       "service": "local.facturas-db",
       "action": "actualizar",
       "proyecto": "{{ project.id }}",
-      "id": "{{ trigger.id }}",
       "datos": {
         "estado": "procesando",
         "procesado_at": "{{ new Date().toISOString() }}"
@@ -95,12 +92,11 @@
       "timeout": 10000
     },
     {
-      "id": "actualizar-bd",
+      "id": "{{ trigger.id }}",
       "type": "service",
       "service": "local.facturas-db",
       "action": "actualizar",
       "proyecto": "{{ project.id }}",
-      "id": "{{ trigger.id }}",
       "datos": {
         "estado": "procesada",
         "numero_factura": "{{ steps.extraer-datos.data.numero_factura }}",
@@ -137,12 +133,11 @@
       }
     },
     {
-      "id": "marcar-error",
+      "id": "{{ trigger.id }}",
       "type": "service",
       "service": "local.facturas-db",
       "action": "actualizar",
       "proyecto": "{{ project.id }}",
-      "id": "{{ trigger.id }}",
       "datos": {
         "estado": "error",
         "error_mensaje": "{{ error.message }}",

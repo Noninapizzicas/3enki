@@ -30,12 +30,17 @@ pids/
 # Data directory - track project definitions, ignore runtime data
 data/*
 !data/projects/
+# Legacy structure
 data/projects/*/inbox/
 data/projects/*/datos/
 data/projects/*/exports/
 data/projects/*/archivados/
 data/projects/*/originales/
 data/projects/*/tmp/
+# New structure: bot directories contain runtime data
+data/projects/*/*/recibidas/
+data/projects/*/*/procesadas/
+data/projects/*/*/errores/
 data/logs/
 
 # Module data (development/runtime)

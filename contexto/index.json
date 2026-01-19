@@ -13,6 +13,8 @@
       "external_services": "Read services.json (OCR, TTS, PDF, CSV, APIs externas)",
       "bot_agent_flow": "Read bot-agent-architecture.json",
       "flow_automation": "Read flow-engine.json (flujos, orquestacion, triggers, steps)",
+      "create_flow_conversational": "Read flow-builder-prompt.json (guía conversacional para crear flujos)",
+      "flow_debugging": "Read lecciones-aprendidas-flow-engine.json (errores comunes, checklist)",
       "credentials_questions": "Read credentials.json (API keys, OAuth2, niveles, cascada)",
       "scheduling_questions": "Read scheduler.json (jobs, triggers cron/interval/event, acciones programadas)",
       "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)"
@@ -101,6 +103,16 @@
       "file": "catalogo-servicios.json",
       "purpose": "Catálogo completo de todos los servicios, módulos, APIs, tools AI y providers del sistema",
       "when": "Consultar qué servicios existen, buscar APIs disponibles, ver tools para AI, encontrar providers, referencia rápida de capacidades"
+    },
+    {
+      "file": "lecciones-aprendidas-flow-engine.json",
+      "purpose": "Bugs documentados y lecciones aprendidas durante implementación de flujos",
+      "when": "Debuggear flujos, evitar errores comunes, checklist de nuevo flujo"
+    },
+    {
+      "file": "flow-builder-prompt.json",
+      "purpose": "Prompt conversacional para crear flujos de automatización guiado por IA",
+      "when": "Crear flujos mediante conversación, usar como guía/agente para flow builder"
     }
   ],
 

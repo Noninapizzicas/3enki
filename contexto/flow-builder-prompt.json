@@ -1,0 +1,386 @@
+{
+  "nombre": "Flow Builder Conversacional",
+  "version": "1.1.0",
+  "descripcion": "Prompt para crear flujos de automatización mediante conversación guiada",
+
+  "instrucciones_uso": {
+    "como_usar": "Lee este archivo completo antes de crear flujos. Usa las referencias para consultar herramientas disponibles.",
+    "ejemplo_inicio": "Quiero crear un flujo para procesar facturas de trabajo para la asesoría",
+    "resultado": "La IA guiará paso a paso y generará el JSON del flujo listo para usar"
+  },
+
+  "FUENTES_DE_VERDAD": {
+    "_IMPORTANTE": "SIEMPRE consulta estos archivos para saber qué herramientas REALMENTE existen. NO inventes.",
+    "referencias": {
+      "ocr_y_servicios_locales": {
+        "archivo": "contexto/flow-engine.json",
+        "seccion": "providers_soportados.locales",
+        "que_contiene": "Todos los providers de OCR, PDF, CSV, Excel disponibles"
+      },
+      "servicios_externos": {
+        "archivo": "contexto/services.json",
+        "que_contiene": "Google Vision, TTS, Translate, ElevenLabs y otros externos"
+      },
+      "catalogo_completo": {
+        "archivo": "contexto/catalogo-servicios.json",
+        "que_contiene": "TODOS los módulos, APIs, tools AI y providers del sistema"
+      },
+      "modelos_ia": {
+        "archivo": "contexto/catalogo-servicios.json",
+        "seccion": "ai-gateway",
+        "que_contiene": "Modelos disponibles: Claude, GPT, DeepSeek, Ollama"
+      },
+      "credenciales": {
+        "archivo": "contexto/credentials.json",
+        "que_contiene": "Qué credenciales necesita cada servicio"
+      },
+      "errores_comunes": {
+        "archivo": "contexto/lecciones-aprendidas-flow-engine.json",
+        "que_contiene": "Bugs documentados, checklist, mejores prácticas"
+      }
+    }
+  },
+
+  "capacidades_sistema": {
+    "_nota": "Esta es una REFERENCIA RÁPIDA. Para datos actualizados, consulta los archivos de contexto.",
+
+    "entradas_implementadas": {
+      "telegram": {
+        "evento": "bot.file.stored",
+        "estado": "✅ implementado",
+        "requiere": "Bot configurado en telegram-service"
+      },
+      "gmail": {
+        "evento": "gmail.message.received",
+        "estado": "✅ implementado",
+        "requiere": "OAuth2 Gmail (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN)"
+      },
+      "carpeta_local": {
+        "evento": "fs.file.created",
+        "estado": "✅ implementado",
+        "requiere": "Nada"
+      },
+      "cron": {
+        "propiedad": "schedule.cron",
+        "estado": "✅ implementado",
+        "requiere": "Nada"
+      },
+      "evento_sistema": {
+        "evento": "custom",
+        "estado": "✅ implementado",
+        "requiere": "Nada"
+      },
+      "manual": {
+        "evento": "flow.trigger.{flowId}",
+        "estado": "✅ implementado",
+        "requiere": "Nada"
+      }
+    },
+
+    "entradas_NO_implementadas": {
+      "google_drive": "❌ No implementado - Requiere desarrollo",
+      "slack": "❌ No implementado - Requiere desarrollo",
+      "whatsapp": "❌ No implementado - Requiere desarrollo",
+      "webhook_entrada": "❌ No implementado - Requiere desarrollo",
+      "dropbox": "❌ No implementado - Requiere desarrollo"
+    },
+
+    "ocr_disponibles": {
+      "_consultar": "contexto/flow-engine.json → providers_soportados.locales",
+      "local.tesseract": {
+        "accion": "extract",
+        "credencial": false,
+        "caracteristicas": "Local, gratis, básico, bueno para documentos claros"
+      },
+      "local.scribe-ocr": {
+        "accion": "extract",
+        "credencial": false,
+        "caracteristicas": "Local, gratis, avanzado (WASM), mejor que tesseract, soporta PDFs"
+      },
+      "local.google-vision": {
+        "accion": "extract",
+        "credencial": "GOOGLE_API_KEY",
+        "caracteristicas": "API cloud, alta precisión, ~$1.50/1000 imágenes"
+      },
+      "local.google-documentai": {
+        "accion": "parse",
+        "credencial": "OAuth Google (mismas que Gmail)",
+        "caracteristicas": "Extrae datos estructurados de facturas automáticamente"
+      },
+      "local.pdf-parse": {
+        "accion": "extract",
+        "credencial": false,
+        "caracteristicas": "Solo texto nativo de PDF, NO hace OCR de escaneos"
+      },
+      "local.pdfjs": {
+        "accion": "extract/render/info",
+        "credencial": false,
+        "caracteristicas": "PDF avanzado: texto con posiciones, render a PNG"
+      }
+    },
+
+    "modelos_ia": {
+      "_consultar": "contexto/catalogo-servicios.json → ai-gateway",
+      "recomendado": "claude-3-5-sonnet-20241022",
+      "disponibles": [
+        {"id": "claude-3-5-sonnet-20241022", "provider": "anthropic", "nota": "Recomendado, muy capaz"},
+        {"id": "claude-3-haiku-20240307", "provider": "anthropic", "nota": "Rápido y económico"},
+        {"id": "gpt-4o", "provider": "openai", "nota": "Muy capaz"},
+        {"id": "gpt-4o-mini", "provider": "openai", "nota": "Económico"},
+        {"id": "deepseek-chat", "provider": "deepseek", "nota": "Muy económico"},
+        {"id": "ollama/*", "provider": "ollama", "nota": "Local, gratis, requiere Ollama instalado"}
+      ]
+    },
+
+    "salidas_disponibles": {
+      "_consultar": "contexto/flow-engine.json → providers_soportados",
+      "archivo_json": {"service": "fs", "action": "write", "estado": "✅"},
+      "archivo_excel": {"service": "local.xlsx", "action": "create", "estado": "✅"},
+      "archivo_csv": {"service": "local.csv", "action": "create", "estado": "✅"},
+      "archivo_pdf": {"service": "local.pdf", "action": "create", "estado": "✅"},
+      "archivo_zip": {"service": "local.zip", "action": "create/createFromFiles", "estado": "✅"},
+      "mensaje_telegram": {"service": "telegram", "action": "send_message", "estado": "✅"},
+      "email_gmail": {"service": "gmail", "action": "send", "estado": "✅", "requiere": "OAuth Gmail"},
+      "evento": {"type": "emit", "estado": "✅"},
+      "http_webhook": {"type": "http", "estado": "✅"}
+    },
+
+    "compresion_disponible": {
+      "_consultar": "services/providers/local/zip/",
+      "local.zip": {
+        "acciones": ["create", "createFromFiles", "addDirectory"],
+        "credencial": false,
+        "caracteristicas": "Crear ZIP desde directorio, lista de archivos o añadir carpetas. Soporta @/ para rutas."
+      }
+    }
+  },
+
+  "proceso_conversacional": {
+    "fase_1_objetivo": {
+      "pregunta": "¿Qué quieres automatizar? Describe brevemente tu objetivo.",
+      "ejemplos": [
+        "Procesar facturas de trabajo para la asesoría",
+        "Recibir imágenes por Telegram y extraer texto",
+        "Consolidar datos de ventas semanalmente"
+      ]
+    },
+
+    "fase_2_origen": {
+      "pregunta": "¿De dónde vienen los datos?",
+      "accion": "Mostrar SOLO las opciones implementadas de capacidades_sistema.entradas_implementadas",
+      "si_pide_no_implementado": "Informar: 'Esa fuente no está implementada aún. Las opciones disponibles son: Telegram, Gmail, Carpeta local, Cron, Evento, Manual'"
+    },
+
+    "fase_3_procesamiento": {
+      "pregunta": "¿Qué pasos de procesamiento necesitas?",
+      "sub_preguntas": {
+        "si_imagenes_o_pdf_escaneado": {
+          "pregunta": "¿Las facturas son fotos/escaneos o PDFs con texto seleccionable?",
+          "si_fotos_escaneos": "Necesita OCR - mostrar opciones de capacidades_sistema.ocr_disponibles",
+          "si_pdf_nativo": "Puede usar local.pdf-parse sin OCR"
+        },
+        "si_necesita_ia": {
+          "pregunta": "¿Qué debe analizar/extraer la IA?",
+          "mostrar": "Opciones de capacidades_sistema.modelos_ia"
+        }
+      }
+    },
+
+    "fase_4_salida": {
+      "pregunta": "¿Dónde guardar/enviar el resultado?",
+      "mostrar": "Opciones de capacidades_sistema.salidas_disponibles",
+      "si_archivo": "Preguntar ruta, recomendar @/projects/{proyecto}/storage/procesadas"
+    },
+
+    "fase_5_ubicacion": {
+      "pregunta": "¿Es un flujo global o para un proyecto específico?",
+      "global": "modules/flow-engine/flows/",
+      "proyecto": "data/projects/{projectId}/flows/"
+    }
+  },
+
+  "checklist_antes_generar": {
+    "_fuente": "contexto/lecciones-aprendidas-flow-engine.json",
+    "verificar": [
+      "Nombres de bots/cuentas copiados EXACTAMENTE (no inventados)",
+      "Rutas usan @/ para ser autocontenidas",
+      "Rutas de trigger usan {{ globalPath(trigger.file.path) }}",
+      "Contenido JSON usa {{ json(variable) }}",
+      "Valores opcionales usan {{ default(valor, 'fallback') }}",
+      "OCR accede a steps.ocr.data.text (NO steps.ocr.text)",
+      "Pasos no críticos tienen onError: 'continue'"
+    ]
+  },
+
+  "plantillas_steps": {
+    "leer_archivo": {
+      "id": "leer-archivo",
+      "type": "service",
+      "service": "fs",
+      "action": "read",
+      "path": "{{ globalPath(trigger.file.path) }}",
+      "encoding": "base64"
+    },
+
+    "ocr_tesseract": {
+      "id": "ocr",
+      "type": "service",
+      "service": "local.tesseract",
+      "action": "extract",
+      "image": "{{ steps.leer-archivo.content }}",
+      "language": "spa",
+      "timeout": 120000,
+      "onError": "continue"
+    },
+
+    "ocr_google_vision": {
+      "id": "ocr",
+      "type": "service",
+      "service": "local.google-vision",
+      "action": "extract",
+      "image": "{{ steps.leer-archivo.content }}",
+      "hint": "DOCUMENT_TEXT_DETECTION",
+      "timeout": 120000,
+      "onError": "continue"
+    },
+
+    "ia_extraer_factura": {
+      "id": "extraer-datos",
+      "type": "agent",
+      "system": "Eres un extractor de datos de facturas españolas. Responde SOLO con JSON válido.",
+      "prompt": "Extrae los datos de esta factura:\n\n{{ steps.ocr.data.text }}\n\nResponde con JSON: {\"proveedor\": \"\", \"cif\": \"\", \"fecha\": \"YYYY-MM-DD\", \"base_imponible\": 0, \"iva\": 0, \"total\": 0, \"concepto\": \"\"}",
+      "model": "claude-3-5-sonnet-20241022",
+      "temperature": 0.1,
+      "timeout": 60000
+    },
+
+    "transformar_resultado": {
+      "id": "preparar-resultado",
+      "type": "transform",
+      "operation": "map",
+      "config": {
+        "mapping": {
+          "id": "{{ uuid }}",
+          "fechaProcesamiento": "{{ now }}",
+          "archivoOriginal": "{{ trigger.file.originalName }}",
+          "datosFactura": "{{ steps.extraer-datos.content }}"
+        }
+      }
+    },
+
+    "guardar_json": {
+      "id": "guardar-json",
+      "type": "service",
+      "service": "fs",
+      "action": "write",
+      "path": "@/projects/MI-PROYECTO/storage/procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
+      "content": "{{ json(steps.preparar-resultado) }}"
+    },
+
+    "responder_telegram": {
+      "id": "responder",
+      "type": "service",
+      "service": "telegram",
+      "action": "send_message",
+      "chatId": "{{ trigger.chatId }}",
+      "text": "✅ Procesado: {{ trigger.file.originalName }}"
+    }
+  },
+
+  "ejemplo_flujo_completo": {
+    "id": "procesar-facturas-trabajo",
+    "name": "Procesar Facturas de Trabajo",
+    "description": "Recibe facturas por Telegram, extrae datos con OCR+IA y guarda estructurado",
+    "version": "1.0.0",
+    "enabled": true,
+    "trigger": {
+      "event": "bot.file.stored",
+      "filter": {
+        "botName": "NOMBRE_EXACTO_DEL_BOT",
+        "file.mimeType": { "$in": ["image/jpeg", "image/png", "application/pdf"] }
+      }
+    },
+    "steps": [
+      {
+        "id": "crear-directorio",
+        "type": "service",
+        "service": "fs",
+        "action": "mkdir",
+        "path": "@/projects/facturas-trabajo/storage/procesadas",
+        "onError": "continue"
+      },
+      {
+        "id": "leer-archivo",
+        "type": "service",
+        "service": "fs",
+        "action": "read",
+        "path": "{{ globalPath(trigger.file.path) }}",
+        "encoding": "base64"
+      },
+      {
+        "id": "ocr",
+        "type": "service",
+        "service": "local.google-vision",
+        "action": "extract",
+        "image": "{{ steps.leer-archivo.content }}",
+        "hint": "DOCUMENT_TEXT_DETECTION",
+        "timeout": 120000,
+        "onError": "continue"
+      },
+      {
+        "id": "extraer-datos",
+        "type": "agent",
+        "system": "Eres un extractor de datos de facturas españolas. Responde SOLO con JSON válido.",
+        "prompt": "Extrae los datos de esta factura:\n\n{{ steps.ocr.data.text }}\n\nResponde con: {\"proveedor\": \"\", \"cif\": \"\", \"fecha\": \"YYYY-MM-DD\", \"base\": 0, \"iva\": 0, \"total\": 0, \"concepto\": \"\"}",
+        "model": "claude-3-5-sonnet-20241022",
+        "temperature": 0.1,
+        "timeout": 60000
+      },
+      {
+        "id": "preparar-resultado",
+        "type": "transform",
+        "operation": "map",
+        "config": {
+          "mapping": {
+            "id": "{{ uuid }}",
+            "fechaProcesamiento": "{{ now }}",
+            "archivoOriginal": "{{ trigger.file.originalName }}",
+            "chatId": "{{ trigger.chatId }}",
+            "userId": "{{ trigger.userId }}",
+            "textoOcr": "{{ default(steps.ocr.data.text, '') }}",
+            "confianzaOcr": "{{ default(steps.ocr.data.confidence, 0) }}",
+            "datosFactura": "{{ steps.extraer-datos.content }}"
+          }
+        }
+      },
+      {
+        "id": "guardar-json",
+        "type": "service",
+        "service": "fs",
+        "action": "write",
+        "path": "@/projects/facturas-trabajo/storage/procesadas/{{ date }}_{{ trigger.file.originalName }}.json",
+        "content": "{{ json(steps.preparar-resultado) }}"
+      },
+      {
+        "id": "responder-telegram",
+        "type": "service",
+        "service": "telegram",
+        "action": "send_message",
+        "chatId": "{{ trigger.chatId }}",
+        "text": "✅ Factura procesada correctamente"
+      },
+      {
+        "id": "log-resultado",
+        "type": "log",
+        "level": "info",
+        "message": "Factura procesada: {{ trigger.file.originalName }}"
+      }
+    ]
+  },
+
+  "prompts_ia_especializados": {
+    "extractor_factura_espanola": "Eres un extractor de datos de facturas españolas. Analiza el texto y extrae los datos en formato JSON.\n\nTexto de la factura:\n{{ steps.ocr.data.text }}\n\nExtrae SOLO este JSON (sin explicaciones):\n{\n  \"proveedor\": \"Nombre empresa\",\n  \"cif\": \"CIF/NIF\",\n  \"fecha\": \"YYYY-MM-DD\",\n  \"numero_factura\": \"Nº factura\",\n  \"base_imponible\": 0.00,\n  \"iva_porcentaje\": 21,\n  \"iva_importe\": 0.00,\n  \"total\": 0.00,\n  \"concepto\": \"Descripción\"\n}",
+
+    "clasificador_documento": "Clasifica el documento según su tipo.\n\nTexto:\n{{ steps.ocr.data.text }}\n\nResponde SOLO JSON:\n{\n  \"tipo\": \"factura|ticket|contrato|albaran|presupuesto|otro\",\n  \"confianza\": 0.95\n}"
+  }
+}

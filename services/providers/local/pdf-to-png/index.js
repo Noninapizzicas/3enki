@@ -175,32 +175,23 @@ module.exports = {
    * Convertir PDF a PNG
    *
    * LECCION #7: Validar TODOS los parametros al inicio
-   * LECCION #14: Devolver estructura consistente
+   * LECCION #14: Devolver datos directamente (el executor los envuelve en {success, data})
+   *
+   * IMPORTANTE: Devolver datos directamente como google-vision,
+   * NO envolver en {success, data} - el executor ya lo hace.
    */
   async convert({ pdf, pages = [], scale = 2.0, outputFolder = '', password = '' } = {}) {
     // === VALIDACION DE ENTRADA (Leccion #7) ===
     if (!pdf) {
-      return {
-        success: false,
-        error: 'Parameter "pdf" is required',
-        data: { images: [], totalPages: 0 }
-      };
+      throw new Error('Parameter "pdf" is required');
     }
 
     if (typeof pdf !== 'string') {
-      return {
-        success: false,
-        error: `Invalid pdf parameter: expected string, got ${typeof pdf}`,
-        data: { images: [], totalPages: 0 }
-      };
+      throw new Error(`Invalid pdf parameter: expected string, got ${typeof pdf}`);
     }
 
     if (pdf.trim() === '') {
-      return {
-        success: false,
-        error: 'Parameter "pdf" cannot be empty',
-        data: { images: [], totalPages: 0 }
-      };
+      throw new Error('Parameter "pdf" cannot be empty');
     }
 
     try {
@@ -209,11 +200,7 @@ module.exports = {
       // Resolver input
       const resolved = await this.resolveInput(pdf);
       if (resolved.error) {
-        return {
-          success: false,
-          error: resolved.error,
-          data: { images: [], totalPages: 0 }
-        };
+        throw new Error(resolved.error);
       }
 
       // Preparar opciones
@@ -265,22 +252,17 @@ module.exports = {
         height: page.height
       }));
 
+      // Devolver datos directamente - el executor los envuelve en {success, data}
       return {
-        success: true,
-        data: {
-          images,
-          totalPages: images.length,
-          scale,
-          outputFolder: outputFolder || null
-        }
+        images,
+        totalPages: images.length,
+        scale,
+        outputFolder: outputFolder || null
       };
 
     } catch (error) {
-      return {
-        success: false,
-        error: `PDF to PNG conversion failed: ${error.message}`,
-        data: { images: [], totalPages: 0 }
-      };
+      // Lanzar error para que el executor lo maneje
+      throw new Error(`PDF to PNG conversion failed: ${error.message}`);
     }
   },
 

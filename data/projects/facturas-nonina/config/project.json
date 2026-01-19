@@ -1,0 +1,34 @@
+{
+  "id": "facturas-nonina",
+  "nombre": "Facturas Asesoría Nonina",
+  "version": "2.0.0",
+
+  "bots": {
+    "facturas_asesoria_bot": {
+      "enabled": true,
+      "descripcion": "Bot para recibir facturas de clientes",
+
+      "filtros": {
+        "userIds": null,
+        "chatType": "private",
+        "maxFileSize": 10485760
+      },
+
+      "archivos": {
+        "mimeTypes": ["image/jpeg", "image/png", "image/webp", "application/pdf"],
+        "directorio": "recibidas",
+        "formato": "{YYYYMMDD-HHmmss}_{original}"
+      },
+
+      "mensajes": {
+        "recibido": "✅ Recibido: {nombre}\nSe procesará próximamente.",
+        "error": "❌ Error al guardar: {mensaje}",
+        "rechazado": "⚠️ Archivo no válido: {motivo}"
+      },
+
+      "notificaciones": {
+        "errores": true
+      }
+    }
+  }
+}

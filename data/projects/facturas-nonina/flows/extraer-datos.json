@@ -2,7 +2,7 @@
   "id": "extraer-datos",
   "name": "Extraer Datos Estructurados con DeepSeek",
   "description": "Extrae datos estructurados de facturas usando DeepSeek LLM",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "enabled": true,
 
   "trigger": {
@@ -73,7 +73,7 @@
           "archivo": "{{ trigger.archivo }}",
           "extraidoEn": "{{ now }}",
           "modelo": "{{ steps.extraer-con-deepseek.output.model }}",
-          "tokens": "{{ steps.extraer-con-deepseek.output.usage.total_tokens }}",
+          "tokens": "{{ steps.extraer-con-deepseek.output.tokens }}",
           "datos": "{{ steps.parsear-respuesta }}"
         }
       }
@@ -119,7 +119,7 @@
       "id": "log-exito",
       "type": "log",
       "level": "info",
-      "message": "Datos extraídos: {{ trigger.archivo }} - {{ steps.extraer-con-deepseek.output.usage.total_tokens }} tokens"
+      "message": "Datos extraídos: {{ trigger.archivo }} - {{ steps.extraer-con-deepseek.output.tokens }} tokens"
     },
     {
       "id": "guardar-respuesta-raw",

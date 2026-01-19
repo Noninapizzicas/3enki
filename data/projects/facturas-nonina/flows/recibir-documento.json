@@ -2,7 +2,7 @@
   "id": "recibir-documento",
   "name": "Recibir Documento",
   "description": "Recibe archivos del bot Telegram, los renombra con timestamp y guarda metadata",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "enabled": true,
 
   "trigger": {
@@ -103,6 +103,7 @@
       "event": "facturas-nonina.documento.pendiente",
       "data": {
         "archivo": "{{ projectPath(variables.dirRecibidas, variables.nuevoNombre) }}",
+        "botName": "{{ trigger.botName }}",
         "mimeType": "{{ trigger.file.mimeType }}",
         "chatId": "{{ trigger.chatId }}",
         "username": "{{ trigger.username }}",

@@ -1,0 +1,58 @@
+{
+  "proyecto": "facturas-nonina",
+  "descripcion": "Procesamiento de facturas de trabajo para asesoría",
+
+  "telegram": {
+    "botName": "facturas_asesoria_bot"
+  },
+
+  "gmail": {
+    "enabled": true,
+    "account": "",
+    "query": "has:attachment"
+  },
+
+  "asesoria": {
+    "email": "paco.sanchez.mar@gmail.com",
+    "nombre": "Asesoría"
+  },
+
+  "ocr": {
+    "provider": "local.google-vision",
+    "hint": "DOCUMENT_TEXT_DETECTION"
+  },
+
+  "ai": {
+    "model": "deepseek-chat",
+    "temperature": 0.1
+  },
+
+  "schedule": {
+    "procesamiento": "0 2 * * 0",
+    "consolidacion": "0 5 * * 0",
+    "timezone": "Europe/Madrid"
+  },
+
+  "storage": {
+    "inbox": "@/projects/facturas-nonina/inbox",
+    "originales": "@/projects/facturas-nonina/originales",
+    "datos": "@/projects/facturas-nonina/datos",
+    "exports": "@/projects/facturas-nonina/exports",
+    "archivados": "@/projects/facturas-nonina/archivados"
+  },
+
+  "campos_factura": [
+    "proveedor",
+    "cif",
+    "direccion",
+    "fecha",
+    "numero_factura",
+    "base_imponible",
+    "iva_porcentaje",
+    "iva_importe",
+    "total",
+    "concepto",
+    "forma_pago",
+    "iban"
+  ]
+}

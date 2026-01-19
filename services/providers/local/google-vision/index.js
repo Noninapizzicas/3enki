@@ -150,9 +150,12 @@ module.exports = {
     // Es un path de archivo
     let filePath = image;
 
+    // Limpiar dobles // en la ruta
+    filePath = filePath.replace(/\/+/g, '/');
+
     // Convertir @/ a ruta real (data/)
-    if (image.startsWith('@/')) {
-      filePath = image.replace('@/', './data/');
+    if (filePath.startsWith('@/')) {
+      filePath = filePath.replace('@/', './data/');
     }
 
     // Verificar que existe

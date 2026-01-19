@@ -2,7 +2,7 @@
   "id": "extraer-datos",
   "name": "Extraer Datos Estructurados con DeepSeek",
   "description": "Extrae datos estructurados de facturas usando DeepSeek LLM",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "enabled": true,
 
   "trigger": {
@@ -52,7 +52,7 @@
       "temperature": 0.1,
       "max_tokens": 2000,
       "system": "Eres un experto en extracción de datos de facturas españolas. Tu trabajo es extraer información estructurada del texto OCR de facturas.\n\nDEBES responder ÚNICAMENTE con un objeto JSON válido, sin explicaciones adicionales.\n\nEstructura requerida:\n{\n  \"proveedor\": {\n    \"nombre\": \"string\",\n    \"nif\": \"string o null\",\n    \"direccion\": \"string o null\",\n    \"telefono\": \"string o null\",\n    \"email\": \"string o null\"\n  },\n  \"cliente\": {\n    \"nombre\": \"string\",\n    \"nif\": \"string o null\",\n    \"direccion\": \"string o null\"\n  },\n  \"factura\": {\n    \"numero\": \"string\",\n    \"fecha\": \"YYYY-MM-DD\",\n    \"referencia\": \"string o null\"\n  },\n  \"lineas\": [\n    {\n      \"descripcion\": \"string\",\n      \"cantidad\": number,\n      \"precioUnitario\": number,\n      \"iva\": number (porcentaje),\n      \"total\": number\n    }\n  ],\n  \"totales\": {\n    \"baseImponible\": number,\n    \"iva\": [\n      { \"tipo\": number, \"base\": number, \"cuota\": number }\n    ],\n    \"recargo\": number o null,\n    \"total\": number\n  },\n  \"metadatos\": {\n    \"moneda\": \"EUR\",\n    \"formaPago\": \"string o null\",\n    \"observaciones\": \"string o null\"\n  }\n}\n\nReglas:\n- Usa null para campos que no encuentres\n- Normaliza fechas a formato YYYY-MM-DD\n- Los importes deben ser números (sin símbolos de moneda)\n- Si hay ambigüedad, usa el valor más probable\n- Extrae TODAS las líneas de productos/servicios",
-      "prompt": "Extrae los datos estructurados de esta factura:\n\n---\n{{ steps.leer-texto-ocr.data.content }}\n---",
+      "prompt": "Extrae los datos estructurados de esta factura:\n\n---\n{{ steps.leer-texto-ocr.output.content }}\n---",
       "onError": "notificar-error"
     },
     {

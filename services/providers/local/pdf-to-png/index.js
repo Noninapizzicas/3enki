@@ -137,8 +137,14 @@ module.exports = {
       return { input: buffer, tempFile: null, error: null };
     }
 
-    // Path de archivo
-    if (pdf.startsWith('/') || pdf.startsWith('./') || pdf.startsWith('@/')) {
+    // Path de archivo (absoluto, relativo con ./, relativo sin ./, o @/)
+    const isPath = pdf.startsWith('/') ||
+                   pdf.startsWith('./') ||
+                   pdf.startsWith('@/') ||
+                   pdf.startsWith('data/') ||
+                   fs.existsSync(pdf);
+
+    if (isPath) {
       let filePath = pdf;
 
       // Convertir @/ a ruta real (data/)

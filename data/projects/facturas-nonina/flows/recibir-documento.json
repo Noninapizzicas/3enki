@@ -2,7 +2,7 @@
   "id": "recibir-documento",
   "name": "Recibir Documento",
   "description": "Recibe archivos del bot Telegram, los renombra con timestamp y guarda metadata",
-  "version": "2.4.0",
+  "version": "2.2.0",
   "enabled": true,
 
   "trigger": {
@@ -24,24 +24,15 @@
         "nombreOriginal": "{{ trigger.file.originalName }}",
         "extension": "{{ mimeToExt(trigger.file.mimeType) }}",
         "nuevoNombre": "{{ replace(replace(substring(now, 0, 19), 'T', '-'), ':', '') }}_{{ trigger.file.originalName }}{{ mimeToExt(trigger.file.mimeType) }}",
-        "dirRecibidas": "{{ trigger.botName }}/recibidas/",
-        "dirProcesadas": "{{ trigger.botName }}/procesadas/"
+        "dirDestino": "{{ trigger.botName }}/recibidas/"
       }
     },
     {
-      "id": "crear-directorio-recibidas",
+      "id": "crear-directorio",
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "{{ projectPath(variables.dirRecibidas) }}",
-      "onError": "continue"
-    },
-    {
-      "id": "crear-directorio-procesadas",
-      "type": "service",
-      "service": "fs",
-      "action": "mkdir",
-      "path": "{{ projectPath(variables.dirProcesadas) }}",
+      "path": "{{ projectPath(variables.dirDestino) }}",
       "onError": "continue"
     },
     {
@@ -50,7 +41,7 @@
       "service": "fs",
       "action": "copy",
       "from": "{{ globalPath(trigger.file.path) }}",
-      "to": "{{ projectPath(variables.dirRecibidas, variables.nuevoNombre) }}",
+      "to": "{{ projectPath(variables.dirDestino, variables.nuevoNombre) }}",
       "onError": "notificar-error"
     },
     {
@@ -78,7 +69,7 @@
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "{{ projectPath(variables.dirRecibidas, variables.nuevoNombre, '.meta.json') }}",
+      "path": "{{ projectPath(variables.dirDestino, variables.nuevoNombre, '.meta.json') }}",
       "content": "{{ json(steps.preparar-metadata) }}",
       "onError": "continue"
     },
@@ -102,8 +93,7 @@
       "type": "emit",
       "event": "facturas-nonina.documento.pendiente",
       "data": {
-        "archivo": "{{ projectPath(variables.dirRecibidas, variables.nuevoNombre) }}",
-        "botName": "{{ trigger.botName }}",
+        "archivo": "{{ projectPath(variables.dirDestino, variables.nuevoNombre) }}",
         "mimeType": "{{ trigger.file.mimeType }}",
         "chatId": "{{ trigger.chatId }}",
         "username": "{{ trigger.username }}",

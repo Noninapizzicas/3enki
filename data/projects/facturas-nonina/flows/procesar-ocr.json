@@ -2,7 +2,7 @@
   "id": "procesar-ocr",
   "name": "Procesar OCR con Google Vision",
   "description": "Extrae texto de documentos recibidos usando Google Vision OCR",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "enabled": true,
 
   "trigger": {
@@ -34,7 +34,7 @@
     {
       "id": "verificar-resultado",
       "type": "condition",
-      "if": "{{ steps.extraer-texto.output.textLength }} > 0",
+      "if": "{{ steps.extraer-texto.success }} == true",
       "then": "guardar-texto",
       "else": "notificar-error-ocr"
     },
@@ -44,7 +44,7 @@
       "service": "fs",
       "action": "write",
       "path": "{{ trigger.archivo }}.ocr.txt",
-      "content": "{{ steps.extraer-texto.output.text }}",
+      "content": "{{ steps.extraer-texto.data.text }}",
       "onError": "continue"
     },
     {
@@ -56,11 +56,11 @@
           "archivo": "{{ trigger.archivo }}",
           "procesado": "{{ now }}",
           "exito": true,
-          "confianza": "{{ steps.extraer-texto.output.confidence }}",
-          "idioma": "{{ steps.extraer-texto.output.locale }}",
-          "bloques": "{{ steps.extraer-texto.output.blocks }}",
-          "caracteresTexto": "{{ steps.extraer-texto.output.textLength }}",
-          "hint": "{{ steps.extraer-texto.output.hint }}"
+          "confianza": "{{ steps.extraer-texto.data.confidence }}",
+          "idioma": "{{ steps.extraer-texto.data.locale }}",
+          "bloques": "{{ steps.extraer-texto.data.blocks }}",
+          "caracteresTexto": "{{ steps.extraer-texto.data.textLength }}",
+          "hint": "{{ steps.extraer-texto.data.hint }}"
         }
       }
     },
@@ -79,28 +79,14 @@
       "service": "telegram",
       "action": "send_message",
       "chatId": "{{ trigger.chatId }}",
-      "text": "OCR completado ({{ steps.extraer-texto.output.confidence }}% confianza).\nTexto extraido: {{ steps.extraer-texto.output.textLength }} caracteres.",
+      "text": "OCR completado ({{ steps.extraer-texto.data.confidence }}% confianza).\nTexto extraido: {{ steps.extraer-texto.data.textLength }} caracteres.",
       "onError": "continue"
     },
     {
       "id": "log-exito",
       "type": "log",
       "level": "info",
-      "message": "OCR completado: {{ trigger.archivo }} - {{ steps.extraer-texto.output.textLength }} chars, {{ steps.extraer-texto.output.confidence }}% confianza"
-    },
-    {
-      "id": "emitir-ocr-completado",
-      "type": "emit",
-      "event": "facturas-nonina.ocr.completado",
-      "data": {
-        "archivo": "{{ trigger.archivo }}",
-        "botName": "{{ trigger.botName }}",
-        "success": true,
-        "textLength": "{{ steps.extraer-texto.output.textLength }}",
-        "confidence": "{{ steps.extraer-texto.output.confidence }}",
-        "chatId": "{{ trigger.chatId }}",
-        "username": "{{ trigger.username }}"
-      }
+      "message": "OCR completado: {{ trigger.archivo }} - {{ steps.extraer-texto.data.textLength }} chars, {{ steps.extraer-texto.data.confidence }}% confianza"
     },
     {
       "id": "notificar-error-ocr",

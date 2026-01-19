@@ -16,7 +16,7 @@
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "@/projects/facturas-nonina/inbox",
+      "path": "{{ projectPath('inbox') }}",
       "onError": "continue"
     },
     {
@@ -52,7 +52,7 @@
       "service": "gmail",
       "action": "attachments.download",
       "messageIds": "{{ steps.buscar-emails.data.messages }}",
-      "outputDir": "@/projects/facturas-nonina/inbox",
+      "outputDir": "{{ projectPath('inbox') }}",
       "mimeTypes": ["image/jpeg", "image/png", "application/pdf"],
       "markAsRead": true
     },

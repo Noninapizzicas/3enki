@@ -72,7 +72,7 @@
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "@/projects/facturas-nonina/datos/{{ date }}_{{ last(split(trigger.archivo, '/')) }}.json",
+      "path": "{{ projectPath('datos/', date, '_', last(split(trigger.archivo, '/')), '.json') }}",
       "content": "{{ json(steps.preparar-resultado) }}"
     },
     {
@@ -81,7 +81,7 @@
       "service": "fs",
       "action": "move",
       "from": "{{ trigger.archivo }}",
-      "to": "@/projects/facturas-nonina/originales/{{ last(split(trigger.archivo, '/')) }}",
+      "to": "{{ projectPath('originales/', last(split(trigger.archivo, '/'))) }}",
       "onError": "continue"
     },
     {
@@ -104,7 +104,7 @@
       "event": "facturas-nonina.factura.procesada",
       "data": {
         "archivo": "{{ trigger.archivo }}",
-        "json": "@/projects/facturas-nonina/datos/{{ date }}_{{ last(split(trigger.archivo, '/')) }}.json"
+        "json": "{{ projectPath('datos/', date, '_', last(split(trigger.archivo, '/')), '.json') }}"
       }
     },
     {

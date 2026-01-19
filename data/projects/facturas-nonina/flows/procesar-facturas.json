@@ -20,7 +20,7 @@
           "type": "service",
           "service": "fs",
           "action": "mkdir",
-          "path": "@/projects/facturas-nonina/datos",
+          "path": "{{ projectPath('datos') }}",
           "onError": "continue"
         },
         {
@@ -28,7 +28,7 @@
           "type": "service",
           "service": "fs",
           "action": "mkdir",
-          "path": "@/projects/facturas-nonina/originales",
+          "path": "{{ projectPath('originales') }}",
           "onError": "continue"
         }
       ]
@@ -38,7 +38,7 @@
       "type": "service",
       "service": "fs",
       "action": "list",
-      "path": "@/projects/facturas-nonina/inbox",
+      "path": "{{ projectPath('inbox') }}",
       "pattern": "*.{jpg,jpeg,png,pdf,webp}"
     },
     {

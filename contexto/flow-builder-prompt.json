@@ -203,8 +203,8 @@
     "_fuente": "contexto/lecciones-aprendidas-flow-engine.json",
     "verificar": [
       "Nombres de bots/cuentas copiados EXACTAMENTE (no inventados)",
-      "Rutas usan @/ para ser autocontenidas",
-      "Rutas de trigger usan {{ globalPath(trigger.file.path) }}",
+      "Rutas dentro del proyecto usan {{ projectPath('carpeta') }} o {{ projectPath('carpeta/', variable, '.json') }}",
+      "Rutas de trigger externas usan {{ globalPath(trigger.file.path) }}",
       "Contenido JSON usa {{ json(variable) }}",
       "Valores opcionales usan {{ default(valor, 'fallback') }}",
       "OCR accede a steps.ocr.data.text (NO steps.ocr.text)",

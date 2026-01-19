@@ -21,7 +21,7 @@
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "@/projects/facturas-nonina/inbox",
+      "path": "{{ projectPath('inbox') }}",
       "onError": "continue"
     },
     {
@@ -30,14 +30,14 @@
       "service": "fs",
       "action": "copy",
       "from": "{{ globalPath(trigger.file.path) }}",
-      "to": "@/projects/facturas-nonina/inbox/{{ trigger.file.originalName }}"
+      "to": "{{ projectPath('inbox/', trigger.file.originalName) }}"
     },
     {
       "id": "guardar-metadata",
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "@/projects/facturas-nonina/inbox/{{ trigger.file.originalName }}.meta.json",
+      "path": "{{ projectPath('inbox/', trigger.file.originalName, '.meta.json') }}",
       "content": "{{ json({ fuente: 'telegram', chatId: trigger.chatId, userId: trigger.userId, username: trigger.username, fecha: now, archivoOriginal: trigger.file.originalName, mimeType: trigger.file.mimeType, size: trigger.file.size }) }}"
     },
     {

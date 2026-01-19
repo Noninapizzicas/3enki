@@ -16,7 +16,7 @@
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "@/projects/facturas-nonina/exports",
+      "path": "{{ projectPath('exports') }}",
       "onError": "continue"
     },
     {
@@ -24,7 +24,7 @@
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "@/projects/facturas-nonina/archivados",
+      "path": "{{ projectPath('archivados') }}",
       "onError": "continue"
     },
     {
@@ -32,7 +32,7 @@
       "type": "service",
       "service": "fs",
       "action": "list",
-      "path": "@/projects/facturas-nonina/datos"
+      "path": "{{ projectPath('datos') }}"
     },
     {
       "id": "verificar-datos",
@@ -68,15 +68,15 @@
       "action": "createFromFiles",
       "files": [
         {
-          "source": "@/projects/facturas-nonina/originales",
+          "source": "{{ projectPath('originales') }}",
           "name": "originales"
         },
         {
-          "source": "@/projects/facturas-nonina/datos",
+          "source": "{{ projectPath('datos') }}",
           "name": "datos_json"
         }
       ],
-      "output": "@/projects/facturas-nonina/exports/facturas_nonina_{{ variables.semana }}.zip"
+      "output": "{{ projectPath('exports/facturas_nonina_', variables.semana, '.zip') }}"
     },
     {
       "id": "log-zip-creado",
@@ -89,11 +89,11 @@
       "type": "service",
       "service": "gmail",
       "action": "send",
-      "to": "paco.sanchez.mar@gmail.com",
-      "subject": "Facturas Nonina - {{ variables.semana }}",
-      "body": "Adjunto el paquete de facturas de la semana.\n\nContenido del ZIP:\n- Carpeta 'originales': Imágenes y PDFs de las facturas\n- Carpeta 'datos_json': Datos extraídos en formato JSON\n\nTotal facturas procesadas: {{ count(steps.listar-datos.files) }}\n\nPara importar a Excel, puedes usar los archivos JSON de la carpeta datos_json.\n\nSaludos,\nSistema Automático de Facturas Nonina",
+      "to": "{{ config.asesoria.email }}",
+      "subject": "Facturas {{ project.id }} - {{ variables.semana }}",
+      "body": "Adjunto el paquete de facturas de la semana.\n\nContenido del ZIP:\n- Carpeta 'originales': Imágenes y PDFs de las facturas\n- Carpeta 'datos_json': Datos extraídos en formato JSON\n\nTotal facturas procesadas: {{ count(steps.listar-datos.files) }}\n\nPara importar a Excel, puedes usar los archivos JSON de la carpeta datos_json.\n\nSaludos,\nSistema Automático de Facturas",
       "attachments": [
-        "@/projects/facturas-nonina/exports/facturas_nonina_{{ variables.semana }}.zip"
+        "{{ projectPath('exports/facturas_nonina_', variables.semana, '.zip') }}"
       ]
     },
     {
@@ -101,23 +101,23 @@
       "type": "service",
       "service": "fs",
       "action": "mkdir",
-      "path": "@/projects/facturas-nonina/archivados/{{ variables.semana }}"
+      "path": "{{ projectPath('archivados/', variables.semana) }}"
     },
     {
       "id": "archivar-datos",
       "type": "service",
       "service": "fs",
       "action": "move",
-      "from": "@/projects/facturas-nonina/datos",
-      "to": "@/projects/facturas-nonina/archivados/{{ variables.semana }}/datos"
+      "from": "{{ projectPath('datos') }}",
+      "to": "{{ projectPath('archivados/', variables.semana, '/datos') }}"
     },
     {
       "id": "archivar-originales",
       "type": "service",
       "service": "fs",
       "action": "move",
-      "from": "@/projects/facturas-nonina/originales",
-      "to": "@/projects/facturas-nonina/archivados/{{ variables.semana }}/originales"
+      "from": "{{ projectPath('originales') }}",
+      "to": "{{ projectPath('archivados/', variables.semana, '/originales') }}"
     },
     {
       "id": "recrear-directorios",
@@ -128,14 +128,14 @@
           "type": "service",
           "service": "fs",
           "action": "mkdir",
-          "path": "@/projects/facturas-nonina/datos"
+          "path": "{{ projectPath('datos') }}"
         },
         {
           "id": "recrear-originales",
           "type": "service",
           "service": "fs",
           "action": "mkdir",
-          "path": "@/projects/facturas-nonina/originales"
+          "path": "{{ projectPath('originales') }}"
         }
       ]
     },
@@ -143,7 +143,7 @@
       "id": "log-completado",
       "type": "log",
       "level": "info",
-      "message": "Consolidación completada: {{ count(steps.listar-datos.files) }} facturas enviadas a paco.sanchez.mar@gmail.com"
+      "message": "Consolidación completada: {{ count(steps.listar-datos.files) }} facturas enviadas a {{ config.asesoria.email }}"
     }
   ]
 }

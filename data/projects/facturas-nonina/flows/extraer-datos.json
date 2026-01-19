@@ -3,7 +3,7 @@
   "name": "Extraer Datos Estructurados con DeepSeek",
   "description": "Extrae datos estructurados de facturas usando DeepSeek LLM",
   "version": "1.4.2",
-  "enabled": true,
+  "enabled": false,
 
   "trigger": {
     "event": "facturas-nonina.ocr.completado",

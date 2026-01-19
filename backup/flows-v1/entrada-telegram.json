@@ -1,0 +1,61 @@
+{
+  "id": "entrada-telegram",
+  "name": "Entrada Facturas Telegram",
+  "description": "Recibe facturas desde Telegram y las guarda en inbox para procesamiento nocturno",
+  "version": "1.0.0",
+  "enabled": false,
+  "trigger": {
+    "event": "bot.file.stored",
+    "filter": {
+      "botName": "facturas_asesoria_bot",
+      "file.mimeType": {
+        "$in": [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "application/pdf"
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": "crear-inbox",
+      "type": "service",
+      "service": "fs",
+      "action": "mkdir",
+      "path": "{{ projectPath('inbox') }}",
+      "onError": "continue"
+    },
+    {
+      "id": "copiar-a-inbox",
+      "type": "service",
+      "service": "fs",
+      "action": "copy",
+      "from": "{{ globalPath(trigger.file.path) }}",
+      "to": "{{ projectPath('inbox/', trigger.file.originalName) }}"
+    },
+    {
+      "id": "guardar-metadata",
+      "type": "service",
+      "service": "fs",
+      "action": "write",
+      "path": "{{ projectPath('inbox/', trigger.file.originalName, '.meta.json') }}",
+      "content": "{{ json({ fuente: 'telegram', chatId: trigger.chatId, userId: trigger.userId, username: trigger.username, fecha: now, archivoOriginal: trigger.file.originalName, mimeType: trigger.file.mimeType, size: trigger.file.size }) }}"
+    },
+    {
+      "id": "confirmar-recepcion",
+      "type": "service",
+      "service": "telegram",
+      "action": "send_message",
+      "chatId": "{{ trigger.chatId }}",
+      "text": "📥 Factura recibida: {{ trigger.file.originalName }}\n\nSe procesará automáticamente el domingo por la noche."
+    },
+    {
+      "id": "log",
+      "type": "log",
+      "level": "info",
+      "message": "Factura recibida de Telegram: {{ trigger.file.originalName }}"
+    }
+  ]
+}

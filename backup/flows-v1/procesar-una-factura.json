@@ -1,0 +1,121 @@
+{
+  "id": "procesar-una-factura",
+  "name": "Procesar Una Factura",
+  "description": "Procesa una factura específica con OCR + IA. Disparar manualmente o desde otro flujo.",
+  "version": "1.0.0",
+  "enabled": false,
+  "trigger": {
+    "event": "facturas-nonina.procesar.archivo",
+    "filter": {}
+  },
+  "steps": [
+    {
+      "id": "log-inicio",
+      "type": "log",
+      "level": "info",
+      "message": "Procesando factura: {{ trigger.archivo }}"
+    },
+    {
+      "id": "leer-archivo",
+      "type": "service",
+      "service": "fs",
+      "action": "read",
+      "path": "{{ trigger.archivo }}",
+      "encoding": "base64"
+    },
+    {
+      "id": "ocr",
+      "type": "service",
+      "service": "local.google-vision",
+      "action": "extract",
+      "image": "{{ steps.leer-archivo.content }}",
+      "hint": "DOCUMENT_TEXT_DETECTION",
+      "timeout": 120000,
+      "retry": {
+        "attempts": 3,
+        "delay": 2000,
+        "backoff": 2
+      },
+      "onError": "log-error-ocr"
+    },
+    {
+      "id": "extraer-datos",
+      "type": "agent",
+      "system": "Eres un extractor de datos de facturas españolas. Tu trabajo es analizar el texto de una factura y extraer todos los datos relevantes en formato JSON estructurado.\n\nSIEMPRE responde con JSON válido, sin explicaciones adicionales.\nSi un campo no se encuentra, usa null.\nLos importes deben ser números decimales.\nLas fechas deben estar en formato YYYY-MM-DD.",
+      "prompt": "Extrae los datos de esta factura:\n\n{{ steps.ocr.data.text }}\n\nResponde SOLO con este JSON:\n{\n  \"proveedor\": \"nombre de la empresa emisora\",\n  \"cif\": \"CIF/NIF del proveedor\",\n  \"direccion\": \"dirección completa\",\n  \"fecha\": \"YYYY-MM-DD\",\n  \"numero_factura\": \"número de factura\",\n  \"base_imponible\": 0.00,\n  \"iva_porcentaje\": 21,\n  \"iva_importe\": 0.00,\n  \"total\": 0.00,\n  \"concepto\": \"descripción del servicio/producto\",\n  \"forma_pago\": \"transferencia/efectivo/tarjeta/domiciliación\",\n  \"iban\": \"ES00 0000 0000 0000 0000 0000\"\n}",
+      "model": "deepseek-chat",
+      "temperature": 0.1,
+      "timeout": 60000,
+      "onError": "log-error-ia"
+    },
+    {
+      "id": "preparar-resultado",
+      "type": "transform",
+      "operation": "map",
+      "config": {
+        "mapping": {
+          "id": "{{ uuid }}",
+          "fechaProcesamiento": "{{ now }}",
+          "archivoOriginal": "{{ trigger.archivo }}",
+          "nombreArchivo": "{{ last(split(trigger.archivo, '/')) }}",
+          "textoOcr": "{{ default(steps.ocr.data.text, '') }}",
+          "confianzaOcr": "{{ default(steps.ocr.data.confidence, 0) }}",
+          "datosFactura": "{{ steps.extraer-datos.content }}",
+          "fuente": "{{ default(trigger.fuente, 'desconocida') }}"
+        }
+      }
+    },
+    {
+      "id": "guardar-json",
+      "type": "service",
+      "service": "fs",
+      "action": "write",
+      "path": "{{ projectPath('datos/', date, '_', last(split(trigger.archivo, '/')), '.json') }}",
+      "content": "{{ json(steps.preparar-resultado) }}"
+    },
+    {
+      "id": "mover-a-originales",
+      "type": "service",
+      "service": "fs",
+      "action": "move",
+      "from": "{{ trigger.archivo }}",
+      "to": "{{ projectPath('originales/', last(split(trigger.archivo, '/'))) }}",
+      "onError": "continue"
+    },
+    {
+      "id": "eliminar-metadata",
+      "type": "service",
+      "service": "fs",
+      "action": "delete",
+      "path": "{{ trigger.archivo }}.meta.json",
+      "onError": "continue"
+    },
+    {
+      "id": "log-exito",
+      "type": "log",
+      "level": "info",
+      "message": "Factura procesada: {{ last(split(trigger.archivo, '/')) }}"
+    },
+    {
+      "id": "emitir-completado",
+      "type": "emit",
+      "event": "facturas-nonina.factura.procesada",
+      "data": {
+        "archivo": "{{ trigger.archivo }}",
+        "json": "{{ projectPath('datos/', date, '_', last(split(trigger.archivo, '/')), '.json') }}"
+      }
+    },
+    {
+      "id": "log-error-ocr",
+      "type": "log",
+      "level": "error",
+      "message": "Error en OCR para {{ trigger.archivo }}"
+    },
+    {
+      "id": "log-error-ia",
+      "type": "log",
+      "level": "error",
+      "message": "Error en IA para {{ trigger.archivo }}"
+    }
+  ]
+}

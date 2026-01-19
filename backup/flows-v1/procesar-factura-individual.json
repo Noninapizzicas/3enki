@@ -1,0 +1,28 @@
+{
+  "id": "procesar-factura-individual",
+  "name": "Procesar Factura Individual",
+  "description": "Procesa una factura individual con OCR + IA",
+  "version": "1.0.0",
+  "enabled": false,
+  "trigger": {
+    "event": "facturas-nonina.procesar.lote",
+    "filter": {}
+  },
+  "steps": [
+    {
+      "id": "log-inicio",
+      "type": "log",
+      "level": "info",
+      "message": "Iniciando procesamiento de lote: {{ trigger.total }} facturas"
+    },
+    {
+      "id": "procesar-cada-archivo",
+      "type": "emit",
+      "event": "facturas-nonina.procesar.archivo",
+      "_comment": "Por cada archivo en el lote, emitimos un evento individual",
+      "data": {
+        "archivos": "{{ trigger.archivos }}"
+      }
+    }
+  ]
+}

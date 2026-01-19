@@ -244,7 +244,7 @@ class FlowValidator {
   constructor(logger) {
     this.logger = logger;
     this.schema = FLOW_SCHEMA;
-    this.stepTypes = new Set(['service', 'condition', 'parallel', 'agent', 'http', 'delay', 'log', 'set', 'emit']);
+    this.stepTypes = new Set(['service', 'transform', 'condition', 'parallel', 'agent', 'http', 'delay', 'log', 'set', 'emit']);
   }
 
   /**
@@ -461,9 +461,12 @@ class FlowValidator {
         } else if (typeof step.service !== 'string') {
           errors.push(ERROR_MESSAGES.type(`${path}.service`, 'string'));
         }
-        if (!step.function) {
-          errors.push(ERROR_MESSAGES.required(path, 'function'));
-        } else if (typeof step.function !== 'string') {
+        // Accept either 'action' (preferred) or 'function' (legacy)
+        if (!step.action && !step.function) {
+          errors.push(ERROR_MESSAGES.required(path, 'action'));
+        } else if (step.action && typeof step.action !== 'string') {
+          errors.push(ERROR_MESSAGES.type(`${path}.action`, 'string'));
+        } else if (step.function && typeof step.function !== 'string') {
           errors.push(ERROR_MESSAGES.type(`${path}.function`, 'string'));
         }
         if (step.input !== undefined && typeof step.input !== 'object') {
@@ -472,40 +475,52 @@ class FlowValidator {
         break;
 
       case 'condition':
-        if (!step.condition) {
-          errors.push(ERROR_MESSAGES.required(path, 'condition'));
-        } else if (typeof step.condition !== 'string') {
+        // Accept either 'if' (preferred) or 'condition' (legacy)
+        if (!step.if && !step.condition) {
+          errors.push(ERROR_MESSAGES.required(path, 'if'));
+        } else if (step.if && typeof step.if !== 'string') {
+          errors.push(ERROR_MESSAGES.type(`${path}.if`, 'string'));
+        } else if (step.condition && typeof step.condition !== 'string') {
           errors.push(ERROR_MESSAGES.type(`${path}.condition`, 'string'));
         }
+        // then/else can be strings (step references) or arrays (inline steps)
         if (step.then !== undefined) {
-          if (!Array.isArray(step.then)) {
-            errors.push(ERROR_MESSAGES.type(`${path}.then`, 'array'));
-          } else {
+          if (typeof step.then === 'string') {
+            // Step reference - valid
+          } else if (Array.isArray(step.then)) {
             step.then.forEach((s, i) => this.validateStep(s, `${path}.then[${i}]`, errors, stepIds));
+          } else {
+            errors.push(`${path}.then debe ser string (referencia a step) o array de steps`);
           }
         }
         if (step.else !== undefined) {
-          if (!Array.isArray(step.else)) {
-            errors.push(ERROR_MESSAGES.type(`${path}.else`, 'array'));
-          } else {
+          if (typeof step.else === 'string') {
+            // Step reference - valid
+          } else if (Array.isArray(step.else)) {
             step.else.forEach((s, i) => this.validateStep(s, `${path}.else[${i}]`, errors, stepIds));
+          } else {
+            errors.push(`${path}.else debe ser string (referencia a step) o array de steps`);
           }
         }
         break;
 
       case 'parallel':
-        if (!step.branches) {
-          errors.push(ERROR_MESSAGES.required(path, 'branches'));
-        } else if (!Array.isArray(step.branches)) {
-          errors.push(ERROR_MESSAGES.type(`${path}.branches`, 'array'));
-        } else if (step.branches.length === 0) {
-          errors.push(ERROR_MESSAGES.minItems(`${path}.branches`, 1));
+        // Accept either 'steps' (preferred) or 'branches' (legacy)
+        const parallelSteps = step.steps || step.branches;
+        if (!parallelSteps) {
+          errors.push(ERROR_MESSAGES.required(path, 'steps'));
+        } else if (!Array.isArray(parallelSteps)) {
+          errors.push(ERROR_MESSAGES.type(`${path}.steps`, 'array'));
+        } else if (parallelSteps.length === 0) {
+          errors.push(ERROR_MESSAGES.minItems(`${path}.steps`, 1));
         } else {
-          step.branches.forEach((branch, bi) => {
-            if (!Array.isArray(branch)) {
-              errors.push(ERROR_MESSAGES.type(`${path}.branches[${bi}]`, 'array'));
-            } else {
-              branch.forEach((s, si) => this.validateStep(s, `${path}.branches[${bi}][${si}]`, errors, stepIds));
+          // steps is flat array of step objects
+          parallelSteps.forEach((s, i) => {
+            if (typeof s === 'object' && !Array.isArray(s)) {
+              this.validateStep(s, `${path}.steps[${i}]`, errors, stepIds);
+            } else if (Array.isArray(s)) {
+              // branches format: array of arrays
+              s.forEach((innerStep, si) => this.validateStep(innerStep, `${path}.branches[${i}][${si}]`, errors, stepIds));
             }
           });
         }
@@ -513,6 +528,19 @@ class FlowValidator {
           const validWaitFor = ['all', 'first', 'any'];
           if (!validWaitFor.includes(step.waitFor)) {
             errors.push(ERROR_MESSAGES.enum(`${path}.waitFor`, validWaitFor));
+          }
+        }
+        break;
+
+      case 'transform':
+        if (!step.operation) {
+          errors.push(ERROR_MESSAGES.required(path, 'operation'));
+        } else if (typeof step.operation !== 'string') {
+          errors.push(ERROR_MESSAGES.type(`${path}.operation`, 'string'));
+        } else {
+          const validOps = ['map', 'filter', 'reduce', 'sort', 'pick', 'omit', 'merge', 'flatten', 'unique'];
+          if (!validOps.includes(step.operation)) {
+            errors.push(ERROR_MESSAGES.enum(`${path}.operation`, validOps));
           }
         }
         break;

@@ -2,7 +2,7 @@
   "id": "extraer-datos",
   "name": "Extraer Datos Estructurados con DeepSeek",
   "description": "Extrae datos estructurados de facturas usando DeepSeek LLM",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "enabled": true,
 
   "trigger": {
@@ -93,33 +93,6 @@
       "action": "move",
       "from": "{{ trigger.archivo }}",
       "to": "{{ variables.dirProcesadas }}",
-      "onError": "continue"
-    },
-    {
-      "id": "mover-meta",
-      "type": "service",
-      "service": "fs",
-      "action": "move",
-      "from": "{{ trigger.archivo }}.meta.json",
-      "to": "{{ variables.dirProcesadas }}.meta.json",
-      "onError": "continue"
-    },
-    {
-      "id": "mover-ocr-txt",
-      "type": "service",
-      "service": "fs",
-      "action": "move",
-      "from": "{{ trigger.archivo }}.ocr.txt",
-      "to": "{{ variables.dirProcesadas }}.ocr.txt",
-      "onError": "continue"
-    },
-    {
-      "id": "mover-ocr-json",
-      "type": "service",
-      "service": "fs",
-      "action": "move",
-      "from": "{{ trigger.archivo }}.ocr.json",
-      "to": "{{ variables.dirProcesadas }}.ocr.json",
       "onError": "continue"
     },
     {

@@ -2,7 +2,7 @@
   "id": "extraer-datos",
   "name": "Extraer Datos Estructurados con DeepSeek",
   "description": "Extrae datos estructurados de facturas usando DeepSeek LLM",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "enabled": true,
 
   "trigger": {
@@ -18,6 +18,22 @@
       "type": "log",
       "level": "info",
       "message": "Extrayendo datos de: {{ trigger.archivo }}"
+    },
+    {
+      "id": "set-variables",
+      "type": "set",
+      "variables": {
+        "dirProcesadas": "{{ replace(trigger.archivo, '/recibidas/', '/procesadas/') }}",
+        "nombreArchivo": "{{ last(split(trigger.archivo, '/')) }}"
+      }
+    },
+    {
+      "id": "crear-dir-procesadas",
+      "type": "service",
+      "service": "fs",
+      "action": "mkdir",
+      "path": "{{ projectPath(trigger.botName, '/procesadas/') }}",
+      "onError": "continue"
     },
     {
       "id": "leer-texto-ocr",
@@ -66,7 +82,7 @@
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "{{ trigger.archivo }}.datos.json",
+      "path": "{{ variables.dirProcesadas }}.datos.json",
       "content": "{{ json(steps.preparar-resultado) }}",
       "onError": "continue"
     },
@@ -100,7 +116,7 @@
       "type": "service",
       "service": "fs",
       "action": "write",
-      "path": "{{ trigger.archivo }}.datos-raw.txt",
+      "path": "{{ variables.dirProcesadas }}.datos-raw.txt",
       "content": "{{ steps.extraer-con-deepseek.output.content }}",
       "onError": "continue"
     },

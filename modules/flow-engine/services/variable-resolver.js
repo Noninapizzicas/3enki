@@ -177,6 +177,11 @@ class VariableResolver {
 
         const relativePath = parts.join('').replace(/^\//, '');
 
+        // Si ya es una ruta completa @/, devolverla tal cual (evitar doble prefijo)
+        if (relativePath.startsWith('@/')) {
+          return relativePath;
+        }
+
         if (!projectId) {
           this.logger?.warn('variable-resolver.projectPath.no_project', { relativePath });
           return `@/${relativePath}`; // Fallback sin proyecto

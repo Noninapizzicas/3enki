@@ -228,6 +228,22 @@ class VariableResolver {
         const path = this.getValue(args[0], ctx) || this._parseArg(args[0]) || '';
         return path.replace(/\/+/g, '/').replace('@/', '@/');
       },
+      parseJson: (args, ctx) => {
+        // parseJson(string) - Parsea un string JSON a objeto
+        const value = this.getValue(args[0], ctx) || this._parseArg(args[0]) || '';
+        if (typeof value === 'object') return value; // Ya es objeto
+        try {
+          // Limpiar posibles markdown code blocks
+          let clean = value.trim();
+          if (clean.startsWith('```json')) clean = clean.slice(7);
+          if (clean.startsWith('```')) clean = clean.slice(3);
+          if (clean.endsWith('```')) clean = clean.slice(0, -3);
+          return JSON.parse(clean.trim());
+        } catch (e) {
+          this.logger?.warn('variable-resolver.parseJson.error', { error: e.message });
+          return null;
+        }
+      },
 
       // === Type conversion ===
       int: (args, ctx) => parseInt(this.getValue(args[0], ctx)) || 0,

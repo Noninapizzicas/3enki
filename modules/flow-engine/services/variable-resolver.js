@@ -184,9 +184,11 @@ class VariableResolver {
 
         if (!projectId) {
           this.logger?.warn('variable-resolver.projectPath.no_project', { relativePath });
-          return `@/${relativePath}`; // Fallback sin proyecto
+          return `@/${relativePath}`.replace(/\/+/g, '/'); // Fallback sin proyecto
         }
-        return `@/projects/${projectId}/${relativePath}`;
+        // Limpiar dobles // excepto en @/
+        const result = `@/projects/${projectId}/${relativePath}`;
+        return result.replace(/([^:])\/+/g, '$1/');
       },
       json: (args, ctx) => {
         const value = this.getValue(args[0], ctx);
@@ -201,6 +203,30 @@ class VariableResolver {
           return this._parseArg(args[1]) || '';
         }
         return value;
+      },
+
+      // === File/Path functions ===
+      mimeToExt: (args, ctx) => {
+        // mimeToExt(mimeType) - Convierte mimeType a extensión de archivo
+        const mimeType = this.getValue(args[0], ctx) || this._parseArg(args[0]) || '';
+        const map = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png',
+          'image/webp': '.webp',
+          'image/gif': '.gif',
+          'image/bmp': '.bmp',
+          'image/tiff': '.tiff',
+          'application/pdf': '.pdf',
+          'text/plain': '.txt',
+          'application/json': '.json',
+          'application/xml': '.xml'
+        };
+        return map[mimeType] || '';
+      },
+      cleanPath: (args, ctx) => {
+        // cleanPath(path) - Limpia rutas removiendo dobles //
+        const path = this.getValue(args[0], ctx) || this._parseArg(args[0]) || '';
+        return path.replace(/\/+/g, '/').replace('@/', '@/');
       },
 
       // === Type conversion ===

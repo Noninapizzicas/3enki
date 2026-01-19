@@ -2,7 +2,7 @@
   "id": "recibir-documento",
   "name": "Recibir Documento",
   "description": "Recibe archivos del bot Telegram, los renombra con timestamp y guarda metadata",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "enabled": true,
 
   "trigger": {
@@ -22,7 +22,8 @@
       "variables": {
         "fechaHora": "{{ replace(replace(substring(now, 0, 19), 'T', '-'), ':', '') }}",
         "nombreOriginal": "{{ trigger.file.originalName }}",
-        "nuevoNombre": "{{ replace(replace(substring(now, 0, 19), 'T', '-'), ':', '') }}_{{ trigger.file.originalName }}",
+        "extension": "{{ mimeToExt(trigger.file.mimeType) }}",
+        "nuevoNombre": "{{ replace(replace(substring(now, 0, 19), 'T', '-'), ':', '') }}_{{ trigger.file.originalName }}{{ mimeToExt(trigger.file.mimeType) }}",
         "dirDestino": "{{ trigger.botName }}/recibidas/"
       }
     },

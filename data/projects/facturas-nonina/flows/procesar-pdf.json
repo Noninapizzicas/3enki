@@ -2,7 +2,7 @@
   "id": "procesar-pdf",
   "name": "Procesar PDF con OCR",
   "description": "Convierte PDF a imagen y extrae texto con Google Vision",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "enabled": true,
 
   "trigger": {
@@ -35,7 +35,7 @@
       "service": "fs",
       "action": "write",
       "path": "{{ trigger.archivo }}.png",
-      "content": "{{ steps.convertir-pdf.data.images[0].base64 }}",
+      "content": "{{ steps.convertir-pdf.data.images[0].content }}",
       "encoding": "base64",
       "onError": "notificar-error"
     },
@@ -44,7 +44,7 @@
       "type": "service",
       "service": "local.google-vision",
       "action": "extract",
-      "image": "{{ steps.convertir-pdf.data.images[0].base64 }}",
+      "image": "{{ steps.convertir-pdf.data.images[0].content }}",
       "hint": "DOCUMENT_TEXT_DETECTION",
       "languageHints": ["es", "en"],
       "onError": "notificar-error"

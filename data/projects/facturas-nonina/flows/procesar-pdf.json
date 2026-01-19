@@ -2,7 +2,7 @@
   "id": "procesar-pdf",
   "name": "Procesar PDF con OCR",
   "description": "Convierte PDF a imagen y extrae texto con Google Vision",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "enabled": true,
 
   "trigger": {
@@ -23,7 +23,8 @@
       "id": "set-variables",
       "type": "set",
       "variables": {
-        "pngPath": "{{ trigger.archivo }}.png"
+        "dirOutput": "{{ replace(trigger.archivo, last(split(trigger.archivo, '/')), '') }}",
+        "pdfName": "{{ last(split(trigger.archivo, '/')) }}"
       }
     },
     {
@@ -34,37 +35,21 @@
       "pdf": "{{ trigger.archivo }}",
       "pages": [1],
       "scale": 2,
+      "outputFolder": "{{ variables.dirOutput }}",
       "onError": "notificar-error"
     },
     {
       "id": "log-conversion",
       "type": "log",
       "level": "info",
-      "message": "PDF convertido: {{ steps.convertir-pdf.data.totalPages }} páginas, imagen content length: {{ length(steps.convertir-pdf.data.images[0].content) }}"
-    },
-    {
-      "id": "verificar-conversion",
-      "type": "condition",
-      "if": "{{ steps.convertir-pdf.success }} == true",
-      "then": "guardar-imagen",
-      "else": "notificar-error"
-    },
-    {
-      "id": "guardar-imagen",
-      "type": "service",
-      "service": "fs",
-      "action": "write",
-      "path": "{{ variables.pngPath }}",
-      "content": "{{ steps.convertir-pdf.data.images[0].content }}",
-      "encoding": "base64",
-      "onError": "notificar-error"
+      "message": "PDF convertido: totalPages={{ steps.convertir-pdf.data.totalPages }}, path={{ steps.convertir-pdf.data.images[0].path }}"
     },
     {
       "id": "extraer-texto",
       "type": "service",
       "service": "local.google-vision",
       "action": "extract",
-      "image": "{{ variables.pngPath }}",
+      "image": "{{ steps.convertir-pdf.data.images[0].path }}",
       "hint": "DOCUMENT_TEXT_DETECTION",
       "languageHints": ["es", "en"],
       "onError": "notificar-error"
@@ -75,7 +60,7 @@
       "service": "fs",
       "action": "write",
       "path": "{{ trigger.archivo }}.ocr.txt",
-      "content": "{{ steps.extraer-texto.data.text }}",
+      "content": "{{ steps.extraer-texto.text }}",
       "onError": "continue"
     },
     {
@@ -85,13 +70,13 @@
       "config": {
         "mapping": {
           "archivo": "{{ trigger.archivo }}",
-          "imagenPNG": "{{ variables.pngPath }}",
+          "imagenPNG": "{{ steps.convertir-pdf.data.images[0].path }}",
           "procesado": "{{ now }}",
           "exito": true,
-          "confianza": "{{ steps.extraer-texto.data.confidence }}",
-          "idioma": "{{ steps.extraer-texto.data.locale }}",
-          "bloques": "{{ steps.extraer-texto.data.blocks }}",
-          "caracteresTexto": "{{ steps.extraer-texto.data.textLength }}",
+          "confianza": "{{ steps.extraer-texto.confidence }}",
+          "idioma": "{{ steps.extraer-texto.locale }}",
+          "bloques": "{{ steps.extraer-texto.blocks }}",
+          "caracteresTexto": "{{ steps.extraer-texto.textLength }}",
           "paginasPDF": "{{ steps.convertir-pdf.data.totalPages }}"
         }
       }
@@ -111,14 +96,14 @@
       "service": "telegram",
       "action": "send_message",
       "chatId": "{{ trigger.chatId }}",
-      "text": "📄 PDF procesado ({{ steps.extraer-texto.data.confidence }}% confianza).\nTexto extraído: {{ steps.extraer-texto.data.textLength }} caracteres.",
+      "text": "📄 PDF procesado ({{ steps.extraer-texto.confidence }}% confianza).\nTexto extraído: {{ steps.extraer-texto.textLength }} caracteres.",
       "onError": "continue"
     },
     {
       "id": "log-exito",
       "type": "log",
       "level": "info",
-      "message": "PDF OCR completado: {{ trigger.archivo }} - {{ steps.extraer-texto.data.textLength }} chars"
+      "message": "PDF OCR completado: {{ trigger.archivo }} - {{ steps.extraer-texto.textLength }} chars"
     },
     {
       "id": "notificar-error",

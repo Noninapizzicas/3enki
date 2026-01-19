@@ -238,7 +238,13 @@ module.exports = {
           fs.mkdirSync(outputFolder, { recursive: true });
         }
         options.outputFolder = outputFolder;
-        options.outputFileMaskFunc = (pageNumber) => `page_${pageNumber}.png`;
+
+        // Usar nombre del PDF como prefijo para evitar colisiones
+        let pdfBasename = 'page';
+        if (typeof resolved.input === 'string' && resolved.input.includes('/')) {
+          pdfBasename = path.basename(resolved.input, '.pdf');
+        }
+        options.outputFileMaskFunc = (pageNumber) => `${pdfBasename}_page_${pageNumber}.png`;
       }
 
       // Contraseña

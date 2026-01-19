@@ -138,10 +138,20 @@
       "archivo_excel": {"service": "local.xlsx", "action": "create", "estado": "✅"},
       "archivo_csv": {"service": "local.csv", "action": "create", "estado": "✅"},
       "archivo_pdf": {"service": "local.pdf", "action": "create", "estado": "✅"},
+      "archivo_zip": {"service": "local.zip", "action": "create/createFromFiles", "estado": "✅"},
       "mensaje_telegram": {"service": "telegram", "action": "send_message", "estado": "✅"},
       "email_gmail": {"service": "gmail", "action": "send", "estado": "✅", "requiere": "OAuth Gmail"},
       "evento": {"type": "emit", "estado": "✅"},
       "http_webhook": {"type": "http", "estado": "✅"}
+    },
+
+    "compresion_disponible": {
+      "_consultar": "services/providers/local/zip/",
+      "local.zip": {
+        "acciones": ["create", "createFromFiles", "addDirectory"],
+        "credencial": false,
+        "caracteristicas": "Crear ZIP desde directorio, lista de archivos o añadir carpetas. Soporta @/ para rutas."
+      }
     }
   },
 

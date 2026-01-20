@@ -1,12 +1,20 @@
 /**
  * Handler Loader
  *
- * Carga y gestiona handlers de eventos (reemplazo de flow-engine).
+ * Carga y gestiona handlers de eventos.
  * Soporta handlers globales y por proyecto.
  *
  * Estructura:
- * - handlers/           → Handlers globales (sin project_id)
- * - data/projects/X/handlers/ → Handlers del proyecto X (inyecta project_id: X)
+ * - handlers/           → Handlers globales
+ * - data/projects/X/handlers/ → Handlers del proyecto X
+ *
+ * Context del handler:
+ * - services: Llamar servicios (project_id inyectado automáticamente)
+ * - logger: Logging estructurado
+ * - projectId: ID del proyecto (null si global)
+ * - emit: Emitir eventos para encadenar handlers
+ * - config: Configuración del proyecto (de config/*.json)
+ * - store: Key-value persistente
  *
  * @example
  * const loader = new HandlerLoader(eventBus, serviceExecutor, logger);
@@ -16,6 +24,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const HandlerStore = require('./handler-store');
 
 class HandlerLoader {
   constructor(eventBus, serviceExecutor, logger) {
@@ -23,8 +33,136 @@ class HandlerLoader {
     this.executor = serviceExecutor;
     this.logger = logger;
 
-    // Map: "scope:handlerName" -> { handler, unsubscribe, projectId }
+    // Map: "scope:handlerName" -> { handler, unsubscribe, projectId, store }
     this.handlers = new Map();
+
+    // Cache de config por proyecto
+    this.configCache = new Map();
+  }
+
+  /**
+   * Carga configuración de un proyecto
+   * Lee todos los JSON de data/projects/{id}/config/
+   *
+   * @param {string} projectId
+   * @returns {Object} Config merged { project: {...}, facturas: {...}, ... }
+   */
+  loadProjectConfig(projectId) {
+    // Check cache
+    if (this.configCache.has(projectId)) {
+      return this.configCache.get(projectId);
+    }
+
+    const config = {};
+    const configDir = path.join('./data/projects', projectId, 'config');
+
+    try {
+      if (fs.existsSync(configDir)) {
+        const files = fs.readdirSync(configDir).filter(f => f.endsWith('.json'));
+
+        for (const file of files) {
+          try {
+            const filePath = path.join(configDir, file);
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const name = file.replace('.json', '');
+            config[name] = JSON.parse(content);
+          } catch (error) {
+            this.logger?.warn('handlers.config.file.error', {
+              projectId,
+              file,
+              error: error.message
+            });
+          }
+        }
+      }
+    } catch (error) {
+      this.logger?.warn('handlers.config.error', {
+        projectId,
+        error: error.message
+      });
+    }
+
+    this.configCache.set(projectId, config);
+    return config;
+  }
+
+  /**
+   * Carga configuración global
+   * @returns {Object}
+   */
+  loadGlobalConfig() {
+    if (this.configCache.has('__global__')) {
+      return this.configCache.get('__global__');
+    }
+
+    let config = {};
+    try {
+      if (fs.existsSync('./config.json')) {
+        config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+      }
+    } catch (error) {
+      this.logger?.warn('handlers.config.global.error', { error: error.message });
+    }
+
+    this.configCache.set('__global__', config);
+    return config;
+  }
+
+  /**
+   * Invalida cache de config (para hot-reload)
+   * @param {string} projectId - null para global
+   */
+  invalidateConfigCache(projectId = null) {
+    if (projectId) {
+      this.configCache.delete(projectId);
+    } else {
+      this.configCache.clear();
+    }
+  }
+
+  /**
+   * Crea función emit para un handler
+   *
+   * @param {string} handlerName
+   * @param {string|null} projectId
+   * @returns {Function}
+   */
+  createEmit(handlerName, projectId) {
+    return (evento, data = {}) => {
+      // Validar evento
+      if (typeof evento !== 'string' || !evento.trim()) {
+        this.logger?.error('handler.emit.invalid', {
+          handler: handlerName,
+          reason: 'Event name must be non-empty string'
+        });
+        return;
+      }
+
+      // Construir payload con metadata
+      const payload = {
+        ...data,
+        _meta: {
+          source: handlerName,
+          projectId: projectId || null,
+          correlationId: data._meta?.correlationId || crypto.randomUUID(),
+          timestamp: Date.now(),
+          emittedAt: new Date().toISOString()
+        }
+      };
+
+      // Propagar correlationId del evento original si existe
+      if (data._sourceEvent?._meta?.correlationId) {
+        payload._meta.correlationId = data._sourceEvent._meta.correlationId;
+      }
+
+      this.eventBus.publish(evento, payload);
+
+      this.logger?.debug('handler.emit', {
+        handler: handlerName,
+        event: evento,
+        correlationId: payload._meta.correlationId
+      });
+    };
   }
 
   /**
@@ -72,6 +210,9 @@ class HandlerLoader {
       this.handlers.delete(key);
     }
 
+    // Invalidar cache de config
+    this.invalidateConfigCache(projectId);
+
     this.logger?.info('handlers.project.unloaded', {
       projectId,
       count: toRemove.length
@@ -91,7 +232,9 @@ class HandlerLoader {
     }
 
     const files = fs.readdirSync(dir).filter(f =>
-      f.endsWith('.js') && f !== 'index.js'
+      f.endsWith('.js') &&
+      !f.startsWith('_') &&  // Ignorar archivos que empiezan con _
+      f !== 'index.js'
     );
 
     let loaded = 0;
@@ -109,7 +252,8 @@ class HandlerLoader {
       } catch (error) {
         this.logger?.error('handlers.load.failed', {
           file,
-          error: error.message
+          error: error.message,
+          stack: error.stack
         });
       }
     }
@@ -143,28 +287,64 @@ class HandlerLoader {
       return;
     }
 
+    // Verificar que handle es función
+    if (typeof handle !== 'function') {
+      this.logger?.warn('handlers.invalid', {
+        name,
+        reason: 'handle must be a function'
+      });
+      return;
+    }
+
     // Crear services con scope del proyecto
     const services = projectId
       ? this.executor.scoped(projectId)
       : { call: (s, a, p, o) => this.executor.call(s, a, p, o) };
 
+    // Crear emit
+    const emit = this.createEmit(name, projectId);
+
+    // Cargar config
+    const config = projectId
+      ? this.loadProjectConfig(projectId)
+      : this.loadGlobalConfig();
+
+    // Crear store
+    const store = new HandlerStore(projectId, name);
+
     // Suscribirse al evento
     const unsubscribe = this.eventBus.subscribe(trigger, async (event) => {
       // Aplicar filtro si existe
-      if (filter && !filter(event)) return;
+      if (filter) {
+        try {
+          if (!filter(event)) return;
+        } catch (filterError) {
+          this.logger?.error('handler.filter.error', {
+            name,
+            error: filterError.message
+          });
+          return;
+        }
+      }
 
       const startTime = Date.now();
+      const correlationId = event._meta?.correlationId || crypto.randomUUID();
 
       try {
         const result = await handle(event, {
           services,
           logger: this.logger,
-          projectId
+          projectId,
+          emit,
+          config,
+          store
         });
 
         this.logger?.info('handler.completed', {
           name,
           projectId,
+          trigger,
+          correlationId,
           duration: Date.now() - startTime
         });
 
@@ -173,14 +353,32 @@ class HandlerLoader {
         this.logger?.error('handler.failed', {
           name,
           projectId,
+          trigger,
+          correlationId,
           error: error.message,
+          stack: error.stack,
           duration: Date.now() - startTime
+        });
+
+        // Emitir evento de error para posible handling
+        emit(`${name}.error`, {
+          error: error.message,
+          trigger,
+          event,
+          _sourceEvent: event
         });
       }
     });
 
     const key = `${projectId || 'global'}:${name}`;
-    this.handlers.set(key, { handler, unsubscribe, projectId });
+    this.handlers.set(key, { handler, unsubscribe, projectId, store });
+
+    this.logger?.debug('handler.registered', {
+      name,
+      trigger,
+      projectId,
+      hasFilter: !!filter
+    });
   }
 
   /**
@@ -198,12 +396,25 @@ class HandlerLoader {
           name: data.handler.name,
           trigger: data.handler.trigger,
           projectId: data.projectId,
-          description: data.handler.description
+          description: data.handler.description,
+          enabled: data.handler.enabled !== false
         });
       }
     }
 
     return result;
+  }
+
+  /**
+   * Obtiene un handler por nombre
+   *
+   * @param {string} name
+   * @param {string|null} projectId
+   * @returns {Object|null}
+   */
+  get(name, projectId = null) {
+    const key = `${projectId || 'global'}:${name}`;
+    return this.handlers.get(key)?.handler || null;
   }
 
   /**
@@ -214,6 +425,7 @@ class HandlerLoader {
       data.unsubscribe();
     }
     this.handlers.clear();
+    this.configCache.clear();
   }
 
   /**
@@ -227,12 +439,34 @@ class HandlerLoader {
   }
 
   /**
+   * Recarga handlers globales
+   */
+  reloadGlobal() {
+    // Descargar globales
+    const toRemove = [];
+    for (const [key, data] of this.handlers) {
+      if (!data.projectId) {
+        data.unsubscribe();
+        toRemove.push(key);
+      }
+    }
+    for (const key of toRemove) {
+      this.handlers.delete(key);
+    }
+    this.invalidateConfigCache(null);
+
+    // Recargar
+    this.loadGlobal();
+  }
+
+  /**
    * Estadísticas
    */
   getStats() {
-    const stats = { global: 0, byProject: {} };
+    const stats = { total: 0, global: 0, byProject: {} };
 
     for (const [key, data] of this.handlers) {
+      stats.total++;
       if (data.projectId) {
         stats.byProject[data.projectId] = (stats.byProject[data.projectId] || 0) + 1;
       } else {

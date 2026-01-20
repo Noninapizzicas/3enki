@@ -1,13 +1,15 @@
 {
-  "_VERSION": "1.0.0",
+  "_VERSION": "2.0.0",
   "_CREATED": "2026-01-20",
+  "_UPDATED": "2026-01-20",
   "_DESCRIPTION": "Sistema de Handlers - Orquestación de eventos con JavaScript directo",
 
   "_AI_INSTRUCTIONS": {
     "cuando_leer": "Cuando necesites crear flujos de automatización o entender cómo se procesan eventos",
     "principio_clave": "Handlers son JavaScript puro - NO inventar sintaxis especial",
     "regla_credenciales": "La ubicación del handler determina qué credenciales usa",
-    "simplicidad": "Si algo se puede hacer en JS, hazlo en JS - sin abstracciones innecesarias"
+    "simplicidad": "Si algo se puede hacer en JS, hazlo en JS - sin abstracciones innecesarias",
+    "encadenamiento": "Usa emit() para conectar handlers entre sí"
   },
 
   "overview": {
@@ -17,7 +19,10 @@
       "JavaScript nativo - debugging con stack traces",
       "Sin sintaxis especial - autocompletado funciona",
       "Credenciales automáticas por ubicación",
-      "Hot-reload de handlers"
+      "Hot-reload de handlers",
+      "Encadenamiento via emit()",
+      "Config del proyecto accesible",
+      "Store persistente por handler"
     ]
   },
 
@@ -25,169 +30,368 @@
     "global": {
       "path": "handlers/*.js",
       "credenciales": "GLOBAL",
+      "config": "config.json (raíz)",
+      "store": "data/handler-store/{handlerName}.json",
       "uso": "Automatizaciones del sistema, sin proyecto específico"
     },
     "proyecto": {
       "path": "data/projects/{projectId}/handlers/*.js",
       "credenciales": "PROJECT_{projectId} → fallback GLOBAL",
+      "config": "data/projects/{projectId}/config/*.json",
+      "store": "data/projects/{projectId}/handler-store/{handlerName}.json",
       "uso": "Automatizaciones específicas de un proyecto"
     }
   },
 
-  "anatomia_handler": {
-    "campos": {
-      "name": {
-        "tipo": "string",
-        "requerido": true,
-        "descripcion": "Nombre único del handler"
+  "context": {
+    "descripcion": "Objeto que recibe la función handle(event, context)",
+    "propiedades": {
+      "services": {
+        "tipo": "object",
+        "descripcion": "Executor para llamar servicios",
+        "metodo": "call(service, action, params)",
+        "ejemplo": "await services.call('local.google-vision', 'extract', { image: path })",
+        "nota": "project_id se inyecta automáticamente según ubicación del handler"
       },
-      "description": {
-        "tipo": "string",
-        "requerido": false,
-        "descripcion": "Descripción para documentación"
+      "logger": {
+        "tipo": "object",
+        "descripcion": "Logger estructurado del sistema",
+        "metodos": ["debug", "info", "warn", "error"],
+        "ejemplo": "logger.info('Procesando', { archivo: event.path })"
       },
-      "trigger": {
-        "tipo": "string",
-        "requerido": true,
-        "descripcion": "Evento que dispara el handler"
+      "projectId": {
+        "tipo": "string|null",
+        "descripcion": "ID del proyecto al que pertenece el handler",
+        "valor": "null si es handler global"
       },
-      "enabled": {
-        "tipo": "boolean",
-        "requerido": false,
-        "default": true,
-        "descripcion": "Si el handler está activo"
-      },
-      "filter": {
+      "emit": {
         "tipo": "function",
-        "requerido": false,
-        "descripcion": "Función que filtra eventos (event) => boolean"
+        "descripcion": "Emitir eventos para encadenar con otros handlers",
+        "firma": "emit(evento, data)",
+        "ejemplo": "emit('documento.procesado', { texto, confianza })",
+        "metadata": "Añade automáticamente _meta con source, projectId, correlationId, timestamp"
       },
-      "handle": {
-        "tipo": "async function",
-        "requerido": true,
-        "descripcion": "Lógica del handler (event, context) => any"
+      "config": {
+        "tipo": "object",
+        "descripcion": "Configuración del proyecto",
+        "estructura": "{ nombreArchivo: contenido } para cada JSON en config/",
+        "ejemplo": "config.facturas.ocr.provider → 'local.google-vision'"
+      },
+      "store": {
+        "tipo": "object",
+        "descripcion": "Key-value persistente para el handler",
+        "metodos": ["get", "set", "delete", "increment", "has", "keys", "getAll", "clear"],
+        "persistencia": "JSON file por handler",
+        "ejemplo": "await store.increment('contador')"
       }
-    },
-    "context": {
-      "services": "Executor para llamar servicios (inyecta project_id automático)",
-      "logger": "Logger del sistema",
-      "projectId": "ID del proyecto (null si global)"
     }
   },
 
-  "ejemplo_handler": {
-    "archivo": "data/projects/mi-proyecto/handlers/procesar-documento.js",
+  "emit": {
+    "descripcion": "Función para emitir eventos y encadenar handlers",
+    "uso": "emit(evento, data)",
+    "metadata_automatica": {
+      "_meta.source": "Nombre del handler que emite",
+      "_meta.projectId": "ID del proyecto (null si global)",
+      "_meta.correlationId": "UUID para trazabilidad (se propaga)",
+      "_meta.timestamp": "Timestamp en ms",
+      "_meta.emittedAt": "ISO string del momento"
+    },
+    "ejemplo": {
+      "codigo": "emit('factura.procesada', { proveedor: 'Acme', total: 100 })",
+      "resultado": {
+        "proveedor": "Acme",
+        "total": 100,
+        "_meta": {
+          "source": "procesar-factura",
+          "projectId": "facturas-nonina",
+          "correlationId": "uuid...",
+          "timestamp": 1705766400000,
+          "emittedAt": "2026-01-20T12:00:00.000Z"
+        }
+      }
+    },
+    "buenas_practicas": [
+      "Usar nombres descriptivos: {dominio}.{accion} (documento.validado, factura.extraida)",
+      "Incluir datos necesarios para el siguiente handler",
+      "No incluir datos sensibles innecesarios",
+      "El correlationId se propaga automáticamente para trazabilidad"
+    ]
+  },
+
+  "config": {
+    "descripcion": "Configuración del proyecto accesible en el handler",
+    "carga": "Automática al registrar handler, desde data/projects/{id}/config/*.json",
+    "estructura": {
+      "ejemplo_archivos": [
+        "config/project.json → config.project",
+        "config/facturas.json → config.facturas",
+        "config/telegram.json → config.telegram"
+      ]
+    },
+    "uso_en_handler": [
+      "const provider = config.facturas?.ocr?.provider || 'local.tesseract';",
+      "const email = config.facturas?.asesoria?.email;",
+      "const campos = config.facturas?.campos_factura || [];"
+    ],
+    "cache": "Config se cachea por proyecto. Se invalida al recargar handlers."
+  },
+
+  "store": {
+    "descripcion": "Key-value persistente para guardar estado entre ejecuciones",
+    "ubicacion": {
+      "proyecto": "data/projects/{projectId}/handler-store/{handlerName}.json",
+      "global": "data/handler-store/{handlerName}.json"
+    },
+    "api": {
+      "get": {
+        "firma": "await store.get(key, defaultValue)",
+        "ejemplo": "const count = await store.get('procesados', 0);"
+      },
+      "set": {
+        "firma": "await store.set(key, value)",
+        "ejemplo": "await store.set('ultimo_proceso', Date.now());"
+      },
+      "delete": {
+        "firma": "await store.delete(key)",
+        "retorna": "boolean - true si existía"
+      },
+      "increment": {
+        "firma": "await store.increment(key, amount = 1)",
+        "ejemplo": "const nuevo = await store.increment('facturas_procesadas');",
+        "nota": "Crea la key con 0 si no existe"
+      },
+      "has": {
+        "firma": "await store.has(key)",
+        "retorna": "boolean"
+      },
+      "keys": {
+        "firma": "await store.keys()",
+        "retorna": "string[]"
+      },
+      "getAll": {
+        "firma": "await store.getAll()",
+        "retorna": "object - Copia de todos los datos"
+      },
+      "clear": {
+        "firma": "await store.clear()",
+        "nota": "Borra todo el store del handler"
+      }
+    },
+    "limitaciones": [
+      "Keys deben ser strings no vacíos (max 256 chars)",
+      "Values deben ser serializables a JSON",
+      "undefined se convierte a null",
+      "No usar para datos grandes (usar fs o database-manager)"
+    ]
+  },
+
+  "ejemplo_handler_completo": {
+    "archivo": "data/projects/facturas-nonina/handlers/procesar-documento.js",
     "codigo": [
       "module.exports = {",
       "  name: 'procesar-documento',",
+      "  description: 'Procesa documentos recibidos y extrae texto',",
       "  trigger: 'documento.recibido',",
-      "  filter: (e) => e.mimeType === 'application/pdf',",
+      "  ",
+      "  // Filtro opcional - solo procesar PDFs e imágenes",
+      "  filter: (event) => {",
+      "    const validTypes = ['application/pdf', 'image/jpeg', 'image/png'];",
+      "    return validTypes.includes(event.mimeType);",
+      "  },",
       "",
-      "  async handle(event, { services, logger }) {",
-      "    // Convertir PDF a imagen",
-      "    const png = await services.call('local.pdf-to-png', 'convert', {",
-      "      pdf: event.path,",
-      "      pages: [1]",
+      "  async handle(event, { services, logger, emit, config, store }) {",
+      "    logger.info('Procesando documento', { path: event.path });",
+      "",
+      "    // Usar config del proyecto",
+      "    const ocrProvider = config.facturas?.ocr?.provider || 'local.google-vision';",
+      "    const hint = config.facturas?.ocr?.hint || 'DOCUMENT_TEXT_DETECTION';",
+      "",
+      "    let imageContent = event.path;",
+      "",
+      "    // Si es PDF, convertir a imagen primero",
+      "    if (event.mimeType === 'application/pdf') {",
+      "      const png = await services.call('local.pdf-to-png', 'convert', {",
+      "        pdf: event.path,",
+      "        pages: [1]",
+      "      });",
+      "      imageContent = png.data.images[0].content;",
+      "    }",
+      "",
+      "    // OCR",
+      "    const ocr = await services.call(ocrProvider, 'extract', {",
+      "      image: imageContent,",
+      "      hint",
       "    });",
       "",
-      "    // OCR (usa credenciales PROJECT_mi-proyecto automáticamente)",
-      "    const ocr = await services.call('local.google-vision', 'extract', {",
-      "      image: png.data.images[0].content",
+      "    // Guardar contador en store",
+      "    const procesados = await store.increment('documentos_procesados');",
+      "    await store.set(`doc:${event.id}:status`, 'ocr_completado');",
+      "",
+      "    logger.info('OCR completado', { ",
+      "      confianza: ocr.data.confidence,",
+      "      totalProcesados: procesados",
       "    });",
       "",
-      "    // Guardar resultado",
-      "    await services.call('fs', 'write', {",
-      "      path: `${event.path}.txt`,",
-      "      content: ocr.data.text",
+      "    // Emitir para siguiente handler",
+      "    emit('texto.extraido', {",
+      "      path: event.path,",
+      "      texto: ocr.data.text,",
+      "      confianza: ocr.data.confidence,",
+      "      chatId: event.chatId  // Propagar datos del evento original",
       "    });",
-      "",
-      "    return { texto: ocr.data.text };",
       "  }",
       "};"
     ]
   },
 
-  "services_call": {
-    "firma": "services.call(service, action, params, options)",
-    "parametros": {
-      "service": "Nombre del servicio (ej: 'local.google-vision')",
-      "action": "Acción a ejecutar (ej: 'extract')",
-      "params": "Objeto con parámetros para el servicio",
-      "options": {
-        "timeout": "Timeout en ms (default: 60000)"
-      }
-    },
-    "retorna": "Promise con la respuesta del servicio",
-    "credenciales": "Se inyecta project_id automáticamente según ubicación del handler"
-  },
-
-  "resolucion_credenciales": {
-    "descripcion": "La ubicación del handler determina qué credenciales usa",
+  "ejemplo_encadenamiento": {
+    "descripcion": "Pipeline de 3 handlers conectados via emit",
     "flujo": [
-      "1. Handler en handlers/ → project_id = null → usa GLOBAL",
-      "2. Handler en data/projects/X/handlers/ → project_id = X",
-      "3. Servicio recibe project_id en el request",
-      "4. Provider busca: {PROVIDER}_API_KEY_PROJECT_X",
-      "5. Si no existe → fallback a {PROVIDER}_API_KEY_GLOBAL"
+      "telegram.document.received → recibir-documento",
+      "documento.recibido → procesar-ocr",
+      "texto.extraido → extraer-datos"
     ],
-    "ejemplo": {
-      "handler_en": "data/projects/facturas-nonina/handlers/",
-      "servicio_llamado": "local.google-vision.extract",
-      "busca_primero": "GOOGLE_API_KEY_PROJECT_facturas-nonina",
-      "fallback": "GOOGLE_API_KEY_GLOBAL"
+    "handlers": {
+      "recibir-documento": {
+        "trigger": "telegram.document.received",
+        "emite": "documento.recibido",
+        "codigo": [
+          "async handle(event, { emit, logger }) {",
+          "  logger.info('Documento recibido de Telegram');",
+          "  emit('documento.recibido', {",
+          "    path: event.filePath,",
+          "    mimeType: event.mimeType,",
+          "    chatId: event.chatId",
+          "  });",
+          "}"
+        ]
+      },
+      "procesar-ocr": {
+        "trigger": "documento.recibido",
+        "emite": "texto.extraido",
+        "codigo": [
+          "async handle(event, { services, emit }) {",
+          "  const ocr = await services.call('local.google-vision', 'extract', {",
+          "    image: event.path",
+          "  });",
+          "  emit('texto.extraido', {",
+          "    ...event,",
+          "    texto: ocr.data.text",
+          "  });",
+          "}"
+        ]
+      },
+      "extraer-datos": {
+        "trigger": "texto.extraido",
+        "emite": "factura.procesada",
+        "codigo": [
+          "async handle(event, { services, emit, config }) {",
+          "  const campos = config.facturas?.campos_factura || ['total', 'fecha'];",
+          "  const ai = await services.call('ai-gateway', 'chat', {",
+          "    messages: [{ role: 'user', content: `Extrae ${campos.join(', ')} de: ${event.texto}` }]",
+          "  });",
+          "  emit('factura.procesada', {",
+          "    ...event,",
+          "    datos: JSON.parse(ai.data.content)",
+          "  });",
+          "}"
+        ]
+      }
     }
   },
 
-  "carga_handlers": {
-    "al_iniciar": [
-      "1. HandlerLoader.loadGlobal() → carga handlers/",
-      "2. Para cada proyecto activo: HandlerLoader.loadProject(projectId)"
-    ],
-    "eventos": {
-      "project.activated": "Carga handlers del proyecto",
-      "project.deactivated": "Descarga handlers del proyecto"
+  "errores_comunes": {
+    "filter_con_error": {
+      "problema": "Filter lanza excepción y el handler no se ejecuta",
+      "causa": "Acceder a propiedad de undefined en filter",
+      "solucion": "Usar optional chaining: event.data?.mimeType",
+      "ejemplo_malo": "filter: (e) => e.data.mimeType === 'pdf'",
+      "ejemplo_bueno": "filter: (e) => e.data?.mimeType === 'pdf'"
     },
-    "hot_reload": "HandlerLoader.reloadProject(projectId) recarga handlers sin reiniciar"
-  },
-
-  "diferencias_con_flow_engine": {
-    "antes": {
-      "formato": "JSON con templates {{ }}",
-      "logica": "Limitada a funciones predefinidas",
-      "debugging": "Difícil - errores de sintaxis crípticos",
-      "credenciales": "Manual - pasar project_id explícitamente"
+    "emit_sin_datos": {
+      "problema": "Handler siguiente no recibe datos necesarios",
+      "causa": "No propagar datos del evento original",
+      "solucion": "Usar spread: emit('next', { ...event, nuevosDatos })",
+      "ejemplo_malo": "emit('procesado', { resultado })",
+      "ejemplo_bueno": "emit('procesado', { ...event, resultado })"
     },
-    "ahora": {
-      "formato": "JavaScript puro",
-      "logica": "Ilimitada - es código normal",
-      "debugging": "Stack traces estándar",
-      "credenciales": "Automáticas por ubicación"
+    "store_key_invalida": {
+      "problema": "Error 'Store key must be non-empty string'",
+      "causa": "Usar variable undefined como key",
+      "solucion": "Validar antes: if (id) await store.set(`doc:${id}`, value)",
+      "ejemplo_malo": "await store.set(event.id, 'ok')  // event.id puede ser undefined",
+      "ejemplo_bueno": "await store.set(`doc:${event.id || 'unknown'}`, 'ok')"
+    },
+    "config_undefined": {
+      "problema": "Cannot read property 'x' of undefined",
+      "causa": "Acceder a config sin verificar existencia",
+      "solucion": "Usar optional chaining y defaults",
+      "ejemplo_malo": "const x = config.facturas.ocr.provider",
+      "ejemplo_bueno": "const x = config.facturas?.ocr?.provider || 'default'"
+    },
+    "services_timeout": {
+      "problema": "Timeout en llamada a servicio",
+      "causa": "Servicio tarda más de 60s (default)",
+      "solucion": "Pasar timeout en options",
+      "ejemplo": "await services.call('ai-gateway', 'chat', params, { timeout: 120000 })"
+    },
+    "circular_emit": {
+      "problema": "Handler A emite evento que dispara Handler B que emite evento que dispara Handler A",
+      "causa": "Ciclo de dependencias entre handlers",
+      "solucion": "Diseñar flujo unidireccional, usar condiciones para romper ciclo",
+      "prevencion": "Documentar qué emite cada handler antes de implementar"
+    },
+    "store_datos_grandes": {
+      "problema": "Archivo JSON del store se vuelve muy grande",
+      "causa": "Guardar arrays/objetos grandes en store",
+      "solucion": "Usar filesystem o database-manager para datos grandes",
+      "limite_recomendado": "Store para metadata, contadores, estados. No para documentos."
+    },
+    "handler_no_carga": {
+      "problema": "Handler no se ejecuta aunque el evento se emite",
+      "causas_posibles": [
+        "Archivo empieza con _ (ignorado)",
+        "enabled: false",
+        "Error de sintaxis en el archivo",
+        "trigger mal escrito",
+        "filter siempre retorna false"
+      ],
+      "debug": "Revisar logs: handlers.loaded, handler.registered"
     }
   },
 
-  "patrones_comunes": {
-    "pdf_a_texto": [
-      "const png = await services.call('local.pdf-to-png', 'convert', { pdf: path });",
-      "const ocr = await services.call('local.google-vision', 'extract', { image: png.data.images[0].content });"
+  "buenas_practicas": {
+    "naming": {
+      "handlers": "kebab-case.js (procesar-factura.js)",
+      "eventos": "dominio.accion (documento.validado, factura.extraida)",
+      "store_keys": "tipo:id:campo (doc:123:status)"
+    },
+    "estructura_handler": [
+      "1. Validar input si es necesario",
+      "2. Usar config con defaults",
+      "3. Llamar servicios",
+      "4. Actualizar store si aplica",
+      "5. Emitir evento para siguiente paso",
+      "6. Log de resultado"
     ],
-    "notificar_telegram": [
-      "await services.call('telegram', 'send_message', { chatId, text: 'Mensaje' });"
-    ],
-    "guardar_archivo": [
-      "await services.call('fs', 'write', { path: '/ruta/archivo.txt', content: 'datos' });"
-    ],
-    "leer_archivo": [
-      "const file = await services.call('fs', 'read', { path: '/ruta/archivo.txt' });"
+    "trazabilidad": [
+      "correlationId se propaga automáticamente entre handlers",
+      "Usar logger con contexto: logger.info('msg', { correlationId, ... })",
+      "En caso de error, el sistema emite {handlerName}.error automáticamente"
     ]
   },
 
   "archivos": {
     "core": [
       "core/handler-loader.js - Carga y gestiona handlers",
+      "core/handler-store.js - Store key-value persistente",
       "core/service-executor.js - Ejecuta llamadas a servicios"
     ],
     "handlers_globales": "handlers/*.js",
     "handlers_proyecto": "data/projects/{projectId}/handlers/*.js",
-    "ejemplo": "handlers/_ejemplo.js"
+    "config_proyecto": "data/projects/{projectId}/config/*.json",
+    "store_proyecto": "data/projects/{projectId}/handler-store/",
+    "store_global": "data/handler-store/"
   }
 }

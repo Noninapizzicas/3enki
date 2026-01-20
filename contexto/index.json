@@ -104,22 +104,6 @@
     }
   ],
 
-  "deprecated_files": [
-    {
-      "file": "flow-engine.json",
-      "reason": "Reemplazado por handlers.json - usar JavaScript directo en lugar de JSONs con templates",
-      "migration": "Convertir flujos JSON a handlers JS en handlers/ o data/projects/{id}/handlers/"
-    },
-    {
-      "file": "lecciones-aprendidas-flow-engine.json",
-      "reason": "Bugs del sistema de templates {{ }} - ya no aplica con handlers JS"
-    },
-    {
-      "file": "flow-builder-prompt.json",
-      "reason": "Prompt para crear flujos JSON - ya no aplica"
-    }
-  ],
-
   "quick_reference": {
     "stack": {
       "backend": "Node.js + MQTT (Aedes)",

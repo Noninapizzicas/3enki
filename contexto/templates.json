@@ -273,6 +273,52 @@
         "Templates complejos con muchas condiciones"
       ],
       "recommended_action": "No usar. Usar 'module' o 'service-module' directamente"
+    },
+
+    "handler": {
+      "status": "active",
+      "quality": "production",
+      "command": "npx plop handler",
+      "description": "Handler JavaScript para automatización de eventos (reemplaza flow-engine)",
+      "output": [
+        "handlers/{name}.js (global)",
+        "data/projects/{projectId}/handlers/{name}.js (proyecto)"
+      ],
+      "features": {
+        "services": "Llamadas a servicios con services.call()",
+        "emit": "Encadenamiento con otros handlers via emit()",
+        "store": "Persistencia key-value por handler",
+        "config": "Acceso a configuración del proyecto",
+        "auto_credentials": "Credenciales automáticas según ubicación (GLOBAL/PROJECT)"
+      },
+      "prompts": [
+        "name (kebab-case)",
+        "description",
+        "trigger (evento a escuchar)",
+        "hasFilter (boolean)",
+        "useServices (boolean)",
+        "serviceName",
+        "serviceAction",
+        "useStore (boolean)",
+        "useConfig (boolean)",
+        "configKey",
+        "emitEvent (boolean)",
+        "emitEventName",
+        "ubicacion (global/project)",
+        "projectId"
+      ],
+      "context_available": {
+        "services": "services.call(service, action, params) - Llamar servicios",
+        "logger": "logger.info/warn/error(msg, data) - Logging estructurado",
+        "projectId": "ID del proyecto o null si global",
+        "emit": "emit(evento, data) - Emitir evento para encadenar",
+        "config": "config.* - Configuración del proyecto",
+        "store": "store.get/set/delete/increment - Persistencia"
+      },
+      "reference_implementations": [
+        "handlers/log-activity.js",
+        "handlers/_ejemplo.js"
+      ]
     }
   },
 
@@ -305,6 +351,10 @@
     "chat_integration": {
       "recommended": "module + integración manual con chat-ai-bridge",
       "reason": "chat-module está desactualizado"
+    },
+    "event_automation": {
+      "recommended": "handler",
+      "reason": "JavaScript directo, sin templates JSON problemáticos. Soporta services, emit, store, config."
     }
   },
 

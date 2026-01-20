@@ -33,11 +33,61 @@
     "handlers": "Global event handlers (JavaScript directo)",
     "frontend": "SvelteKit app",
     "data": "Runtime data (projects, logs, etc)",
-    "data/projects/{id}/handlers": "Project-specific handlers (usan credenciales PROJECT_{id})",
+    "data/projects/{id}": "Datos de un proyecto específico",
     "services/providers": "Service providers (local.*, google.*, etc)",
     "contexto": "AI context files (this directory)",
     "docs": "Human documentation",
     "prompts": "AI prompts and tutorials"
+  },
+
+  "project_structure": {
+    "descripcion": "Estructura de carpetas dentro de cada proyecto",
+    "base_path": "data/projects/{project-id}/",
+    "carpetas": {
+      "handlers": {
+        "path": "handlers/*.js",
+        "descripcion": "Handlers del proyecto (usan credenciales PROJECT_{id})",
+        "ejemplo": "handlers/recibir-documento.js"
+      },
+      "storage": {
+        "path": "storage/{flujo-name}/",
+        "descripcion": "Almacenamiento de datos por flujo/proceso",
+        "estructura": {
+          "descripcion": "Cada flujo tiene su carpeta con subcarpetas según estado",
+          "ejemplo_facturas": {
+            "path": "storage/facturas/",
+            "subcarpetas": ["recibidas", "procesadas", "enviadas", "errores"]
+          }
+        }
+      },
+      "config": {
+        "path": "config/*.json",
+        "descripcion": "Configuración del proyecto (accesible via context.config)"
+      },
+      "handler-store": {
+        "path": "handler-store/{handler-name}.json",
+        "descripcion": "Persistencia key-value por handler (automático)"
+      }
+    },
+    "ejemplo_completo": {
+      "project": "facturas-nonina",
+      "tree": [
+        "data/projects/facturas-nonina/",
+        "├── handlers/",
+        "│   ├── recibir-documento.js",
+        "│   ├── procesar-ocr.js",
+        "│   └── extraer-datos.js",
+        "├── storage/",
+        "│   └── facturas/",
+        "│       ├── recibidas/      # Archivos originales",
+        "│       ├── procesadas/     # Resultados OCR/extracción",
+        "│       └── errores/        # Procesamiento fallido",
+        "├── config/",
+        "│   └── ocr.json           # Config de OCR",
+        "└── handler-store/",
+        "    └── recibir-documento.json  # Estado persistente"
+      ]
+    }
   },
 
   "conventions": {

@@ -7,10 +7,13 @@
       "MQTTClient",
       "ModuleLoader",
       "UIRequestHandler",
+      "ServiceExecutor",
+      "HandlerLoader",
       "Logger",
       "Metrics"
     ]
   },
+
   "startup_sequence": [
     { "step": 1, "name": "Observability", "component": "Logger + Metrics" },
     { "step": 2, "name": "Validation", "component": "JSON Schema validator" },
@@ -18,24 +21,33 @@
     { "step": 4, "name": "Hooks", "component": "Lifecycle hooks system" },
     { "step": 5, "name": "EventBus", "component": "Event routing" },
     { "step": 5.5, "name": "UIRequestHandler", "component": "UI request/response" },
-    { "step": 6, "name": "Modules", "component": "Dynamic module loading" },
-    { "step": 7, "name": "HTTP", "component": "Express server" }
+    { "step": 6, "name": "Providers", "component": "Service providers (OCR, PDF, etc)" },
+    { "step": 7, "name": "Modules", "component": "Dynamic module loading" },
+    { "step": 8, "name": "Handlers", "component": "Global handlers + project handlers" },
+    { "step": 9, "name": "HTTP", "component": "Express server" }
   ],
+
   "directories": {
-    "core": "Core framework code",
+    "core": "Core framework code (EventBus, ServiceExecutor, HandlerLoader, etc)",
     "modules": "Loadable modules (each with module.json + index.js)",
+    "handlers": "Global event handlers (JavaScript directo)",
     "frontend": "SvelteKit app",
     "data": "Runtime data (projects, logs, etc)",
+    "data/projects/{id}/handlers": "Project-specific handlers (usan credenciales PROJECT_{id})",
+    "services/providers": "Service providers (local.*, google.*, etc)",
     "contexto": "AI context files (this directory)",
     "docs": "Human documentation",
     "prompts": "AI prompts and tutorials"
   },
+
   "conventions": {
     "naming": {
       "modules": "kebab-case (e.g., project-manager)",
+      "handlers": "kebab-case.js (e.g., procesar-documento.js)",
       "events": "dot.notation (e.g., project.created)",
       "topics": "slash/notation (e.g., ui/request/project/list)",
-      "files": "kebab-case.js or PascalCase.svelte"
+      "files": "kebab-case.js or PascalCase.svelte",
+      "services": "dot.notation (e.g., local.google-vision)"
     },
     "logging": {
       "format": "structured JSON",
@@ -45,6 +57,38 @@
     "errors": {
       "always_include": ["error.message", "correlationId"],
       "never_throw": "in event handlers (catch and log)"
+    }
+  },
+
+  "handlers": {
+    "descripcion": "Sistema de orquestación de eventos con JavaScript directo",
+    "ubicaciones": {
+      "global": "handlers/*.js - Sin project_id, usa credenciales GLOBAL",
+      "proyecto": "data/projects/{id}/handlers/*.js - project_id={id}, credenciales PROJECT_{id}"
+    },
+    "estructura_handler": {
+      "name": "string - Nombre único",
+      "trigger": "string - Evento que dispara el handler",
+      "filter": "function(event) - Opcional, filtra eventos",
+      "handle": "async function(event, {services, logger, projectId}) - Lógica"
+    },
+    "services_call": {
+      "firma": "services.call(service, action, params)",
+      "ejemplo": "await services.call('local.google-vision', 'extract', { image: path })",
+      "credenciales": "Se inyecta project_id automáticamente según ubicación del handler"
+    }
+  },
+
+  "services": {
+    "descripcion": "Providers que ejecutan operaciones via eventos request/response",
+    "patron": "{service}.{action}.request → {service}.{action}.response",
+    "tipos": {
+      "local": "Ejecución local (local.pdf-to-png, local.tesseract)",
+      "cloud": "APIs externas (google.vision, anthropic.chat)"
+    },
+    "credenciales": {
+      "resolucion": "PROJECT_{id} → GLOBAL (cascada automática)",
+      "documentacion": "Ver contexto/credentials.json"
     }
   }
 }

@@ -12,11 +12,9 @@
       "generate_ui": "Read ui-generator.json",
       "external_services": "Read services.json (OCR, TTS, PDF, CSV, APIs externas)",
       "bot_agent_flow": "Read bot-agent-architecture.json",
-      "flow_automation": "Read flow-engine.json (flujos, orquestacion, triggers, steps)",
-      "create_flow_conversational": "Read flow-builder-prompt.json (guía conversacional para crear flujos)",
-      "flow_debugging": "Read lecciones-aprendidas-flow-engine.json (errores comunes, checklist)",
+      "automation_handlers": "Read handlers.json (orquestación de eventos con JavaScript)",
       "credentials_questions": "Read credentials.json (API keys, OAuth2, niveles, cascada)",
-      "scheduling_questions": "Read scheduler.json (jobs, triggers cron/interval/event, acciones programadas)",
+      "scheduling_questions": "Read scheduler.json (jobs, triggers cron/interval/event)",
       "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)"
     },
     "fallback_sources": [
@@ -29,7 +27,7 @@
 
   "project": {
     "name": "event-core",
-    "version": "0.1.0",
+    "version": "1.3.0",
     "description": "Meta-Core Event-Driven Framework"
   },
 
@@ -55,64 +53,70 @@
       "when": "Questions about creating/modifying modules"
     },
     {
+      "file": "handlers.json",
+      "purpose": "Sistema de handlers - orquestación de eventos con JavaScript directo",
+      "when": "Crear automatizaciones, procesar eventos, orquestar servicios"
+    },
+    {
+      "file": "credentials.json",
+      "purpose": "Sistema de credenciales multi-nivel con cascada de resolución",
+      "when": "Gestionar API keys, OAuth2, niveles GLOBAL/PROJECT/CLIENT/CUSTOM"
+    },
+    {
+      "file": "scheduler.json",
+      "purpose": "Sistema de scheduling con triggers cron, interval, datetime, event",
+      "when": "Programar tareas, jobs automáticos, triggers basados en eventos"
+    },
+    {
+      "file": "services.json",
+      "purpose": "Arquitectura de servicios externos y locales (providers)",
+      "when": "Usar servicios como Google Vision, TTS, PDF, CSV, OCR"
+    },
+    {
+      "file": "catalogo-servicios.json",
+      "purpose": "Catálogo completo de todos los servicios, módulos, APIs, tools",
+      "when": "Consultar qué servicios existen, buscar APIs disponibles"
+    },
+    {
+      "file": "bot-agent-architecture.json",
+      "purpose": "Arquitectura de bot-manager, agent-manager, ai-agent-framework",
+      "when": "Trabajar con bots de Telegram, pipelines de agentes"
+    },
+    {
       "file": "ui-generator.json",
-      "purpose": "Prompt: generate UI from backend modules",
+      "purpose": "Prompt para generar UI desde módulos backend",
       "when": "Task is to generate UI for a module"
     },
     {
       "file": "chat-refactoring.json",
       "purpose": "Plan de refactorización del sistema de chat",
-      "when": "Trabajar en conversation-manager, chat-session, chat-ai-bridge, prompt-composer"
+      "when": "Trabajar en conversation-manager, chat-session, chat-ai-bridge"
     },
     {
       "file": "templates.json",
-      "purpose": "Sistema de templates Plop: generadores, estado, uso y mejores prácticas",
-      "when": "Crear módulos con plop, entender generadores disponibles, mejores prácticas"
+      "purpose": "Sistema de templates Plop: generadores",
+      "when": "Crear módulos con plop"
     },
     {
       "file": "project-composition.json",
-      "purpose": "Sistema de composición progresiva de proyectos (links, dependencias, sistemas, contexto compartido)",
-      "when": "Trabajar con relaciones entre proyectos, sistemas, contexto heredado, project-manager v2.0"
-    },
-    {
-      "file": "services.json",
-      "purpose": "Arquitectura de servicios externos y locales (providers, funciones, catálogo)",
-      "when": "Usar servicios externos (Google Vision, TTS, Translate), crear PDFs, CSVs, Excel, OCR local. NO para LLMs (esos usan ai-gateway)"
-    },
-    {
-      "file": "bot-agent-architecture.json",
-      "purpose": "Arquitectura de bot-manager, agent-manager, ai-agent-framework",
-      "when": "Trabajar con bots de Telegram, pipelines de agentes, triggers automáticos"
-    },
+      "purpose": "Sistema de composición de proyectos",
+      "when": "Relaciones entre proyectos, contexto heredado"
+    }
+  ],
+
+  "deprecated_files": [
     {
       "file": "flow-engine.json",
-      "purpose": "Motor de automatizacion de flujos de trabajo basado en eventos",
-      "when": "Crear flujos de automatizacion, orquestar providers, transformar datos, triggers de eventos"
-    },
-    {
-      "file": "credentials.json",
-      "purpose": "Sistema de credenciales multi-nivel con cascada de resolucion",
-      "when": "Gestionar API keys, OAuth2 (Gmail), niveles GLOBAL/PROJECT/CLIENT/CUSTOM, testear credenciales"
-    },
-    {
-      "file": "scheduler.json",
-      "purpose": "Sistema avanzado de scheduling con múltiples tipos de triggers (cron, interval, datetime, event, condition, composite)",
-      "when": "Programar tareas, crear jobs automáticos, disparar acciones en horarios específicos, triggers basados en eventos"
-    },
-    {
-      "file": "catalogo-servicios.json",
-      "purpose": "Catálogo completo de todos los servicios, módulos, APIs, tools AI y providers del sistema",
-      "when": "Consultar qué servicios existen, buscar APIs disponibles, ver tools para AI, encontrar providers, referencia rápida de capacidades"
+      "reason": "Reemplazado por handlers.json - usar JavaScript directo en lugar de JSONs con templates",
+      "migration": "Convertir flujos JSON a handlers JS en handlers/ o data/projects/{id}/handlers/"
     },
     {
       "file": "lecciones-aprendidas-flow-engine.json",
-      "purpose": "Bugs documentados y lecciones aprendidas durante implementación de flujos",
-      "when": "Debuggear flujos, evitar errores comunes, checklist de nuevo flujo"
+      "reason": "Bugs del sistema de templates {{ }} - ya no aplica con handlers JS"
     },
     {
       "file": "flow-builder-prompt.json",
-      "purpose": "Prompt conversacional para crear flujos de automatización guiado por IA",
-      "when": "Crear flujos mediante conversación, usar como guía/agente para flow builder"
+      "reason": "Prompt para crear flujos JSON - ya no aplica"
     }
   ],
 
@@ -135,6 +139,10 @@
       "http": 3000,
       "mqtt": 1883,
       "websocket": 9001
+    },
+    "handlers": {
+      "global": "handlers/*.js → credenciales GLOBAL",
+      "proyecto": "data/projects/{id}/handlers/*.js → credenciales PROJECT_{id}"
     }
   }
 }

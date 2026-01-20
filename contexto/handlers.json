@@ -1,0 +1,193 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-01-20",
+  "_DESCRIPTION": "Sistema de Handlers - Orquestación de eventos con JavaScript directo",
+
+  "_AI_INSTRUCTIONS": {
+    "cuando_leer": "Cuando necesites crear flujos de automatización o entender cómo se procesan eventos",
+    "principio_clave": "Handlers son JavaScript puro - NO inventar sintaxis especial",
+    "regla_credenciales": "La ubicación del handler determina qué credenciales usa",
+    "simplicidad": "Si algo se puede hacer en JS, hazlo en JS - sin abstracciones innecesarias"
+  },
+
+  "overview": {
+    "que_es": "Sistema de handlers para procesar eventos con JavaScript directo",
+    "reemplaza": "flow-engine (JSONs con templates {{ }})",
+    "ventajas": [
+      "JavaScript nativo - debugging con stack traces",
+      "Sin sintaxis especial - autocompletado funciona",
+      "Credenciales automáticas por ubicación",
+      "Hot-reload de handlers"
+    ]
+  },
+
+  "estructura": {
+    "global": {
+      "path": "handlers/*.js",
+      "credenciales": "GLOBAL",
+      "uso": "Automatizaciones del sistema, sin proyecto específico"
+    },
+    "proyecto": {
+      "path": "data/projects/{projectId}/handlers/*.js",
+      "credenciales": "PROJECT_{projectId} → fallback GLOBAL",
+      "uso": "Automatizaciones específicas de un proyecto"
+    }
+  },
+
+  "anatomia_handler": {
+    "campos": {
+      "name": {
+        "tipo": "string",
+        "requerido": true,
+        "descripcion": "Nombre único del handler"
+      },
+      "description": {
+        "tipo": "string",
+        "requerido": false,
+        "descripcion": "Descripción para documentación"
+      },
+      "trigger": {
+        "tipo": "string",
+        "requerido": true,
+        "descripcion": "Evento que dispara el handler"
+      },
+      "enabled": {
+        "tipo": "boolean",
+        "requerido": false,
+        "default": true,
+        "descripcion": "Si el handler está activo"
+      },
+      "filter": {
+        "tipo": "function",
+        "requerido": false,
+        "descripcion": "Función que filtra eventos (event) => boolean"
+      },
+      "handle": {
+        "tipo": "async function",
+        "requerido": true,
+        "descripcion": "Lógica del handler (event, context) => any"
+      }
+    },
+    "context": {
+      "services": "Executor para llamar servicios (inyecta project_id automático)",
+      "logger": "Logger del sistema",
+      "projectId": "ID del proyecto (null si global)"
+    }
+  },
+
+  "ejemplo_handler": {
+    "archivo": "data/projects/mi-proyecto/handlers/procesar-documento.js",
+    "codigo": [
+      "module.exports = {",
+      "  name: 'procesar-documento',",
+      "  trigger: 'documento.recibido',",
+      "  filter: (e) => e.mimeType === 'application/pdf',",
+      "",
+      "  async handle(event, { services, logger }) {",
+      "    // Convertir PDF a imagen",
+      "    const png = await services.call('local.pdf-to-png', 'convert', {",
+      "      pdf: event.path,",
+      "      pages: [1]",
+      "    });",
+      "",
+      "    // OCR (usa credenciales PROJECT_mi-proyecto automáticamente)",
+      "    const ocr = await services.call('local.google-vision', 'extract', {",
+      "      image: png.data.images[0].content",
+      "    });",
+      "",
+      "    // Guardar resultado",
+      "    await services.call('fs', 'write', {",
+      "      path: `${event.path}.txt`,",
+      "      content: ocr.data.text",
+      "    });",
+      "",
+      "    return { texto: ocr.data.text };",
+      "  }",
+      "};"
+    ]
+  },
+
+  "services_call": {
+    "firma": "services.call(service, action, params, options)",
+    "parametros": {
+      "service": "Nombre del servicio (ej: 'local.google-vision')",
+      "action": "Acción a ejecutar (ej: 'extract')",
+      "params": "Objeto con parámetros para el servicio",
+      "options": {
+        "timeout": "Timeout en ms (default: 60000)"
+      }
+    },
+    "retorna": "Promise con la respuesta del servicio",
+    "credenciales": "Se inyecta project_id automáticamente según ubicación del handler"
+  },
+
+  "resolucion_credenciales": {
+    "descripcion": "La ubicación del handler determina qué credenciales usa",
+    "flujo": [
+      "1. Handler en handlers/ → project_id = null → usa GLOBAL",
+      "2. Handler en data/projects/X/handlers/ → project_id = X",
+      "3. Servicio recibe project_id en el request",
+      "4. Provider busca: {PROVIDER}_API_KEY_PROJECT_X",
+      "5. Si no existe → fallback a {PROVIDER}_API_KEY_GLOBAL"
+    ],
+    "ejemplo": {
+      "handler_en": "data/projects/facturas-nonina/handlers/",
+      "servicio_llamado": "local.google-vision.extract",
+      "busca_primero": "GOOGLE_API_KEY_PROJECT_facturas-nonina",
+      "fallback": "GOOGLE_API_KEY_GLOBAL"
+    }
+  },
+
+  "carga_handlers": {
+    "al_iniciar": [
+      "1. HandlerLoader.loadGlobal() → carga handlers/",
+      "2. Para cada proyecto activo: HandlerLoader.loadProject(projectId)"
+    ],
+    "eventos": {
+      "project.activated": "Carga handlers del proyecto",
+      "project.deactivated": "Descarga handlers del proyecto"
+    },
+    "hot_reload": "HandlerLoader.reloadProject(projectId) recarga handlers sin reiniciar"
+  },
+
+  "diferencias_con_flow_engine": {
+    "antes": {
+      "formato": "JSON con templates {{ }}",
+      "logica": "Limitada a funciones predefinidas",
+      "debugging": "Difícil - errores de sintaxis crípticos",
+      "credenciales": "Manual - pasar project_id explícitamente"
+    },
+    "ahora": {
+      "formato": "JavaScript puro",
+      "logica": "Ilimitada - es código normal",
+      "debugging": "Stack traces estándar",
+      "credenciales": "Automáticas por ubicación"
+    }
+  },
+
+  "patrones_comunes": {
+    "pdf_a_texto": [
+      "const png = await services.call('local.pdf-to-png', 'convert', { pdf: path });",
+      "const ocr = await services.call('local.google-vision', 'extract', { image: png.data.images[0].content });"
+    ],
+    "notificar_telegram": [
+      "await services.call('telegram', 'send_message', { chatId, text: 'Mensaje' });"
+    ],
+    "guardar_archivo": [
+      "await services.call('fs', 'write', { path: '/ruta/archivo.txt', content: 'datos' });"
+    ],
+    "leer_archivo": [
+      "const file = await services.call('fs', 'read', { path: '/ruta/archivo.txt' });"
+    ]
+  },
+
+  "archivos": {
+    "core": [
+      "core/handler-loader.js - Carga y gestiona handlers",
+      "core/service-executor.js - Ejecuta llamadas a servicios"
+    ],
+    "handlers_globales": "handlers/*.js",
+    "handlers_proyecto": "data/projects/{projectId}/handlers/*.js",
+    "ejemplo": "handlers/_ejemplo.js"
+  }
+}

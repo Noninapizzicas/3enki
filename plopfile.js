@@ -1513,250 +1513,99 @@ module.exports = function (plop) {
   });
 
   // ==========================================
-  // Generator: flow (Flow Builder Wizard)
+  // Generator: handler (Sistema de Handlers)
   // ==========================================
-  plop.setGenerator('flow', {
-    description: '🔄 Crear un flujo de automatización (Flow Builder Wizard)',
+  plop.setGenerator('handler', {
+    description: 'Crear un handler JavaScript para automatización de eventos',
 
     prompts: [
-      // ========== FASE 1: Información básica ==========
       {
         type: 'input',
-        name: 'id',
-        message: '🔄 ID del flujo (kebab-case, ej: procesar-facturas):',
+        name: 'name',
+        message: '📦 Nombre del handler (kebab-case, ej: procesar-factura):',
         validate: (value) => {
-          if (!value) return 'El ID es requerido';
-          if (!/^[a-z][a-z0-9-]*$/.test(value)) return 'Usa kebab-case (ej: procesar-facturas)';
+          if (!value) return 'El nombre es requerido';
+          if (!/^[a-z][a-z0-9-]*$/.test(value)) return 'Usa kebab-case (ej: procesar-factura)';
           return true;
         }
       },
       {
         type: 'input',
-        name: 'name',
-        message: '📝 Nombre descriptivo:',
-        default: (answers) => answers.id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-      },
-      {
-        type: 'input',
         name: 'description',
-        message: '📄 Descripción del flujo:',
-        default: 'Flujo de automatización'
-      },
-
-      // ========== FASE 2: Objetivo ==========
-      {
-        type: 'list',
-        name: 'objetivo',
-        message: '🎯 ¿Qué quieres conseguir con este flujo?',
-        choices: [
-          { name: '📄 Procesar documentos (facturas, tickets, contratos, etc.)', value: 'documentos' },
-          { name: '🔁 Automatizar tareas repetitivas', value: 'automatizar' },
-          { name: '🔗 Integrar sistemas (entrada → transformación → salida)', value: 'integrar' },
-          { name: '📊 Recopilar y consolidar datos', value: 'consolidar' },
-          { name: '🤖 Asistente IA con tareas específicas', value: 'asistente' },
-          { name: '📦 Otro (flujo personalizado)', value: 'otro' }
-        ]
-      },
-
-      // ========== FASE 3: Trigger ==========
-      {
-        type: 'list',
-        name: 'triggerType',
-        message: '📥 ¿De dónde vienen los datos? (TRIGGER)',
-        choices: [
-          { name: '📱 Telegram Bot (imágenes, documentos, mensajes)', value: 'telegram' },
-          { name: '📧 Gmail (emails con adjuntos)', value: 'gmail' },
-          { name: '📂 Carpeta local (watch directory)', value: 'folder' },
-          { name: '⏰ Cron (programado periódicamente)', value: 'cron' },
-          { name: '🔗 Evento del sistema (otro flujo, módulo)', value: 'event' },
-          { name: '🖐️ Manual (API call o UI)', value: 'manual' }
-        ]
-      },
-
-      // Detalles según trigger
-      {
-        type: 'input',
-        name: 'telegramBot',
-        message: '🤖 Nombre del bot de Telegram (exacto):',
-        when: (a) => a.triggerType === 'telegram',
-        validate: (v) => v ? true : 'El nombre del bot es requerido'
-      },
-      {
-        type: 'checkbox',
-        name: 'telegramMimeTypes',
-        message: '📎 Tipos de archivo a aceptar:',
-        when: (a) => a.triggerType === 'telegram',
-        choices: [
-          { name: 'Imágenes JPEG', value: 'image/jpeg', checked: true },
-          { name: 'Imágenes PNG', value: 'image/png', checked: true },
-          { name: 'Imágenes WebP', value: 'image/webp' },
-          { name: 'PDF', value: 'application/pdf' },
-          { name: 'Cualquier archivo', value: '*' }
-        ]
+        message: '📝 Descripción del handler:',
+        default: 'Handler de automatización'
       },
       {
         type: 'input',
-        name: 'gmailAccount',
-        message: '📧 Cuenta Gmail (o vacío para default):',
-        when: (a) => a.triggerType === 'gmail',
-        default: ''
+        name: 'trigger',
+        message: '🎯 Evento trigger (ej: documento.nuevo, bot.file.stored):',
+        validate: (value) => value ? true : 'El evento trigger es requerido'
+      },
+      {
+        type: 'confirm',
+        name: 'hasFilter',
+        message: '🔍 ¿Incluir función de filtro?',
+        default: false
+      },
+      {
+        type: 'confirm',
+        name: 'useServices',
+        message: '🔧 ¿Llamará a servicios (OCR, IA, etc)?',
+        default: true
       },
       {
         type: 'input',
-        name: 'gmailQuery',
-        message: '🔍 Query de búsqueda Gmail (ej: from:facturas@empresa.com):',
-        when: (a) => a.triggerType === 'gmail',
-        default: 'has:attachment'
+        name: 'serviceName',
+        message: '   🔹 Servicio principal (ej: local.google-vision, telegram, fs):',
+        when: (a) => a.useServices,
+        default: 'fs'
       },
       {
         type: 'input',
-        name: 'cronExpression',
-        message: '⏰ Expresión cron (ej: 0 3 * * 0 = domingos 3am):',
-        when: (a) => a.triggerType === 'cron',
-        default: '0 3 * * *'
+        name: 'serviceAction',
+        message: '   🔹 Acción del servicio (ej: extract, send_message, write):',
+        when: (a) => a.useServices,
+        default: 'read'
+      },
+      {
+        type: 'confirm',
+        name: 'useStore',
+        message: '💾 ¿Usar store persistente (contadores, estado)?',
+        default: false
+      },
+      {
+        type: 'confirm',
+        name: 'useConfig',
+        message: '⚙️ ¿Leer configuración del proyecto?',
+        default: false
       },
       {
         type: 'input',
-        name: 'eventName',
-        message: '🔗 Nombre del evento a escuchar (ej: factura.nueva):',
-        when: (a) => a.triggerType === 'event',
-        validate: (v) => v ? true : 'El nombre del evento es requerido'
+        name: 'configKey',
+        message: '   🔹 Clave de configuración (ej: ocr, factura):',
+        when: (a) => a.useConfig,
+        default: 'settings'
       },
-
-      // ========== FASE 4: Procesamiento ==========
       {
-        type: 'checkbox',
-        name: 'procesamiento',
-        message: '⚙️ ¿Qué pasos de procesamiento necesitas?',
-        choices: (answers) => {
-          const choices = [];
-
-          // OCR - si procesa documentos o imágenes
-          if (['documentos', 'integrar', 'consolidar', 'otro'].includes(answers.objetivo) ||
-              answers.triggerType === 'telegram') {
-            choices.push(
-              { name: '📝 OCR - Extraer texto de imágenes/PDF', value: 'ocr' }
-            );
-          }
-
-          // AI - siempre disponible
-          choices.push(
-            { name: '🤖 AI - Analizar/clasificar/extraer con IA', value: 'ai' }
-          );
-
-          // Transformación - siempre
-          choices.push(
-            { name: '🔀 Transformar - Mapear/filtrar datos', value: 'transform' }
-          );
-
-          // Validación
-          choices.push(
-            { name: '✅ Validar - Verificar condiciones', value: 'validate' }
-          );
-
-          // HTTP - si integra
-          if (['integrar', 'automatizar', 'otro'].includes(answers.objetivo)) {
-            choices.push(
-              { name: '🌐 HTTP - Llamar API externa', value: 'http' }
-            );
-          }
-
-          // Delay
-          choices.push(
-            { name: '⏳ Delay - Esperar entre pasos', value: 'delay' }
-          );
-
-          return choices;
-        }
-      },
-
-      // Detalles OCR
-      {
-        type: 'list',
-        name: 'ocrProvider',
-        message: '📝 ¿Qué motor de OCR usar?',
-        when: (a) => a.procesamiento && a.procesamiento.includes('ocr'),
-        choices: [
-          { name: 'Tesseract (local, gratis, básico)', value: 'local.tesseract' },
-          { name: 'Scribe OCR (local, gratis, avanzado WASM)', value: 'local.scribe-ocr' },
-          { name: 'Google Vision (API, alta precisión)', value: 'local.google-vision' },
-          { name: 'Google Document AI (API, extrae estructura)', value: 'local.google-documentai' }
-        ],
-        default: 'local.tesseract'
+        type: 'confirm',
+        name: 'emitEvent',
+        message: '📤 ¿Emitir evento para encadenar con otros handlers?',
+        default: false
       },
       {
         type: 'input',
-        name: 'ocrLanguage',
-        message: '🌍 Idioma OCR (spa, eng, fra, deu...):',
-        when: (a) => a.procesamiento && a.procesamiento.includes('ocr'),
-        default: 'spa'
+        name: 'emitEventName',
+        message: '   🔹 Nombre del evento a emitir (ej: factura.procesada):',
+        when: (a) => a.emitEvent,
+        default: (a) => `${a.name}.completado`
       },
-
-      // Detalles AI
-      {
-        type: 'list',
-        name: 'aiModel',
-        message: '🤖 ¿Qué modelo de IA usar?',
-        when: (a) => a.procesamiento && a.procesamiento.includes('ai'),
-        choices: [
-          { name: 'Claude 3.5 Sonnet (Anthropic, recomendado)', value: 'claude-3-5-sonnet-20241022' },
-          { name: 'Claude 3 Haiku (Anthropic, rápido/barato)', value: 'claude-3-haiku-20240307' },
-          { name: 'GPT-4o (OpenAI)', value: 'gpt-4o' },
-          { name: 'GPT-4o-mini (OpenAI, barato)', value: 'gpt-4o-mini' },
-          { name: 'DeepSeek Chat (local/API, muy barato)', value: 'deepseek-chat' }
-        ],
-        default: 'claude-3-5-sonnet-20241022'
-      },
-      {
-        type: 'input',
-        name: 'aiTask',
-        message: '💬 ¿Qué debe hacer la IA? (ej: extraer datos de factura, clasificar documento):',
-        when: (a) => a.procesamiento && a.procesamiento.includes('ai'),
-        default: 'Analizar y extraer información relevante'
-      },
-
-      // ========== FASE 5: Salida ==========
-      {
-        type: 'checkbox',
-        name: 'salida',
-        message: '📤 ¿Dónde guardar/enviar el resultado?',
-        choices: [
-          { name: '📁 Archivo JSON (estructurado)', value: 'json', checked: true },
-          { name: '📊 Archivo Excel (xlsx)', value: 'excel' },
-          { name: '📄 Archivo de texto', value: 'text' },
-          { name: '📱 Respuesta Telegram (al usuario)', value: 'telegram' },
-          { name: '📧 Email', value: 'email' },
-          { name: '🔗 Evento (para otro flujo)', value: 'event' },
-          { name: '🌐 API externa (webhook)', value: 'webhook' }
-        ]
-      },
-
-      // Ruta de salida
-      {
-        type: 'input',
-        name: 'outputPath',
-        message: '📂 Ruta de salida (usa @/ para ruta global):',
-        when: (a) => a.salida && (a.salida.includes('json') || a.salida.includes('excel') || a.salida.includes('text')),
-        default: '@/projects/mi-proyecto/storage/procesadas'
-      },
-
-      // Evento de salida
-      {
-        type: 'input',
-        name: 'outputEvent',
-        message: '🔗 Nombre del evento a emitir (ej: factura.procesada):',
-        when: (a) => a.salida && a.salida.includes('event'),
-        default: (a) => `${a.id}.completado`
-      },
-
-      // ========== FASE 6: Ubicación ==========
       {
         type: 'list',
         name: 'ubicacion',
-        message: '📁 ¿Dónde guardar el flujo?',
+        message: '📁 ¿Dónde guardar el handler?',
         choices: [
-          { name: '🌍 Global (modules/flow-engine/flows/)', value: 'global' },
-          { name: '📦 Proyecto específico', value: 'project' }
+          { name: '🌍 Global (handlers/) - Usa credenciales GLOBAL', value: 'global' },
+          { name: '📦 Proyecto específico - Usa credenciales del proyecto', value: 'project' }
         ]
       },
       {
@@ -1769,332 +1618,33 @@ module.exports = function (plop) {
     ],
 
     actions: (data) => {
-      // ========================================
-      // CONSTRUIR EL FLUJO
-      // ========================================
-      const flow = {
-        id: data.id,
-        name: data.name,
-        description: data.description,
-        version: '1.0.0',
-        enabled: true
-      };
-
-      // ========== TRIGGER ==========
-      switch (data.triggerType) {
-        case 'telegram':
-          flow.trigger = {
-            event: 'bot.file.stored',
-            filter: {
-              botName: data.telegramBot
-            }
-          };
-          if (data.telegramMimeTypes && !data.telegramMimeTypes.includes('*')) {
-            flow.trigger.filter['file.mimeType'] = { '$in': data.telegramMimeTypes };
-          }
-          break;
-
-        case 'gmail':
-          flow.trigger = {
-            event: 'gmail.message.received',
-            filter: {}
-          };
-          if (data.gmailAccount) {
-            flow.trigger.filter.account = data.gmailAccount;
-          }
-          break;
-
-        case 'folder':
-          flow.trigger = {
-            event: 'fs.file.created',
-            filter: {}
-          };
-          break;
-
-        case 'cron':
-          flow.schedule = {
-            cron: data.cronExpression,
-            timezone: 'Europe/Madrid'
-          };
-          break;
-
-        case 'event':
-          flow.trigger = {
-            event: data.eventName,
-            filter: {}
-          };
-          break;
-
-        case 'manual':
-          flow.trigger = {
-            event: `flow.trigger.${data.id}`,
-            filter: {}
-          };
-          break;
-      }
-
-      // ========== STEPS ==========
-      flow.steps = [];
-      let stepIndex = 0;
-
-      // Step: Crear directorio (si guarda archivos)
-      if (data.salida && (data.salida.includes('json') || data.salida.includes('excel') || data.salida.includes('text'))) {
-        flow.steps.push({
-          id: 'crear-directorio',
-          type: 'service',
-          service: 'fs',
-          action: 'mkdir',
-          path: data.outputPath,
-          onError: 'continue'
-        });
-      }
-
-      // Step: Leer archivo (si trigger es telegram o folder)
-      if (['telegram', 'folder'].includes(data.triggerType)) {
-        flow.steps.push({
-          id: 'leer-archivo',
-          type: 'service',
-          service: 'fs',
-          action: 'read',
-          path: '{{ globalPath(trigger.file.path) }}',
-          encoding: 'base64'
-        });
-      }
-
-      // Step: OCR
-      if (data.procesamiento && data.procesamiento.includes('ocr')) {
-        const ocrStep = {
-          id: 'ocr',
-          type: 'service',
-          service: data.ocrProvider,
-          action: 'extract',
-          timeout: 120000,
-          onError: 'continue'
-        };
-
-        // Input según provider
-        if (data.ocrProvider === 'local.google-documentai') {
-          ocrStep.document = '{{ steps.leer-archivo.content }}';
-          ocrStep.processor = 'ocr';
-        } else {
-          ocrStep.image = '{{ steps.leer-archivo.content }}';
-          ocrStep.language = data.ocrLanguage;
-        }
-
-        flow.steps.push(ocrStep);
-      }
-
-      // Step: AI
-      if (data.procesamiento && data.procesamiento.includes('ai')) {
-        const aiPrompt = data.procesamiento.includes('ocr')
-          ? `${data.aiTask}\n\nTexto extraído:\n{{ steps.ocr.data.text }}`
-          : `${data.aiTask}\n\nDatos de entrada:\n{{ json(trigger) }}`;
-
-        flow.steps.push({
-          id: 'analisis-ai',
-          type: 'agent',
-          system: 'Eres un asistente especializado. Responde en JSON estructurado cuando sea apropiado.',
-          prompt: aiPrompt,
-          model: data.aiModel,
-          temperature: 0.3,
-          timeout: 120000
-        });
-      }
-
-      // Step: Transform (mapear resultado)
-      if (data.procesamiento && data.procesamiento.includes('transform')) {
-        const mapping = {
-          id: '{{ uuid }}',
-          fechaProcesamiento: '{{ now }}'
-        };
-
-        if (data.triggerType === 'telegram') {
-          mapping.archivoOriginal = '{{ trigger.file.originalName }}';
-          mapping.chatId = '{{ trigger.chatId }}';
-          mapping.userId = '{{ trigger.userId }}';
-        }
-
-        if (data.procesamiento.includes('ocr')) {
-          mapping.textoExtraido = '{{ default(steps.ocr.data.text, "") }}';
-          mapping.confianzaOcr = '{{ default(steps.ocr.data.confidence, 0) }}';
-        }
-
-        if (data.procesamiento.includes('ai')) {
-          mapping.analisisAi = '{{ steps.analisis-ai.content }}';
-        }
-
-        flow.steps.push({
-          id: 'preparar-resultado',
-          type: 'transform',
-          operation: 'map',
-          config: {
-            mapping: mapping
-          }
-        });
-      }
-
-      // Step: Validación
-      if (data.procesamiento && data.procesamiento.includes('validate')) {
-        flow.steps.push({
-          id: 'validar',
-          type: 'condition',
-          if: data.procesamiento.includes('ocr')
-            ? '{{ steps.ocr.data.confidence }} > 0.5'
-            : '{{ !isEmpty(steps.preparar-resultado) }}',
-          then: null, // continúa normal
-          else: 'log-error'
-        });
-
-        // Agregar paso de log-error al final si hay validación
-        data._addLogError = true;
-      }
-
-      // Step: HTTP (si aplica)
-      if (data.procesamiento && data.procesamiento.includes('http')) {
-        flow.steps.push({
-          id: 'llamar-api',
-          type: 'http',
-          url: 'https://api.ejemplo.com/endpoint',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: '{{ json(steps.preparar-resultado) }}',
-          timeout: 30000,
-          onError: 'continue'
-        });
-      }
-
-      // Step: Delay (si aplica)
-      if (data.procesamiento && data.procesamiento.includes('delay')) {
-        flow.steps.push({
-          id: 'esperar',
-          type: 'delay',
-          ms: 1000
-        });
-      }
-
-      // ========== SALIDAS ==========
-
-      // Guardar JSON
-      if (data.salida && data.salida.includes('json')) {
-        flow.steps.push({
-          id: 'guardar-json',
-          type: 'service',
-          service: 'fs',
-          action: 'write',
-          path: `${data.outputPath}/{{ date }}_{{ default(trigger.file.originalName, uuid) }}.json`,
-          content: '{{ json(steps.preparar-resultado) }}'
-        });
-      }
-
-      // Guardar texto
-      if (data.salida && data.salida.includes('text')) {
-        flow.steps.push({
-          id: 'guardar-texto',
-          type: 'service',
-          service: 'fs',
-          action: 'write',
-          path: `${data.outputPath}/{{ date }}_{{ default(trigger.file.originalName, uuid) }}.txt`,
-          content: data.procesamiento && data.procesamiento.includes('ocr')
-            ? '{{ default(steps.ocr.data.text, "Sin texto") }}'
-            : '{{ json(steps.preparar-resultado) }}'
-        });
-      }
-
-      // Guardar Excel
-      if (data.salida && data.salida.includes('excel')) {
-        flow.steps.push({
-          id: 'guardar-excel',
-          type: 'service',
-          service: 'local.xlsx',
-          action: 'create',
-          data: ['{{ steps.preparar-resultado }}'],
-          path: `${data.outputPath}/{{ date }}_export.xlsx`
-        });
-      }
-
-      // Respuesta Telegram
-      if (data.salida && data.salida.includes('telegram')) {
-        flow.steps.push({
-          id: 'responder-telegram',
-          type: 'service',
-          service: 'telegram',
-          action: 'send_message',
-          chatId: '{{ trigger.chatId }}',
-          text: '✅ Procesado: {{ default(trigger.file.originalName, "documento") }}'
-        });
-      }
-
-      // Emitir evento
-      if (data.salida && data.salida.includes('event')) {
-        flow.steps.push({
-          id: 'emitir-evento',
-          type: 'emit',
-          event: data.outputEvent,
-          data: {
-            flowId: data.id,
-            resultado: '{{ steps.preparar-resultado }}'
-          }
-        });
-      }
-
-      // Log final
-      flow.steps.push({
-        id: 'log-resultado',
-        type: 'log',
-        level: 'info',
-        message: `Flujo ${data.id} completado`
-      });
-
-      // Log error (si hay validación)
-      if (data._addLogError) {
-        flow.steps.push({
-          id: 'log-error',
-          type: 'log',
-          level: 'warn',
-          message: `Flujo ${data.id}: validación fallida`
-        });
-      }
-
-      // ========================================
-      // GUARDAR EL FLUJO
-      // ========================================
-      data.flowJson = JSON.stringify(flow, null, 2);
-
-      const flowPath = data.ubicacion === 'global'
-        ? `modules/flow-engine/flows/${data.id}.json`
-        : `data/projects/${data.projectId}/flows/${data.id}.json`;
+      const handlerPath = data.ubicacion === 'global'
+        ? `handlers/${data.name}.js`
+        : `data/projects/${data.projectId}/handlers/${data.name}.js`;
 
       return [
         {
           type: 'add',
-          path: flowPath,
-          template: data.flowJson
+          path: handlerPath,
+          templateFile: 'plop-templates/handler/handler.js.hbs'
         },
         () => {
-          console.log('\n✅ Flujo creado exitosamente');
-          console.log(`\n📁 Ubicación: ${flowPath}`);
-          console.log('\n📋 Resumen del flujo:');
-          console.log(`   ID: ${data.id}`);
-          console.log(`   Trigger: ${data.triggerType}`);
-          console.log(`   Pasos: ${flow.steps.length}`);
-          if (data.procesamiento) {
-            console.log(`   Procesamiento: ${data.procesamiento.join(', ')}`);
-          }
-          if (data.salida) {
-            console.log(`   Salidas: ${data.salida.join(', ')}`);
-          }
-          console.log('\n🔧 Pasos generados:');
-          flow.steps.forEach((step, i) => {
-            console.log(`   ${i + 1}. [${step.type}] ${step.id}`);
-          });
+          console.log('\n✅ Handler creado exitosamente');
+          console.log(`\n📁 Ubicación: ${handlerPath}`);
+          console.log(`\n📋 Configuración:`);
+          console.log(`   Nombre: ${data.name}`);
+          console.log(`   Trigger: ${data.trigger}`);
+          console.log(`   Credenciales: ${data.ubicacion === 'global' ? 'GLOBAL' : 'PROJECT_' + data.projectId}`);
+          console.log('\n🔧 Contexto disponible:');
+          console.log('   - services.call(service, action, params)');
+          console.log('   - logger.info/warn/error(msg, data)');
+          console.log('   - emit(evento, data)');
+          console.log('   - config.* (configuración del proyecto)');
+          console.log('   - store.get/set/increment (persistencia)');
           console.log('\n🚀 Próximos pasos:');
-          console.log('   1. Revisar y ajustar el flujo generado');
-          console.log('   2. Verificar nombres de bots/cuentas');
-          console.log('   3. Ajustar rutas de salida');
-          console.log('   4. Reiniciar Event-Core para cargar el flujo');
-          console.log(`   5. Probar: curl -X POST http://localhost:3000/modules/flow-engine/flows/${data.id}/trigger\n`);
+          console.log('   1. Editar el handler con la lógica de negocio');
+          console.log('   2. Reiniciar Event-Core: npm start');
+          console.log('   3. El handler se cargará automáticamente\n');
           return '';
         }
       ];

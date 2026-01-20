@@ -130,16 +130,16 @@
     },
 
     "automatizacion": {
-      "flow-engine": {
+      "handlers": {
         "version": "1.0.0",
-        "descripcion": "Motor de flujos genérico conectando servicios, APIs, agentes y lógica",
-        "apis": ["CRUD flujos", "Trigger", "Gestión de ejecuciones"],
-        "eventos_publica": ["flow.started", "flow.step.started", "flow.step.completed", "flow.step.failed", "flow.completed", "flow.failed"],
-        "ui_actions": ["list", "get", "create", "trigger", "executions"],
-        "config": {
-          "max_flujos_concurrentes": 50,
-          "timeout_default_s": 300
-        }
+        "descripcion": "Sistema de handlers JavaScript para orquestación de eventos",
+        "ubicaciones": {
+          "global": "handlers/*.js",
+          "proyecto": "data/projects/{id}/handlers/*.js"
+        },
+        "credenciales": "Automáticas según ubicación (PROJECT_{id} → GLOBAL)",
+        "core_files": ["core/handler-loader.js", "core/service-executor.js"],
+        "patron": "Evento dispara handler → handler llama servicios → resultado"
       },
       "scheduler": {
         "version": "1.0.0",

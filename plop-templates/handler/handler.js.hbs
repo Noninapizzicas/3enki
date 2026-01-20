@@ -1,0 +1,89 @@
+/**
+ * Handler: {{titleCase name}}
+ *
+ * {{description}}
+ *
+ * Ubicación determina credenciales:
+ * - handlers/*.js → Usa credenciales GLOBAL
+ * - data/projects/X/handlers/*.js → Usa credenciales PROJECT_X
+ *
+ * Generado con: npx plop handler
+ */
+
+module.exports = {
+  name: '{{name}}',
+
+  description: '{{description}}',
+
+  // Evento que dispara este handler
+  trigger: '{{trigger}}',
+
+  // Habilitado
+  enabled: true,
+
+{{#if hasFilter}}
+  // Filtro: solo ejecuta si retorna true
+  filter: (event) => {
+    // TODO: Implementar condición de filtrado
+    return true;
+  },
+
+{{/if}}
+  /**
+   * Lógica del handler
+   *
+   * @param {Object} event - Datos del evento recibido
+   * @param {Object} context - Contexto de ejecución
+   * @param {Object} context.services - Executor de servicios (services.call)
+   * @param {Object} context.logger - Logger estructurado
+   * @param {string|null} context.projectId - ID del proyecto (null si global)
+   * @param {Function} context.emit - Emitir eventos para encadenamiento
+   * @param {Object} context.config - Configuración del proyecto
+   * @param {Object} context.store - Store persistente key-value
+   */
+  async handle(event, { services, logger, projectId, emit, config, store }) {
+    logger.info('{{name}}.started', { eventData: event, projectId });
+
+{{#if useServices}}
+    // Llamar a un servicio
+    // services.call inyecta project_id automáticamente según ubicación del handler
+    const resultado = await services.call('{{serviceName}}', '{{serviceAction}}', {
+      // TODO: Parámetros del servicio
+    });
+
+    if (!resultado.success) {
+      logger.error('{{name}}.service-error', { error: resultado.error });
+      return { success: false, error: resultado.error };
+    }
+
+{{/if}}
+{{#if useStore}}
+    // Persistir estado con store
+    const contador = await store.increment('procesados');
+    await store.set('ultimo', { timestamp: Date.now(), event });
+
+{{/if}}
+{{#if useConfig}}
+    // Leer configuración del proyecto (desde data/projects/{id}/config/*.json)
+    const miConfig = config.{{configKey}} ?? {};
+    const opcion = miConfig.opcion ?? 'default';
+
+{{/if}}
+{{#if emitEvent}}
+    // Emitir evento para encadenar con otros handlers
+    emit('{{emitEventName}}', {
+      ...event,
+      procesadoPor: '{{name}}',
+      timestamp: Date.now()
+    });
+
+{{/if}}
+    logger.info('{{name}}.completed', { projectId });
+
+    // Retornar resultado (opcional)
+    return {
+      success: true,
+      handler: '{{name}}'
+    };
+  }
+};

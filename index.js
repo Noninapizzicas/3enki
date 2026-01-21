@@ -43,6 +43,10 @@ const { UIRequestHandler } = require('./core/ui');
 // Port Management & Service Registry
 const { ServiceRegistry } = require('./core/utils');
 
+// Handler System
+const HandlerLoader = require('./core/handler-loader');
+const ServiceExecutor = require('./core/service-executor');
+
 // Parse CLI args
 function parseCLIArgs() {
   const args = process.argv.slice(2);
@@ -411,6 +415,43 @@ async function main() {
     }
 
     // ========================================================================
+    // Step 6.7: Initialize Handler System
+    // ========================================================================
+    console.log('⚡ [6.7/8] Loading Event Handlers...');
+
+    // Create Service Executor for handlers
+    core.serviceExecutor = new ServiceExecutor(core.eventBus, core.logger);
+
+    // Create Handler Loader
+    core.handlerLoader = new HandlerLoader(core.eventBus, core.serviceExecutor, core.logger);
+
+    // Load global handlers
+    core.handlerLoader.loadGlobal('./handlers');
+
+    // Load handlers for each project
+    const projectsPath = path.resolve(__dirname, './data/projects');
+    if (fs.existsSync(projectsPath)) {
+      const projects = fs.readdirSync(projectsPath).filter(f => {
+        const projectPath = path.join(projectsPath, f);
+        return fs.statSync(projectPath).isDirectory();
+      });
+
+      for (const projectId of projects) {
+        core.handlerLoader.loadProject(projectId);
+      }
+    }
+
+    const handlerStats = core.handlerLoader.getStats();
+    console.log(`   ✅ Loaded ${handlerStats.total} handler(s):`);
+    console.log(`      - Global: ${handlerStats.global}`);
+    for (const [proj, count] of Object.entries(handlerStats.byProject)) {
+      console.log(`      - ${proj}: ${count}`);
+    }
+    console.log('');
+
+    core.logger.info('core.handlers.loaded', handlerStats);
+
+    // ========================================================================
     // Step 7: Initialize Service Registry & Allocate Port
     // ========================================================================
     console.log('📋 [7/8] Initializing Service Registry...');
@@ -574,6 +615,13 @@ async function main() {
           console.log('   [4/7] Unloading modules...');
           await core.moduleLoader.unloadAll();
           core.logger.info('core.modules.unloaded');
+        }
+
+        // Step 5.3: Unload Handlers
+        if (core.handlerLoader) {
+          console.log('   [4.5/7] Unloading handlers...');
+          core.handlerLoader.unloadAll();
+          core.logger.info('core.handlers.unloaded');
         }
 
         // Step 5.5: Unload Providers

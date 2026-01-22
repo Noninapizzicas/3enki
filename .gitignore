@@ -78,3 +78,7 @@ temp/
 
 # Tesseract language files (download on first run)
 services/providers/local/tesseract/tessdata/*.traineddata
+
+# Generated project databases
+data/projects/_prompts/
+data/projects/system/

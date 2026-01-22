@@ -16,11 +16,15 @@ module.exports = {
   // Solo procesar archivos del bot de facturas
   filter: (event) => {
     const botPermitido = 'facturas_asesoria_bot';
-    return event.botName === botPermitido;
+    // EventBus envuelve datos en event.data
+    const data = event.data || event;
+    return data.botName === botPermitido;
   },
 
   async handle(event, { services, logger, projectId, emit, store }) {
-    const { botName, chatId, userId, file, timestamp } = event;
+    // EventBus envuelve datos en event.data
+    const data = event.data || event;
+    const { botName, chatId, userId, file, timestamp } = data;
     const { path: rutaOrigen, originalName, mimeType, size } = file;
 
     logger.info('guardar-archivo.iniciando', {

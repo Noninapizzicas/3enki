@@ -16,28 +16,7 @@ class ServiceExecutor {
     this.eventBus = eventBus;
     this.logger = logger;
     this.pending = new Map();
-
-    // Suscribirse a respuestas genéricas
-    this.setupResponseListeners();
-  }
-
-  setupResponseListeners() {
-    // Escuchar todas las respuestas de servicios
-    this.eventBus.subscribe('#', (event, topic) => {
-      if (!topic.endsWith('.response')) return;
-
-      const requestId = event.request_id;
-      if (!requestId || !this.pending.has(requestId)) return;
-
-      const { resolve, reject } = this.pending.get(requestId);
-      this.pending.delete(requestId);
-
-      if (event.success === false || event.error) {
-        reject(new Error(event.error || 'Service error'));
-      } else {
-        resolve(event);
-      }
-    });
+    this.subscriptions = new Map(); // Track active subscriptions
   }
 
   /**
@@ -56,6 +35,7 @@ class ServiceExecutor {
 
     const requestId = crypto.randomUUID();
     const requestEvent = `${service}.${action}.request`;
+    const responseEvent = `${service}.${action}.response`;
 
     // Construir payload
     const payload = {
@@ -69,23 +49,39 @@ class ServiceExecutor {
     }
 
     return new Promise((resolve, reject) => {
-      // Timeout
-      const timer = setTimeout(() => {
+      let timer;
+      let unsubscribe;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        if (unsubscribe) {
+          try { unsubscribe(); } catch (e) { /* ignore */ }
+        }
         this.pending.delete(requestId);
+      };
+
+      // Timeout
+      timer = setTimeout(() => {
+        cleanup();
         reject(new Error(`Timeout: ${service}.${action} after ${timeout}ms`));
       }, timeout);
 
-      // Guardar pending con cleanup de timer
-      this.pending.set(requestId, {
-        resolve: (result) => {
-          clearTimeout(timer);
-          resolve(result);
-        },
-        reject: (error) => {
-          clearTimeout(timer);
-          reject(error);
+      // Suscribirse SOLO al evento de respuesta específico
+      unsubscribe = this.eventBus.subscribe(responseEvent, (event) => {
+        // Verificar que es nuestra respuesta
+        if (event.request_id !== requestId) return;
+
+        cleanup();
+
+        if (event.success === false || event.error) {
+          reject(new Error(event.error || 'Service error'));
+        } else {
+          resolve(event);
         }
       });
+
+      // Guardar referencia para posible cancelación
+      this.pending.set(requestId, { cleanup });
 
       // Publicar request
       this.eventBus.publish(requestEvent, payload);
@@ -94,7 +90,8 @@ class ServiceExecutor {
         requestId,
         service,
         action,
-        projectId
+        projectId,
+        responseEvent
       });
     });
   }
@@ -111,6 +108,16 @@ class ServiceExecutor {
         return this.call(service, action, params, { ...options, projectId });
       }
     };
+  }
+
+  /**
+   * Cancela todas las peticiones pendientes
+   */
+  cancelAll() {
+    for (const [requestId, { cleanup }] of this.pending) {
+      if (cleanup) cleanup();
+    }
+    this.pending.clear();
   }
 }
 

@@ -21,34 +21,50 @@ module.exports = {
 
   // Solo procesar archivos del bot de este proyecto
   filter: (event) => {
+    // Log para debug - ver qué botName llega
+    console.log('[recibir-documento] filter - botName:', event?.botName);
+
     const botsProyecto = ['facturas_asesoria_bot'];
-    return botsProyecto.includes(event.botName);
+    return botsProyecto.includes(event?.botName);
   },
 
   async handle(event, { services, logger, projectId, emit, config, store }) {
+    // Validar evento
+    if (!event || !event.file) {
+      logger.error('recibir-documento.evento-invalido', { event });
+      return { success: false, error: 'Evento sin datos de archivo' };
+    }
+
     const { botName, chatId, userId, file, timestamp } = event;
 
     logger.info('recibir-documento.inicio', {
       botName,
-      archivo: file.originalName,
-      tipo: file.mimeType,
-      tamaño: file.size,
+      archivo: file?.originalName || 'sin-nombre',
+      tipo: file?.mimeType,
+      tamaño: file?.size,
+      path: file?.path,
       chatId
     });
 
     try {
       // 1. Leer configuración del proyecto
-      const projectConfig = config.project ?? {};
+      const projectConfig = config?.project ?? {};
       const botConfig = projectConfig.bots?.[botName] ?? {};
 
       // 2. Preparar ruta destino
       const fecha = new Date().toISOString().split('T')[0].replace(/-/g, '');
       const hora = new Date().toISOString().split('T')[1].slice(0, 8).replace(/:/g, '');
-      const nombreDestino = `${fecha}-${hora}_${file.originalName}`;
+      const nombreArchivo = file?.originalName || `archivo_${Date.now()}`;
+      const nombreDestino = `${fecha}-${hora}_${nombreArchivo}`;
 
-      // Ruta base del proyecto (relativa a data/)
+      // Ruta base del proyecto
       const storageBase = `./data/projects/${projectId}/storage/facturas/recibidas`;
       const rutaDestino = path.join(storageBase, nombreDestino);
+
+      logger.info('recibir-documento.rutas', {
+        origen: file?.path,
+        destino: rutaDestino
+      });
 
       // 3. Crear directorio si no existe
       await services.call('fs', 'mkdir', { path: storageBase });
@@ -59,19 +75,19 @@ module.exports = {
         encoding: 'base64'
       });
 
-      if (!contenido.success) {
-        throw new Error(`No se pudo leer archivo origen: ${contenido.error}`);
+      if (!contenido?.success) {
+        throw new Error(`No se pudo leer archivo origen: ${contenido?.error || 'respuesta vacía'}`);
       }
 
       // 5. Escribir en storage del proyecto
       const guardado = await services.call('fs', 'write', {
         path: rutaDestino,
-        content: contenido.data.content,
+        content: contenido.data?.content,
         encoding: 'base64'
       });
 
-      if (!guardado.success) {
-        throw new Error(`No se pudo guardar archivo: ${guardado.error}`);
+      if (!guardado?.success) {
+        throw new Error(`No se pudo guardar archivo: ${guardado?.error || 'respuesta vacía'}`);
       }
 
       // 6. Actualizar contadores
@@ -80,19 +96,20 @@ module.exports = {
       await store.increment(`dia:${hoy}`);
 
       await store.set('ultimo_archivo', {
-        nombre: file.originalName,
+        nombre: nombreArchivo,
         ruta: rutaDestino,
         timestamp: Date.now(),
         chatId
       });
 
       // 7. Responder al usuario por Telegram
-      const mensajeConfig = botConfig.mensajes?.recibido ?? '✅ Archivo recibido';
+      const mensajeConfig = botConfig.mensajes?.recibido ?? '✅ Archivo recibido: {nombre}';
       const mensaje = mensajeConfig
-        .replace('{nombre}', file.originalName)
+        .replace('{nombre}', nombreArchivo)
         .replace('{total}', totalRecibidos);
 
       await services.call('telegram', 'send_message', {
+        botName,
         chatId,
         text: mensaje
       });
@@ -100,10 +117,10 @@ module.exports = {
       // 8. Emitir evento para siguiente handler (OCR, extracción, etc.)
       emit('documento.recibido', {
         archivo: {
-          nombre: file.originalName,
+          nombre: nombreArchivo,
           ruta: rutaDestino,
-          mimeType: file.mimeType,
-          tamaño: file.size
+          mimeType: file?.mimeType,
+          tamaño: file?.size
         },
         origen: {
           bot: botName,
@@ -115,7 +132,7 @@ module.exports = {
       });
 
       logger.info('recibir-documento.completado', {
-        archivo: file.originalName,
+        archivo: nombreArchivo,
         destino: rutaDestino,
         totalRecibidos
       });
@@ -128,15 +145,23 @@ module.exports = {
 
     } catch (error) {
       logger.error('recibir-documento.error', {
-        archivo: file.originalName,
-        error: error.message
+        archivo: file?.originalName,
+        error: error.message,
+        stack: error.stack
       });
 
-      // Notificar error al usuario
-      await services.call('telegram', 'send_message', {
-        chatId,
-        text: `❌ Error procesando archivo: ${error.message}`
-      });
+      // Intentar notificar error al usuario
+      try {
+        await services.call('telegram', 'send_message', {
+          botName,
+          chatId,
+          text: `❌ Error procesando archivo: ${error.message}`
+        });
+      } catch (sendError) {
+        logger.error('recibir-documento.error-notificacion', {
+          error: sendError.message
+        });
+      }
 
       return {
         success: false,

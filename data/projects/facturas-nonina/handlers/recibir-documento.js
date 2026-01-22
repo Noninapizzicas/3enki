@@ -82,7 +82,7 @@ module.exports = {
       // 5. Escribir en storage del proyecto
       const guardado = await services.call('fs', 'write', {
         path: rutaDestino,
-        content: contenido.data?.content,
+        content: contenido.content,
         encoding: 'base64'
       });
 

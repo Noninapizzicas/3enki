@@ -68,15 +68,18 @@ class ServiceExecutor {
 
       // Suscribirse SOLO al evento de respuesta específico
       unsubscribe = this.eventBus.subscribe(responseEvent, (event) => {
+        // Manejar envelope del EventBus
+        const data = event.data || event;
+
         // Verificar que es nuestra respuesta
-        if (event.request_id !== requestId) return;
+        if (data.request_id !== requestId) return;
 
         cleanup();
 
-        if (event.success === false || event.error) {
-          reject(new Error(event.error || 'Service error'));
+        if (data.success === false || data.error) {
+          reject(new Error(data.error || 'Service error'));
         } else {
-          resolve(event);
+          resolve(data);
         }
       });
 

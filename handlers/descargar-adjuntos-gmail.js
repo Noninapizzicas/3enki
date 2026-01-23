@@ -20,7 +20,7 @@ module.exports = {
 
     // Leer correo completo
     const correo = await services.call('local.gmail', 'read', {
-      account: email,
+      account,
       messageId,
       format: 'full'
     });
@@ -40,7 +40,7 @@ module.exports = {
     for (const adj of correo.attachments) {
       // Descargar adjunto
       const descarga = await services.call('local.gmail', 'attachments.download', {
-        account: email,
+        account,
         messageId,
         attachmentId: adj.id
       });

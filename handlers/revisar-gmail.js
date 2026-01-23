@@ -23,7 +23,7 @@ module.exports = {
     let totalCorreos = 0;
 
     for (const [nombreCuenta, configCuenta] of cuentas) {
-      const { account, query = 'has:attachment is:unread' } = configCuenta;
+      const { account, email, query = 'has:attachment is:unread' } = configCuenta;
 
       // Buscar correos
       const busqueda = await services.call('local.gmail', 'search', {
@@ -39,7 +39,7 @@ module.exports = {
         totalCorreos++;
         emit('gmail.message.found', {
           account: nombreCuenta,
-          email: account,
+          email: email || `${account}@gmail.com`,
           messageId: msg.id,
           threadId: msg.threadId
         });

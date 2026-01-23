@@ -81,9 +81,9 @@
   },
   "gmail": {
     "cuentas": {
-      "noninapizzica": {
-        "account": "noninapizzica",
-        "email": "noninapizzica@gmail.com",
+      "noninapizzicas": {
+        "account": "noninapizzicas",
+        "email": "noninapizzicas@gmail.com",
         "query": "has:attachment is:unread",
         "enabled": true
       }

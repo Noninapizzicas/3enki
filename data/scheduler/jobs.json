@@ -1,0 +1,22 @@
+[
+  {
+    "id": "gmail-check",
+    "name": "Revisar Gmail",
+    "description": "Busca correos nuevos con adjuntos cada 60 segundos",
+    "enabled": true,
+    "trigger": {
+      "type": "interval",
+      "value": 60,
+      "unit": "s"
+    },
+    "action": {
+      "type": "mqtt",
+      "topic": "gmail.check",
+      "payload": {}
+    },
+    "options": {
+      "maxRetries": 1,
+      "timeout": 30000
+    }
+  }
+]

@@ -419,7 +419,7 @@ module.exports = {
 
   functions: {
     send: {
-      event: 'gmail.send.request',
+      event: 'local.gmail.send.request',
       description: 'Enviar correo electrónico',
       input: {
         account: { type: 'string', description: 'Identificador de cuenta (opcional)' },
@@ -442,7 +442,7 @@ module.exports = {
     },
 
     list: {
-      event: 'gmail.list.request',
+      event: 'local.gmail.list.request',
       description: 'Listar correos',
       input: {
         account: { type: 'string', description: 'Identificador de cuenta (opcional)' },
@@ -459,7 +459,7 @@ module.exports = {
     },
 
     read: {
-      event: 'gmail.read.request',
+      event: 'local.gmail.read.request',
       description: 'Leer un correo específico',
       input: {
         account: { type: 'string', description: 'Identificador de cuenta (opcional)' },
@@ -480,7 +480,7 @@ module.exports = {
     },
 
     search: {
-      event: 'gmail.search.request',
+      event: 'local.gmail.search.request',
       description: 'Buscar correos con query estilo Gmail',
       input: {
         account: { type: 'string', description: 'Identificador de cuenta (opcional)' },
@@ -496,7 +496,7 @@ module.exports = {
     },
 
     'attachments.download': {
-      event: 'gmail.attachments.download.request',
+      event: 'local.gmail.attachments.download.request',
       description: 'Descargar adjunto de un correo',
       input: {
         account: { type: 'string', description: 'Identificador de cuenta (opcional)' },

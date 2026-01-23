@@ -11,7 +11,7 @@ module.exports = {
 
   filter(event) {
     const data = event.data || event;
-    const texto = data.text || data.message || '';
+    const texto = data.content || data.text || data.message || '';
     return texto.trim().toLowerCase() === '/correo';
   },
 

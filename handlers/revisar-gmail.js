@@ -1,0 +1,56 @@
+/**
+ * Handler Global: Revisar Gmail
+ *
+ * Escucha: gmail.check (activado por scheduler)
+ * Emite: gmail.message.found (por cada correo con adjuntos)
+ *
+ * Solo busca correos. El siguiente handler se encarga de descargar.
+ */
+module.exports = {
+  name: 'revisar-gmail',
+  description: 'Busca correos con adjuntos en Gmail',
+  trigger: 'gmail.check',
+
+  async handle(event, { services, logger, emit, config }) {
+    const gmailConfig = config.gmail?.cuentas || {};
+    const cuentas = Object.entries(gmailConfig).filter(([_, c]) => c.enabled !== false);
+
+    if (cuentas.length === 0) {
+      logger.debug('revisar-gmail.sin-cuentas');
+      return { success: true, correos: 0 };
+    }
+
+    let totalCorreos = 0;
+
+    for (const [nombreCuenta, configCuenta] of cuentas) {
+      const { account, query = 'has:attachment is:unread' } = configCuenta;
+
+      // Buscar correos
+      const busqueda = await services.call('local.gmail', 'search', {
+        account,
+        query,
+        maxResults: 10
+      });
+
+      if (!busqueda.messages?.length) continue;
+
+      // Emitir evento por cada correo encontrado
+      for (const msg of busqueda.messages) {
+        totalCorreos++;
+        emit('gmail.message.found', {
+          account: nombreCuenta,
+          email: account,
+          messageId: msg.id,
+          threadId: msg.threadId
+        });
+      }
+
+      logger.info('revisar-gmail.encontrados', {
+        cuenta: nombreCuenta,
+        correos: busqueda.messages.length
+      });
+    }
+
+    return { success: true, correos: totalCorreos };
+  }
+};

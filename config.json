@@ -78,5 +78,15 @@
       "key_rotation_days": 90,
       "trust_on_first_use": false
     }
+  },
+  "gmail": {
+    "cuentas": {
+      "noninapizzica": {
+        "account": "noninapizzica",
+        "email": "noninapizzica@gmail.com",
+        "query": "has:attachment is:unread",
+        "enabled": true
+      }
+    }
   }
 }

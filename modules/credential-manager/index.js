@@ -316,13 +316,20 @@ class CredentialManagerModule {
       this.onDeleteCredential.bind(this)
     );
 
+    // OAuth credential resolution (for Gmail and other OAuth providers)
+    await this.eventBus.subscribe(
+      'credential.oauth.resolve.request',
+      this.onOAuthResolveRequest.bind(this)
+    );
+
     this.logger.info('credential-manager.eventbus.subscribed', {
       events: [
         EVENTS.CREDENTIAL.RESOLVE_REQUEST,
         EVENTS.CREDENTIAL.STATE_REQUEST,
         EVENTS.CREDENTIAL.CREATE,
         EVENTS.CREDENTIAL.UPDATE,
-        EVENTS.CREDENTIAL.DELETE
+        EVENTS.CREDENTIAL.DELETE,
+        'credential.oauth.resolve.request'
       ]
     });
   }
@@ -603,6 +610,140 @@ class CredentialManagerModule {
         error.message,
         correlation_id
       );
+    }
+  }
+
+  /**
+   * Handler para resolución de credenciales OAuth (Gmail, Google)
+   * Retorna { clientId, clientSecret, refreshToken }
+   */
+  async onOAuthResolveRequest(event) {
+    const {
+      provider,
+      account,
+      request_id,
+      correlation_id
+    } = event.data || event;
+
+    this.logger.info('credential.oauth.resolve.request', {
+      provider,
+      account,
+      request_id,
+      correlation_id
+    });
+
+    const responseEvent = 'credential.oauth.resolve.response';
+
+    try {
+      // Buscar OAuth config (clientId, clientSecret)
+      const accountsToTry = account ? [account, 'default'] : ['default'];
+      let oauthConfig = null;
+      let usedAccount = null;
+
+      for (const acc of accountsToTry) {
+        const config = this.oauthConfigs.get(acc);
+        if (config && config.clientId && config.clientSecret) {
+          oauthConfig = config;
+          usedAccount = acc;
+          break;
+        }
+        // Fallback to process.env
+        const envClientId = acc === 'default'
+          ? process.env.GMAIL_CLIENT_ID
+          : process.env[`GMAIL_CLIENT_ID_${acc}`];
+        const envClientSecret = acc === 'default'
+          ? process.env.GMAIL_CLIENT_SECRET
+          : process.env[`GMAIL_CLIENT_SECRET_${acc}`];
+
+        if (envClientId && envClientSecret) {
+          oauthConfig = { clientId: envClientId, clientSecret: envClientSecret };
+          usedAccount = acc;
+          break;
+        }
+      }
+
+      if (!oauthConfig) {
+        this.logger.warn('credential.oauth.resolve.no_config', { provider, account });
+        await this.eventBus.publish(responseEvent, {
+          request_id,
+          success: false,
+          provider,
+          account,
+          error: `No OAuth config found for account: ${account || 'default'}`
+        });
+        return;
+      }
+
+      // Buscar refresh token
+      let refreshToken = null;
+      for (const acc of accountsToTry) {
+        // Buscar en credentials Map (patrón GMAIL_API_KEY_CUSTOM_{account})
+        const customKey = this.buildKey('GMAIL', 'CUSTOM', acc);
+        if (this.credentials.has(customKey)) {
+          refreshToken = this.credentials.get(customKey);
+          break;
+        }
+        // Fallback a process.env
+        const envRefreshToken = acc === 'default'
+          ? process.env.GMAIL_REFRESH_TOKEN
+          : process.env[`GMAIL_REFRESH_TOKEN_${acc}`];
+        if (envRefreshToken) {
+          refreshToken = envRefreshToken;
+          break;
+        }
+      }
+
+      if (!refreshToken) {
+        this.logger.warn('credential.oauth.resolve.no_refresh_token', { provider, account });
+        await this.eventBus.publish(responseEvent, {
+          request_id,
+          success: false,
+          provider,
+          account,
+          error: `No refresh token found for account: ${account || 'default'}`
+        });
+        return;
+      }
+
+      // Éxito - retornar los 3 valores
+      this.logger.info('credential.oauth.resolve.success', {
+        provider,
+        account: usedAccount,
+        correlation_id
+      });
+
+      this.metrics.increment('credential.oauth.resolved.total');
+
+      await this.eventBus.publish(responseEvent, {
+        request_id,
+        success: true,
+        provider,
+        account: usedAccount,
+        credentials: {
+          clientId: oauthConfig.clientId,
+          clientSecret: oauthConfig.clientSecret,
+          refreshToken
+        },
+        resolved_from: usedAccount === 'default' ? 'GLOBAL' : 'CUSTOM'
+      });
+
+    } catch (error) {
+      this.logger.error('credential.oauth.resolve.error', {
+        provider,
+        account,
+        error: error.message,
+        correlation_id
+      });
+
+      this.metrics.increment('credential.errors.total');
+
+      await this.eventBus.publish(responseEvent, {
+        request_id,
+        success: false,
+        provider,
+        account,
+        error: error.message
+      });
     }
   }
 

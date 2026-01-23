@@ -7,7 +7,7 @@
 module.exports = {
   name: 'comando-correo',
   description: 'Comando /correo para revisar Gmail manualmente',
-  trigger: 'chat.message.received',
+  trigger: 'chat.send.request',
 
   filter(event) {
     const data = event.data || event;

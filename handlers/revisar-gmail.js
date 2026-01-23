@@ -12,8 +12,15 @@ module.exports = {
   trigger: 'gmail.check',
 
   async handle(event, { services, logger, emit, config }) {
+    const data = event.data || event;
+
+    // Permite filtrar cuenta específica si se pasa en el evento
+    const cuentaFiltro = data.account || null;
+
     const gmailConfig = config.gmail?.cuentas || {};
-    const cuentas = Object.entries(gmailConfig).filter(([_, c]) => c.enabled !== false);
+    const cuentas = Object.entries(gmailConfig).filter(([nombre, c]) =>
+      c.enabled !== false && (!cuentaFiltro || nombre === cuentaFiltro)
+    );
 
     if (cuentas.length === 0) {
       logger.debug('revisar-gmail.sin-cuentas');

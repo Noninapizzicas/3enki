@@ -246,9 +246,17 @@ class HandlerLoader {
         // Clear cache para hot-reload
         delete require.cache[filePath];
 
-        const handler = require(filePath);
-        this.register(handler, projectId);
-        loaded++;
+        const exported = require(filePath);
+
+        // Soportar export de array de handlers o handler único
+        const handlers = Array.isArray(exported) ? exported : [exported];
+
+        for (const handler of handlers) {
+          if (handler && handler.name && handler.trigger && handler.handle) {
+            this.register(handler, projectId);
+            loaded++;
+          }
+        }
       } catch (error) {
         this.logger?.error('handlers.load.failed', {
           file,

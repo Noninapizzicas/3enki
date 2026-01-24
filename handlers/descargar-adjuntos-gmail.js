@@ -19,13 +19,17 @@ module.exports = {
     const { account, email, messageId } = data;
 
     // Leer correo completo
-    const correo = await services.call('local.gmail', 'read', {
+    const correoResp = await services.call('local.gmail', 'read', {
       account,
       messageId,
       format: 'full'
     });
 
-    if (!correo.attachments?.length) {
+    // Los datos están en .data (patrón de respuesta de servicios)
+    const correo = correoResp.data || correoResp;
+    const attachments = correo.attachments || [];
+
+    if (!attachments.length) {
       logger.debug('descargar-adjuntos.sin-adjuntos', { messageId });
       return { success: true, adjuntos: 0 };
     }
@@ -37,13 +41,16 @@ module.exports = {
 
     let descargados = 0;
 
-    for (const adj of correo.attachments) {
+    for (const adj of attachments) {
       // Descargar adjunto
-      const descarga = await services.call('local.gmail', 'attachments.download', {
+      const descargaResp = await services.call('local.gmail', 'attachments.download', {
         account,
         messageId,
         attachmentId: adj.id
       });
+
+      // Los datos están en .data
+      const descarga = descargaResp.data || descargaResp;
 
       // Nombre con fecha
       const ahora = new Date();

@@ -39,10 +39,19 @@ module.exports = {
         maxResults: 10
       });
 
-      if (!busqueda.messages?.length) continue;
+      // Los mensajes están en busqueda.data.messages
+      const messages = busqueda.data?.messages || busqueda.messages || [];
+
+      logger.info('revisar-gmail.busqueda', {
+        cuenta: nombreCuenta,
+        query,
+        mensajes: messages.length
+      });
+
+      if (!messages.length) continue;
 
       // Emitir evento por cada correo encontrado
-      for (const msg of busqueda.messages) {
+      for (const msg of messages) {
         totalCorreos++;
         emit('gmail.message.found', {
           account: nombreCuenta,
@@ -54,7 +63,7 @@ module.exports = {
 
       logger.info('revisar-gmail.encontrados', {
         cuenta: nombreCuenta,
-        correos: busqueda.messages.length
+        correos: messages.length
       });
     }
 

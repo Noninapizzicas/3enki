@@ -167,6 +167,10 @@ class CredentialManagerModule {
             oauthClientSecrets.set(accountId, value);
             process.env[key] = value;
           }
+          // OAuth Refresh Token (GMAIL_REFRESH_TOKEN or GMAIL_REFRESH_TOKEN_accountName)
+          else if (key.startsWith('GMAIL_REFRESH_TOKEN')) {
+            process.env[key] = value;
+          }
         }
       }
 

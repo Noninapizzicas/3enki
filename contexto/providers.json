@@ -1,0 +1,162 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-01-23",
+  "_DESCRIPTION": "Reglas y patrones para providers del sistema Event-Core",
+
+  "_AI_INSTRUCTIONS": {
+    "CRITICAL": "Este archivo define las reglas que TODOS los providers deben seguir",
+    "rule_1": "Los providers son TONTOS - solo ejecutan, no deciden",
+    "rule_2": "Los providers NO resuelven credenciales - las reciben inyectadas",
+    "rule_3": "Los eventos siguen el patrón: {provider}.{function}.request/response",
+    "rule_4": "Para providers locales, el prefijo es: local.{nombre}",
+    "ANTES_DE_CREAR_PROVIDER": "Leer este archivo COMPLETO antes de escribir código"
+  },
+
+  "tipos_de_providers": {
+    "external": {
+      "ubicacion": "services/providers/{provider}/",
+      "estructura": "provider.json + functions/*.json",
+      "credencial": "Definida en provider.json, resuelta por provider-loader",
+      "ejemplo": "google/, anthropic/, elevenlabs/"
+    },
+    "local": {
+      "ubicacion": "services/providers/local/{nombre}/",
+      "estructura": "index.js con name, functions, y métodos",
+      "credencial": "Inyectada por provider-loader, NUNCA buscada internamente",
+      "ejemplo": "local/gmail/, local/pdf/, local/tesseract/"
+    }
+  },
+
+  "patron_eventos": {
+    "regla": "Todos los eventos siguen el patrón {provider}.{function}.request/response",
+    "external_providers": {
+      "ejemplo": "google.vision.extract.request → google.vision.extract.response"
+    },
+    "local_providers": {
+      "IMPORTANTE": "SIEMPRE incluir prefijo 'local.'",
+      "patron": "local.{nombre}.{function}.request → local.{nombre}.{function}.response",
+      "ejemplos": [
+        "local.pdf.create.request → local.pdf.create.response",
+        "local.gmail.search.request → local.gmail.search.response",
+        "local.tesseract.extract.request → local.tesseract.extract.response"
+      ]
+    }
+  },
+
+  "credenciales": {
+    "REGLA_CRITICA": "Los providers NUNCA resuelven credenciales internamente",
+    "razon": [
+      "Evita duplicación de lógica",
+      "Evita inconsistencias de case (noninapizzicas vs Noninapizzicas)",
+      "Centraliza la gestión en credential-manager",
+      "Permite cambiar la lógica en un solo lugar"
+    ],
+    "flujo_correcto": {
+      "paso_1": "Handler llama services.call('local.gmail', 'search', { account: 'xxx' })",
+      "paso_2": "ServiceExecutor publica local.gmail.search.request",
+      "paso_3": "provider-loader recibe el evento",
+      "paso_4": "provider-loader detecta que gmail necesita OAuth credentials",
+      "paso_5": "provider-loader publica credential.oauth.resolve.request",
+      "paso_6": "credential-manager responde con { clientId, clientSecret, refreshToken }",
+      "paso_7": "provider-loader llama al provider con credenciales inyectadas",
+      "paso_8": "provider ejecuta y retorna resultado"
+    },
+    "flujo_incorrecto": {
+      "NO_HACER": "El provider lee directamente de process.env",
+      "NO_HACER_2": "El provider tiene su propia función resolveCredentials()",
+      "NO_HACER_3": "El provider busca GMAIL_CLIENT_ID_{account} internamente"
+    }
+  },
+
+  "estructura_provider_local": {
+    "archivo": "services/providers/local/{nombre}/index.js",
+    "ejemplo_correcto": {
+      "comentario": "Ejemplo de provider local que NO resuelve credenciales",
+      "codigo": [
+        "module.exports = {",
+        "  name: 'local.gmail',",
+        "  description: 'Gmail API',",
+        "",
+        "  functions: {",
+        "    search: {",
+        "      event: 'local.gmail.search.request',",
+        "      description: 'Buscar correos',",
+        "      input: { account: 'string', query: 'string' },",
+        "      output: { messages: 'array' }",
+        "    }",
+        "  },",
+        "",
+        "  // Las credenciales son INYECTADAS por provider-loader",
+        "  // NO buscarlas internamente",
+        "  async search({ account, query, _credentials }) {",
+        "    const { clientId, clientSecret, refreshToken } = _credentials;",
+        "    // usar credenciales inyectadas",
+        "  }",
+        "};"
+      ]
+    },
+    "ejemplo_incorrecto": {
+      "comentario": "NO HACER - provider que resuelve credenciales internamente",
+      "codigo": [
+        "// ❌ MAL - No hacer esto",
+        "function resolveCredentials(account) {",
+        "  const env = process.env;",
+        "  const clientId = env[`GMAIL_CLIENT_ID_${account}`];",
+        "  // ... búsqueda propia de credenciales",
+        "}"
+      ]
+    }
+  },
+
+  "provider_loader_responsabilidades": {
+    "ubicacion": "core/providers/loader.js",
+    "responsabilidades": [
+      "Cargar providers externos y locales",
+      "Registrar eventos request/response",
+      "Resolver credenciales via credential-manager ANTES de llamar al provider",
+      "Inyectar credenciales como parámetro _credentials"
+    ],
+    "flujo_ejecucion": [
+      "1. Recibe evento local.gmail.search.request",
+      "2. Extrae provider='local.gmail', function='search', input={...}",
+      "3. Detecta que provider requiere OAuth (mirando config)",
+      "4. Publica credential.oauth.resolve.request { provider: 'GMAIL', account: input.account }",
+      "5. Espera credential.oauth.resolve.response",
+      "6. Añade _credentials al input",
+      "7. Llama a handler.search({ ...input, _credentials })",
+      "8. Publica local.gmail.search.response con resultado"
+    ]
+  },
+
+  "providers_oauth": {
+    "descripcion": "Providers que requieren OAuth2 (3 credenciales)",
+    "lista": ["local.gmail"],
+    "credenciales_requeridas": {
+      "clientId": "OAuth Client ID de Google Cloud Console",
+      "clientSecret": "OAuth Client Secret",
+      "refreshToken": "Refresh Token obtenido via flujo OAuth"
+    },
+    "evento_resolucion": "credential.oauth.resolve.request/response"
+  },
+
+  "providers_api_key": {
+    "descripcion": "Providers que requieren API key simple (1 credencial)",
+    "lista": ["google", "anthropic", "openai", "deepseek", "elevenlabs"],
+    "credencial_requerida": "api_key",
+    "evento_resolucion": "credential.resolve.request/response"
+  },
+
+  "checklist_nuevo_provider": {
+    "descripcion": "Pasos para crear un nuevo provider local",
+    "pasos": [
+      "1. Crear directorio: services/providers/local/{nombre}/",
+      "2. Crear index.js con estructura correcta",
+      "3. Definir events CON prefijo 'local.'",
+      "4. NO implementar resolución de credenciales",
+      "5. Recibir credenciales como parámetro _credentials",
+      "6. Actualizar este archivo (/contexto/providers.json) con el nuevo provider",
+      "7. Actualizar /contexto/services.json con los eventos",
+      "8. Si requiere OAuth, añadir a lista 'providers_oauth'"
+    ]
+  }
+}

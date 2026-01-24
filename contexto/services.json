@@ -671,57 +671,53 @@
     },
 
     "gmail": {
-      "credential": "GMAIL_REFRESH_TOKEN",
+      "name": "local.gmail",
+      "credential": "via credential-manager",
       "auth_type": "oauth2",
       "description": "Gmail API - Envío y lectura de correos con OAuth2 Multi-Cuenta",
-      "note": "Implementado como servicio local por complejidad de OAuth2. Soporta múltiples cuentas de Google.",
-      "multi_account": {
-        "description": "Soporte para múltiples cuentas de Google, cada una con sus propias credenciales OAuth2",
-        "credential_resolution": [
-          "1. JSON agrupado: GMAIL_OAUTH_CUSTOM_{account} = {client_id, client_secret, refresh_token}",
-          "2. Individual por cuenta: GMAIL_CLIENT_ID_{account}, GMAIL_CLIENT_SECRET_{account}, GMAIL_REFRESH_TOKEN_{account}",
-          "3. Fallback global: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN"
-        ],
-        "usage_example": {
-          "single_account": "await gmail.send({ to: 'user@example.com', subject: 'Test', body: 'Hello' })",
-          "specific_account": "await gmail.send({ to: 'user@example.com', subject: 'Test', body: 'Hello', account: 'trabajo' })"
-        },
-        "env_examples": {
-          "json_grouped": "GMAIL_OAUTH_CUSTOM_trabajo={\"client_id\":\"xxx\",\"client_secret\":\"yyy\",\"refresh_token\":\"zzz\"}",
-          "individual": "GMAIL_CLIENT_ID_trabajo=xxx\nGMAIL_CLIENT_SECRET_trabajo=yyy\nGMAIL_REFRESH_TOKEN_trabajo=zzz",
-          "global_fallback": "GMAIL_CLIENT_ID=xxx\nGMAIL_CLIENT_SECRET=yyy\nGMAIL_REFRESH_TOKEN=zzz"
-        }
+      "IMPORTANTE": {
+        "patron_eventos": "local.gmail.{action}.request - SIEMPRE con prefijo local.",
+        "credenciales": "NUNCA resolver internamente. SIEMPRE usar credential-manager via eventos",
+        "razon": "Unificar lógica. No duplicar código. Evitar inconsistencias de case/formato"
       },
-      "required_env": {
-        "option_1_json": ["GMAIL_OAUTH_CUSTOM_{account}"],
-        "option_2_individual": ["GMAIL_CLIENT_ID_{account}", "GMAIL_CLIENT_SECRET_{account}", "GMAIL_REFRESH_TOKEN_{account}"],
-        "option_3_global": ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"]
+      "credential_flow": {
+        "description": "El provider-loader resuelve credenciales ANTES de llamar al provider",
+        "steps": [
+          "1. Handler llama services.call('local.gmail', 'search', { account: 'xxx' })",
+          "2. ServiceExecutor publica local.gmail.search.request",
+          "3. provider-loader recibe evento",
+          "4. provider-loader pide credenciales a credential-manager via credential.oauth.resolve",
+          "5. credential-manager retorna { clientId, clientSecret, refreshToken }",
+          "6. provider-loader llama a Gmail provider con credenciales inyectadas",
+          "7. Gmail provider ejecuta, retorna resultado",
+          "8. provider-loader publica local.gmail.search.response"
+        ]
       },
       "functions": {
         "send": {
-          "event": "gmail.send.request",
-          "description": "Enviar correo electrónico",
-          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
+          "event": "local.gmail.send.request",
+          "response": "local.gmail.send.response",
+          "description": "Enviar correo electrónico"
         },
         "list": {
-          "event": "gmail.list.request",
-          "description": "Listar correos",
-          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
+          "event": "local.gmail.list.request",
+          "response": "local.gmail.list.response",
+          "description": "Listar correos"
         },
         "read": {
-          "event": "gmail.read.request",
-          "description": "Leer correo específico",
-          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
+          "event": "local.gmail.read.request",
+          "response": "local.gmail.read.response",
+          "description": "Leer correo específico"
         },
         "search": {
-          "event": "gmail.search.request",
-          "description": "Buscar correos",
-          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
+          "event": "local.gmail.search.request",
+          "response": "local.gmail.search.response",
+          "description": "Buscar correos"
         },
         "attachments.download": {
-          "event": "gmail.attachments.download.request",
-          "description": "Descargar adjunto",
-          "input_extra": "account: string (opcional) - Cuenta de Google a usar"
+          "event": "local.gmail.attachments.download.request",
+          "response": "local.gmail.attachments.download.response",
+          "description": "Descargar adjunto"
         }
       }
     },

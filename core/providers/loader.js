@@ -289,7 +289,7 @@ class ProviderLoader {
 
       const unsubscribe = this.eventBus.subscribe(eventName, async (event) => {
         const requestId = event.data?.request_id || event.request_id || this.generateRequestId();
-        const input = event.data || event;
+        let input = { ...(event.data || event) };
 
         // Buscar función por evento
         const fnInfo = this.registry.findByEvent(eventName);
@@ -300,6 +300,21 @@ class ProviderLoader {
             error: `Handler not found for event: ${eventName}`
           });
           return;
+        }
+
+        // Resolver credenciales OAuth para providers que lo requieren
+        if (this.isOAuthProvider(fnInfo.provider)) {
+          try {
+            const credentials = await this.resolveOAuthCredentials(fnInfo.provider, input.account);
+            input._credentials = credentials;
+          } catch (credError) {
+            await this.eventBus.publish(responseEvent, {
+              request_id: requestId,
+              success: false,
+              error: `Credential resolution failed: ${credError.message}`
+            });
+            return;
+          }
         }
 
         // Ejecutar
@@ -432,6 +447,66 @@ class ProviderLoader {
       name,
       ...data
     }));
+  }
+
+  /**
+   * Verifica si un provider requiere credenciales OAuth
+   *
+   * @param {string} providerName - Nombre del provider
+   * @returns {boolean}
+   */
+  isOAuthProvider(providerName) {
+    // Lista de providers que requieren OAuth2
+    const oauthProviders = ['local.gmail'];
+    return oauthProviders.includes(providerName);
+  }
+
+  /**
+   * Resuelve credenciales OAuth via credential-manager
+   *
+   * @param {string} providerName - Nombre del provider
+   * @param {string} account - Identificador de cuenta
+   * @returns {Promise<Object>} { clientId, clientSecret, refreshToken }
+   */
+  async resolveOAuthCredentials(providerName, account) {
+    return new Promise((resolve, reject) => {
+      const requestId = this.generateRequestId();
+      const timeout = 5000;
+      let timer;
+      let unsubscribe;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        if (unsubscribe) unsubscribe();
+      };
+
+      timer = setTimeout(() => {
+        cleanup();
+        reject(new Error(`OAuth credential resolution timeout for ${providerName}`));
+      }, timeout);
+
+      unsubscribe = this.eventBus.subscribe('credential.oauth.resolve.response', (event) => {
+        const data = event.data || event;
+        if (data.request_id !== requestId) return;
+
+        cleanup();
+
+        if (data.success && data.credentials) {
+          resolve(data.credentials);
+        } else {
+          reject(new Error(data.error || 'OAuth credential resolution failed'));
+        }
+      });
+
+      // Extraer provider base (local.gmail -> GMAIL)
+      const provider = providerName.replace('local.', '').toUpperCase();
+
+      this.eventBus.publish('credential.oauth.resolve.request', {
+        request_id: requestId,
+        provider,
+        account: account || null
+      });
+    });
   }
 }
 

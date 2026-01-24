@@ -1,128 +1,31 @@
 /**
  * Gmail Service - Servicio local para Gmail API (Multi-cuenta)
  *
- * Soporta múltiples cuentas de Google con OAuth2.
+ * IMPORTANTE: Este provider NO resuelve credenciales internamente.
+ * Las credenciales son inyectadas por provider-loader via credential-manager.
  *
- * Credenciales por cuenta (en .env o credential-manager):
- *
- * Opción 1: Credenciales individuales por cuenta
- * - GMAIL_CLIENT_ID_{account}
- * - GMAIL_CLIENT_SECRET_{account}
- * - GMAIL_REFRESH_TOKEN_{account}
- *
- * Opción 2: Credenciales globales (fallback)
- * - GMAIL_CLIENT_ID
- * - GMAIL_CLIENT_SECRET
- * - GMAIL_REFRESH_TOKEN
- *
- * Opción 3: JSON agrupado (via credential-manager)
- * - GMAIL_OAUTH_CUSTOM_{account} = {"client_id":"...","client_secret":"...","refresh_token":"..."}
+ * Cada función recibe _credentials: { clientId, clientSecret, refreshToken }
  *
  * @example
- * // Enviar correo con cuenta específica
- * eventBus.publish('gmail.send.request', {
- *   account: 'empresa',  // usa credenciales de 'empresa'
- *   to: 'destinatario@email.com',
- *   subject: 'Asunto',
- *   body: 'Contenido del correo'
- * });
- *
- * // Enviar correo con cuenta por defecto
- * eventBus.publish('gmail.send.request', {
- *   to: 'destinatario@email.com',
- *   subject: 'Asunto',
- *   body: 'Contenido'
- * });
+ * // El provider-loader maneja la resolución de credenciales
+ * // El handler solo necesita especificar account:
+ * services.call('local.gmail', 'search', { account: 'noninapizzicas', query: 'is:unread' })
  */
 
 const https = require('https');
 
 // Cache de access tokens por cuenta
-// Map: account -> { token, expiresAt }
+// Map: cacheKey -> { token, expiresAt }
 const accessTokenCache = new Map();
 
 /**
- * Resuelve las credenciales OAuth2 para una cuenta
+ * Obtiene un access token válido usando las credenciales inyectadas
  *
- * Orden de búsqueda:
- * 1. JSON agrupado: GMAIL_OAUTH_CUSTOM_{account}
- * 2. Individuales por cuenta: GMAIL_CLIENT_ID_{account}, etc.
- * 3. Globales (fallback): GMAIL_CLIENT_ID, etc.
- *
- * @param {string} account - Identificador de cuenta (opcional)
- * @returns {Object} { clientId, clientSecret, refreshToken }
- */
-function resolveCredentials(account) {
-  const env = process.env;
-
-  // 1. Intentar JSON agrupado
-  if (account) {
-    const jsonKey = `GMAIL_OAUTH_CUSTOM_${account}`;
-    const jsonValue = env[jsonKey];
-    if (jsonValue) {
-      try {
-        const parsed = JSON.parse(jsonValue);
-        if (parsed.client_id && parsed.client_secret && parsed.refresh_token) {
-          return {
-            clientId: parsed.client_id,
-            clientSecret: parsed.client_secret,
-            refreshToken: parsed.refresh_token,
-            source: jsonKey
-          };
-        }
-      } catch (e) {
-        // No es JSON válido, continuar
-      }
-    }
-
-    // 2. Intentar individuales por cuenta
-    const clientId = env[`GMAIL_CLIENT_ID_${account}`];
-    const clientSecret = env[`GMAIL_CLIENT_SECRET_${account}`];
-    const refreshToken = env[`GMAIL_REFRESH_TOKEN_${account}`];
-
-    if (clientId && clientSecret && refreshToken) {
-      return {
-        clientId,
-        clientSecret,
-        refreshToken,
-        source: `GMAIL_*_${account}`
-      };
-    }
-  }
-
-  // 3. Fallback a globales
-  const clientId = env.GMAIL_CLIENT_ID;
-  const clientSecret = env.GMAIL_CLIENT_SECRET;
-  const refreshToken = env.GMAIL_REFRESH_TOKEN;
-
-  if (clientId && clientSecret && refreshToken) {
-    return {
-      clientId,
-      clientSecret,
-      refreshToken,
-      source: 'GMAIL_* (global)'
-    };
-  }
-
-  // No se encontraron credenciales
-  const searchedKeys = account
-    ? [`GMAIL_OAUTH_CUSTOM_${account}`, `GMAIL_*_${account}`, 'GMAIL_* (global)']
-    : ['GMAIL_* (global)'];
-
-  throw new Error(
-    `Gmail credentials not found. Searched: ${searchedKeys.join(', ')}. ` +
-    'Configure: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN'
-  );
-}
-
-/**
- * Obtiene un access token válido para una cuenta (con refresh automático)
- *
- * @param {string} account - Identificador de cuenta (opcional)
+ * @param {Object} credentials - { clientId, clientSecret, refreshToken }
+ * @param {string} cacheKey - Clave para el cache (account o '_default_')
  * @returns {Promise<string>}
  */
-async function getAccessToken(account = null) {
-  const cacheKey = account || '_default_';
+async function getAccessToken(credentials, cacheKey = '_default_') {
   const now = Date.now();
 
   // Verificar cache
@@ -131,8 +34,11 @@ async function getAccessToken(account = null) {
     return cached.token;
   }
 
-  // Resolver credenciales
-  const { clientId, clientSecret, refreshToken } = resolveCredentials(account);
+  const { clientId, clientSecret, refreshToken } = credentials;
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Missing OAuth credentials. Credentials should be injected by provider-loader.');
+  }
 
   // Obtener nuevo token
   const response = await httpRequest({
@@ -218,11 +124,12 @@ function httpRequest(options) {
  * @param {string} endpoint - Endpoint (sin base URL)
  * @param {Object} body - Body opcional
  * @param {Object} query - Query params opcionales
- * @param {string} account - Cuenta a usar (opcional)
+ * @param {Object} credentials - { clientId, clientSecret, refreshToken } - Inyectadas por provider-loader
+ * @param {string} cacheKey - Clave para cache de tokens
  * @returns {Promise<Object>}
  */
-async function gmailRequest(method, endpoint, body = null, query = {}, account = null) {
-  const token = await getAccessToken(account);
+async function gmailRequest(method, endpoint, body = null, query = {}, credentials, cacheKey = '_default_') {
+  const token = await getAccessToken(credentials, cacheKey);
 
   let path = `/gmail/v1/users/me${endpoint}`;
 
@@ -517,14 +424,15 @@ module.exports = {
 
   /**
    * Enviar correo
+   * @param {Object} input - Incluye _credentials inyectadas por provider-loader
    */
-  async send({ account, to, subject, body, html = false, cc, bcc, attachments = [] }) {
+  async send({ account, to, subject, body, html = false, cc, bcc, attachments = [], _credentials }) {
     const mimeMessage = buildMimeMessage({ to, subject, body, html, cc, bcc, attachments });
     const encodedMessage = base64urlEncode(mimeMessage);
 
     const response = await gmailRequest('POST', '/messages/send', {
       raw: encodedMessage
-    }, {}, account);
+    }, {}, _credentials, account || '_default_');
 
     return {
       messageId: response.id,
@@ -535,13 +443,14 @@ module.exports = {
 
   /**
    * Listar correos
+   * @param {Object} input - Incluye _credentials inyectadas por provider-loader
    */
-  async list({ account, maxResults = 10, labelIds, pageToken }) {
+  async list({ account, maxResults = 10, labelIds, pageToken, _credentials }) {
     const query = { maxResults };
     if (labelIds?.length) query.labelIds = labelIds.join(',');
     if (pageToken) query.pageToken = pageToken;
 
-    const response = await gmailRequest('GET', '/messages', null, query, account);
+    const response = await gmailRequest('GET', '/messages', null, query, _credentials, account || '_default_');
 
     return {
       messages: response.messages || [],
@@ -553,9 +462,10 @@ module.exports = {
 
   /**
    * Leer un correo
+   * @param {Object} input - Incluye _credentials inyectadas por provider-loader
    */
-  async read({ account, messageId, format = 'full' }) {
-    const response = await gmailRequest('GET', `/messages/${messageId}`, null, { format }, account);
+  async read({ account, messageId, format = 'full', _credentials }) {
+    const response = await gmailRequest('GET', `/messages/${messageId}`, null, { format }, _credentials, account || '_default_');
 
     const headers = extractHeaders(response);
 
@@ -576,18 +486,20 @@ module.exports = {
 
   /**
    * Buscar correos
+   * @param {Object} input - Incluye _credentials inyectadas por provider-loader
    */
-  async search({ account, query, maxResults = 10, pageToken }) {
+  async search({ account, query, maxResults = 10, pageToken, _credentials }) {
     const params = { q: query, maxResults };
     if (pageToken) params.pageToken = pageToken;
+    const cacheKey = account || '_default_';
 
-    const response = await gmailRequest('GET', '/messages', null, params, account);
+    const response = await gmailRequest('GET', '/messages', null, params, _credentials, cacheKey);
 
     // Obtener snippets de cada mensaje
     const messages = [];
     for (const msg of (response.messages || [])) {
       try {
-        const details = await gmailRequest('GET', `/messages/${msg.id}`, null, { format: 'metadata' }, account);
+        const details = await gmailRequest('GET', `/messages/${msg.id}`, null, { format: 'metadata' }, _credentials, cacheKey);
         const headers = extractHeaders(details);
         messages.push({
           id: msg.id,
@@ -616,9 +528,10 @@ module.exports = {
 
   /**
    * Descargar adjunto
+   * @param {Object} input - Incluye _credentials inyectadas por provider-loader
    */
-  async 'attachments.download'({ account, messageId, attachmentId }) {
-    const response = await gmailRequest('GET', `/messages/${messageId}/attachments/${attachmentId}`, null, {}, account);
+  async 'attachments.download'({ account, messageId, attachmentId, _credentials }) {
+    const response = await gmailRequest('GET', `/messages/${messageId}/attachments/${attachmentId}`, null, {}, _credentials, account || '_default_');
 
     return {
       content: response.data,

@@ -5,11 +5,45 @@
   "_DESCRIPTION": "Sistema de Handlers - Orquestación de eventos con JavaScript directo",
 
   "_AI_INSTRUCTIONS": {
-    "cuando_leer": "Cuando necesites crear flujos de automatización o entender cómo se procesan eventos",
+    "cuando_leer": "ANTES de crear cualquier handler",
     "principio_clave": "Handlers son JavaScript puro - NO inventar sintaxis especial",
+    "CRITICO_ENVELOPE": "SIEMPRE usar 'const data = event.data || event;' - El EventBus envuelve datos",
+    "CRITICO_EVENTOS": "Verificar nombres de eventos en /contexto/ antes de usar",
     "regla_credenciales": "La ubicación del handler determina qué credenciales usa",
     "simplicidad": "Si algo se puede hacer en JS, hazlo en JS - sin abstracciones innecesarias",
     "encadenamiento": "Usa emit() para conectar handlers entre sí"
+  },
+
+  "CRITICO_event_envelope": {
+    "descripcion": "El EventBus envuelve los datos en event.data",
+    "SIEMPRE_HACER": "const data = event.data || event;",
+    "razon": "Los eventos llegan envueltos. Si accedes a event.content directamente, será undefined",
+    "ejemplo_correcto": [
+      "async handle(event, { logger }) {",
+      "  const data = event.data || event;  // ✅ SIEMPRE primero",
+      "  const content = data.content;       // ✅ Acceder via data",
+      "  const account = data.account;       // ✅",
+      "}"
+    ],
+    "ejemplo_incorrecto": [
+      "async handle(event, { logger }) {",
+      "  const content = event.content;  // ❌ MAL - será undefined",
+      "  const account = event.account;  // ❌ MAL",
+      "}"
+    ]
+  },
+
+  "CRITICO_eventos_chat": {
+    "descripcion": "Eventos del chat para handlers que escuchan mensajes",
+    "evento_correcto": "chat.send.request",
+    "campo_contenido": "data.content (NO data.text, NO data.message)",
+    "ejemplo_filter": [
+      "filter(event) {",
+      "  const data = event.data || event;",
+      "  const texto = data.content || '';  // ✅ content, no text",
+      "  return texto.trim() === '/comando';",
+      "}"
+    ]
   },
 
   "overview": {

@@ -1,8 +1,8 @@
 /**
  * Handler: Cola de Archivos Telegram
  *
- * Escucha TODOS los eventos de archivos de Telegram y los guarda
- * como "pendientes" en el store. NO descarga nada.
+ * Escucha eventos de archivos de Telegram del bot configurado
+ * y los guarda como "pendientes" en el store. NO descarga nada.
  *
  * Los archivos se procesan cuando un disparador emite
  * 'telegram.cola.procesar' (comando /procesar, scheduler, etc.)
@@ -15,6 +15,17 @@
  * }
  */
 
+// ═══════════════════════════════════════════════════════════
+// CONFIGURACIÓN
+// ═══════════════════════════════════════════════════════════
+const BOT_NAME = 'facturas_asesoria_bot';
+
+// Filtro común para todos los handlers
+const filterBot = (event) => {
+  const data = event.data || event;
+  return data.botName === BOT_NAME;
+};
+
 module.exports = [
   // ═══════════════════════════════════════════════════════════
   // HANDLERS DE ENTRADA - Guardan archivos como pendientes
@@ -23,6 +34,7 @@ module.exports = [
   {
     name: 'cola-telegram-document',
     trigger: 'telegram.document.received',
+    filter: filterBot,
     async handle(event, { store, logger }) {
       const data = event.data || event;
       await guardarPendiente(store, logger, data, 'document');
@@ -32,6 +44,7 @@ module.exports = [
   {
     name: 'cola-telegram-photo',
     trigger: 'telegram.photo.received',
+    filter: filterBot,
     async handle(event, { store, logger }) {
       const data = event.data || event;
       await guardarPendiente(store, logger, data, 'photo');
@@ -41,6 +54,7 @@ module.exports = [
   {
     name: 'cola-telegram-video',
     trigger: 'telegram.video.received',
+    filter: filterBot,
     async handle(event, { store, logger }) {
       const data = event.data || event;
       await guardarPendiente(store, logger, data, 'video');
@@ -50,6 +64,7 @@ module.exports = [
   {
     name: 'cola-telegram-audio',
     trigger: 'telegram.audio.received',
+    filter: filterBot,
     async handle(event, { store, logger }) {
       const data = event.data || event;
       await guardarPendiente(store, logger, data, 'audio');
@@ -59,6 +74,7 @@ module.exports = [
   {
     name: 'cola-telegram-voice',
     trigger: 'telegram.voice.received',
+    filter: filterBot,
     async handle(event, { store, logger }) {
       const data = event.data || event;
       await guardarPendiente(store, logger, data, 'voice');

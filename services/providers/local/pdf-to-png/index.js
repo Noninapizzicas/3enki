@@ -1,8 +1,8 @@
 /**
  * Local PDF to PNG Service
  *
- * Convierte páginas de PDF a imágenes PNG usando pdf-to-png-converter.
- * Sin dependencias de binarios ni SO. Ideal para previews y OCR de PDFs escaneados.
+ * Convierte páginas de PDF a imágenes PNG usando pdftoppm (Poppler).
+ * Requiere poppler-utils instalado: apt-get install poppler-utils
  *
  * Eventos:
  * - local.pdf-to-png.convert.request -> local.pdf-to-png.convert.response
@@ -26,35 +26,18 @@
  * {{ steps.mi-step.data.images }}
  * {{ steps.mi-step.data.images[0].content }}
  *
- * @version 1.0.0
+ * @version 2.0.0
  * @created 2026-01-13
+ * @updated 2026-01-25 - Cambio a pdftoppm (Poppler) para mejor soporte de fuentes
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 
-// Lazy load pdf-to-png-converter
-let pdfToPng = null;
-let pdfToPngLoadPromise = null;
-
-const loadPdfToPng = async () => {
-  if (pdfToPng) return pdfToPng;
-
-  if (!pdfToPngLoadPromise) {
-    pdfToPngLoadPromise = import('pdf-to-png-converter')
-      .then(module => {
-        pdfToPng = module.pdfToPng;
-        return pdfToPng;
-      })
-      .catch(e => {
-        pdfToPngLoadPromise = null;
-        throw new Error(`pdf-to-png-converter not installed. Run: npm install pdf-to-png-converter`);
-      });
-  }
-
-  return pdfToPngLoadPromise;
-};
+const execAsync = promisify(exec);
 
 module.exports = {
   name: 'local.pdf-to-png',
@@ -75,10 +58,10 @@ module.exports = {
           description: 'Páginas a convertir [1,2,3] (1-based). Vacío = todas',
           default: []
         },
-        scale: {
+        dpi: {
           type: 'number',
-          description: 'Escala del viewport (2.0 = 200%)',
-          default: 2.0
+          description: 'DPI para la conversión (300 recomendado para OCR)',
+          default: 300
         },
         outputFolder: {
           type: 'string',
@@ -109,8 +92,6 @@ module.exports = {
   /**
    * Detectar si el string es base64 de PDF por magic bytes
    * PDF en base64 empieza con "JVBERi" (que es "%PDF-" en base64)
-   *
-   * LECCION #12: Detectar magic bytes ANTES de verificar si es path
    */
   isPdfBase64(str) {
     if (!str || typeof str !== 'string') return false;
@@ -119,22 +100,24 @@ module.exports = {
 
   /**
    * Resolver input: base64, path, o @/ path
-   * pdf-to-png-converter acepta path o Buffer
-   *
-   * @returns {Promise<{input: string|Buffer, tempFile: string|null, error: string|null}>}
+   * @returns {Promise<{filePath: string, tempFile: string|null, error: string|null}>}
    */
   async resolveInput(pdf) {
     // Data URI completo
     if (pdf.startsWith('data:application/pdf;base64,')) {
       const base64Data = pdf.replace('data:application/pdf;base64,', '');
       const buffer = Buffer.from(base64Data, 'base64');
-      return { input: buffer, tempFile: null, error: null };
+      const tempFile = path.join(os.tmpdir(), `pdf-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+      fs.writeFileSync(tempFile, buffer);
+      return { filePath: tempFile, tempFile, error: null };
     }
 
     // Base64 puro (detectado por magic bytes)
     if (this.isPdfBase64(pdf)) {
       const buffer = Buffer.from(pdf, 'base64');
-      return { input: buffer, tempFile: null, error: null };
+      const tempFile = path.join(os.tmpdir(), `pdf-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+      fs.writeFileSync(tempFile, buffer);
+      return { filePath: tempFile, tempFile, error: null };
     }
 
     // Path de archivo (absoluto, relativo con ./, relativo sin ./, o @/)
@@ -153,41 +136,41 @@ module.exports = {
       }
 
       if (!fs.existsSync(filePath)) {
-        return { input: null, tempFile: null, error: `PDF file not found: ${filePath}` };
+        return { filePath: null, tempFile: null, error: `PDF file not found: ${filePath}` };
       }
 
       const stats = fs.statSync(filePath);
       if (!stats.isFile()) {
-        return { input: null, tempFile: null, error: `Path is not a file: ${filePath}` };
+        return { filePath: null, tempFile: null, error: `Path is not a file: ${filePath}` };
       }
 
-      return { input: filePath, tempFile: null, error: null };
+      return { filePath, tempFile: null, error: null };
     }
 
     // Intentar como base64
     try {
       const buffer = Buffer.from(pdf, 'base64');
-      // Verificar magic bytes de PDF
       if (buffer.slice(0, 5).toString() !== '%PDF-') {
-        return { input: null, tempFile: null, error: 'Invalid input: not a valid PDF' };
+        return { filePath: null, tempFile: null, error: 'Invalid input: not a valid PDF' };
       }
-      return { input: buffer, tempFile: null, error: null };
+      const tempFile = path.join(os.tmpdir(), `pdf-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+      fs.writeFileSync(tempFile, buffer);
+      return { filePath: tempFile, tempFile, error: null };
     } catch (e) {
-      return { input: null, tempFile: null, error: 'Invalid input: not a valid file path or base64' };
+      return { filePath: null, tempFile: null, error: 'Invalid input: not a valid file path or base64' };
     }
   },
 
   /**
-   * Convertir PDF a PNG
-   *
-   * LECCION #7: Validar TODOS los parametros al inicio
-   * LECCION #14: Devolver datos directamente (el executor los envuelve en {success, data})
-   *
-   * IMPORTANTE: Devolver datos directamente como google-vision,
-   * NO envolver en {success, data} - el executor ya lo hace.
+   * Convertir PDF a PNG usando pdftoppm (Poppler)
    */
-  async convert({ pdf, pages = [], scale = 2.0, outputFolder = '', password = '' } = {}) {
-    // === VALIDACION DE ENTRADA (Leccion #7) ===
+  async convert({ pdf, pages = [], dpi = 300, scale, outputFolder = '', password = '' } = {}) {
+    // Compatibilidad: si se usa scale en lugar de dpi, convertir
+    if (scale && !dpi) {
+      dpi = Math.round(72 * scale); // 72 DPI base * scale
+    }
+
+    // === VALIDACION DE ENTRADA ===
     if (!pdf) {
       throw new Error('Parameter "pdf" is required');
     }
@@ -200,87 +183,134 @@ module.exports = {
       throw new Error('Parameter "pdf" cannot be empty');
     }
 
+    let tempFile = null;
+    let tempOutputDir = null;
+
     try {
-      const converter = await loadPdfToPng();
+      // Verificar que pdftoppm está disponible
+      try {
+        await execAsync('which pdftoppm');
+      } catch (e) {
+        throw new Error('pdftoppm not found. Install poppler-utils: apt-get install poppler-utils');
+      }
 
       // Resolver input
       const resolved = await this.resolveInput(pdf);
       if (resolved.error) {
         throw new Error(resolved.error);
       }
+      tempFile = resolved.tempFile;
 
-      // Preparar opciones
-      const options = {
-        disableFontFace: false,
-        useSystemFonts: true,  // Usar fuentes del sistema para PDFs sin fuentes embebidas
-        viewportScale: scale,
-        verbosityLevel: 0,
-        returnPageContent: true
-      };
-
-      // Páginas específicas
-      if (Array.isArray(pages) && pages.length > 0) {
-        options.pagesToProcess = pages;
-        options.strictPagesToProcess = false;
-      }
-
-      // Carpeta de salida
+      // Determinar carpeta de salida
       let resolvedOutputFolder = outputFolder;
       if (outputFolder && outputFolder.trim() !== '') {
-        // Convertir @/ a ruta real (data/)
         if (outputFolder.startsWith('@/')) {
           resolvedOutputFolder = outputFolder.replace('@/', './data/');
         }
-
-        // Crear carpeta si no existe
         if (!fs.existsSync(resolvedOutputFolder)) {
           fs.mkdirSync(resolvedOutputFolder, { recursive: true });
         }
-        options.outputFolder = resolvedOutputFolder;
-
-        // Usar nombre del PDF como prefijo para evitar colisiones
-        let pdfBasename = 'page';
-        if (typeof resolved.input === 'string' && resolved.input.includes('/')) {
-          pdfBasename = path.basename(resolved.input, '.pdf');
-        }
-        options.outputFileMaskFunc = (pageNumber) => `${pdfBasename}_page_${pageNumber}.png`;
+      } else {
+        // Usar carpeta temporal si no se especifica output
+        tempOutputDir = path.join(os.tmpdir(), `pdfpng-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        fs.mkdirSync(tempOutputDir, { recursive: true });
+        resolvedOutputFolder = tempOutputDir;
       }
 
-      // Contraseña
+      // Nombre base para los archivos de salida
+      const pdfBasename = path.basename(resolved.filePath, '.pdf');
+      const outputPrefix = path.join(resolvedOutputFolder, pdfBasename);
+
+      // Construir comando pdftoppm
+      let cmd = `pdftoppm -png -r ${dpi}`;
+
+      // Añadir contraseña si se especifica
       if (password && password.trim() !== '') {
-        options.pdfFilePassword = password;
+        cmd += ` -upw "${password}"`;
       }
 
-      // Convertir
-      const pngPages = await converter(resolved.input, options);
+      // Añadir páginas específicas
+      if (Array.isArray(pages) && pages.length > 0) {
+        const firstPage = Math.min(...pages);
+        const lastPage = Math.max(...pages);
+        cmd += ` -f ${firstPage} -l ${lastPage}`;
+      }
 
-      // Procesar resultado
-      const images = pngPages.map(page => ({
-        pageNumber: page.pageNumber,
-        name: page.name,
-        content: page.content ? page.content.toString('base64') : null,
-        path: page.path || '',
-        width: page.width,
-        height: page.height
-      }));
+      // Archivo de entrada y prefijo de salida
+      cmd += ` "${resolved.filePath}" "${outputPrefix}"`;
 
-      // Devolver datos directamente - el executor los envuelve en {success, data}
+      // Ejecutar conversión
+      await execAsync(cmd);
+
+      // Leer archivos generados
+      const files = fs.readdirSync(resolvedOutputFolder)
+        .filter(f => f.startsWith(pdfBasename) && f.endsWith('.png'))
+        .sort();
+
+      const images = [];
+      for (const file of files) {
+        const filePath = path.join(resolvedOutputFolder, file);
+        const content = fs.readFileSync(filePath);
+
+        // Extraer número de página del nombre (formato: basename-1.png, basename-01.png, etc)
+        const match = file.match(/-(\d+)\.png$/);
+        const pageNumber = match ? parseInt(match[1], 10) : images.length + 1;
+
+        // Si se especificaron páginas específicas, filtrar
+        if (Array.isArray(pages) && pages.length > 0 && !pages.includes(pageNumber)) {
+          // Si estamos en carpeta temporal, eliminar archivo no deseado
+          if (tempOutputDir) {
+            fs.unlinkSync(filePath);
+          }
+          continue;
+        }
+
+        images.push({
+          pageNumber,
+          name: file,
+          content: content.toString('base64'),
+          path: outputFolder ? filePath : '', // Solo incluir path si se especificó outputFolder
+          width: null,  // pdftoppm no proporciona dimensiones directamente
+          height: null
+        });
+
+        // Si estamos en carpeta temporal, eliminar después de leer
+        if (tempOutputDir) {
+          fs.unlinkSync(filePath);
+        }
+      }
+
+      // Limpiar archivos temporales
+      if (tempFile) {
+        fs.unlinkSync(tempFile);
+      }
+      if (tempOutputDir) {
+        fs.rmdirSync(tempOutputDir);
+      }
+
       return {
         images,
         totalPages: images.length,
-        scale,
+        dpi,
         outputFolder: outputFolder || null
       };
 
     } catch (error) {
-      // Lanzar error para que el executor lo maneje
+      // Limpiar archivos temporales en caso de error
+      if (tempFile && fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+      if (tempOutputDir && fs.existsSync(tempOutputDir)) {
+        const files = fs.readdirSync(tempOutputDir);
+        for (const f of files) {
+          fs.unlinkSync(path.join(tempOutputDir, f));
+        }
+        fs.rmdirSync(tempOutputDir);
+      }
       throw new Error(`PDF to PNG conversion failed: ${error.message}`);
     }
   },
 
-  /**
-   * Cleanup
-   */
   async cleanup() {
     // No hay estado global que limpiar
   }

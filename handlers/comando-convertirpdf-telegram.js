@@ -34,11 +34,11 @@ module.exports = {
       text: '⏳ Convirtiendo PDFs a imágenes...'
     });
 
-    // Disparar conversión (scale 4.0 ≈ 288 DPI, óptimo para OCR)
+    // Disparar conversión (300 DPI óptimo para OCR)
     emit('pdf.batch.convert', {
       sourceDir: 'data/gmail/noninapizzicas',
       outputDir: 'data/gmail/noninapizzicas-images',
-      scale: 4.0
+      dpi: 300
     });
 
     // Notificar fin (el handler de conversión es async, esto es aproximado)

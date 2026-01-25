@@ -2,13 +2,13 @@
  * Handler: Convertir PDFs a Imágenes
  *
  * Escucha: pdf.batch.convert
- * Convierte todos los PDFs de un directorio a imágenes PNG
+ * Convierte todos los PDFs de un directorio a imágenes PNG usando pdftoppm (Poppler)
  *
  * Payload:
  * {
- *   sourceDir: 'data/gmail/noninapizzicas',      // Directorio con PDFs
+ *   sourceDir: 'data/gmail/noninapizzicas',       // Directorio con PDFs
  *   outputDir: 'data/gmail/noninapizzicas-images' // Directorio destino (opcional, genera automático)
- *   scale: 2.0                                    // Escala (opcional, default 2.0)
+ *   dpi: 300                                      // DPI (opcional, default 300 para OCR)
  * }
  */
 
@@ -22,8 +22,8 @@ module.exports = {
 
   async handle(event, { emit, logger }) {
     const data = event.data || event;
-    // scale 4.0 ≈ 288 DPI (72 base × 4), óptimo para OCR
-    const { sourceDir, outputDir, scale = 4.0 } = data;
+    // 300 DPI óptimo para OCR
+    const { sourceDir, outputDir, dpi = 300 } = data;
 
     if (!sourceDir) {
       logger.error('convertir-pdf.sin-directorio');
@@ -78,7 +78,7 @@ module.exports = {
       // Emitir request al provider
       emit('local.pdf-to-png.convert.request', {
         pdf: pdfPath,
-        scale,
+        dpi,
         outputFolder: pdfOutputDir
       });
 

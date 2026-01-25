@@ -212,7 +212,7 @@ module.exports = {
       // Preparar opciones
       const options = {
         disableFontFace: false,
-        useSystemFonts: false,
+        useSystemFonts: true,  // Usar fuentes del sistema para PDFs sin fuentes embebidas
         viewportScale: scale,
         verbosityLevel: 0,
         returnPageContent: true

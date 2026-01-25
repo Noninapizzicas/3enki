@@ -18,29 +18,5 @@
       "maxRetries": 1,
       "timeout": 30000
     }
-  },
-  {
-    "id": "telegram-procesar-cola",
-    "name": "Procesar cola Telegram",
-    "description": "Procesa archivos pendientes de Telegram todos los lunes a las 3 AM",
-    "enabled": true,
-    "trigger": {
-      "type": "cron",
-      "expression": "0 3 * * 1",
-      "timezone": "Europe/Madrid"
-    },
-    "action": {
-      "type": "mqtt",
-      "topic": "telegram.cola.procesar",
-      "payload": {
-        "botName": "facturas_asesoria_bot",
-        "triggeredBy": "scheduler",
-        "limit": 100
-      }
-    },
-    "options": {
-      "maxRetries": 3,
-      "timeout": 300000
-    }
   }
 ]

@@ -18,5 +18,29 @@
       "maxRetries": 1,
       "timeout": 30000
     }
+  },
+  {
+    "id": "convertir-pdf-imagenes",
+    "name": "Convertir PDFs a imágenes",
+    "description": "Convierte PDFs de Gmail a imágenes diariamente a las 3:15 AM",
+    "enabled": true,
+    "trigger": {
+      "type": "cron",
+      "expression": "15 3 * * *",
+      "timezone": "Europe/Madrid"
+    },
+    "action": {
+      "type": "mqtt",
+      "topic": "pdf.batch.convert",
+      "payload": {
+        "sourceDir": "data/gmail/noninapizzicas",
+        "outputDir": "data/gmail/noninapizzicas-images",
+        "scale": 2.0
+      }
+    },
+    "options": {
+      "maxRetries": 2,
+      "timeout": 300000
+    }
   }
 ]

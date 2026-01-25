@@ -22,7 +22,8 @@ module.exports = {
 
   async handle(event, { emit, logger }) {
     const data = event.data || event;
-    const { sourceDir, outputDir, scale = 2.0 } = data;
+    // scale 4.0 ≈ 288 DPI (72 base × 4), óptimo para OCR
+    const { sourceDir, outputDir, scale = 4.0 } = data;
 
     if (!sourceDir) {
       logger.error('convertir-pdf.sin-directorio');

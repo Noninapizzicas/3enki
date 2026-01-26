@@ -42,5 +42,28 @@
       "maxRetries": 2,
       "timeout": 300000
     }
+  },
+  {
+    "id": "procesar-ocr-imagenes",
+    "name": "Procesar OCR de imágenes",
+    "description": "Extrae texto de imágenes con Google Vision OCR a las 3:30 AM",
+    "enabled": true,
+    "trigger": {
+      "type": "cron",
+      "expression": "30 3 * * *",
+      "timezone": "Europe/Madrid"
+    },
+    "action": {
+      "type": "mqtt",
+      "topic": "ocr.batch.process",
+      "payload": {
+        "sourceDir": "data/gmail/noninapizzicas-images",
+        "force": false
+      }
+    },
+    "options": {
+      "maxRetries": 2,
+      "timeout": 600000
+    }
   }
 ]

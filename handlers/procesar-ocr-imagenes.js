@@ -18,15 +18,12 @@
 const fs = require('fs');
 const path = require('path');
 
-// Importar servicio Google Vision directamente
-const googleVision = require('../services/providers/local/google-vision/index.js');
-
 module.exports = {
   name: 'procesar-ocr-imagenes',
   description: 'Procesa imágenes con OCR y guarda JSON maestro',
   trigger: 'ocr.batch.process',
 
-  async handle(event, { emit, logger }) {
+  async handle(event, { emit, logger, services }) {
     const data = event.data || event;
     const { sourceDir, force = false } = data;
 
@@ -76,12 +73,15 @@ module.exports = {
       logger.info('procesar-ocr.procesando', { imageFile });
 
       try {
-        // Llamar directamente al servicio de Google Vision
-        const ocrResult = await googleVision.extract({
+        // Llamar al servicio via services.call() (event-driven)
+        const ocrResponse = await services.call('local.google-vision', 'extract', {
           image: imagePath,
           hint: 'DOCUMENT_TEXT_DETECTION',
           languageHints: ['es']
-        });
+        }, { timeout: 120000 });
+
+        // El resultado viene en ocrResponse.data o directamente
+        const ocrResult = ocrResponse.data || ocrResponse;
 
         // Construir JSON maestro
         const masterJson = {

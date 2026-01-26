@@ -9,7 +9,7 @@
  * Uso:
  *   /ocr                    - Procesa data/gmail/noninapizzicas-images
  *   /ocr force              - Reprocesa aunque exista JSON
- *   /ocr bots               - Procesa data/bots/facturas_asesoria_bot/images
+ *   /ocr bots               - Procesa data/bots/facturas_asesoria_bot/received
  */
 
 module.exports = {
@@ -41,7 +41,7 @@ module.exports = {
       if (arg === 'force') {
         force = true;
       } else if (arg === 'bots' || arg === 'telegram') {
-        sourceDir = 'data/bots/facturas_asesoria_bot/images';
+        sourceDir = 'data/bots/facturas_asesoria_bot/received';
       } else if (arg === 'gmail') {
         sourceDir = 'data/gmail/noninapizzicas-images';
       }

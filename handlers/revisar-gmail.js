@@ -67,6 +67,15 @@ module.exports = {
       });
     }
 
+    // Notificar por Telegram si se solicitó
+    if (data.notifyTelegram && data.botName && data.chatId) {
+      emit('telegram.send_message.request', {
+        botName: data.botName,
+        chatId: data.chatId,
+        text: `📧 Gmail revisado:\n- Correos encontrados: ${totalCorreos}`
+      });
+    }
+
     return { success: true, correos: totalCorreos };
   }
 };

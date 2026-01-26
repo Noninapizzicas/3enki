@@ -33,14 +33,20 @@ module.exports = {
       args
     });
 
+    // Log args para debug
+    logger.info('comando-ocr.args', { args, argsLength: args?.length });
+
     // Determinar directorio según argumentos
     let sourceDir = 'data/gmail/noninapizzicas-images';
     let force = false;
 
-    for (const arg of args) {
+    // Normalizar args (lowercase, trim)
+    const normalizedArgs = (args || []).map(a => String(a).toLowerCase().trim());
+
+    for (const arg of normalizedArgs) {
       if (arg === 'force') {
         force = true;
-      } else if (arg === 'bots' || arg === 'telegram') {
+      } else if (arg === 'bots' || arg === 'telegram' || arg === 'bot') {
         sourceDir = 'data/bots/facturas_asesoria_bot/received';
       } else if (arg === 'gmail') {
         sourceDir = 'data/gmail/noninapizzicas-images';

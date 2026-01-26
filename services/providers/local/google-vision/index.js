@@ -359,6 +359,7 @@ module.exports = {
                      '';
 
       // Devolver datos directamente - el executor los envuelve en {success, data}
+      // Incluye raw response completo para archivo maestro
       return {
         text: text.trim(),
         confidence,
@@ -366,7 +367,12 @@ module.exports = {
         pages,
         locale,
         textLength: text.length,
-        hint
+        hint,
+        // Raw response de Google Vision (completo)
+        raw: {
+          fullTextAnnotation: fullTextAnnotation || null,
+          textAnnotations: textAnnotations || []
+        }
       };
 
     } catch (error) {

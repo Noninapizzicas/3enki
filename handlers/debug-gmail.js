@@ -28,19 +28,37 @@ module.exports = {
       maxResults: 1
     });
 
-    if (!busqueda.messages?.length) {
+    // Manejar respuesta con anidación: { success, data: { messages, ... } }
+    if (!busqueda?.success) {
+      logger.error('debug-gmail.error-busqueda', {
+        error: busqueda?.error || 'Error en búsqueda Gmail'
+      });
+      return { success: false, error: busqueda?.error || 'Error buscando en Gmail' };
+    }
+
+    const searchData = busqueda.data || {};
+    const messages = searchData.messages || [];
+
+    if (!messages.length) {
       logger.info('debug-gmail.sin-correos', { account });
       return { success: true, mensaje: 'No hay correos en los últimos 3 días' };
     }
 
-    const msg = busqueda.messages[0];
+    const msg = messages[0];
 
     // Leer correo completo
-    const correo = await services.call('local.gmail', 'read', {
+    const correoResp = await services.call('local.gmail', 'read', {
       account,
       messageId: msg.id,
       format: 'full'
     });
+
+    if (!correoResp?.success) {
+      logger.error('debug-gmail.error-leer', { error: correoResp?.error });
+      return { success: false, error: correoResp?.error || 'Error leyendo correo' };
+    }
+
+    const correo = correoResp.data || {};
 
     logger.info('debug-gmail.ultimo-correo', {
       id: correo.id,

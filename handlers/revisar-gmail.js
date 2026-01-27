@@ -42,8 +42,18 @@ module.exports = {
       maxResults
     });
 
+    // Verificar respuesta
+    if (!busqueda?.success) {
+      logger.error('revisar-gmail.error-busqueda', {
+        error: busqueda?.error || 'Error en búsqueda Gmail',
+        account
+      });
+      return { success: false, account, error: busqueda?.error || 'Error buscando en Gmail' };
+    }
+
     // Los mensajes están en busqueda.data.messages
-    const messages = busqueda.data?.messages || busqueda.messages || [];
+    const searchData = busqueda.data || {};
+    const messages = searchData.messages || [];
 
     logger.info('revisar-gmail.busqueda', {
       account,

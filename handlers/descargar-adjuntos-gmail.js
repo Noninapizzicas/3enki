@@ -18,6 +18,11 @@ module.exports = {
     const data = event.data || event;
     const { account, email, messageId } = data;
 
+    if (!messageId) {
+      logger.error('descargar-adjuntos.error', { error: 'messageId es requerido' });
+      return { success: false, error: 'messageId es requerido' };
+    }
+
     // Leer correo completo
     const correoResp = await services.call('local.gmail', 'read', {
       account,
@@ -25,8 +30,17 @@ module.exports = {
       format: 'full'
     });
 
+    // Verificar respuesta
+    if (!correoResp?.success) {
+      logger.error('descargar-adjuntos.error-leer', {
+        error: correoResp?.error || 'Error leyendo correo',
+        messageId
+      });
+      return { success: false, error: correoResp?.error || 'Error leyendo correo' };
+    }
+
     // Los datos están en .data (patrón de respuesta de servicios)
-    const correo = correoResp.data || correoResp;
+    const correo = correoResp.data || {};
     const attachments = correo.attachments || [];
 
     if (!attachments.length) {
@@ -49,8 +63,26 @@ module.exports = {
         attachmentId: adj.id
       });
 
+      // Verificar respuesta de descarga
+      if (!descargaResp?.success) {
+        logger.warn('descargar-adjuntos.error-descarga', {
+          error: descargaResp?.error || 'Error descargando adjunto',
+          filename: adj.filename,
+          messageId
+        });
+        continue; // Continuar con el siguiente adjunto
+      }
+
       // Los datos están en .data
-      const descarga = descargaResp.data || descargaResp;
+      const descarga = descargaResp.data || {};
+
+      if (!descarga.content) {
+        logger.warn('descargar-adjuntos.sin-contenido', {
+          filename: adj.filename,
+          messageId
+        });
+        continue;
+      }
 
       // Nombre con fecha
       const ahora = new Date();

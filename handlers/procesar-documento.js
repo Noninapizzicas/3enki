@@ -61,14 +61,31 @@ module.exports = {
         {}
       );
 
-      if (!backendsResult.success) {
-        throw new Error('No se pudieron listar los backends');
+      // Manejar doble anidación: executor envuelve en {success, data: providerResult}
+      // donde providerResult es {success, data: {available, ...}}
+      // Resultado final: {success, data: {success, data: {available, ...}}}
+      const providerResult = backendsResult?.data || {};
+      const backendsData = providerResult?.data || providerResult;
+
+      if (!backendsResult?.success) {
+        logger.warn('procesar-documento.backends-error', {
+          success: backendsResult?.success,
+          hasData: !!backendsData,
+          error: backendsResult?.error || providerResult?.error
+        });
+        throw new Error(backendsResult?.error || providerResult?.error || 'No se pudieron listar los backends');
       }
 
-      const { available, recommended } = backendsResult.data;
+      const available = backendsData?.available || [];
+      const recommended = backendsData?.recommended;
 
-      if (available.length === 0) {
-        throw new Error('No hay backends disponibles para procesar documentos');
+      if (!Array.isArray(available) || available.length === 0) {
+        logger.warn('procesar-documento.no-backends', {
+          backendsResultKeys: Object.keys(backendsResult || {}),
+          providerResultKeys: Object.keys(providerResult || {}),
+          backendsDataKeys: Object.keys(backendsData || {})
+        });
+        throw new Error('No hay backends disponibles para procesar documentos. Instala tesseract.js o configura credenciales de API.');
       }
 
       logger.info('procesar-documento.backends', {
@@ -93,26 +110,30 @@ module.exports = {
         );
       }
 
-      if (!result.success) {
-        throw new Error(result.error || 'Error procesando documento');
+      // Manejar doble anidación igual que arriba
+      const resultProvider = result?.data || {};
+      const resultData = resultProvider?.data || resultProvider;
+
+      if (!result?.success || !resultProvider?.success) {
+        throw new Error(result?.error || resultProvider?.error || 'Error procesando documento');
       }
 
       logger.info('procesar-documento.completado', {
-        backend: result.data.backend,
-        confidence: result.data.confidence,
-        hasInvoice: !!result.data.invoice,
-        textLength: result.data.text?.length || 0
+        backend: resultData.backend,
+        confidence: resultData.confidence,
+        hasInvoice: !!resultData.invoice,
+        textLength: resultData.text?.length || 0
       });
 
       // Preparar resultado
       const processResult = {
         success: true,
-        backend: result.data.backend,
-        confidence: result.data.confidence,
-        pages: result.data.pages,
-        text: result.data.text,
-        invoice: result.data.invoice,
-        tables: result.data.tables,
+        backend: resultData.backend,
+        confidence: resultData.confidence,
+        pages: resultData.pages,
+        text: resultData.text,
+        invoice: resultData.invoice,
+        tables: resultData.tables,
         metadata
       };
 
@@ -121,7 +142,7 @@ module.exports = {
 
       // Notificar por Telegram si se solicita
       if (notifyTelegram && botName && chatId) {
-        const message = formatTelegramMessage(result.data, type);
+        const message = formatTelegramMessage(resultData, type);
         emit('telegram.send_message.request', {
           botName,
           chatId,

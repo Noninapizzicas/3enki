@@ -30,6 +30,7 @@ pids/
 # Data directory - track project definitions, ignore runtime data
 data/*
 !data/projects/
+!data/scheduler/
 # Legacy structure
 data/projects/*/inbox/
 data/projects/*/datos/

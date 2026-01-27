@@ -1,7 +1,87 @@
 {
   "module": "scheduler",
-  "version": "1.0.0",
-  "description": "Sistema avanzado de scheduling con múltiples tipos de triggers",
+  "version": "2.0.0",
+  "description": "Gestor central de alarmas - emite eventos de tiempo (y en futuro: clima, sistema)",
+
+  "_AI_INSTRUCTIONS": {
+    "concepto_clave": "Scheduler emite eventos GENÉRICOS, los proyectos se suscriben y filtran",
+    "NO_hacer": "NO crear jobs específicos por proyecto con datos hardcodeados",
+    "SI_hacer": "Crear handlers de proyecto que escuchen eventos genéricos y usen SU config",
+    "filosofia": "El scheduler no sabe de Gmail ni de facturas, solo emite 'son las 9am'",
+    "ampliable": "Misma filosofía para eventos de clima, sistema, externos en el futuro"
+  },
+
+  "eventos_de_tiempo": {
+    "descripcion": "Eventos genéricos que emite el scheduler con metadatos de tiempo",
+    "payload_automatico": {
+      "_time": {
+        "timestamp": "number - Unix timestamp ms",
+        "iso": "string - ISO 8601",
+        "hour": "number - 0-23",
+        "minute": "number - 0-59",
+        "second": "number - 0-59",
+        "dayOfWeek": "number - 0=Domingo, 6=Sábado",
+        "dayOfMonth": "number - 1-31",
+        "month": "number - 1-12",
+        "year": "number - 2026",
+        "timezone": "string - Europe/Madrid"
+      },
+      "_job": {
+        "id": "string - ID del job",
+        "name": "string - Nombre del job"
+      }
+    },
+    "eventos_base": {
+      "schedule.time": "Cada minuto - pulso general de tiempo",
+      "schedule.hour": "Cada hora en punto",
+      "schedule.workday.start": "L-V 9:00 - inicio jornada",
+      "schedule.workday.end": "L-V 18:00 - fin jornada",
+      "schedule.night": "22:00 - tareas nocturnas",
+      "schedule.midnight": "00:00 - cambio de día",
+      "schedule.maintenance": "Domingo 3:00 - mantenimiento",
+      "schedule.month.start": "Día 1 00:00 - inicio de mes"
+    },
+    "eventos_futuros": {
+      "schedule.weather.*": "Eventos climáticos (via API externa)",
+      "schedule.system.*": "Eventos del sistema (errores, health)",
+      "schedule.external.*": "Eventos de APIs externas"
+    }
+  },
+
+  "uso_en_proyectos": {
+    "descripcion": "Cómo los proyectos usan los eventos de tiempo",
+    "patron": [
+      "1. Handler de proyecto escucha evento genérico (schedule.time, schedule.hour)",
+      "2. Handler filtra con filter() si necesita condiciones específicas",
+      "3. Handler lee SU configuración (config.gmail, config.telegram)",
+      "4. Handler emite evento de acción (gmail.check, backup.start)",
+      "5. Handler global reutilizable procesa la acción"
+    ],
+    "ejemplo_handler_proyecto": {
+      "archivo": "data/projects/mi-proyecto/handlers/revisar-gmail-programado.js",
+      "codigo": [
+        "module.exports = {",
+        "  name: 'revisar-gmail-programado',",
+        "  trigger: 'schedule.hour',",
+        "  filter: (event) => {",
+        "    const t = event.data?._time || event._time;",
+        "    return t.hour >= 9 && t.hour <= 18 && t.dayOfWeek >= 1 && t.dayOfWeek <= 5;",
+        "  },",
+        "  async handle(event, { emit, config, logger }) {",
+        "    const { gmail, telegram } = config.project || {};",
+        "    if (!gmail?.account) return;",
+        "    emit('gmail.check', {",
+        "      account: gmail.account,",
+        "      query: gmail.query || 'has:attachment is:unread',",
+        "      notifyTelegram: !!telegram,",
+        "      botName: telegram?.botName,",
+        "      chatId: telegram?.chatId",
+        "    });",
+        "  }",
+        "};"
+      ]
+    }
+  },
 
   "arquitectura": {
     "componentes": {

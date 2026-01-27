@@ -209,18 +209,32 @@ function resolveDocument(document) {
     throw new Error('document is required');
   }
 
-  // Data URI
-  if (document.startsWith('data:')) {
-    const match = document.match(/^data:([^;]+);base64,(.+)$/);
-    if (match) {
-      return { base64: match[2], mimeType: match[1], filePath: null };
+  // Data URI - detectar primero para evitar tratar como path
+  if (typeof document === 'string' && document.startsWith('data:')) {
+    // Buscar el separador base64, de forma más eficiente que regex en strings largos
+    const base64Marker = ';base64,';
+    const markerIndex = document.indexOf(base64Marker);
+
+    if (markerIndex !== -1) {
+      const mimeType = document.substring(5, markerIndex); // después de 'data:'
+      const base64 = document.substring(markerIndex + base64Marker.length);
+      return { base64, mimeType, filePath: null };
     }
+
+    // Fallback: data URI sin base64 marker (raro pero posible)
+    throw new Error('Invalid data URI format. Expected: data:<mimeType>;base64,<content>');
   }
 
-  // Magic bytes (base64)
+  // Magic bytes (base64 puro sin data: prefix)
   const mimeType = detectMimeType(document);
   if (mimeType) {
     return { base64: document, mimeType, filePath: null };
+  }
+
+  // A partir de aquí, asumir que es un file path
+  // Verificar que no sea un string demasiado largo para ser un path (evitar ENAMETOOLONG)
+  if (document.length > 4096) {
+    throw new Error('Document appears to be base64 content but could not detect MIME type. Prefix with data:<mimeType>;base64, or pass a file path.');
   }
 
   // File path

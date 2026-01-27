@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "id": "facturas-nonina-gmail-domingo",
+    "name": "Gmail Facturas Nonina - Domingo 3AM",
+    "description": "Descarga adjuntos PDF de Gmail los domingos a las 3:00 AM",
+    "enabled": true,
+    "trigger": {
+      "type": "cron",
+      "expression": "0 3 * * 0",
+      "timezone": "Europe/Madrid"
+    },
+    "action": {
+      "type": "mqtt",
+      "topic": "schedule.time"
+    },
+    "metadata": {
+      "projectId": "facturas-nonina",
+      "category": "time"
+    }
+  }
+]

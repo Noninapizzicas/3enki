@@ -427,6 +427,28 @@ class SchedulerModule {
       );
     }
 
+    // SIEMPRE añadir metadatos de tiempo al payload
+    // Los handlers pueden filtrar por hora, día, etc.
+    const now = new Date();
+    payload._time = {
+      timestamp: now.getTime(),
+      iso: now.toISOString(),
+      hour: now.getHours(),
+      minute: now.getMinutes(),
+      second: now.getSeconds(),
+      dayOfWeek: now.getDay(),        // 0=Domingo, 6=Sábado
+      dayOfMonth: now.getDate(),
+      month: now.getMonth() + 1,      // 1-12
+      year: now.getFullYear(),
+      timezone: this.config.defaultTimezone || 'Europe/Madrid'
+    };
+
+    // Añadir info del job
+    payload._job = {
+      id: job.id,
+      name: job.name
+    };
+
     await this.eventBus.publish(topic, payload, { qos: action.qos || 1 });
 
     return { published: true, topic, payload };

@@ -1,9 +1,9 @@
 [
   {
-    "id": "gmail-check",
-    "name": "Revisar Gmail",
-    "description": "Busca correos nuevos con adjuntos cada 60 segundos",
-    "enabled": true,
+    "id": "ejemplo-gmail-check",
+    "name": "Revisar Gmail (ejemplo)",
+    "description": "Busca correos nuevos con adjuntos - CONFIGURAR account antes de habilitar",
+    "enabled": false,
     "trigger": {
       "type": "interval",
       "value": 60,
@@ -12,7 +12,11 @@
     "action": {
       "type": "mqtt",
       "topic": "gmail.check",
-      "payload": {}
+      "payload": {
+        "account": "mi-cuenta",
+        "query": "has:attachment is:unread",
+        "maxResults": 10
+      }
     },
     "options": {
       "maxRetries": 1,
@@ -20,10 +24,10 @@
     }
   },
   {
-    "id": "convertir-pdf-imagenes",
-    "name": "Convertir PDFs a imágenes",
-    "description": "Convierte PDFs de Gmail a imágenes diariamente a las 3:15 AM",
-    "enabled": true,
+    "id": "ejemplo-convertir-pdf",
+    "name": "Convertir PDFs a imágenes (ejemplo)",
+    "description": "Convierte PDFs a imágenes - CONFIGURAR rutas antes de habilitar",
+    "enabled": false,
     "trigger": {
       "type": "cron",
       "expression": "15 3 * * *",
@@ -33,8 +37,8 @@
       "type": "mqtt",
       "topic": "pdf.batch.convert",
       "payload": {
-        "sourceDir": "data/gmail/noninapizzicas",
-        "outputDir": "data/gmail/noninapizzicas-images",
+        "sourceDir": "data/gmail/mi-cuenta",
+        "outputDir": "data/gmail/mi-cuenta-images",
         "dpi": 300
       }
     },
@@ -44,10 +48,10 @@
     }
   },
   {
-    "id": "procesar-ocr-imagenes",
-    "name": "Procesar OCR de imágenes",
-    "description": "Extrae texto de imágenes con Google Vision OCR a las 3:30 AM",
-    "enabled": true,
+    "id": "ejemplo-ocr-imagenes",
+    "name": "Procesar OCR de imágenes (ejemplo)",
+    "description": "Extrae texto con Google Vision OCR - CONFIGURAR rutas antes de habilitar",
+    "enabled": false,
     "trigger": {
       "type": "cron",
       "expression": "30 3 * * *",
@@ -57,7 +61,7 @@
       "type": "mqtt",
       "topic": "ocr.batch.process",
       "payload": {
-        "sourceDir": "data/gmail/noninapizzicas-images",
+        "sourceDir": "data/gmail/mi-cuenta-images",
         "force": false
       }
     },

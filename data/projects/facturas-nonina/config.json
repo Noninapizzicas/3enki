@@ -1,0 +1,38 @@
+{
+  "id": "facturas-nonina",
+  "name": "Facturas Nonina Pizzicas",
+  "description": "Procesamiento automático de facturas",
+
+  "sources": {
+    "telegram": {
+      "botName": "nonina",
+      "description": "Bot de Telegram para recibir facturas"
+    },
+    "gmail": {
+      "account": "noninapizzicas",
+      "description": "Cuenta Gmail para facturas por correo"
+    }
+  },
+
+  "processing": {
+    "backend": "auto",
+    "language": "es",
+    "outputFormat": {
+      "json": true,
+      "csv": true,
+      "copyOriginal": true
+    }
+  },
+
+  "paths": {
+    "procesadas": "./data/projects/facturas-nonina/procesadas",
+    "pendientes": "./data/projects/facturas-nonina/pendientes"
+  },
+
+  "notifications": {
+    "telegram": {
+      "enabled": false,
+      "chatId": null
+    }
+  }
+}

@@ -37,6 +37,8 @@ data/projects/*/exports/
 data/projects/*/archivados/
 data/projects/*/originales/
 data/projects/*/tmp/
+data/projects/*/db/
+data/projects/*/storage/
 # New structure: bot directories contain runtime data
 data/projects/*/*/recibidas/
 data/projects/*/*/procesadas/

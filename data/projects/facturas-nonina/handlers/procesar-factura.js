@@ -20,7 +20,7 @@ const path = require('path');
 
 // Configuración del proyecto
 const PROJECT_ID = 'facturas-nonina';
-const BOT_NAME = 'nonina';  // Bot de Telegram asociado
+const BOT_NAME = 'facturas_asesoria_bot';  // Bot de Telegram asociado
 const GMAIL_ACCOUNT = 'noninapizzicas';  // Cuenta Gmail asociada
 const TELEGRAM_CHAT_ID = null;  // Se puede configurar para notificaciones
 

@@ -5,7 +5,8 @@
 
   "sources": {
     "telegram": {
-      "botName": "nonina",
+      "botName": "facturas_asesoria_bot",
+      "command": "/procesafacturas",
       "description": "Bot de Telegram para recibir facturas"
     },
     "gmail": {

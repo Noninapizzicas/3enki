@@ -3,38 +3,46 @@
   "name": "Facturas Nonina Pizzicas",
   "description": "Procesamiento automático de facturas",
 
-  "sources": {
-    "telegram": {
-      "botName": "facturas_asesoria_bot",
-      "commands": {
-        "/procesafacturas": "Revisa Gmail y procesa facturas nuevas",
-        "/enviarfacturas": "Comprime y envía facturas a asesoría"
-      }
-    },
-    "gmail": {
-      "account": "noninapizzicas",
-      "description": "Cuenta Gmail para facturas por correo"
+  "telegram": {
+    "botName": "facturas_noninapizzicas_bot",
+    "chatId": null,
+    "commands": {
+      "/gmailnoninapizzicas": "Descarga adjuntos PDF de Gmail",
+      "/procesarnoninapizzicas": "Procesa facturas con Document AI",
+      "/ayuda": "Muestra ayuda de comandos"
     }
   },
 
+  "gmail": {
+    "account": "noninapizzicas",
+    "query": "has:attachment is:unread",
+    "maxResults": 20
+  },
+
   "processing": {
-    "backend": "auto",
+    "backend": "google-documentai",
     "language": "es",
     "moveOriginal": true
   },
 
-  "paths": {
-    "procesadas": "./data/projects/facturas-nonina/procesadas",
-    "pendientes": "./data/projects/facturas-nonina/pendientes",
-    "envios": "./data/projects/facturas-nonina/envios"
+  "storage": {
+    "inbox": {
+      "telegram": "./data/bots/facturas_noninapizzicas_bot/received",
+      "gmail": "./data/gmail/noninapizzicas"
+    },
+    "procesados": "./data/projects/facturas-nonina/storage/procesados",
+    "pendientes": "./data/projects/facturas-nonina/storage/pendientes"
+  },
+
+  "schedule": {
+    "gmail": {
+      "cron": "0 3 * * 0",
+      "description": "Domingos a las 3:00 AM"
+    }
   },
 
   "asesoria": {
     "email": "EMAIL_ASESORIA en .env",
     "formatos": ["ZIP con PDFs originales", "resumen.csv"]
-  },
-
-  "dependencies": {
-    "npm": ["archiver"]
   }
 }

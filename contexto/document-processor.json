@@ -1,0 +1,219 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-01-27",
+  "_DESCRIPTION": "Procesador unificado de documentos con múltiples backends OCR/AI",
+
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANTE": "Este provider unifica múltiples backends de OCR e IA para procesar documentos",
+    "seleccion_backend": "Usar 'auto' para seleccionar automáticamente el mejor disponible",
+    "para_facturas": "Usar extract-invoice para obtener campos estructurados",
+    "para_ocr_simple": "Usar process para solo extraer texto"
+  },
+
+  "ubicacion": {
+    "provider": "services/providers/local/document-processor/index.js",
+    "handler": "handlers/procesar-documento.js"
+  },
+
+  "tiers_de_calidad": {
+    "descripcion": "Backends ordenados de mejor a peor calidad",
+    "tier_1": {
+      "id": "google_document_ai",
+      "nombre": "Google Document AI",
+      "calidad": 100,
+      "descripcion": "Mejor para facturas - extrae campos automáticamente",
+      "capacidades": ["ocr", "invoice_fields", "tables", "forms"],
+      "costo": "~$1.50 por 1000 páginas",
+      "credenciales": ["GOOGLE_PROJECT_ID", "GOOGLE_DOCUMENTAI_PROCESSOR_INVOICE"]
+    },
+    "tier_2": {
+      "id": "google_vision_ai",
+      "nombre": "Google Vision + AI Extraction",
+      "calidad": 85,
+      "descripcion": "OCR de Google Vision + extracción con Claude/GPT",
+      "capacidades": ["ocr", "invoice_fields"],
+      "costo": "~$0.50 + AI por página",
+      "credenciales": ["GOOGLE_API_KEY", "ANTHROPIC_API_KEY|OPENAI_API_KEY"]
+    },
+    "tier_3": {
+      "id": "anthropic_vision",
+      "nombre": "Anthropic Claude Vision",
+      "calidad": 80,
+      "descripcion": "Claude analiza la imagen directamente",
+      "capacidades": ["ocr", "invoice_fields"],
+      "costo": "~$0.03 por página",
+      "credenciales": ["ANTHROPIC_API_KEY"]
+    },
+    "tier_4": {
+      "id": "openai_vision",
+      "nombre": "OpenAI GPT-4 Vision",
+      "calidad": 75,
+      "descripcion": "GPT-4V/GPT-4o analiza la imagen",
+      "capacidades": ["ocr", "invoice_fields"],
+      "costo": "~$0.03 por página",
+      "credenciales": ["OPENAI_API_KEY"]
+    },
+    "tier_5": {
+      "id": "tesseract",
+      "nombre": "Tesseract OCR (Local)",
+      "calidad": 50,
+      "descripcion": "OCR local gratuito - solo texto",
+      "capacidades": ["ocr"],
+      "costo": "GRATIS",
+      "credenciales": [],
+      "requiere_npm": "npm install tesseract.js"
+    },
+    "tier_6": {
+      "id": "scribe_ocr",
+      "nombre": "Scribe OCR (Local)",
+      "calidad": 45,
+      "descripcion": "OCR local - soporta PDFs directamente",
+      "capacidades": ["ocr", "pdf_direct"],
+      "costo": "GRATIS",
+      "credenciales": [],
+      "requiere_npm": "npm install scribe.js-ocr"
+    }
+  },
+
+  "eventos": {
+    "extract_invoice": {
+      "request": "local.document-processor.extract-invoice.request",
+      "response": "local.document-processor.extract-invoice.response",
+      "descripcion": "Extrae campos estructurados de factura",
+      "input": {
+        "document": "string - Path, base64, o data URI del documento",
+        "backend": "string - 'auto' o id específico del backend",
+        "language": "string - 'es', 'en', etc. (default: 'es')",
+        "account": "string - Cuenta OAuth para Document AI (opcional)"
+      },
+      "output": {
+        "backend": "string - Backend usado",
+        "invoice": "object - Campos extraídos de la factura",
+        "text": "string - Texto completo",
+        "confidence": "number - Confianza del OCR"
+      }
+    },
+    "process": {
+      "request": "local.document-processor.process.request",
+      "response": "local.document-processor.process.response",
+      "descripcion": "Procesa documento con OCR",
+      "input": {
+        "document": "string - Path, base64, o data URI",
+        "backend": "string - 'auto' o id específico",
+        "language": "string - Código de idioma",
+        "processor": "string - Tipo para Document AI (invoice, form, ocr)"
+      },
+      "output": {
+        "backend": "string - Backend usado",
+        "text": "string - Texto extraído",
+        "confidence": "number - Confianza",
+        "pages": "number - Páginas procesadas"
+      }
+    },
+    "list_backends": {
+      "request": "local.document-processor.list-backends.request",
+      "response": "local.document-processor.list-backends.response",
+      "descripcion": "Lista backends disponibles",
+      "output": {
+        "available": "array - Backends disponibles ordenados por calidad",
+        "unavailable": "array - Backends no disponibles y razón",
+        "recommended": "string - Backend recomendado"
+      }
+    }
+  },
+
+  "handler_procesar_documento": {
+    "trigger": "document.process.request",
+    "descripcion": "Handler que procesa documentos y notifica por Telegram",
+    "input": {
+      "document": "string - Documento a procesar",
+      "type": "string - 'invoice' o 'document'",
+      "backend": "string - Backend a usar",
+      "language": "string - Idioma",
+      "notifyTelegram": "boolean - Notificar resultado por Telegram",
+      "botName": "string - Bot de Telegram",
+      "chatId": "number - Chat ID"
+    },
+    "emite": ["document.process.complete", "document.process.error", "telegram.send_message.request"]
+  },
+
+  "campos_factura": {
+    "descripcion": "Campos estándar extraídos de facturas",
+    "campos": {
+      "vendor_name": "Nombre del proveedor",
+      "vendor_address": "Dirección del proveedor",
+      "vendor_tax_id": "NIF/CIF/VAT del proveedor",
+      "invoice_number": "Número de factura",
+      "invoice_date": "Fecha de emisión (YYYY-MM-DD)",
+      "due_date": "Fecha de vencimiento",
+      "subtotal": "Subtotal sin impuestos",
+      "tax_amount": "Importe de impuestos",
+      "tax_rate": "Porcentaje de impuesto",
+      "total_amount": "Total con impuestos",
+      "currency": "Moneda (EUR, USD, etc.)",
+      "payment_terms": "Condiciones de pago",
+      "line_items": "Array de líneas { description, quantity, unit_price, amount }"
+    }
+  },
+
+  "configuracion_credenciales": {
+    "google_document_ai": {
+      "variables_env": [
+        "GOOGLE_PROJECT_ID=tu-proyecto-gcp",
+        "GOOGLE_DOCUMENTAI_LOCATION=us",
+        "GOOGLE_DOCUMENTAI_PROCESSOR_INVOICE=abc123",
+        "GOOGLE_DOCUMENTAI_PROCESSOR_OCR=def456"
+      ],
+      "oauth": "Usa las mismas credenciales OAuth que Gmail (GMAIL_CLIENT_ID, etc.)"
+    },
+    "google_vision": {
+      "variables_env": ["GOOGLE_API_KEY=tu-api-key"]
+    },
+    "anthropic": {
+      "variables_env": ["ANTHROPIC_API_KEY=tu-api-key"]
+    },
+    "openai": {
+      "variables_env": ["OPENAI_API_KEY=tu-api-key"]
+    }
+  },
+
+  "ejemplos_uso": {
+    "desde_handler": {
+      "descripcion": "Procesar factura desde otro handler",
+      "codigo": [
+        "emit('document.process.request', {",
+        "  document: '@/temp/factura.pdf',",
+        "  type: 'invoice',",
+        "  backend: 'auto',",
+        "  notifyTelegram: true,",
+        "  botName: 'miBot',",
+        "  chatId: 123456",
+        "});"
+      ]
+    },
+    "desde_flow_engine": {
+      "descripcion": "Usar en flow-engine",
+      "codigo": [
+        "{",
+        "  \"type\": \"service\",",
+        "  \"service\": \"local.document-processor\",",
+        "  \"action\": \"extract-invoice\",",
+        "  \"document\": \"{{ trigger.attachment.path }}\",",
+        "  \"backend\": \"auto\"",
+        "}"
+      ]
+    },
+    "listar_backends": {
+      "descripcion": "Ver backends disponibles",
+      "codigo": [
+        "const result = await services.call(",
+        "  'local.document-processor',",
+        "  'list-backends',",
+        "  {}",
+        ");",
+        "console.log('Disponibles:', result.data.available);",
+        "console.log('Recomendado:', result.data.recommended);"
+      ]
+    }
+  }
+}

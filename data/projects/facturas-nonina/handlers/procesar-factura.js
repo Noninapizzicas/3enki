@@ -25,10 +25,11 @@ module.exports = {
     const data = event.data || event;
     const { filePath, fileName, source, notifyTelegram, botName, chatId } = data;
 
-    // Leer config del proyecto
-    const processing = config.processing || {};
-    const storage = config.storage || {};
-    const gmail = config.gmail || {};
+    // Leer config del proyecto (config.config porque el archivo es config/config.json)
+    const cfg = config.config || {};
+    const processing = cfg.processing || {};
+    const storage = cfg.storage || {};
+    const gmail = cfg.gmail || {};
 
     const procesadosPath = storage.procesados || `./data/projects/${projectId}/storage/procesados`;
     const pendientesPath = storage.pendientes || `./data/projects/${projectId}/storage/pendientes`;

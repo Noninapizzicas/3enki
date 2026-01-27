@@ -32,9 +32,10 @@ module.exports = {
     const data = event.data || event;
     const { chatId } = data;
 
-    // Leer config del proyecto
-    const telegram = config.telegram || {};
-    const storage = config.storage || {};
+    // Leer config del proyecto (config.config porque el archivo es config/config.json)
+    const cfg = config.config || {};
+    const telegram = cfg.telegram || {};
+    const storage = cfg.storage || {};
     const inboxTelegram = storage.inbox?.telegram;
     const inboxGmail = storage.inbox?.gmail;
 

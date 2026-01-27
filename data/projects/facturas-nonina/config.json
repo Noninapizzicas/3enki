@@ -6,8 +6,10 @@
   "sources": {
     "telegram": {
       "botName": "facturas_asesoria_bot",
-      "command": "/procesafacturas",
-      "description": "Bot de Telegram para recibir facturas"
+      "commands": {
+        "/procesafacturas": "Revisa Gmail y procesa facturas nuevas",
+        "/enviarfacturas": "Comprime y envía facturas a asesoría"
+      }
     },
     "gmail": {
       "account": "noninapizzicas",
@@ -18,22 +20,21 @@
   "processing": {
     "backend": "auto",
     "language": "es",
-    "outputFormat": {
-      "json": true,
-      "csv": true,
-      "copyOriginal": true
-    }
+    "moveOriginal": true
   },
 
   "paths": {
     "procesadas": "./data/projects/facturas-nonina/procesadas",
-    "pendientes": "./data/projects/facturas-nonina/pendientes"
+    "pendientes": "./data/projects/facturas-nonina/pendientes",
+    "envios": "./data/projects/facturas-nonina/envios"
   },
 
-  "notifications": {
-    "telegram": {
-      "enabled": false,
-      "chatId": null
-    }
+  "asesoria": {
+    "email": "EMAIL_ASESORIA en .env",
+    "formatos": ["ZIP con PDFs originales", "resumen.csv"]
+  },
+
+  "dependencies": {
+    "npm": ["archiver"]
   }
 }

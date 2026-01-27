@@ -124,10 +124,10 @@ module.exports = {
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
       const baseName = `${dateStr}_${invoiceNum}_${vendor}`;
 
-      // 3. Copiar archivo original
+      // 3. MOVER archivo original (no copiar)
       const ext = path.extname(originalName) || '.pdf';
       const destFile = path.join(monthDir, `${baseName}${ext}`);
-      fs.copyFileSync(filePath, destFile);
+      moveFile(filePath, destFile);
 
       // 4. Guardar JSON con datos estructurados
       const jsonData = {
@@ -215,7 +215,7 @@ module.exports = {
       // Mover a pendientes
       const pendingName = `${now.getTime()}_${originalName}`;
       const pendingPath = path.join(PENDIENTES_PATH, pendingName);
-      fs.copyFileSync(filePath, pendingPath);
+      moveFile(filePath, pendingPath);
 
       // Guardar error
       fs.writeFileSync(
@@ -239,6 +239,19 @@ module.exports = {
     }
   }
 };
+
+/**
+ * Mueve archivo (rename si mismo filesystem, copy+delete si no)
+ */
+function moveFile(src, dest) {
+  try {
+    fs.renameSync(src, dest);
+  } catch (e) {
+    // Cross-filesystem: copy + delete
+    fs.copyFileSync(src, dest);
+    fs.unlinkSync(src);
+  }
+}
 
 /**
  * Sanitiza string para nombre de archivo

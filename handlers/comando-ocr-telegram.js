@@ -7,9 +7,12 @@
  * Procesa imágenes con OCR y guarda JSON maestro
  *
  * Uso:
- *   /ocr                    - Procesa data/gmail/noninapizzicas-images
- *   /ocr force              - Reprocesa aunque exista JSON
- *   /ocr bots               - Procesa data/bots/facturas_asesoria_bot/received
+ *   /ocr <directorio>        - Procesa imágenes del directorio especificado
+ *   /ocr <directorio> force  - Reprocesa aunque exista JSON
+ *
+ * Ejemplo:
+ *   /ocr data/gmail/mi-cuenta-images
+ *   /ocr data/bots/mi-bot/received force
  */
 
 module.exports = {
@@ -33,25 +36,22 @@ module.exports = {
       args
     });
 
-    // Log args para debug
-    logger.info('comando-ocr.args', { args, argsLength: args?.length });
-
-    // Determinar directorio según argumentos
-    let sourceDir = 'data/gmail/noninapizzicas-images';
-    let force = false;
-
-    // Normalizar args (lowercase, trim)
-    const normalizedArgs = (args || []).map(a => String(a).toLowerCase().trim());
-
-    for (const arg of normalizedArgs) {
-      if (arg === 'force') {
-        force = true;
-      } else if (arg === 'bots' || arg === 'telegram' || arg === 'bot') {
-        sourceDir = 'data/bots/facturas_asesoria_bot/received';
-      } else if (arg === 'gmail') {
-        sourceDir = 'data/gmail/noninapizzicas-images';
-      }
+    // Validar que se proporcione el directorio
+    if (!args || args.length === 0) {
+      emit('telegram.send_message.request', {
+        botName,
+        chatId,
+        text: '❌ Uso: /ocr <directorio> [force]\n\nEjemplo:\n/ocr data/gmail/mi-cuenta-images\n/ocr data/bots/mi-bot/received force'
+      });
+      return { triggered: false, error: 'Directorio no especificado' };
     }
+
+    // Primer argumento es el directorio
+    const sourceDir = args[0];
+
+    // Verificar si hay flag 'force'
+    const normalizedArgs = args.slice(1).map(a => String(a).toLowerCase().trim());
+    const force = normalizedArgs.includes('force');
 
     // Notificar inicio
     emit('telegram.send_message.request', {
@@ -69,6 +69,6 @@ module.exports = {
       chatId
     });
 
-    return { triggered: true };
+    return { triggered: true, sourceDir, force };
   }
 };

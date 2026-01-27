@@ -409,7 +409,7 @@ class ToolManager {
       parameters: {
         type: 'object',
         properties: {
-          flow_id: { type: 'string', description: 'Flow ID to trigger (e.g., "facturas-nonina:procesar-factura")' },
+          flow_id: { type: 'string', description: 'Flow ID to trigger (e.g., "mi-proyecto:procesar-factura")' },
           data: { type: 'object', description: 'Input data for the flow trigger' }
         },
         required: ['flow_id']
@@ -470,7 +470,7 @@ class ToolManager {
       parameters: {
         type: 'object',
         properties: {
-          project_id: { type: 'string', description: 'Project ID (e.g., "facturas-nonina")' },
+          project_id: { type: 'string', description: 'Project ID (e.g., "mi-proyecto")' },
           status: { type: 'string', description: 'Filter by status: pendiente, procesada, exportada, error' },
           limit: { type: 'number', description: 'Max results (default: 50)' }
         },

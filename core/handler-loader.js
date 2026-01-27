@@ -19,7 +19,7 @@
  * @example
  * const loader = new HandlerLoader(eventBus, serviceExecutor, logger);
  * loader.loadGlobal();
- * loader.loadProject('facturas-nonina');
+ * loader.loadProject('mi-proyecto');
  */
 
 const fs = require('fs');

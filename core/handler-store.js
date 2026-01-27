@@ -9,7 +9,7 @@
  * - Global: data/handler-store/{handlerName}.json
  *
  * @example
- * const store = new HandlerStore('facturas-nonina', 'procesar-factura');
+ * const store = new HandlerStore('mi-proyecto', 'procesar-factura');
  * await store.set('contador', 1);
  * const valor = await store.get('contador');
  */

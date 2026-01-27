@@ -3,6 +3,9 @@
  *
  * Escucha: gmail.debug
  * Solo para testing - muestra el último correo recibido
+ *
+ * Payload requerido:
+ *   { account: 'nombre-cuenta' }
  */
 module.exports = {
   name: 'debug-gmail',
@@ -11,7 +14,12 @@ module.exports = {
 
   async handle(event, { services, logger }) {
     const data = event.data || event;
-    const account = data.account || 'noninapizzicas';
+    const account = data.account;
+
+    if (!account) {
+      logger.error('debug-gmail.error', { error: 'account es requerido' });
+      return { success: false, error: 'account es requerido' };
+    }
 
     // Buscar último correo (sin filtros)
     const busqueda = await services.call('local.gmail', 'search', {

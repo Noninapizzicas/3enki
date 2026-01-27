@@ -6,9 +6,9 @@
  *
  * Payload:
  * {
- *   sourceDir: 'data/gmail/noninapizzicas',       // Directorio con PDFs
- *   outputDir: 'data/gmail/noninapizzicas-images' // Directorio destino (opcional, genera automático)
- *   dpi: 300                                      // DPI (opcional, default 300 para OCR)
+ *   sourceDir: 'data/gmail/mi-cuenta',       // Directorio con PDFs
+ *   outputDir: 'data/gmail/mi-cuenta-images' // Directorio destino (opcional, genera automático)
+ *   dpi: 300                                 // DPI (opcional, default 300 para OCR)
  * }
  */
 

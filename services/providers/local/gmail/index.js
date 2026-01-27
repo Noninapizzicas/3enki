@@ -9,7 +9,7 @@
  * @example
  * // El provider-loader maneja la resolución de credenciales
  * // El handler solo necesita especificar account:
- * services.call('local.gmail', 'search', { account: 'noninapizzicas', query: 'is:unread' })
+ * services.call('local.gmail', 'search', { account: 'mi-cuenta', query: 'is:unread' })
  */
 
 const https = require('https');

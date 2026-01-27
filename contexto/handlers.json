@@ -138,7 +138,7 @@
         "total": 100,
         "_meta": {
           "source": "procesar-factura",
-          "projectId": "facturas-nonina",
+          "projectId": "mi-proyecto",
           "correlationId": "uuid...",
           "timestamp": 1705766400000,
           "emittedAt": "2026-01-20T12:00:00.000Z"
@@ -221,7 +221,7 @@
   },
 
   "ejemplo_handler_completo": {
-    "archivo": "data/projects/facturas-nonina/handlers/procesar-documento.js",
+    "archivo": "data/projects/mi-proyecto/handlers/procesar-documento.js",
     "codigo": [
       "module.exports = {",
       "  name: 'procesar-documento',",

@@ -7,8 +7,8 @@
  *
  * Payload:
  * {
- *   sourceDir: 'data/gmail/noninapizzicas-images',  // Directorio con imágenes
- *   force: false                                     // Reprocesar aunque exista JSON
+ *   sourceDir: 'data/gmail/mi-cuenta-images',  // Directorio con imágenes
+ *   force: false                               // Reprocesar aunque exista JSON
  * }
  *
  * Resultado:

@@ -80,13 +80,6 @@
     }
   },
   "gmail": {
-    "cuentas": {
-      "noninapizzicas": {
-        "account": "noninapizzicas",
-        "email": "noninapizzicas@gmail.com",
-        "query": "has:attachment newer_than:3d",
-        "enabled": true
-      }
-    }
+    "cuentas": {}
   }
 }

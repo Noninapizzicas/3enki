@@ -70,9 +70,9 @@
       }
     },
     "ejemplo_completo": {
-      "project": "facturas-nonina",
+      "project": "mi-proyecto",
       "tree": [
-        "data/projects/facturas-nonina/",
+        "data/projects/mi-proyecto/",
         "├── handlers/",
         "│   ├── recibir-documento.js",
         "│   ├── procesar-ocr.js",

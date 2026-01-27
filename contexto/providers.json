@@ -47,7 +47,7 @@
     "REGLA_CRITICA": "Los providers NUNCA resuelven credenciales internamente",
     "razon": [
       "Evita duplicación de lógica",
-      "Evita inconsistencias de case (noninapizzicas vs Noninapizzicas)",
+      "Evita inconsistencias de case (mi-cuenta vs Mi-Cuenta)",
       "Centraliza la gestión en credential-manager",
       "Permite cambiar la lógica en un solo lugar"
     ],

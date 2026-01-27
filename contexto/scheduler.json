@@ -1,78 +1,143 @@
 {
   "module": "scheduler",
   "version": "2.0.0",
-  "description": "Gestor central de alarmas - emite eventos de tiempo (y en futuro: clima, sistema)",
+  "description": "Gestor central de alarmas - cada proyecto crea sus propias alarmas",
 
   "_AI_INSTRUCTIONS": {
-    "concepto_clave": "Scheduler emite eventos GENÉRICOS, los proyectos se suscriben y filtran",
-    "NO_hacer": "NO crear jobs específicos por proyecto con datos hardcodeados",
-    "SI_hacer": "Crear handlers de proyecto que escuchen eventos genéricos y usen SU config",
-    "filosofia": "El scheduler no sabe de Gmail ni de facturas, solo emite 'son las 9am'",
-    "ampliable": "Misma filosofía para eventos de clima, sistema, externos en el futuro"
+    "concepto_clave": "Cada proyecto crea SUS alarmas cuando las necesita. NO hay alarmas predefinidas del sistema.",
+    "NO_hacer": [
+      "NO crear jobs predefinidos del sistema (schedule.hour cada hora, etc.)",
+      "NO hardcodear datos de proyectos específicos",
+      "NO saturar con eventos innecesarios 'por si acaso'"
+    ],
+    "SI_hacer": [
+      "El proyecto crea su alarma: 'lunes 8am' → emite schedule.time",
+      "Scheduler añade _time automáticamente con datos de tiempo",
+      "Handler del proyecto escucha y actúa con SU config"
+    ],
+    "filosofia": "Solo se emiten eventos cuando alguien los programa. Sin ruido innecesario.",
+    "ampliable": "Misma filosofía para clima, sistema, externos en el futuro"
   },
 
-  "eventos_de_tiempo": {
-    "descripcion": "Eventos genéricos que emite el scheduler con metadatos de tiempo",
-    "payload_automatico": {
-      "_time": {
-        "timestamp": "number - Unix timestamp ms",
-        "iso": "string - ISO 8601",
-        "hour": "number - 0-23",
-        "minute": "number - 0-59",
-        "second": "number - 0-59",
-        "dayOfWeek": "number - 0=Domingo, 6=Sábado",
-        "dayOfMonth": "number - 1-31",
-        "month": "number - 1-12",
-        "year": "number - 2026",
-        "timezone": "string - Europe/Madrid"
-      },
-      "_job": {
-        "id": "string - ID del job",
-        "name": "string - Nombre del job"
-      }
+  "arquitectura": {
+    "diagrama": [
+      "┌─────────────────────────────────────────────────────┐",
+      "│ PROYECTO crea su alarma:                            │",
+      "│ 'Lunes 8am' → cron '0 8 * * 1' → topic schedule.time│",
+      "└─────────────────────────────────────────────────────┘",
+      "                         │",
+      "                         ▼ Lunes 8:00",
+      "┌─────────────────────────────────────────────────────┐",
+      "│ SCHEDULER emite:                                    │",
+      "│ schedule.time { _time: { hour:8, dayOfWeek:1 } }    │",
+      "└─────────────────────────────────────────────────────┘",
+      "                         │",
+      "                         ▼",
+      "┌─────────────────────────────────────────────────────┐",
+      "│ HANDLER del proyecto:                               │",
+      "│ - Lee SU config (gmail.account, telegram.bot)       │",
+      "│ - Emite gmail.check con SUS datos                   │",
+      "└─────────────────────────────────────────────────────┘"
+    ],
+    "flujo": [
+      "1. Proyecto necesita revisar Gmail los lunes a las 8",
+      "2. Proyecto crea alarma via UI o evento",
+      "3. Scheduler guarda y programa la alarma",
+      "4. Lunes 8:00 → Scheduler emite evento con _time",
+      "5. Handler del proyecto escucha y ejecuta"
+    ]
+  },
+
+  "payload_automatico": {
+    "descripcion": "Scheduler añade _time y _job a TODOS los eventos MQTT automáticamente",
+    "_time": {
+      "timestamp": "number - Unix timestamp ms",
+      "iso": "string - ISO 8601",
+      "hour": "number - 0-23",
+      "minute": "number - 0-59",
+      "second": "number - 0-59",
+      "dayOfWeek": "number - 0=Domingo, 6=Sábado",
+      "dayOfMonth": "number - 1-31",
+      "month": "number - 1-12",
+      "year": "number",
+      "timezone": "string - Europe/Madrid"
     },
-    "eventos_base": {
-      "schedule.time": "Cada minuto - pulso general de tiempo",
-      "schedule.hour": "Cada hora en punto",
-      "schedule.workday.start": "L-V 9:00 - inicio jornada",
-      "schedule.workday.end": "L-V 18:00 - fin jornada",
-      "schedule.night": "22:00 - tareas nocturnas",
-      "schedule.midnight": "00:00 - cambio de día",
-      "schedule.maintenance": "Domingo 3:00 - mantenimiento",
-      "schedule.month.start": "Día 1 00:00 - inicio de mes"
-    },
-    "eventos_futuros": {
-      "schedule.weather.*": "Eventos climáticos (via API externa)",
-      "schedule.system.*": "Eventos del sistema (errores, health)",
-      "schedule.external.*": "Eventos de APIs externas"
+    "_job": {
+      "id": "string - ID del job",
+      "name": "string - Nombre del job"
     }
   },
 
-  "uso_en_proyectos": {
-    "descripcion": "Cómo los proyectos usan los eventos de tiempo",
-    "patron": [
-      "1. Handler de proyecto escucha evento genérico (schedule.time, schedule.hour)",
-      "2. Handler filtra con filter() si necesita condiciones específicas",
-      "3. Handler lee SU configuración (config.gmail, config.telegram)",
-      "4. Handler emite evento de acción (gmail.check, backup.start)",
-      "5. Handler global reutilizable procesa la acción"
-    ],
-    "ejemplo_handler_proyecto": {
-      "archivo": "data/projects/mi-proyecto/handlers/revisar-gmail-programado.js",
+  "crear_alarma": {
+    "descripcion": "Cómo un proyecto crea su alarma",
+    "metodos": {
+      "via_ui": "Interfaz de usuario del scheduler",
+      "via_evento": "emit('ui.request.scheduler.create', { ... })",
+      "via_api": "POST /modules/scheduler/jobs"
+    },
+    "estructura_job": {
+      "id": "string - Único, descriptivo (ej: mi-proyecto-gmail-lunes)",
+      "name": "string - Nombre legible",
+      "description": "string - Descripción",
+      "enabled": "boolean",
+      "trigger": "object - Cuándo disparar",
+      "action": {
+        "type": "mqtt",
+        "topic": "string - Evento a emitir"
+      },
+      "metadata": {
+        "projectId": "string - Proyecto dueño",
+        "category": "string - time|weather|system|custom"
+      }
+    },
+    "ejemplos": {
+      "lunes_8am": {
+        "id": "facturas-gmail-lunes",
+        "name": "Gmail lunes 8am",
+        "trigger": { "type": "cron", "expression": "0 8 * * 1" },
+        "action": { "type": "mqtt", "topic": "schedule.time" },
+        "metadata": { "projectId": "facturas", "category": "time" }
+      },
+      "cada_30_min_laborables": {
+        "id": "soporte-check-30min",
+        "name": "Check cada 30 min L-V",
+        "trigger": { "type": "cron", "expression": "*/30 9-18 * * 1-5" },
+        "action": { "type": "mqtt", "topic": "schedule.time" },
+        "metadata": { "projectId": "soporte", "category": "time" }
+      },
+      "domingo_3am_backup": {
+        "id": "sistema-backup-domingo",
+        "name": "Backup domingo 3am",
+        "trigger": { "type": "cron", "expression": "0 3 * * 0" },
+        "action": { "type": "mqtt", "topic": "schedule.time" },
+        "metadata": { "projectId": "sistema", "category": "time" }
+      }
+    }
+  },
+
+  "handler_proyecto": {
+    "descripcion": "El handler escucha el evento y actúa con SU configuración",
+    "ejemplo": {
+      "archivo": "data/projects/mi-proyecto/handlers/gmail-programado.js",
       "codigo": [
         "module.exports = {",
-        "  name: 'revisar-gmail-programado',",
-        "  trigger: 'schedule.hour',",
+        "  name: 'gmail-programado',",
+        "  trigger: 'schedule.time',",
+        "  ",
+        "  // Filtrar por MI job específico",
         "  filter: (event) => {",
-        "    const t = event.data?._time || event._time;",
-        "    return t.hour >= 9 && t.hour <= 18 && t.dayOfWeek >= 1 && t.dayOfWeek <= 5;",
+        "    const job = event.data?._job || event._job;",
+        "    return job?.id === 'mi-proyecto-gmail-lunes';",
         "  },",
+        "  ",
         "  async handle(event, { emit, config, logger }) {",
         "    const { gmail, telegram } = config.project || {};",
         "    if (!gmail?.account) return;",
+        "    ",
+        "    // Emitir acción con MI configuración",
         "    emit('gmail.check', {",
         "      account: gmail.account,",
-        "      query: gmail.query || 'has:attachment is:unread',",
+        "      query: gmail.query,",
         "      notifyTelegram: !!telegram,",
         "      botName: telegram?.botName,",
         "      chatId: telegram?.chatId",
@@ -83,362 +148,70 @@
     }
   },
 
-  "arquitectura": {
-    "componentes": {
-      "index.js": {
-        "responsabilidad": "Módulo principal - orquestación y API",
-        "funciones": [
-          "Inicialización y ciclo de vida",
-          "Handlers UI (MQTT) y HTTP",
-          "Ejecución de jobs",
-          "Template resolution"
-        ]
-      },
-      "services/job-manager.js": {
-        "responsabilidad": "Gestión de definiciones de jobs",
-        "funciones": [
-          "CRUD de jobs",
-          "Persistencia en JSON",
-          "Búsqueda y filtrado"
-        ]
-      },
-      "services/trigger-manager.js": {
-        "responsabilidad": "Gestión de triggers activos",
-        "funciones": [
-          "Iniciar/parar triggers",
-          "Cron, interval, datetime, event, condition, composite",
-          "Debouncing para eventos"
-        ]
-      }
-    },
-    "diagrama": "UI/API → index.js → job-manager (CRUD) + trigger-manager (scheduling) → eventBus (actions)"
-  },
-
   "tipos_de_triggers": {
     "cron": {
       "descripcion": "Expresiones cron estándar",
       "propiedades": {
         "type": "cron",
-        "expression": "string - Expresión cron (minuto hora día-mes mes día-semana)",
-        "timezone": "string - Zona horaria (default: Europe/Madrid)"
+        "expression": "minuto hora día-mes mes día-semana",
+        "timezone": "string - default: Europe/Madrid"
       },
       "ejemplos": {
-        "cada_5_minutos": "*/5 * * * *",
-        "diario_3am": "0 3 * * *",
+        "lunes_8am": "0 8 * * 1",
+        "laborables_9am": "0 9 * * 1-5",
+        "cada_30min_horario": "*/30 9-18 * * 1-5",
         "domingos_3am": "0 3 * * 0",
-        "laborables_9am": "0 9 * * 1-5"
+        "dia_1_medianoche": "0 0 1 * *"
       }
     },
     "interval": {
       "descripcion": "Intervalos fijos",
       "propiedades": {
         "type": "interval",
-        "value": "number - Valor del intervalo",
-        "unit": "string - ms|s|m|h|d"
-      },
-      "ejemplos": {
-        "cada_30_segundos": { "value": 30, "unit": "s" },
-        "cada_hora": { "value": 1, "unit": "h" }
+        "value": "number",
+        "unit": "ms|s|m|h|d"
       }
     },
     "datetime": {
-      "descripcion": "Fecha/hora específica con repetición opcional",
+      "descripcion": "Fecha/hora específica",
       "propiedades": {
         "type": "datetime",
-        "date": "string - YYYY-MM-DD (opcional)",
-        "time": "string - HH:mm:ss",
-        "repeat": "string - once|daily|weekly|monthly|yearly",
-        "timezone": "string"
-      },
-      "ejemplos": {
-        "navidad": { "date": "2025-12-25", "time": "00:00:00", "repeat": "yearly" }
+        "date": "YYYY-MM-DD",
+        "time": "HH:mm:ss",
+        "repeat": "once|daily|weekly|monthly|yearly"
       }
     },
     "event": {
-      "descripcion": "Basado en eventos MQTT",
+      "descripcion": "Cuando ocurre otro evento",
       "propiedades": {
         "type": "event",
-        "topic": "string - Topic MQTT a escuchar",
-        "condition": "string - Expresión JS opcional (ej: payload.size > 1000)",
-        "debounce": "number - ms antes de disparar"
-      },
-      "ejemplos": {
-        "archivo_subido": { "topic": "file.uploaded", "condition": "payload.type === 'pdf'" }
-      }
-    },
-    "condition": {
-      "descripcion": "Basado en condiciones evaluadas periódicamente",
-      "propiedades": {
-        "type": "condition",
-        "check": "string - Expresión JS a evaluar",
-        "interval": "number - Intervalo de chequeo en ms (default: 10000)",
-        "persist": "boolean - Mantener triggered hasta reset"
-      },
-      "ejemplos": {
-        "cpu_alto": { "check": "metrics.cpu > 80", "interval": 10000 }
+        "topic": "string - evento a escuchar",
+        "condition": "string - condición JS",
+        "debounce": "number - ms"
       }
     },
     "composite": {
-      "descripcion": "Combinación de triggers con lógica AND/OR",
+      "descripcion": "Combinación AND/OR de triggers",
       "propiedades": {
         "type": "composite",
-        "logic": "string - AND|OR|NAND|NOR|XOR",
-        "triggers": "array - Sub-triggers a combinar"
-      },
-      "ejemplos": {
-        "laborables_carga_baja": {
-          "logic": "AND",
-          "triggers": [
-            { "type": "cron", "expression": "0 9 * * 1-5" },
-            { "type": "condition", "check": "system.load < 50" }
-          ]
-        }
+        "logic": "AND|OR",
+        "triggers": "array de triggers"
       }
     }
   },
 
-  "tipos_de_acciones": {
-    "mqtt": {
-      "descripcion": "Publica evento MQTT",
-      "propiedades": {
-        "type": "mqtt",
-        "topic": "string - Topic destino (soporta {{templates}})",
-        "payload": "object|string - Payload a publicar (soporta {{templates}})",
-        "qos": "number - 0|1|2 (default: 1)"
-      }
-    },
-    "http": {
-      "descripcion": "Llamada HTTP externa",
-      "propiedades": {
-        "type": "http",
-        "url": "string - URL destino (soporta {{templates}})",
-        "method": "string - GET|POST|PUT|DELETE|PATCH",
-        "headers": "object - Headers HTTP",
-        "body": "object - Cuerpo de la petición",
-        "timeout": "number - Timeout en ms"
-      }
-    },
-    "module": {
-      "descripcion": "Llama a método de otro módulo via eventos",
-      "propiedades": {
-        "type": "module",
-        "module": "string - Nombre del módulo",
-        "method": "string - Método a llamar",
-        "params": "object - Parámetros",
-        "timeout": "number - Timeout en ms"
-      }
-    }
-  },
-
-  "templates": {
-    "sintaxis": "{{ variable }}",
-    "variables_especiales": {
-      "now": "ISO timestamp actual",
-      "uuid": "UUID v4 aleatorio",
-      "timestamp": "Unix timestamp en ms",
-      "date": "Fecha YYYY-MM-DD",
-      "time": "Hora HH:mm:ss"
-    },
-    "contextos": {
-      "job.id": "ID del job",
-      "job.name": "Nombre del job",
-      "trigger.type": "Tipo de trigger que activó",
-      "event.payload": "Payload del evento (solo para event triggers)"
-    },
-    "ejemplo": {
-      "topic": "notifications/{{job.name}}",
-      "payload": {
-        "message": "Job ejecutado a las {{now}}",
-        "jobId": "{{job.id}}"
-      }
-    }
-  },
-
-  "opciones_job": {
-    "enabled": "boolean - Habilitar/deshabilitar",
-    "maxRetries": "number - Reintentos en caso de error (default: 3)",
-    "retryDelay": "number - Delay entre reintentos en ms (default: 5000)",
-    "timeout": "number - Timeout de ejecución en ms (default: 300000)",
-    "overlap": "boolean - Permitir ejecuciones solapadas (default: false)",
-    "circuitBreaker": {
-      "failureThreshold": "number - Fallos antes de abrir circuito",
-      "resetTimeout": "number - Tiempo antes de reintentar",
-      "halfOpenMaxAttempts": "number - Intentos en estado half-open"
-    },
-    "timeWindows": "array - Ventanas de tiempo permitidas"
-  },
-
-  "eventos": {
-    "publicados": {
-      "scheduler.job.created": "Job creado",
-      "scheduler.job.updated": "Job actualizado",
-      "scheduler.job.deleted": "Job eliminado",
-      "scheduler.job.enabled": "Job habilitado",
-      "scheduler.job.disabled": "Job deshabilitado",
-      "scheduler.job.triggered": "Job disparado (manual o automático)",
-      "scheduler.job.completed": "Ejecución completada",
-      "scheduler.job.failed": "Ejecución fallida"
-    }
-  },
-
-  "api_http": {
-    "base_path": "/modules/scheduler",
-    "endpoints": [
-      { "method": "GET", "path": "/health", "descripcion": "Health check" },
-      { "method": "GET", "path": "/jobs", "descripcion": "Lista todos los jobs" },
-      { "method": "GET", "path": "/jobs/:jobId", "descripcion": "Obtiene un job" },
-      { "method": "POST", "path": "/jobs", "descripcion": "Crea nuevo job" },
-      { "method": "PUT", "path": "/jobs/:jobId", "descripcion": "Actualiza job" },
-      { "method": "DELETE", "path": "/jobs/:jobId", "descripcion": "Elimina job" },
-      { "method": "POST", "path": "/jobs/:jobId/enable", "descripcion": "Habilita job" },
-      { "method": "POST", "path": "/jobs/:jobId/disable", "descripcion": "Deshabilita job" },
-      { "method": "POST", "path": "/jobs/:jobId/trigger", "descripcion": "Dispara job manualmente" },
-      { "method": "GET", "path": "/triggers/types", "descripcion": "Lista tipos de triggers" },
-      { "method": "GET", "path": "/executions", "descripcion": "Lista ejecuciones recientes" },
-      { "method": "GET", "path": "/stats", "descripcion": "Estadísticas del scheduler" }
-    ]
-  },
-
-  "ui_handlers": {
-    "domain": "scheduler",
-    "actions": [
-      "list - Lista jobs",
-      "get - Obtiene job",
-      "create - Crea job",
-      "update - Actualiza job",
-      "delete - Elimina job",
-      "enable - Habilita job",
-      "disable - Deshabilita job",
-      "trigger - Dispara job",
-      "triggers - Lista tipos de triggers",
-      "stats - Estadísticas",
-      "executions - Lista ejecuciones"
-    ],
-    "patron_mqtt": "ui/request/scheduler/{action} → ui/response/{request_id}"
-  },
-
-  "persistencia": {
-    "archivo": "data/scheduler/jobs.json",
-    "auto_save": true,
-    "formato": {
-      "version": "1.0.0",
-      "savedAt": "ISO timestamp",
-      "jobs": "array de definiciones de jobs"
-    }
-  },
-
-  "integracion_flow_engine": {
-    "descripcion": "Integración bidireccional entre scheduler y flow-engine",
-    "arquitectura": {
-      "scheduler_como_backend": {
-        "descripcion": "Flow-engine delega la programación al módulo scheduler",
-        "flujo": [
-          "1. Flow con 'schedule' se registra en flow-registry",
-          "2. FlowScheduler (facade) crea job en scheduler via ui.request",
-          "3. Scheduler persiste el job y programa el trigger",
-          "4. Cuando trigger dispara, scheduler publica scheduler.job.triggered",
-          "5. FlowScheduler detecta el evento y flow-engine ejecuta el flujo"
-        ],
-        "beneficios": [
-          "Único motor de scheduling (evita duplicación)",
-          "Todos los tipos de triggers disponibles para flows",
-          "Persistencia centralizada de jobs",
-          "UI unificada para gestión"
-        ]
-      },
-      "eventos_clave": {
-        "flow_to_scheduler": "ui.request con module:scheduler, action:create/delete/trigger",
-        "scheduler_to_flow": "scheduler.job.triggered con metadata.flowId",
-        "job_confirmation": "scheduler.job.created con metadata.flowId"
-      }
-    },
-    "ejemplo_flow_con_schedule": {
-      "id": "procesar-facturas-semanal",
-      "name": "Procesar facturas",
-      "schedule": {
-        "cron": "0 3 * * 0",
-        "timezone": "Europe/Madrid"
-      },
-      "steps": [{ "type": "service", "service": "facturas", "function": "procesarLote" }]
-    },
-    "ejemplo_job_generado": {
-      "name": "flow:procesar-facturas-semanal",
-      "description": "Scheduled execution of flow: procesar-facturas-semanal",
-      "trigger": { "type": "cron", "expression": "0 3 * * 0", "timezone": "Europe/Madrid" },
-      "action": {
-        "type": "mqtt",
-        "topic": "flow.trigger",
-        "payload": { "flowId": "procesar-facturas-semanal", "trigger": "schedule" }
-      },
-      "metadata": { "flowId": "procesar-facturas-semanal", "source": "flow-engine" }
-    }
-  },
-
-  "buenas_practicas": [
-    "Usar IDs descriptivos para jobs",
-    "Definir timeouts apropiados según la tarea",
-    "Usar debounce para event triggers que pueden dispararse frecuentemente",
-    "Configurar maxRetries para jobs críticos",
-    "Usar composite triggers para condiciones complejas",
-    "No solapar ejecuciones (overlap: false) para jobs que modifican datos",
-    "Usar timeWindows para restringir horarios de ejecución"
-  ],
-
-  "ejemplos_completos": {
-    "backup_diario": {
-      "name": "Backup diario de BD",
-      "description": "Copia de seguridad a las 3am",
-      "trigger": {
-        "type": "cron",
-        "expression": "0 3 * * *",
-        "timezone": "Europe/Madrid"
-      },
-      "action": {
-        "type": "mqtt",
-        "topic": "backup.start",
-        "payload": { "database": "primary", "type": "full" }
-      },
-      "options": {
-        "maxRetries": 3,
-        "timeout": 600000
-      }
-    },
-    "limpieza_logs": {
-      "name": "Limpieza de logs",
-      "description": "Elimina logs de más de 7 días cada domingo",
-      "trigger": {
-        "type": "cron",
-        "expression": "0 4 * * 0"
-      },
-      "action": {
-        "type": "http",
-        "method": "DELETE",
-        "url": "http://localhost:3000/api/logs",
-        "body": { "olderThan": "7d" }
-      }
-    },
-    "procesar_archivos": {
-      "name": "Procesar archivos nuevos",
-      "description": "Procesa cuando llega un PDF",
-      "trigger": {
-        "type": "event",
-        "topic": "file.uploaded",
-        "condition": "payload.mimeType === 'application/pdf'",
-        "debounce": 5000
-      },
-      "action": {
-        "type": "mqtt",
-        "topic": "processor.start",
-        "payload": { "file": "{{event.payload.path}}" }
-      }
-    }
+  "categorias_futuras": {
+    "descripcion": "Misma filosofía para otros tipos de alarmas",
+    "time": "Alarmas de tiempo - IMPLEMENTADO",
+    "weather": "Alarmas climáticas - FUTURO (via API externa)",
+    "system": "Alarmas del sistema - FUTURO (errores, health)",
+    "external": "Alarmas de APIs externas - FUTURO"
   },
 
   "ubicacion_archivos": {
     "modulo": "modules/scheduler/",
-    "servicios": "modules/scheduler/services/",
-    "schemas": "modules/scheduler/schemas/",
-    "datos": "data/scheduler/jobs.json",
-    "documentacion": "contexto/scheduler.json"
+    "jobs": "data/scheduler/jobs.json",
+    "documentacion": "contexto/scheduler.json",
+    "nota": "jobs.json está VACÍO por defecto. Cada proyecto crea sus alarmas."
   }
 }

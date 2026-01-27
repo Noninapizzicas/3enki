@@ -1,0 +1,16 @@
+{
+  "_DESCRIPCION": "Proyecto de EJEMPLO - renombrar carpeta para activar",
+  "name": "Mi Proyecto Ejemplo",
+  "gmail": {
+    "account": "mi-cuenta-gmail",
+    "query": "has:attachment is:unread"
+  },
+  "telegram": {
+    "botName": "mi_bot",
+    "chatId": "123456789"
+  },
+  "paths": {
+    "gmail": "data/gmail/mi-cuenta",
+    "images": "data/gmail/mi-cuenta-images"
+  }
+}

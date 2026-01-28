@@ -22,7 +22,8 @@
   "processing": {
     "backend": "google-documentai",
     "language": "es",
-    "moveOriginal": true
+    "moveOriginal": true,
+    "confidenceThreshold": 0.85
   },
 
   "storage": {

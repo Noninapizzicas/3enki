@@ -34,7 +34,7 @@ module.exports = {
 
   async handle(event, { logger, emit }) {
     const data = event.data || event;
-    const { filePath, language = 'spa', requestId } = data;
+    const { filePath, language = 'spa', requestId, notificar } = data;
 
     logger.info('ocr-tesseract.inicio', { filePath, language, requestId });
 
@@ -89,6 +89,7 @@ module.exports = {
           confianza,
           language,
           requestId,
+          notificar, // Propagar datos de notificación
           _meta: {
             tiempoMs: elapsed,
             backend: 'tesseract'

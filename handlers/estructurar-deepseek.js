@@ -188,7 +188,8 @@ module.exports = {
       tipo = 'factura',
       campos,
       filePath,
-      requestId
+      requestId,
+      notificar
     } = data;
 
     logger.info('estructurar-deepseek.inicio', {
@@ -248,6 +249,7 @@ module.exports = {
         tipo,
         filePath,
         requestId,
+        notificar, // Propagar datos de notificación
         _meta: {
           tiempoMs: elapsed,
           tokens: usage.total_tokens,

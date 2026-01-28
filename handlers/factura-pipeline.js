@@ -35,7 +35,7 @@ module.exports = [
 
     async handle(event, { logger, emit }) {
       const data = event.data || event;
-      const { filePath, language = 'spa' } = data;
+      const { filePath, language = 'spa', notificar } = data;
       const requestId = data.requestId || `fac-${Date.now()}`;
 
       logger.info('factura-pipeline.inicio', { filePath, requestId });
@@ -45,7 +45,8 @@ module.exports = [
         filePath,
         language,
         requestId,
-        _pipeline: 'factura' // Marca para identificar el flujo
+        notificar, // Propagar datos de notificación
+        _pipeline: 'factura'
       });
 
       return { success: true, requestId };
@@ -68,7 +69,7 @@ module.exports = [
 
     async handle(event, { logger, emit }) {
       const data = event.data || event;
-      const { texto, filePath, requestId, confianza } = data;
+      const { texto, filePath, requestId, confianza, notificar } = data;
 
       logger.info('factura-pipeline.ocr-completado', {
         caracteres: texto?.length,
@@ -82,6 +83,7 @@ module.exports = [
         tipo: 'factura',
         filePath,
         requestId,
+        notificar, // Propagar datos de notificación
         _pipeline: 'factura'
       });
 
@@ -107,7 +109,7 @@ module.exports = [
 
     async handle(event, { logger, emit }) {
       const data = event.data || event;
-      const { datos, filePath, requestId, _meta } = data;
+      const { datos, filePath, requestId, _meta, notificar } = data;
 
       logger.info('factura-pipeline.completado', {
         filePath,
@@ -121,6 +123,7 @@ module.exports = [
         requestId,
         datos: normalizarDatosFactura(datos),
         datosRaw: datos,
+        notificar, // Propagar para notificación
         _meta
       });
 

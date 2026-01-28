@@ -129,7 +129,11 @@ async function leerFacturasProcesadas(storageBase, periodo) {
   for (const archivo of archivos) {
     try {
       const contenido = fs.readFileSync(path.join(procesadasDir, archivo), 'utf8');
-      const datos = JSON.parse(contenido);
+      const jsonData = JSON.parse(contenido);
+
+      // El JSON guardado tiene estructura: { datos, datosRaw, archivo_original, ... }
+      // Usar datosRaw que tiene la estructura original de DeepSeek
+      const datos = jsonData.datosRaw || jsonData.datos || jsonData;
 
       // Filtrar por periodo si se especifica
       if (periodo) {
@@ -208,17 +212,17 @@ module.exports = {
       const rows = facturas.map(f => facturaToRow(f.datos, f.archivo));
       const csvContent = [header, ...rows].join('\n');
 
-      // Crear directorio de exports si no existe
-      const exportsDir = path.join(storageBase, 'exports');
-      if (!fs.existsSync(exportsDir)) {
-        fs.mkdirSync(exportsDir, { recursive: true });
+      // Guardar en la misma carpeta procesadas
+      const procesadasDir = path.join(storageBase, 'procesadas');
+      if (!fs.existsSync(procesadasDir)) {
+        fs.mkdirSync(procesadasDir, { recursive: true });
       }
 
       // Nombre del archivo
       const timestamp = new Date().toISOString().slice(0, 10);
       const periodoSuffix = periodo ? `_${periodo}` : '';
       const fileName = `facturas_asesoria_${timestamp}${periodoSuffix}.csv`;
-      const filePath = path.join(exportsDir, fileName);
+      const filePath = path.join(procesadasDir, fileName);
 
       // Escribir archivo con BOM para Excel
       const BOM = '\uFEFF';

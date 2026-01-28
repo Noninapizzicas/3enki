@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 /**
- * Script de prueba: Extraer factura con DeepSeek
+ * Script de prueba: Extraer factura con Tesseract OCR + DeepSeek
+ *
+ * Flujo: Imagen → Tesseract (OCR gratis) → Texto → DeepSeek → JSON
  *
  * Uso:
  *   node scripts/test-factura-deepseek.js /path/to/factura.png
  *   node scripts/test-factura-deepseek.js data/bots/facturas_noninapizzicas_bot/received/factura.jpg
  *
  * Requiere:
- *   - DEEPSEEK_API_KEY en .env o como variable de entorno
+ *   - DEEPSEEK_API_KEY en .env
+ *   - tesseract.js (npm install tesseract.js)
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// Cargar .env desde la raíz del proyecto (no desde donde se ejecuta)
+// Cargar .env desde la raíz del proyecto
 const projectRoot = path.resolve(__dirname, '..');
 require('dotenv').config({ path: path.join(projectRoot, '.env') });
 const https = require('https');
@@ -24,7 +27,12 @@ const https = require('https');
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY_GLOBAL;
 
-const PROMPT_FACTURA = `Analiza esta imagen de factura y extrae los datos en formato JSON.
+const PROMPT_FACTURA = `Analiza el siguiente texto extraído de una factura mediante OCR y extrae los datos estructurados en formato JSON.
+
+TEXTO DE LA FACTURA:
+---
+{{TEXTO_OCR}}
+---
 
 Extrae estos campos (usa null si no encuentras el dato):
 
@@ -68,9 +76,16 @@ IMPORTANTE: Responde SOLO con el JSON, sin explicaciones ni markdown.`;
 // ============================================================================
 
 /**
- * Convierte imagen a base64
+ * Extrae texto de imagen usando Tesseract OCR
  */
-function imageToBase64(filePath) {
+async function extractTextWithOCR(filePath) {
+  let Tesseract;
+  try {
+    Tesseract = require('tesseract.js');
+  } catch (e) {
+    throw new Error('tesseract.js no instalado. Ejecuta: npm install tesseract.js');
+  }
+
   const absolutePath = path.isAbsolute(filePath)
     ? filePath
     : path.join(process.cwd(), filePath);
@@ -79,49 +94,35 @@ function imageToBase64(filePath) {
     throw new Error(`Archivo no encontrado: ${absolutePath}`);
   }
 
-  const buffer = fs.readFileSync(absolutePath);
-  const base64 = buffer.toString('base64');
+  // Crear worker con idioma español
+  const worker = await Tesseract.createWorker('spa', 1, {
+    logger: () => {} // Silenciar logs
+  });
 
-  // Detectar tipo MIME
-  const ext = path.extname(filePath).toLowerCase();
-  const mimeTypes = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
-    '.bmp': 'image/bmp'
-  };
-
-  return {
-    base64,
-    mimeType: mimeTypes[ext] || 'image/png',
-    size: Math.round(buffer.length / 1024)
-  };
+  try {
+    const { data } = await worker.recognize(absolutePath);
+    return {
+      text: data.text.trim(),
+      confidence: data.confidence
+    };
+  } finally {
+    await worker.terminate();
+  }
 }
 
 /**
- * Llama a DeepSeek API
+ * Llama a DeepSeek API con texto
  */
-function callDeepSeek(imageBase64, mimeType) {
+function callDeepSeek(textoOCR) {
   return new Promise((resolve, reject) => {
+    const prompt = PROMPT_FACTURA.replace('{{TEXTO_OCR}}', textoOCR);
+
     const requestBody = JSON.stringify({
       model: 'deepseek-chat',
       messages: [
         {
           role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${imageBase64}`
-              }
-            },
-            {
-              type: 'text',
-              text: PROMPT_FACTURA
-            }
-          ]
+          content: prompt
         }
       ],
       temperature: 0.1,
@@ -194,6 +195,8 @@ async function main() {
   if (!filePath) {
     console.log('❌ Uso: node scripts/test-factura-deepseek.js <imagen>');
     console.log('');
+    console.log('Flujo: Imagen → Tesseract (OCR) → DeepSeek → JSON');
+    console.log('');
     console.log('Ejemplo:');
     console.log('  node scripts/test-factura-deepseek.js factura.png');
     console.log('  node scripts/test-factura-deepseek.js data/facturas/factura001.jpg');
@@ -208,31 +211,52 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('🔍 Extrayendo datos de factura con DeepSeek');
+  console.log('🔍 Extrayendo datos de factura');
+  console.log('   Flujo: Imagen → Tesseract (OCR) → DeepSeek → JSON');
   console.log('─'.repeat(50));
 
   try {
-    // 1. Leer imagen
+    // 1. OCR con Tesseract
     console.log(`📄 Archivo: ${filePath}`);
-    const { base64, mimeType, size } = imageToBase64(filePath);
-    console.log(`   Tipo: ${mimeType}`);
-    console.log(`   Tamaño: ${size} KB`);
-
-    // 2. Enviar a DeepSeek
     console.log('');
-    console.log('🚀 Enviando a DeepSeek...');
-    const startTime = Date.now();
+    console.log('📝 Paso 1: Extrayendo texto con Tesseract OCR...');
+    const ocrStart = Date.now();
 
-    const response = await callDeepSeek(base64, mimeType);
+    const { text: textoOCR, confidence } = await extractTextWithOCR(filePath);
 
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`   Tiempo: ${elapsed}s`);
+    const ocrTime = ((Date.now() - ocrStart) / 1000).toFixed(1);
+    console.log(`   Tiempo OCR: ${ocrTime}s`);
+    console.log(`   Confianza: ${confidence.toFixed(1)}%`);
+    console.log(`   Caracteres extraídos: ${textoOCR.length}`);
+
+    if (textoOCR.length < 50) {
+      console.log('');
+      console.log('⚠️  Poco texto extraído. El OCR puede haber fallado.');
+      console.log('   Texto extraído:');
+      console.log(textoOCR || '(vacío)');
+    }
+
+    // 2. Enviar texto a DeepSeek
+    console.log('');
+    console.log('🤖 Paso 2: Estructurando con DeepSeek...');
+    const deepseekStart = Date.now();
+
+    const response = await callDeepSeek(textoOCR);
+
+    const deepseekTime = ((Date.now() - deepseekStart) / 1000).toFixed(1);
+    console.log(`   Tiempo DeepSeek: ${deepseekTime}s`);
 
     // 3. Extraer contenido
     const content = response.choices?.[0]?.message?.content || '';
     const usage = response.usage || {};
 
     console.log(`   Tokens: ${usage.prompt_tokens || '?'} entrada, ${usage.completion_tokens || '?'} salida`);
+
+    // Calcular costo aproximado (DeepSeek es muy barato)
+    const costInput = (usage.prompt_tokens || 0) * 0.00000014;  // $0.14/1M tokens
+    const costOutput = (usage.completion_tokens || 0) * 0.00000028; // $0.28/1M tokens
+    const totalCost = (costInput + costOutput).toFixed(6);
+    console.log(`   Costo aprox: $${totalCost}`);
 
     // 4. Parsear JSON
     console.log('');
@@ -254,8 +278,12 @@ async function main() {
       console.log(content);
     }
 
+    // Resumen
     console.log('');
+    console.log('─'.repeat(50));
     console.log('✅ Completado');
+    console.log(`   Tiempo total: ${(parseFloat(ocrTime) + parseFloat(deepseekTime)).toFixed(1)}s`);
+    console.log(`   Costo: $${totalCost} (casi gratis)`);
 
   } catch (error) {
     console.error('');

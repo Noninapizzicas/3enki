@@ -30,8 +30,20 @@ module.exports = {
 
     try {
       // Determinar directorio de storage
-      const storageBase = config?.storage?.base ||
-        path.join(process.cwd(), 'data/projects/facturas-nonina/storage');
+      // Detectar proyecto desde la ruta del archivo o usar config
+      let storageBase = config?.storage?.base;
+
+      if (!storageBase) {
+        // Intentar detectar desde la ruta del archivo
+        const match = filePath.match(/data\/bots\/([^/]+)\/received/);
+        if (match) {
+          const botName = match[1];
+          const projectId = botName.replace(/_bot$/, '').replace(/_/g, '-');
+          storageBase = path.join(process.cwd(), 'data/projects', projectId, 'storage');
+        } else {
+          storageBase = path.join(process.cwd(), 'data/projects/facturas-nonina/storage');
+        }
+      }
 
       const dirOcr = path.join(storageBase, 'ocr');
 

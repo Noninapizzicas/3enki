@@ -10,9 +10,12 @@
  *   - DEEPSEEK_API_KEY en .env o como variable de entorno
  */
 
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+
+// Cargar .env desde la raíz del proyecto (no desde donde se ejecuta)
+const projectRoot = path.resolve(__dirname, '..');
+require('dotenv').config({ path: path.join(projectRoot, '.env') });
 const https = require('https');
 
 // ============================================================================

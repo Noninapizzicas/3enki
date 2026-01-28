@@ -60,7 +60,8 @@ function resolveCredentials(account) {
     // 2. Individuales por cuenta
     const clientId = env[`GMAIL_CLIENT_ID_${account}`];
     const clientSecret = env[`GMAIL_CLIENT_SECRET_${account}`];
-    const refreshToken = env[`GMAIL_REFRESH_TOKEN_${account}`];
+    // Soporta ambos patrones: GMAIL_REFRESH_TOKEN_* y GMAIL_API_KEY_CUSTOM_* (credential-manager)
+    const refreshToken = env[`GMAIL_REFRESH_TOKEN_${account}`] || env[`GMAIL_API_KEY_CUSTOM_${account}`];
 
     if (clientId && clientSecret && refreshToken) {
       return { clientId, clientSecret, refreshToken, source: `GMAIL_*_${account}` };

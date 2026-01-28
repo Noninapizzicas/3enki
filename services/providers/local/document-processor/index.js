@@ -376,7 +376,8 @@ async function getGoogleAccessToken(account = null) {
     if (!clientId) {
       clientId = env[`GMAIL_CLIENT_ID_${account}`];
       clientSecret = env[`GMAIL_CLIENT_SECRET_${account}`];
-      refreshToken = env[`GMAIL_REFRESH_TOKEN_${account}`];
+      // Soporta ambos patrones: GMAIL_REFRESH_TOKEN_* y GMAIL_API_KEY_CUSTOM_* (credential-manager)
+      refreshToken = env[`GMAIL_REFRESH_TOKEN_${account}`] || env[`GMAIL_API_KEY_CUSTOM_${account}`];
     }
   }
 

@@ -59,7 +59,7 @@ module.exports = {
         'extract-invoice',
         {
           document: filePath,
-          backend: processing.backend || 'google-documentai',
+          backend: processing.backend || 'google_document_ai',
           language: processing.language || 'es',
           account: gmail.account  // Para OAuth de Document AI
         },

@@ -20,7 +20,7 @@
   },
 
   "processing": {
-    "backend": "google-documentai",
+    "backend": "google_document_ai",
     "language": "es",
     "moveOriginal": true,
     "confidenceThreshold": 0.85

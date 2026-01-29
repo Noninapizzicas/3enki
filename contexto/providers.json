@@ -23,7 +23,7 @@
       "ubicacion": "services/providers/local/{nombre}/",
       "estructura": "index.js con name, functions, y métodos",
       "credencial": "Inyectada por provider-loader, NUNCA buscada internamente",
-      "ejemplo": "local/gmail/, local/pdf/, local/tesseract/"
+      "ejemplo": "local/gmail/, local/pdf/, local/tesseract/, local/sharp/, local/learning/"
     }
   },
 
@@ -38,7 +38,10 @@
       "ejemplos": [
         "local.pdf.create.request → local.pdf.create.response",
         "local.gmail.search.request → local.gmail.search.response",
-        "local.tesseract.extract.request → local.tesseract.extract.response"
+        "local.tesseract.extract.request → local.tesseract.extract.response",
+        "local.sharp.prepare-ocr.request → local.sharp.prepare-ocr.response",
+        "local.learning.save.request → local.learning.save.response",
+        "local.learning.query.request → local.learning.query.response"
       ]
     }
   },

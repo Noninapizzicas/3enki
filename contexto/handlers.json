@@ -427,5 +427,33 @@
     "config_proyecto": "data/projects/{projectId}/config/*.json",
     "store_proyecto": "data/projects/{projectId}/handler-store/",
     "store_global": "data/handler-store/"
+  },
+
+  "sistema_aprendizaje": {
+    "_descripcion": "Sistema genérico de aprendizaje basado en experiencias",
+    "_ver_detalle": "contexto/learning.json",
+    "handlers_disponibles": {
+      "aprendizaje-feedback.js": {
+        "descripcion": "Captura feedback de cualquier proceso",
+        "triggers": ["aprendizaje.feedback", "aprendizaje.exito", "aprendizaje.fallo"],
+        "emite": ["aprendizaje.guardado"]
+      },
+      "aprendizaje-consulta.js": {
+        "descripcion": "Consulta recomendaciones basadas en experiencias",
+        "triggers": ["aprendizaje.consulta", "aprendizaje.recomendar", "aprendizaje.estadisticas"],
+        "emite": ["aprendizaje.resultados", "aprendizaje.recomendacion", "aprendizaje.stats"]
+      },
+      "ocr-aprendizaje.js": {
+        "descripcion": "Ejemplo: conecta OCR con sistema de aprendizaje",
+        "triggers": ["documento.ocr.completado", "imagen.preparar.consultar", "comando.ocr.estadisticas"],
+        "dominio": "ocr-imagenes"
+      }
+    },
+    "uso_desde_cualquier_handler": {
+      "guardar_exito": "emit('aprendizaje.exito', { dominio, contexto, accion, resultado, score, tags })",
+      "guardar_fallo": "emit('aprendizaje.fallo', { dominio, contexto, accion, resultado, motivo, tags })",
+      "consultar": "emit('aprendizaje.recomendar', { dominio, contexto, requestId })",
+      "via_services": "await services.call('local.learning', 'best-action', { dominio, contexto })"
+    }
   }
 }

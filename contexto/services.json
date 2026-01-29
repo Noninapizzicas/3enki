@@ -880,6 +880,140 @@
       },
       "_VENTAJAS": "Extracción estructurada (no solo texto), ideal para facturas y formularios",
       "_PRECIO": "$30/1000 páginas para Invoice Parser, ~$1.20/mes para 40 facturas"
+    },
+
+    "sharp.prepare-ocr": {
+      "event": "local.sharp.prepare-ocr.request",
+      "description": "Preparar imagen para OCR con Sharp",
+      "input": {
+        "image": "base64 | path - Imagen a procesar",
+        "grayscale": "boolean - Convertir a escala de grises (default: true)",
+        "normalize": "boolean - Normalizar contraste (default: true)",
+        "sharpen": "boolean - Aplicar enfoque (default: true)",
+        "threshold": "number - Umbral binarización (0-255, opcional)",
+        "denoise": "boolean - Reducir ruido (default: false)"
+      },
+      "output": {
+        "success": "boolean",
+        "data": {
+          "image": "string - Imagen procesada en base64",
+          "format": "string - Formato de salida (png)",
+          "width": "number - Ancho final",
+          "height": "number - Alto final"
+        }
+      },
+      "_VENTAJAS": "Mejora significativa en calidad de OCR, procesamiento local sin coste"
+    },
+    "sharp.crop": {
+      "event": "local.sharp.crop.request",
+      "description": "Recortar región de imagen",
+      "input": {
+        "image": "base64 | path",
+        "left": "number - Píxeles desde izquierda",
+        "top": "number - Píxeles desde arriba",
+        "width": "number - Ancho del recorte",
+        "height": "number - Alto del recorte"
+      },
+      "output": { "image": "base64", "width": "number", "height": "number" }
+    },
+    "sharp.trim": {
+      "event": "local.sharp.trim.request",
+      "description": "Eliminar bordes uniformes automáticamente",
+      "input": { "image": "base64 | path", "threshold": "number - Tolerancia (default: 10)" },
+      "output": { "image": "base64", "trimmed": "boolean" }
+    },
+    "sharp.resize": {
+      "event": "local.sharp.resize.request",
+      "description": "Redimensionar imagen",
+      "input": {
+        "image": "base64 | path",
+        "width": "number (opcional)",
+        "height": "number (opcional)",
+        "fit": "cover | contain | fill | inside | outside (default: inside)"
+      },
+      "output": { "image": "base64", "width": "number", "height": "number" }
+    },
+    "sharp.convert": {
+      "event": "local.sharp.convert.request",
+      "description": "Convertir formato de imagen",
+      "input": {
+        "image": "base64 | path",
+        "format": "png | jpeg | webp | tiff",
+        "quality": "number - Calidad 1-100 (para jpeg/webp)"
+      },
+      "output": { "image": "base64", "format": "string" }
+    },
+    "sharp.info": {
+      "event": "local.sharp.info.request",
+      "description": "Obtener información de imagen",
+      "input": { "image": "base64 | path" },
+      "output": { "width": "number", "height": "number", "format": "string", "channels": "number", "size": "number" }
+    },
+
+    "learning.save": {
+      "event": "local.learning.save.request",
+      "description": "Guardar experiencia/feedback para aprendizaje",
+      "input": {
+        "dominio": "string - Categoría de aprendizaje (ej: 'ocr-imagenes', 'facturas')",
+        "contexto": "object - Datos de entrada/situación para matching",
+        "accion": "object - Qué se hizo (parámetros, decisiones)",
+        "resultado": "object - Qué se obtuvo",
+        "feedback": "object - Evaluación { exito: bool, score: 0-1, comentario }",
+        "tags": "array - Etiquetas para búsqueda"
+      },
+      "output": { "success": "boolean", "id": "string", "dominio": "string" },
+      "_VER_DETALLE": "contexto/learning.json"
+    },
+    "learning.query": {
+      "event": "local.learning.query.request",
+      "description": "Buscar experiencias similares",
+      "input": {
+        "dominio": "string - required",
+        "contexto": "object - Contexto para buscar similares",
+        "camposSimilitud": "array - Campos específicos para comparar",
+        "limite": "number - Máximo resultados (default: 10)",
+        "minSimilitud": "number - Umbral mínimo (default: 0.3)",
+        "tags": "array - Filtrar por tags",
+        "soloExitosos": "boolean - Solo devolver exitosas"
+      },
+      "output": { "success": "boolean", "total": "number", "resultados": "array" }
+    },
+    "learning.stats": {
+      "event": "local.learning.stats.request",
+      "description": "Obtener estadísticas de un dominio de aprendizaje",
+      "input": {
+        "dominio": "string - required",
+        "regenerar": "boolean - Forzar recálculo (default: false)"
+      },
+      "output": {
+        "total": "number - Experiencias totales",
+        "exitosos": "number - Experiencias exitosas",
+        "tasaExito": "string - Porcentaje de éxito",
+        "promedioScore": "number - Score promedio",
+        "tags": "object - Conteo por tag"
+      }
+    },
+    "learning.domains": {
+      "event": "local.learning.domains.request",
+      "description": "Listar todos los dominios con datos de aprendizaje",
+      "input": {},
+      "output": { "dominios": "array - [{nombre, experiencias}]", "total": "number" }
+    },
+    "learning.best-action": {
+      "event": "local.learning.best-action.request",
+      "description": "Obtener mejor acción recomendada para un contexto",
+      "input": {
+        "dominio": "string - required",
+        "contexto": "object - required - Contexto actual",
+        "camposSimilitud": "array - Campos para comparar"
+      },
+      "output": {
+        "encontrado": "boolean",
+        "similitud": "number - 0-1",
+        "accionRecomendada": "object - Acción que funcionó",
+        "contextoSimilar": "object - Contexto de la experiencia similar"
+      },
+      "_FILOSOFIA": "Sistema genérico reutilizable para cualquier dominio del sistema"
     }
   },
 
@@ -905,7 +1039,9 @@
         "csv": "csv-parser, csv-writer",
         "xlsx": "exceljs",
         "tesseract": "tesseract.js (services/providers/local/tesseract)",
-        "scribe-ocr": "scribe.js-ocr (services/providers/local/scribe-ocr) - OCR WASM"
+        "scribe-ocr": "scribe.js-ocr (services/providers/local/scribe-ocr) - OCR WASM",
+        "sharp": "sharp (services/providers/local/sharp) - Procesamiento de imágenes",
+        "learning": "Sin dependencias (services/providers/local/learning) - Sistema de aprendizaje genérico"
       }
     }
   }

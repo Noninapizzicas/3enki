@@ -205,5 +205,185 @@
       "Incluir categorías amplias y específicas",
       "Evitar tags únicos o muy específicos"
     ]
+  },
+
+  "algoritmo_similitud": {
+    "descripcion": "Cómo se calcula la similitud entre contextos",
+    "proceso": [
+      "1. Se comparan los campos especificados en camposSimilitud (o todos si no se especifica)",
+      "2. Para cada campo, se calcula una puntuación de similitud:",
+      "   - Números: 1 - (diferencia_relativa), máx 1 si iguales",
+      "   - Strings: 1 si iguales, 0.5 si uno contiene al otro, 0 si diferentes",
+      "   - Arrays: Índice de Jaccard (intersección / unión)",
+      "   - Otros: 1 si iguales, 0 si diferentes",
+      "3. Se promedia la puntuación de todos los campos comparados",
+      "4. Se filtran experiencias con similitud >= minSimilitud (default 0.3)"
+    ],
+    "ejemplo": {
+      "contexto_actual": { "extension": "jpg", "width": 1200, "threshold": 140 },
+      "experiencia_1": { "extension": "jpg", "width": 1200, "threshold": 140 },
+      "similitud_1": 1.0,
+      "experiencia_2": { "extension": "png", "width": 1000, "threshold": 120 },
+      "similitud_2": 0.5
+    }
+  },
+
+  "flujo_completo_ejemplo": {
+    "descripcion": "Ejemplo completo de integración de aprendizaje en un proceso",
+    "escenario": "Pipeline de OCR que aprende qué parámetros funcionan mejor",
+    "pasos": [
+      {
+        "paso": 1,
+        "descripcion": "Antes de procesar, consultar recomendación",
+        "handler": "preparar-imagen.js",
+        "codigo": [
+          "// Obtener info de la imagen",
+          "const info = await services.call('local.sharp', 'info', { image });",
+          "",
+          "// Consultar aprendizaje",
+          "const rec = await services.call('local.learning', 'best-action', {",
+          "  dominio: 'ocr-imagenes',",
+          "  contexto: { extension: 'jpg', width: info.data.width }",
+          "});",
+          "",
+          "// Usar recomendación o defaults",
+          "const opciones = rec.data?.encontrado",
+          "  ? rec.data.accionRecomendada",
+          "  : { grayscale: true, normalize: true, threshold: 140 };"
+        ]
+      },
+      {
+        "paso": 2,
+        "descripcion": "Procesar con los parámetros seleccionados",
+        "codigo": [
+          "const procesada = await services.call('local.sharp', 'prepare-ocr', {",
+          "  image, ...opciones",
+          "});",
+          "const ocr = await services.call('local.tesseract', 'extract', {",
+          "  image: procesada.data.image",
+          "});"
+        ]
+      },
+      {
+        "paso": 3,
+        "descripcion": "Registrar resultado para aprendizaje",
+        "codigo": [
+          "emit('aprendizaje.feedback', {",
+          "  dominio: 'ocr-imagenes',",
+          "  contexto: { extension: 'jpg', width: info.data.width },",
+          "  accion: opciones,",
+          "  resultado: { confianza: ocr.data.confidence },",
+          "  feedback: {",
+          "    exito: ocr.data.confidence >= 70,",
+          "    score: ocr.data.confidence / 100",
+          "  },",
+          "  tags: ['jpg', ocr.data.confidence >= 70 ? 'exito' : 'bajo']",
+          "});"
+        ]
+      }
+    ],
+    "resultado": "Con el tiempo, el sistema aprende qué parámetros funcionan mejor para cada tipo de imagen"
+  },
+
+  "patrones_integracion": {
+    "patron_basico": {
+      "descripcion": "El más simple: registrar feedback sin consultar",
+      "uso": "Cuando quieres acumular datos para análisis posterior",
+      "codigo": "emit('aprendizaje.feedback', { dominio, contexto, accion, resultado, feedback, tags })"
+    },
+    "patron_consulta_simple": {
+      "descripcion": "Consultar antes de actuar",
+      "uso": "Cuando tienes varios enfoques posibles y quieres usar el que mejor funcionó",
+      "codigo": [
+        "const rec = await services.call('local.learning', 'best-action', { dominio, contexto });",
+        "const accion = rec.data?.encontrado ? rec.data.accionRecomendada : defaultAccion;"
+      ]
+    },
+    "patron_loop_completo": {
+      "descripcion": "Consultar → Ejecutar → Registrar",
+      "uso": "Para aprendizaje continuo en pipelines de procesamiento",
+      "eventos": [
+        "1. Handler A emite: proceso.iniciar",
+        "2. Handler B consulta aprendizaje, ejecuta, emite: proceso.completado",
+        "3. Handler C registra feedback en aprendizaje"
+      ]
+    },
+    "patron_estadisticas": {
+      "descripcion": "Monitorear rendimiento de un dominio",
+      "uso": "Dashboards, alertas, reportes",
+      "codigo": [
+        "const stats = await services.call('local.learning', 'stats', { dominio: 'ocr-imagenes' });",
+        "// stats.data: { total, exitosos, tasaExito, promedioScore }"
+      ]
+    }
+  },
+
+  "casos_uso_avanzados": {
+    "a_b_testing": {
+      "descripcion": "Comparar diferentes enfoques",
+      "como": [
+        "1. Crear tags diferentes para cada enfoque: 'enfoque-A', 'enfoque-B'",
+        "2. Registrar feedback con el tag correspondiente",
+        "3. Consultar stats filtrando por tag para comparar tasas de éxito"
+      ]
+    },
+    "degradacion_graceful": {
+      "descripcion": "Fallback inteligente cuando falla el enfoque recomendado",
+      "como": [
+        "1. Consultar best-action",
+        "2. Si falla, consultar segunda mejor opción excluyendo la primera",
+        "3. Registrar el fallo del primer enfoque para ajustar recomendaciones"
+      ]
+    },
+    "aprendizaje_por_usuario": {
+      "descripcion": "Personalizar por usuario/proyecto",
+      "como": [
+        "Usar dominios específicos: 'ocr-{userId}' o 'facturas-{projectId}'",
+        "O usar tags: ['usuario:123', 'proyecto:abc']"
+      ]
+    }
+  },
+
+  "troubleshooting": {
+    "no_encuentra_recomendaciones": {
+      "problema": "best-action siempre devuelve encontrado=false",
+      "causas": [
+        "No hay suficientes experiencias exitosas registradas",
+        "El contexto de búsqueda es muy diferente a los existentes",
+        "minSimilitud es muy alto"
+      ],
+      "solucion": [
+        "Registrar más experiencias antes de consultar",
+        "Reducir minSimilitud (default 0.3)",
+        "Especificar camposSimilitud con campos más relevantes"
+      ]
+    },
+    "recomendaciones_malas": {
+      "problema": "Las acciones recomendadas no funcionan bien",
+      "causas": [
+        "El contexto no captura suficientes características relevantes",
+        "Hay ruido en los datos (experiencias mal etiquetadas)",
+        "El umbral de éxito es demasiado bajo"
+      ],
+      "solucion": [
+        "Enriquecer el contexto con más datos relevantes",
+        "Revisar y limpiar experiencias con score bajo pero exito=true",
+        "Subir el umbral de score para considerar exitoso"
+      ]
+    },
+    "datos_crecen_mucho": {
+      "problema": "El archivo experiencias.jsonl crece demasiado",
+      "solucion_futura": "Implementar rotación/archivado de experiencias antiguas",
+      "workaround_actual": "Eliminar manualmente o crear nuevo dominio"
+    }
+  },
+
+  "archivos_relacionados": {
+    "provider": "services/providers/local/learning/index.js",
+    "manifest": "services/providers/local/learning/manifest.json",
+    "handler_feedback": "handlers/aprendizaje-feedback.js",
+    "handler_consulta": "handlers/aprendizaje-consulta.js",
+    "ejemplo_ocr": "handlers/ocr-aprendizaje.js",
+    "datos": "data/learning/{dominio}/experiencias.jsonl"
   }
 }

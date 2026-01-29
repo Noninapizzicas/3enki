@@ -1,0 +1,209 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-01-29",
+  "_DESCRIPTION": "Sistema de Aprendizaje Genérico para Event-Core",
+
+  "_AI_INSTRUCTIONS": {
+    "CRITICAL": "Este es un sistema GENÉRICO de aprendizaje, reutilizable en cualquier dominio",
+    "rule_1": "El aprendizaje se organiza por DOMINIOS (ej: 'ocr-imagenes', 'facturas', 'chat')",
+    "rule_2": "Cualquier handler puede guardar y consultar experiencias",
+    "rule_3": "El sistema aprende de éxitos y fallos para recomendar acciones",
+    "FILOSOFIA": "Simple, robusto, reutilizable - sirve para todo el sistema"
+  },
+
+  "arquitectura": {
+    "provider": {
+      "nombre": "local.learning",
+      "ubicacion": "services/providers/local/learning/",
+      "descripcion": "Almacena y consulta experiencias de aprendizaje"
+    },
+    "handlers": {
+      "feedback": "handlers/aprendizaje-feedback.js - Captura feedback de cualquier proceso",
+      "consulta": "handlers/aprendizaje-consulta.js - Consulta recomendaciones"
+    },
+    "almacenamiento": {
+      "directorio": "data/learning/{dominio}/",
+      "archivos": {
+        "experiencias.jsonl": "Una experiencia por línea (append-only)",
+        "estadisticas.json": "Cache de estadísticas calculadas"
+      }
+    }
+  },
+
+  "estructura_experiencia": {
+    "id": "string - UUID único",
+    "timestamp": "ISO 8601 - cuándo ocurrió",
+    "dominio": "string - categoría de aprendizaje",
+    "contexto": "object - datos de entrada para matching",
+    "accion": "object - qué se hizo (parámetros, decisiones)",
+    "resultado": "object - qué se obtuvo",
+    "feedback": {
+      "exito": "boolean - si fue exitoso",
+      "score": "number 0-1 - calidad del resultado",
+      "comentario": "string - notas adicionales"
+    },
+    "tags": "array - etiquetas para búsqueda"
+  },
+
+  "eventos": {
+    "entrada": {
+      "aprendizaje.feedback": "Guardar experiencia completa",
+      "aprendizaje.exito": "Shortcut para marcar éxito",
+      "aprendizaje.fallo": "Shortcut para marcar fallo",
+      "aprendizaje.consulta": "Buscar experiencias similares",
+      "aprendizaje.recomendar": "Obtener mejor acción recomendada",
+      "aprendizaje.estadisticas": "Obtener stats de un dominio"
+    },
+    "salida": {
+      "aprendizaje.guardado": "Confirma que se guardó feedback",
+      "aprendizaje.resultados": "Experiencias similares encontradas",
+      "aprendizaje.recomendacion": "Acción recomendada para un contexto",
+      "aprendizaje.stats": "Estadísticas del dominio"
+    }
+  },
+
+  "funciones_provider": {
+    "save": {
+      "descripcion": "Guardar una experiencia/feedback",
+      "parametros": {
+        "dominio": "required - categoría de aprendizaje",
+        "contexto": "datos de entrada",
+        "accion": "qué se hizo",
+        "resultado": "qué se obtuvo",
+        "feedback": "evaluación { exito, score }",
+        "tags": "etiquetas para búsqueda"
+      }
+    },
+    "query": {
+      "descripcion": "Buscar experiencias similares",
+      "parametros": {
+        "dominio": "required",
+        "contexto": "contexto para buscar similares",
+        "camposSimilitud": "campos específicos para comparar",
+        "limite": "máximo resultados (default: 10)",
+        "minSimilitud": "umbral mínimo (default: 0.3)",
+        "tags": "filtrar por tags",
+        "soloExitosos": "solo devolver exitosas"
+      }
+    },
+    "stats": {
+      "descripcion": "Obtener estadísticas de un dominio",
+      "parametros": {
+        "dominio": "required",
+        "regenerar": "forzar recálculo (default: false)"
+      }
+    },
+    "domains": {
+      "descripcion": "Listar todos los dominios con datos"
+    },
+    "best-action": {
+      "descripcion": "Obtener mejor acción para un contexto",
+      "parametros": {
+        "dominio": "required",
+        "contexto": "required - contexto actual",
+        "camposSimilitud": "campos para comparar"
+      }
+    }
+  },
+
+  "dominios_ejemplo": {
+    "ocr-imagenes": {
+      "descripcion": "Aprendizaje para procesamiento OCR",
+      "contexto_tipico": ["extension", "format", "width", "height", "threshold"],
+      "accion_tipica": ["grayscale", "normalize", "sharpen", "threshold"],
+      "resultado_tipico": ["confianza", "caracteresExtraidos"]
+    },
+    "facturas": {
+      "descripcion": "Aprendizaje para extracción de facturas",
+      "contexto_tipico": ["proveedor", "formato", "tipoDocumento"],
+      "accion_tipica": ["campos_extraidos", "regex_usado"],
+      "resultado_tipico": ["campos_correctos", "errores"]
+    },
+    "agentes": {
+      "descripcion": "Aprendizaje para agentes AI",
+      "contexto_tipico": ["tipo_consulta", "contexto_usuario"],
+      "accion_tipica": ["modelo", "temperatura", "tools_usadas"],
+      "resultado_tipico": ["satisfaccion", "tokens_usados"]
+    }
+  },
+
+  "uso_desde_handlers": {
+    "guardar_exito": {
+      "codigo": [
+        "emit('aprendizaje.exito', {",
+        "  dominio: 'mi-dominio',",
+        "  contexto: { /* datos entrada */ },",
+        "  accion: { /* qué se hizo */ },",
+        "  resultado: { /* qué se obtuvo */ },",
+        "  score: 0.9,",
+        "  tags: ['tag1', 'tag2']",
+        "});"
+      ]
+    },
+    "guardar_fallo": {
+      "codigo": [
+        "emit('aprendizaje.fallo', {",
+        "  dominio: 'mi-dominio',",
+        "  contexto: { /* datos entrada */ },",
+        "  accion: { /* qué se intentó */ },",
+        "  resultado: { /* error o resultado parcial */ },",
+        "  motivo: 'descripción del fallo',",
+        "  tags: ['error-tipo']",
+        "});"
+      ]
+    },
+    "consultar_recomendacion": {
+      "codigo": [
+        "// Emitir consulta",
+        "emit('aprendizaje.recomendar', {",
+        "  dominio: 'mi-dominio',",
+        "  contexto: { /* situación actual */ },",
+        "  requestId: 'para-correlacion'",
+        "});",
+        "",
+        "// O usar services.call directamente",
+        "const result = await services.call('local.learning', 'best-action', {",
+        "  dominio: 'mi-dominio',",
+        "  contexto: { /* situación actual */ }",
+        "});",
+        "if (result.data?.encontrado) {",
+        "  // usar result.data.accionRecomendada",
+        "}"
+      ]
+    }
+  },
+
+  "integraciones_existentes": {
+    "ocr_aprendizaje": {
+      "archivo": "handlers/ocr-aprendizaje.js",
+      "descripcion": "Conecta pipeline OCR con sistema de aprendizaje",
+      "eventos": [
+        "documento.ocr.completado → registra experiencia",
+        "imagen.preparar.consultar → consulta recomendaciones",
+        "comando.ocr.estadisticas → muestra stats"
+      ]
+    }
+  },
+
+  "mejores_practicas": {
+    "contexto": [
+      "Incluir solo datos relevantes para matching",
+      "Usar tipos consistentes (números como números, no strings)",
+      "Evitar datos únicos como timestamps o IDs"
+    ],
+    "accion": [
+      "Documentar todos los parámetros usados",
+      "Incluir versión del algoritmo si aplica"
+    ],
+    "feedback": [
+      "Usar score normalizado 0-1",
+      "Marcar exito=true solo para resultados satisfactorios",
+      "Incluir motivo en fallos para debugging"
+    ],
+    "tags": [
+      "Usar tags consistentes en todo el dominio",
+      "Incluir categorías amplias y específicas",
+      "Evitar tags únicos o muy específicos"
+    ]
+  }
+}

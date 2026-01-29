@@ -15,7 +15,8 @@
       "automation_handlers": "Read handlers.json (orquestación de eventos con JavaScript)",
       "credentials_questions": "Read credentials.json (API keys, OAuth2, niveles, cascada)",
       "scheduling_questions": "Read scheduler.json (jobs, triggers cron/interval/event)",
-      "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)"
+      "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)",
+      "learning_system": "Read learning.json (sistema de aprendizaje genérico, feedback, recomendaciones)"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -101,6 +102,11 @@
       "file": "project-composition.json",
       "purpose": "Sistema de composición de proyectos",
       "when": "Relaciones entre proyectos, contexto heredado"
+    },
+    {
+      "file": "learning.json",
+      "purpose": "Sistema de aprendizaje genérico - feedback y recomendaciones",
+      "when": "Implementar aprendizaje, guardar experiencias, consultar recomendaciones"
     }
   ],
 

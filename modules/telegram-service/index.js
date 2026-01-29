@@ -237,15 +237,17 @@ class TelegramServiceModule {
 
   async onGetFileRequest(event) {
     const data = event?.data || event?.payload || event;
-    const { request_id, botName, fileId, download, destPath } = data;
+    const { request_id, botName, fileId, download, destPath, _meta } = data;
 
     this.logger.info('telegram.get_file.request', { botName, fileId, request_id, destPath });
 
     const result = await this.handleToolGetFile({ botName, fileId, download, destPath });
 
-    // Publish response
+    // Publish response - include botName and _meta for handler chaining
     await this.eventBus.publish('telegram.get_file.response', {
       request_id,
+      botName,
+      _meta,
       ...result
     });
   }

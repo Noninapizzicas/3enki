@@ -2,6 +2,8 @@
  * Handler: Pipeline de Factura (Orquestador)
  *
  * Conecta los handlers individuales en un flujo completo:
+ *   imagen.preparar.request → imagen.preparada
+ *   imagen.preparada → documento.ocr.request
  *   documento.ocr.completado → texto.estructurar.request
  *   texto.estructurado → factura.procesada
  *
@@ -10,6 +12,10 @@
  *
  * FLUJO COMPLETO:
  *   factura.procesar.request
+ *        ↓
+ *   imagen.preparar.request (→ preparar-imagen + Sharp)
+ *        ↓
+ *   imagen.preparada
  *        ↓
  *   documento.ocr.request (→ ocr-tesseract)
  *        ↓
@@ -21,35 +27,83 @@
  *        ↓
  *   factura.procesada
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 module.exports = [
   // =========================================================================
-  // PASO 1: Iniciar pipeline
+  // PASO 1: Iniciar pipeline → Preparar imagen
   // =========================================================================
   {
     name: 'factura-pipeline-inicio',
-    description: 'Inicia el pipeline de procesamiento de factura',
+    description: 'Inicia el pipeline con preprocesamiento de imagen',
     trigger: 'factura.procesar.request',
 
     async handle(event, { logger, emit }) {
       const data = event.data || event;
-      const { filePath, language = 'spa', notificar } = data;
+      const { filePath, language = 'spa', notificar, skipPreprocess = false } = data;
       const requestId = data.requestId || `fac-${Date.now()}`;
 
-      logger.info('factura-pipeline.inicio', { filePath, requestId });
+      logger.info('factura-pipeline.inicio', { filePath, requestId, skipPreprocess });
 
-      // Iniciar OCR
+      if (skipPreprocess) {
+        // Saltar preprocesamiento, ir directo a OCR
+        emit('documento.ocr.request', {
+          filePath,
+          language,
+          requestId,
+          notificar,
+          _pipeline: 'factura'
+        });
+      } else {
+        // Primero preparar la imagen
+        emit('imagen.preparar.request', {
+          filePath,
+          language,
+          requestId,
+          notificar,
+          _pipeline: 'factura'
+        });
+      }
+
+      return { success: true, requestId };
+    }
+  },
+
+  // =========================================================================
+  // PASO 1.5: Imagen preparada → OCR
+  // =========================================================================
+  {
+    name: 'factura-pipeline-imagen-a-ocr',
+    description: 'Conecta imagen preparada con OCR',
+    trigger: 'imagen.preparada',
+
+    filter: (event) => {
+      const data = event.data || event;
+      return data._pipeline === 'factura' || data.requestId?.startsWith('fac-');
+    },
+
+    async handle(event, { logger, emit }) {
+      const data = event.data || event;
+      const { filePath, imagenProcesada, requestId, notificar, language = 'spa' } = data;
+
+      logger.info('factura-pipeline.imagen-preparada', {
+        filePath,
+        tieneImagenProcesada: !!imagenProcesada,
+        requestId
+      });
+
+      // Usar imagen procesada (base64) si existe, sino la original
       emit('documento.ocr.request', {
         filePath,
+        image: imagenProcesada, // base64 de imagen procesada (o null)
         language,
         requestId,
-        notificar, // Propagar datos de notificación
+        notificar,
         _pipeline: 'factura'
       });
 
-      return { success: true, requestId };
+      return { success: true };
     }
   },
 

@@ -84,6 +84,38 @@
         "channels": { "type": "number" },
         "size": { "type": "number" }
       }
+    },
+    "crop": {
+      "event": "local.sharp.crop.request",
+      "description": "Recortar imagen con coordenadas específicas",
+      "input": {
+        "image": { "type": "string", "required": true },
+        "left": { "type": "number", "required": true },
+        "top": { "type": "number", "required": true },
+        "width": { "type": "number", "required": true },
+        "height": { "type": "number", "required": true },
+        "output": { "type": "string" }
+      },
+      "output": {
+        "image": { "type": "string" },
+        "width": { "type": "number" },
+        "height": { "type": "number" }
+      }
+    },
+    "trim": {
+      "event": "local.sharp.trim.request",
+      "description": "Recortar bordes automáticamente (elimina fondo uniforme)",
+      "input": {
+        "image": { "type": "string", "required": true },
+        "threshold": { "type": "number", "default": 10 },
+        "output": { "type": "string" }
+      },
+      "output": {
+        "image": { "type": "string" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "trimmed": { "type": "object" }
+      }
     }
   }
 }

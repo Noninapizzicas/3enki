@@ -1,0 +1,45 @@
+{
+  "name": "image-processor",
+  "description": "Agente que optimiza imágenes para OCR usando herramientas de Sharp",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "image-processor-system.md",
+
+  "subscribes": [
+    "imagen.optimizar.request"
+  ],
+
+  "publishes": [
+    "imagen.optimizada"
+  ],
+
+  "tools": [
+    "sharp_info",
+    "sharp_crop",
+    "sharp_trim",
+    "sharp_resize",
+    "sharp_prepare_ocr",
+    "sharp_convert"
+  ],
+
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "temperature": 0.1,
+  "max_tokens": 2000,
+
+  "context_enabled": false,
+
+  "config": {
+    "max_iterations": 3,
+    "timeout_ms": 60000,
+    "retry_on_low_confidence": true,
+    "confidence_threshold": 50
+  },
+
+  "metadata": {
+    "author": "Event Core",
+    "created": "2026-01-29",
+    "tags": ["image", "ocr", "preprocessing", "sharp"]
+  }
+}

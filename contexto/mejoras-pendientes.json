@@ -1,0 +1,52 @@
+{
+  "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
+  "mejoras": [
+    {
+      "id": "refactor-ai-gateway",
+      "titulo": "Refactorizar estructurar-deepseek para usar ai-gateway",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-01-29",
+      "descripcion": "Cambiar el handler estructurar-deepseek.js para usar el módulo ai-gateway en lugar de llamar directamente a la API de DeepSeek",
+      "beneficios": [
+        "Cambiar de provider sin tocar código (DeepSeek → Claude → OpenAI)",
+        "Fallback automático si un provider falla",
+        "Cost tracking centralizado",
+        "Rate limiting y retry con backoff",
+        "Configuración centralizada"
+      ],
+      "implementacion": {
+        "actual": "estructurar-deepseek.js llama directamente a https://api.deepseek.com con https.request",
+        "propuesto": "Emitir evento ai.chat.request y escuchar ai.chat.response via ai-gateway",
+        "patron": "request/response con correlationId"
+      },
+      "archivos_afectados": [
+        "handlers/estructurar-deepseek.js"
+      ],
+      "dependencias": [
+        "modules/ai-gateway"
+      ],
+      "cuando_implementar": "Cuando se necesiten múltiples providers LLM o fallback automático"
+    },
+    {
+      "id": "ocr-space-provider",
+      "titulo": "Crear provider local.ocr-space como alternativa a Tesseract",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-01-29",
+      "descripcion": "OCR.space ofrece mejor calidad para fotos de documentos con fondos complejos. Free tier: 25,000 llamadas/mes",
+      "beneficios": [
+        "Mejor calidad OCR para fotos reales (vs Tesseract)",
+        "Maneja fondos complejos, ángulos, sombras",
+        "Gratis para volumen bajo (<25k/mes)",
+        "Sin instalación local"
+      ],
+      "implementacion": {
+        "ubicacion": "services/providers/local/ocr-space/",
+        "evento": "local.ocr-space.extract.request",
+        "api_key": "https://ocr.space/ocrapi/freekey"
+      },
+      "cuando_implementar": "Cuando Tesseract no dé resultados aceptables con fotos reales"
+    }
+  ]
+}

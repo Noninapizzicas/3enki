@@ -1,11 +1,11 @@
 /**
  * Handler: Preparar imagen para OCR
  *
- * Preprocesa imágenes antes del OCR para mejorar resultados:
+ * Preprocesa TODAS las imágenes antes del OCR con opciones agresivas:
  * - Escala de grises
  * - Normalización de contraste
  * - Aumento de nitidez
- * - Binarización opcional
+ * - Binarización (threshold)
  *
  * ENTRADA (evento): imagen.preparar.request
  * {
@@ -23,7 +23,7 @@
  *   notificar: object
  * }
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 module.exports = {
@@ -44,16 +44,22 @@ module.exports = {
     logger.info('preparar-imagen.inicio', { filePath, requestId });
 
     try {
-      // Opciones por defecto optimizadas para facturas/documentos
+      // Opciones AGRESIVAS por defecto - optimizadas para fotos de facturas
       const defaultOptions = {
-        grayscale: true,      // Blanco y negro
+        grayscale: true,      // Blanco y negro (elimina colores que confunden)
         normalize: true,      // Mejora contraste automático
-        sharpen: true,        // Aumenta nitidez
-        threshold: null,      // Sin binarización por defecto (puede perder info)
-        denoise: false        // Sin reducción de ruido por defecto
+        sharpen: true,        // Aumenta nitidez de texto
+        threshold: 140,       // Binarización agresiva (separa texto de fondo)
+        denoise: false        // No reducir ruido (puede borrar texto fino)
       };
 
       const processOptions = { ...defaultOptions, ...options };
+
+      logger.info('preparar-imagen.opciones', {
+        filePath,
+        opciones: processOptions,
+        requestId
+      });
 
       // Llamar al provider local.sharp
       const result = await services.call('local.sharp', 'prepare-ocr', {
@@ -68,6 +74,8 @@ module.exports = {
       logger.info('preparar-imagen.completado', {
         filePath,
         requestId,
+        width: result.data.width,
+        height: result.data.height,
         originalSize: result.data.originalSize,
         processedSize: result.data.processedSize,
         reduccion: `${Math.round((1 - result.data.processedSize / result.data.originalSize) * 100)}%`
@@ -81,7 +89,12 @@ module.exports = {
         height: result.data.height,
         requestId,
         notificar,
-        _pipeline
+        _pipeline,
+        _preprocesado: {
+          opciones: processOptions,
+          originalSize: result.data.originalSize,
+          processedSize: result.data.processedSize
+        }
       });
 
       return { success: true };

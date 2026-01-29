@@ -9,6 +9,8 @@
  * - local.sharp.resize.request -> local.sharp.resize.response
  * - local.sharp.convert.request -> local.sharp.convert.response
  * - local.sharp.info.request -> local.sharp.info.response
+ * - local.sharp.crop.request -> local.sharp.crop.response
+ * - local.sharp.trim.request -> local.sharp.trim.response
  */
 
 const fs = require('fs');
@@ -107,6 +109,38 @@ module.exports = {
         format: { type: 'string' },
         channels: { type: 'number' },
         size: { type: 'number' }
+      }
+    },
+    crop: {
+      event: 'local.sharp.crop.request',
+      description: 'Recortar imagen con coordenadas específicas',
+      input: {
+        image: { type: 'string', required: true },
+        left: { type: 'number', description: 'Posición X desde la izquierda', required: true },
+        top: { type: 'number', description: 'Posición Y desde arriba', required: true },
+        width: { type: 'number', description: 'Ancho del recorte', required: true },
+        height: { type: 'number', description: 'Alto del recorte', required: true },
+        output: { type: 'string', description: 'Path donde guardar (opcional)' }
+      },
+      output: {
+        image: { type: 'string' },
+        width: { type: 'number' },
+        height: { type: 'number' }
+      }
+    },
+    trim: {
+      event: 'local.sharp.trim.request',
+      description: 'Recortar bordes automáticamente (elimina fondo uniforme)',
+      input: {
+        image: { type: 'string', required: true },
+        threshold: { type: 'number', description: 'Tolerancia de color 0-255 (default: 10)', default: 10 },
+        output: { type: 'string', description: 'Path donde guardar (opcional)' }
+      },
+      output: {
+        image: { type: 'string' },
+        width: { type: 'number' },
+        height: { type: 'number' },
+        trimmed: { type: 'object', description: 'Información del recorte aplicado' }
       }
     }
   },
@@ -337,6 +371,121 @@ module.exports = {
       density: metadata.density,
       hasAlpha: metadata.hasAlpha,
       size: buffer.length
+    };
+  },
+
+  /**
+   * Recortar imagen con coordenadas específicas
+   */
+  async crop({ image, left, top, width, height, output } = {}) {
+    const sharpLib = loadSharp();
+    const buffer = await this.getImageBuffer(image);
+
+    // Validar parámetros
+    if (left === undefined || top === undefined || !width || !height) {
+      throw new Error('crop requires left, top, width, and height');
+    }
+
+    // Obtener dimensiones originales
+    const metadata = await sharpLib(buffer).metadata();
+
+    // Validar que el recorte esté dentro de los límites
+    if (left < 0 || top < 0) {
+      throw new Error('left and top must be >= 0');
+    }
+    if (left + width > metadata.width || top + height > metadata.height) {
+      throw new Error(`Crop area (${left},${top} ${width}x${height}) exceeds image bounds (${metadata.width}x${metadata.height})`);
+    }
+
+    const pipeline = sharpLib(buffer).extract({
+      left: Math.round(left),
+      top: Math.round(top),
+      width: Math.round(width),
+      height: Math.round(height)
+    });
+
+    const processedBuffer = await pipeline.toBuffer();
+    const info = await sharpLib(processedBuffer).metadata();
+
+    if (output) {
+      const outputDir = path.dirname(output);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+      fs.writeFileSync(output, processedBuffer);
+
+      return {
+        success: true,
+        image: output,
+        width: info.width,
+        height: info.height,
+        originalWidth: metadata.width,
+        originalHeight: metadata.height
+      };
+    }
+
+    return {
+      success: true,
+      image: processedBuffer.toString('base64'),
+      width: info.width,
+      height: info.height,
+      originalWidth: metadata.width,
+      originalHeight: metadata.height
+    };
+  },
+
+  /**
+   * Recortar bordes automáticamente (elimina fondo uniforme)
+   */
+  async trim({ image, threshold = 10, output } = {}) {
+    const sharpLib = loadSharp();
+    const buffer = await this.getImageBuffer(image);
+
+    const metadata = await sharpLib(buffer).metadata();
+
+    // Sharp's trim() elimina píxeles similares al borde
+    const pipeline = sharpLib(buffer).trim({
+      threshold: threshold,
+      background: undefined // Auto-detectar color del borde
+    });
+
+    const processedBuffer = await pipeline.toBuffer();
+    const trimInfo = await sharpLib(processedBuffer).metadata();
+
+    // Calcular cuánto se recortó
+    const trimmed = {
+      top: 0, // Sharp no expone esta info directamente
+      left: 0,
+      widthRemoved: metadata.width - trimInfo.width,
+      heightRemoved: metadata.height - trimInfo.height
+    };
+
+    if (output) {
+      const outputDir = path.dirname(output);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+      fs.writeFileSync(output, processedBuffer);
+
+      return {
+        success: true,
+        image: output,
+        width: trimInfo.width,
+        height: trimInfo.height,
+        originalWidth: metadata.width,
+        originalHeight: metadata.height,
+        trimmed
+      };
+    }
+
+    return {
+      success: true,
+      image: processedBuffer.toString('base64'),
+      width: trimInfo.width,
+      height: trimInfo.height,
+      originalWidth: metadata.width,
+      originalHeight: metadata.height,
+      trimmed
     };
   }
 };

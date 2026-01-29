@@ -6,6 +6,7 @@
  * ENTRADA (evento): documento.ocr.request
  * {
  *   filePath: string,      // Ruta al archivo (imagen)
+ *   image: string,         // Imagen preprocesada en base64 (opcional, prioridad sobre filePath)
  *   language: string,      // Idioma OCR (default: 'spa')
  *   requestId: string      // ID para correlación (opcional)
  * }
@@ -21,7 +22,7 @@
  *
  * ERROR (evento): documento.ocr.error
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 const fs = require('fs');
@@ -34,23 +35,40 @@ module.exports = {
 
   async handle(event, { logger, emit }) {
     const data = event.data || event;
-    const { filePath, language = 'spa', requestId, notificar } = data;
+    const { filePath, image, language = 'spa', requestId, notificar, _pipeline } = data;
 
-    logger.info('ocr-tesseract.inicio', { filePath, language, requestId });
+    logger.info('ocr-tesseract.inicio', {
+      filePath,
+      tieneImagenPreprocesada: !!image,
+      language,
+      requestId
+    });
 
     try {
       // Validar input
-      if (!filePath) {
-        throw new Error('filePath es requerido');
+      if (!filePath && !image) {
+        throw new Error('filePath o image es requerido');
       }
 
-      // Resolver ruta absoluta
-      const absolutePath = path.isAbsolute(filePath)
-        ? filePath
-        : path.join(process.cwd(), filePath);
+      // Determinar qué usar para OCR
+      let imageInput;
+      let usandoPreprocesada = false;
 
-      if (!fs.existsSync(absolutePath)) {
-        throw new Error(`Archivo no encontrado: ${absolutePath}`);
+      if (image) {
+        // Usar imagen preprocesada (base64)
+        imageInput = `data:image/png;base64,${image}`;
+        usandoPreprocesada = true;
+        logger.info('ocr-tesseract.usando-imagen-preprocesada');
+      } else {
+        // Usar archivo original
+        const absolutePath = path.isAbsolute(filePath)
+          ? filePath
+          : path.join(process.cwd(), filePath);
+
+        if (!fs.existsSync(absolutePath)) {
+          throw new Error(`Archivo no encontrado: ${absolutePath}`);
+        }
+        imageInput = absolutePath;
       }
 
       // Cargar Tesseract
@@ -62,14 +80,14 @@ module.exports = {
       }
 
       // Crear worker con idioma especificado
-      logger.info('ocr-tesseract.procesando', { absolutePath });
+      logger.info('ocr-tesseract.procesando', { usandoPreprocesada });
       const worker = await Tesseract.createWorker(language, 1, {
         logger: () => {} // Silenciar logs internos
       });
 
       try {
         const startTime = Date.now();
-        const { data: result } = await worker.recognize(absolutePath);
+        const { data: result } = await worker.recognize(imageInput);
         const elapsed = Date.now() - startTime;
 
         const texto = result.text.trim();
@@ -89,10 +107,12 @@ module.exports = {
           confianza,
           language,
           requestId,
-          notificar, // Propagar datos de notificación
+          notificar,
+          _pipeline,
           _meta: {
             tiempoMs: elapsed,
-            backend: 'tesseract'
+            backend: 'tesseract',
+            preprocesada: usandoPreprocesada
           }
         });
 

@@ -1,8 +1,10 @@
 /**
- * Paso 3: /ocr → dispara documento.ocr.request
+ * Paso 3: /ocr → DeepSeek visión extrae el texto de la imagen
  *
- * Coge la última imagen preprocesada y la manda al handler ocr-tesseract existente.
- * El resultado llega via documento.ocr.completado (cmd-resultados.js notifica).
+ * Coge la última imagen (preprocesada o recibida) y la envía
+ * a DeepSeek visión via ai.chat.request para que lea el texto.
+ *
+ * Respuesta llega en ai.chat.response → resultado-ocr-vision (cmd-resultados.js)
  */
 
 const fs = require('fs');
@@ -33,6 +35,17 @@ function findProjectByBot(botName) {
   return null;
 }
 
+const PROMPT_OCR = `Lee y transcribe TODO el texto visible en esta imagen de factura/documento.
+
+Reglas:
+- Transcribe el texto TAL CUAL aparece, sin interpretar ni reestructurar
+- Mantén el orden de lectura natural (arriba a abajo, izquierda a derecha)
+- Incluye números, fechas, importes, NIFs, direcciones, todo
+- Si hay tablas, separa columnas con | y filas con saltos de línea
+- NO añadas explicaciones ni comentarios, solo el texto extraído
+
+Responde SOLO con el texto extraído.`;
+
 module.exports = {
   name: 'cmd-ocr',
   trigger: 'telegram.command.received',
@@ -46,56 +59,63 @@ module.exports = {
     const data = event.data || event;
     const { botName, chatId } = data;
 
-    // Buscar última preprocesada
+    // Buscar imagen: preprocesada > received
     const projectId = findProjectByBot(botName);
     const prepDir = projectId
       ? path.join(process.cwd(), 'data/projects', projectId, 'storage/preprocesadas')
       : path.join(process.cwd(), 'data/bots', botName, 'preprocesadas');
 
-    const filePath = findLatestFile(prepDir, ['.png', '.jpg', '.jpeg']);
+    let filePath = findLatestFile(prepDir, ['.png', '.jpg', '.jpeg']);
+    let source = 'preprocesada';
 
     if (!filePath) {
-      // Fallback: buscar en received (foto sin preprocesar)
       const receivedDir = path.join(process.cwd(), 'data/bots', botName, 'received');
-      const rawPhoto = findLatestFile(receivedDir, ['.jpg', '.jpeg', '.png']);
-      if (!rawPhoto) {
-        emit('telegram.send_message.request', {
-          botName, chatId,
-          text: '❌ No hay imágenes. Manda una foto y usa /preprocesar primero.'
-        });
-        return { success: false };
-      }
-      // Usar foto sin preprocesar
-      emit('telegram.send_message.request', {
-        botName, chatId,
-        text: `⏳ OCR sobre imagen original (sin preprocesar): ${path.basename(rawPhoto)}...`
-      });
-      emit('documento.ocr.request', {
-        filePath: rawPhoto,
-        language: 'spa',
-        requestId: `ocr-${Date.now()}`,
-        notificar: { telegram: true, botName, chatId }
-      });
-      return { success: true };
+      filePath = findLatestFile(receivedDir, ['.jpg', '.jpeg', '.png']);
+      source = 'original';
     }
 
-    // Leer preprocesada como base64
-    const imagenBase64 = fs.readFileSync(filePath).toString('base64');
+    if (!filePath) {
+      emit('telegram.send_message.request', {
+        botName, chatId,
+        text: '❌ No hay imágenes. Manda una foto primero.'
+      });
+      return { success: false };
+    }
 
     emit('telegram.send_message.request', {
       botName, chatId,
-      text: `⏳ OCR sobre: ${path.basename(filePath)}...`
+      text: `⏳ OCR con DeepSeek visión...\n📄 ${path.basename(filePath)} (${source})`
     });
 
-    // Emitir al handler ocr-tesseract existente
-    emit('documento.ocr.request', {
-      filePath,
-      image: imagenBase64,
-      language: 'spa',
-      requestId: `ocr-${Date.now()}`,
-      notificar: { telegram: true, botName, chatId }
+    // Leer imagen como base64
+    const imageBase64 = fs.readFileSync(filePath).toString('base64');
+    const ext = path.extname(filePath).toLowerCase();
+    const imageType = ext === '.png' ? 'image/png' : 'image/jpeg';
+
+    // request_id codifica contexto para el handler de respuesta
+    const requestId = `ocr-vision|${botName}|${chatId}|${Date.now()}`;
+
+    logger.info('cmd-ocr.enviando-deepseek', {
+      filePath, source, requestId,
+      imageSize: Math.round(imageBase64.length / 1024) + 'KB'
     });
 
-    return { success: true };
+    // Enviar a DeepSeek via ai-gateway
+    emit('ai.chat.request', {
+      request_id: requestId,
+      provider: 'deepseek',
+      messages: [
+        {
+          role: 'user',
+          content: PROMPT_OCR,
+          image_base64: imageBase64,
+          image_type: imageType
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 4000
+    });
+
+    return { success: true, filePath, source };
   }
 };

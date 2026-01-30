@@ -7,6 +7,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const session = require('../lib/factura-session');
 
 module.exports = [
   // Foto recibida → solicitar descarga

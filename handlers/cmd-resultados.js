@@ -3,7 +3,27 @@
  *
  * Escucha eventos de completado y manda resultado a Telegram
  * cuando el evento incluye notificar.telegram = true.
+ * Guarda imagen del agente en preprocesadas/ para que /ocr la use.
  */
+
+const fs = require('fs');
+const path = require('path');
+
+function findProjectByBot(botName) {
+  const projectsDir = path.join(process.cwd(), 'data/projects');
+  try {
+    const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
+      const cfgPath = path.join(projectsDir, entry.name, 'config/config.json');
+      if (fs.existsSync(cfgPath)) {
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+        if (cfg.telegram?.botName === botName) return cfg.id || entry.name;
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
 
 module.exports = [
   // OCR completado → notificar resultado
@@ -31,7 +51,7 @@ module.exports = [
     }
   },
 
-  // Imagen optimizada por agente → notificar y reintentar OCR
+  // Imagen optimizada por agente → guardar en preprocesadas/ y notificar
   {
     name: 'resultado-optimizar',
     trigger: 'imagen.optimizada',
@@ -41,16 +61,42 @@ module.exports = [
       return data.notificar?.telegram === true;
     },
 
-    async handle(event, { emit }) {
+    async handle(event, { emit, logger }) {
       const data = event.data || event;
-      const { operaciones, imagenProcesada, notificar } = data;
+      const { operaciones, imagenProcesada, filePath, notificar } = data;
       const { botName, chatId } = notificar;
 
       const ops = Array.isArray(operaciones) ? operaciones.join(', ') : (operaciones || 'desconocidas');
 
+      // Guardar imagen del agente en preprocesadas/ para /ocr
+      let savedPath = null;
+      if (imagenProcesada) {
+        try {
+          const projectId = findProjectByBot(botName);
+          const outputDir = projectId
+            ? path.join(process.cwd(), 'data/projects', projectId, 'storage/preprocesadas')
+            : path.join(process.cwd(), 'data/bots', botName, 'preprocesadas');
+
+          if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+          }
+
+          const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
+          const base = filePath ? path.basename(filePath, path.extname(filePath)) : 'agente';
+          savedPath = path.join(outputDir, `${timestamp}_${base}_agente.png`);
+
+          const buffer = Buffer.from(imagenProcesada, 'base64');
+          fs.writeFileSync(savedPath, buffer);
+
+          logger.info('resultado-optimizar.guardado', { savedPath, size: buffer.length });
+        } catch (e) {
+          logger.error('resultado-optimizar.guardar-error', { error: e.message });
+        }
+      }
+
       emit('telegram.send_message.request', {
         botName, chatId,
-        text: `🤖 Agente optimizó imagen!\n🔧 Operaciones: ${ops}\n${imagenProcesada ? '✅ Imagen procesada lista' : '⚠️ Sin imagen procesada'}\n\nReintentando OCR automáticamente...`
+        text: `🤖 Agente optimizó imagen!\n🔧 Operaciones: ${ops}${savedPath ? `\n📂 ${savedPath}` : ''}\n${imagenProcesada ? '✅ Imagen guardada en preprocesadas/' : '⚠️ Sin imagen procesada'}\n\nUsa /ocr para el siguiente paso.`
       });
     }
   },

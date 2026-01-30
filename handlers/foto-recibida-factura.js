@@ -44,9 +44,9 @@ module.exports = [
         replyToMessageId: messageId
       });
 
-      // Obtener mejor calidad
+      // Obtener mejor calidad (TelegramClient usa camelCase: fileId)
       const bestFileId = sizes && sizes.length > 0
-        ? sizes[sizes.length - 1].file_id
+        ? sizes[sizes.length - 1].fileId
         : fileId;
 
       // Path destino

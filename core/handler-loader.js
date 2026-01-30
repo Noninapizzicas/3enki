@@ -138,10 +138,11 @@ class HandlerLoader {
         return;
       }
 
-      // Construir payload con metadata
+      // Construir payload con metadata (preservar _meta del handler)
       const payload = {
         ...data,
         _meta: {
+          ...(data._meta || {}),
           source: handlerName,
           projectId: projectId || null,
           correlationId: data._meta?.correlationId || crypto.randomUUID(),

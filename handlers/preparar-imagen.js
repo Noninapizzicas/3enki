@@ -72,12 +72,12 @@ module.exports = {
     logger.info('preparar-imagen.inicio', { filePath, requestId });
 
     try {
-      // Opciones AGRESIVAS por defecto - optimizadas para fotos de facturas
+      // Opciones suaves - threshold destruye texto en fotos reales
       const defaultOptions = {
         grayscale: true,      // Blanco y negro (elimina colores que confunden)
         normalize: true,      // Mejora contraste automático
         sharpen: true,        // Aumenta nitidez de texto
-        threshold: 140,       // Binarización agresiva (separa texto de fondo)
+        threshold: null,      // Sin binarización (destruye texto con fotos)
         denoise: false        // No reducir ruido (puede borrar texto fino)
       };
 

@@ -89,14 +89,14 @@ module.exports = {
       const nombreBase = path.basename(filePath, path.extname(filePath));
       const outputPath = path.join(outputDir, `${timestamp}_${nombreBase}_prep.png`);
 
-      // Llamar Sharp
+      // Llamar Sharp (sin threshold agresivo - destruye texto)
       const result = await services.call('local.sharp', 'prepare-ocr', {
         image: filePath,
         options: {
           grayscale: true,
           normalize: true,
           sharpen: true,
-          threshold: 140,
+          threshold: null,
           denoise: false
         },
         output: outputPath

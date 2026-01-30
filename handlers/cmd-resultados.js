@@ -31,6 +31,30 @@ module.exports = [
     }
   },
 
+  // Imagen optimizada por agente → notificar y reintentar OCR
+  {
+    name: 'resultado-optimizar',
+    trigger: 'imagen.optimizada',
+
+    filter: (event) => {
+      const data = event.data || event;
+      return data.notificar?.telegram === true;
+    },
+
+    async handle(event, { emit }) {
+      const data = event.data || event;
+      const { operaciones, imagenProcesada, notificar } = data;
+      const { botName, chatId } = notificar;
+
+      const ops = Array.isArray(operaciones) ? operaciones.join(', ') : (operaciones || 'desconocidas');
+
+      emit('telegram.send_message.request', {
+        botName, chatId,
+        text: `🤖 Agente optimizó imagen!\n🔧 Operaciones: ${ops}\n${imagenProcesada ? '✅ Imagen procesada lista' : '⚠️ Sin imagen procesada'}\n\nReintentando OCR automáticamente...`
+      });
+    }
+  },
+
   // Texto estructurado → notificar resultado
   {
     name: 'resultado-estructurar',

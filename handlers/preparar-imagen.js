@@ -32,6 +32,28 @@
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Busca el proyecto que tiene configurado un bot de Telegram.
+ * Lee configs de data/projects/{id}/config/config.json
+ */
+function findProjectByBot(botName) {
+  const projectsDir = path.join(process.cwd(), 'data/projects');
+  try {
+    const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
+      const configPath = path.join(projectsDir, entry.name, 'config/config.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        if (config.telegram?.botName === botName) {
+          return config.id || entry.name;
+        }
+      }
+    }
+  } catch (e) { /* fallback si no se puede leer */ }
+  return null;
+}
+
 module.exports = {
   name: 'preparar-imagen',
   description: 'Preprocesa imagen para mejorar OCR usando Sharp',
@@ -68,13 +90,17 @@ module.exports = {
       });
 
       // Determinar ruta de guardado para debug
-      // Si viene de bots: data/bots/{bot}/received/ → data/projects/{project}/storage/preprocesadas/
+      // Buscar proyecto que tenga este bot configurado
       let outputDir;
-      const match = filePath.match(/data\/bots\/([^/]+)\/received/);
-      if (match) {
-        const botName = match[1];
-        const projectId = botName.replace(/_bot$/, '').replace(/_/g, '-');
-        outputDir = path.join(process.cwd(), 'data/projects', projectId, 'storage/preprocesadas');
+      const botMatch = filePath.match(/data\/bots\/([^/]+)\/received/);
+      if (botMatch) {
+        const botNameFromPath = botMatch[1];
+        const projectId = findProjectByBot(botNameFromPath);
+        if (projectId) {
+          outputDir = path.join(process.cwd(), 'data/projects', projectId, 'storage/preprocesadas');
+        } else {
+          outputDir = path.join(process.cwd(), 'data/bots', botNameFromPath, 'preprocesadas');
+        }
       } else {
         outputDir = path.join(process.cwd(), 'data/storage/preprocesadas');
       }

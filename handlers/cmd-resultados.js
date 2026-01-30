@@ -101,6 +101,47 @@ module.exports = [
     }
   },
 
+  // OCR con DeepSeek visión → notificar resultado
+  {
+    name: 'resultado-ocr-vision',
+    trigger: 'ai.chat.response',
+
+    filter: (event) => {
+      const data = event.data || event;
+      return data.request_id?.startsWith('ocr-vision|');
+    },
+
+    async handle(event, { emit, logger }) {
+      const data = event.data || event;
+      const { request_id, success, content, error, tokens, cost, provider, model } = data;
+
+      // Decodificar contexto del request_id: ocr-vision|botName|chatId|timestamp
+      const parts = request_id.split('|');
+      const botName = parts[1];
+      const chatId = parts[2];
+
+      if (!success || !content) {
+        emit('telegram.send_message.request', {
+          botName, chatId,
+          text: `❌ OCR DeepSeek falló: ${error || 'sin respuesta'}`
+        });
+        return;
+      }
+
+      const texto = content.trim();
+      const preview = texto.length > 1500 ? texto.slice(0, 1500) + '...' : texto;
+
+      logger.info('resultado-ocr-vision.ok', {
+        chars: texto.length, tokens, cost, provider, model
+      });
+
+      emit('telegram.send_message.request', {
+        botName, chatId,
+        text: `✅ OCR DeepSeek visión!\n🤖 ${model || 'deepseek'} | 🔤 ${texto.length} chars | 💰 $${(cost || 0).toFixed(4)}\n\n--- Texto ---\n${preview}\n\nUsa /estructurar para el siguiente paso.`
+      });
+    }
+  },
+
   // Texto estructurado → notificar resultado
   {
     name: 'resultado-estructurar',

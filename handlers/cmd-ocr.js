@@ -100,11 +100,10 @@ module.exports = {
       imageSize: Math.round(imageBase64.length / 1024) + 'KB'
     });
 
-    // Enviar a OpenAI (gpt-4o-mini soporta visión, DeepSeek no)
+    // Enviar a DeepSeek V3 con visión
     emit('ai.chat.request', {
       request_id: requestId,
-      provider: 'openai',
-      model: 'gpt-4o-mini',
+      provider: 'deepseek',
       messages: [
         {
           role: 'user',

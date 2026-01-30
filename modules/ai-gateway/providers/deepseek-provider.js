@@ -58,17 +58,17 @@ class DeepSeekProvider extends BaseProvider {
         const mediaType = m.image_type || 'image/jpeg';
         const imageUrl = `data:${mediaType};base64,${m.image_base64}`;
 
-        const content = [
-          {
-            type: 'image_url',
-            image_url: { url: imageUrl }
-          }
-        ];
+        // DeepSeek V3: texto PRIMERO, imagen DESPUÉS
+        const content = [];
 
-        // Add text content if present
         if (m.content && typeof m.content === 'string') {
           content.push({ type: 'text', text: m.content });
         }
+
+        content.push({
+          type: 'image_url',
+          image_url: { url: imageUrl }
+        });
 
         return { role: m.role, content };
       }

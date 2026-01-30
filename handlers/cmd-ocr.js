@@ -100,7 +100,7 @@ module.exports = {
       imageSize: Math.round(imageBase64.length / 1024) + 'KB'
     });
 
-    // Enviar a DeepSeek via ai-gateway
+    // Enviar a DeepSeek V3 con visión
     emit('ai.chat.request', {
       request_id: requestId,
       provider: 'deepseek',

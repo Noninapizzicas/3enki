@@ -293,7 +293,7 @@ module.exports = {
 
       emit(EVENTS.TEXTO_ESTRUCTURAR_ERROR, {
         error: error.message, tipo,
-        filePath, requestId
+        filePath, requestId, notificar, _pipeline
       });
 
       return { success: false, error: error.message };

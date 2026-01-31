@@ -7,58 +7,44 @@
  * Comprime facturas procesadas por período (semana/mes)
  * y opcionalmente las envía por email a la asesoría.
  *
- * Uso:
- *   emit('facturas.comprimir.request', {
- *     periodo: '2026-01',           // Mes específico
- *     // o
- *     periodo: 'semana-actual',     // Última semana
- *     periodo: 'mes-actual',        // Mes en curso
- *     periodo: 'mes-anterior',      // Mes pasado
+ * Todo leído desde config del proyecto, sin hardcodes.
  *
- *     enviarEmail: true,
- *     destinatario: 'asesoria@example.com'
- *   });
- *
- * Comando Telegram: /enviarfacturas [periodo]
+ * @version 2.0.0
  */
 
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
-
-const PROJECT_ID = 'facturas-nonina';
-const BOT_NAME = 'facturas_asesoria_bot';
-const GMAIL_ACCOUNT = 'noninapizzicas';
-const PROCESADAS_PATH = `./data/projects/${PROJECT_ID}/procesadas`;
-const ENVIOS_PATH = `./data/projects/${PROJECT_ID}/envios`;
-
-// Email de la asesoría (configurar)
-const EMAIL_ASESORIA = process.env.EMAIL_ASESORIA || null;
+const { EVENTS, resolveStoragePath } = require('../../../../lib/handler-utils');
 
 module.exports = {
   name: 'comprimir-facturas',
   description: 'Comprime facturas por período para enviar a asesoría',
   trigger: 'facturas.comprimir.request',
 
-  async handle(event, { services, logger, emit }) {
+  async handle(event, { services, logger, emit, config, projectId }) {
     const data = event.data || event;
     const {
       periodo = 'mes-actual',
       enviarEmail = false,
-      destinatario = EMAIL_ASESORIA,
-      chatId  // Para notificar por Telegram
+      destinatario = null,
+      chatId, botName: eventBotName
     } = data;
 
-    logger.info('comprimir-facturas.iniciando', { periodo, enviarEmail });
+    const cfg = config.config || {};
+    const telegram = cfg.telegram || {};
+    const gmail = cfg.gmail || {};
+    const botName = eventBotName || telegram.botName;
+    const gmailAccount = gmail.account;
 
-    // Crear directorio de envíos
-    if (!fs.existsSync(ENVIOS_PATH)) {
-      fs.mkdirSync(ENVIOS_PATH, { recursive: true });
-    }
+    const procesadasPath = resolveStoragePath({ config: cfg, projectId, subdir: 'procesadas' });
+    const enviosPath = resolveStoragePath({ config: cfg, projectId, subdir: 'envios' });
+
+    logger.info('comprimir-facturas.iniciando', { periodo, enviarEmail, projectId });
 
     try {
       // Determinar carpeta(s) a comprimir
-      const folders = resolvePeriodo(periodo);
+      const folders = resolvePeriodo(periodo, procesadasPath);
 
       if (folders.length === 0) {
         throw new Error(`No hay facturas para el período: ${periodo}`);
@@ -66,7 +52,7 @@ module.exports = {
 
       // Verificar que existen
       const existingFolders = folders.filter(f =>
-        fs.existsSync(path.join(PROCESADAS_PATH, f))
+        fs.existsSync(path.join(procesadasPath, f))
       );
 
       if (existingFolders.length === 0) {
@@ -76,38 +62,37 @@ module.exports = {
       // Nombre del ZIP
       const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const zipName = `facturas_${periodo.replace(/[^a-zA-Z0-9-]/g, '_')}_${timestamp}.zip`;
-      const zipPath = path.join(ENVIOS_PATH, zipName);
+      const zipPath = path.join(enviosPath, zipName);
 
       // Crear ZIP
-      await createZip(PROCESADAS_PATH, existingFolders, zipPath);
+      await createZip(procesadasPath, existingFolders, zipPath);
 
       const stats = fs.statSync(zipPath);
       const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
 
       logger.info('comprimir-facturas.zip-creado', {
-        archivo: zipName,
-        sizeMB,
-        carpetas: existingFolders
+        archivo: zipName, sizeMB, carpetas: existingFolders
       });
 
       // Contar archivos
       let totalFiles = 0;
       for (const folder of existingFolders) {
-        const folderPath = path.join(PROCESADAS_PATH, folder);
+        const folderPath = path.join(procesadasPath, folder);
         const files = fs.readdirSync(folderPath);
-        totalFiles += files.filter(f => f.endsWith('.pdf') || f.endsWith('.png') || f.endsWith('.jpg')).length;
+        totalFiles += files.filter(f =>
+          f.endsWith('.pdf') || f.endsWith('.png') || f.endsWith('.jpg')
+        ).length;
       }
 
       // Enviar por email si se solicita
-      if (enviarEmail && destinatario) {
-        // Leer ZIP como base64
+      if (enviarEmail && destinatario && gmailAccount) {
         const zipContent = fs.readFileSync(zipPath).toString('base64');
 
         emit('gmail.send.request', {
-          account: GMAIL_ACCOUNT,
+          account: gmailAccount,
           to: destinatario,
-          subject: `Facturas ${periodo} - Nonina Pizzicas`,
-          body: `Adjunto las facturas del período ${periodo}.\n\nTotal: ${totalFiles} facturas\nTamaño: ${sizeMB} MB\n\nSaludos`,
+          subject: `Facturas ${periodo} - ${cfg.name || projectId}`,
+          body: `Adjunto las facturas del período ${periodo}.\n\nTotal: ${totalFiles} facturas\nTamaño: ${sizeMB} MB`,
           attachments: [{
             filename: zipName,
             content: zipContent,
@@ -116,24 +101,20 @@ module.exports = {
           }]
         });
 
-        logger.info('comprimir-facturas.email-enviado', {
-          destinatario,
-          archivo: zipName
-        });
+        logger.info('comprimir-facturas.email-enviado', { destinatario, archivo: zipName });
       }
 
       // Notificar por Telegram
-      if (chatId) {
-        emit('telegram.send_message.request', {
-          botName: BOT_NAME,
-          chatId,
-          text: `📦 ZIP creado: ${zipName}\n📄 ${totalFiles} facturas\n💾 ${sizeMB} MB${enviarEmail ? `\n📧 Enviado a: ${destinatario}` : ''}`
+      if (chatId && botName) {
+        emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+          botName, chatId,
+          text: `ZIP creado: ${zipName}\n${totalFiles} facturas\n${sizeMB} MB${enviarEmail && destinatario ? `\nEnviado a: ${destinatario}` : ''}`
         });
       }
 
       // Emitir evento de completado
       emit('facturas.comprimido', {
-        projectId: PROJECT_ID,
+        projectId,
         archivo: zipPath,
         periodo,
         carpetas: existingFolders,
@@ -142,21 +123,15 @@ module.exports = {
         enviado: enviarEmail && !!destinatario
       });
 
-      return {
-        success: true,
-        archivo: zipPath,
-        totalFiles,
-        sizeMB
-      };
+      return { success: true, archivo: zipPath, totalFiles, sizeMB };
 
     } catch (error) {
       logger.error('comprimir-facturas.error', { error: error.message });
 
-      if (chatId) {
-        emit('telegram.send_message.request', {
-          botName: BOT_NAME,
-          chatId,
-          text: `❌ Error comprimiendo: ${error.message}`
+      if (chatId && botName) {
+        emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+          botName, chatId,
+          text: `Error comprimiendo: ${error.message}`
         });
       }
 
@@ -168,7 +143,7 @@ module.exports = {
 /**
  * Resuelve período a carpetas
  */
-function resolvePeriodo(periodo) {
+function resolvePeriodo(periodo, procesadasPath) {
   const now = new Date();
 
   if (periodo === 'mes-actual') {
@@ -181,7 +156,6 @@ function resolvePeriodo(periodo) {
   }
 
   if (periodo === 'semana-actual') {
-    // Últimos 7 días pueden cruzar meses
     const folders = new Set();
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
@@ -192,9 +166,8 @@ function resolvePeriodo(periodo) {
   }
 
   if (periodo === 'todo') {
-    // Todas las carpetas existentes
-    if (fs.existsSync(PROCESADAS_PATH)) {
-      return fs.readdirSync(PROCESADAS_PATH)
+    if (fs.existsSync(procesadasPath)) {
+      return fs.readdirSync(procesadasPath)
         .filter(f => /^\d{4}-\d{2}$/.test(f));
     }
     return [];

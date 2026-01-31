@@ -8,7 +8,10 @@
     "chatId": null,
     "commands": {
       "/gmailnoninapizzicas": "Descarga adjuntos PDF de Gmail",
-      "/procesarnoninapizzicas": "Procesa facturas con Document AI",
+      "/procesarnoninapizzicas": "Procesa facturas pendientes (OCR + IA)",
+      "/procesarfacturas": "Alias de procesarnoninapizzicas",
+      "/enviarfacturas": "Comprime facturas y envía a asesoría",
+      "/estado": "Ver estadísticas de facturas",
       "/ayuda": "Muestra ayuda de comandos"
     }
   },

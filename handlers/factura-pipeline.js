@@ -143,7 +143,7 @@ module.exports = [
 
       return { success: true };
     }
-  }
+  },
 
   // NOTA: El paso 3 (texto.estructurado → factura.procesada) lo maneja
   // validar-factura.js que escucha texto.estructurado con filter _pipeline:'factura'

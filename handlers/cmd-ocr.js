@@ -1,10 +1,13 @@
 /**
- * Paso 3: /ocr → DeepSeek visión extrae el texto de la imagen
+ * Paso 3: /ocr → OCR en dos etapas: Tesseract + DeepSeek cleanup
  *
- * Coge la última imagen (preprocesada o recibida) y la envía
- * a DeepSeek visión via ai.chat.request para que lea el texto.
+ * 1) Tesseract extrae texto raw de la imagen (local, gratis)
+ * 2) DeepSeek limpia y mejora el texto usando inteligencia lingüística
  *
- * Respuesta llega en ai.chat.response → resultado-ocr-vision (cmd-resultados.js)
+ * La API de DeepSeek NO soporta imágenes (solo deepseek-chat texto).
+ * Esta estrategia combina OCR local + LLM para mejor resultado.
+ *
+ * Respuesta llega en ai.chat.response → resultado-ocr-cleanup (cmd-resultados.js)
  */
 
 const fs = require('fs');
@@ -35,16 +38,23 @@ function findProjectByBot(botName) {
   return null;
 }
 
-const PROMPT_OCR = `Lee y transcribe TODO el texto visible en esta imagen de factura/documento.
+const PROMPT_CLEANUP = `Eres un corrector de texto OCR. Te paso el texto raw extraido por OCR de una factura/documento.
 
-Reglas:
-- Transcribe el texto TAL CUAL aparece, sin interpretar ni reestructurar
-- Mantén el orden de lectura natural (arriba a abajo, izquierda a derecha)
-- Incluye números, fechas, importes, NIFs, direcciones, todo
-- Si hay tablas, separa columnas con | y filas con saltos de línea
-- NO añadas explicaciones ni comentarios, solo el texto extraído
+El texto puede tener errores tipicos de OCR:
+- Letras confundidas (l/1, O/0, rn/m, etc.)
+- Palabras cortadas o mal separadas
+- Caracteres basura o simbolos incorrectos
+- Numeros mal leidos
 
-Responde SOLO con el texto extraído.`;
+Tu tarea:
+1. Corrige errores evidentes de OCR manteniendo el contenido original
+2. Manten el formato y orden del texto
+3. Si hay tablas, usa | para separar columnas
+4. Manten todos los numeros, fechas, NIFs, importes tal como esten (solo corrige errores obvios)
+5. NO inventes ni agregues informacion que no este en el texto original
+6. Si el texto esta muy corrupto, devuelve lo que puedas recuperar
+
+Responde SOLO con el texto corregido, sin explicaciones.`;
 
 module.exports = {
   name: 'cmd-ocr',
@@ -77,45 +87,96 @@ module.exports = {
     if (!filePath) {
       emit('telegram.send_message.request', {
         botName, chatId,
-        text: '❌ No hay imágenes. Manda una foto primero.'
+        text: 'No hay imagenes. Manda una foto primero.'
       });
       return { success: false };
     }
 
     emit('telegram.send_message.request', {
       botName, chatId,
-      text: `⏳ OCR con DeepSeek visión...\n📄 ${path.basename(filePath)} (${source})`
+      text: `OCR en 2 etapas...\n${path.basename(filePath)} (${source})\n1. Tesseract extrayendo texto...\n2. DeepSeek corrigiendo...`
     });
 
-    // Leer imagen como base64
-    const imageBase64 = fs.readFileSync(filePath).toString('base64');
-    const ext = path.extname(filePath).toLowerCase();
-    const imageType = ext === '.png' ? 'image/png' : 'image/jpeg';
+    // -- Etapa 1: Tesseract OCR --
+    let Tesseract;
+    try {
+      Tesseract = require('tesseract.js');
+    } catch (e) {
+      emit('telegram.send_message.request', {
+        botName, chatId,
+        text: 'Error: tesseract.js no instalado'
+      });
+      return { success: false };
+    }
 
-    // request_id codifica contexto para el handler de respuesta
-    const requestId = `ocr-vision|${botName}|${chatId}|${Date.now()}`;
+    let rawText = '';
+    let confidence = 0;
+    const startTime = Date.now();
 
-    logger.info('cmd-ocr.enviando-deepseek', {
-      filePath, source, requestId,
-      imageSize: Math.round(imageBase64.length / 1024) + 'KB'
+    try {
+      const worker = await Tesseract.createWorker('spa', 1, {
+        logger: () => {}
+      });
+      const { data: result } = await worker.recognize(filePath);
+      rawText = result.text.trim();
+      confidence = result.confidence;
+      await worker.terminate();
+
+      logger.info('cmd-ocr.tesseract-ok', {
+        chars: rawText.length,
+        confidence: confidence.toFixed(1),
+        elapsed: Date.now() - startTime,
+        filePath
+      });
+    } catch (error) {
+      logger.error('cmd-ocr.tesseract-error', { error: error.message });
+      emit('telegram.send_message.request', {
+        botName, chatId,
+        text: `Tesseract fallo: ${error.message}`
+      });
+      return { success: false };
+    }
+
+    if (!rawText || rawText.length < 10) {
+      emit('telegram.send_message.request', {
+        botName, chatId,
+        text: `Tesseract extrajo muy poco texto (${rawText.length} chars, ${confidence.toFixed(1)}% confianza).\nPrueba con /preprocesar primero.`
+      });
+      return { success: false, rawText, confidence };
+    }
+
+    // Notificar progreso etapa 1
+    emit('telegram.send_message.request', {
+      botName, chatId,
+      text: `Etapa 1 OK: Tesseract ${rawText.length} chars (${confidence.toFixed(1)}% confianza) en ${Date.now() - startTime}ms\nEtapa 2: DeepSeek corrigiendo texto...`
     });
 
-    // Enviar a DeepSeek V3 con visión
+    // -- Etapa 2: DeepSeek text cleanup (solo texto, no imagen) --
+    const requestId = `ocr-cleanup|${botName}|${chatId}|${confidence.toFixed(1)}|${Date.now()}`;
+
+    logger.info('cmd-ocr.enviando-deepseek-cleanup', {
+      rawChars: rawText.length,
+      confidence,
+      requestId
+    });
+
     emit('ai.chat.request', {
       request_id: requestId,
       provider: 'deepseek',
       messages: [
         {
+          role: 'system',
+          content: PROMPT_CLEANUP
+        },
+        {
           role: 'user',
-          content: PROMPT_OCR,
-          image_base64: imageBase64,
-          image_type: imageType
+          content: `Texto OCR raw (confianza: ${confidence.toFixed(1)}%):\n\n${rawText}`
         }
       ],
       temperature: 0.1,
       max_tokens: 4000
     });
 
-    return { success: true, filePath, source };
+    return { success: true, filePath, source, rawText, confidence };
   }
 };

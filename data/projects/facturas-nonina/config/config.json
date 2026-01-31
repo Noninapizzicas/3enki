@@ -7,11 +7,15 @@
     "botName": "facturas_noninapizzicas_bot",
     "chatId": null,
     "commands": {
+      "/listar": "Lista archivos pendientes en bandeja",
+      "/ocr": "OCR manual de un archivo (paso 2)",
+      "/ia": "Estructura OCR con IA (paso 3)",
+      "/validar": "Valida datos extraidos (paso 4)",
+      "/guardar": "Archiva factura validada (paso 5)",
+      "/procesarfacturas": "Pipeline automatico (todos los pasos)",
       "/gmailnoninapizzicas": "Descarga adjuntos PDF de Gmail",
-      "/procesarnoninapizzicas": "Procesa facturas pendientes (OCR + IA)",
-      "/procesarfacturas": "Alias de procesarnoninapizzicas",
-      "/enviarfacturas": "Comprime facturas y envía a asesoría",
-      "/estado": "Ver estadísticas de facturas",
+      "/enviarfacturas": "Comprime facturas y envia a asesoria",
+      "/estado": "Ver estadisticas de facturas",
       "/ayuda": "Muestra ayuda de comandos"
     }
   },

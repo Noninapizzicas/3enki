@@ -1,155 +1,106 @@
 /**
- * Handler: Preparar imagen para OCR
+ * Handler Base: Preparar imagen para OCR
  *
- * Preprocesa TODAS las imágenes antes del OCR con opciones agresivas:
- * - Escala de grises
+ * Preprocesa imágenes antes del OCR usando el provider local.sharp:
+ * - Escala de grises (elimina colores que confunden al OCR)
  * - Normalización de contraste
  * - Aumento de nitidez
- * - Binarización (threshold)
  *
- * GUARDA la imagen procesada en storage/preprocesadas/ para debug.
+ * Guarda copia en storage/preprocesadas/ para debug.
  *
  * ENTRADA (evento): imagen.preparar.request
  * {
  *   filePath: string,       // Ruta de la imagen
  *   options: object,        // Opciones de procesamiento (opcional)
  *   requestId: string,
- *   notificar: object
+ *   notificar: object,
+ *   _pipeline: string       // Tag de pipeline (opcional)
  * }
  *
  * SALIDA (evento): imagen.preparada
  * {
  *   filePath: string,       // Ruta imagen original
- *   imagenProcesada: string,// Base64 de imagen procesada
- *   imagenProcesadaPath: string, // Ruta donde se guardó
+ *   imagenProcesada: string, // Base64 de imagen procesada (null si falló)
+ *   imagenProcesadaPath: string,
  *   requestId: string,
- *   notificar: object
+ *   notificar: object,
+ *   _pipeline: string,
+ *   _preprocesado: object   // Metadata del preprocesado
  * }
  *
- * @version 2.1.0
+ * Providers usados: local.sharp (prepare-ocr)
+ *
+ * @version 3.0.0
  */
 
 const fs = require('fs');
 const path = require('path');
+const { resolveStoragePath, generateFileName, EVENTS } = require('../lib/handler-utils');
 
-/**
- * Busca el proyecto que tiene configurado un bot de Telegram.
- * Lee configs de data/projects/{id}/config/config.json
- */
-function findProjectByBot(botName) {
-  const projectsDir = path.join(process.cwd(), 'data/projects');
-  try {
-    const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
-      const configPath = path.join(projectsDir, entry.name, 'config/config.json');
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        if (config.telegram?.botName === botName) {
-          return config.id || entry.name;
-        }
-      }
-    }
-  } catch (e) { /* fallback si no se puede leer */ }
-  return null;
-}
+// Opciones por defecto (suaves - threshold destruye texto en fotos reales)
+const DEFAULT_OPTIONS = {
+  grayscale: true,
+  normalize: true,
+  sharpen: true,
+  threshold: null,
+  denoise: false
+};
 
 module.exports = {
   name: 'preparar-imagen',
   description: 'Preprocesa imagen para mejorar OCR usando Sharp',
-  trigger: 'imagen.preparar.request',
+  trigger: EVENTS.IMAGEN_PREPARAR,
 
-  async handle(event, { logger, emit, services }) {
+  async handle(event, { logger, emit, services, config, projectId }) {
     const data = event.data || event;
-    const {
-      filePath,
-      options = {},
-      requestId,
-      notificar,
-      _pipeline
-    } = data;
+    const { filePath, options = {}, requestId, notificar, _pipeline } = data;
 
     logger.info('preparar-imagen.inicio', { filePath, requestId });
 
     try {
-      // Opciones suaves - threshold destruye texto en fotos reales
-      const defaultOptions = {
-        grayscale: true,      // Blanco y negro (elimina colores que confunden)
-        normalize: true,      // Mejora contraste automático
-        sharpen: true,        // Aumenta nitidez de texto
-        threshold: null,      // Sin binarización (destruye texto con fotos)
-        denoise: false        // No reducir ruido (puede borrar texto fino)
-      };
+      const processOptions = { ...DEFAULT_OPTIONS, ...options };
 
-      const processOptions = { ...defaultOptions, ...options };
-
-      logger.info('preparar-imagen.opciones', {
-        filePath,
-        opciones: processOptions,
-        requestId
+      // Resolver directorio de storage para guardar debug
+      const outputDir = resolveStoragePath({
+        config, projectId, filePath,
+        subdir: 'preprocesadas'
       });
 
-      // Determinar ruta de guardado para debug
-      // Buscar proyecto que tenga este bot configurado
-      let outputDir;
-      const botMatch = filePath.match(/data\/bots\/([^/]+)\/received/);
-      if (botMatch) {
-        const botNameFromPath = botMatch[1];
-        const projectId = findProjectByBot(botNameFromPath);
-        if (projectId) {
-          outputDir = path.join(process.cwd(), 'data/projects', projectId, 'storage/preprocesadas');
-        } else {
-          outputDir = path.join(process.cwd(), 'data/bots', botNameFromPath, 'preprocesadas');
-        }
-      } else {
-        outputDir = path.join(process.cwd(), 'data/storage/preprocesadas');
-      }
+      const outputName = generateFileName(filePath, '_prep', '.png');
+      const outputPath = path.join(outputDir, outputName);
 
-      // Crear directorio si no existe
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-      }
+      logger.info('preparar-imagen.opciones', {
+        filePath, opciones: processOptions, requestId
+      });
 
-      // Nombre del archivo procesado
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
-      const nombreBase = path.basename(filePath, path.extname(filePath));
-      const outputPath = path.join(outputDir, `${timestamp}_${nombreBase}_prep.png`);
-
-      // Llamar al provider local.sharp con output para guardar
+      // Llamar al provider local.sharp
       const result = await services.call('local.sharp', 'prepare-ocr', {
         image: filePath,
         options: processOptions,
-        output: outputPath  // Guardar imagen procesada
+        output: outputPath
       });
 
       if (!result.data?.success) {
         throw new Error(result.data?.error || 'Error procesando imagen');
       }
 
-      // Leer la imagen guardada para obtener base64
+      // Leer imagen procesada como base64
       const imagenBase64 = fs.readFileSync(outputPath).toString('base64');
 
       logger.info('preparar-imagen.completado', {
-        filePath,
-        outputPath,
-        requestId,
+        filePath, outputPath, requestId,
         width: result.data.width,
         height: result.data.height,
-        originalSize: result.data.originalSize,
-        processedSize: result.data.processedSize,
         reduccion: `${Math.round((1 - result.data.processedSize / result.data.originalSize) * 100)}%`
       });
 
-      // Emitir imagen preparada
-      emit('imagen.preparada', {
+      emit(EVENTS.IMAGEN_PREPARADA, {
         filePath,
         imagenProcesada: imagenBase64,
-        imagenProcesadaPath: outputPath,  // Ruta donde se guardó
+        imagenProcesadaPath: outputPath,
         width: result.data.width,
         height: result.data.height,
-        requestId,
-        notificar,
-        _pipeline,
+        requestId, notificar, _pipeline,
         _preprocesado: {
           opciones: processOptions,
           outputPath,
@@ -162,24 +113,19 @@ module.exports = {
 
     } catch (error) {
       logger.error('preparar-imagen.error', {
-        error: error.message,
-        filePath,
-        requestId
+        error: error.message, filePath, requestId
       });
 
-      // Si falla el preprocesamiento, continuar con imagen original
+      // Fallback: continuar con imagen original sin bloquear el pipeline
       logger.warn('preparar-imagen.fallback', {
-        mensaje: 'Usando imagen original sin preprocesar',
-        filePath
+        mensaje: 'Usando imagen original sin preprocesar', filePath
       });
 
-      emit('imagen.preparada', {
+      emit(EVENTS.IMAGEN_PREPARADA, {
         filePath,
-        imagenProcesada: null, // null = usar original
+        imagenProcesada: null,
         imagenProcesadaPath: null,
-        requestId,
-        notificar,
-        _pipeline,
+        requestId, notificar, _pipeline,
         _preprocesadoFallido: true
       });
 

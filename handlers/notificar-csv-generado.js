@@ -1,85 +1,98 @@
 /**
- * Handler: Notificar CSV Generado
+ * Handler Notificación: CSV generado/error
  *
- * Envía notificación por Telegram cuando el CSV está listo,
- * incluyendo el archivo para descarga.
+ * Unifica notificaciones de CSV en un solo handler con array.
+ * Envía por Telegram cuando el CSV está listo o hubo error.
  *
- * ENTRADA (evento): csv.asesoria.generado
- * {
- *   archivo: string,
- *   fileName: string,
- *   facturas: number,
- *   periodo: string,
- *   totales: object,
- *   notificar: { chatId, botName }
- * }
+ * ENTRADA (eventos):
+ *   - csv.asesoria.generado
+ *   - csv.asesoria.error
  *
- * SALIDA (evento): bot.document.send
+ * SALIDA (eventos):
+ *   - telegram.send_message.request
+ *   - telegram.send_document.request (para enviar archivo)
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 
-module.exports = {
-  name: 'notificar-csv-generado',
-  description: 'Notifica por Telegram cuando el CSV está listo',
-  trigger: 'csv.asesoria.generado',
+const { formatMoney, EVENTS } = require('../lib/handler-utils');
 
-  async handle(event, { logger, emit }) {
-    const data = event.data || event;
-    const {
-      archivo,
-      fileName,
-      facturas,
-      periodo,
-      totales,
-      notificar
-    } = data;
+module.exports = [
+  // CSV generado OK → enviar documento
+  {
+    name: 'notificar-csv-generado',
+    description: 'Notifica por Telegram cuando el CSV está listo',
+    trigger: EVENTS.CSV_GENERADO,
 
-    if (!notificar || !notificar.chatId) {
-      logger.info('notificar-csv-generado.sin-destino', { archivo });
-      return { success: true, notified: false };
+    async handle(event, { logger, emit }) {
+      const data = event.data || event;
+      const {
+        archivo, fileName, facturas,
+        periodo, totales, notificar
+      } = data;
+
+      if (!notificar?.chatId) {
+        logger.info('notificar-csv-generado.sin-destino', { archivo });
+        return { success: true, notified: false };
+      }
+
+      const { chatId, botName } = notificar;
+
+      const mensaje = [
+        `<b>CSV Asesoria Generado</b>`,
+        ``,
+        `Archivo: <code>${fileName}</code>`,
+        `Facturas: ${facturas}`,
+        `Periodo: ${periodo}`,
+        ``,
+        `<b>Totales:</b>`,
+        `- Base Imponible: ${formatMoney(totales?.base_imponible)}`,
+        `- IVA: ${formatMoney(totales?.iva)}`,
+        `- Total: ${formatMoney(totales?.total)}`,
+        ``,
+        `Listo para enviar a la asesoria`
+      ].join('\n');
+
+      logger.info('notificar-csv-generado.enviando', {
+        chatId, archivo, facturas
+      });
+
+      // Enviar documento CSV
+      emit(EVENTS.TELEGRAM_SEND_DOCUMENT, {
+        chatId, botName,
+        filePath: archivo,
+        caption: mensaje,
+        parse_mode: 'HTML'
+      });
+
+      return { success: true, notified: true };
     }
+  },
 
-    const { chatId, botName } = notificar;
+  // CSV error → notificar
+  {
+    name: 'notificar-csv-error',
+    description: 'Notifica errores al generar CSV',
+    trigger: EVENTS.CSV_ERROR,
 
-    logger.info('notificar-csv-generado.enviando', {
-      chatId,
-      archivo,
-      facturas
-    });
+    async handle(event, { logger, emit }) {
+      const data = event.data || event;
+      const { error, periodo, notificar } = data;
 
-    // Formatear totales para mostrar
-    const formatMoney = (val) => {
-      const num = parseFloat(val) || 0;
-      return num.toLocaleString('es-ES', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }) + ' €';
-    };
+      if (!notificar?.chatId) {
+        return { success: true, notified: false };
+      }
 
-    // Mensaje con resumen
-    const mensaje = `📊 *CSV Asesoría Generado*
+      const { chatId, botName } = notificar;
 
-📁 Archivo: \`${fileName}\`
-📋 Facturas: ${facturas}
-📅 Periodo: ${periodo}
+      logger.warn('notificar-csv-error.enviando', { chatId, error });
 
-💰 *Totales:*
-• Base Imponible: ${formatMoney(totales?.base_imponible)}
-• IVA: ${formatMoney(totales?.iva)}
-• Total: ${formatMoney(totales?.total)}
+      emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+        chatId, botName,
+        text: `Error al generar CSV${periodo ? ` (${periodo})` : ''}:\n${error}`
+      });
 
-✅ Listo para enviar a la asesoría`;
-
-    // Enviar documento
-    emit('bot.document.send', {
-      chatId,
-      botName,
-      filePath: archivo,
-      caption: mensaje,
-      parseMode: 'Markdown'
-    });
-
-    return { success: true, notified: true };
+      return { success: true, notified: true };
+    }
   }
-};
+];

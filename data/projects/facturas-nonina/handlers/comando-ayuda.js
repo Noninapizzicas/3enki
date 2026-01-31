@@ -1,66 +1,59 @@
 /**
  * Handler Proyecto: Comando /ayuda
  *
+ * Escucha: bot.command.received
+ * Emite: telegram.send_message.request
+ *
  * Muestra todos los comandos disponibles del bot.
+ * Lee botName y comandos desde config del proyecto.
+ *
+ * @version 2.0.0
  */
 
-const BOT_NAME = 'facturas_asesoria_bot';
-
-const AYUDA = `
-<b>🤖 Bot Facturas Asesoría</b>
-
-<b>📧 Procesar facturas:</b>
-/procesafacturas
-  → Revisa Gmail y procesa facturas nuevas
-  → Extrae datos con OCR/AI
-  → Guarda en procesadas/
-
-<b>📦 Enviar a asesoría:</b>
-/enviarfacturas
-  → Comprime mes actual en ZIP
-
-/enviarfacturas mes-anterior
-  → Comprime el mes pasado
-
-/enviarfacturas 2026-01
-  → Comprime mes específico
-
-/enviarfacturas todo
-  → Comprime todas las facturas
-
-<b>📄 Enviar factura directa:</b>
-  → Envía un PDF o imagen al chat
-  → Se procesa automáticamente
-
-<b>ℹ️ Ayuda:</b>
-/ayuda - Este mensaje
-/estado - Ver estadísticas
-
-<b>📁 Archivos guardados en:</b>
-<code>data/projects/facturas-nonina/</code>
-├── procesadas/{mes}/
-├── pendientes/
-└── envios/
-`.trim();
+const { EVENTS } = require('../../../../lib/handler-utils');
 
 module.exports = {
   name: 'comando-ayuda',
   description: 'Muestra ayuda del bot',
-  trigger: 'bot.command.received',
+  trigger: EVENTS.BOT_COMMAND,
 
   filter: (event) => {
     const data = event.data || event;
-    return data.botName === BOT_NAME &&
-           (data.command === 'ayuda' || data.command === 'help' || data.command === 'start');
+    return data.command === 'ayuda' || data.command === 'help' || data.command === 'start';
   },
 
-  async handle(event, { emit }) {
+  async handle(event, { emit, config }) {
     const data = event.data || event;
+    const cfg = config.config || {};
+    const telegram = cfg.telegram || {};
+    const botName = telegram.botName || data.botName;
+    const projectName = cfg.name || 'Facturas';
 
-    emit('telegram.send_message.request', {
-      botName: BOT_NAME,
+    // Construir texto de ayuda dinámicamente desde config
+    const comandos = telegram.commands || {};
+    const cmdList = Object.entries(comandos)
+      .map(([cmd, desc]) => `${cmd}\n  → ${desc}`)
+      .join('\n\n');
+
+    const text = `
+<b>Bot ${projectName}</b>
+
+<b>Comandos disponibles:</b>
+${cmdList || 'No hay comandos configurados'}
+
+<b>Factura directa:</b>
+  → Envía un PDF o imagen al chat
+  → Se procesa automáticamente
+
+<b>Info:</b>
+/ayuda - Este mensaje
+/estado - Ver estadísticas
+    `.trim();
+
+    emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+      botName,
       chatId: data.chatId,
-      text: AYUDA,
+      text,
       parse_mode: 'HTML'
     });
 

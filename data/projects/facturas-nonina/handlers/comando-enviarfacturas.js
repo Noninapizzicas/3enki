@@ -9,50 +9,48 @@
  *   /enviarfacturas mes-anterior → mes pasado
  *   /enviarfacturas 2026-01      → mes específico
  *   /enviarfacturas todo         → todas las facturas
+ *
+ * @version 2.0.0
  */
 
-const BOT_NAME = 'facturas_asesoria_bot';
-const EMAIL_ASESORIA = process.env.EMAIL_ASESORIA || null;
+const { EVENTS } = require('../../../../lib/handler-utils');
 
 module.exports = {
   name: 'comando-enviarfacturas',
   description: 'Comando /enviarfacturas para comprimir y enviar',
-  trigger: 'bot.command.received',
+  trigger: EVENTS.BOT_COMMAND,
 
   filter: (event) => {
     const data = event.data || event;
-    return data.botName === BOT_NAME && data.command === 'enviarfacturas';
+    return data.command === 'enviarfacturas';
   },
 
-  async handle(event, { logger, emit }) {
+  async handle(event, { logger, emit, config }) {
     const data = event.data || event;
     const chatId = data.chatId;
-    const args = data.args || '';  // Argumentos después del comando
+    const args = data.args || '';
 
-    // Parsear período de los argumentos
+    const cfg = config.config || {};
+    const telegram = cfg.telegram || {};
+    const botName = telegram.botName || data.botName;
+    const asesoria = cfg.asesoria || {};
+
     const periodo = args.trim() || 'mes-actual';
 
-    logger.info('comando-enviarfacturas.ejecutando', {
-      chatId,
-      periodo
+    logger.info('comando-enviarfacturas.ejecutando', { chatId, periodo });
+
+    emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+      botName, chatId,
+      text: `Comprimiendo facturas: ${periodo}...`
     });
 
-    // Notificar inicio
-    emit('telegram.send_message.request', {
-      botName: BOT_NAME,
-      chatId,
-      text: `📦 Comprimiendo facturas: ${periodo}...`
-    });
+    const enviarEmail = !!asesoria.email;
 
-    // Determinar si enviar email
-    const enviarEmail = !!EMAIL_ASESORIA;
-
-    // Disparar compresión
     emit('facturas.comprimir.request', {
       periodo,
       enviarEmail,
-      destinatario: EMAIL_ASESORIA,
-      chatId  // Para notificación de resultado
+      destinatario: asesoria.email || null,
+      botName, chatId
     });
 
     return { success: true, periodo };

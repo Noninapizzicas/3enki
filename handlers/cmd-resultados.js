@@ -101,29 +101,30 @@ module.exports = [
     }
   },
 
-  // OCR con DeepSeek visión → notificar resultado
+  // OCR cleanup: Tesseract raw + DeepSeek corrección → notificar resultado
   {
-    name: 'resultado-ocr-vision',
+    name: 'resultado-ocr-cleanup',
     trigger: 'ai.chat.response',
 
     filter: (event) => {
       const data = event.data || event;
-      return data.request_id?.startsWith('ocr-vision|');
+      return data.request_id?.startsWith('ocr-cleanup|');
     },
 
     async handle(event, { emit, logger }) {
       const data = event.data || event;
       const { request_id, success, content, error, tokens, cost, provider, model } = data;
 
-      // Decodificar contexto del request_id: ocr-vision|botName|chatId|timestamp
+      // Decodificar contexto: ocr-cleanup|botName|chatId|confidence|timestamp
       const parts = request_id.split('|');
       const botName = parts[1];
       const chatId = parts[2];
+      const tesseractConfidence = parts[3] || '?';
 
       if (!success || !content) {
         emit('telegram.send_message.request', {
           botName, chatId,
-          text: `❌ OCR DeepSeek falló: ${error || 'sin respuesta'}`
+          text: `DeepSeek cleanup fallo: ${error || 'sin respuesta'}\n(Texto raw Tesseract con ${tesseractConfidence}% confianza disponible)`
         });
         return;
       }
@@ -131,13 +132,13 @@ module.exports = [
       const texto = content.trim();
       const preview = texto.length > 1500 ? texto.slice(0, 1500) + '...' : texto;
 
-      logger.info('resultado-ocr-vision.ok', {
-        chars: texto.length, tokens, cost, provider, model
+      logger.info('resultado-ocr-cleanup.ok', {
+        chars: texto.length, tokens, cost, provider, model, tesseractConfidence
       });
 
       emit('telegram.send_message.request', {
         botName, chatId,
-        text: `✅ OCR DeepSeek visión!\n🤖 ${model || 'deepseek'} | 🔤 ${texto.length} chars | 💰 $${(cost || 0).toFixed(4)}\n\n--- Texto ---\n${preview}\n\nUsa /estructurar para el siguiente paso.`
+        text: `OCR completado (2 etapas)\nTesseract: ${tesseractConfidence}% confianza\nDeepSeek: ${model || 'deepseek-chat'} cleanup | ${texto.length} chars | $${(cost || 0).toFixed(4)}\n\n--- Texto corregido ---\n${preview}\n\nUsa /estructurar para el siguiente paso.`
       });
     }
   },

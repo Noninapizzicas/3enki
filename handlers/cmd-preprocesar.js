@@ -1,16 +1,17 @@
 /**
- * Paso 2: /preprocesar → Sharp → preprocesadas
+ * Paso 2: /preprocesar → Sharp pipeline optimizado para OCR
  *
- * Coge la última foto descargada del bot y la pasa por Sharp.
+ * Pipeline: trim (recortar bordes) → ampliar (min 2500px) → grayscale → contraste → sharpen
+ * Tesseract funciona mejor con imagenes grandes y limpias.
+ *
  * Resultado visible en data/projects/{proyecto}/storage/preprocesadas/
  */
 
 const fs = require('fs');
 const path = require('path');
 
-/**
- * Busca el proyecto que tiene configurado un bot de Telegram.
- */
+const MIN_LONG_SIDE = 2500; // Tesseract rinde mejor con imagenes grandes
+
 function findProjectByBot(botName) {
   const projectsDir = path.join(process.cwd(), 'data/projects');
   try {
@@ -29,9 +30,6 @@ function findProjectByBot(botName) {
   return null;
 }
 
-/**
- * Busca la última foto en data/bots/{botName}/received/
- */
 function findLatestPhoto(botName) {
   const dir = path.join(process.cwd(), 'data/bots', botName, 'received');
   if (!fs.existsSync(dir)) return null;
@@ -53,29 +51,29 @@ module.exports = {
     return data.command === 'preprocesar';
   },
 
-  async handle(event, { logger, emit, services }) {
+  async handle(event, { logger, emit }) {
     const data = event.data || event;
     const { botName, chatId } = data;
 
     logger.info('cmd-preprocesar.inicio', { botName, chatId });
 
-    // Buscar última foto
     const filePath = findLatestPhoto(botName);
     if (!filePath) {
       emit('telegram.send_message.request', {
         botName, chatId,
-        text: '❌ No hay fotos descargadas. Manda una foto primero.'
+        text: 'No hay fotos descargadas. Manda una foto primero.'
       });
       return { success: false, error: 'no photos' };
     }
 
     emit('telegram.send_message.request', {
       botName, chatId,
-      text: `⏳ Preprocesando: ${path.basename(filePath)}...`
+      text: `Preprocesando: ${path.basename(filePath)}...`
     });
 
     try {
-      // Determinar directorio de salida
+      const sharp = require('sharp');
+
       const projectId = findProjectByBot(botName);
       const outputDir = projectId
         ? path.join(process.cwd(), 'data/projects', projectId, 'storage/preprocesadas')
@@ -89,30 +87,84 @@ module.exports = {
       const nombreBase = path.basename(filePath, path.extname(filePath));
       const outputPath = path.join(outputDir, `${timestamp}_${nombreBase}_prep.png`);
 
-      // Llamar Sharp (sin threshold agresivo - destruye texto)
-      const result = await services.call('local.sharp', 'prepare-ocr', {
-        image: filePath,
-        options: {
-          grayscale: true,
-          normalize: true,
-          sharpen: true,
-          threshold: null,
-          denoise: false
-        },
-        output: outputPath
-      });
+      // -- Paso 1: Obtener dimensiones originales --
+      const originalMeta = await sharp(filePath).metadata();
+      const origW = originalMeta.width;
+      const origH = originalMeta.height;
 
-      if (!result.data?.success) {
-        throw new Error(result.data?.error || 'Sharp falló');
+      // -- Paso 2: Trim (recortar bordes uniformes/fondo) --
+      let trimmedBuffer;
+      let trimmedW, trimmedH;
+      try {
+        const trimResult = await sharp(filePath)
+          .trim({ threshold: 15 })
+          .toBuffer({ resolveWithObject: true });
+        trimmedBuffer = trimResult.data;
+        trimmedW = trimResult.info.width;
+        trimmedH = trimResult.info.height;
+      } catch (trimErr) {
+        // trim puede fallar si no hay bordes uniformes - usar original
+        logger.debug('cmd-preprocesar.trim-skip', { reason: trimErr.message });
+        trimmedBuffer = fs.readFileSync(filePath);
+        trimmedW = origW;
+        trimmedH = origH;
       }
+
+      // -- Paso 3: Ampliar si es pequena (Tesseract necesita resolucion alta) --
+      const longSide = Math.max(trimmedW, trimmedH);
+      let resizeW = null;
+      let resizeH = null;
+      let scaled = false;
+
+      if (longSide < MIN_LONG_SIDE) {
+        const scale = MIN_LONG_SIDE / longSide;
+        resizeW = Math.round(trimmedW * scale);
+        resizeH = Math.round(trimmedH * scale);
+        scaled = true;
+      }
+
+      // -- Paso 4: Pipeline final: [resize] → grayscale → normalize → sharpen → png --
+      let pipeline = sharp(trimmedBuffer);
+
+      if (scaled) {
+        pipeline = pipeline.resize(resizeW, resizeH, {
+          fit: 'fill',
+          kernel: 'lanczos3'  // Mejor kernel para ampliar texto
+        });
+      }
+
+      const result = await pipeline
+        .grayscale()
+        .normalize()
+        .sharpen({ sigma: 1.5, m1: 1.5, m2: 2.5 })
+        .png()
+        .toFile(outputPath);
 
       const stats = fs.statSync(outputPath);
 
-      logger.info('cmd-preprocesar.ok', { outputPath, size: stats.size });
+      logger.info('cmd-preprocesar.ok', {
+        outputPath,
+        original: `${origW}x${origH}`,
+        trimmed: `${trimmedW}x${trimmedH}`,
+        final: `${result.width}x${result.height}`,
+        scaled,
+        size: stats.size
+      });
+
+      const lines = [
+        `Imagen preprocesada para OCR`,
+        `Original: ${origW}x${origH}`,
+        `Recortada: ${trimmedW}x${trimmedH} (trim bordes)`,
+      ];
+      if (scaled) {
+        lines.push(`Ampliada: ${result.width}x${result.height} (x${(MIN_LONG_SIDE / longSide).toFixed(1)})`);
+      }
+      lines.push(`Tamano: ${Math.round(stats.size / 1024)}KB`);
+      lines.push(`\nUsa /ocr para el siguiente paso.`);
 
       emit('telegram.send_message.request', {
         botName, chatId,
-        text: `✅ Imagen preprocesada!\n📂 ${outputPath}\n📐 ${result.data.width}x${result.data.height}\n💾 ${Math.round(stats.size / 1024)}KB\n\nUsa /ocr para el siguiente paso.`
+        text: lines.join('\n')
       });
 
       return { success: true, outputPath };
@@ -122,7 +174,7 @@ module.exports = {
 
       emit('telegram.send_message.request', {
         botName, chatId,
-        text: `❌ Error preprocesando: ${error.message}`
+        text: `Error preprocesando: ${error.message}`
       });
 
       return { success: false, error: error.message };

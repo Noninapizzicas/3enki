@@ -148,4 +148,75 @@ module.exports = [
   // NOTA: El paso 3 (texto.estructurado → factura.procesada) lo maneja
   // validar-factura.js que escucha texto.estructurado con filter _pipeline:'factura'
   // Ya no se necesita un paso aquí para eso.
+
+  // =========================================================================
+  // ERROR HANDLERS: Notificar al usuario si algo falla
+  // =========================================================================
+  {
+    name: 'factura-pipeline-error-ocr',
+    description: 'Notifica error de OCR en pipeline factura',
+    trigger: EVENTS.OCR_ERROR,
+
+    filter: (event) => {
+      const data = event.data || event;
+      return data._pipeline === 'factura' ||
+             data.requestId?.startsWith('fac-');
+    },
+
+    async handle(event, { logger, emit }) {
+      const data = event.data || event;
+      const { error, filePath, requestId, notificar } = data;
+
+      logger.error('factura-pipeline.error-ocr', { error, filePath, requestId });
+
+      if (notificar?.botName && notificar?.chatId) {
+        emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+          botName: notificar.botName,
+          chatId: notificar.chatId,
+          text: `Error OCR: ${error}\nArchivo: ${filePath?.split('/').pop() || 'desconocido'}`
+        });
+      }
+
+      emit(EVENTS.FACTURA_ERROR, {
+        error: `OCR falló: ${error}`,
+        fase: 'ocr', filePath, requestId
+      });
+
+      return { success: false, error };
+    }
+  },
+
+  {
+    name: 'factura-pipeline-error-estructura',
+    description: 'Notifica error de estructuración LLM en pipeline factura',
+    trigger: EVENTS.TEXTO_ESTRUCTURAR_ERROR,
+
+    filter: (event) => {
+      const data = event.data || event;
+      return data._pipeline === 'factura' ||
+             data.requestId?.startsWith('fac-');
+    },
+
+    async handle(event, { logger, emit }) {
+      const data = event.data || event;
+      const { error, filePath, requestId, notificar } = data;
+
+      logger.error('factura-pipeline.error-estructura', { error, filePath, requestId });
+
+      if (notificar?.botName && notificar?.chatId) {
+        emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+          botName: notificar.botName,
+          chatId: notificar.chatId,
+          text: `Error estructurando factura: ${error}\nArchivo: ${filePath?.split('/').pop() || 'desconocido'}`
+        });
+      }
+
+      emit(EVENTS.FACTURA_ERROR, {
+        error: `Estructuración falló: ${error}`,
+        fase: 'estructura', filePath, requestId
+      });
+
+      return { success: false, error };
+    }
+  }
 ];

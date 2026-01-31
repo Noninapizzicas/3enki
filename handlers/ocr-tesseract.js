@@ -116,7 +116,8 @@ module.exports = {
       });
 
       emit(EVENTS.OCR_ERROR, {
-        filePath, error: error.message, requestId
+        filePath, error: error.message,
+        requestId, notificar, _pipeline
       });
 
       return { success: false, error: error.message };

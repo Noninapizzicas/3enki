@@ -16,7 +16,7 @@ module.exports = {
 
   filter: (event) => {
     const data = event.data || event;
-    return data.command === 'preparar';
+    return data.command === 'gosharp';
   },
 
   async handle(event, { logger, emit, services, config, projectId }) {

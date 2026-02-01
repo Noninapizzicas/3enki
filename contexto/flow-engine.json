@@ -1,0 +1,212 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-02-01",
+  "_DESCRIPTION": "Motor genérico de flows con agente IA y registry de providers",
+
+  "_AI_INSTRUCTIONS": {
+    "CRITICAL": "El flow engine es GENÉRICO. No sabe de facturas, OCR ni Telegram",
+    "rule_1": "Los flows se definen en JSON en /flows/*.json",
+    "rule_2": "Los nodos usan capabilities (abstractas) o fn (funciones registradas)",
+    "rule_3": "Las capabilities se resuelven via registry → provider concreto",
+    "rule_4": "El agente IA es OPCIONAL. Sin él, el engine funciona con reglas básicas",
+    "rule_5": "El engine emite eventos genéricos (flow.node.start/complete/error)",
+    "rule_6": "Las notificaciones específicas (Telegram, etc) son responsabilidad de handlers que escuchan esos eventos"
+  },
+
+  "arquitectura": {
+    "piezas": {
+      "engine": {
+        "archivo": "core/flow/engine.js",
+        "clase": "FlowEngine",
+        "responsabilidad": "Ejecuta flows nodo a nodo. Lee JSON, resuelve orden, pasa output→input, emite eventos de progreso",
+        "no_sabe_de": ["facturas", "Telegram", "OCR", "ningún dominio concreto"]
+      },
+      "registry": {
+        "archivo": "core/flow/registry.js",
+        "clase": "Registry",
+        "responsabilidad": "Mapea capability abstracta → provider concreto. Permite cambiar provider en caliente",
+        "config": "config/capabilities.json"
+      },
+      "agent": {
+        "archivo": "core/flow/agent.js",
+        "clase": "FlowAgent",
+        "responsabilidad": "Decide ante errores o resultados sospechosos. Usa LLM o reglas básicas",
+        "es_opcional": true
+      }
+    },
+    "relaciones": {
+      "engine_usa": ["registry", "services.call", "eventBus.publish"],
+      "engine_consulta": ["agent (opcional)"],
+      "agent_usa": ["registry.alternatives", "LLM HTTP directo"],
+      "registry_usa": ["config/capabilities.json"]
+    }
+  },
+
+  "flow_definition": {
+    "ubicacion": "flows/*.json",
+    "schema": {
+      "id": "string - Identificador único del flow",
+      "description": "string - Descripción del flow",
+      "version": "string - Versión semver",
+      "nodes": [
+        {
+          "id": "string - Identificador único del nodo",
+          "description": "string - Descripción del nodo",
+          "capability": "string - Nombre de capability (se resuelve via registry)",
+          "fn": "string - Nombre de función registrada (alternativa a capability)",
+          "params": "object - Parámetros fijos del nodo",
+          "map": "object - Mapeo de campos: { campoDestino: 'campoOrigen' }",
+          "inputFrom": "string - ID de nodo del que tomar input (en vez del anterior)",
+          "next": "string|string[] - Siguiente(s) nodo(s)"
+        }
+      ]
+    },
+    "ejemplo": "flows/factura.json",
+    "tipos_de_nodo": {
+      "capability": "Se resuelve via Registry y se ejecuta con services.call(provider, action, params)",
+      "fn": "Función JavaScript registrada con engine.registerFunction(name, fn)"
+    }
+  },
+
+  "capabilities": {
+    "ubicacion": "config/capabilities.json",
+    "schema": {
+      "nombre_capability": {
+        "provider": "string - Provider concreto (ej: local.sharp)",
+        "action": "string - Acción del provider (ej: prepare-ocr)",
+        "defaults": "object - Parámetros por defecto",
+        "alternatives": "string[] - Providers alternativos"
+      }
+    },
+    "capabilities_actuales": {
+      "image.prepare": "Preprocesar imagen → local.sharp",
+      "ocr.extract": "Extraer texto de imagen → local.tesseract",
+      "llm.structure": "Estructurar texto con IA → local.deepseek",
+      "db.save": "Guardar en base de datos → local.facturas-db",
+      "email.send": "Enviar email → local.gmail",
+      "pdf.create": "Crear PDF → local.pdf"
+    }
+  },
+
+  "eventos_emitidos": {
+    "descripcion": "El engine emite eventos genéricos. No sabe de Telegram ni de ningún dominio",
+    "eventos": {
+      "flow.node.start": {
+        "payload": "{ runId, flowId, nodeId, input, context }",
+        "cuando": "Antes de ejecutar un nodo"
+      },
+      "flow.node.complete": {
+        "payload": "{ runId, flowId, nodeId, output, durationMs, context }",
+        "cuando": "Después de ejecutar un nodo con éxito"
+      },
+      "flow.node.error": {
+        "payload": "{ runId, flowId, nodeId, error, durationMs, context }",
+        "cuando": "Cuando un nodo falla"
+      },
+      "flow.complete": {
+        "payload": "{ runId, flowId, state, context }",
+        "cuando": "Cuando el flow termina (éxito o abort)"
+      },
+      "flow.error": {
+        "payload": "{ runId, flowId, nodeId, error, state, context }",
+        "cuando": "Cuando el flow aborta por error"
+      }
+    },
+    "ejemplo_handler_notificaciones": {
+      "descripcion": "Un handler de PROYECTO escucha estos eventos y notifica por Telegram",
+      "ejemplo": "data/projects/{id}/handlers/flow-notificador.js escucha flow.node.complete y envía mensaje"
+    }
+  },
+
+  "agente_ia": {
+    "descripcion": "Agente opcional que asiste al engine en decisiones",
+    "decisiones_posibles": {
+      "continue": "Todo bien, seguir al siguiente nodo",
+      "abort": "Parar el flow con razón",
+      "retry": "Reintentar mismo provider",
+      "switch": "Reintentar con provider alternativo",
+      "skip": "Saltar nodo fallido y continuar"
+    },
+    "modos": {
+      "con_llm": "Envía contexto del flow al LLM, parsea decisión JSON",
+      "sin_llm": "Reglas básicas: timeout→retry, hay alternativa→switch, sin alternativa→abort"
+    },
+    "llm_config": {
+      "providers_soportados": ["deepseek", "openai"],
+      "env_vars": ["DEEPSEEK_API_KEY", "OPENAI_API_KEY"],
+      "max_tokens": 200,
+      "temperature": 0.1
+    }
+  },
+
+  "uso": {
+    "inicializar": {
+      "descripcion": "Crear engine con dependencias",
+      "codigo": [
+        "const { FlowEngine, Registry, FlowAgent } = require('./core/flow');",
+        "",
+        "const registry = new Registry();",
+        "registry.load('./config/capabilities.json');",
+        "",
+        "const agent = new FlowAgent({ registry, llm: { provider: 'deepseek' } });",
+        "",
+        "const engine = new FlowEngine({",
+        "  services: serviceExecutor,",
+        "  eventBus: eventBus,",
+        "  registry: registry,",
+        "  agent: agent,",
+        "  logger: logger",
+        "});",
+        "",
+        "engine.loadFlows('./flows');",
+        "",
+        "// Registrar funciones custom",
+        "engine.registerFunction('validar-factura', async (input) => { ... });",
+        "engine.registerFunction('guardar-factura', async (input) => { ... });"
+      ]
+    },
+    "ejecutar_flow_completo": {
+      "codigo": [
+        "const state = await engine.run('factura', {",
+        "  filePath: '/path/to/imagen.jpg'",
+        "}, {",
+        "  context: { projectId: 'facturas-nonina', notificar: { botName, chatId } }",
+        "});"
+      ]
+    },
+    "ejecutar_nodo_individual": {
+      "descripcion": "Para testing paso a paso",
+      "codigo": [
+        "const result = await engine.runNode('factura', 'ocr', {",
+        "  image: '/path/to/imagen.jpg',",
+        "  language: 'spa'",
+        "});"
+      ]
+    },
+    "cambiar_provider": {
+      "codigo": [
+        "// Cambiar OCR de Tesseract a Google Vision",
+        "registry.switch('ocr.extract', 'google.vision');",
+        "",
+        "// Restaurar al original",
+        "registry.reset('ocr.extract');"
+      ]
+    }
+  },
+
+  "checklist_nuevo_flow": [
+    "1. Crear flows/{nombre}.json con id, description, nodes",
+    "2. Cada nodo usa capability (registry) o fn (función registrada)",
+    "3. Si necesitas capability nueva, añadirla a config/capabilities.json",
+    "4. Si necesitas fn nueva, registrarla con engine.registerFunction()",
+    "5. Si necesitas notificaciones, crear handler de proyecto que escuche flow.node.*",
+    "6. Actualizar este archivo con el nuevo flow"
+  ],
+
+  "checklist_nuevo_provider": [
+    "1. Crear provider en services/providers/local/{nombre}/",
+    "2. Añadir capability en config/capabilities.json",
+    "3. Si reemplaza uno existente, añadirlo como alternative",
+    "4. Probar con engine.runNode() antes de integrarlo en un flow"
+  ]
+}

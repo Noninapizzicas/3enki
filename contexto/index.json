@@ -16,7 +16,8 @@
       "credentials_questions": "Read credentials.json (API keys, OAuth2, niveles, cascada)",
       "scheduling_questions": "Read scheduler.json (jobs, triggers cron/interval/event)",
       "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)",
-      "learning_system": "Read learning.json (sistema de aprendizaje genérico, feedback, recomendaciones)"
+      "learning_system": "Read learning.json (sistema de aprendizaje genérico, feedback, recomendaciones)",
+      "flow_engine": "Read flow-engine.json (motor de flows, registry, agente IA)"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -107,6 +108,11 @@
       "file": "learning.json",
       "purpose": "Sistema de aprendizaje genérico - feedback y recomendaciones",
       "when": "Implementar aprendizaje, guardar experiencias, consultar recomendaciones"
+    },
+    {
+      "file": "flow-engine.json",
+      "purpose": "Motor genérico de flows con agente IA y registry de providers",
+      "when": "Crear flows, ejecutar pipelines, cambiar providers, agente IA"
     }
   ],
 

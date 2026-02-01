@@ -9,16 +9,35 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["role", "content"],
-        "additionalProperties": false,
+        "required": ["role"],
         "properties": {
           "role": {
             "type": "string",
-            "enum": ["system", "user", "assistant"]
+            "enum": ["system", "user", "assistant", "tool"]
           },
           "content": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": { "type": "string" }
+                  }
+                }
+              }
+            ]
+          },
+          "image_base64": {
             "type": "string",
-            "minLength": 1
+            "description": "Imagen en base64 para análisis con visión"
+          },
+          "image_type": {
+            "type": "string",
+            "enum": ["image/jpeg", "image/png", "image/webp", "image/gif"],
+            "default": "image/jpeg"
           }
         }
       }

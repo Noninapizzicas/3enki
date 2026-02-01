@@ -1,0 +1,46 @@
+{
+  "id": "factura",
+  "description": "Procesa una imagen de factura: prepara, OCR, estructura con IA, valida y guarda",
+  "version": "1.0.0",
+
+  "nodes": [
+    {
+      "id": "preparar",
+      "description": "Prepara imagen para OCR (escala de grises, normalizar, enfocar)",
+      "capability": "image.prepare",
+      "map": {
+        "image": "filePath"
+      },
+      "next": "ocr"
+    },
+    {
+      "id": "ocr",
+      "description": "Extrae texto de la imagen mediante OCR",
+      "capability": "ocr.extract",
+      "map": {
+        "image": "filePath"
+      },
+      "next": "estructurar"
+    },
+    {
+      "id": "estructurar",
+      "description": "Estructura el texto extraido en JSON usando IA",
+      "capability": "llm.structure",
+      "map": {
+        "text": "text"
+      },
+      "next": "validar"
+    },
+    {
+      "id": "validar",
+      "description": "Valida campos obligatorios y cuadre de importes",
+      "fn": "validar-factura",
+      "next": "guardar"
+    },
+    {
+      "id": "guardar",
+      "description": "Mueve imagen a procesadas y guarda JSON con datos",
+      "fn": "guardar-factura"
+    }
+  ]
+}

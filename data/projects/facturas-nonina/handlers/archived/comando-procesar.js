@@ -2,131 +2,102 @@
  * Handler Proyecto: Comando /procesarnoninapizzicas
  *
  * Escucha: bot.command.received
- * Emite: factura.procesar.request (por cada archivo)
+ * Emite: factura.procesar.request
  *
- * Disparador MANUAL para procesar facturas con Document AI.
- * Busca archivos en:
- *   - storage.inbox.telegram (archivos del bot)
- *   - storage.inbox.gmail (adjuntos de Gmail)
+ * Busca archivos pendientes (imágenes/PDFs) en las carpetas
+ * inbox del proyecto y dispara el pipeline de factura para cada uno.
  *
- * Usa configuración del proyecto (config.json).
+ * Flujo:
+ *   /procesarnoninapizzicas
+ *     → busca en storage.inbox.telegram + storage.inbox.gmail
+ *     → para cada archivo: emit('factura.procesar.request', { filePath })
+ *     → el pipeline global se encarga del resto
+ *
+ * @version 1.0.0
  */
 
 const fs = require('fs');
 const path = require('path');
-
-// Extensiones válidas para facturas
-const VALID_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff', '.tif'];
+const {
+  EVENTS, findFiles, EXTENSIONES_DOCUMENTO
+} = require('../../../../lib/handler-utils');
 
 module.exports = {
   name: 'comando-procesar',
-  description: 'Comando /procesarnoninapizzicas - Procesa facturas con Document AI',
-  trigger: 'bot.command.received',
+  description: 'Comando para procesar facturas pendientes',
+  trigger: EVENTS.BOT_COMMAND,
 
   filter: (event) => {
     const data = event.data || event;
-    return data.command === 'procesarnoninapizzicas';
+    return data.command === 'procesarnoninapizzicas' ||
+           data.command === 'procesarfacturas';
   },
 
-  async handle(event, { logger, emit, config }) {
+  async handle(event, { logger, emit, config, projectId }) {
     const data = event.data || event;
-    const { chatId } = data;
+    const chatId = data.chatId;
 
-    // Leer config del proyecto (config.config porque el archivo es config/config.json)
     const cfg = config.config || {};
     const telegram = cfg.telegram || {};
     const storage = cfg.storage || {};
-    const inboxTelegram = storage.inbox?.telegram;
-    const inboxGmail = storage.inbox?.gmail;
+    const botName = telegram.botName || data.botName;
 
-    logger.info('comando-procesar.ejecutando', { chatId });
+    logger.info('comando-procesar.ejecutando', { chatId, projectId });
 
-    // Notificar inicio
-    emit('telegram.send_message.request', {
-      botName: telegram.botName,
-      chatId,
-      text: '🔄 Buscando facturas pendientes...'
-    });
-
-    // Buscar archivos en ambas ubicaciones
-    const archivos = [];
-
-    // 1. Archivos del bot Telegram
-    if (inboxTelegram && fs.existsSync(inboxTelegram)) {
-      const telegramFiles = findFiles(inboxTelegram);
-      archivos.push(...telegramFiles.map(f => ({ ...f, source: 'telegram' })));
+    // Recopilar carpetas inbox donde buscar
+    const inboxDirs = [];
+    if (storage.inbox) {
+      if (storage.inbox.telegram) inboxDirs.push(storage.inbox.telegram);
+      if (storage.inbox.gmail) inboxDirs.push(storage.inbox.gmail);
     }
 
-    // 2. Archivos de Gmail
-    if (inboxGmail && fs.existsSync(inboxGmail)) {
-      const gmailFiles = findFiles(inboxGmail);
-      archivos.push(...gmailFiles.map(f => ({ ...f, source: 'gmail' })));
+    // Fallback: carpeta por defecto del bot
+    if (inboxDirs.length === 0 && telegram.botName) {
+      inboxDirs.push(path.join('data/bots', telegram.botName, 'received'));
+    }
+
+    // Buscar archivos procesables
+    const archivos = [];
+    for (const dir of inboxDirs) {
+      const absDir = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+      const found = findFiles(absDir, EXTENSIONES_DOCUMENTO);
+      archivos.push(...found);
     }
 
     if (archivos.length === 0) {
-      emit('telegram.send_message.request', {
-        botName: telegram.botName,
-        chatId,
-        text: '✅ No hay facturas pendientes de procesar.'
+      emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+        botName, chatId,
+        text: 'No hay archivos pendientes para procesar.'
       });
-      return { success: true, archivos: 0 };
+      return { success: true, procesados: 0 };
     }
 
-    // Notificar cantidad encontrada
-    emit('telegram.send_message.request', {
-      botName: telegram.botName,
-      chatId,
-      text: `📄 Encontradas ${archivos.length} facturas. Procesando con Document AI...`
+    // Notificar inicio
+    emit(EVENTS.TELEGRAM_SEND_MESSAGE, {
+      botName, chatId,
+      text: `Procesando ${archivos.length} archivo(s)...`
     });
 
-    // Emitir evento por cada archivo para procesar
+    // Disparar pipeline para cada archivo
+    let count = 0;
     for (const archivo of archivos) {
-      emit('factura.procesar.request', {
+      const requestId = `fac-${Date.now()}-${count}`;
+
+      emit(EVENTS.FACTURA_PROCESAR, {
         filePath: archivo.path,
-        fileName: archivo.name,
-        source: archivo.source,
-        // Datos para notificación
-        notifyTelegram: true,
-        botName: telegram.botName,
-        chatId
+        requestId,
+        language: cfg.processing?.language || 'spa',
+        notificar: { botName, chatId },
+        _pipeline: 'factura'
+      });
+
+      count++;
+
+      logger.info('comando-procesar.dispatched', {
+        filePath: archivo.path, requestId
       });
     }
 
-    logger.info('comando-procesar.emitidos', {
-      total: archivos.length,
-      telegram: archivos.filter(a => a.source === 'telegram').length,
-      gmail: archivos.filter(a => a.source === 'gmail').length
-    });
-
-    return { success: true, archivos: archivos.length };
+    return { success: true, procesados: count };
   }
 };
-
-/**
- * Busca archivos válidos en un directorio (recursivo)
- */
-function findFiles(dir, files = []) {
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        findFiles(fullPath, files);
-      } else if (entry.isFile()) {
-        const ext = path.extname(entry.name).toLowerCase();
-        if (VALID_EXTENSIONS.includes(ext)) {
-          files.push({
-            path: fullPath,
-            name: entry.name
-          });
-        }
-      }
-    }
-  } catch (err) {
-    // Ignorar errores de lectura
-  }
-
-  return files;
-}

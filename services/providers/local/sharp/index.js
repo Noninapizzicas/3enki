@@ -48,6 +48,10 @@ module.exports = {
           type: 'object',
           description: 'Opciones de procesamiento',
           properties: {
+            trim: { type: 'boolean', default: true, description: 'Recortar bordes/fondo uniforme' },
+            trimThreshold: { type: 'number', default: 10, description: 'Tolerancia de color para trim (0-255)' },
+            maxWidth: { type: 'number', default: 2400, description: 'Ancho máximo (sin agrandar)' },
+            maxHeight: { type: 'number', default: 3200, description: 'Alto máximo (sin agrandar)' },
             grayscale: { type: 'boolean', default: true },
             normalize: { type: 'boolean', default: true },
             sharpen: { type: 'boolean', default: true },
@@ -183,6 +187,10 @@ module.exports = {
     const buffer = await this.getImageBuffer(image);
 
     const {
+      trim: doTrim = true,
+      trimThreshold = 10,
+      maxWidth = 2400,
+      maxHeight = 3200,
       grayscale = true,
       normalize = true,
       sharpen = true,
@@ -190,24 +198,42 @@ module.exports = {
       denoise = false
     } = options;
 
+    // Metadata original
+    const metadata = await sharpLib(buffer).metadata();
+
     let pipeline = sharpLib(buffer);
 
-    // Convertir a escala de grises
+    // 1. Recortar bordes (elimina fondo uniforme alrededor del documento)
+    if (doTrim) {
+      pipeline = pipeline.trim({ threshold: trimThreshold });
+    }
+
+    // 2. Ajustar tamaño (sin agrandar, mantiene proporción)
+    if (maxWidth || maxHeight) {
+      pipeline = pipeline.resize({
+        width: maxWidth,
+        height: maxHeight,
+        fit: 'inside',
+        withoutEnlargement: true
+      });
+    }
+
+    // 3. Escala de grises
     if (grayscale) {
       pipeline = pipeline.grayscale();
     }
 
-    // Normalizar (mejora contraste automáticamente)
+    // 4. Normalizar contraste
     if (normalize) {
       pipeline = pipeline.normalize();
     }
 
-    // Reducir ruido (median filter)
+    // 5. Reducir ruido
     if (denoise) {
       pipeline = pipeline.median(3);
     }
 
-    // Aumentar nitidez
+    // 6. Enfocar
     if (sharpen) {
       pipeline = pipeline.sharpen({
         sigma: 1,
@@ -216,13 +242,10 @@ module.exports = {
       });
     }
 
-    // Binarización (blanco/negro puro)
+    // 7. Binarización (blanco/negro puro)
     if (threshold !== null && typeof threshold === 'number') {
       pipeline = pipeline.threshold(threshold);
     }
-
-    // Obtener metadata
-    const metadata = await sharpLib(buffer).metadata();
 
     // Procesar
     const processedBuffer = await pipeline.png().toBuffer();

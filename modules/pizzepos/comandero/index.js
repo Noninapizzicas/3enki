@@ -1,20 +1,29 @@
 /**
- * Modulo Comandero v1.0
- * Gestion de pedidos - A�adir productos a cuentas
+ * Módulo Comandero v2.0
+ * Puerta de entrada del camarero - Buffer de pedido por cuenta
+ * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ *
+ * Flujo: cuenta abierta → comandero (add/remove items) → enviar cocina → cobrar
  */
+
+const crypto = require('crypto');
 
 class ComanderoModule {
   constructor() {
     this.name = 'comandero';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
+    this.uiHandler = null;
 
-    // Estado en memoria
-    this.pedidos = new Map(); // cuenta_id -> { items: [], notas: '', total: 0 }
+    // Buffer de pedidos por cuenta: cuenta_id -> { items: [], notas: '', total: 0 }
+    this.pedidos = new Map();
+
+    // Caché de productos (para resolver nombre/precio)
+    this.productosCache = new Map();
   }
 
   // ==========================================
@@ -25,19 +34,73 @@ class ComanderoModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
 
-    this.logger.info('modulo.loading', { module: this.name });
+    this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Suscribirse a eventos
+    await this.subscribeToEvents();
+    this.registerUIHandlers();
+
+    this.logger.info('module.loaded', { module: this.name, version: this.version });
+  }
+
+  async onUnload() {
+    this.logger.info('module.unloading', { module: this.name });
+
+    if (this.uiHandler) {
+      const actions = ['get', 'add-item', 'remove-item', 'send-kitchen', 'health'];
+      for (const action of actions) {
+        this.uiHandler.unregister('comandero', action);
+      }
+    }
+
+    this.pedidos.clear();
+    this.productosCache.clear();
+
+    this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // UI Handler Registration
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('comandero.uiHandler.not_available', { module: this.name });
+      return;
+    }
+
+    this.uiHandler.register('comandero', 'get', this.handleGetPedido.bind(this));
+    this.uiHandler.register('comandero', 'add-item', this.handleAddItem.bind(this));
+    this.uiHandler.register('comandero', 'remove-item', this.handleRemoveItem.bind(this));
+    this.uiHandler.register('comandero', 'send-kitchen', this.handleEnviarCocina.bind(this));
+    this.uiHandler.register('comandero', 'health', this.handleHealthCheck.bind(this));
+
+    this.logger.info('comandero.ui_handlers.registered', {
+      handlers: ['get', 'add-item', 'remove-item', 'send-kitchen', 'health']
+    });
+  }
+
+  // ==========================================
+  // Event Subscriptions
+  // ==========================================
+
+  async subscribeToEvents() {
     await this.eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
     await this.eventBus.subscribe('caja.cerrada', this.onCajaCerrada.bind(this));
     await this.eventBus.subscribe('dia.iniciado', this.onDiaIniciado.bind(this));
 
-    this.logger.info('modulo.loaded', { module: this.name });
-  }
+    // Caché de productos
+    await this.eventBus.subscribe('catalogo.actualizado', this.onCatalogoActualizado.bind(this));
+    await this.eventBus.subscribe('producto.creado', this.onProductoActualizado.bind(this));
+    await this.eventBus.subscribe('producto.actualizado', this.onProductoActualizado.bind(this));
 
-  async onUnload() {
-    this.logger.info('modulo.unloading', { module: this.name });
+    this.logger.info('comandero.events.subscribed', {
+      events: [
+        'cuenta.actualizada', 'caja.cerrada', 'dia.iniciado',
+        'catalogo.actualizado', 'producto.creado', 'producto.actualizado'
+      ]
+    });
   }
 
   // ==========================================
@@ -45,35 +108,72 @@ class ComanderoModule {
   // ==========================================
 
   async onCuentaActualizada(event) {
-    const { cuenta_id } = event.payload;
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+
     this.logger.debug('cuenta.actualizada.received', {
       cuenta_id,
-      correlation_id: event.correlation_id
+      correlation_id: event?.metadata?.correlationId
     });
   }
 
   async onCajaCerrada(event) {
-    // Limpiar todos los pedidos al cerrar caja
+    const size = this.pedidos.size;
     this.pedidos.clear();
+
     this.logger.info('comandero.reset.caja_cerrada', {
-      correlation_id: event.correlation_id
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
     });
   }
 
   async onDiaIniciado(event) {
-    // Limpiar todos los pedidos al iniciar dia
+    const size = this.pedidos.size;
     this.pedidos.clear();
+
     this.logger.info('comandero.reset.dia_iniciado', {
-      correlation_id: event.correlation_id
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
     });
   }
 
+  async onCatalogoActualizado(event) {
+    const data = event?.data || event?.payload || event;
+    const productos = data?.productos || [];
+
+    for (const producto of productos) {
+      if (producto.id && producto.precio !== undefined) {
+        this.productosCache.set(producto.id, {
+          nombre: producto.nombre || producto.id,
+          precio: producto.precio
+        });
+      }
+    }
+
+    this.logger.info('comandero.catalogo.synced', {
+      productos_en_cache: this.productosCache.size
+    });
+  }
+
+  async onProductoActualizado(event) {
+    const data = event?.data || event?.payload || event;
+    const { id, nombre, precio } = data;
+
+    if (id && precio !== undefined) {
+      this.productosCache.set(id, { nombre: nombre || id, precio });
+    }
+  }
+
   // ==========================================
-  // HTTP API Handlers
+  // UI Handlers (MQTT Request/Response)
   // ==========================================
 
-  async handleGetPedido(req, context) {
-    const cuenta_id = context.params.cuenta_id;
+  async handleGetPedido(data) {
+    const { cuenta_id } = data;
+
+    if (!cuenta_id) {
+      return { status: 400, error: 'cuenta_id es requerido' };
+    }
 
     let pedido = this.pedidos.get(cuenta_id);
     if (!pedido) {
@@ -83,183 +183,138 @@ class ComanderoModule {
 
     return {
       status: 200,
-      data: {
-        cuenta_id,
-        ...pedido
-      }
+      data: { cuenta_id, ...pedido }
     };
   }
 
-  async handleAddItem(req, context) {
-    const cuenta_id = context.params.cuenta_id;
-    const { producto_id, nombre, precio, cantidad, variaciones, notas } = context.body;
+  async handleAddItem(data) {
+    const { cuenta_id, producto_id, nombre, precio, cantidad, variaciones, notas } = data;
 
-    this.logger.info('pedido.add_item.start', {
-      cuenta_id,
-      producto_id,
-      correlation_id: context.correlationId
-    });
+    if (!cuenta_id) {
+      return { status: 400, error: 'cuenta_id es requerido' };
+    }
+    if (!producto_id) {
+      return { status: 400, error: 'producto_id es requerido' };
+    }
 
-    // Obtener o crear pedido
+    // Obtener o crear buffer de pedido
     let pedido = this.pedidos.get(cuenta_id);
     if (!pedido) {
       pedido = { items: [], notas: '', total: 0 };
       this.pedidos.set(cuenta_id, pedido);
     }
 
-    // Crear item
-    const item_id = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Resolver nombre/precio: prioridad data > cache > fallback
+    const cached = this.productosCache.get(producto_id);
+    const itemNombre = nombre || cached?.nombre || producto_id;
+    const itemPrecio = precio ?? cached?.precio ?? 0;
+    const itemCantidad = cantidad || 1;
+
+    if (!cached && precio === undefined) {
+      this.logger.warn('comandero.producto.not_in_cache', { producto_id });
+    }
+
+    const item_id = crypto.randomUUID();
     const item = {
       id: item_id,
       producto_id,
-      nombre,
-      precio: precio || 0,
-      cantidad: cantidad || 1,
+      nombre: itemNombre,
+      precio: itemPrecio,
+      cantidad: itemCantidad,
       variaciones: variaciones || [],
       notas: notas || '',
-      subtotal: (precio || 0) * (cantidad || 1),
+      subtotal: itemPrecio * itemCantidad,
       created_at: new Date().toISOString()
     };
 
     pedido.items.push(item);
     pedido.total = this.calcularTotal(pedido.items);
 
-    // Metricas
     this.metrics.increment('pedido.item_agregado.total');
 
-    // Publicar evento
     await this.eventBus.publish('pedido.item_agregado', {
       cuenta_id,
       item_id,
       producto_id,
-      nombre,
-      precio: item.precio,
-      cantidad: item.cantidad
-    }, {
-      correlationId: context.correlationId
+      nombre: itemNombre,
+      precio_unitario: itemPrecio,
+      precio_total: item.subtotal,
+      cantidad: itemCantidad
     });
 
-    this.logger.info('pedido.item_agregado', {
-      cuenta_id,
-      item_id,
-      producto_id,
-      correlation_id: context.correlationId
+    this.logger.info('comandero.item.agregado', {
+      cuenta_id, item_id, producto_id, precio: itemPrecio, cantidad: itemCantidad
     });
 
     return {
       status: 201,
       data: {
         item,
-        pedido: {
-          cuenta_id,
-          items: pedido.items,
-          total: pedido.total
-        }
+        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
       }
     };
   }
 
-  async handleRemoveItem(req, context) {
-    const cuenta_id = context.params.cuenta_id;
-    const item_id = context.params.item_id;
-
-    this.logger.info('pedido.remove_item.start', {
-      cuenta_id,
-      item_id,
-      correlation_id: context.correlationId
-    });
+  async handleRemoveItem(data) {
+    const { cuenta_id, item_id } = data;
 
     const pedido = this.pedidos.get(cuenta_id);
     if (!pedido) {
-      return {
-        status: 404,
-        data: { error: 'Pedido no encontrado' }
-      };
+      return { status: 404, error: 'Pedido no encontrado' };
     }
 
     const itemIndex = pedido.items.findIndex(i => i.id === item_id);
     if (itemIndex === -1) {
-      return {
-        status: 404,
-        data: { error: 'Item no encontrado en pedido' }
-      };
+      return { status: 404, error: 'Item no encontrado en pedido' };
     }
 
     const removedItem = pedido.items.splice(itemIndex, 1)[0];
     pedido.total = this.calcularTotal(pedido.items);
 
-    // Metricas
     this.metrics.increment('pedido.item_eliminado.total');
 
-    // Publicar evento
     await this.eventBus.publish('pedido.item_eliminado', {
       cuenta_id,
       item_id,
-      producto_id: removedItem.producto_id
-    }, {
-      correlationId: context.correlationId
+      producto_id: removedItem.producto_id,
+      precio_total: removedItem.subtotal
     });
 
-    this.logger.info('pedido.item_eliminado', {
-      cuenta_id,
-      item_id,
-      correlation_id: context.correlationId
-    });
+    this.logger.info('comandero.item.eliminado', { cuenta_id, item_id });
 
     return {
       status: 200,
       data: {
-        message: 'Item eliminado',
-        pedido: {
-          cuenta_id,
-          items: pedido.items,
-          total: pedido.total
-        }
+        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
       }
     };
   }
 
-  async handleEnviarCocina(req, context) {
-    const cuenta_id = context.params.cuenta_id;
-
-    this.logger.info('pedido.enviar_cocina.start', {
-      cuenta_id,
-      correlation_id: context.correlationId
-    });
+  async handleEnviarCocina(data) {
+    const { cuenta_id } = data;
 
     const pedido = this.pedidos.get(cuenta_id);
     if (!pedido || pedido.items.length === 0) {
-      return {
-        status: 400,
-        data: { error: 'No hay items en el pedido para enviar' }
-      };
+      return { status: 400, error: 'No hay items en el pedido para enviar' };
     }
 
-    // Metricas
     this.metrics.increment('pedido.enviado.total');
 
-    // Publicar evento
     await this.eventBus.publish('pedido.enviado_cocina', {
       cuenta_id,
       items: pedido.items,
       total: pedido.total,
-      notas: pedido.notas,
+      notas_generales: pedido.notas,
       enviado_at: new Date().toISOString()
-    }, {
-      correlationId: context.correlationId
     });
 
-    this.logger.info('pedido.enviado_cocina', {
-      cuenta_id,
-      items_count: pedido.items.length,
-      total: pedido.total,
-      correlation_id: context.correlationId
+    this.logger.info('comandero.enviado_cocina', {
+      cuenta_id, items_count: pedido.items.length, total: pedido.total
     });
 
     return {
       status: 200,
       data: {
-        message: 'Pedido enviado a cocina',
         cuenta_id,
         items_count: pedido.items.length,
         total: pedido.total
@@ -267,7 +322,7 @@ class ComanderoModule {
     };
   }
 
-  async handleHealthCheck(req, context) {
+  async handleHealthCheck() {
     return {
       status: 200,
       data: {
@@ -275,13 +330,14 @@ class ComanderoModule {
         module: this.name,
         version: this.version,
         pedidos_activos: this.pedidos.size,
+        productos_en_cache: this.productosCache.size,
         timestamp: new Date().toISOString()
       }
     };
   }
 
   // ==========================================
-  // Utilidades
+  // Helpers
   // ==========================================
 
   calcularTotal(items) {

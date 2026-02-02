@@ -1,3 +1,9 @@
+/**
+ * Módulo Cocina v2.0
+ * Display de cocina en tiempo real con tracking item a item
+ * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ */
+
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 
@@ -7,12 +13,13 @@ const eventsSchema = require('./schemas/events.json');
 class CocinaModule {
   constructor() {
     this.name = 'cocina';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
-    // Dependencias (inicializadas en onLoad)
+    // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
+    this.uiHandler = null;
 
     // Validación JSON Schema
     this.ajv = new Ajv({ allErrors: true, useDefaults: true });
@@ -40,45 +47,113 @@ class CocinaModule {
     this.tiemposPreparacion = [];
   }
 
+  // ==========================================
+  // Lifecycle
+  // ==========================================
+
   async onLoad(core) {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
 
-    this.logger.info('[cocina] Inicializando módulo cocina v1.0');
+    this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Suscribirse a eventos
+    await this.subscribeToEvents();
+    this.registerUIHandlers();
+
+    this.logger.info('module.loaded', { module: this.name, version: this.version });
+  }
+
+  async onUnload() {
+    this.logger.info('module.unloading', { module: this.name });
+
+    // Cerrar clientes SSE
+    for (const client of this.sseClients) {
+      try {
+        if (client.close) client.close();
+      } catch (_) { /* ignore */ }
+    }
+    this.sseClients.clear();
+
+    // Desregistrar UI handlers
+    if (this.uiHandler) {
+      const actions = [
+        'list-active', 'get', 'history', 'prepare-item',
+        'mark-ready', 'stream', 'health', 'metrics'
+      ];
+      for (const action of actions) {
+        this.uiHandler.unregister('cocina', action);
+      }
+    }
+
+    // Limpiar estado
+    this.pedidosActivos.clear();
+    this.historial = [];
+    this.tiemposPreparacion = [];
+
+    this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // UI Handler Registration
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('cocina.uiHandler.not_available', { module: this.name });
+      return;
+    }
+
+    this.uiHandler.register('cocina', 'list-active', this.handleGetActivos.bind(this));
+    this.uiHandler.register('cocina', 'get', this.handleGetPedido.bind(this));
+    this.uiHandler.register('cocina', 'history', this.handleGetHistorial.bind(this));
+    this.uiHandler.register('cocina', 'prepare-item', this.handlePrepararItem.bind(this));
+    this.uiHandler.register('cocina', 'mark-ready', this.handleMarcarListo.bind(this));
+    this.uiHandler.register('cocina', 'stream', this.handleSSEStream.bind(this));
+    this.uiHandler.register('cocina', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('cocina', 'metrics', this.handleGetMetrics.bind(this));
+
+    this.logger.info('cocina.ui_handlers.registered', {
+      handlers: ['list-active', 'get', 'history', 'prepare-item', 'mark-ready', 'stream', 'health', 'metrics']
+    });
+  }
+
+  // ==========================================
+  // Event Subscriptions
+  // ==========================================
+
+  async subscribeToEvents() {
     await this.eventBus.subscribe('pedido.enviado_cocina', this.onPedidoEnviadoCocina.bind(this));
     await this.eventBus.subscribe('pedido.item_agregado', this.onItemAgregado.bind(this));
     await this.eventBus.subscribe('pedido.cancelado', this.onPedidoCancelado.bind(this));
 
-    this.logger.info('[cocina] Módulo cocina iniciado - Display en tiempo real');
-    return true;
+    this.logger.info('cocina.events.subscribed', {
+      events: ['pedido.enviado_cocina', 'pedido.item_agregado', 'pedido.cancelado']
+    });
   }
 
-  async onUnload() {
-    this.logger.info('modulo.unloading', { module: this.name });
-  }
-
-  // ================== Event Handlers ==================
+  // ==========================================
+  // Event Handlers
+  // ==========================================
 
   async onPedidoEnviadoCocina(event) {
-    const correlationId = event.correlation_id || 'missing-cid';
-    const { pedido_id, items, numero_mesa, cuenta_id, notas_generales } = event.payload;
+    const data = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { pedido_id, items, numero_mesa, cuenta_id, notas_generales } = data;
 
-    this.logger.info('[cocina] Pedido recibido en cocina', {
+    this.logger.info('cocina.pedido.recibido', {
       correlation_id: correlationId,
-      pedido_id: pedido_id,
-      numero_mesa: numero_mesa,
-      items_count: items.length
+      pedido_id,
+      numero_mesa,
+      items_count: items?.length || 0
     });
 
-    // Crear pedido de cocina
     const pedidoCocina = {
-      pedido_id: pedido_id,
-      numero_mesa: numero_mesa,
-      cuenta_id: cuenta_id,
-      items: items.map(item => ({
+      pedido_id,
+      numero_mesa,
+      cuenta_id,
+      items: (items || []).map(item => ({
         item_id: item.item_id,
         producto_id: item.producto_id,
         nombre: item.nombre,
@@ -95,153 +170,89 @@ class CocinaModule {
     this.pedidosActivos.set(pedido_id, pedidoCocina);
     this.internalMetrics.pedidos_recibidos++;
 
-    // Notificar a clientes SSE
-    this.broadcastSSE({
-      type: 'nuevo_pedido',
-      data: pedidoCocina
-    });
-
-    this.logger.info('[cocina] Pedido añadido a cola activa', {
-      correlation_id: correlationId,
-      pedido_id: pedido_id,
-      items_pendientes: items.length
-    });
+    this.broadcastSSE({ type: 'nuevo_pedido', data: pedidoCocina });
   }
 
   async onItemAgregado(event) {
-    const correlationId = event.correlation_id || 'missing-cid';
-    const { pedido_id, item } = event.payload;
+    const data = event?.data || event?.payload || event;
+    const { pedido_id, item_id, producto_id, nombre, cantidad, variaciones, notas } = data;
 
     const pedidoCocina = this.pedidosActivos.get(pedido_id);
-    if (!pedidoCocina) {
-      this.logger.warn('[cocina] Item agregado a pedido no activo en cocina', {
-        correlation_id: correlationId,
-        pedido_id: pedido_id
-      });
-      return;
-    }
+    if (!pedidoCocina) return;
 
-    // Agregar item al pedido
     pedidoCocina.items.push({
-      item_id: item.item_id,
-      producto_id: item.producto_id,
-      nombre: item.nombre,
-      cantidad: item.cantidad,
-      variaciones: item.variaciones || {},
-      notas: item.notas || '',
+      item_id,
+      producto_id,
+      nombre,
+      cantidad,
+      variaciones: variaciones || {},
+      notas: notas || '',
       estado: 'pendiente'
     });
 
-    // Notificar a clientes SSE
     this.broadcastSSE({
       type: 'item_agregado',
-      data: { pedido_id, item }
+      data: { pedido_id, item_id, nombre, cantidad }
     });
 
-    this.logger.info('[cocina] Item agregado a pedido activo', {
-      correlation_id: correlationId,
-      pedido_id: pedido_id,
-      item_id: item.item_id
-    });
+    this.logger.info('cocina.item.agregado', { pedido_id, item_id });
   }
 
   async onPedidoCancelado(event) {
-    const correlationId = event.correlation_id || 'missing-cid';
-    const { pedido_id } = event.payload;
+    const data = event?.data || event?.payload || event;
+    const { pedido_id } = data;
 
-    const pedidoCocina = this.pedidosActivos.get(pedido_id);
-    if (!pedidoCocina) {
-      return;
-    }
+    if (!this.pedidosActivos.has(pedido_id)) return;
 
-    // Remover de activos
     this.pedidosActivos.delete(pedido_id);
     this.internalMetrics.pedidos_cancelados++;
 
-    // Notificar a clientes SSE
-    this.broadcastSSE({
-      type: 'pedido_cancelado',
-      data: { pedido_id }
-    });
+    this.broadcastSSE({ type: 'pedido_cancelado', data: { pedido_id } });
 
-    this.logger.info('[cocina] Pedido cancelado y removido', {
-      correlation_id: correlationId,
-      pedido_id: pedido_id
-    });
+    this.logger.info('cocina.pedido.cancelado', { pedido_id });
   }
 
-  // ================== HTTP Handlers ==================
+  // ==========================================
+  // UI Handlers (MQTT Request/Response)
+  // ==========================================
 
-  async handleGetActivos(req, context) {
-    const correlationId = context.correlationId;
-
+  async handleGetActivos() {
     const activos = Array.from(this.pedidosActivos.values());
-
-    // Ordenar por tiempo de espera (más antiguos primero)
     activos.sort((a, b) => new Date(a.recibido_at) - new Date(b.recibido_at));
 
-    // Calcular estadísticas
     const itemsPendientes = activos.reduce((sum, p) => {
       return sum + p.items.filter(i => i.estado === 'pendiente').length;
     }, 0);
 
-    this.logger.info('[cocina] GET /cocina/activos', {
-      correlation_id: correlationId,
-      pedidos_activos: activos.length,
-      items_pendientes: itemsPendientes
-    });
-
     return {
       status: 200,
-      body: {
-        pedidos: activos,
-        total: activos.length,
-        items_pendientes: itemsPendientes
-      }
+      data: { pedidos: activos, total: activos.length, items_pendientes: itemsPendientes }
     };
   }
 
-  async handleGetHistorial(req, context) {
-    const correlationId = context.correlationId;
-    const { limit = 20 } = context.query || {};
-
-    const historial = this.historial.slice(0, parseInt(limit));
+  async handleGetHistorial(data) {
+    const { limit } = data || {};
+    const historial = this.historial.slice(0, parseInt(limit) || 20);
 
     return {
       status: 200,
-      body: {
-        pedidos: historial,
-        total: historial.length
-      }
+      data: { pedidos: historial, total: historial.length }
     };
   }
 
-  async handleGetPedido(req, context) {
-    const correlationId = context.correlationId;
-    const pedido_id = context.params.pedido_id;
-
+  async handleGetPedido(data) {
+    const { pedido_id } = data;
     const pedido = this.pedidosActivos.get(pedido_id);
+
     if (!pedido) {
-      return {
-        status: 404,
-        body: { error: 'Pedido no encontrado en cocina' }
-      };
+      return { status: 404, error: 'Pedido no encontrado en cocina' };
     }
 
-    return {
-      status: 200,
-      body: pedido
-    };
+    return { status: 200, data: pedido };
   }
 
-  async handlePrepararItem(req, context) {
-    const correlationId = context.correlationId;
-    const item_id = context.params.item_id;
-
-    this.logger.info('[cocina] POST /cocina/items/:item_id/preparar', {
-      correlation_id: correlationId,
-      item_id: item_id
-    });
+  async handlePrepararItem(data) {
+    const { item_id } = data;
 
     // Buscar item en pedidos activos
     let pedidoEncontrado = null;
@@ -257,10 +268,7 @@ class CocinaModule {
     }
 
     if (!itemEncontrado) {
-      return {
-        status: 404,
-        body: { error: 'Item no encontrado en cocina' }
-      };
+      return { status: 404, error: 'Item no encontrado en cocina' };
     }
 
     // Marcar como listo
@@ -268,57 +276,37 @@ class CocinaModule {
     itemEncontrado.preparado_at = new Date().toISOString();
     this.internalMetrics.items_preparados++;
 
-    // Publicar evento
-    await this.publishItemPreparado(pedidoEncontrado.pedido_id, itemEncontrado, correlationId);
+    await this.publishItemPreparado(pedidoEncontrado.pedido_id, itemEncontrado);
 
-    // Notificar SSE
     this.broadcastSSE({
       type: 'item_preparado',
-      data: {
-        pedido_id: pedidoEncontrado.pedido_id,
-        item_id: item_id
-      }
+      data: { pedido_id: pedidoEncontrado.pedido_id, item_id }
     });
 
-    // Verificar si todos los items están listos
+    // Auto-completar si todos listos
     const todosListos = pedidoEncontrado.items.every(i => i.estado === 'listo');
     if (todosListos) {
-      await this.marcarPedidoListo(pedidoEncontrado, correlationId);
+      await this.marcarPedidoListo(pedidoEncontrado);
     }
 
-    this.logger.info('[cocina] Item marcado como preparado', {
-      correlation_id: correlationId,
-      pedido_id: pedidoEncontrado.pedido_id,
-      item_id: item_id
+    this.logger.info('cocina.item.preparado', {
+      pedido_id: pedidoEncontrado.pedido_id, item_id, pedido_completo: todosListos
     });
 
     return {
       status: 200,
-      body: {
-        item: itemEncontrado,
-        pedido_completo: todosListos
-      }
+      data: { item: itemEncontrado, pedido_completo: todosListos }
     };
   }
 
-  async handleMarcarListo(req, context) {
-    const correlationId = context.correlationId;
-    const pedido_id = context.params.pedido_id;
-
-    this.logger.info('[cocina] POST /cocina/pedidos/:pedido_id/listo', {
-      correlation_id: correlationId,
-      pedido_id: pedido_id
-    });
+  async handleMarcarListo(data) {
+    const { pedido_id } = data;
 
     const pedido = this.pedidosActivos.get(pedido_id);
     if (!pedido) {
-      return {
-        status: 404,
-        body: { error: 'Pedido no encontrado en cocina' }
-      };
+      return { status: 404, error: 'Pedido no encontrado en cocina' };
     }
 
-    // Marcar todos los items como listos
     const now = new Date().toISOString();
     pedido.items.forEach(item => {
       if (item.estado !== 'listo') {
@@ -328,81 +316,43 @@ class CocinaModule {
       }
     });
 
-    await this.marcarPedidoListo(pedido, correlationId);
+    await this.marcarPedidoListo(pedido);
 
-    return {
-      status: 200,
-      body: pedido
-    };
+    return { status: 200, data: pedido };
   }
 
-  async handleSSEStream(req, context) {
-    const correlationId = context.correlationId;
-
-    this.logger.info('[cocina] Cliente SSE conectado', {
-      correlation_id: correlationId
-    });
-
-    // Configurar headers SSE
-    const headers = {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    };
-
-    // Crear cliente SSE
-    const client = {
-      id: `client_${Date.now()}`,
-      send: (data) => {
-        // Esta función será implementada por el core del servidor
-        return `data: ${JSON.stringify(data)}\n\n`;
-      }
-    };
-
-    this.sseClients.add(client);
-
-    // Enviar estado inicial
+  async handleSSEStream(data) {
+    // El uiHandler/core gestiona la conexión SSE
+    // Aquí registramos el interés y devolvemos estado inicial
     const activos = Array.from(this.pedidosActivos.values());
-    client.send({
-      type: 'connected',
-      data: {
-        pedidos_activos: activos
-      }
-    });
-
-    // Cleanup al desconectar
-    req.on('close', () => {
-      this.sseClients.delete(client);
-      this.logger.info('[cocina] Cliente SSE desconectado', {
-        correlation_id: correlationId,
-        client_id: client.id
-      });
-    });
 
     return {
       status: 200,
-      headers: headers,
-      body: client // El core manejará el streaming
+      data: {
+        type: 'connected',
+        pedidos_activos: activos,
+        clientes_sse: this.sseClients.size
+      }
     };
   }
 
-  async handleHealthCheck(req, context) {
+  async handleHealthCheck() {
     return {
       status: 200,
-      body: {
+      data: {
         status: 'healthy',
-        module: 'cocina',
-        version: '1.0.0',
+        module: this.name,
+        version: this.version,
         pedidos_activos: this.pedidosActivos.size,
         clientes_sse: this.sseClients.size
       }
     };
   }
 
-  async handleGetMetrics(req, context) {
+  async handleGetMetrics() {
     return {
       status: 200,
-      body: {
+      data: {
         ...this.internalMetrics,
         pedidos_activos: this.pedidosActivos.size,
         clientes_sse: this.sseClients.size
@@ -410,17 +360,19 @@ class CocinaModule {
     };
   }
 
-  // ================== Utilidades ==================
+  // ==========================================
+  // Lógica interna
+  // ==========================================
 
-  async marcarPedidoListo(pedido, correlationId) {
+  async marcarPedidoListo(pedido) {
     pedido.estado = 'listo';
     pedido.listo_at = new Date().toISOString();
 
-    // Calcular tiempo de preparación
+    // Tiempo de preparación
     const tiempoPreparacion = (new Date(pedido.listo_at) - new Date(pedido.recibido_at)) / 1000;
     pedido.tiempo_preparacion = tiempoPreparacion;
 
-    // Actualizar métricas
+    // Rolling average (últimos 100)
     this.tiemposPreparacion.push(tiempoPreparacion);
     if (this.tiemposPreparacion.length > 100) {
       this.tiemposPreparacion.shift();
@@ -430,19 +382,16 @@ class CocinaModule {
 
     this.internalMetrics.pedidos_listos++;
 
-    // Mover a historial
+    // Historial (últimos 50)
     this.historial.unshift(pedido);
     if (this.historial.length > this.maxHistorial) {
       this.historial.pop();
     }
 
-    // Remover de activos
     this.pedidosActivos.delete(pedido.pedido_id);
 
-    // Publicar evento
-    await this.publishPedidoListo(pedido, correlationId);
+    await this.publishPedidoListo(pedido);
 
-    // Notificar SSE
     this.broadcastSSE({
       type: 'pedido_listo',
       data: {
@@ -452,49 +401,45 @@ class CocinaModule {
       }
     });
 
-    this.logger.info('[cocina] Pedido marcado como listo', {
-      correlation_id: correlationId,
+    this.logger.info('cocina.pedido.listo', {
       pedido_id: pedido.pedido_id,
       tiempo_preparacion: tiempoPreparacion
     });
   }
 
   broadcastSSE(message) {
-    const payload = JSON.stringify(message);
     for (const client of this.sseClients) {
       try {
         client.send(message);
       } catch (error) {
-        this.logger.warn('[cocina] Error enviando SSE a cliente', {
-          client_id: client.id,
-          error: error.message
-        });
         this.sseClients.delete(client);
       }
     }
   }
 
-  // ================== Event Publishers ==================
+  // ==========================================
+  // Event Publishers
+  // ==========================================
 
-  async publishItemPreparado(pedido_id, item, correlationId) {
+  async publishItemPreparado(pedido_id, item) {
     await this.eventBus.publish('cocina.item_preparado', {
-      pedido_id: pedido_id,
+      pedido_id,
       item_id: item.item_id,
       producto_id: item.producto_id,
       nombre: item.nombre,
       cantidad: item.cantidad,
       preparado_at: item.preparado_at
-    }, { correlationId });
+    });
   }
 
-  async publishPedidoListo(pedido, correlationId) {
+  async publishPedidoListo(pedido) {
     await this.eventBus.publish('cocina.pedido_listo', {
       pedido_id: pedido.pedido_id,
       numero_mesa: pedido.numero_mesa,
       items_count: pedido.items.length,
       tiempo_preparacion: pedido.tiempo_preparacion,
       listo_at: pedido.listo_at
-    }, { correlationId });
+    });
   }
 }
 

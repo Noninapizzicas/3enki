@@ -203,6 +203,12 @@ class BaseProvider {
         });
       });
 
+      // Timeout para evitar que el request se cuelgue
+      req.setTimeout(90000, () => {
+        req.destroy();
+        reject(new Error(`HTTP request timeout after 90s to ${url.hostname}${url.pathname}`));
+      });
+
       req.on('error', (error) => {
         reject(error);
       });

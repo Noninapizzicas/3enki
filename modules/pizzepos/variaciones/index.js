@@ -1,21 +1,26 @@
 /**
- * Módulo Variaciones v1.0
+ * Módulo Variaciones v2.0
  * Gestión de variaciones de productos (quitar/añadir ingredientes)
+ * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ *
+ * Emite: variacion.validada, variacion.rechazada
+ * Consume: producto.creado, pedido.item_agregado
  */
 
 class VariacionesModule {
   constructor() {
     this.name = 'variaciones';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
-    // Estado
-    this.configuraciones = new Map(); // producto_id -> variacion_config
-    this.ingredientesDisponibles = new Map(); // ingrediente_id -> {precio, disponible}
-
-    // Dependencias (inyectadas)
+    // Dependencias (inyectadas en onLoad)
+    this.eventBus = null;
     this.logger = null;
     this.metrics = null;
-    this.eventBus = null;
+    this.uiHandler = null;
+
+    // Estado en memoria
+    this.configuraciones = new Map(); // producto_id -> variacion_config
+    this.ingredientesDisponibles = new Map(); // ingrediente_id -> {precio, disponible}
   }
 
   // ==========================================
@@ -26,16 +31,51 @@ class VariacionesModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
 
-    this.logger.info('modulo.loading', { module: this.name });
+    this.logger.info('module.loading', { module: this.name, version: this.version });
 
     await this.subscribeToEvents();
+    this.registerUIHandlers();
 
-    this.logger.info('modulo.loaded', { module: this.name });
+    this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
-    this.logger.info('modulo.unloading', { module: this.name });
+    this.logger.info('module.unloading', { module: this.name });
+
+    if (this.uiHandler) {
+      const actions = ['get', 'validar', 'calcular_precio', 'health', 'metrics'];
+      for (const action of actions) {
+        this.uiHandler.unregister('variaciones', action);
+      }
+    }
+
+    this.configuraciones.clear();
+    this.ingredientesDisponibles.clear();
+
+    this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // UI Handler Registration
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('variaciones.uiHandler.not_available', { module: this.name });
+      return;
+    }
+
+    this.uiHandler.register('variaciones', 'get', this.handleGetVariacionesProducto.bind(this));
+    this.uiHandler.register('variaciones', 'validar', this.handleValidarVariacion.bind(this));
+    this.uiHandler.register('variaciones', 'calcular_precio', this.handleCalcularPrecio.bind(this));
+    this.uiHandler.register('variaciones', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('variaciones', 'metrics', this.handleGetMetrics.bind(this));
+
+    this.logger.info('variaciones.ui_handlers.registered', {
+      handlers: ['get', 'validar', 'calcular_precio', 'health', 'metrics']
+    });
   }
 
   // ==========================================
@@ -45,10 +85,20 @@ class VariacionesModule {
   async subscribeToEvents() {
     await this.eventBus.subscribe('producto.creado', this.onProductoCreado.bind(this));
     await this.eventBus.subscribe('pedido.item_agregado', this.onPedidoItemAgregado.bind(this));
+
+    this.logger.info('variaciones.events.subscribed', {
+      events: ['producto.creado', 'pedido.item_agregado']
+    });
   }
 
+  // ==========================================
+  // Event Handlers
+  // ==========================================
+
   async onProductoCreado(event) {
-    const { producto_id, variaciones, ingredientes_base, precio } = event.payload;
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { producto_id, variaciones, ingredientes_base, precio } = eventData;
 
     if (!variaciones) {
       return;
@@ -56,10 +106,9 @@ class VariacionesModule {
 
     this.logger.info('producto.creado.received', {
       producto_id,
-      correlation_id: event.correlation_id
+      correlation_id: correlationId
     });
 
-    // Registrar configuración de variaciones
     const config = {
       producto_id,
       precio_base: precio,
@@ -72,7 +121,6 @@ class VariacionesModule {
 
     this.configuraciones.set(producto_id, config);
 
-    // Registrar ingredientes disponibles para extras
     if (config.extras_sugeridos) {
       config.extras_sugeridos.forEach(extra => {
         this.ingredientesDisponibles.set(extra.ingrediente_id, {
@@ -88,50 +136,48 @@ class VariacionesModule {
       producto_id,
       permite_quitar: config.permite_quitar.length,
       extras_sugeridos: config.extras_sugeridos.length,
-      correlation_id: event.correlation_id
+      correlation_id: correlationId
     });
   }
 
   async onPedidoItemAgregado(event) {
-    const { producto_id, variaciones } = event.payload;
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { producto_id, variaciones } = eventData;
 
     if (!variaciones || (!variaciones.ingredientes_quitar && !variaciones.ingredientes_anadir)) {
-      return; // No hay variaciones en este item
+      return;
     }
 
     this.logger.info('pedido.item_agregado.received', {
       producto_id,
       tiene_variaciones: true,
-      correlation_id: event.correlation_id
+      correlation_id: correlationId
     });
 
-    // Validar variaciones
     const resultado = await this.validarVariacion({
       producto_id,
       ingredientes_quitar: variaciones.ingredientes_quitar || [],
       ingredientes_anadir: variaciones.ingredientes_anadir || []
-    }, event.correlation_id);
+    });
 
     if (resultado.valida) {
-      await this.publishVariacionValidada(resultado, event.correlation_id);
+      await this.publishVariacionValidada(resultado, correlationId);
     } else {
-      await this.publishVariacionRechazada(producto_id, variaciones, resultado.motivo_rechazo, event.correlation_id);
+      await this.publishVariacionRechazada(producto_id, variaciones, resultado.motivo_rechazo, correlationId);
     }
   }
 
   // ==========================================
-  // HTTP API Handlers
+  // UI Handlers (MQTT Request/Response)
   // ==========================================
 
-  async handleGetVariacionesProducto(req) {
-    const { producto_id } = req.params;
+  async handleGetVariacionesProducto(data) {
+    const { producto_id } = data;
     const config = this.configuraciones.get(producto_id);
 
     if (!config) {
-      return {
-        status: 404,
-        data: { error: 'Producto no configurado para variaciones' }
-      };
+      return { status: 404, error: 'Producto no configurado para variaciones' };
     }
 
     return {
@@ -146,25 +192,22 @@ class VariacionesModule {
     };
   }
 
-  async handleValidarVariacion(req) {
-    const { producto_id, ingredientes_quitar, ingredientes_anadir } = req.body;
+  async handleValidarVariacion(data) {
+    const { producto_id, ingredientes_quitar, ingredientes_anadir } = data;
 
     if (!producto_id) {
-      return {
-        status: 400,
-        data: { error: 'producto_id requerido' }
-      };
+      return { status: 400, error: 'producto_id requerido' };
     }
 
     const resultado = await this.validarVariacion({
       producto_id,
       ingredientes_quitar: ingredientes_quitar || [],
       ingredientes_anadir: ingredientes_anadir || []
-    }, req.correlationId || req.request_id);
+    });
 
     if (resultado.valida) {
       this.metrics.increment('variacion.validada.total');
-      await this.publishVariacionValidada(resultado, req.correlationId || req.request_id);
+      await this.publishVariacionValidada(resultado);
     } else {
       this.metrics.increment('variacion.rechazada.total');
     }
@@ -175,15 +218,12 @@ class VariacionesModule {
     };
   }
 
-  async handleCalcularPrecio(req) {
-    const { producto_id, ingredientes_anadir } = req.body;
+  async handleCalcularPrecio(data) {
+    const { producto_id, ingredientes_anadir } = data;
 
     const config = this.configuraciones.get(producto_id);
     if (!config) {
-      return {
-        status: 404,
-        data: { error: 'Producto no encontrado' }
-      };
+      return { status: 404, error: 'Producto no encontrado' };
     }
 
     const precio_base = config.precio_base;
@@ -199,26 +239,23 @@ class VariacionesModule {
       });
     }
 
-    const precio_total = precio_base + precio_extras;
-
     return {
       status: 200,
       data: {
         producto_id,
         precio_base,
         precio_extras,
-        precio_total
+        precio_total: precio_base + precio_extras
       }
     };
   }
 
-  async handleHealthCheck(req) {
+  async handleHealthCheck() {
     return {
       status: 200,
       data: {
         status: 'healthy',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
+        module: this.name,
         version: this.version,
         catalogo: {
           productos_configurados: this.configuraciones.size,
@@ -228,7 +265,7 @@ class VariacionesModule {
     };
   }
 
-  async handleGetMetrics(req) {
+  async handleGetMetrics() {
     return {
       status: 200,
       data: {
@@ -276,7 +313,7 @@ class VariacionesModule {
   // Business Logic
   // ==========================================
 
-  async validarVariacion(request, correlation_id) {
+  async validarVariacion(request) {
     const { producto_id, ingredientes_quitar, ingredientes_anadir } = request;
 
     const config = this.configuraciones.get(producto_id);
@@ -319,7 +356,6 @@ class VariacionesModule {
         };
       }
 
-      // Verificar que los ingredientes existen y están disponibles
       for (const item of ingredientes_anadir) {
         const ingrediente = this.ingredientesDisponibles.get(item.ingrediente_id);
         if (!ingrediente) {
@@ -356,7 +392,6 @@ class VariacionesModule {
     // Calcular ingredientes finales
     const ingredientes_finales = [...config.ingredientes_base];
 
-    // Quitar ingredientes
     if (ingredientes_quitar) {
       ingredientes_quitar.forEach(ing_id => {
         const index = ingredientes_finales.indexOf(ing_id);
@@ -366,7 +401,6 @@ class VariacionesModule {
       });
     }
 
-    // Añadir ingredientes
     if (ingredientes_anadir) {
       ingredientes_anadir.forEach(item => {
         ingredientes_finales.push(item.ingrediente_id);

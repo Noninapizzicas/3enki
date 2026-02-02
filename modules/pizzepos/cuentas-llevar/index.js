@@ -1,3 +1,13 @@
+/**
+ * Módulo Cuentas Llevar v2.0
+ * Sistema de tickets para pedidos "para llevar" con display SSE
+ * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ *
+ * Emite: llevar.ticket_creado, llevar.ticket_listo, llevar.ticket_entregado,
+ *        cuenta.creada, cuenta.cerrada
+ * Consume: cocina.pedido_listo, cobro.procesado
+ */
+
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 
@@ -7,12 +17,13 @@ const eventsSchema = require('./schemas/events.json');
 class CuentasLlevarModule {
   constructor() {
     this.name = 'cuentas-llevar';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
+    this.uiHandler = null;
     this.config = {};
 
     // Validación JSON Schema
@@ -43,38 +54,100 @@ class CuentasLlevarModule {
 
     this.tiemposPreparacion = [];
     this.tiemposEspera = [];
+    this._resetInterval = null;
   }
+
+  // ==========================================
+  // Lifecycle
+  // ==========================================
 
   async onLoad(core) {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
+    this.config = core.config || {};
 
-    this.logger.info('[cuentas-llevar] Inicializando módulo cuentas-llevar v1.0');
+    this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Suscribirse a eventos
-    await this.eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
-    await this.eventBus.subscribe('cobro.completado', this.onCobroCompletado.bind(this));
-
-    // Iniciar tarea de reseteo diario
+    await this.subscribeToEvents();
+    this.registerUIHandlers();
     this.iniciarReseoDiario();
 
-    this.logger.info('[cuentas-llevar] Módulo iniciado - Sistema de tickets para llevar');
-
-    return true;
+    this.logger.info('module.loaded', { module: this.name });
   }
 
   async onUnload() {
-    this.logger.info('[cuentas-llevar] modulo.unloading');
+    this.logger.info('module.unloading', { module: this.name });
+
+    if (this._resetInterval) {
+      clearInterval(this._resetInterval);
+      this._resetInterval = null;
+    }
+
+    if (this.uiHandler) {
+      const actions = [
+        'crear', 'marcar_listo', 'entregar', 'activos',
+        'listos', 'get', 'health', 'metrics'
+      ];
+      for (const action of actions) {
+        this.uiHandler.unregister('llevar', action);
+      }
+    }
+
+    this.displayClients.clear();
+    this.ticketsActivos.clear();
+    this.ticketsListos.clear();
+
+    this.logger.info('module.unloaded', { module: this.name });
   }
 
-  // ================== Event Handlers ==================
+  // ==========================================
+  // UI Handler Registration
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('cuentas-llevar.uiHandler.not_available', { module: this.name });
+      return;
+    }
+
+    this.uiHandler.register('llevar', 'crear', this.handleCrearTicket.bind(this));
+    this.uiHandler.register('llevar', 'marcar_listo', this.handleMarcarListo.bind(this));
+    this.uiHandler.register('llevar', 'entregar', this.handleEntregar.bind(this));
+    this.uiHandler.register('llevar', 'activos', this.handleGetActivos.bind(this));
+    this.uiHandler.register('llevar', 'listos', this.handleGetListos.bind(this));
+    this.uiHandler.register('llevar', 'get', this.handleGetTicket.bind(this));
+    this.uiHandler.register('llevar', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('llevar', 'metrics', this.handleGetMetrics.bind(this));
+
+    this.logger.info('cuentas-llevar.ui_handlers.registered', {
+      handlers: ['crear', 'marcar_listo', 'entregar', 'activos', 'listos', 'get', 'health', 'metrics']
+    });
+  }
+
+  // ==========================================
+  // Event Subscriptions
+  // ==========================================
+
+  async subscribeToEvents() {
+    await this.eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
+    await this.eventBus.subscribe('cobro.procesado', this.onCobroProcesado.bind(this));
+
+    this.logger.info('cuentas-llevar.events.subscribed', {
+      events: ['cocina.pedido_listo', 'cobro.procesado']
+    });
+  }
+
+  // ==========================================
+  // Event Handlers
+  // ==========================================
 
   async onCocinaPedidoListo(event) {
-    const correlationId = event.correlation_id || 'missing-cid';
-    const { pedido_id } = event.payload;
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { pedido_id } = eventData;
 
-    // Buscar si pertenece a un ticket
     let ticket = null;
     for (const t of this.ticketsActivos.values()) {
       if (t.pedidos && t.pedidos.includes(pedido_id)) {
@@ -84,71 +157,57 @@ class CuentasLlevarModule {
     }
 
     if (!ticket) {
-      return; // No es un ticket de para llevar
+      return;
     }
 
-    // Marcar como listo automáticamente
     await this.marcarListo(ticket.cuenta_id, correlationId);
 
-    this.logger.info('[cuentas-llevar] Ticket marcado listo automáticamente', {
+    this.logger.info('cuentas-llevar.ticket_listo_auto', {
       correlation_id: correlationId,
       numero_ticket: ticket.numero_ticket
     });
   }
 
-  async onCobroCompletado(event) {
-    const correlationId = event.correlation_id || 'missing-cid';
-    const { cuenta_id } = event.payload;
+  async onCobroProcesado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { cuenta_id } = eventData;
 
-    // Verificar si es un ticket
-    if (!cuenta_id.startsWith('llevar_')) {
+    if (!cuenta_id || !cuenta_id.startsWith('llevar_')) {
       return;
     }
 
-    // Marcar como entregado
     await this.marcarEntregado(cuenta_id, correlationId);
 
-    this.logger.info('[cuentas-llevar] Ticket cerrado tras cobro', {
+    this.logger.info('cuentas-llevar.cerrado_tras_cobro', {
       correlation_id: correlationId,
-      cuenta_id: cuenta_id
+      cuenta_id
     });
   }
 
-  // ================== HTTP Handlers ==================
+  // ==========================================
+  // UI Handlers (MQTT Request/Response)
+  // ==========================================
 
-  async handleCrearTicket(req, context) {
-    const correlationId = context.correlationId;
-    this.logger.info('[cuentas-llevar] POST /llevar/crear-ticket', {
-      correlation_id: correlationId
-    });
-
+  async handleCrearTicket(data) {
     try {
-      const body = context.body || {};
-
-      // Validar request
       const validate = this.ajv.getSchema('https://pizzepos.com/schemas/llevar.json#/definitions/crear_ticket_request');
-      if (!validate(body)) {
-        return {
-          status: 400,
-          body: { error: 'Request inválido', details: validate.errors }
-        };
+      if (validate && !validate(data)) {
+        return { status: 400, error: 'Request inválido', details: validate.errors };
       }
 
-      const { cliente_nombre, notas } = body;
+      const { cliente_nombre, notas } = data;
 
-      // Verificar reseteo diario
       this.verificarReseoDiario();
 
-      // Generar cuenta_id con auto-numeración
       this.contadorDiario++;
       const fecha = this.getFechaActual();
       const cuenta_id = `llevar_${fecha}_${this.contadorDiario.toString().padStart(3, '0')}`;
       const numero_ticket = this.contadorDiario;
 
-      // Crear ticket
       const ticket = {
-        cuenta_id: cuenta_id,
-        numero_ticket: numero_ticket,
+        cuenta_id,
+        numero_ticket,
         cliente_nombre: cliente_nombre || `Cliente ${numero_ticket}`,
         estado: 'pendiente',
         total: 0,
@@ -161,212 +220,88 @@ class CuentasLlevarModule {
       this.ticketsActivos.set(cuenta_id, ticket);
       this.internalMetrics.tickets_creados++;
 
-      // Publicar evento específico
-      await this.publishTicketCreado(ticket, correlationId);
+      await this.publishTicketCreado(ticket);
+      await this.publishCuentaCreada(ticket);
 
-      // Publicar evento base cuenta.creada
-      await this.publishCuentaCreada(ticket, correlationId);
-
-      this.logger.info('[cuentas-llevar] Ticket creado', {
-        correlation_id: correlationId,
-        cuenta_id: cuenta_id,
-        numero_ticket: numero_ticket
+      this.logger.info('llevar.ticket_creado', {
+        cuenta_id,
+        numero_ticket
       });
 
-      return {
-        status: 201,
-        body: ticket
-      };
+      return { status: 201, data: ticket };
 
     } catch (error) {
-      this.logger.error('[cuentas-llevar] Error creando ticket', {
-        correlation_id: correlationId,
-        error: error.message
-      });
-      return {
-        status: 500,
-        body: { error: 'Error interno creando ticket' }
-      };
+      this.logger.error('cuentas-llevar.crear.error', { error: error.message });
+      return { status: 500, error: 'Error interno creando ticket' };
     }
   }
 
-  async handleMarcarListo(req, context) {
-    const correlationId = context.correlationId;
-    const cuenta_id = context.params.id;
-
-    this.logger.info('[cuentas-llevar] POST /llevar/:id/listo', {
-      correlation_id: correlationId,
-      cuenta_id: cuenta_id
-    });
+  async handleMarcarListo(data) {
+    const { cuenta_id } = data;
 
     try {
-      await this.marcarListo(cuenta_id, correlationId);
-
-      return {
-        status: 200,
-        body: { message: 'Ticket marcado como listo' }
-      };
-
+      await this.marcarListo(cuenta_id);
+      return { status: 200, data: { message: 'Ticket marcado como listo' } };
     } catch (error) {
-      this.logger.error('[cuentas-llevar] Error marcando listo', {
-        correlation_id: correlationId,
-        error: error.message
-      });
-      return {
-        status: 500,
-        body: { error: error.message }
-      };
+      this.logger.error('cuentas-llevar.marcar_listo.error', { error: error.message });
+      return { status: 500, error: error.message };
     }
   }
 
-  async handleEntregar(req, context) {
-    const correlationId = context.correlationId;
-    const cuenta_id = context.params.id;
-
-    this.logger.info('[cuentas-llevar] POST /llevar/:id/entregar', {
-      correlation_id: correlationId,
-      cuenta_id: cuenta_id
-    });
+  async handleEntregar(data) {
+    const { cuenta_id } = data;
 
     try {
-      await this.marcarEntregado(cuenta_id, correlationId);
-
-      return {
-        status: 200,
-        body: { message: 'Ticket entregado' }
-      };
-
+      await this.marcarEntregado(cuenta_id);
+      return { status: 200, data: { message: 'Ticket entregado' } };
     } catch (error) {
-      this.logger.error('[cuentas-llevar] Error marcando entregado', {
-        correlation_id: correlationId,
-        error: error.message
-      });
-      return {
-        status: 500,
-        body: { error: error.message }
-      };
+      this.logger.error('cuentas-llevar.entregar.error', { error: error.message });
+      return { status: 500, error: error.message };
     }
   }
 
-  async handleGetActivos(req, context) {
-    const correlationId = context.correlationId;
-
+  async handleGetActivos() {
     const activos = Array.from(this.ticketsActivos.values())
-      .filter(t => t.estado === 'pendiente' || t.estado === 'preparando');
-
-    // Ordenar por hora de creación
-    activos.sort((a, b) => new Date(a.hora_creacion) - new Date(b.hora_creacion));
+      .filter(t => t.estado === 'pendiente' || t.estado === 'preparando')
+      .sort((a, b) => new Date(a.hora_creacion) - new Date(b.hora_creacion));
 
     return {
       status: 200,
-      body: {
-        tickets: activos,
-        total: activos.length
-      }
+      data: { tickets: activos, total: activos.length }
     };
   }
 
-  async handleGetListos(req, context) {
-    const correlationId = context.correlationId;
+  async handleGetListos() {
+    const listos = Array.from(this.ticketsListos.values())
+      .sort((a, b) => new Date(b.hora_listo) - new Date(a.hora_listo));
 
-    const listos = Array.from(this.ticketsListos.values());
-
-    // Ordenar por hora de listo (más recientes primero)
-    listos.sort((a, b) => new Date(b.hora_listo) - new Date(a.hora_listo));
-
-    // Limitar a los últimos N configurados
     const maxMostrar = this.config.display?.max_numeros_mostrar || 10;
     const paraDisplay = listos.slice(0, maxMostrar);
 
     return {
       status: 200,
-      body: {
-        tickets: paraDisplay,
-        total: listos.length
-      }
+      data: { tickets: paraDisplay, total: listos.length }
     };
   }
 
-  async handleGetTicket(req, context) {
-    const correlationId = context.correlationId;
-    const cuenta_id = context.params.id;
+  async handleGetTicket(data) {
+    const { cuenta_id } = data;
 
     const ticket = this.ticketsActivos.get(cuenta_id) || this.ticketsListos.get(parseInt(cuenta_id));
     if (!ticket) {
-      return {
-        status: 404,
-        body: { error: 'Ticket no encontrado' }
-      };
+      return { status: 404, error: 'Ticket no encontrado' };
     }
 
-    return {
-      status: 200,
-      body: ticket
-    };
+    return { status: 200, data: ticket };
   }
 
-  async handleDisplay(req, context) {
-    const correlationId = context.correlationId;
-
-    this.logger.info('[cuentas-llevar] Cliente SSE conectado al display', {
-      correlation_id: correlationId
-    });
-
-    // Configurar headers SSE
-    const headers = {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    };
-
-    // Crear cliente SSE
-    const client = {
-      id: `display_${Date.now()}`,
-      send: (data) => {
-        return `data: ${JSON.stringify(data)}\n\n`;
-      }
-    };
-
-    this.displayClients.add(client);
-
-    // Enviar estado inicial
-    const listos = Array.from(this.ticketsListos.values())
-      .sort((a, b) => new Date(b.hora_listo) - new Date(a.hora_listo))
-      .slice(0, this.config.display?.max_numeros_mostrar || 10);
-
-    client.send({
-      type: 'connected',
+  async handleHealthCheck() {
+    return {
+      status: 200,
       data: {
-        tickets_listos: listos.map(t => ({
-          numero_ticket: t.numero_ticket,
-          cliente_nombre: t.cliente_nombre
-        }))
-      }
-    });
-
-    // Cleanup al desconectar
-    req.on('close', () => {
-      this.displayClients.delete(client);
-      this.logger.info('[cuentas-llevar] Cliente SSE desconectado', {
-        correlation_id: correlationId,
-        client_id: client.id
-      });
-    });
-
-    return {
-      status: 200,
-      headers: headers,
-      body: client
-    };
-  }
-
-  async handleHealthCheck(req, context) {
-    return {
-      status: 200,
-      body: {
         status: 'healthy',
-        module: 'cuentas-llevar',
-        version: '1.0.0',
+        module: this.name,
+        version: this.version,
         tickets_activos: this.ticketsActivos.size,
         tickets_listos: this.ticketsListos.size,
         display_clients: this.displayClients.size
@@ -374,10 +309,10 @@ class CuentasLlevarModule {
     };
   }
 
-  async handleGetMetrics(req, context) {
+  async handleGetMetrics() {
     return {
       status: 200,
-      body: {
+      data: {
         ...this.internalMetrics,
         tickets_activos: this.ticketsActivos.size,
         tickets_listos: this.ticketsListos.size,
@@ -386,7 +321,9 @@ class CuentasLlevarModule {
     };
   }
 
-  // ================== Event Publishers ==================
+  // ==========================================
+  // Event Publishers
+  // ==========================================
 
   async publishTicketCreado(ticket, correlationId) {
     await this.eventBus.publish('llevar.ticket_creado', {
@@ -442,7 +379,9 @@ class CuentasLlevarModule {
     }, { correlationId });
   }
 
-  // ================== Utilidades ==================
+  // ==========================================
+  // Business Logic
+  // ==========================================
 
   async marcarListo(cuenta_id, correlationId) {
     const ticket = this.ticketsActivos.get(cuenta_id);
@@ -455,7 +394,6 @@ class CuentasLlevarModule {
     ticket.tiempo_preparacion = this.calcularTiempoPreparacion(ticket.hora_creacion);
     ticket.mostrado_en_display = true;
 
-    // Actualizar métricas
     this.internalMetrics.tickets_listos++;
     this.tiemposPreparacion.push(ticket.tiempo_preparacion);
     if (this.tiemposPreparacion.length > 100) {
@@ -464,13 +402,10 @@ class CuentasLlevarModule {
     this.internalMetrics.tiempo_promedio_preparacion =
       this.tiemposPreparacion.reduce((a, b) => a + b, 0) / this.tiemposPreparacion.length;
 
-    // Mover a listos (para display)
     this.ticketsListos.set(ticket.numero_ticket, ticket);
 
-    // Publicar evento
     await this.publishTicketListo(ticket, correlationId);
 
-    // Actualizar displays SSE
     this.broadcastDisplay({
       type: 'ticket_listo',
       data: {
@@ -479,7 +414,7 @@ class CuentasLlevarModule {
       }
     });
 
-    this.logger.info('[cuentas-llevar] Ticket marcado listo', {
+    this.logger.info('llevar.ticket_listo', {
       correlation_id: correlationId,
       numero_ticket: ticket.numero_ticket
     });
@@ -497,7 +432,6 @@ class CuentasLlevarModule {
     if (ticket.hora_listo) {
       ticket.tiempo_espera = this.calcularTiempoEspera(ticket.hora_listo);
 
-      // Actualizar métricas
       this.tiemposEspera.push(ticket.tiempo_espera);
       if (this.tiemposEspera.length > 100) {
         this.tiemposEspera.shift();
@@ -508,35 +442,29 @@ class CuentasLlevarModule {
 
     this.internalMetrics.tickets_entregados++;
 
-    // Publicar eventos
     await this.publishTicketEntregado(ticket, correlationId);
     await this.publishCuentaCerrada(ticket, correlationId);
 
-    // Remover de activos y listos
     this.ticketsActivos.delete(cuenta_id);
     this.ticketsListos.delete(ticket.numero_ticket);
 
-    // Actualizar displays SSE
     this.broadcastDisplay({
       type: 'ticket_entregado',
-      data: {
-        numero_ticket: ticket.numero_ticket
-      }
+      data: { numero_ticket: ticket.numero_ticket }
     });
 
-    this.logger.info('[cuentas-llevar] Ticket entregado', {
+    this.logger.info('llevar.ticket_entregado', {
       correlation_id: correlationId,
       numero_ticket: ticket.numero_ticket
     });
   }
 
   broadcastDisplay(message) {
-    const payload = JSON.stringify(message);
     for (const client of this.displayClients) {
       try {
         client.send(message);
       } catch (error) {
-        this.logger.warn('[cuentas-llevar] Error enviando SSE a display', {
+        this.logger.warn('cuentas-llevar.sse.error', {
           client_id: client.id,
           error: error.message
         });
@@ -545,16 +473,20 @@ class CuentasLlevarModule {
     }
   }
 
+  // ==========================================
+  // Helper Methods
+  // ==========================================
+
   calcularTiempoPreparacion(horaCreacion) {
     const ahora = new Date();
     const creacion = new Date(horaCreacion);
-    return Math.floor((ahora - creacion) / 1000 / 60); // minutos
+    return Math.floor((ahora - creacion) / 1000 / 60);
   }
 
   calcularTiempoEspera(horaListo) {
     const ahora = new Date();
     const listo = new Date(horaListo);
-    return Math.floor((ahora - listo) / 1000 / 60); // minutos
+    return Math.floor((ahora - listo) / 1000 / 60);
   }
 
   getFechaActual() {
@@ -568,7 +500,7 @@ class CuentasLlevarModule {
   verificarReseoDiario() {
     const fechaActual = this.getFechaActual();
     if (fechaActual !== this.fechaActual) {
-      this.logger.info('[cuentas-llevar] Reseteo diario de contador', {
+      this.logger.info('cuentas-llevar.reseteo_diario', {
         fecha_anterior: this.fechaActual,
         fecha_nueva: fechaActual
       });
@@ -578,10 +510,9 @@ class CuentasLlevarModule {
   }
 
   iniciarReseoDiario() {
-    // Verificar cada hora si cambió el día
-    setInterval(() => {
+    this._resetInterval = setInterval(() => {
       this.verificarReseoDiario();
-    }, 60 * 60 * 1000); // 1 hora
+    }, 60 * 60 * 1000);
   }
 }
 

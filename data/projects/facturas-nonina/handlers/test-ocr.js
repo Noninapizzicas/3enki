@@ -99,8 +99,8 @@ module.exports = {
         ],
         provider: 'deepseek',
         temperature: 0.1,
-        max_tokens: 4000
-      }, { timeout: 60000 });
+        max_tokens: 2000
+      }, { timeout: 120000 });
 
       const d = result.data || result;
       const texto = d.content || d.text || 'Sin respuesta';

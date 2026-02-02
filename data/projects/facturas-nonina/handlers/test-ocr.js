@@ -1,11 +1,11 @@
 /**
  * Handler Proyecto: /gocr
  *
- * Test OCR con DeepSeek Vision.
- * Coge la ultima imagen preparada (o del inbox), la envia a DeepSeek
+ * Test OCR con Google Vision.
+ * Coge la ultima imagen preparada (o del inbox), la envia a Google Vision
  * y devuelve el texto extraido.
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 const path = require('path');
@@ -72,49 +72,31 @@ module.exports = {
 
     emit('telegram.send_message.request', {
       botName, chatId,
-      text: `OCR DeepSeek (${origen}): ${archivo.name}...`
+      text: `OCR Google Vision (${origen}): ${archivo.name}...`
     });
 
-    // 2. Leer imagen y convertir a base64
+    // 2. Llamar a Google Vision (acepta ruta de archivo directamente)
     try {
-      const imageBuffer = fs.readFileSync(archivo.path);
-      const base64Image = imageBuffer.toString('base64');
-      const ext = path.extname(archivo.name).toLowerCase();
-      const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
-      const imageType = mimeTypes[ext] || 'image/jpeg';
-
-      // 3. Llamar a DeepSeek via ai-gateway
-      const result = await services.call('ai', 'chat', {
-        messages: [
-          {
-            role: 'system',
-            content: 'Eres un experto en OCR de facturas. Extrae TODO el texto visible de la imagen. Devuelve el texto tal cual aparece, manteniendo la estructura. No interpretes ni resumas, solo extrae el texto.'
-          },
-          {
-            role: 'user',
-            content: 'Extrae todo el texto de esta factura:',
-            image_base64: base64Image,
-            image_type: imageType
-          }
-        ],
-        provider: 'deepseek',
-        temperature: 0.1,
-        max_tokens: 2000
-      }, { timeout: 120000 });
+      const result = await services.call('local.google-vision', 'extract', {
+        image: archivo.path,
+        hint: 'DOCUMENT_TEXT_DETECTION',
+        languageHints: ['es']
+      }, { timeout: 60000 });
 
       const d = result.data || result;
-      const texto = d.content || d.text || 'Sin respuesta';
+      const texto = d.text || 'Sin texto extraido';
 
       // Truncar para Telegram (max 4096 chars)
-      const textoTelegram = texto.length > 3500
-        ? texto.substring(0, 3500) + '\n\n... (truncado)'
+      const textoTelegram = texto.length > 3000
+        ? texto.substring(0, 3000) + '\n\n... (truncado)'
         : texto;
 
       const mensaje = [
-        `OCR DeepSeek OK`,
+        'OCR Google Vision OK',
         `Imagen: ${archivo.name} (${origen})`,
-        `Tokens: ${d.usage?.total_tokens || '?'}`,
-        `Coste: $${(d.cost || 0).toFixed(4)}`,
+        `Confianza: ${d.confidence || '?'}%`,
+        `Bloques: ${d.blocks || '?'}`,
+        `Idioma: ${d.locale || '?'}`,
         '',
         textoTelegram
       ].join('\n');
@@ -123,8 +105,9 @@ module.exports = {
 
       logger.info('test-ocr.ok', {
         file: archivo.name, origen,
-        tokens: d.usage?.total_tokens,
-        cost: d.cost,
+        confidence: d.confidence,
+        blocks: d.blocks,
+        locale: d.locale,
         textLength: texto.length
       });
 

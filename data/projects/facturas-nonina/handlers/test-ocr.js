@@ -84,7 +84,7 @@ module.exports = {
       const imageType = mimeTypes[ext] || 'image/jpeg';
 
       // 3. Llamar a DeepSeek via ai-gateway
-      const result = await services.call('ai-gateway', 'chat', {
+      const result = await services.call('ai', 'chat', {
         messages: [
           {
             role: 'system',

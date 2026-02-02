@@ -1,0 +1,170 @@
+{
+  "name": "cuentas-telefono",
+  "version": "1.0.0",
+  "description": "Gestión de pedidos telefónicos - Caller ID y notificaciones WhatsApp",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": [
+      "telefono.llamada_detectada",
+      "telefono.contacto_identificado",
+      "telefono.pedido_creado",
+      "telefono.listo_para_recoger"
+    ],
+    "queries": ["telefono.pendientes", "telefono.contactos"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "telefono.llamada_detectada",
+        "description": "Llamada telefónica entrante detectada",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/telefono_llamada_detectada"
+        }
+      },
+      {
+        "event": "telefono.contacto_identificado",
+        "description": "Contacto identificado por caller ID",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/telefono_contacto_identificado"
+        }
+      },
+      {
+        "event": "telefono.pedido_creado",
+        "description": "Pedido telefónico creado",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/telefono_pedido_creado"
+        }
+      },
+      {
+        "event": "telefono.listo_para_recoger",
+        "description": "Pedido listo, enviar notificación WhatsApp",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/telefono_listo_para_recoger"
+        }
+      },
+      {
+        "event": "cuenta.creada",
+        "description": "Publicado al módulo base cuentas",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/cuenta_creada"
+        }
+      },
+      {
+        "event": "cuenta.cerrada",
+        "description": "Publicado al módulo base cuentas",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/cuenta_cerrada"
+        }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "cocina.pedido_listo",
+        "description": "Pedido listo en cocina, notificar cliente",
+        "handler": "onCocinaPedidoListo"
+      },
+      {
+        "event": "cobro.completado",
+        "description": "Cobro completado, cerrar cuenta",
+        "handler": "onCobroCompletado"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/telefono/llamada-entrante",
+      "handler": "handleLlamadaEntrante",
+      "description": "Registrar llamada entrante (webhook Asterisk/FreePBX)"
+    },
+    {
+      "method": "POST",
+      "path": "/telefono/crear-pedido",
+      "handler": "handleCrearPedido",
+      "description": "Crear pedido telefónico"
+    },
+    {
+      "method": "GET",
+      "path": "/telefono/pendientes",
+      "handler": "handleGetPendientes",
+      "description": "Listar pedidos pendientes de recoger"
+    },
+    {
+      "method": "GET",
+      "path": "/telefono/:id",
+      "handler": "handleGetPedido",
+      "description": "Obtener pedido por ID"
+    },
+    {
+      "method": "POST",
+      "path": "/telefono/:id/listo",
+      "handler": "handleMarcarListo",
+      "description": "Marcar pedido listo y enviar WhatsApp"
+    },
+    {
+      "method": "GET",
+      "path": "/telefono/contactos",
+      "handler": "handleGetContactos",
+      "description": "Listar contactos guardados"
+    },
+    {
+      "method": "POST",
+      "path": "/telefono/contactos",
+      "handler": "handleGuardarContacto",
+      "description": "Guardar/actualizar contacto"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "telefono.llamadas_recibidas.total",
+        "telefono.contactos_identificados.total",
+        "telefono.pedidos_creados.total",
+        "telefono.whatsapp_enviados.total"
+      ],
+      "gauges": [
+        "telefono.pendientes.count",
+        "telefono.contactos_guardados.count"
+      ],
+      "timings": [
+        "telefono.tiempo_preparacion.avg"
+      ]
+    }
+  },
+
+  "config": {
+    "caller_id": {
+      "enabled": true,
+      "asterisk_webhook": "http://localhost:5038/ami"
+    },
+    "whatsapp": {
+      "enabled": true,
+      "provider": "twilio",
+      "template_listo": "¡Hola {{nombre}}! Tu pedido #{{numero}} está listo para recoger. Te esperamos 😊"
+    },
+    "reseteo_diario": true,
+    "reseteo_hora": "00:00"
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "name": "cuentas-llevar",
+  "version": "1.0.0",
+  "description": "Gestión de para llevar - Sistema de tickets y display de números",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": [
+      "llevar.ticket_creado",
+      "llevar.ticket_listo",
+      "llevar.ticket_entregado"
+    ],
+    "queries": ["llevar.activos", "llevar.listos"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "llevar.ticket_creado",
+        "description": "Ticket de para llevar creado",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/llevar_ticket_creado"
+        }
+      },
+      {
+        "event": "llevar.ticket_listo",
+        "description": "Ticket listo para entregar",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/llevar_ticket_listo"
+        }
+      },
+      {
+        "event": "llevar.ticket_entregado",
+        "description": "Ticket entregado al cliente",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/llevar_ticket_entregado"
+        }
+      },
+      {
+        "event": "cuenta.creada",
+        "description": "Publicado al módulo base cuentas",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/cuenta_creada"
+        }
+      },
+      {
+        "event": "cuenta.cerrada",
+        "description": "Publicado al módulo base cuentas",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/cuenta_cerrada"
+        }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "cocina.pedido_listo",
+        "description": "Pedido listo en cocina, mostrar en display",
+        "handler": "onCocinaPedidoListo"
+      },
+      {
+        "event": "cobro.completado",
+        "description": "Cobro completado, cerrar cuenta",
+        "handler": "onCobroCompletado"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/llevar/crear-ticket",
+      "handler": "handleCrearTicket",
+      "description": "Crear ticket de para llevar"
+    },
+    {
+      "method": "POST",
+      "path": "/llevar/:id/listo",
+      "handler": "handleMarcarListo",
+      "description": "Marcar ticket como listo (mostrar en display)"
+    },
+    {
+      "method": "POST",
+      "path": "/llevar/:id/entregar",
+      "handler": "handleEntregar",
+      "description": "Marcar ticket como entregado"
+    },
+    {
+      "method": "GET",
+      "path": "/llevar/activos",
+      "handler": "handleGetActivos",
+      "description": "Listar tickets activos (preparando)"
+    },
+    {
+      "method": "GET",
+      "path": "/llevar/listos",
+      "handler": "handleGetListos",
+      "description": "Tickets listos (para display)"
+    },
+    {
+      "method": "GET",
+      "path": "/llevar/:id",
+      "handler": "handleGetTicket",
+      "description": "Obtener ticket por ID"
+    },
+    {
+      "method": "GET",
+      "path": "/llevar/display",
+      "handler": "handleDisplay",
+      "description": "SSE stream para display de números listos"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "llevar.tickets_creados.total",
+        "llevar.tickets_listos.total",
+        "llevar.tickets_entregados.total"
+      ],
+      "gauges": [
+        "llevar.activos.count",
+        "llevar.listos.count"
+      ],
+      "timings": [
+        "llevar.tiempo_preparacion.avg",
+        "llevar.tiempo_espera.avg"
+      ]
+    }
+  },
+
+  "config": {
+    "reseteo_diario": true,
+    "reseteo_hora": "00:00",
+    "display": {
+      "max_numeros_mostrar": 10,
+      "tiempo_mostrar_segundos": 300
+    }
+  }
+}

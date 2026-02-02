@@ -1,23 +1,28 @@
 /**
- * Módulo Productos v2.0
+ * Módulo Productos v2.1
  * Catálogo de productos - Actualizado desde menús generados por IA
+ * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ *
+ * Emite: producto.creado, producto.actualizado, producto.eliminado, catalogo.actualizado
+ * Consume: menu.generado, menu.validado
  */
 
 class ProductosModule {
   constructor() {
     this.name = 'productos';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
 
-    // Estado
+    // Dependencias (inyectadas en onLoad)
+    this.eventBus = null;
+    this.logger = null;
+    this.metrics = null;
+    this.uiHandler = null;
+
+    // Estado en memoria
     this.productos = new Map(); // producto_id -> producto
     this.categorias = new Map(); // categoria_id -> categoria
     this.ingredientes = new Map(); // ingrediente_id -> ingrediente
     this.menusPendientes = new Map(); // menu_id -> productos_draft
-
-    // Dependencias (inyectadas)
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
   }
 
   // ==========================================
@@ -28,17 +33,63 @@ class ProductosModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
 
-    this.logger.info('modulo.loading', { module: this.name });
+    this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Suscribirse a eventos
     await this.subscribeToEvents();
+    this.registerUIHandlers();
 
-    this.logger.info('modulo.loaded', { module: this.name });
+    this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
-    this.logger.info('modulo.unloading', { module: this.name });
+    this.logger.info('module.unloading', { module: this.name });
+
+    if (this.uiHandler) {
+      const actions = [
+        'list', 'get', 'search', 'update', 'delete',
+        'categorias', 'ingredientes', 'pizzas',
+        'stats', 'health', 'metrics'
+      ];
+      for (const action of actions) {
+        this.uiHandler.unregister('productos', action);
+      }
+    }
+
+    this.productos.clear();
+    this.categorias.clear();
+    this.ingredientes.clear();
+    this.menusPendientes.clear();
+
+    this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // UI Handler Registration
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('productos.uiHandler.not_available', { module: this.name });
+      return;
+    }
+
+    this.uiHandler.register('productos', 'list', this.handleListProductos.bind(this));
+    this.uiHandler.register('productos', 'get', this.handleGetProducto.bind(this));
+    this.uiHandler.register('productos', 'search', this.handleSearchProductos.bind(this));
+    this.uiHandler.register('productos', 'update', this.handleUpdateProducto.bind(this));
+    this.uiHandler.register('productos', 'delete', this.handleDeleteProducto.bind(this));
+    this.uiHandler.register('productos', 'categorias', this.handleListCategorias.bind(this));
+    this.uiHandler.register('productos', 'ingredientes', this.handleListIngredientes.bind(this));
+    this.uiHandler.register('productos', 'pizzas', this.handleListPizzas.bind(this));
+    this.uiHandler.register('productos', 'stats', this.handleGetStats.bind(this));
+    this.uiHandler.register('productos', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('productos', 'metrics', this.handleGetMetrics.bind(this));
+
+    this.logger.info('productos.ui_handlers.registered', {
+      handlers: ['list', 'get', 'search', 'update', 'delete', 'categorias', 'ingredientes', 'pizzas', 'stats', 'health', 'metrics']
+    });
   }
 
   // ==========================================
@@ -48,34 +99,43 @@ class ProductosModule {
   async subscribeToEvents() {
     await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
     await this.eventBus.subscribe('menu.validado', this.onMenuValidado.bind(this));
+
+    this.logger.info('productos.events.subscribed', {
+      events: ['menu.generado', 'menu.validado']
+    });
   }
 
+  // ==========================================
+  // Event Handlers
+  // ==========================================
+
   async onMenuGenerado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { menu_id, productos, categorias, ingredientes_catalogo } = eventData;
     const start_time = Date.now();
-    const { menu_id, productos, categorias, ingredientes } = event.payload;
 
     this.logger.info('menu.generado.received', {
       menu_id,
-      productos_count: productos.length,
-      categorias_count: categorias.length,
-      ingredientes_count: ingredientes ? ingredientes.length : 0,
-      correlation_id: event.correlation_id
+      productos_count: productos?.length || 0,
+      categorias_count: categorias?.length || 0,
+      ingredientes_count: ingredientes_catalogo?.length || 0,
+      correlation_id: correlationId
     });
 
     try {
-      // Guardar productos como pendientes de validación
       this.menusPendientes.set(menu_id, {
-        productos,
-        categorias,
-        ingredientes: ingredientes || [],
+        productos: productos || [],
+        categorias: categorias || [],
+        ingredientes: ingredientes_catalogo || [],
         received_at: new Date().toISOString()
       });
 
       this.logger.info('menu.productos_guardados', {
         menu_id,
-        productos_count: productos.length,
+        productos_count: productos?.length || 0,
         estado: 'pendiente_validacion',
-        correlation_id: event.correlation_id,
+        correlation_id: correlationId,
         duration: Date.now() - start_time
       });
 
@@ -83,7 +143,7 @@ class ProductosModule {
       this.logger.error('menu.generado.error', {
         menu_id,
         error: error.message,
-        correlation_id: event.correlation_id
+        correlation_id: correlationId
       });
 
       this.metrics.increment('producto.errors.total', 1, { operation: 'menu_generado' });
@@ -91,13 +151,15 @@ class ProductosModule {
   }
 
   async onMenuValidado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { menu_id, correcciones } = eventData;
     const start_time = Date.now();
-    const { menu_id, correcciones } = event.payload;
 
     this.logger.info('menu.validado.received', {
       menu_id,
       correcciones_count: correcciones ? correcciones.length : 0,
-      correlation_id: event.correlation_id
+      correlation_id: correlationId
     });
 
     try {
@@ -105,22 +167,19 @@ class ProductosModule {
       if (!menuPendiente) {
         this.logger.warn('menu.validado.not_found', {
           menu_id,
-          correlation_id: event.correlation_id
+          correlation_id: correlationId
         });
         return;
       }
 
       let { productos, categorias, ingredientes } = menuPendiente;
 
-      // Aplicar correcciones si existen
       if (correcciones && correcciones.length > 0) {
         productos = this.applyCorrections(productos, correcciones);
       }
 
-      // Sincronizar catálogo
-      const stats = await this.syncCatalogo(menu_id, productos, categorias, event.correlation_id);
+      const stats = await this.syncCatalogo(menu_id, productos, categorias, correlationId);
 
-      // Sincronizar ingredientes
       if (ingredientes && ingredientes.length > 0) {
         stats.ingredientes_nuevos = 0;
         for (const ing of ingredientes) {
@@ -136,21 +195,18 @@ class ProductosModule {
         }
       }
 
-      // Limpiar menú pendiente
       this.menusPendientes.delete(menu_id);
 
-      // Métricas
       this.metrics.increment('catalogo.actualizado.total');
       this.metrics.timing('catalogo.sync.duration', Date.now() - start_time);
       this.metrics.gauge('producto.activos.count', this.productos.size);
 
-      // Publicar evento catalogo.actualizado
-      await this.publishCatalogoActualizado(menu_id, stats, Date.now() - start_time, event.correlation_id);
+      await this.publishCatalogoActualizado(menu_id, stats, Date.now() - start_time, correlationId);
 
       this.logger.info('catalogo.sincronizado', {
         menu_id,
         estadisticas: stats,
-        correlation_id: event.correlation_id,
+        correlation_id: correlationId,
         duration: Date.now() - start_time
       });
 
@@ -159,7 +215,7 @@ class ProductosModule {
         menu_id,
         error: error.message,
         stack: error.stack,
-        correlation_id: event.correlation_id
+        correlation_id: correlationId
       });
 
       this.metrics.increment('producto.errors.total', 1, { operation: 'menu_validado' });
@@ -167,16 +223,15 @@ class ProductosModule {
   }
 
   // ==========================================
-  // HTTP API Handlers
+  // UI Handlers (MQTT Request/Response)
   // ==========================================
 
-  async handleListProductos(req) {
+  async handleListProductos(data) {
     const start_time = Date.now();
-    const { categoria, activo } = req.query || {};
+    const { categoria, activo } = data || {};
 
     let productos = Array.from(this.productos.values());
 
-    // Filtros
     if (categoria) {
       productos = productos.filter(p => p.categoria === categoria);
     }
@@ -186,7 +241,6 @@ class ProductosModule {
       productos = productos.filter(p => p.activo === activoBoolean);
     }
 
-    // Ordenar por categoría y nombre
     productos.sort((a, b) => {
       if (a.categoria !== b.categoria) {
         return a.categoria.localeCompare(b.categoria);
@@ -198,39 +252,27 @@ class ProductosModule {
 
     return {
       status: 200,
-      data: {
-        productos,
-        total: productos.length
-      }
+      data: { productos, total: productos.length }
     };
   }
 
-  async handleGetProducto(req) {
-    const { id } = req.params;
+  async handleGetProducto(data) {
+    const { id } = data;
     const producto = this.productos.get(id);
 
     if (!producto) {
-      return {
-        status: 404,
-        data: { error: 'Producto no encontrado' }
-      };
+      return { status: 404, error: 'Producto no encontrado' };
     }
 
-    return {
-      status: 200,
-      data: producto
-    };
+    return { status: 200, data: producto };
   }
 
-  async handleSearchProductos(req) {
+  async handleSearchProductos(data) {
     const start_time = Date.now();
-    const { q } = req.query || {};
+    const { q } = data || {};
 
     if (!q) {
-      return {
-        status: 400,
-        data: { error: 'Parámetro "q" requerido' }
-      };
+      return { status: 400, error: 'Parámetro "q" requerido' };
     }
 
     const searchTerm = q.toLowerCase();
@@ -245,19 +287,14 @@ class ProductosModule {
 
     return {
       status: 200,
-      data: {
-        resultados,
-        total: resultados.length,
-        query: q
-      }
+      data: { resultados, total: resultados.length, query: q }
     };
   }
 
-  async handleListCategorias(req) {
+  async handleListCategorias() {
     const categorias = Array.from(this.categorias.values())
       .sort((a, b) => a.orden - b.orden);
 
-    // Añadir conteo de productos por categoría
     const categoriasConConteo = categorias.map(cat => ({
       ...cat,
       productos_count: Array.from(this.productos.values())
@@ -266,25 +303,20 @@ class ProductosModule {
 
     return {
       status: 200,
-      data: {
-        categorias: categoriasConConteo,
-        total: categorias.length
-      }
+      data: { categorias: categoriasConConteo, total: categorias.length }
     };
   }
 
-  async handleListIngredientes(req, context) {
-    const { tipo } = context.query || {};
+  async handleListIngredientes(data) {
+    const { tipo } = data || {};
 
     let ingredientes = Array.from(this.ingredientes.values())
       .filter(i => i.activo !== false);
 
-    // Filtrar por tipo si se especifica
     if (tipo) {
       ingredientes = ingredientes.filter(i => i.tipo === tipo);
     }
 
-    // Ordenar por tipo y nombre
     ingredientes.sort((a, b) => {
       if (a.tipo !== b.tipo) {
         return a.tipo.localeCompare(b.tipo);
@@ -294,15 +326,11 @@ class ProductosModule {
 
     return {
       status: 200,
-      data: {
-        ingredientes,
-        total: ingredientes.length
-      }
+      data: { ingredientes, total: ingredientes.length }
     };
   }
 
-  async handleListPizzas(req, context) {
-    // Filtrar productos que son pizzas (categoría pizza o tipo pizza)
+  async handleListPizzas() {
     const pizzas = Array.from(this.productos.values())
       .filter(p =>
         p.activo &&
@@ -312,26 +340,18 @@ class ProductosModule {
 
     return {
       status: 200,
-      data: {
-        pizzas,
-        total: pizzas.length
-      }
+      data: { pizzas, total: pizzas.length }
     };
   }
 
-  async handleUpdateProducto(req, context) {
-    const { id } = context.params;
-    const updates = context.body;
+  async handleUpdateProducto(data) {
+    const { id, ...updates } = data;
 
     const producto = this.productos.get(id);
     if (!producto) {
-      return {
-        status: 404,
-        data: { error: 'Producto no encontrado' }
-      };
+      return { status: 404, error: 'Producto no encontrado' };
     }
 
-    // Aplicar actualizaciones
     const cambios = {};
     Object.keys(updates).forEach(key => {
       if (updates[key] !== producto[key]) {
@@ -343,59 +363,42 @@ class ProductosModule {
     producto.updated_at = new Date().toISOString();
     this.productos.set(id, producto);
 
-    // Métricas
     this.metrics.increment('producto.actualizado.total');
 
-    // Publicar evento
-    await this.publishProductoActualizado(id, cambios, req.correlationId || req.request_id);
+    await this.publishProductoActualizado(id, cambios);
 
     this.logger.info('producto.actualizado', {
       producto_id: id,
-      cambios,
-      correlation_id: req.correlationId || req.request_id
+      cambios_count: Object.keys(cambios).length
     });
 
-    return {
-      status: 200,
-      data: producto
-    };
+    return { status: 200, data: producto };
   }
 
-  async handleDeleteProducto(req) {
-    const { id } = req.params;
+  async handleDeleteProducto(data) {
+    const { id } = data;
 
     const producto = this.productos.get(id);
     if (!producto) {
-      return {
-        status: 404,
-        data: { error: 'Producto no encontrado' }
-      };
+      return { status: 404, error: 'Producto no encontrado' };
     }
 
     this.productos.delete(id);
 
-    // Métricas
     this.metrics.increment('producto.eliminado.total');
     this.metrics.gauge('producto.activos.count', this.productos.size);
 
-    // Publicar evento
-    await this.publishProductoEliminado(id, 'manual', req.correlationId || req.request_id);
+    await this.publishProductoEliminado(id, 'manual');
 
-    this.logger.info('producto.eliminado', {
-      producto_id: id,
-      correlation_id: req.correlationId || req.request_id
-    });
+    this.logger.info('producto.eliminado', { producto_id: id });
 
     return {
       status: 200,
-      data: {
-        message: 'Producto eliminado',
-        producto_id: id
-      }
+      data: { message: 'Producto eliminado', producto_id: id }
     };
   }
 
-  async handleGetStats(req) {
+  async handleGetStats() {
     const productosPorCategoria = {};
     const productosActivos = Array.from(this.productos.values()).filter(p => p.activo);
 
@@ -419,24 +422,24 @@ class ProductosModule {
     };
   }
 
-  async handleHealthCheck(req) {
+  async handleHealthCheck() {
     return {
       status: 200,
       data: {
         status: 'healthy',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
+        module: this.name,
         version: this.version,
         catalogo: {
           productos: this.productos.size,
           categorias: this.categorias.size,
+          ingredientes: this.ingredientes.size,
           menus_pendientes: this.menusPendientes.size
         }
       }
     };
   }
 
-  async handleGetMetrics(req) {
+  async handleGetMetrics() {
     return {
       status: 200,
       data: {
@@ -447,7 +450,9 @@ class ProductosModule {
           'catalogo.actualizado.total': this.metrics.getCounter('catalogo.actualizado.total') || 0
         },
         gauges: {
-          'producto.activos.count': this.productos.size
+          'producto.activos.count': this.productos.size,
+          'categorias.count': this.categorias.size,
+          'ingredientes.count': this.ingredientes.size
         }
       }
     };
@@ -514,26 +519,19 @@ class ProductosModule {
       categorias_nuevas: 0
     };
 
-    // Sincronizar categorías primero
     for (const cat of categorias) {
       if (!this.categorias.has(cat.id)) {
-        this.categorias.set(cat.id, {
-          ...cat,
-          activa: true
-        });
+        this.categorias.set(cat.id, { ...cat, activa: true });
         stats.categorias_nuevas++;
       }
     }
 
-    // Marcar productos existentes como inactivos (serán reactivados si están en el nuevo menú)
     const productosExistentes = new Set(this.productos.keys());
 
-    // Sincronizar productos
     for (const prod of productos) {
       const productoExistente = this.productos.get(prod.id);
 
       if (productoExistente) {
-        // Actualizar producto existente
         const productoActualizado = {
           ...productoExistente,
           ...prod,
@@ -547,7 +545,6 @@ class ProductosModule {
         await this.publishProductoActualizado(prod.id, { menu_source_id: menu_id }, correlation_id);
 
       } else {
-        // Crear nuevo producto
         const nuevoProducto = {
           ...prod,
           activo: true,
@@ -562,11 +559,9 @@ class ProductosModule {
         await this.publishProductoCreado(nuevoProducto, correlation_id);
       }
 
-      // Eliminar de la lista de existentes (los que queden se desactivarán)
       productosExistentes.delete(prod.id);
     }
 
-    // Desactivar productos que no están en el nuevo menú
     for (const prod_id of productosExistentes) {
       const producto = this.productos.get(prod_id);
       if (producto && producto.activo) {

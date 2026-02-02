@@ -144,14 +144,22 @@ class CredentialManagerModule {
       const oauthClientIds = new Map(); // accountId -> clientId
       const oauthClientSecrets = new Map(); // accountId -> clientSecret
 
+      // Líneas no gestionadas que hay que preservar al guardar
+      this._unmanagedLines = [];
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
           const [key, ...valueParts] = trimmed.split('=');
           const value = valueParts.join('=');
 
-          // API Key credentials
+          // API Key credentials (formato con nivel: _API_KEY_GLOBAL, _API_KEY_PROJECT_x, etc.)
           if (key.includes('_API_KEY_')) {
+            this.credentials.set(key, value);
+            process.env[key] = value;
+          }
+          // API Key credentials (formato legacy sin nivel: DEEPSEEK_API_KEY, GOOGLE_API_KEY, etc.)
+          else if (key.endsWith('_API_KEY')) {
             this.credentials.set(key, value);
             process.env[key] = value;
           }
@@ -170,6 +178,12 @@ class CredentialManagerModule {
           // OAuth Refresh Token (GMAIL_REFRESH_TOKEN or GMAIL_REFRESH_TOKEN_accountName)
           else if (key.startsWith('GMAIL_REFRESH_TOKEN')) {
             process.env[key] = value;
+            this._unmanagedLines.push(trimmed);
+          }
+          // Cualquier otra variable: preservar
+          else {
+            process.env[key] = value;
+            this._unmanagedLines.push(trimmed);
           }
         }
       }
@@ -242,6 +256,15 @@ class CredentialManagerModule {
           }
           content += '\n';
         }
+      }
+
+      // Preservar líneas no gestionadas (refresh tokens, variables custom, etc.)
+      if (this._unmanagedLines && this._unmanagedLines.length > 0) {
+        content += '# Other variables (preserved)\n';
+        for (const line of this._unmanagedLines) {
+          content += `${line}\n`;
+        }
+        content += '\n';
       }
 
       await fs.writeFile(this.envFilePath, content);
@@ -2407,13 +2430,25 @@ class CredentialManagerModule {
   parseKey(key) {
     // Pattern: PROVIDER_API_KEY_LEVEL or PROVIDER_API_KEY_LEVEL_IDENTIFIER
     const match = key.match(/^([A-Z_]+)_API_KEY_(GLOBAL|PROJECT|CLIENT|CUSTOM|BOT)(?:_(.+))?$/);
-    if (!match) return null;
+    if (match) {
+      return {
+        provider: match[1],
+        level: match[2],
+        identifier: match[3] || null
+      };
+    }
 
-    return {
-      provider: match[1],
-      level: match[2],
-      identifier: match[3] || null
-    };
+    // Legacy pattern: PROVIDER_API_KEY (sin nivel, se trata como GLOBAL)
+    const legacyMatch = key.match(/^([A-Z_]+)_API_KEY$/);
+    if (legacyMatch) {
+      return {
+        provider: legacyMatch[1],
+        level: 'GLOBAL',
+        identifier: null
+      };
+    }
+
+    return null;
   }
 
   extractLevel(key) {

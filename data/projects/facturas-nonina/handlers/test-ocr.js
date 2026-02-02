@@ -86,6 +86,12 @@ module.exports = {
       const d = result.data || result;
       const texto = d.text || 'Sin texto extraido';
 
+      // Guardar texto OCR para siguiente paso (estructurar)
+      const ocrDir = path.join(process.cwd(), 'data/projects', projectId, 'storage', 'ocr');
+      if (!fs.existsSync(ocrDir)) fs.mkdirSync(ocrDir, { recursive: true });
+      const ocrPath = path.join(ocrDir, `ocr_${Date.now()}.txt`);
+      fs.writeFileSync(ocrPath, texto, 'utf-8');
+
       // Truncar para Telegram (max 4096 chars)
       const textoTelegram = texto.length > 3000
         ? texto.substring(0, 3000) + '\n\n... (truncado)'

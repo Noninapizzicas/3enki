@@ -1,0 +1,227 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pizzepos.com/schemas/menu-generator-events.json",
+  "title": "Menu Generator Events Schema",
+  "description": "Esquemas de eventos del módulo menu-generator",
+
+  "definitions": {
+    "event_envelope": {
+      "type": "object",
+      "required": ["event_id", "event_type", "correlation_id", "occurred_at", "producer", "schema_version", "payload"],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID único del evento"
+        },
+        "event_type": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.[a-z_]+$",
+          "description": "Tipo de evento (ej: menu.generado)"
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID de correlación para tracing"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp del evento"
+        },
+        "producer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Módulo que produjo el evento"
+        },
+        "schema_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Versión del schema"
+        },
+        "payload": {
+          "type": "object",
+          "description": "Datos del evento"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ai_request": {
+      "allOf": [
+        {"$ref": "#/definitions/event_envelope"},
+        {
+          "properties": {
+            "event_type": {"const": "ai.request"},
+            "payload": {
+              "type": "object",
+              "required": ["request_id", "type", "prompt_id", "data"],
+              "properties": {
+                "request_id": {
+                  "type": "string",
+                  "description": "ID de la solicitud"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["menu_parse", "image_ocr", "text_extraction"]
+                },
+                "prompt_id": {
+                  "type": "string",
+                  "description": "ID del prompt en prompt-manager"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "file_url": {"type": "string"},
+                    "file_type": {"type": "string"},
+                    "context": {"type": "object"}
+                  }
+                },
+                "options": {
+                  "type": "object",
+                  "properties": {
+                    "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+                    "max_tokens": {"type": "integer", "minimum": 1}
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "menu_generado": {
+      "allOf": [
+        {"$ref": "#/definitions/event_envelope"},
+        {
+          "properties": {
+            "event_type": {"const": "menu.generado"},
+            "payload": {
+              "type": "object",
+              "required": ["menu_id", "productos", "categorias"],
+              "properties": {
+                "menu_id": {
+                  "type": "string",
+                  "pattern": "^menu_[a-z0-9]+$"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "tipo": {"type": "string"},
+                    "url": {"type": "string"}
+                  }
+                },
+                "productos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "nombre", "categoria", "precio"],
+                    "properties": {
+                      "id": {"type": "string"},
+                      "nombre": {"type": "string"},
+                      "emoji": {"type": "string"},
+                      "categoria": {"type": "string"},
+                      "precio": {"type": "number"},
+                      "ingredientes_base": {"type": "array"},
+                      "alergenos": {"type": "array"},
+                      "variaciones": {"type": "object"}
+                    }
+                  },
+                  "minItems": 1
+                },
+                "categorias": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {"type": "string"},
+                      "nombre": {"type": "string"},
+                      "emoji": {"type": "string"}
+                    }
+                  }
+                },
+                "ingredientes_catalogo": {
+                  "type": "array",
+                  "description": "Catálogo unificado de ingredientes"
+                },
+                "estadisticas": {
+                  "type": "object",
+                  "properties": {
+                    "total_productos": {"type": "integer"},
+                    "total_categorias": {"type": "integer"},
+                    "total_ingredientes": {"type": "integer"},
+                    "tiempo_procesamiento": {"type": "integer"}
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "menu_validado": {
+      "allOf": [
+        {"$ref": "#/definitions/event_envelope"},
+        {
+          "properties": {
+            "event_type": {"const": "menu.validado"},
+            "payload": {
+              "type": "object",
+              "required": ["menu_id", "validado_por"],
+              "properties": {
+                "menu_id": {"type": "string"},
+                "validado_por": {"type": "string"},
+                "correcciones": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "producto_id": {"type": "string"},
+                      "campo": {"type": "string"},
+                      "valor_anterior": {},
+                      "valor_nuevo": {}
+                    }
+                  }
+                },
+                "validated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "menu_error": {
+      "allOf": [
+        {"$ref": "#/definitions/event_envelope"},
+        {
+          "properties": {
+            "event_type": {"const": "menu.error"},
+            "payload": {
+              "type": "object",
+              "required": ["menu_id", "error_type", "message"],
+              "properties": {
+                "menu_id": {"type": "string"},
+                "error_type": {
+                  "type": "string",
+                  "enum": ["upload_failed", "ai_processing_failed", "validation_failed", "schema_invalid"]
+                },
+                "message": {"type": "string"},
+                "details": {"type": "object"}
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

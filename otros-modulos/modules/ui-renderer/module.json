@@ -1,0 +1,117 @@
+{
+  "name": "ui-renderer",
+  "version": "1.0.0",
+  "description": "Motor de renderizado automático de UIs desde configuración JSON - 100% Event-Driven",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "services": [
+      "ui.render",
+      "component.render",
+      "layout.render"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "ui.rendered",
+        "description": "UI renderizada exitosamente",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "module": {"type": "string"},
+            "view": {"type": "string"},
+            "components": {"type": "array"}
+          }
+        }
+      },
+      {
+        "event": "ui.render_error",
+        "description": "Error al renderizar UI",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "module": {"type": "string"},
+            "error": {"type": "string"}
+          }
+        }
+      }
+    ],
+    "subscribes": []
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/ui/:module/:view?",
+      "handler": "handleRenderUI",
+      "description": "Renderizar vista de un módulo (view por defecto: main)"
+    },
+    {
+      "method": "GET",
+      "path": "/component/:name",
+      "handler": "handleGetComponent",
+      "description": "Obtener definición de un componente"
+    },
+    {
+      "method": "POST",
+      "path": "/component/:name/render",
+      "handler": "handleRenderComponent",
+      "description": "Renderizar un componente con datos"
+    },
+    {
+      "method": "GET",
+      "path": "/components",
+      "handler": "handleListComponents",
+      "description": "Listar todos los componentes disponibles"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ui.rendered.total",
+        "ui.render_error.total",
+        "component.rendered.total"
+      ],
+      "gauges": [
+        "ui.active_views.count",
+        "components.loaded.count"
+      ],
+      "timings": [
+        "ui.render.duration",
+        "component.load.duration"
+      ]
+    }
+  },
+
+  "config": {
+    "components_path": "../../ui-components",
+    "templates_path": "./templates",
+    "cache_enabled": true,
+    "cache_ttl": 300000,
+    "mqtt": {
+      "inject_client": true,
+      "client_url": "ws://localhost:1884"
+    }
+  }
+}

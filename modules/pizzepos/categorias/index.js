@@ -1,20 +1,25 @@
 /**
- * Módulo Categorias v1.0
+ * Módulo Categorias v2.0
  * Catálogo de categorías - Actualizado desde menús generados por IA
+ * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ *
+ * Emite: categoria.creada, categoria.actualizada, categoria.orden_actualizado
+ * Consume: menu.generado
  */
 
 class CategoriasModule {
   constructor() {
     this.name = 'categorias';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
-    // Estado
-    this.categorias = new Map(); // categoria_id -> categoria
-
-    // Dependencias (inyectadas)
+    // Dependencias (inyectadas en onLoad)
+    this.eventBus = null;
     this.logger = null;
     this.metrics = null;
-    this.eventBus = null;
+    this.uiHandler = null;
+
+    // Estado en memoria
+    this.categorias = new Map(); // categoria_id -> categoria
   }
 
   // ==========================================
@@ -25,16 +30,52 @@ class CategoriasModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.uiHandler = core.uiHandler;
 
-    this.logger.info('modulo.loading', { module: this.name });
+    this.logger.info('module.loading', { module: this.name, version: this.version });
 
     await this.subscribeToEvents();
+    this.registerUIHandlers();
 
-    this.logger.info('modulo.loaded', { module: this.name });
+    this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
-    this.logger.info('modulo.unloading', { module: this.name });
+    this.logger.info('module.unloading', { module: this.name });
+
+    if (this.uiHandler) {
+      const actions = ['list', 'get', 'create', 'update', 'reorder', 'health', 'metrics'];
+      for (const action of actions) {
+        this.uiHandler.unregister('categorias', action);
+      }
+    }
+
+    this.categorias.clear();
+
+    this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // UI Handler Registration
+  // ==========================================
+
+  registerUIHandlers() {
+    if (!this.uiHandler) {
+      this.logger.warn('categorias.uiHandler.not_available', { module: this.name });
+      return;
+    }
+
+    this.uiHandler.register('categorias', 'list', this.handleListCategorias.bind(this));
+    this.uiHandler.register('categorias', 'get', this.handleGetCategoria.bind(this));
+    this.uiHandler.register('categorias', 'create', this.handleCreateCategoria.bind(this));
+    this.uiHandler.register('categorias', 'update', this.handleUpdateCategoria.bind(this));
+    this.uiHandler.register('categorias', 'reorder', this.handleReorderCategorias.bind(this));
+    this.uiHandler.register('categorias', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('categorias', 'metrics', this.handleGetMetrics.bind(this));
+
+    this.logger.info('categorias.ui_handlers.registered', {
+      handlers: ['list', 'get', 'create', 'update', 'reorder', 'health', 'metrics']
+    });
   }
 
   // ==========================================
@@ -43,10 +84,20 @@ class CategoriasModule {
 
   async subscribeToEvents() {
     await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
+
+    this.logger.info('categorias.events.subscribed', {
+      events: ['menu.generado']
+    });
   }
 
+  // ==========================================
+  // Event Handlers
+  // ==========================================
+
   async onMenuGenerado(event) {
-    const { categorias } = event.payload;
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { categorias } = eventData;
 
     if (!categorias || categorias.length === 0) {
       return;
@@ -54,7 +105,7 @@ class CategoriasModule {
 
     this.logger.info('menu.generado.received', {
       categorias_count: categorias.length,
-      correlation_id: event.correlation_id
+      correlation_id: correlationId
     });
 
     let nuevas = 0;
@@ -64,7 +115,6 @@ class CategoriasModule {
       const existente = this.categorias.get(cat.id);
 
       if (!existente) {
-        // Crear nueva categoría
         const categoria = {
           id: cat.id,
           nombre: cat.nombre,
@@ -79,10 +129,9 @@ class CategoriasModule {
         nuevas++;
 
         this.metrics.increment('categoria.creada.total');
-        await this.publishCategoriaCreada(categoria, event.correlation_id);
+        await this.publishCategoriaCreada(categoria, correlationId);
 
       } else {
-        // Actualizar existente (emoji, nombre, etc)
         const cambios = {};
         if (cat.emoji && cat.emoji !== existente.emoji) {
           cambios.emoji = { anterior: existente.emoji, nuevo: cat.emoji };
@@ -98,7 +147,7 @@ class CategoriasModule {
           this.categorias.set(cat.id, existente);
           actualizadas++;
 
-          await this.publishCategoriaActualizada(cat.id, cambios, event.correlation_id);
+          await this.publishCategoriaActualizada(cat.id, cambios, correlationId);
         }
       }
     }
@@ -112,62 +161,47 @@ class CategoriasModule {
       nuevas,
       actualizadas,
       total: this.categorias.size,
-      correlation_id: event.correlation_id
+      correlation_id: correlationId
     });
   }
 
   // ==========================================
-  // HTTP API Handlers
+  // UI Handlers (MQTT Request/Response)
   // ==========================================
 
-  async handleListCategorias(req) {
+  async handleListCategorias() {
     const categorias = Array.from(this.categorias.values())
       .filter(c => c.activa)
       .sort((a, b) => a.orden - b.orden);
 
     return {
       status: 200,
-      data: {
-        categorias,
-        total: categorias.length
-      }
+      data: { categorias, total: categorias.length }
     };
   }
 
-  async handleGetCategoria(req) {
-    const { id } = req.params;
+  async handleGetCategoria(data) {
+    const { id } = data;
     const categoria = this.categorias.get(id);
 
     if (!categoria) {
-      return {
-        status: 404,
-        data: { error: 'Categoría no encontrada' }
-      };
+      return { status: 404, error: 'Categoría no encontrada' };
     }
 
-    return {
-      status: 200,
-      data: categoria
-    };
+    return { status: 200, data: categoria };
   }
 
-  async handleCreateCategoria(req) {
-    const { nombre, emoji, descripcion, color } = req.body;
+  async handleCreateCategoria(data) {
+    const { nombre, emoji, descripcion, color } = data;
 
     if (!nombre) {
-      return {
-        status: 400,
-        data: { error: 'nombre requerido' }
-      };
+      return { status: 400, error: 'nombre requerido' };
     }
 
     const categoria_id = `cat_${this.slugify(nombre)}`;
 
     if (this.categorias.has(categoria_id)) {
-      return {
-        status: 409,
-        data: { error: 'Categoría ya existe' }
-      };
+      return { status: 409, error: 'Categoría ya existe' };
     }
 
     const categoria = {
@@ -185,30 +219,22 @@ class CategoriasModule {
     this.categorias.set(categoria_id, categoria);
 
     this.metrics.increment('categoria.creada.total');
-    await this.publishCategoriaCreada(categoria, req.correlationId || req.request_id);
+    await this.publishCategoriaCreada(categoria);
 
     this.logger.info('categoria.creada', {
       categoria_id,
-      nombre,
-      correlation_id: req.correlationId || req.request_id
+      nombre
     });
 
-    return {
-      status: 201,
-      data: categoria
-    };
+    return { status: 201, data: categoria };
   }
 
-  async handleUpdateCategoria(req) {
-    const { id } = req.params;
-    const updates = req.body;
+  async handleUpdateCategoria(data) {
+    const { id, ...updates } = data;
 
     const categoria = this.categorias.get(id);
     if (!categoria) {
-      return {
-        status: 404,
-        data: { error: 'Categoría no encontrada' }
-      };
+      return { status: 404, error: 'Categoría no encontrada' };
     }
 
     const cambios = {};
@@ -223,28 +249,21 @@ class CategoriasModule {
     this.categorias.set(id, categoria);
 
     this.metrics.increment('categoria.actualizada.total');
-    await this.publishCategoriaActualizada(id, cambios, req.correlationId || req.request_id);
+    await this.publishCategoriaActualizada(id, cambios);
 
     this.logger.info('categoria.actualizada', {
       categoria_id: id,
-      cambios,
-      correlation_id: req.correlationId || req.request_id
+      cambios_count: Object.keys(cambios).length
     });
 
-    return {
-      status: 200,
-      data: categoria
-    };
+    return { status: 200, data: categoria };
   }
 
-  async handleReorderCategorias(req) {
-    const { orden } = req.body;
+  async handleReorderCategorias(data) {
+    const { orden } = data;
 
     if (!orden || !Array.isArray(orden)) {
-      return {
-        status: 400,
-        data: { error: 'orden array requerido' }
-      };
+      return { status: 400, error: 'orden array requerido' };
     }
 
     const nuevo_orden = [];
@@ -263,29 +282,24 @@ class CategoriasModule {
       }
     });
 
-    await this.publishOrdenActualizado(nuevo_orden, req.correlationId || req.request_id);
+    await this.publishOrdenActualizado(nuevo_orden);
 
     this.logger.info('categorias.reordenadas', {
-      count: nuevo_orden.length,
-      correlation_id: req.correlationId || req.request_id
+      count: nuevo_orden.length
     });
 
     return {
       status: 200,
-      data: {
-        message: 'Orden actualizado',
-        nuevo_orden
-      }
+      data: { message: 'Orden actualizado', nuevo_orden }
     };
   }
 
-  async handleHealthCheck(req) {
+  async handleHealthCheck() {
     return {
       status: 200,
       data: {
         status: 'healthy',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
+        module: this.name,
         version: this.version,
         catalogo: {
           total: this.categorias.size,
@@ -295,7 +309,7 @@ class CategoriasModule {
     };
   }
 
-  async handleGetMetrics(req) {
+  async handleGetMetrics() {
     return {
       status: 200,
       data: {

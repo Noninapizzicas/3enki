@@ -130,10 +130,23 @@ class DeepSeekProvider extends BaseProvider {
       'Authorization': `Bearer ${this.apiKey}`
     };
 
-    // Make request with retry
+    // Sin retry para visión (imágenes base64 son pesadas, reintentar no ayuda)
+    const retryConfig = hasImages
+      ? { max_attempts: 1 }
+      : (options.retryConfig || {});
+
+    this.logger.info('deepseek.chat.request', {
+      model,
+      hasImages,
+      messageCount: processedMessages.length,
+      estimatedTokens,
+      max_tokens: requestData.max_tokens
+    });
+
+    // Make request
     const response = await this.withRetry(
       () => this.makeRequest('POST', '/chat/completions', requestData, headers),
-      options.retryConfig || {}
+      retryConfig
     );
 
     // Extract response

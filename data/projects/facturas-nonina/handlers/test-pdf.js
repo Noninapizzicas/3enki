@@ -62,6 +62,7 @@ module.exports = {
     let convertidos = 0;
     let totalPaginas = 0;
     let errores = 0;
+    let primerError = '';
 
     for (const pdf of pdfs) {
       try {
@@ -82,6 +83,7 @@ module.exports = {
 
       } catch (error) {
         errores++;
+        if (!primerError) primerError = `${pdf.name}: ${error.message}`;
         logger.error('test-pdf.error', { archivo: pdf.name, error: error.message });
       }
     }
@@ -91,6 +93,7 @@ module.exports = {
       `PDFs procesados: ${convertidos}/${pdfs.length}`,
       `Paginas generadas: ${totalPaginas}`,
       errores > 0 ? `Errores: ${errores}` : '',
+      primerError ? `Primer error: ${primerError}` : '',
       `Guardadas en: storage/preprocesadas/`
     ].filter(Boolean).join('\n');
 

@@ -453,6 +453,7 @@ class ChatAiBridgeModule {
 
   /**
    * Step 4: Call AI via ai-gateway
+   * Supports streaming: publishes chunks to MQTT conversation/{id}/message
    */
   async callAI(flowState, messages) {
     const { flowId, conversation_id, use_tools, correlation_id } = flowState;
@@ -463,9 +464,45 @@ class ChatAiBridgeModule {
     const toolTimeout = this.config.aiTimeoutWithTools || 180000;
     const timeout = use_tools ? toolTimeout : baseTimeout;
 
+    // Streaming: accumulate chunks and forward to frontend via MQTT
+    let accumulatedContent = '';
+    let chunkUnsub = null;
+    const streamingMsgId = crypto.randomUUID();
+    const mqttClient = this.uiHandler?.mqtt;
+    const canStream = !!mqttClient;
+
+    if (canStream) {
+      // Subscribe to chunk events BEFORE sending the request
+      chunkUnsub = await this.eventBus.subscribe(EVENTS.AI.CHAT_CHUNK, (event) => {
+        const chunkData = event.data || event;
+        if (chunkData.request_id !== requestId) return;
+
+        if (chunkData.done) {
+          // Stream complete - publish end signal
+          mqttClient.publish('conversation/stream/end', JSON.stringify({
+            conversationId: conversation_id
+          }), { qos: 1 });
+          return;
+        }
+
+        // Accumulate delta
+        accumulatedContent += chunkData.delta || '';
+
+        // Forward to frontend via MQTT
+        mqttClient.publish(`conversation/${conversation_id}/message`, JSON.stringify({
+          id: streamingMsgId,
+          role: 'assistant',
+          content: accumulatedContent,
+          streaming: true,
+          timestamp: new Date().toISOString()
+        }), { qos: 0 }); // QoS 0 for speed
+      });
+    }
+
     const promise = new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingAIRequests.delete(requestId);
+        if (chunkUnsub) chunkUnsub();
         reject(new Error(`AI request timeout after ${timeout / 1000}s`));
       }, timeout);
 
@@ -473,23 +510,31 @@ class ChatAiBridgeModule {
         resolve,
         reject,
         timeout: timeoutId,
-        flowId
+        flowId,
+        chunkUnsub // store for cleanup
       });
     });
 
     await this.eventBus.publish(EVENTS.AI.CHAT_REQUEST, {
       request_id: requestId,
       messages,
-      // When tools=true, ai-gateway loads tools automatically
       tools: use_tools,
-      // When execute_tools=true, ai-gateway handles the tool loop
       execute_tools: use_tools,
       max_tool_iterations: this.config.maxToolIterations || 10,
       provider: 'auto',
+      stream: canStream,
       correlation_id
     });
 
-    return await promise;
+    try {
+      const result = await promise;
+      return result;
+    } finally {
+      // Always cleanup chunk subscription
+      if (chunkUnsub) {
+        await chunkUnsub();
+      }
+    }
   }
 
   /**

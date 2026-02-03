@@ -111,14 +111,34 @@ export async function sendMessage(content: string): Promise<void> {
     // Añadir mensaje del asistente si existe (está en response.data)
     const data = response?.data;
     if (data?.assistant_message) {
-      const assistantMsg: Message = {
-        id: data.assistant_message.id || crypto.randomUUID(),
-        role: 'assistant',
-        content: data.assistant_message.content,
-        timestamp: data.assistant_message.created_at || new Date().toISOString(),
-        metadata: data.assistant_message.metadata
-      };
-      messages.update(msgs => [...msgs, assistantMsg]);
+      messages.update(msgs => {
+        const lastIdx = msgs.length - 1;
+        const lastMsg = msgs[lastIdx];
+
+        // If streaming already added this message, finalize it with server data
+        if (lastMsg?.role === 'assistant' && lastMsg.streaming) {
+          return [
+            ...msgs.slice(0, lastIdx),
+            {
+              ...lastMsg,
+              id: data.assistant_message.id || lastMsg.id,
+              content: data.assistant_message.content || lastMsg.content,
+              timestamp: data.assistant_message.created_at || lastMsg.timestamp,
+              metadata: data.assistant_message.metadata,
+              streaming: false
+            }
+          ];
+        }
+
+        // No streaming happened: add the message normally
+        return [...msgs, {
+          id: data.assistant_message.id || crypto.randomUUID(),
+          role: 'assistant',
+          content: data.assistant_message.content,
+          timestamp: data.assistant_message.created_at || new Date().toISOString(),
+          metadata: data.assistant_message.metadata
+        }];
+      });
     }
 
     // Actualizar conversationId si se creó una nueva
@@ -127,6 +147,7 @@ export async function sendMessage(content: string): Promise<void> {
     }
 
     isStreaming.set(false);
+    streamingMessageId.set(null);
   } catch (error) {
     console.error('[chat] Error sending message:', error);
     isStreaming.set(false);

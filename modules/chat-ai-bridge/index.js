@@ -259,6 +259,18 @@ class ChatAiBridgeModule {
       const assistantMessage = await this.saveAssistantMessage(flowState, aiResponse);
       flowState.assistantMessageId = assistantMessage?.id;
 
+      // Step 6b: Publish final complete message to MQTT (safety net for lost streaming chunks)
+      const mqttClient = this.uiHandler?.mqtt;
+      if (mqttClient && assistantMessage) {
+        mqttClient.publish(`conversation/${conversation_id}/message`, JSON.stringify({
+          id: assistantMessage.id,
+          role: 'assistant',
+          content: aiResponse.content || assistantMessage.content || '',
+          streaming: false,
+          timestamp: assistantMessage.created_at || new Date().toISOString()
+        }), { qos: 1 }); // QoS 1 para garantizar entrega
+      }
+
       // Step 7: Send success response
       flowState.stage = 'completed';
       const duration = Date.now() - flowState.startTime;

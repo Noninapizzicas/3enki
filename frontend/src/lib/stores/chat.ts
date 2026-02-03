@@ -109,7 +109,7 @@ export async function sendMessage(content: string): Promise<void> {
         path: a.path,
         name: a.name
       }))
-    }, { timeout: 60000 }); // 60s para respuestas de IA
+    }, { timeout: 180000 }); // 180s para respuestas de IA con herramientas
 
     // Añadir mensaje del asistente si existe (está en response.data)
     const data = response?.data;
@@ -165,16 +165,27 @@ export async function sendMessage(content: string): Promise<void> {
  */
 export function addMessage(message: Message): void {
   messages.update(msgs => {
-    // Si es streaming y es del asistente, actualizar el último
-    if (message.streaming && message.role === 'assistant') {
-      const lastIdx = msgs.length - 1;
-      const lastMsg = msgs[lastIdx];
+    const lastIdx = msgs.length - 1;
+    const lastMsg = msgs[lastIdx];
 
-      if (lastMsg?.role === 'assistant' && lastMsg.streaming) {
-        // Actualizar contenido del mensaje existente
+    if (message.role === 'assistant' && lastMsg?.role === 'assistant') {
+      if (message.streaming) {
+        // Chunk de streaming: actualizar contenido del mensaje existente
         return [
           ...msgs.slice(0, lastIdx),
-          { ...lastMsg, content: message.content }
+          { ...lastMsg, content: message.content, streaming: true }
+        ];
+      } else {
+        // Mensaje final (sin streaming): finalizar el mensaje existente con datos completos
+        return [
+          ...msgs.slice(0, lastIdx),
+          {
+            ...lastMsg,
+            id: message.id || lastMsg.id,
+            content: message.content || lastMsg.content,
+            timestamp: message.timestamp || lastMsg.timestamp,
+            streaming: false
+          }
         ];
       }
     }
@@ -184,6 +195,9 @@ export function addMessage(message: Message): void {
 
   if (message.streaming) {
     streamingMessageId.set(message.id);
+  } else if (message.role === 'assistant') {
+    // Mensaje final recibido - limpiar streaming
+    streamingMessageId.set(null);
   }
 }
 

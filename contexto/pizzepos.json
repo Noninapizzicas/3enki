@@ -1,0 +1,244 @@
+{
+  "_VERSION": "3.0.0",
+  "_CREATED": "2026-02-03",
+  "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
+
+  "resumen": {
+    "que_es": "Sistema de punto de venta (POS) para pizzerías con 5 canales de venta, gestión de cocina, catálogo de productos y persistencia de ventas",
+    "ubicacion": "modules/pizzepos/",
+    "total_modulos": 12,
+    "total_uiHandlers": "95+",
+    "total_eventos": "40+ publicados, 20+ suscritos",
+    "patron_principal": "Event sourcing — todos los eventos se graban y se reconstruyen ventas desde el stream"
+  },
+
+  "arquitectura": {
+    "module_loader": {
+      "nota": "El loader de módulos (core/modules/loader.js) escanea subdirectorios recursivamente",
+      "comportamiento": "Si un directorio en modules/ no tiene module.json, busca en subdirectorios",
+      "ejemplo": "modules/pizzepos/ no tiene module.json → escanea modules/pizzepos/pedidos/, modules/pizzepos/cobros/, etc."
+    },
+    "flujo_principal": [
+      "1. comandero (camarero) → crea pedido en canal",
+      "2. cuentas-canales → registra cuenta según canal (mesa/telefono/llevar/glovo/whatsapp)",
+      "3. pedidos → gestiona ciclo de vida del pedido (ítems, variaciones, estado)",
+      "4. cocina → recibe pedido, gestiona preparación por estaciones",
+      "5. cobros → procesa pago (efectivo/tarjeta/mixto)",
+      "6. cuentas-canales → cierra cuenta automáticamente tras cobro",
+      "7. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
+    ],
+    "evento_critico": {
+      "nombre": "cobro.procesado",
+      "flujo": "cobros publica → cuentas-canales detecta canal por prefijo de cuenta_id → cierra cuenta automáticamente",
+      "prefijos": {
+        "mesa_": "MesaStrategy",
+        "tel_": "TelefonoStrategy",
+        "llevar_": "LlevarStrategy",
+        "glovo_": "GlovoStrategy",
+        "wa_": "WhatsAppStrategy"
+      }
+    }
+  },
+
+  "modulos": {
+    "cuentas-canales": {
+      "version": "3.0.0",
+      "descripcion": "Sistema unificado de canales de venta con Strategy pattern — reemplaza cuentas-mesa + cuentas-telefono + cuentas-llevar",
+      "patron": "Composición con Strategy — 1 módulo base + 5 strategies independientes",
+      "estructura": {
+        "index.js": "Módulo base: lifecycle, cobro.procesado routing por prefijo, reseteo diario, contadores, tracking tiempos, publishers cuenta.creada/cerrada",
+        "strategies/mesa.js": "Servicio en mesa — zonas (terraza/interior/vip), capacidad, asignación de camareros",
+        "strategies/telefono.js": "Pedidos telefónicos — caller ID, CRM contactos, notificación WhatsApp",
+        "strategies/llevar.js": "Pedidos para llevar — tickets numerados, display SSE, 2 fases (listo → entregado)",
+        "strategies/glovo.js": "Delivery externo Glovo — aceptar/rechazar, notificar rider, mapeo order_id externo",
+        "strategies/whatsapp.js": "Pedidos vía WhatsApp Business API — conversaciones, auto-reply, templates configurables"
+      },
+      "ui_domains": {
+        "mesa": ["abrir", "cerrar", "asignar_camarero", "get", "disponibles", "ocupadas", "list", "health", "metrics"],
+        "telefono": ["llamada", "crear_pedido", "pendientes", "get", "marcar_listo", "contactos", "guardar_contacto", "health", "metrics"],
+        "llevar": ["crear", "marcar_listo", "entregar", "activos", "listos", "get", "health", "metrics"],
+        "glovo": ["recibir", "aceptar", "rechazar", "marcar_listo", "activos", "get", "historial", "health", "metrics"],
+        "whatsapp": ["mensaje", "crear_pedido", "confirmar", "marcar_listo", "activos", "get", "conversaciones", "enviar", "health", "metrics"],
+        "canales": ["health", "metrics", "list"]
+      },
+      "eventos_publica": [
+        "cuenta.creada", "cuenta.cerrada",
+        "mesa.abierta", "mesa.camarero_asignado", "mesa.cerrada",
+        "telefono.llamada_detectada", "telefono.contacto_identificado", "telefono.pedido_creado", "telefono.listo_para_recoger",
+        "llevar.ticket_creado", "llevar.ticket_listo", "llevar.ticket_entregado",
+        "glovo.pedido_recibido", "glovo.pedido_aceptado", "glovo.pedido_rechazado", "glovo.pedido_listo", "glovo.pedido_recogido",
+        "whatsapp.mensaje_recibido", "whatsapp.pedido_creado", "whatsapp.pedido_confirmado", "whatsapp.pedido_listo"
+      ],
+      "eventos_suscribe": ["cobro.procesado", "pedido.creado", "cocina.pedido_listo"],
+      "como_agregar_canal": [
+        "1. Crear strategies/nuevo-canal.js implementando: tipo, prefijo, version, init(), registerUIHandlers(), unregisterUIHandlers(), subscribeToEvents(), onCobroProcesado(), getHealth(), getMetrics(), getCuentasActivas(), cleanup()",
+        "2. Crear schemas/nuevo-canal.json y schemas/nuevo-canal-events.json",
+        "3. Registrar en constructor de index.js: this.registerStrategy(new NuevoCanalStrategy())",
+        "4. El routing por prefijo de cobro.procesado funciona automáticamente"
+      ]
+    },
+
+    "pedidos": {
+      "version": "2.0.0",
+      "descripcion": "Gestión del ciclo de vida de pedidos — ítems, variaciones, estados, totales",
+      "ui_domain": "pedidos",
+      "uiHandlers": ["crear", "get", "agregar_item", "eliminar_item", "aplicar_variacion", "confirmar", "cancelar", "activos", "health", "metrics", "por_cuenta"],
+      "eventos_publica": ["pedido.creado", "pedido.item_agregado", "pedido.confirmado", "pedido.cancelado"],
+      "eventos_suscribe": ["cocina.pedido_listo"],
+      "nota": "productosCache se mantiene sincronizado via catalogo.actualizado para resolver precios"
+    },
+
+    "cobros": {
+      "version": "2.0.0",
+      "descripcion": "Procesamiento de pagos — efectivo, tarjeta, mixto, con cálculo de cambio",
+      "ui_domain": "cobros",
+      "uiHandlers": ["procesar", "get", "pendientes", "anular", "resumen", "cierre", "health", "metrics"],
+      "eventos_publica": ["cobro.procesado", "cobro.anulado"],
+      "eventos_suscribe": ["pedido.confirmado"],
+      "nota": "cobro.procesado es el evento que dispara el cierre automático de cuenta en cuentas-canales"
+    },
+
+    "cocina": {
+      "version": "2.0.0",
+      "descripcion": "Gestión de cocina — recepción de pedidos, estaciones de trabajo, tiempos de preparación",
+      "ui_domain": "cocina",
+      "uiHandlers": ["pendientes", "iniciar", "completar", "get", "estaciones", "reasignar", "health", "metrics"],
+      "eventos_publica": ["cocina.pedido_recibido", "cocina.pedido_iniciado", "cocina.pedido_listo"],
+      "eventos_suscribe": ["pedido.confirmado"],
+      "nota": "cocina.pedido_listo dispara auto-notificación en canales telefono/llevar/glovo/whatsapp"
+    },
+
+    "comandero": {
+      "version": "2.0.0",
+      "descripcion": "Interfaz del camarero — puerta de entrada para tomar pedidos desde mesa",
+      "ui_domain": "comandero",
+      "uiHandlers": ["nuevo_pedido", "agregar_item", "ver_mesa", "mis_mesas", "health"],
+      "eventos_publica": ["comandero.pedido_enviado"],
+      "nota": "NO es legacy — es la interfaz principal del camarero para interactuar con mesas y pedidos"
+    },
+
+    "productos": {
+      "version": "2.1.0",
+      "descripcion": "Catálogo de productos — CRUD, sincronización desde menú AI, cache de precios",
+      "ui_domain": "productos",
+      "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "sync_menu", "validar_menu", "ingredientes", "health", "metrics"],
+      "eventos_publica": ["producto.creado", "producto.actualizado", "catalogo.actualizado"],
+      "eventos_suscribe": ["menu.generado", "menu.validado"]
+    },
+
+    "categorias": {
+      "version": "2.0.0",
+      "descripcion": "Catálogo de categorías con soporte de reordenación",
+      "ui_domain": "categorias",
+      "uiHandlers": ["crear", "actualizar", "get", "list", "eliminar", "reorder", "health"]
+    },
+
+    "ingredientes": {
+      "version": "2.0.0",
+      "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos",
+      "ui_domain": "ingredientes",
+      "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "health"],
+      "eventos_suscribe": ["menu.generado", "producto.creado"]
+    },
+
+    "variaciones": {
+      "version": "2.0.0",
+      "descripcion": "Customizaciones de productos — quitar/añadir ingredientes con recálculo de precio",
+      "ui_domain": "variaciones",
+      "uiHandlers": ["crear", "validar", "get", "por_producto", "health"],
+      "logica_negocio": "validarVariacion() es pura: valida quitar, añadir, disponibilidad, computa precio e ingredientes finales"
+    },
+
+    "menu-generator": {
+      "version": "2.0.0",
+      "descripcion": "Genera menús digitales desde fotos del menú físico via AI",
+      "ui_domain": "menu-generator",
+      "uiHandlers": ["upload", "list", "get", "validate", "health", "metrics"],
+      "eventos_publica": ["menu.generado", "menu.validado"],
+      "flujo": "Foto → upload → AI extrae productos → menu.generado → productos sincroniza catálogo"
+    },
+
+    "persistencia-comandero": {
+      "version": "2.0.0",
+      "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas",
+      "ui_domain": "persistencia",
+      "uiHandlers": ["cuentas_activas", "eventos", "eventos_fecha", "ventas", "ventas_fecha", "cuadre", "cuadre_fecha", "cierre", "iniciar_dia", "backup", "health", "metrics"],
+      "eventos_suscribe": ["cuenta.creada", "cuenta.cerrada", "pedido.creado", "pedido.confirmado", "cobro.procesado", "cocina.pedido_listo"],
+      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día"]
+    }
+  },
+
+  "patrones_comunes": {
+    "event_envelope": {
+      "descripcion": "Todos los handlers de eventos usan envelope defensivo",
+      "codigo": "const data = event?.data || event?.payload || event;",
+      "razon": "EventBus envuelve payload en event.data, pero no siempre"
+    },
+    "correlation_id": {
+      "descripcion": "ID de trazabilidad que viaja por toda la cadena de eventos",
+      "codigo": "const correlationId = event?.metadata?.correlationId;",
+      "uso": "Se propaga al publicar: eventBus.publish('evento', payload, { correlationId })"
+    },
+    "uiHandler": {
+      "registro": "this.uiHandler.register('dominio', 'accion', handler.bind(this))",
+      "signature": "async handler(data) → { status, data } o { status, error }",
+      "cleanup": "this.uiHandler.unregister('dominio', 'accion') en onUnload()"
+    },
+    "onUnload_completo": {
+      "descripcion": "Todo módulo debe limpiar en onUnload()",
+      "checklist": [
+        "clearInterval de todos los timers",
+        "unregister de todos los uiHandlers",
+        "clear() de todos los Maps y Sets",
+        "Liberar cualquier recurso (SSE clients, connections)"
+      ]
+    },
+    "reseteo_diario": {
+      "descripcion": "Contadores se resetean automáticamente al cambiar de día",
+      "implementacion": "setInterval cada 1h verifica getFechaActual() vs fecha guardada"
+    }
+  },
+
+  "mapa_eventos": {
+    "descripcion": "Flujo de eventos entre módulos — quién publica qué y quién consume",
+    "flujo_pedido_completo": {
+      "1_crear_cuenta": "cuentas-canales publica cuenta.creada",
+      "2_crear_pedido": "pedidos publica pedido.creado → cuentas-canales (mesa) actualiza total",
+      "3_confirmar_pedido": "pedidos publica pedido.confirmado → cocina recibe pedido",
+      "4_cocina_prepara": "cocina publica cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican",
+      "5_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo",
+      "6_persistencia": "persistencia-comandero graba todos los eventos anteriores"
+    }
+  },
+
+  "integraciones_externas": {
+    "glovo": {
+      "estado": "Placeholder — pendiente integración con Glovo Partner API",
+      "api_url": "https://partner-api.glovoapp.com/",
+      "config_requerida": ["glovo.api_key", "glovo.store_id"]
+    },
+    "whatsapp": {
+      "estado": "Placeholder — pendiente integración con WhatsApp Cloud API",
+      "api_url": "https://graph.facebook.com/v17.0/{phone_number_id}/messages",
+      "config_requerida": ["whatsapp_bot.phone_number_id", "whatsapp_bot.access_token"]
+    }
+  },
+
+  "mejoras_pendientes": [
+    {
+      "id": "unificar-catalogo",
+      "descripcion": "Eliminar módulos categorias e ingredientes separados — productos debería ser la única fuente de verdad del catálogo",
+      "impacto": "Reduce 2 módulos, simplifica sincronización"
+    },
+    {
+      "id": "persistencia-real",
+      "descripcion": "Actualmente TODO está en memoria (Maps) — un reinicio pierde todas las mesas, pedidos, cuentas activas",
+      "solucion": "SQLite para estado crítico (cuentas activas, pedidos, catálogo)"
+    },
+    {
+      "id": "tests",
+      "descripcion": "No hay tests para ningún módulo — prioridad en cobros, pedidos, persistencia",
+      "solucion": "Tests unitarios para lógica de negocio pura (validarVariacion, calcularCambio, etc.)"
+    }
+  ]
+}

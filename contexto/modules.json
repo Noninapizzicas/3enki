@@ -2,7 +2,12 @@
   "system": {
     "location": "modules/",
     "loader": "core/modules/loader.js",
-    "discovery": "automatic (scans modules/ directory)"
+    "discovery": "automatic (scans modules/ directory, recursive into subdirectories)",
+    "subdirectory_scanning": {
+      "descripcion": "Si un directorio en modules/ no tiene module.json, el loader escanea sus subdirectorios buscando módulos",
+      "ejemplo": "modules/pizzepos/ no tiene module.json → escanea modules/pizzepos/pedidos/, modules/pizzepos/cobros/, etc.",
+      "uso": "Permite agrupar módulos por vertical/dominio sin modificar el loader"
+    }
   },
   "module_structure": {
     "required_files": {
@@ -89,7 +94,19 @@
     "scheduler",
     "system-inspector",
     "telegram-service",
-    "ui-designer"
+    "ui-designer",
+    "pizzepos/cuentas-canales",
+    "pizzepos/pedidos",
+    "pizzepos/cobros",
+    "pizzepos/cocina",
+    "pizzepos/comandero",
+    "pizzepos/productos",
+    "pizzepos/categorias",
+    "pizzepos/ingredientes",
+    "pizzepos/variaciones",
+    "pizzepos/menu-generator",
+    "pizzepos/persistencia-comandero",
+    "pizzepos/cuentas"
   ],
   "module_categories": {
     "ai": {
@@ -123,6 +140,16 @@
     "system": {
       "description": "Módulos del sistema",
       "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas", "scheduler", "flow-engine"]
+    },
+    "pizzepos": {
+      "description": "Vertical POS pizzería — 12 módulos en modules/pizzepos/. Ver contexto/pizzepos.json para documentación completa",
+      "location": "modules/pizzepos/",
+      "modules": [
+        "cuentas-canales (5 canales: mesa, telefono, llevar, glovo, whatsapp)",
+        "pedidos", "cobros", "cocina", "comandero",
+        "productos", "categorias", "ingredientes", "variaciones",
+        "menu-generator", "persistencia-comandero", "cuentas"
+      ]
     }
   },
   "key_modules": {

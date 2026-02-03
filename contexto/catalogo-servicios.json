@@ -4,11 +4,12 @@
   "_DESCRIPTION": "Catálogo completo de servicios, módulos, utilidades y acciones del sistema Event-Core",
 
   "resumen": {
-    "total_modulos": 30,
+    "total_modulos": "42 (30 core + 12 pizzepos)",
     "total_providers": 11,
     "total_apis": "200+",
-    "total_eventos": "150+ publicados, 100+ suscritos",
-    "total_tools_ai": "50+"
+    "total_eventos": "190+ publicados, 120+ suscritos",
+    "total_tools_ai": "50+",
+    "verticales": ["pizzepos (POS pizzería, 12 módulos, 5 canales de venta)"]
   },
 
   "modulos": {
@@ -334,6 +335,59 @@
         "eventos_publica": ["nota.creada", "nota.actualizada", "nota.eliminada"],
         "caracteristicas": ["Codificación por color", "Filtrado de notas fijadas"]
       }
+    },
+
+    "pizzepos": {
+      "_nota": "Ver contexto/pizzepos.json para documentación completa",
+      "_ubicacion": "modules/pizzepos/",
+      "cuentas-canales": {
+        "version": "3.0.0",
+        "descripcion": "Sistema unificado de 5 canales de venta con Strategy pattern",
+        "strategies": ["mesa", "telefono", "llevar", "glovo", "whatsapp"],
+        "eventos_publica": ["cuenta.creada", "cuenta.cerrada", "mesa.abierta", "mesa.cerrada", "telefono.pedido_creado", "llevar.ticket_creado", "glovo.pedido_recibido", "whatsapp.pedido_creado"],
+        "eventos_suscribe": ["cobro.procesado", "pedido.creado", "cocina.pedido_listo"],
+        "ui_domains": ["mesa (9)", "telefono (9)", "llevar (8)", "glovo (9)", "whatsapp (10)", "canales (3)"]
+      },
+      "pedidos": {
+        "version": "2.0.0",
+        "descripcion": "Ciclo de vida de pedidos — ítems, variaciones, estados, totales",
+        "eventos_publica": ["pedido.creado", "pedido.item_agregado", "pedido.confirmado", "pedido.cancelado"],
+        "uiHandlers": 11
+      },
+      "cobros": {
+        "version": "2.0.0",
+        "descripcion": "Procesamiento de pagos — efectivo, tarjeta, mixto",
+        "eventos_publica": ["cobro.procesado", "cobro.anulado"],
+        "uiHandlers": 8
+      },
+      "cocina": {
+        "version": "2.0.0",
+        "descripcion": "Gestión de cocina — estaciones, preparación, tiempos",
+        "eventos_publica": ["cocina.pedido_recibido", "cocina.pedido_iniciado", "cocina.pedido_listo"],
+        "uiHandlers": 8
+      },
+      "comandero": {
+        "version": "2.0.0",
+        "descripcion": "Interfaz del camarero para tomar pedidos",
+        "uiHandlers": 5
+      },
+      "productos": {
+        "version": "2.1.0",
+        "descripcion": "Catálogo de productos con sync desde menú AI",
+        "eventos_publica": ["producto.creado", "producto.actualizado", "catalogo.actualizado"],
+        "uiHandlers": 11
+      },
+      "categorias": { "version": "2.0.0", "descripcion": "Catálogo de categorías con reorden", "uiHandlers": 7 },
+      "ingredientes": { "version": "2.0.0", "descripcion": "Catálogo de ingredientes", "uiHandlers": 7 },
+      "variaciones": { "version": "2.0.0", "descripcion": "Customizaciones de productos", "uiHandlers": 5 },
+      "menu-generator": { "version": "2.0.0", "descripcion": "Genera menús digitales desde fotos via AI", "uiHandlers": 6 },
+      "persistencia-comandero": {
+        "version": "2.0.0",
+        "descripcion": "Event sourcing — graba todos los eventos, reconstruye ventas",
+        "uiHandlers": 12,
+        "caracteristicas": ["Rotación diaria", "Archivado", "Backup", "Cuadre de caja", "Cierre del día"]
+      },
+      "cuentas": { "version": "2.1.0", "descripcion": "Módulo base de cuentas (agregación)", "uiHandlers": 6 }
     }
   },
 

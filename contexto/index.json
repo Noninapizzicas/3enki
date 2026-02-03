@@ -17,7 +17,8 @@
       "scheduling_questions": "Read scheduler.json (jobs, triggers cron/interval/event)",
       "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)",
       "learning_system": "Read learning.json (sistema de aprendizaje genérico, feedback, recomendaciones)",
-      "flow_engine": "Read flow-engine.json (motor de flows, registry, agente IA)"
+      "flow_engine": "Read flow-engine.json (motor de flows, registry, agente IA)",
+      "pizzepos_pos": "Read pizzepos.json (vertical POS pizzería: 12 módulos, 5 canales, Strategy pattern)"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -88,6 +89,11 @@
       "file": "ui-generator.json",
       "purpose": "Prompt para generar UI desde módulos backend",
       "when": "Task is to generate UI for a module"
+    },
+    {
+      "file": "pizzepos.json",
+      "purpose": "Vertical POS pizzería: 12 módulos, 5 canales de venta, Strategy pattern, event sourcing",
+      "when": "Trabajar con módulos en modules/pizzepos/, canales de venta, pedidos, cobros, cocina"
     },
     {
       "file": "chat-refactoring.json",

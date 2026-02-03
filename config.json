@@ -52,7 +52,7 @@
       "security-p2p",
       "scratch-designer"
     ],
-    "disabled": []
+    "disabled": ["cobros", "cocina", "cuentas", "cuentas-canales", "comandero", "pedidos", "persistencia-comandero", "productos", "variaciones", "ingredientes", "categorias"]
   },
   "observability": {
     "logging": {

@@ -37,6 +37,7 @@ class ModuleLoader {
     this.registry = options.registry || null;
     this.logger = options.logger || null;
     this.metrics = options.metrics || null;
+    this.config = options.config || {};
 
     /**
      * Módulos cargados
@@ -486,16 +487,31 @@ class ModuleLoader {
    */
   async loadAll() {
     const discovered = this.discover();
+    const disabled = this.config.disabled || [];
+
+    // Filter out disabled modules
+    const toLoad = disabled.length > 0
+      ? discovered.filter(m => {
+          if (disabled.includes(m.name)) {
+            if (this.logger) {
+              this.logger.info('module.skipped.disabled', { module: m.name });
+            }
+            return false;
+          }
+          return true;
+        })
+      : discovered;
 
     if (this.logger) {
       this.logger.info('modules.loading.all', {
-        count: discovered.length
+        count: toLoad.length,
+        disabled: disabled.length > 0 ? disabled.length : undefined
       });
     }
 
     const results = [];
 
-    for (const { name, path, manifest } of discovered) {
+    for (const { name, path, manifest } of toLoad) {
       try {
         await this.load(name, path, manifest);
         results.push({ name, success: true });

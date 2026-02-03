@@ -389,7 +389,8 @@ async function main() {
         core: coreContext,
         registry: core.moduleRegistry,
         logger: core.logger,
-        metrics: core.metrics
+        metrics: core.metrics,
+        config: config.modules || {}
       });
 
       // Register provider functions as AI tools (unifies tool systems)

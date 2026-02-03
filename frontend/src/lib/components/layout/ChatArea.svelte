@@ -11,14 +11,14 @@
    * - Toggle de contexto por mensaje
    */
 
-  import { messages, hasConversation, isStreaming, lastMessage, toggleMessageContext } from '$lib/stores';
+  import { messages, hasConversation, isStreaming, lastMessage, toolStatus, toggleMessageContext } from '$lib/stores';
   import { Message, ConnectionStatus } from '$lib/components/base';
   import { connected } from '$lib/ui-core';
   import { afterUpdate } from 'svelte';
   import { fade } from 'svelte/transition';
 
   // Show typing dots only when streaming AND no content has arrived yet
-  $: showTypingDots = $isStreaming && !($lastMessage?.role === 'assistant' && $lastMessage?.streaming);
+  $: showTypingDots = $isStreaming && !($lastMessage?.role === 'assistant' && $lastMessage?.streaming) && !$toolStatus;
 
   // Handler para toggle de contexto
   async function handleToggleContext(event: CustomEvent<{ id: string; inContext: boolean }>) {
@@ -65,6 +65,18 @@
       {#each $messages as message (message.id)}
         <Message {message} on:toggleContext={handleToggleContext} />
       {/each}
+
+      <!-- Tool execution indicator -->
+      {#if $toolStatus}
+        <div class="tool-indicator" transition:fade={{ duration: 150 }}>
+          <span class="tool-icon">{$toolStatus.status === 'executing' ? '⚙️' : $toolStatus.status === 'error' ? '❌' : '✅'}</span>
+          <span class="tool-text">
+            {$toolStatus.status === 'executing' ? `Ejecutando ${$toolStatus.name}...` :
+             $toolStatus.status === 'error' ? `Error en ${$toolStatus.name}` :
+             `${$toolStatus.name} completado`}
+          </span>
+        </div>
+      {/if}
 
       <!-- Typing indicator: only show when waiting for first chunk -->
       {#if showTypingDots}
@@ -119,6 +131,28 @@
     flex-direction: column;
     gap: 0.75rem;
     width: 100%;
+  }
+
+  /* Tool execution indicator */
+  .tool-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    background: var(--color-surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.75rem;
+    width: fit-content;
+  }
+
+  .tool-icon {
+    font-size: 0.875rem;
+  }
+
+  .tool-text {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #a3a3a3);
+    font-style: italic;
   }
 
   /* Typing indicator */

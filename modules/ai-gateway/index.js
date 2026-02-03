@@ -282,13 +282,21 @@ class AIGatewayModule {
     });
 
     try {
-      // Build onChunk callback for streaming
-      const onChunk = stream ? (delta) => {
-        this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
-          request_id,
-          delta,
-          done: false
-        });
+      // Build onChunk callback for streaming (handles text deltas and tool status)
+      const onChunk = stream ? (data) => {
+        if (typeof data === 'object' && data.tool) {
+          this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
+            request_id,
+            tool: data.tool,
+            done: false
+          });
+        } else {
+          this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
+            request_id,
+            delta: typeof data === 'string' ? data : '',
+            done: false
+          });
+        }
       } : null;
 
       // Procesar la solicitud
@@ -696,8 +704,23 @@ class AIGatewayModule {
 
         // Parse and execute tool calls
         const toolCalls = this.parseToolCallsFromProvider(result, providerName);
+
+        // Notify frontend: tools are being executed
+        if (onChunk) {
+          for (const tc of toolCalls) {
+            onChunk({ tool: { name: tc.name, status: 'executing' } });
+          }
+        }
+
         const toolResults = await this.executeToolCalls(toolCalls, context);
         allToolResults.push(...toolResults);
+
+        // Notify frontend: tools completed
+        if (onChunk) {
+          for (const tr of toolResults) {
+            onChunk({ tool: { name: tr.name, status: tr.status === 'error' ? 'error' : 'completed' } });
+          }
+        }
 
         // Check if any tool requires confirmation (pause the loop)
         const pendingConfirmation = toolResults.find(r => r.requires_confirmation);
@@ -719,6 +742,17 @@ class AIGatewayModule {
         // Add tool results to conversation
         const toolResultMessages = this.formatToolResultsForProvider(toolResults, providerName);
         messages.push(...toolResultMessages);
+      }
+
+      // Post-hoc streaming: when tools were active, real-time streaming was
+      // not possible. Simulate typewriter effect by publishing content progressively.
+      if (stream && onChunk && !useRealStreaming && result?.content) {
+        const content = result.content;
+        const chunkSize = 12;
+        for (let i = 0; i < content.length; i += chunkSize) {
+          onChunk(content.slice(i, i + chunkSize));
+          await new Promise(r => setTimeout(r, 10));
+        }
       }
 
       const latencyMs = Date.now() - startTime;

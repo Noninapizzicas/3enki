@@ -21,6 +21,7 @@ export const messages = writable<Message[]>([]);
 export const conversationId = writable<string | null>(null);
 export const isStreaming = writable<boolean>(false);
 export const streamingMessageId = writable<string | null>(null);
+export const toolStatus = writable<{ name: string; status: string } | null>(null);
 
 // ============================================================================
 // STORES DERIVADOS
@@ -186,6 +187,7 @@ export function addMessage(message: Message): void {
  */
 export function endStreaming(): void {
   isStreaming.set(false);
+  toolStatus.set(null);
 
   // Marcar último mensaje como no-streaming
   messages.update(msgs => {
@@ -284,8 +286,17 @@ export function initChatSubscriptions(): () => void {
     });
   }));
 
+  // Tool status
+  unsubs.push(subscribe('conversation/+/tool-status', (topic, payload) => {
+    const data = payload as { tool: { name: string; status: string } };
+    if (data.tool) {
+      toolStatus.set(data.tool);
+    }
+  }));
+
   // Fin de streaming
   unsubs.push(subscribe('conversation/stream/end', () => {
+    toolStatus.set(null);
     endStreaming();
   }));
 

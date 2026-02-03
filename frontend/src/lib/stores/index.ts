@@ -67,6 +67,7 @@ export {
   lastMessage,
   userMessages,
   assistantMessages,
+  toolStatus,
   sendMessage,
   addMessage,
   endStreaming,

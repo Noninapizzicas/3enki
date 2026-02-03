@@ -485,6 +485,15 @@ class ChatAiBridgeModule {
           return;
         }
 
+        // Tool status event - forward to dedicated topic
+        if (chunkData.tool) {
+          mqttClient.publish(`conversation/${conversation_id}/tool-status`, JSON.stringify({
+            tool: chunkData.tool,
+            timestamp: new Date().toISOString()
+          }), { qos: 0 });
+          return;
+        }
+
         // Accumulate delta
         accumulatedContent += chunkData.delta || '';
 

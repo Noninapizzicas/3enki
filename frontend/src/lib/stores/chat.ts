@@ -208,6 +208,14 @@ export function endStreaming(): void {
 }
 
 /**
+ * Stop generation - detiene la recepcion de streaming
+ * Mantiene el contenido parcial que ya se recibio
+ */
+export function stopGeneration(): void {
+  endStreaming();
+}
+
+/**
  * Cargar conversación
  */
 export async function loadConversation(id: string): Promise<void> {

@@ -70,6 +70,7 @@ export {
   sendMessage,
   addMessage,
   endStreaming,
+  stopGeneration,
   loadConversation,
   newConversation,
   clearMessages,

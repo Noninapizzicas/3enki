@@ -11,11 +11,14 @@
    * - Toggle de contexto por mensaje
    */
 
-  import { messages, hasConversation, isStreaming, toggleMessageContext } from '$lib/stores';
+  import { messages, hasConversation, isStreaming, lastMessage, toggleMessageContext } from '$lib/stores';
   import { Message, ConnectionStatus } from '$lib/components/base';
   import { connected } from '$lib/ui-core';
   import { afterUpdate } from 'svelte';
   import { fade } from 'svelte/transition';
+
+  // Show typing dots only when streaming AND no content has arrived yet
+  $: showTypingDots = $isStreaming && !($lastMessage?.role === 'assistant' && $lastMessage?.streaming);
 
   // Handler para toggle de contexto
   async function handleToggleContext(event: CustomEvent<{ id: string; inContext: boolean }>) {
@@ -63,15 +66,15 @@
         <Message {message} on:toggleContext={handleToggleContext} />
       {/each}
 
-      <!-- Typing indicator -->
-      {#if $isStreaming}
+      <!-- Typing indicator: only show when waiting for first chunk -->
+      {#if showTypingDots}
         <div class="typing-indicator" transition:fade={{ duration: 150 }}>
           <div class="typing-dots">
             <span></span>
             <span></span>
             <span></span>
           </div>
-          <span class="typing-text">Escribiendo...</span>
+          <span class="typing-text">Generando...</span>
         </div>
       {/if}
     </div>

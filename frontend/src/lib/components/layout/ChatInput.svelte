@@ -10,7 +10,7 @@
    */
 
   import { hasAttachments } from '$lib/stores/attachments';
-  import { sendMessage, isStreaming } from '$lib/stores';
+  import { sendMessage, isStreaming, stopGeneration } from '$lib/stores';
 
   let inputValue = '';
   let textareaEl: HTMLTextAreaElement;
@@ -33,6 +33,10 @@
 
     // Enviar via chat store (que publica a MQTT)
     await sendMessage(content);
+  }
+
+  function handleStop() {
+    stopGeneration();
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -61,14 +65,24 @@
     rows="1"
   ></textarea>
 
-  <button
-    class="send-btn"
-    on:click={handleSend}
-    disabled={!canSend}
-    title="Enviar (Enter)"
-  >
-    ➤
-  </button>
+  {#if $isStreaming}
+    <button
+      class="stop-btn"
+      on:click={handleStop}
+      title="Detener generación"
+    >
+      <span class="stop-icon"></span>
+    </button>
+  {:else}
+    <button
+      class="send-btn"
+      on:click={handleSend}
+      disabled={!canSend}
+      title="Enviar (Enter)"
+    >
+      ➤
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -133,5 +147,34 @@
   .send-btn:disabled {
     background: var(--color-disabled, #4b5563);
     cursor: not-allowed;
+  }
+
+  /* Stop button */
+  .stop-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border: 2px solid rgba(239, 68, 68, 0.7);
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+  }
+
+  .stop-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+  }
+
+  .stop-icon {
+    display: block;
+    width: 0.75rem;
+    height: 0.75rem;
+    background: #ef4444;
+    border-radius: 2px;
   }
 </style>

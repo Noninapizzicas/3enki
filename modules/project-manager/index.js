@@ -258,6 +258,9 @@ class ProjectManagerModule {
     // Load existing projects from database
     await this.loadExistingProjects();
 
+    // Ensure the "Sistema" parent project exists
+    await this.ensureSystemProject();
+
     this.logger.info('project-manager.loaded', { module: this.name });
   }
 
@@ -455,6 +458,131 @@ class ProjectManagerModule {
       }
     } catch (error) {
       this.logger.error({ correlationId, error: error.message }, 'Failed to load projects');
+    }
+  }
+
+  /**
+   * Ensure the "Sistema" parent project exists.
+   * This project acts as the root parent for all other projects,
+   * with access to the entire event-core system directory.
+   * Created automatically on first startup; idempotent on subsequent runs.
+   */
+  async ensureSystemProject() {
+    const correlationId = crypto.randomUUID();
+    const SYSTEM_PROJECT_SLUG = 'sistema';
+    const SYSTEM_PROJECT_NAME = 'Sistema';
+
+    try {
+      // Check if already exists in memory cache
+      const existing = Array.from(this.projects.values()).find(
+        p => p.metadata?.is_system === true || (p.base_path && p.base_path.endsWith('/sistema'))
+      );
+
+      if (existing) {
+        this.logger.debug({ correlationId, projectId: existing.id }, 'System project already exists');
+        return existing;
+      }
+
+      // Check if directory exists but project is not in DB yet
+      const basePath = path.join(this.projectsBasePath, SYSTEM_PROJECT_SLUG);
+
+      // Create directories if missing
+      const dirs = [basePath, path.join(basePath, 'db'), path.join(basePath, 'storage')];
+      for (const dir of dirs) {
+        await fs.promises.mkdir(dir, { recursive: true });
+      }
+
+      // Create the project in the database
+      const projectId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const metadata = {
+        is_system: true,
+        icon: 'server',
+        color: '#1a1a2e',
+        workspaceType: 'system'
+      };
+
+      await this.queryDatabase(`
+        INSERT INTO projects (
+          id, name, description, created_at, updated_at, is_active, metadata,
+          last_conversation_id, provider, model, prompt_id, base_path, session_state,
+          system_id, system_role, parent_project_id
+        )
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        projectId,
+        SYSTEM_PROJECT_NAME,
+        'Proyecto padre del sistema. Gestiona la configuración, módulos, logs y todos los directorios del sistema event-core.',
+        now,
+        now,
+        JSON.stringify(metadata),
+        null,   // last_conversation_id
+        null,   // provider
+        null,   // model
+        null,   // prompt_id
+        basePath,
+        JSON.stringify({}),  // session_state
+        null,   // system_id (it IS the system)
+        'root', // system_role
+        null    // parent_project_id (no parent, it's the root)
+      ], false, correlationId);
+
+      const project = {
+        id: projectId,
+        name: SYSTEM_PROJECT_NAME,
+        description: 'Proyecto padre del sistema. Gestiona la configuración, módulos, logs y todos los directorios del sistema event-core.',
+        created_at: now,
+        updated_at: now,
+        is_active: false,
+        metadata,
+        last_conversation_id: null,
+        provider: null,
+        model: null,
+        prompt_id: null,
+        base_path: basePath,
+        session_state: {},
+        system_id: null,
+        system_role: 'root',
+        parent_project_id: null
+      };
+
+      this.projects.set(projectId, project);
+
+      // Initialize project database schema
+      await this.initializeProjectSchema(projectId, correlationId);
+
+      // Create a system entry so other projects can reference it
+      const systemId = crypto.randomUUID();
+      await this.queryDatabase(`
+        INSERT OR IGNORE INTO systems (id, name, description, created_at, updated_at, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        systemId,
+        'Event-Core System',
+        'Sistema raíz que engloba todos los proyectos',
+        now,
+        now,
+        JSON.stringify({ root_project_id: projectId })
+      ], false, correlationId);
+
+      // Assign the sistema project to this system
+      await this.queryDatabase(
+        'UPDATE projects SET system_id = ?, system_role = ? WHERE id = ?',
+        [systemId, 'root', projectId],
+        false, correlationId
+      );
+      project.system_id = systemId;
+
+      this.logger.info({ correlationId, projectId, basePath }, 'System project created successfully');
+
+      return project;
+    } catch (error) {
+      // If it's a duplicate name error, that's fine - project already exists
+      if (error.code === 'PROJECT_NAME_EXISTS' || error.message?.includes('UNIQUE constraint')) {
+        this.logger.debug({ correlationId }, 'System project already exists (constraint)');
+        return;
+      }
+      this.logger.error({ correlationId, error: error.message }, 'Failed to ensure system project');
     }
   }
 
@@ -1046,6 +1174,7 @@ class ProjectManagerModule {
         project_id: projectId,
         name: project.name,
         base_path: project.base_path,
+        metadata: project.metadata || {},
         activated_at: new Date().toISOString()
       });
 
@@ -1098,6 +1227,7 @@ class ProjectManagerModule {
         project_id: projectId,
         name: project.name,
         base_path: project.base_path,
+        metadata: project.metadata || {},
         activated_at: new Date().toISOString()
       });
 

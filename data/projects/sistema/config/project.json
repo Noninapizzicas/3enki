@@ -1,0 +1,11 @@
+{
+  "name": "Sistema",
+  "description": "Proyecto padre del sistema. Gestiona la configuración, módulos, logs y todos los directorios del sistema event-core.",
+  "is_system": true,
+  "metadata": {
+    "icon": "server",
+    "color": "#1a1a2e",
+    "is_system": true,
+    "workspaceType": "system"
+  }
+}

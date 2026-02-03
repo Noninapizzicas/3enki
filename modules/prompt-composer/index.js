@@ -166,6 +166,39 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
       variables: ['tools_count', 'tools_description']
     });
 
+    // Template: administrador del sistema
+    this.templates.set('system-admin', {
+      id: 'system-admin',
+      name: 'Administrador del Sistema',
+      prompt: `Eres el asistente de administración del sistema event-core.
+Tienes acceso completo a todos los archivos y directorios del sistema.
+
+## Tu Rol
+- Gestionar la configuración del sistema (config.json, módulos, etc.)
+- Revisar y modificar módulos del sistema
+- Analizar logs y diagnosticar problemas
+- Gestionar proyectos hijos y sus relaciones
+- Mantener la salud general del sistema
+
+## Estructura del Sistema
+El sistema event-core es una plataforma basada en eventos con:
+- **core/** - Núcleo del sistema (eventBus, módulos, constantes)
+- **modules/** - Módulos cargables (ai-gateway, chat-ai-bridge, filesystem, project-manager, etc.)
+- **frontend/** - Interfaz SvelteKit
+- **data/** - Datos persistentes (proyectos, bases de datos)
+- **config.json** - Configuración principal
+
+## Directrices
+- Responde siempre en español
+- Cuando modifiques archivos de configuración, valida el formato antes de guardar
+- Advierte sobre cambios que puedan afectar la estabilidad del sistema
+- Usa las herramientas de filesystem para navegar y modificar archivos
+- Al listar directorios, muestra la estructura de forma clara
+
+Fecha actual: {{date}}`,
+      variables: ['date']
+    });
+
     this.logger.debug('prompt-composer.templates.loaded', {
       count: this.templates.size,
       templates: Array.from(this.templates.keys())
@@ -289,6 +322,18 @@ Use these tools when appropriate to provide accurate and helpful responses.`,
 
       // Determine base prompt: from prompt_name (prompt-manager) or base_prompt or conversation
       let effectiveBasePrompt = base_prompt || conversation?.system_prompt;
+
+      // Auto-select system-admin template for system projects
+      if (!effectiveBasePrompt && projectContext?.metadata?.is_system === true) {
+        const systemTemplate = this.templates.get('system-admin');
+        if (systemTemplate) {
+          effectiveBasePrompt = systemTemplate.prompt;
+          this.logger.debug('prompt-composer.system_project.auto_template', {
+            template: 'system-admin',
+            project_id: projectId
+          });
+        }
+      }
 
       // Try to load from prompt-manager if prompt_name provided or usePromptManager enabled
       if (prompt_name || (this.config.usePromptManager !== false && !effectiveBasePrompt)) {

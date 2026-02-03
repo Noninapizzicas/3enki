@@ -26,6 +26,7 @@ class FilesystemModule {
     this.activeProjectId = null;
     this.activeProjectPath = null;  // /data/projects/paco/storage
     this.workingDirectory = null;   // Current working dir (defaults to project storage)
+    this.systemMode = false;        // true when "Sistema" project is active (full system access)
 
     // Unsubscribe functions
     this.unsubscribes = [];
@@ -144,16 +145,33 @@ class FilesystemModule {
    */
   async onProjectActivated(event) {
     const data = event.data || event;
-    const { project_id, base_path, name } = data;
+    const { project_id, base_path, name, metadata } = data;
 
     this.logger.debug('filesystem.project.activating', {
       project_id,
       base_path,
       name,
+      is_system: metadata?.is_system,
       raw_event: JSON.stringify(data).slice(0, 200)
     });
 
     this.activeProjectId = project_id;
+
+    // Detect system project: gets access to the entire event-core root
+    if (metadata?.is_system === true) {
+      this.systemMode = true;
+      this.activeProjectPath = process.cwd(); // Full system root
+      this.workingDirectory = process.cwd();
+
+      this.logger.info('filesystem.project.activated.system_mode', {
+        project_id,
+        project_name: name,
+        system_root: process.cwd()
+      });
+      return;
+    }
+
+    this.systemMode = false;
 
     if (base_path) {
       // New structure: use storage subdirectory
@@ -190,6 +208,7 @@ class FilesystemModule {
     this.activeProjectId = null;
     this.activeProjectPath = null;
     this.workingDirectory = null;
+    this.systemMode = false;
 
     this.logger.info('filesystem.project.deactivated', {
       previous_project: previousProject
@@ -507,9 +526,8 @@ class FilesystemModule {
       const normalized = path.normalize(relativePart).replace(/^\/+/, '');
       resolved = path.resolve(this.basePath, normalized);
     } else if (this.activeProjectPath) {
-      // Project is active - all paths resolve from project storage
+      // Project is active - all paths resolve from project storage (or system root)
       if (inputPath.startsWith('/')) {
-        // "/archivo.txt" -> project storage root
         const normalized = path.normalize(inputPath).replace(/^\/+/, '');
         resolved = path.resolve(this.activeProjectPath, normalized);
       } else if (inputPath === '~' || inputPath.startsWith('~/')) {
@@ -531,9 +549,10 @@ class FilesystemModule {
       }
     }
 
-    // Security check: must be within basePath
-    if (!resolved.startsWith(this.basePath)) {
-      const error = new Error('Access denied: path outside data directory');
+    // Security check: determine allowed root
+    const allowedRoot = this.systemMode ? process.cwd() : this.basePath;
+    if (!resolved.startsWith(allowedRoot)) {
+      const error = new Error(`Access denied: path outside ${this.systemMode ? 'system' : 'data'} directory`);
       error.status = 403;
       error.code = 'PATH_TRAVERSAL';
       throw error;
@@ -547,6 +566,11 @@ class FilesystemModule {
    * When a project is active, shows path relative to project storage
    */
   toRelativePath(absolutePath) {
+    if (this.systemMode && absolutePath.startsWith(process.cwd())) {
+      // System mode - show relative to system root
+      const relativePath = path.relative(process.cwd(), absolutePath).replace(/\\/g, '/');
+      return '/' + relativePath;
+    }
     if (this.activeProjectPath && absolutePath.startsWith(this.activeProjectPath)) {
       // Path within project storage - show relative to project
       const relativePath = path.relative(this.activeProjectPath, absolutePath).replace(/\\/g, '/');

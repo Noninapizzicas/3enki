@@ -6,12 +6,14 @@
  * - ID de conversación activa
  * - Estado de streaming
  * - Envío de mensajes
+ * - Toggle de contexto por mensaje
  */
 
 import { writable, derived, get } from 'svelte/store';
 import { publish, subscribe, mqttRequest } from '$lib/ui-core';
 import type { Message, Attachment } from '$lib/ui-core';
 import { attachments, clearAttachments } from './attachments';
+import { activeProjectId } from './projects';
 
 // ============================================================================
 // STORES
@@ -113,11 +115,12 @@ export async function sendMessage(content: string): Promise<void> {
     const data = response?.data;
     if (data?.assistant_message) {
       messages.update(msgs => {
+        // Check if streaming already added this message (by content match or streaming flag)
         const lastIdx = msgs.length - 1;
         const lastMsg = msgs[lastIdx];
 
-        // If streaming already added this message, finalize it with server data
-        if (lastMsg?.role === 'assistant' && lastMsg.streaming) {
+        if (lastMsg?.role === 'assistant') {
+          // Finalize: update with server-confirmed data (id, full content, metadata)
           return [
             ...msgs.slice(0, lastIdx),
             {
@@ -126,6 +129,7 @@ export async function sendMessage(content: string): Promise<void> {
               content: data.assistant_message.content || lastMsg.content,
               timestamp: data.assistant_message.created_at || lastMsg.timestamp,
               metadata: data.assistant_message.metadata,
+              in_context: data.assistant_message.in_context !== false,
               streaming: false
             }
           ];
@@ -137,7 +141,8 @@ export async function sendMessage(content: string): Promise<void> {
           role: 'assistant',
           content: data.assistant_message.content,
           timestamp: data.assistant_message.created_at || new Date().toISOString(),
-          metadata: data.assistant_message.metadata
+          metadata: data.assistant_message.metadata,
+          in_context: data.assistant_message.in_context !== false
         }];
       });
     }
@@ -218,18 +223,32 @@ export function stopGeneration(): void {
 }
 
 /**
- * Cargar conversación
+ * Cargar conversación - usa conversation.get para obtener TODOS los mensajes
  */
 export async function loadConversation(id: string): Promise<void> {
   conversationId.set(id);
   messages.set([]);
 
   try {
-    const response = await mqttRequest<{ messages: Message[] }>('conversation', 'load', {
+    const response = await mqttRequest<{
+      conversation: any;
+      messages: any[];
+    }>('conversation', 'get', {
       conversationId: id
     });
     if (response?.data?.messages) {
-      messages.set(response.data.messages);
+      // Map backend fields (created_at) to frontend fields (timestamp)
+      const mapped = response.data.messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.created_at || m.timestamp || new Date().toISOString(),
+        attachments: m.attachments,
+        metadata: m.metadata,
+        in_context: m.in_context !== false && m.in_context !== 0,
+        manually_toggled: m.manually_toggled === true || m.manually_toggled === 1
+      }));
+      messages.set(mapped);
     }
   } catch (error) {
     console.error('[chat] Error loading conversation:', error);
@@ -260,6 +279,42 @@ export function clearConversation(): void {
   messages.set([]);
   isStreaming.set(false);
   streamingMessageId.set(null);
+}
+
+/**
+ * Toggle de contexto de un mensaje
+ * Actualiza el store local y envía al backend
+ */
+export async function toggleMessageContext(messageId: string, inContext: boolean): Promise<void> {
+  const projId = get(activeProjectId);
+
+  // Optimistic update en el store de mensajes visibles
+  messages.update(msgs =>
+    msgs.map(m =>
+      m.id === messageId
+        ? { ...m, in_context: inContext, manually_toggled: true }
+        : m
+    )
+  );
+
+  try {
+    await mqttRequest('conversation', 'toggleContext', {
+      projectId: projId,
+      messageId,
+      inContext
+    });
+  } catch (error) {
+    // Rollback on error
+    messages.update(msgs =>
+      msgs.map(m =>
+        m.id === messageId
+          ? { ...m, in_context: !inContext, manually_toggled: true }
+          : m
+      )
+    );
+    console.error('[chat] Toggle context failed:', error);
+    throw error;
+  }
 }
 
 // ============================================================================

@@ -18,7 +18,8 @@
       "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)",
       "learning_system": "Read learning.json (sistema de aprendizaje genérico, feedback, recomendaciones)",
       "flow_engine": "Read flow-engine.json (motor de flows, registry, agente IA)",
-      "pizzepos_pos": "Read pizzepos.json (vertical POS pizzería: 12 módulos, 5 canales, Strategy pattern)"
+      "pizzepos_pos": "Read pizzepos.json (vertical POS pizzería: 12 módulos, 5 canales, Strategy pattern)",
+      "facturas_pipeline": "Read facturas.json (pipeline OCR+IA+CSV fiscal, handlers /go*, gotchas)"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -30,7 +31,7 @@
 
   "project": {
     "name": "event-core",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "description": "Meta-Core Event-Driven Framework"
   },
 
@@ -119,6 +120,11 @@
       "file": "flow-engine.json",
       "purpose": "Motor genérico de flows con agente IA y registry de providers",
       "when": "Crear flows, ejecutar pipelines, cambiar providers, agente IA"
+    },
+    {
+      "file": "facturas.json",
+      "purpose": "Pipeline de facturas: OCR + IA + CSV fiscal con handlers /go*",
+      "when": "Trabajar con facturas, OCR, PDF, CSV fiscal, asesoria española, pipeline batch"
     }
   ],
 

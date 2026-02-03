@@ -93,33 +93,62 @@ class ModuleLoader {
         const manifestPath = path.join(modulePath, 'module.json');
 
         // Verificar que existe module.json
-        if (!fs.existsSync(manifestPath)) {
-          if (this.logger) {
-            this.logger.warn('module.manifest.missing', {
-              module: moduleName,
-              path: modulePath
+        if (fs.existsSync(manifestPath)) {
+          try {
+            // Leer y parsear manifest
+            const manifestContent = fs.readFileSync(manifestPath, 'utf8');
+            const manifest = JSON.parse(manifestContent);
+
+            modules.push({
+              name: moduleName,
+              path: modulePath,
+              manifest
             });
+
+          } catch (error) {
+            if (this.logger) {
+              this.logger.error('module.manifest.invalid', {
+                module: moduleName,
+                error: error.message
+              }, error);
+            }
           }
-          continue;
-        }
+        } else {
+          // Sin module.json → escanear subdirectorios (soporta agrupación por vertical, ej: modules/pizzepos/*)
+          const subEntries = fs.readdirSync(modulePath, { withFileTypes: true });
 
-        try {
-          // Leer y parsear manifest
-          const manifestContent = fs.readFileSync(manifestPath, 'utf8');
-          const manifest = JSON.parse(manifestContent);
+          for (const subEntry of subEntries) {
+            if (!subEntry.isDirectory()) {
+              continue;
+            }
 
-          modules.push({
-            name: moduleName,
-            path: modulePath,
-            manifest
-          });
+            const subModuleName = subEntry.name;
+            const subModulePath = path.join(modulePath, subModuleName);
+            const subManifestPath = path.join(subModulePath, 'module.json');
 
-        } catch (error) {
-          if (this.logger) {
-            this.logger.error('module.manifest.invalid', {
-              module: moduleName,
-              error: error.message
-            }, error);
+            if (!fs.existsSync(subManifestPath)) {
+              continue;
+            }
+
+            try {
+              const subManifestContent = fs.readFileSync(subManifestPath, 'utf8');
+              const subManifest = JSON.parse(subManifestContent);
+
+              modules.push({
+                name: subModuleName,
+                path: subModulePath,
+                manifest: subManifest,
+                group: moduleName
+              });
+
+            } catch (error) {
+              if (this.logger) {
+                this.logger.error('module.manifest.invalid', {
+                  module: `${moduleName}/${subModuleName}`,
+                  error: error.message
+                }, error);
+              }
+            }
           }
         }
       }

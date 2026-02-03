@@ -1,0 +1,489 @@
+/**
+ * Strategy: Glovo (Delivery)
+ * Integración con plataforma de delivery Glovo
+ * Recibe pedidos externos, gestiona aceptación/rechazo, y notifica cuando está listo
+ *
+ * Prefijo cuenta_id: glovo_{YYYYMMDD}_{seq}
+ * Dominio uiHandler: 'glovo'
+ * Eventos propios: glovo.pedido_recibido, glovo.pedido_aceptado,
+ *                  glovo.pedido_rechazado, glovo.pedido_listo, glovo.pedido_recogido
+ * Consume: cocina.pedido_listo
+ */
+
+class GlovoStrategy {
+  constructor() {
+    this.tipo = 'glovo';
+    this.prefijo = 'glovo_';
+    this.version = '3.0.0';
+
+    // Pedidos activos de Glovo
+    this.pedidosActivos = new Map();
+
+    // Mapeo order_id externo → cuenta_id interno
+    this.externalOrderMap = new Map();
+
+    this.internalMetrics = {
+      pedidos_recibidos: 0,
+      pedidos_aceptados: 0,
+      pedidos_rechazados: 0,
+      pedidos_listos: 0,
+      pedidos_recogidos: 0,
+      ingresos_totales: 0,
+      tiempo_promedio_aceptacion: 0,
+      tiempo_promedio_preparacion: 0
+    };
+
+    this.modulo = null;
+    this._uiActions = [
+      'recibir', 'aceptar', 'rechazar', 'marcar_listo',
+      'activos', 'get', 'historial', 'health', 'metrics'
+    ];
+  }
+
+  // ==========================================
+  // Strategy Interface
+  // ==========================================
+
+  async init(modulo) {
+    this.modulo = modulo;
+
+    modulo.safeAddSchema(require('../schemas/glovo.json'));
+    modulo.safeAddSchema(require('../schemas/glovo-events.json'));
+  }
+
+  registerUIHandlers(uiHandler) {
+    uiHandler.register('glovo', 'recibir', this.handleRecibirPedido.bind(this));
+    uiHandler.register('glovo', 'aceptar', this.handleAceptarPedido.bind(this));
+    uiHandler.register('glovo', 'rechazar', this.handleRechazarPedido.bind(this));
+    uiHandler.register('glovo', 'marcar_listo', this.handleMarcarListo.bind(this));
+    uiHandler.register('glovo', 'activos', this.handleGetActivos.bind(this));
+    uiHandler.register('glovo', 'get', this.handleGetPedido.bind(this));
+    uiHandler.register('glovo', 'historial', this.handleGetHistorial.bind(this));
+    uiHandler.register('glovo', 'health', this.handleHealthCheck.bind(this));
+    uiHandler.register('glovo', 'metrics', this.handleGetMetrics.bind(this));
+
+    this.modulo.logger.info('canal.glovo.ui_handlers.registered', {
+      handlers: this._uiActions
+    });
+  }
+
+  unregisterUIHandlers(uiHandler) {
+    for (const action of this._uiActions) {
+      uiHandler.unregister('glovo', action);
+    }
+  }
+
+  async subscribeToEvents(eventBus) {
+    await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
+  }
+
+  async onCobroProcesado(cuenta_id, correlationId) {
+    await this.marcarRecogido(cuenta_id, correlationId);
+  }
+
+  getHealth() {
+    return {
+      pedidos_activos: this.pedidosActivos.size,
+      pendientes_aceptar: Array.from(this.pedidosActivos.values())
+        .filter(p => p.estado === 'recibido').length
+    };
+  }
+
+  getMetrics() {
+    return {
+      ...this.internalMetrics,
+      pedidos_activos: this.pedidosActivos.size,
+      tiempo_promedio_aceptacion: this.modulo.getPromedioTiempo('glovo_aceptacion'),
+      tiempo_promedio_preparacion: this.modulo.getPromedioTiempo('glovo_preparacion')
+    };
+  }
+
+  getCuentasActivas() {
+    return this.pedidosActivos.size;
+  }
+
+  cleanup() {
+    this.pedidosActivos.clear();
+    this.externalOrderMap.clear();
+  }
+
+  // ==========================================
+  // Event Handlers
+  // ==========================================
+
+  async onCocinaPedidoListo(event) {
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { pedido_id } = eventData;
+
+    let pedidoGlovo = null;
+    for (const pedido of this.pedidosActivos.values()) {
+      if (pedido.pedidos && pedido.pedidos.includes(pedido_id)) {
+        pedidoGlovo = pedido;
+        break;
+      }
+    }
+
+    if (!pedidoGlovo) return;
+
+    await this.marcarListoInterno(pedidoGlovo.cuenta_id, correlationId);
+
+    this.modulo.logger.info('canal.glovo.pedido_listo_auto', {
+      correlation_id: correlationId,
+      cuenta_id: pedidoGlovo.cuenta_id,
+      glovo_order_id: pedidoGlovo.glovo_order_id
+    });
+  }
+
+  // ==========================================
+  // UI Handlers
+  // ==========================================
+
+  async handleRecibirPedido(data) {
+    try {
+      const validate = this.modulo.ajv.getSchema(
+        'https://pizzepos.com/schemas/glovo.json#/definitions/recibir_pedido_request'
+      );
+      if (validate && !validate(data)) {
+        return { status: 400, error: 'Request inválido', details: validate.errors };
+      }
+
+      const {
+        glovo_order_id, items, total, cliente_nombre,
+        direccion_entrega, notas, tiempo_estimado_entrega
+      } = data;
+
+      if (this.externalOrderMap.has(glovo_order_id)) {
+        return { status: 409, error: `Pedido Glovo ${glovo_order_id} ya existe` };
+      }
+
+      this.modulo.verificarReseoDiario();
+
+      const secuencial = this.modulo.getNextSecuencial('glovo');
+      const fecha = this.modulo.getFechaActual();
+      const cuenta_id = `glovo_${fecha}_${secuencial.toString().padStart(3, '0')}`;
+
+      const pedido = {
+        cuenta_id,
+        glovo_order_id,
+        numero_pedido: secuencial,
+        plataforma: 'glovo',
+        estado: 'recibido',
+        items: items || [],
+        total: total || 0,
+        cliente_nombre: cliente_nombre || 'Cliente Glovo',
+        direccion_entrega: direccion_entrega || '',
+        notas: notas || '',
+        tiempo_estimado_entrega: tiempo_estimado_entrega || 45,
+        hora_recibido: new Date().toISOString(),
+        hora_aceptado: null,
+        hora_listo: null,
+        hora_recogido: null,
+        rider_info: null,
+        pedidos: []
+      };
+
+      this.pedidosActivos.set(cuenta_id, pedido);
+      this.externalOrderMap.set(glovo_order_id, cuenta_id);
+      this.internalMetrics.pedidos_recibidos++;
+
+      await this.modulo.eventBus.publish('glovo.pedido_recibido', {
+        cuenta_id,
+        glovo_order_id,
+        total: pedido.total,
+        items: pedido.items,
+        cliente_nombre: pedido.cliente_nombre,
+        hora_recibido: pedido.hora_recibido
+      });
+
+      this.modulo.logger.info('glovo.pedido_recibido', {
+        cuenta_id,
+        glovo_order_id,
+        total: pedido.total
+      });
+
+      return { status: 201, data: pedido };
+
+    } catch (error) {
+      this.modulo.logger.error('canal.glovo.recibir.error', { error: error.message });
+      return { status: 500, error: 'Error interno recibiendo pedido Glovo' };
+    }
+  }
+
+  async handleAceptarPedido(data) {
+    try {
+      const { cuenta_id, tiempo_preparacion_estimado } = data;
+      const pedido = this.pedidosActivos.get(cuenta_id);
+
+      if (!pedido) {
+        return { status: 404, error: 'Pedido Glovo no encontrado' };
+      }
+
+      if (pedido.estado !== 'recibido') {
+        return { status: 409, error: `Pedido en estado '${pedido.estado}', no se puede aceptar` };
+      }
+
+      pedido.estado = 'aceptado';
+      pedido.hora_aceptado = new Date().toISOString();
+      pedido.tiempo_preparacion_estimado = tiempo_preparacion_estimado || 25;
+
+      const tiempoAceptacion = this.modulo.calcularTiempoMinutos(pedido.hora_recibido);
+      this.modulo.trackTiempo('glovo_aceptacion', tiempoAceptacion);
+      this.internalMetrics.pedidos_aceptados++;
+
+      await this.modulo.eventBus.publish('glovo.pedido_aceptado', {
+        cuenta_id: pedido.cuenta_id,
+        glovo_order_id: pedido.glovo_order_id,
+        tiempo_preparacion_estimado: pedido.tiempo_preparacion_estimado,
+        hora_aceptado: pedido.hora_aceptado
+      });
+
+      await this.modulo.publishCuentaCreada({
+        cuenta_id: pedido.cuenta_id,
+        tipo: 'glovo',
+        total: pedido.total,
+        metadata: {
+          glovo_order_id: pedido.glovo_order_id,
+          cliente_nombre: pedido.cliente_nombre,
+          direccion_entrega: pedido.direccion_entrega
+        }
+      });
+
+      await this.notificarGlovoAPI('accept', pedido);
+
+      this.modulo.logger.info('glovo.pedido_aceptado', {
+        cuenta_id,
+        glovo_order_id: pedido.glovo_order_id,
+        tiempo_aceptacion: tiempoAceptacion
+      });
+
+      return { status: 200, data: pedido };
+
+    } catch (error) {
+      this.modulo.logger.error('canal.glovo.aceptar.error', { error: error.message });
+      return { status: 500, error: 'Error interno aceptando pedido' };
+    }
+  }
+
+  async handleRechazarPedido(data) {
+    try {
+      const { cuenta_id, motivo } = data;
+      const pedido = this.pedidosActivos.get(cuenta_id);
+
+      if (!pedido) {
+        return { status: 404, error: 'Pedido Glovo no encontrado' };
+      }
+
+      if (pedido.estado !== 'recibido') {
+        return { status: 409, error: `Pedido en estado '${pedido.estado}', no se puede rechazar` };
+      }
+
+      pedido.estado = 'rechazado';
+      pedido.hora_rechazado = new Date().toISOString();
+      pedido.motivo_rechazo = motivo || 'Sin motivo especificado';
+
+      this.internalMetrics.pedidos_rechazados++;
+
+      await this.modulo.eventBus.publish('glovo.pedido_rechazado', {
+        cuenta_id: pedido.cuenta_id,
+        glovo_order_id: pedido.glovo_order_id,
+        motivo: pedido.motivo_rechazo
+      });
+
+      await this.notificarGlovoAPI('reject', pedido);
+
+      this.pedidosActivos.delete(cuenta_id);
+      this.externalOrderMap.delete(pedido.glovo_order_id);
+
+      this.modulo.logger.info('glovo.pedido_rechazado', {
+        cuenta_id,
+        glovo_order_id: pedido.glovo_order_id,
+        motivo
+      });
+
+      return { status: 200, data: { message: 'Pedido rechazado', motivo: pedido.motivo_rechazo } };
+
+    } catch (error) {
+      this.modulo.logger.error('canal.glovo.rechazar.error', { error: error.message });
+      return { status: 500, error: 'Error interno rechazando pedido' };
+    }
+  }
+
+  async handleMarcarListo(data) {
+    const { cuenta_id } = data;
+
+    try {
+      await this.marcarListoInterno(cuenta_id);
+      return { status: 200, data: { message: 'Pedido Glovo marcado como listo para rider' } };
+    } catch (error) {
+      this.modulo.logger.error('canal.glovo.marcar_listo.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleGetActivos() {
+    const activos = Array.from(this.pedidosActivos.values())
+      .filter(p => p.estado !== 'rechazado')
+      .sort((a, b) => new Date(a.hora_recibido) - new Date(b.hora_recibido));
+
+    const porEstado = {
+      recibidos: activos.filter(p => p.estado === 'recibido').length,
+      aceptados: activos.filter(p => p.estado === 'aceptado').length,
+      preparando: activos.filter(p => p.estado === 'preparando').length,
+      listos: activos.filter(p => p.estado === 'listo').length
+    };
+
+    return {
+      status: 200,
+      data: { pedidos: activos, total: activos.length, por_estado: porEstado }
+    };
+  }
+
+  async handleGetPedido(data) {
+    const { cuenta_id, glovo_order_id } = data;
+
+    let pedido = null;
+    if (cuenta_id) {
+      pedido = this.pedidosActivos.get(cuenta_id);
+    } else if (glovo_order_id) {
+      const internalId = this.externalOrderMap.get(glovo_order_id);
+      if (internalId) pedido = this.pedidosActivos.get(internalId);
+    }
+
+    if (!pedido) {
+      return { status: 404, error: 'Pedido Glovo no encontrado' };
+    }
+
+    return { status: 200, data: pedido };
+  }
+
+  async handleGetHistorial(data) {
+    const { limit } = data || {};
+    const maxItems = limit || 50;
+
+    // Solo pedidos completados (recogidos) - en memoria solo quedan activos
+    // En producción esto vendría de persistencia
+    return {
+      status: 200,
+      data: {
+        message: 'Historial disponible vía persistencia-comandero',
+        pedidos_activos: this.pedidosActivos.size,
+        metricas: this.getMetrics()
+      }
+    };
+  }
+
+  async handleHealthCheck() {
+    return { status: 200, data: this.getHealth() };
+  }
+
+  async handleGetMetrics() {
+    return { status: 200, data: this.getMetrics() };
+  }
+
+  // ==========================================
+  // Business Logic
+  // ==========================================
+
+  async marcarListoInterno(cuenta_id, correlationId) {
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) {
+      throw new Error('Pedido Glovo no encontrado');
+    }
+
+    if (pedido.estado === 'recibido') {
+      throw new Error('Pedido debe ser aceptado antes de marcar como listo');
+    }
+
+    pedido.estado = 'listo';
+    pedido.hora_listo = new Date().toISOString();
+
+    const tiempoPreparacion = this.modulo.calcularTiempoMinutos(
+      pedido.hora_aceptado || pedido.hora_recibido
+    );
+    this.modulo.trackTiempo('glovo_preparacion', tiempoPreparacion);
+    this.internalMetrics.pedidos_listos++;
+
+    await this.modulo.eventBus.publish('glovo.pedido_listo', {
+      cuenta_id: pedido.cuenta_id,
+      glovo_order_id: pedido.glovo_order_id,
+      hora_listo: pedido.hora_listo,
+      tiempo_preparacion: tiempoPreparacion
+    }, { correlationId });
+
+    await this.notificarGlovoAPI('ready', pedido);
+
+    this.modulo.logger.info('glovo.pedido_listo', {
+      correlation_id: correlationId,
+      cuenta_id,
+      glovo_order_id: pedido.glovo_order_id,
+      tiempo_preparacion: tiempoPreparacion
+    });
+  }
+
+  async marcarRecogido(cuenta_id, correlationId) {
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) {
+      throw new Error('Pedido Glovo no encontrado');
+    }
+
+    pedido.estado = 'recogido';
+    pedido.hora_recogido = new Date().toISOString();
+
+    this.internalMetrics.pedidos_recogidos++;
+    this.internalMetrics.ingresos_totales += pedido.total;
+
+    await this.modulo.eventBus.publish('glovo.pedido_recogido', {
+      cuenta_id: pedido.cuenta_id,
+      glovo_order_id: pedido.glovo_order_id,
+      total: pedido.total,
+      hora_recogido: pedido.hora_recogido
+    }, { correlationId });
+
+    await this.modulo.publishCuentaCerrada({
+      cuenta_id: pedido.cuenta_id,
+      tipo: 'glovo',
+      total: pedido.total,
+      metadata: {
+        glovo_order_id: pedido.glovo_order_id,
+        direccion_entrega: pedido.direccion_entrega,
+        cliente_nombre: pedido.cliente_nombre
+      }
+    }, correlationId);
+
+    this.pedidosActivos.delete(cuenta_id);
+    this.externalOrderMap.delete(pedido.glovo_order_id);
+
+    this.modulo.logger.info('glovo.pedido_recogido', {
+      correlation_id: correlationId,
+      cuenta_id,
+      glovo_order_id: pedido.glovo_order_id,
+      total: pedido.total
+    });
+  }
+
+  // ==========================================
+  // Integración Glovo API
+  // ==========================================
+
+  async notificarGlovoAPI(action, pedido) {
+    // TODO: Implementar integración real con Glovo Partner API
+    // https://partner-api.glovoapp.com/
+    //
+    // Acciones:
+    //   accept  → PATCH /orders/{id}/accept
+    //   reject  → PATCH /orders/{id}/reject
+    //   ready   → PATCH /orders/{id}/ready
+    //
+    // Credenciales en: this.modulo.config.glovo?.api_key
+    //                  this.modulo.config.glovo?.store_id
+
+    this.modulo.logger.info('glovo.api_notificacion', {
+      action,
+      glovo_order_id: pedido.glovo_order_id,
+      nota: 'Pendiente integración con Glovo Partner API'
+    });
+  }
+}
+
+module.exports = GlovoStrategy;

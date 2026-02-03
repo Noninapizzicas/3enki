@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "id": "carta_principal",
+    "nombre": "Carta Principal - Nonina Pizzicas",
+    "version": 1,
+    "idioma": "es",
+    "created_at": "2026-02-03T10:00:00Z",
+    "updated_at": "2026-02-03T10:00:00Z"
+  },
+
+  "categorias": [
+    { "id": "cat_pizzas", "nombre": "Pizzas", "emoji": "\ud83c\udf55", "orden": 1 },
+    { "id": "cat_pastas", "nombre": "Pastas", "emoji": "\ud83c\udf5d", "orden": 2 },
+    { "id": "cat_entrantes", "nombre": "Entrantes", "emoji": "\ud83e\udd57", "orden": 3 },
+    { "id": "cat_postres", "nombre": "Postres", "emoji": "\ud83c\udf70", "orden": 4 },
+    { "id": "cat_bebidas", "nombre": "Bebidas", "emoji": "\ud83c\udf7a", "orden": 5 },
+    { "id": "cat_bebidas_alcohol", "nombre": "Bebidas alcoh\u00f3licas", "emoji": "\ud83c\udf77", "orden": 6 }
+  ],
+
+  "productos": [
+    {
+      "id": "prod_margherita",
+      "nombre": "Margherita",
+      "emoji": "\ud83c\udf55",
+      "categoria": "cat_pizzas",
+      "precio": 8.50,
+      "descripcion": "Tomate, mozzarella, albahaca",
+      "ingredientes": ["ing_harina_trigo", "ing_tomate", "ing_mozzarella", "ing_albahaca"],
+      "iva": 10,
+      "cocina": "horno",
+      "variaciones": {
+        "permite_quitar": ["ing_mozzarella", "ing_albahaca"],
+        "permite_anadir": true,
+        "extras": [
+          { "ingrediente": "ing_jamon_serrano", "precio": 2.00 },
+          { "ingrediente": "ing_anchoas", "precio": 2.00 }
+        ]
+      },
+      "traducciones": {
+        "en": { "nombre": "Margherita", "descripcion": "Tomato, mozzarella, basil" }
+      },
+      "metadata": { "vegano": false, "vegetariano": true, "tiempo_preparacion": 12 }
+    },
+    {
+      "id": "prod_pepperoni",
+      "nombre": "Pepperoni",
+      "emoji": "\ud83c\udf55",
+      "categoria": "cat_pizzas",
+      "precio": 10.00,
+      "descripcion": "Tomate, mozzarella, pepperoni",
+      "ingredientes": ["ing_harina_trigo", "ing_tomate", "ing_mozzarella", "ing_pepperoni"],
+      "iva": 10,
+      "cocina": "horno",
+      "variaciones": {
+        "permite_quitar": ["ing_pepperoni"],
+        "permite_anadir": true,
+        "extras": []
+      },
+      "traducciones": {
+        "en": { "nombre": "Pepperoni", "descripcion": "Tomato, mozzarella, pepperoni" }
+      },
+      "metadata": { "vegano": false, "vegetariano": false, "tiempo_preparacion": 12 }
+    },
+    {
+      "id": "prod_4quesos",
+      "nombre": "Cuatro Quesos",
+      "emoji": "\ud83e\uddc0",
+      "categoria": "cat_pizzas",
+      "precio": 11.00,
+      "descripcion": "Mozzarella, gorgonzola, parmesano, nata",
+      "ingredientes": ["ing_harina_trigo", "ing_mozzarella", "ing_gorgonzola", "ing_parmesano", "ing_nata"],
+      "iva": 10,
+      "cocina": "horno",
+      "variaciones": {
+        "permite_quitar": ["ing_gorgonzola"],
+        "permite_anadir": true,
+        "extras": [
+          { "ingrediente": "ing_rucula", "precio": 0.50 }
+        ]
+      },
+      "traducciones": {
+        "en": { "nombre": "Four Cheese", "descripcion": "Mozzarella, gorgonzola, parmesan, cream" }
+      },
+      "metadata": { "vegano": false, "vegetariano": true, "tiempo_preparacion": 14 }
+    },
+    {
+      "id": "prod_prosciutto",
+      "nombre": "Prosciutto e R\u00faccula",
+      "emoji": "\ud83e\udd57",
+      "categoria": "cat_pizzas",
+      "precio": 12.00,
+      "descripcion": "Tomate, mozzarella, jam\u00f3n serrano, r\u00faccula, parmesano",
+      "ingredientes": ["ing_harina_trigo", "ing_tomate", "ing_mozzarella", "ing_jamon_serrano", "ing_rucula", "ing_parmesano"],
+      "iva": 10,
+      "cocina": "horno",
+      "variaciones": {
+        "permite_quitar": ["ing_rucula", "ing_parmesano"],
+        "permite_anadir": true,
+        "extras": []
+      },
+      "traducciones": {
+        "en": { "nombre": "Prosciutto & Rocket", "descripcion": "Tomato, mozzarella, cured ham, rocket, parmesan" }
+      },
+      "metadata": { "vegano": false, "vegetariano": false, "tiempo_preparacion": 14 }
+    },
+    {
+      "id": "prod_marinera",
+      "nombre": "Marinera",
+      "emoji": "\ud83e\uddc4",
+      "categoria": "cat_pizzas",
+      "precio": 7.50,
+      "descripcion": "Tomate, ajo, or\u00e9gano, aceite de oliva",
+      "ingredientes": ["ing_harina_trigo", "ing_tomate", "ing_ajo", "ing_oregano"],
+      "iva": 10,
+      "cocina": "horno",
+      "variaciones": {
+        "permite_quitar": [],
+        "permite_anadir": true,
+        "extras": [
+          { "ingrediente": "ing_anchoas", "precio": 2.00 }
+        ]
+      },
+      "traducciones": {
+        "en": { "nombre": "Marinara", "descripcion": "Tomato, garlic, oregano, olive oil" }
+      },
+      "metadata": { "vegano": true, "vegetariano": true, "tiempo_preparacion": 10 }
+    },
+    {
+      "id": "prod_carbonara_pizza",
+      "nombre": "Carbonara",
+      "emoji": "\ud83e\udd53",
+      "categoria": "cat_pizzas",
+      "precio": 11.50,
+      "descripcion": "Nata, mozzarella, bacon, huevo, parmesano",
+      "ingredientes": ["ing_harina_trigo", "ing_nata", "ing_mozzarella", "ing_bacon", "ing_huevo", "ing_parmesano"],
+      "iva": 10,
+      "cocina": "horno",
+      "variaciones": {
+        "permite_quitar": ["ing_huevo", "ing_bacon"],
+        "permite_anadir": true,
+        "extras": []
+      },
+      "traducciones": {
+        "en": { "nombre": "Carbonara Pizza", "descripcion": "Cream, mozzarella, bacon, egg, parmesan" }
+      },
+      "metadata": { "vegano": false, "vegetariano": false, "tiempo_preparacion": 14 }
+    },
+    {
+      "id": "prod_pasta_carbonara",
+      "nombre": "Pasta Carbonara",
+      "emoji": "\ud83c\udf5d",
+      "categoria": "cat_pastas",
+      "precio": 9.50,
+      "descripcion": "Espaguetis, bacon, huevo, parmesano, nata",
+      "ingredientes": ["ing_harina_trigo", "ing_bacon", "ing_huevo", "ing_parmesano", "ing_nata"],
+      "iva": 10,
+      "cocina": "cocina",
+      "variaciones": {
+        "permite_quitar": ["ing_bacon"],
+        "permite_anadir": true,
+        "extras": [
+          { "ingrediente": "ing_champiñones", "precio": 1.00 }
+        ]
+      },
+      "traducciones": {
+        "en": { "nombre": "Carbonara Pasta", "descripcion": "Spaghetti, bacon, egg, parmesan, cream" }
+      },
+      "metadata": { "vegano": false, "vegetariano": false, "tiempo_preparacion": 15 }
+    },
+    {
+      "id": "prod_pasta_bolognesa",
+      "nombre": "Pasta Bolo\u00f1esa",
+      "emoji": "\ud83c\udf5d",
+      "categoria": "cat_pastas",
+      "precio": 9.00,
+      "descripcion": "Espaguetis con salsa bolo\u00f1esa",
+      "ingredientes": ["ing_harina_trigo", "ing_tomate", "ing_cebolla", "ing_ajo"],
+      "iva": 10,
+      "cocina": "cocina",
+      "variaciones": {
+        "permite_quitar": [],
+        "permite_anadir": true,
+        "extras": [
+          { "ingrediente": "ing_parmesano", "precio": 1.00 }
+        ]
+      },
+      "traducciones": {
+        "en": { "nombre": "Bolognese Pasta", "descripcion": "Spaghetti with bolognese sauce" }
+      },
+      "metadata": { "vegano": false, "vegetariano": false, "tiempo_preparacion": 18 }
+    },
+    {
+      "id": "prod_ensalada_cesar",
+      "nombre": "Ensalada C\u00e9sar",
+      "emoji": "\ud83e\udd57",
+      "categoria": "cat_entrantes",
+      "precio": 7.50,
+      "descripcion": "Lechuga, pollo, parmesano, croutons",
+      "ingredientes": ["ing_pollo", "ing_parmesano", "ing_harina_trigo"],
+      "iva": 10,
+      "cocina": "cocina",
+      "variaciones": {
+        "permite_quitar": ["ing_pollo", "ing_parmesano"],
+        "permite_anadir": true,
+        "extras": [
+          { "ingrediente": "ing_anchoas", "precio": 2.00 },
+          { "ingrediente": "ing_huevo", "precio": 1.00 }
+        ]
+      },
+      "traducciones": {
+        "en": { "nombre": "Caesar Salad", "descripcion": "Lettuce, chicken, parmesan, croutons" }
+      },
+      "metadata": { "vegano": false, "vegetariano": false, "tiempo_preparacion": 8 }
+    },
+    {
+      "id": "prod_tiramisu",
+      "nombre": "Tiramisú",
+      "emoji": "\ud83c\udf70",
+      "categoria": "cat_postres",
+      "precio": 5.50,
+      "descripcion": "Tiramisú casero",
+      "ingredientes": ["ing_huevo", "ing_harina_trigo"],
+      "iva": 10,
+      "cocina": "cocina",
+      "variaciones": { "permite_quitar": [], "permite_anadir": false, "extras": [] },
+      "traducciones": {
+        "en": { "nombre": "Tiramisu", "descripcion": "Homemade tiramisu" }
+      },
+      "metadata": { "vegano": false, "vegetariano": true, "tiempo_preparacion": 0 }
+    },
+    {
+      "id": "prod_agua",
+      "nombre": "Agua mineral",
+      "emoji": "\ud83d\udca7",
+      "categoria": "cat_bebidas",
+      "precio": 2.00,
+      "descripcion": "50cl",
+      "ingredientes": [],
+      "iva": 10,
+      "cocina": "barra",
+      "variaciones": { "permite_quitar": [], "permite_anadir": false, "extras": [] },
+      "traducciones": { "en": { "nombre": "Mineral water", "descripcion": "50cl" } },
+      "metadata": { "vegano": true, "vegetariano": true, "tiempo_preparacion": 0 }
+    },
+    {
+      "id": "prod_cerveza",
+      "nombre": "Cerveza ca\u00f1a",
+      "emoji": "\ud83c\udf7a",
+      "categoria": "cat_bebidas_alcohol",
+      "precio": 2.50,
+      "descripcion": "Ca\u00f1a 25cl",
+      "ingredientes": ["ing_harina_trigo"],
+      "iva": 10,
+      "cocina": "barra",
+      "variaciones": { "permite_quitar": [], "permite_anadir": false, "extras": [] },
+      "traducciones": { "en": { "nombre": "Draft beer", "descripcion": "25cl" } },
+      "metadata": { "vegano": true, "vegetariano": true, "tiempo_preparacion": 0 }
+    }
+  ],
+
+  "reglas": []
+}

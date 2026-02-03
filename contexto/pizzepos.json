@@ -150,12 +150,32 @@
     },
 
     "menu-generator": {
-      "version": "2.0.0",
-      "descripcion": "Genera menús digitales desde fotos del menú físico via AI",
+      "version": "3.0.0",
+      "descripcion": "Sistema de gestión de cartas: escaneo, chat conversacional, reglas de precios, programación horaria",
       "ui_domain": "menu-generator",
       "uiHandlers": ["upload", "list", "get", "validate", "health", "metrics"],
-      "eventos_publica": ["menu.generado", "menu.validado"],
-      "flujo": "Foto → upload → AI extrae productos → menu.generado → productos sincroniza catálogo"
+      "eventos_publica": ["menu.generado", "menu.validado", "carta.scan.completado", "carta.respuesta"],
+      "flujo": "Foto/PDF → OCR → AI estructura → carta.json | Chat → comandos/NLU → modifica carta.json",
+      "lib": {
+        "carta-manager.js": "Motor central: carga cartas JSON, resuelve carta activa según contexto (hora/canal/zona), aplica reglas de precios, calcula alérgenos desde ingredientes"
+      },
+      "handlers_proyecto": {
+        "carta-chat.js": "Comandos /carta para gestión conversacional (precios, reglas, programación, CRUD cartas)",
+        "carta-scan.js": "Pipeline escaneo: foto/PDF → Sharp → Google Vision OCR → AI estructura → carta.json"
+      },
+      "arquitectura_cartas": {
+        "persistencia": "JSON puro — ingredientes.json + cartas/*.json + programacion.json",
+        "resolucion": "Contexto (hora, canal, zona, fecha) → programacion.json → carta activa → reglas → precios finales",
+        "alergenos": "Calculados en tiempo real desde ingredientes.json — solo se muestran cara al público",
+        "reglas": "Condiciones (canal, zona, horario, dias, fechas, categorias, productos) → efectos (precio %, precio fijo, disponible, etiqueta)",
+        "programacion": "N cartas programables por franja horaria, canal, zona, rango de fechas — prioridad resuelve conflictos"
+      },
+      "storage": {
+        "base": "data/projects/pizzepos/storage/",
+        "ingredientes": "ingredientes.json — maestro único compartido entre todas las cartas",
+        "cartas": "cartas/*.json — cada carta es autocontenida con productos, categorías y reglas",
+        "programacion": "programacion.json — qué carta se usa cuándo y dónde"
+      }
     },
 
     "persistencia-comandero": {

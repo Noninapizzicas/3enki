@@ -27,6 +27,7 @@ const EVENTS = {
   AI: {
     CHAT_REQUEST: 'ai.chat.request',
     CHAT_RESPONSE: 'ai.chat.response',
+    CHAT_CHUNK: 'ai.chat.chunk',
     COMPLETION_COMPLETED: 'ai.completion.completed',
     REQUEST: 'ai.request',
   },

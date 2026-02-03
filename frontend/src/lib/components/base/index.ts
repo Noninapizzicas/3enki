@@ -12,6 +12,7 @@
  * - CodeEditor: Editor de código con líneas numeradas
  * - FileViewer: Visor de árbol de archivos
  * - Terminal: Output de terminal con input
+ * - MarkdownRenderer: Renderiza markdown con syntax highlighting
  */
 
 export { default as Button } from './Button.svelte';
@@ -25,3 +26,4 @@ export { default as CodeEditor } from './CodeEditor.svelte';
 export { default as FileViewer } from './FileViewer.svelte';
 export { default as Terminal } from './Terminal.svelte';
 export { default as LazyButton } from './LazyButton.svelte';
+export { default as MarkdownRenderer } from './MarkdownRenderer.svelte';

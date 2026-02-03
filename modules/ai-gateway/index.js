@@ -256,7 +256,8 @@ class AIGatewayModule {
       temperature,
       max_tokens,
       project_id,
-      correlation_id
+      correlation_id,
+      stream
     } = event.data || event.payload || event;
 
     const correlationId = correlation_id || event.correlationId;
@@ -281,6 +282,23 @@ class AIGatewayModule {
     });
 
     try {
+      // Build onChunk callback for streaming (handles text deltas and tool status)
+      const onChunk = stream ? (data) => {
+        if (typeof data === 'object' && data.tool) {
+          this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
+            request_id,
+            tool: data.tool,
+            done: false
+          });
+        } else {
+          this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
+            request_id,
+            delta: typeof data === 'string' ? data : '',
+            done: false
+          });
+        }
+      } : null;
+
       // Procesar la solicitud
       const result = await this.handleChatCompletion({
         body: {
@@ -292,9 +310,19 @@ class AIGatewayModule {
           model,
           temperature,
           max_tokens,
+          stream: !!stream,
           metadata: { request_id, project_id }
         }
-      }, { correlationId, projectId: project_id });
+      }, { correlationId, projectId: project_id, onChunk });
+
+      // Signal streaming done
+      if (stream && result.status === 200) {
+        await this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
+          request_id,
+          delta: '',
+          done: true
+        });
+      }
 
       // Publicar respuesta exitosa
       await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, {
@@ -546,8 +574,10 @@ class AIGatewayModule {
         top_p,
         metadata,
         execute_tools,
-        max_tool_iterations
+        max_tool_iterations,
+        stream
       } = req.body || {};
+      const onChunk = context?.onChunk;
       const projectId = context?.projectId || metadata?.project_id;
 
       if (!initialMessages || !Array.isArray(initialMessages) || initialMessages.length === 0) {
@@ -622,6 +652,11 @@ class AIGatewayModule {
         retryConfig: this.config.retry
       };
 
+      // Determine if we can use real streaming:
+      // - stream requested AND no tools to execute
+      // Real streaming gives text-as-it-generates experience
+      const useRealStreaming = stream && onChunk && (!translatedTools || !execute_tools);
+
       // Agentic loop - execute tools and continue conversation
       let result;
       let iteration = 0;
@@ -632,11 +667,19 @@ class AIGatewayModule {
         this.logger.info('ai-gateway.chat.iteration', {
           iteration,
           messages_count: messages.length,
-          has_tools: !!translatedTools
+          has_tools: !!translatedTools,
+          streaming: useRealStreaming && iteration === 1
         });
 
-        // Call AI
-        result = await this.chatWithRetry(provider, messages, chatOptions);
+        // Call AI - use streaming for first/only call when no tools
+        if (useRealStreaming) {
+          result = await this.chatStreamWithRetry(provider, messages, {
+            ...chatOptions,
+            onChunk
+          });
+        } else {
+          result = await this.chatWithRetry(provider, messages, chatOptions);
+        }
 
         // Accumulate usage
         totalTokens += result.usage?.total_tokens || 0;
@@ -661,8 +704,23 @@ class AIGatewayModule {
 
         // Parse and execute tool calls
         const toolCalls = this.parseToolCallsFromProvider(result, providerName);
+
+        // Notify frontend: tools are being executed
+        if (onChunk) {
+          for (const tc of toolCalls) {
+            onChunk({ tool: { name: tc.name, status: 'executing' } });
+          }
+        }
+
         const toolResults = await this.executeToolCalls(toolCalls, context);
         allToolResults.push(...toolResults);
+
+        // Notify frontend: tools completed
+        if (onChunk) {
+          for (const tr of toolResults) {
+            onChunk({ tool: { name: tr.name, status: tr.status === 'error' ? 'error' : 'completed' } });
+          }
+        }
 
         // Check if any tool requires confirmation (pause the loop)
         const pendingConfirmation = toolResults.find(r => r.requires_confirmation);
@@ -684,6 +742,17 @@ class AIGatewayModule {
         // Add tool results to conversation
         const toolResultMessages = this.formatToolResultsForProvider(toolResults, providerName);
         messages.push(...toolResultMessages);
+      }
+
+      // Post-hoc streaming: when tools were active, real-time streaming was
+      // not possible. Simulate typewriter effect by publishing content progressively.
+      if (stream && onChunk && !useRealStreaming && result?.content) {
+        const content = result.content;
+        const chunkSize = 12;
+        for (let i = 0; i < content.length; i += chunkSize) {
+          onChunk(content.slice(i, i + chunkSize));
+          await new Promise(r => setTimeout(r, 10));
+        }
       }
 
       const latencyMs = Date.now() - startTime;
@@ -1631,6 +1700,17 @@ class AIGatewayModule {
   async chatWithRetry(provider, messages, options) {
     return provider.withRetry(
       () => provider.chatCompletion(messages, options),
+      options.retryConfig
+    );
+  }
+
+  /**
+   * Chat streaming with retry
+   * Uses chatCompletionStream instead of chatCompletion
+   */
+  async chatStreamWithRetry(provider, messages, options) {
+    return provider.withRetry(
+      () => provider.chatCompletionStream(messages, options),
       options.retryConfig
     );
   }

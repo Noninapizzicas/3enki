@@ -14,6 +14,7 @@
   import { createEventDispatcher } from 'svelte';
   import type { Message, Attachment } from '$lib/ui-core';
   import Chip from './Chip.svelte';
+  import MarkdownRenderer from './MarkdownRenderer.svelte';
 
   export let message: Message;
   export let showContextToggle: boolean = true;
@@ -85,8 +86,12 @@
       {/if}
     </div>
 
-    <div class="content">
-      {message.content}
+    <div class="content" class:content-markdown={message.role === 'assistant'}>
+      {#if message.role === 'assistant' && message.content}
+        <MarkdownRenderer content={message.content} />
+      {:else}
+        {message.content}
+      {/if}
       {#if message.streaming && !message.content}
         <span class="typing">...</span>
       {/if}
@@ -256,6 +261,11 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  /* Markdown content: let MarkdownRenderer handle whitespace */
+  .content-markdown {
+    white-space: normal;
   }
 
   .typing {

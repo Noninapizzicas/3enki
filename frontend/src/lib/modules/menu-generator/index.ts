@@ -8,6 +8,8 @@
 import type { UIModule } from '$lib/ui-core';
 import MenuGeneratorPanel from './MenuGeneratorPanel.svelte';
 
+export { default as MenuGeneratorPanel } from './MenuGeneratorPanel.svelte';
+
 export const menuGeneratorModule: UIModule = {
   manifest: {
     id: 'menu-generator',

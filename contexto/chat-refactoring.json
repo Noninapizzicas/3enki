@@ -1,9 +1,9 @@
 {
   "title": "Plan de Refactorización: Chat Modules",
-  "version": "1.1.0",
-  "status": "proposed",
+  "version": "2.0.0",
+  "status": "implemented",
   "created": "2026-01-07",
-  "updated": "2026-01-07",
+  "updated": "2026-02-04",
   "problem": {
     "summary": "Duplicación de lógica entre conversation-manager y ai-gateway",
     "modules_affected": [
@@ -496,7 +496,7 @@
       "duplicated_tool_logic": 400,
       "total_lines": 3992
     },
-    "after": {
+    "estimated": {
       "conversation_manager_lines": 600,
       "chat_session_lines": 400,
       "chat_ai_bridge_lines": 300,
@@ -504,10 +504,152 @@
       "ai_gateway_lines": 1523,
       "total_lines": 3023
     },
+    "actual": {
+      "conversation_manager_lines": 1061,
+      "chat_session_lines": 1233,
+      "chat_ai_bridge_lines": 1023,
+      "prompt_composer_lines": 1296,
+      "ai_gateway_lines": 1523,
+      "total_lines": 6136,
+      "note": "Líneas superiores a lo estimado porque incluyen funcionalidad adicional: streaming post-hoc, safety-net MQTT, context FIFO avanzado, composición multi-capa de prompts"
+    },
     "reduction": {
       "lines_removed": "~970 líneas (24%)",
       "duplication_eliminated": "400 líneas",
       "modules": "2 → 5 (más granular)"
+    }
+  },
+  "implementation_status": {
+    "date_implemented": "2026-02-03/04",
+    "option_used": "option_b - Tools en chat-ai-bridge",
+    "reason": "Se necesita control granular del agentic loop desde el chat, incluyendo streaming post-hoc y tool status publishing",
+    "phases_completed": {
+      "phase_1_chat_session": {
+        "status": "completado",
+        "actual_lines": 1233,
+        "notes": "Incluye CRUD conversaciones, mensajes, context FIFO, schema management, toggleContext"
+      },
+      "phase_2_prompt_composer": {
+        "status": "completado",
+        "actual_lines": 1296,
+        "notes": "Composición multi-capa: system prompt base + contexto proyecto + tools description"
+      },
+      "phase_3_chat_ai_bridge": {
+        "status": "completado",
+        "actual_lines": 1023,
+        "notes": "Orquesta flujo completo de 7 pasos. Maneja tool loop internamente con streaming post-hoc"
+      },
+      "phase_4_limpieza": {
+        "status": "completado",
+        "actual_lines": 1061,
+        "notes": "conversation-manager reducido a facade - delega a chat-session, prompt-composer, chat-ai-bridge"
+      }
+    },
+    "chat_ai_bridge_flow": {
+      "description": "Flujo implementado en 7 pasos",
+      "steps": [
+        "1. Save user message → chat-session (session.save.request)",
+        "2. Load context messages → chat-session (session.getMessages.request)",
+        "3. Compose prompt → prompt-composer (prompt.compose.request)",
+        "4. Build AI messages array (system + context + user)",
+        "5. Call AI → ai-gateway (ai.chat.request) con agentic loop",
+        "6. Save assistant message → chat-session",
+        "6b. Safety-net: publish complete message via MQTT QoS 1",
+        "7. Return response → conversation-manager (chat.send.response)"
+      ],
+      "streaming": {
+        "type": "post-hoc",
+        "description": "Cuando hay tools, el AI response se entrega progresivamente después del agentic loop (~12 chars per 10ms)",
+        "mqtt_topics": [
+          "conversation/{id}/message - chunks de streaming",
+          "conversation/{id}/tool-status - estado de ejecución de tools",
+          "conversation/stream/end - señal de fin de streaming"
+        ]
+      }
+    }
+  },
+  "bugs_found_and_fixed": {
+    "date": "2026-02-04",
+    "bugs": [
+      {
+        "id": "BUG-001",
+        "title": "Chat no operativo - NO_PROJECT",
+        "root_cause": "LazyShell.svelte (página principal /) no llamaba a initProjectsSubscriptions() ni initConversations(). El backend no tenía proyecto activo, causando error NO_PROJECT en cada envío",
+        "fix": "Añadir initProjectsSubscriptions() e initConversations() en LazyShell.onMount + cleanup en onDestroy",
+        "files": ["frontend/src/lib/components/layout/LazyShell.svelte"],
+        "severity": "critical",
+        "lesson": "LazyShell es bootstrap mínimo - verificar que TODAS las inicializaciones necesarias estén presentes"
+      },
+      {
+        "id": "BUG-002",
+        "title": "Errores silenciosos en sendMessage",
+        "root_cause": "sendMessage en chat.ts solo hacía console.error sin feedback al usuario",
+        "fix": "Añadir notifyError() para mostrar toast con el mensaje de error",
+        "files": ["frontend/src/lib/stores/chat.ts"],
+        "severity": "medium",
+        "lesson": "Siempre mostrar errores al usuario, nunca silenciarlos solo con console.error"
+      },
+      {
+        "id": "BUG-003",
+        "title": "Race condition en ordenamiento de mensajes",
+        "root_cause": "La suscripción MQTT a conversation/stream/end llamaba endStreaming() que ponía isStreaming=false. Esto desbloqueaba el botón de envío ANTES de que mqttRequest retornara. Si el usuario enviaba rápido, el segundo mensaje se intercalaba con la respuesta del primero",
+        "fix": "stream/end ahora solo finaliza el contenido del mensaje (quita flag streaming) sin tocar isStreaming. Solo sendMessage completion y stopGeneration controlan isStreaming",
+        "files": ["frontend/src/lib/stores/chat.ts"],
+        "severity": "high",
+        "lesson": "isStreaming debe ser controlado SOLO por sendMessage (request/response), no por señales MQTT asíncronas"
+      },
+      {
+        "id": "BUG-004",
+        "title": "AI response no aparece después de tool execution",
+        "root_cause": "Tres causas: (1) Frontend timeout 60s vs backend 180s, (2) chunks de streaming perdidos sin safety-net, (3) addMessage no manejaba mensajes assistant no-streaming",
+        "fix": "(1) Timeout frontend → 180s, (2) Safety-net MQTT QoS 1 en chat-ai-bridge después de guardar, (3) addMessage mejorado para manejar ambos casos",
+        "files": ["frontend/src/lib/stores/chat.ts", "modules/chat-ai-bridge/index.js"],
+        "severity": "high",
+        "lesson": "Para mensajes críticos usar QoS 1. El timeout del frontend debe ser >= al del backend"
+      }
+    ]
+  },
+  "frontend_architecture": {
+    "stores": {
+      "chat.ts": {
+        "purpose": "Estado de conversación activa - mensajes visibles en ChatArea",
+        "stores": ["messages", "conversationId", "isStreaming", "streamingMessageId", "toolStatus"],
+        "derived": ["messageCount", "hasConversation", "lastMessage", "userMessages", "assistantMessages"],
+        "key_functions": ["sendMessage", "addMessage", "endStreaming", "loadConversation", "toggleMessageContext"],
+        "mqtt_subscriptions": [
+          "conversation/+/message - chunks de streaming y mensajes finales",
+          "conversation/+/tool-status - estado de ejecución de tools",
+          "conversation/stream/end - finalización de streaming (solo marca mensaje, NO desbloquea envío)"
+        ]
+      },
+      "conversations.ts": {
+        "purpose": "Gestión de lista de conversaciones (separado de chat.ts)",
+        "key_functions": ["selectConversation", "initConversations"],
+        "note": "selectConversation llama tanto a conversations.ts loadConversation como a chat.ts loadConversation"
+      },
+      "projects.ts": {
+        "purpose": "Gestión de proyectos",
+        "key_functions": ["initProjects (alias initProjectsSubscriptions)", "activateProject"],
+        "note": "activateProject envía mqttRequest('project', 'activate', {id}) al backend + guarda en localStorage"
+      }
+    },
+    "critical_initialization": {
+      "LazyShell.svelte": {
+        "must_call": [
+          "initWorkspaceSubscriptions() - suscripciones de workspace",
+          "initChatSubscriptions() - suscripciones MQTT del chat",
+          "initProjectsSubscriptions() - carga proyectos + activa proyecto guardado",
+          "initConversations() - carga conversaciones + restaura conversación activa"
+        ],
+        "order_matters": "initProjectsSubscriptions ANTES de initConversations (necesita proyecto activo)"
+      }
+    },
+    "request_response_pattern": {
+      "flow": "mqttRequest(domain, action, data) → ui/request/{domain}/{action} → UIRequestHandler → handler → ui/response/{requestId}",
+      "timeout_defaults": {
+        "general": "10s",
+        "chat_with_tools": "180s"
+      }
     }
   }
 }

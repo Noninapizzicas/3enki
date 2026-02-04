@@ -54,12 +54,42 @@
     "examples": {
       "projects.ts": {
         "store": "projectsStore",
-        "functions": ["loadProjects()", "createProject()", "updateProject()", "deleteProject()"]
+        "functions": ["loadProjects()", "createProject()", "updateProject()", "deleteProject()"],
+        "init": "initProjectsSubscriptions() - carga lista + activa proyecto guardado en backend"
       },
       "credentials.ts": {
         "store": "credentialsStore",
         "functions": ["loadCredentials()", "createCredential()", "updateCredential()", "deleteCredential()"]
+      },
+      "chat.ts": {
+        "stores": ["messages", "conversationId", "isStreaming", "streamingMessageId", "toolStatus"],
+        "derived": ["messageCount", "hasConversation", "lastMessage", "userMessages", "assistantMessages"],
+        "functions": ["sendMessage()", "addMessage()", "endStreaming()", "loadConversation()", "toggleMessageContext()"],
+        "init": "initChatSubscriptions() - suscripciones MQTT para streaming y mensajes",
+        "important_patterns": {
+          "isStreaming_control": "SOLO controlado por sendMessage (set true al inicio, false al final) y stopGeneration. NUNCA por señales MQTT asíncronas",
+          "stream_end_handler": "conversation/stream/end solo finaliza el contenido del mensaje (quita flag streaming), NO toca isStreaming",
+          "addMessage_logic": "Si llega assistant message y ya hay un assistant como último mensaje: actualiza (streaming chunk o mensaje final). Si no: añade nuevo",
+          "safety_net": "sendMessage espera mqttRequest response. Si streaming ya añadió el mensaje, lo actualiza con datos del server. Si no, lo añade"
+        }
+      },
+      "conversations.ts": {
+        "stores": ["conversations", "activeConversationId"],
+        "functions": ["selectConversation()", "createConversation()", "deleteConversation()"],
+        "init": "initConversations() - suscribe a activeProjectId, carga lista, restaura conversación activa",
+        "note": "Separado de chat.ts - gestiona la LISTA de conversaciones, no los mensajes"
       }
+    },
+    "critical_init_order": {
+      "description": "Orden de inicialización en LazyShell.svelte",
+      "order": [
+        "1. initWorkspaceSubscriptions() - suscripciones de workspace",
+        "2. initChatSubscriptions() - suscripciones MQTT del chat",
+        "3. connect() - conexión MQTT en background",
+        "4. initProjectsSubscriptions() - carga proyectos + activa guardado",
+        "5. initConversations() - carga conversaciones (necesita proyecto activo)"
+      ],
+      "warning": "Si falta initProjectsSubscriptions, el backend no tiene proyecto activo y TODO falla con NO_PROJECT"
     }
   },
   "mqtt_integration": {

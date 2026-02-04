@@ -47,6 +47,46 @@
         "api_key": "https://ocr.space/ocrapi/freekey"
       },
       "cuando_implementar": "Cuando Tesseract no dé resultados aceptables con fotos reales"
+    },
+    {
+      "id": "centralizar-tools-ai-gateway",
+      "titulo": "Centralizar tool loop en ai-gateway (eliminar duplicación)",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-04",
+      "descripcion": "Actualmente el tool loop (agentic loop) está en chat-ai-bridge. ai-gateway tiene código de tools que NO se usa (~360 líneas). El plan original (chat-refactoring.json option_a) proponía centralizar todo en ai-gateway con execute_tools=true",
+      "beneficios": [
+        "Eliminar duplicación de lógica de tools entre chat-ai-bridge y ai-gateway",
+        "ai-gateway manejaría diferencias entre providers automáticamente",
+        "chat-ai-bridge se simplificaría eliminando el agentic loop interno"
+      ],
+      "implementacion": {
+        "actual": "chat-ai-bridge maneja el tool loop internamente (option_b del plan)",
+        "propuesto": "ai-gateway acepta execute_tools=true y ejecuta loop interno (option_a del plan)",
+        "nota": "option_b se eligió por necesidad de control granular de streaming post-hoc y tool status"
+      },
+      "archivos_afectados": [
+        "modules/ai-gateway/index.js",
+        "modules/chat-ai-bridge/index.js"
+      ],
+      "cuando_implementar": "Cuando se necesite soporte multi-provider para tools o se refactorice el streaming"
+    },
+    {
+      "id": "streaming-nativo-sse",
+      "titulo": "Implementar streaming nativo en lugar de post-hoc",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-04",
+      "descripcion": "Actualmente el streaming con tools es post-hoc: se espera a que termine el agentic loop y luego se entrega el contenido progresivamente (~12 chars/10ms). Un streaming nativo mostraría la respuesta en tiempo real",
+      "beneficios": [
+        "Feedback más rápido al usuario durante respuestas largas",
+        "Menor latencia percibida"
+      ],
+      "implementacion": {
+        "actual": "Post-hoc streaming en chat-ai-bridge via simulateStreaming()",
+        "propuesto": "Streaming real desde ai-gateway via provider.streamChat()"
+      },
+      "cuando_implementar": "Cuando la UX de respuesta sea una prioridad y los providers soporten streaming"
     }
   ]
 }

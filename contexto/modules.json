@@ -77,7 +77,6 @@
     "calling-generator",
     "chat-ai-bridge",
     "chat-session",
-    "conversation-manager",
     "credential-manager",
     "dashboard",
     "database-manager",
@@ -115,7 +114,7 @@
     },
     "chat": {
       "description": "Módulos del stack de chat/conversaciones",
-      "modules": ["chat-session", "chat-ai-bridge", "prompt-composer", "conversation-manager"]
+      "modules": ["chat-session", "chat-ai-bridge", "prompt-composer"]
     },
     "project": {
       "description": "Módulos de gestión de proyectos y composición",
@@ -454,16 +453,21 @@
       "result": "El AI recibe contexto automático de proyectos relacionados"
     },
     "chat_flow": {
-      "description": "Flujo de mensaje de chat con módulos refactorizados",
-      "flow": [
-        "1. conversation-manager recibe mqttRequest('conversation', 'send', { conversationId, content })",
-        "2. Publica chat.send.request → chat-ai-bridge",
-        "3. chat-ai-bridge guarda mensaje via session.save.request → chat-session",
-        "4. chat-ai-bridge solicita prompt.compose.request → prompt-composer",
-        "5. prompt-composer (si include_inherited_context) carga contexto via context.full.request → project-manager",
-        "6. chat-ai-bridge envía ai.chat.request → ai-gateway",
-        "7. ai-gateway responde con ai.chat.response",
-        "8. chat-ai-bridge guarda respuesta y publica chat.send.response"
+      "description": "Flujo de mensaje de chat (sin facade, handlers directos)",
+      "entry_points": {
+        "conversation.send": "chat-ai-bridge (UI handler directo)",
+        "conversation.load|create|list|get|update|delete|toggleContext|contextStats": "chat-session (UI handlers directos)"
+      },
+      "send_flow": [
+        "1. Frontend: mqttRequest('conversation', 'send', { conversationId, content })",
+        "2. UIRequestHandler → chat-ai-bridge.handleConversationSend()",
+        "3. chat-ai-bridge obtiene proyecto activo (project.active.request)",
+        "4. chat-ai-bridge crea conversación si no existe (session.create.request → chat-session)",
+        "5. chat-ai-bridge guarda mensaje usuario (session.save.request → chat-session)",
+        "6. chat-ai-bridge compone prompt (prompt.compose.request → prompt-composer)",
+        "7. chat-ai-bridge llama AI (ai.chat.request → ai-gateway, con agentic loop)",
+        "8. chat-ai-bridge guarda respuesta + safety-net MQTT QoS 1",
+        "9. UIRequestHandler devuelve resultado al frontend"
       ]
     }
   }

@@ -79,6 +79,18 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/credentials/CredentialsPanel.svelte')
   },
 
+  // === WORK BAR (barra de trabajo) ===
+  'menu-generator-panel': {
+    id: 'menu-generator-panel',
+    title: 'Generador de Cartas',
+    icon: '📋',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 1,
+    loader: () => import('$lib/modules/menu-generator/MenuGeneratorPanel.svelte')
+  },
+
   // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',

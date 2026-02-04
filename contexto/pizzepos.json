@@ -151,26 +151,57 @@
 
     "menu-generator": {
       "version": "3.0.0",
+      "estado": "implementado — backend + frontend completos",
       "descripcion": "Genera cartas estructuradas desde texto o imágenes usando IA. SOLO genera, no almacena ni gestiona.",
-      "ui_domain": "menu",
-      "uiHandlers": ["generate", "list", "get", "health"],
-      "eventos_publica": ["carta.generada", "menu.error"],
-      "eventos_suscribe": ["ai.chat.response"],
-      "flujo": "texto/OCR/JSON crudo → ai.chat.request → AI estructura → parseAndStructure → carta.generada",
-      "output_schema": "schemas/carta-output.json",
-      "output_formato": {
-        "meta": "{ id, nombre, generado_desde, created_at }",
-        "categorias": "[{ id, nombre, orden }]",
-        "productos": "[{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji }] }]"
+      "backend": {
+        "ubicacion": "modules/pizzepos/menu-generator/index.js",
+        "ui_domain": "menu",
+        "uiHandlers": ["generate", "list", "get", "health"],
+        "eventos_publica": ["carta.generada", "menu.error"],
+        "eventos_suscribe": ["ai.chat.response"],
+        "flujo": "texto/OCR/JSON crudo → ai.chat.request → AI estructura → parseAndStructure → carta.generada",
+        "output_schema": "schemas/carta-output.json",
+        "output_formato": {
+          "meta": "{ id, nombre, generado_desde, created_at }",
+          "categorias": "[{ id, nombre, orden }]",
+          "productos": "[{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji }] }]"
+        },
+        "tests": {
+          "test-generate.js": "40/40 — datos reales Pizzicas (30 productos, 2 categorías)",
+          "test-carta-real.js": "29/29 — carta restaurante real (66 productos, 9 categorías, 72 ingredientes)"
+        }
+      },
+      "frontend": {
+        "store": "frontend/src/lib/stores/menu-generator.ts",
+        "modulo": "frontend/src/lib/modules/menu-generator/",
+        "pagina": "frontend/src/routes/menu-generator/+page.svelte",
+        "panel_flotante": "menu-generator-panel (registrado en panels.ts)",
+        "componentes": {
+          "MenuGeneratorPanel.svelte": "Panel flotante con 3 tabs: Generar, Cartas, Detalle",
+          "manifest.json": "Autodiscovery — zone: work-bar, icon: 📋",
+          "index.ts": "UIModule + re-exports del store"
+        },
+        "mqtt_requests": [
+          "mqttRequest('menu', 'generate', { texto, nombre, provider })",
+          "mqttRequest('menu', 'list')",
+          "mqttRequest('menu', 'get', { id })",
+          "mqttRequest('menu', 'health')"
+        ],
+        "subscriptions_realtime": ["carta.generada", "menu.error"]
       },
       "separacion_responsabilidades": {
-        "menu-generator": "SOLO genera carta estructurada desde input (texto, OCR, JSON crudo). Emite carta.generada y listo.",
-        "carta-manager_legacy": "lib/carta-manager.js existe como referencia. Su lógica (CRUD cartas, programación, reglas, alérgenos) pertenece a futuros módulos de catálogo/operación.",
+        "menu-generator": "SOLO genera carta estructurada desde input. Emite carta.generada y listo.",
+        "carta-manager_legacy": "lib/carta-manager.js — referencia. Su lógica pertenece a futuros módulos de catálogo/operación.",
         "handlers_proyecto_legacy": {
-          "carta-chat.js": "Usa CartaManager directamente. Pendiente de refactorizar cuando exista módulo de gestión de cartas.",
-          "carta-scan.js": "Pipeline OCR funcional. Usa CartaManager para guardar. Pendiente de refactorizar para emitir carta.generada en vez de guardar directamente."
+          "carta-chat.js": "Pendiente de refactorizar.",
+          "carta-scan.js": "Pipeline OCR funcional. Pendiente de refactorizar para emitir carta.generada."
         }
-      }
+      },
+      "decisiones_tomadas": [
+        "Precios multi-tamaño (Individual/Mediana/Familiar): se manejan como variaciones, NO en el generador",
+        "CartaManager separado: su lógica CRUD/reglas/alérgenos NO pertenece al generador",
+        "menu-generator-v2 monolito (2913 líneas) archivado en otros-modulos/"
+      ]
     },
 
     "persistencia-comandero": {

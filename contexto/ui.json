@@ -2,18 +2,43 @@
   "framework": "SvelteKit",
   "typescript": true,
   "layout": {
-    "type": "single-page with floating panels",
+    "type": "multi-page with shared base and floating panels",
+    "filosofia": {
+      "concepto": "Cada ruta es un MODO DE TRABAJO, no una app separada. Todas comparten la misma base (chat IA, system-bar, proyecto activo). Lo que cambia entre rutas es la work-bar: las herramientas específicas de esa tarea.",
+      "base_comun": [
+        "AppShell: wrapper común de todas las páginas",
+        "Chat con IA: siempre disponible, no se pierde al cambiar de modo",
+        "System-bar: proyecto activo, provider IA, credenciales, conversaciones",
+        "Archivos del proyecto: subir, OCR, explorar — siempre accesibles",
+        "MQTT: conexión compartida, eventos en tiempo real"
+      ],
+      "work_bar": "Cada página define sus propias herramientas en la work-bar. Es el contexto de trabajo específico de esa tarea.",
+      "paneles_flotantes": "Las herramientas se abren como paneles flotantes SOBRE la pantalla. No reemplazan el contenido — conviven con el chat y las demás herramientas.",
+      "integracion": "No se duplica funcionalidad. Si el sistema ya tiene archivos, OCR, chat con IA — la nueva herramienta los usa, no los reimplementa."
+    },
     "zones": {
-      "work-bar": "Left sidebar - main module buttons",
-      "chat-config": "Right sidebar - configuration panels",
-      "chat-tools": "Bottom - tool panels",
-      "main": "Center - primary content area"
+      "work-bar": "Top bar — herramientas específicas del modo de trabajo actual (cambia por ruta)",
+      "chat-config": "Config bar — proyecto, provider, prompts, conversaciones, credenciales (compartido)",
+      "chat-tools": "Bottom — herramientas del chat: archivos, adjuntos (compartido)",
+      "system-bar": "Right sidebar — módulos del sistema (compartido)"
+    },
+    "rutas": {
+      "descripcion": "Cada ruta es un modo de trabajo con su propia work-bar",
+      "patron": "frontend/src/routes/{nombre}/+page.svelte → AppShell con work-bar contextual",
+      "existentes": {
+        "/": "Pantalla principal — chat general, LazyShell",
+        "/facturas": "Modo facturas — work-bar con herramientas de facturación",
+        "/menu-generator": "Modo generador de cartas — work-bar con herramientas de menú"
+      },
+      "futuras": "Cada vertical (cocina, comandero, cobros...) puede tener su propia ruta con work-bar específica"
     },
     "principles": [
-      "1 click = 1 panel (no double-click, no long-press)",
-      "Single screen (no traditional navigation)",
-      "Panels are floating and self-contained",
-      "Data via MQTT (no REST /ui/state endpoints)"
+      "1 click = 1 panel flotante (no double-click, no long-press)",
+      "Cada ruta comparte la misma base (chat, project, files, providers)",
+      "La work-bar es el contexto — cambia según la ruta/modo de trabajo",
+      "Los paneles flotan SOBRE el contenido, no lo reemplazan",
+      "No duplicar: si ya existe (archivos, OCR, chat), se usa, no se reimplementa",
+      "Data via MQTT exclusivamente (no REST)"
     ]
   },
   "component_structure": {
@@ -46,7 +71,7 @@
       "critical": "boolean (preload on startup)",
       "heavy": "boolean (load in background)"
     },
-    "active_modules": ["project", "files", "provider", "prompts", "credentials"]
+    "active_modules": ["project", "files", "provider", "prompts", "credentials", "menu-generator"]
   },
   "stores": {
     "location": "frontend/src/lib/stores/",
@@ -102,6 +127,21 @@
       ]
     }
   },
+  "panel_system": {
+    "registry": "frontend/src/lib/modules/panels.ts",
+    "descripcion": "Los paneles flotantes se registran manualmente en panels.ts con lazy loaders",
+    "flujo": [
+      "1. Work-bar button click → LazyButton.handleClick()",
+      "2. mountModule(id) → carga index.ts + onMount()",
+      "3. openPanel(panelId) → actualiza activePanel store",
+      "4. AppShell detecta $activePanel → renderiza LazyPanel",
+      "5. LazyPanel → loadPanelComponent(panelId) desde panels.ts",
+      "6. Panel.svelte wrapper → drag, resize, backdrop, ESC to close"
+    ],
+    "registro_obligatorio": "Cada panel flotante DEBE estar en panels.ts con su loader. El autodiscovery de manifest.json descubre módulos pero los paneles se registran aparte.",
+    "sizes": ["sm", "md", "lg"],
+    "positions": ["top", "bottom", "left", "right", "center"]
+  },
   "generation_rules": [
     "Never invent UX not defined in backend",
     "Never add screens or flows not specified",
@@ -109,6 +149,9 @@
     "Use mqttRequest() for all CRUD operations",
     "Keep state minimal",
     "New UI modules: create folder in modules/, add manifest.json + index.ts",
-    "No manual registration needed - loader auto-discovers via import.meta.glob"
+    "Loader auto-discovers modules via import.meta.glob — NO tocar loader.ts ni definitions.ts",
+    "Floating panels: registrar SIEMPRE en panels.ts con lazy loader",
+    "Nuevas rutas: misma base AppShell, work-bar contextual, paneles flotantes",
+    "No duplicar herramientas existentes (archivos, chat, OCR) — integrar con ellas"
   ]
 }

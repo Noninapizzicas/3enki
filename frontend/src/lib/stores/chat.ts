@@ -14,6 +14,7 @@ import { publish, subscribe, mqttRequest } from '$lib/ui-core';
 import type { Message, Attachment } from '$lib/ui-core';
 import { attachments, clearAttachments } from './attachments';
 import { activeProjectId } from './projects';
+import { notifyError } from './ui';
 
 // ============================================================================
 // STORES
@@ -154,9 +155,16 @@ export async function sendMessage(content: string): Promise<void> {
 
     isStreaming.set(false);
     streamingMessageId.set(null);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[chat] Error sending message:', error);
     isStreaming.set(false);
+    streamingMessageId.set(null);
+
+    // Mostrar error al usuario
+    const errorMsg = error?.response?.error?.message
+      || error?.message
+      || 'Error al enviar mensaje';
+    notifyError(errorMsg);
   }
 }
 

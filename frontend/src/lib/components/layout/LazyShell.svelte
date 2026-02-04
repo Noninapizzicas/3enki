@@ -20,7 +20,7 @@
     getPanelComponent
   } from '$lib/ui-core/lazy-registry';
   import { closePanel } from '$lib/stores/ui';
-  import { initWorkspaceSubscriptions, initChatSubscriptions } from '$lib/stores';
+  import { initWorkspaceSubscriptions, initChatSubscriptions, initProjectsSubscriptions, initConversations } from '$lib/stores';
   import { moduleDefinitions, criticalModules } from '$lib/modules/definitions';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
@@ -36,6 +36,8 @@
 
   let cleanupWorkspace: (() => void) | null = null;
   let cleanupChat: (() => void) | null = null;
+  let cleanupProjects: (() => void) | null = null;
+  let cleanupConversations: (() => void) | null = null;
   let panelComponent: any = null;
 
   onMount(async () => {
@@ -63,7 +65,13 @@
     });
     perfEnd('LazyShell.connect.start');
 
-    // 3b. Registrar handler de visibilidad (HyperOS/MIUI fix)
+    // 3b. Inicializar proyectos (carga lista + activa proyecto guardado en backend)
+    cleanupProjects = initProjectsSubscriptions();
+
+    // 3c. Inicializar conversaciones (carga lista + restaura conversación activa)
+    cleanupConversations = initConversations();
+
+    // 3d. Registrar handler de visibilidad (HyperOS/MIUI fix)
     setupVisibilityHandler();
 
     perfEnd('LazyShell.onMount.TOTAL');
@@ -82,6 +90,8 @@
     // Limpiar subscripciones
     if (cleanupWorkspace) cleanupWorkspace();
     if (cleanupChat) cleanupChat();
+    if (cleanupProjects) cleanupProjects();
+    if (cleanupConversations) cleanupConversations();
 
     // Desconectar MQTT
     disconnect();

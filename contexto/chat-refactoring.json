@@ -541,8 +541,13 @@
       },
       "phase_4_limpieza": {
         "status": "completado",
-        "actual_lines": 1061,
-        "notes": "conversation-manager reducido a facade - delega a chat-session, prompt-composer, chat-ai-bridge"
+        "actual_lines": 607,
+        "notes": "conversation-manager eliminado como facade activa - handlers distribuidos directamente a chat-session y chat-ai-bridge"
+      },
+      "phase_5_eliminar_facade": {
+        "status": "completado",
+        "date": "2026-02-04",
+        "notes": "conversation-manager desactivado en config.json. Los handlers conversation.* se registran directamente: chat-ai-bridge registra conversation.send, chat-session registra conversation.load|create|list|get|update|delete|toggleContext|contextStats. Frontend sin cambios."
       }
     },
     "chat_ai_bridge_flow": {
@@ -555,7 +560,7 @@
         "5. Call AI → ai-gateway (ai.chat.request) con agentic loop",
         "6. Save assistant message → chat-session",
         "6b. Safety-net: publish complete message via MQTT QoS 1",
-        "7. Return response → conversation-manager (chat.send.response)"
+        "7. Return response → frontend (via UIRequestHandler)"
       ],
       "streaming": {
         "type": "post-hoc",

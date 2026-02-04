@@ -82,6 +82,7 @@ class ChatAiBridgeModule {
 
     // Unregister UI handlers
     if (this.uiHandler) {
+      this.uiHandler.unregister('conversation', 'send');
       this.uiHandler.unregister('chat-bridge', 'send');
       this.uiHandler.unregister('chat-bridge', 'status');
     }
@@ -120,12 +121,15 @@ class ChatAiBridgeModule {
   async registerUIHandlers() {
     if (!this.uiHandler) return;
 
+    // Primary domain: conversation.send (replaces conversation-manager facade)
+    this.uiHandler.register('conversation', 'send', this.handleConversationSend.bind(this));
+
+    // Internal domain: chat-bridge (direct access)
     this.uiHandler.register('chat-bridge', 'send', this.handleUISend.bind(this));
     this.uiHandler.register('chat-bridge', 'status', this.handleUIStatus.bind(this));
 
     this.logger.info('chat-ai-bridge.ui_handlers.registered', {
-      domain: 'chat-bridge',
-      actions: ['send', 'status']
+      domains: { conversation: ['send'], 'chat-bridge': ['send', 'status'] }
     });
   }
 
@@ -691,6 +695,146 @@ class ChatAiBridgeModule {
 
   // ==========================================
   // UI Handlers (MQTT Request/Response)
+  // ==========================================
+
+  // ==========================================
+  // Helper: Get Active Project
+  // ==========================================
+
+  async getActiveProjectId(correlationId) {
+    const requestId = crypto.randomUUID();
+
+    return new Promise(async (resolve, reject) => {
+      const timeout = setTimeout(() => {
+        unsub();
+        resolve(null);
+      }, 5000);
+
+      const unsub = await this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE, (event) => {
+        const data = event.data || event;
+        if (data.request_id === requestId) {
+          clearTimeout(timeout);
+          unsub();
+          resolve(data.active_project_id || null);
+        }
+      });
+
+      await this.eventBus.publish(EVENTS.PROJECT.ACTIVE_REQUEST, {
+        request_id: requestId,
+        correlation_id: correlationId
+      });
+    });
+  }
+
+  // ==========================================
+  // UI Handler: conversation.send (primary frontend entry point)
+  // ==========================================
+
+  /**
+   * UI Handler: conversation.send
+   * Replaces conversation-manager facade for send action.
+   * Frontend calls: mqttRequest('conversation', 'send', { conversationId, content, attachments })
+   */
+  async handleConversationSend(data, request) {
+    const { conversationId, content, attachments } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    this.logger.info('chat-ai-bridge.handleConversationSend', { correlationId, conversationId });
+
+    if (!content || content.trim().length === 0) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Content is required' };
+    }
+
+    try {
+      // Get active project
+      const projectId = await this.getActiveProjectId(correlationId);
+      if (!projectId) {
+        throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
+      }
+
+      // Create conversation if needed
+      let convId = conversationId;
+      if (!convId) {
+        const createRequestId = crypto.randomUUID();
+        const createResponse = await new Promise(async (resolve, reject) => {
+          const timeout = setTimeout(() => { unsub(); reject(new Error('Create conversation timeout')); }, 10000);
+          const unsub = await this.eventBus.subscribe('session.create.response', (event) => {
+            const d = event.data || event;
+            if (d.request_id === createRequestId) {
+              clearTimeout(timeout);
+              unsub();
+              resolve(d);
+            }
+          });
+          await this.eventBus.publish('session.create.request', {
+            request_id: createRequestId,
+            project_id: projectId,
+            correlation_id: correlationId
+          });
+        });
+
+        if (!createResponse.success) {
+          throw { status: 500, code: 'CREATE_ERROR', message: createResponse.error || 'Failed to create conversation' };
+        }
+        convId = createResponse.conversation?.id;
+      }
+
+      // Execute chat flow via internal event (triggers onChatSendRequest)
+      const requestId = crypto.randomUUID();
+      const responsePromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          this.pendingChatRequests.delete(requestId);
+          reject(new Error('Chat request timeout'));
+        }, (this.config.aiTimeoutWithTools || 180000) + 30000);
+        this.pendingChatRequests.set(requestId, { resolve, reject, timeout });
+      });
+
+      const unsubResponse = await this.eventBus.subscribe('chat.send.response', (event) => {
+        const eventData = event.data || event;
+        if (eventData.request_id === requestId) {
+          const pending = this.pendingChatRequests.get(requestId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            this.pendingChatRequests.delete(requestId);
+            if (eventData.success) pending.resolve(eventData);
+            else pending.reject(new Error(eventData.error || 'Chat request failed'));
+          }
+          unsubResponse();
+        }
+      });
+
+      await this.eventBus.publish('chat.send.request', {
+        request_id: requestId,
+        conversation_id: convId,
+        content,
+        attachments: attachments || [],
+        use_tools: true,
+        correlation_id: correlationId
+      });
+
+      const result = await responsePromise;
+
+      return {
+        conversationId: convId,
+        user_message: result.user_message,
+        assistant_message: result.assistant_message,
+        tokens_used: result.tokens_used,
+        cost: result.cost,
+        duration: result.duration
+      };
+
+    } catch (error) {
+      if (error.status) throw error;
+      this.logger.error('chat-ai-bridge.handleConversationSend.error', {
+        correlationId,
+        error: error.message
+      });
+      throw { status: 500, code: 'SEND_ERROR', message: error.message };
+    }
+  }
+
+  // ==========================================
+  // UI Handlers: chat-bridge domain (internal)
   // ==========================================
 
   /**

@@ -18,6 +18,8 @@
 
 const crypto = require('crypto');
 
+const { EVENTS } = require('../../core/constants');
+
 class ChatSessionModule {
   constructor() {
     this.name = 'chat-session';
@@ -74,15 +76,11 @@ class ChatSessionModule {
 
     // Unregister UI handlers
     if (this.uiHandler) {
-      this.uiHandler.unregister('session', 'create');
-      this.uiHandler.unregister('session', 'list');
-      this.uiHandler.unregister('session', 'get');
-      this.uiHandler.unregister('session', 'update');
-      this.uiHandler.unregister('session', 'delete');
-      this.uiHandler.unregister('session', 'messages');
-      this.uiHandler.unregister('session', 'save');
-      this.uiHandler.unregister('session', 'toggleContext');
-      this.uiHandler.unregister('session', 'contextStats');
+      const convActions = ['load', 'create', 'list', 'get', 'update', 'delete', 'toggleContext', 'contextStats'];
+      for (const action of convActions) this.uiHandler.unregister('conversation', action);
+
+      const sessionActions = ['create', 'list', 'get', 'update', 'delete', 'messages', 'save', 'toggleContext', 'contextStats'];
+      for (const action of sessionActions) this.uiHandler.unregister('session', action);
     }
 
     // Unsubscribe all event handlers
@@ -112,7 +110,17 @@ class ChatSessionModule {
   async registerUIHandlers() {
     if (!this.uiHandler) return;
 
-    // Register handlers for UI requests via MQTT
+    // Primary domain: conversation.* (replaces conversation-manager facade)
+    this.uiHandler.register('conversation', 'load', this.handleConversationLoad.bind(this));
+    this.uiHandler.register('conversation', 'create', this.handleConversationCreate.bind(this));
+    this.uiHandler.register('conversation', 'list', this.handleConversationList.bind(this));
+    this.uiHandler.register('conversation', 'get', this.handleConversationGet.bind(this));
+    this.uiHandler.register('conversation', 'update', this.handleConversationUpdate.bind(this));
+    this.uiHandler.register('conversation', 'delete', this.handleConversationDelete.bind(this));
+    this.uiHandler.register('conversation', 'toggleContext', this.handleConversationToggleContext.bind(this));
+    this.uiHandler.register('conversation', 'contextStats', this.handleConversationContextStats.bind(this));
+
+    // Internal domain: session.* (for inter-module communication)
     this.uiHandler.register('session', 'create', this.handleUICreate.bind(this));
     this.uiHandler.register('session', 'list', this.handleUIList.bind(this));
     this.uiHandler.register('session', 'get', this.handleUIGet.bind(this));
@@ -124,8 +132,10 @@ class ChatSessionModule {
     this.uiHandler.register('session', 'contextStats', this.handleUIContextStats.bind(this));
 
     this.logger.info('chat-session.ui_handlers.registered', {
-      domain: 'session',
-      actions: ['create', 'list', 'get', 'update', 'delete', 'messages', 'save', 'toggleContext', 'contextStats']
+      domains: {
+        conversation: ['load', 'create', 'list', 'get', 'update', 'delete', 'toggleContext', 'contextStats'],
+        session: ['create', 'list', 'get', 'update', 'delete', 'messages', 'save', 'toggleContext', 'contextStats']
+      }
     });
   }
 
@@ -1050,6 +1060,219 @@ class ChatSessionModule {
       return { status: 200, data: stats };
     } catch (error) {
       return { status: 500, error: error.message };
+    }
+  }
+
+  // ==========================================
+  // Helper: Get Active Project
+  // ==========================================
+
+  async getActiveProjectId(correlationId) {
+    const requestId = crypto.randomUUID();
+
+    return new Promise(async (resolve, reject) => {
+      const timeout = setTimeout(() => {
+        unsub();
+        resolve(null);
+      }, 5000);
+
+      const unsub = await this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE, (event) => {
+        const data = event.data || event;
+        if (data.request_id === requestId) {
+          clearTimeout(timeout);
+          unsub();
+          resolve(data.active_project_id || null);
+        }
+      });
+
+      await this.eventBus.publish(EVENTS.PROJECT.ACTIVE_REQUEST, {
+        request_id: requestId,
+        correlation_id: correlationId
+      });
+    });
+  }
+
+  // ==========================================
+  // UI Handlers: conversation.* (frontend facing, camelCase)
+  // ==========================================
+
+  async handleConversationLoad(data, request) {
+    const { conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const context = await this.loadConversationContext(conversationId, correlationId);
+      return {
+        conversationId,
+        messages: context.messages || [],
+        conversation: context.conversation
+      };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'LOAD_ERROR', message: error.message };
+    }
+  }
+
+  async handleConversationCreate(data, request) {
+    const { projectId, title, system_prompt, model, provider, temperature, max_tokens, context_window } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    try {
+      let projId = projectId;
+      if (!projId) {
+        projId = await this.getActiveProjectId(correlationId);
+        if (!projId) {
+          throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
+        }
+      }
+
+      const options = { title, system_prompt, model, provider, temperature, max_tokens, context_window };
+      const conversation = await this.createConversation(projId, null, options, correlationId);
+      return { conversation };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'CREATE_ERROR', message: error.message };
+    }
+  }
+
+  async handleConversationList(data, request) {
+    const { projectId, limit } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    try {
+      let projId = projectId;
+      if (!projId) {
+        projId = await this.getActiveProjectId(correlationId);
+        if (!projId) {
+          return { conversations: [], total: 0 };
+        }
+      }
+
+      const conversations = await this.listConversations(projId, limit || 20, correlationId);
+      return {
+        conversations,
+        total: conversations.length
+      };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'LIST_ERROR', message: error.message };
+    }
+  }
+
+  async handleConversationGet(data, request) {
+    const { conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const conversation = await this.getConversation(conversationId, correlationId);
+      const messages = await this.getMessages(conversationId, false, correlationId);
+      return { conversation, messages };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'GET_ERROR', message: error.message };
+    }
+  }
+
+  async handleConversationUpdate(data, request) {
+    const { conversationId, ...updates } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const conversation = await this.updateConversation(conversationId, updates, correlationId);
+      return { conversation };
+    } catch (error) {
+      if (error.status) throw error;
+      if (error.message?.includes('not found')) {
+        throw { status: 404, code: 'NOT_FOUND', message: error.message };
+      }
+      throw { status: 500, code: 'UPDATE_ERROR', message: error.message };
+    }
+  }
+
+  async handleConversationDelete(data, request) {
+    const { conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const result = await this.deleteConversation(conversationId, correlationId);
+      return {
+        success: true,
+        id: conversationId,
+        messagesDeleted: result.messages_deleted || 0
+      };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'DELETE_ERROR', message: error.message };
+    }
+  }
+
+  async handleConversationToggleContext(data, request) {
+    const { projectId, messageId, inContext } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'projectId is required' };
+    }
+    if (!messageId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'messageId is required' };
+    }
+    if (inContext === undefined) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'inContext is required' };
+    }
+
+    try {
+      const result = await this.toggleMessageContext(projectId, messageId, inContext, correlationId);
+      return {
+        success: true,
+        messageId: result.messageId,
+        inContext: result.inContext,
+        manuallyToggled: result.manuallyToggled
+      };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'TOGGLE_ERROR', message: error.message };
+    }
+  }
+
+  async handleConversationContextStats(data, request) {
+    const { projectId, conversationId } = data;
+    const correlationId = request?.correlationId || crypto.randomUUID();
+
+    if (!projectId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'projectId is required' };
+    }
+    if (!conversationId) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'conversationId is required' };
+    }
+
+    try {
+      const stats = await this.getContextStats(projectId, conversationId, correlationId);
+      return {
+        total: stats.total,
+        active: stats.active,
+        manuallyToggled: stats.manuallyToggled,
+        maxContext: stats.maxContext,
+        remaining: stats.remaining
+      };
+    } catch (error) {
+      if (error.status) throw error;
+      throw { status: 500, code: 'STATS_ERROR', message: error.message };
     }
   }
 

@@ -148,11 +148,22 @@
 
   "ui": {
     "zone": "chat-config",
-    "icon": "💬"
+    "icon": "💬",
+    "handlers": {
+      "conversation": {
+        "actions": ["load", "create", "list", "get", "update", "delete", "toggleContext", "contextStats"],
+        "note": "Primary frontend entry point for conversation CRUD"
+      },
+      "session": {
+        "actions": ["create", "list", "get", "update", "delete", "messages", "save", "toggleContext", "contextStats"],
+        "note": "Internal inter-module communication"
+      }
+    }
   },
 
   "dependencies": [
-    "database-manager"
+    "database-manager",
+    "project-manager"
   ],
 
   "config": {

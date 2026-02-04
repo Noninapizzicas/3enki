@@ -371,10 +371,25 @@ export function initChatSubscriptions(): () => void {
     }
   }));
 
-  // Fin de streaming
+  // Fin de streaming (solo finaliza el mensaje, NO desbloquea envío)
   unsubs.push(subscribe('conversation/stream/end', () => {
     toolStatus.set(null);
-    endStreaming();
+
+    // Solo finalizar el último mensaje de streaming (quitar flag streaming)
+    // NO tocar isStreaming - eso lo controla sendMessage/stopGeneration
+    messages.update(msgs => {
+      if (msgs.length === 0) return msgs;
+      const lastIdx = msgs.length - 1;
+      const lastMsg = msgs[lastIdx];
+      if (lastMsg.streaming) {
+        return [
+          ...msgs.slice(0, lastIdx),
+          { ...lastMsg, streaming: false }
+        ];
+      }
+      return msgs;
+    });
+    streamingMessageId.set(null);
   }));
 
   // Conversación cargada

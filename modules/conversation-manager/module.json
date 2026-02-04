@@ -1,6 +1,6 @@
 {
   "name": "conversation-manager",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Facade/Coordinator que mantiene compatibilidad con frontend existente, delegando a chat-session, prompt-composer y chat-ai-bridge",
   "author": "Event Core Team",
   "main": "index.js",
@@ -8,7 +8,52 @@
   "deprecationNote": "Use chat-session, prompt-composer, chat-ai-bridge directly for new development",
 
   "events": {
-    "publishes": [],
+    "publishes": [
+      {
+        "event": "chat.send.request",
+        "description": "Delegate send message to chat-ai-bridge"
+      },
+      {
+        "event": "session.create.request",
+        "description": "Delegate create conversation to chat-session"
+      },
+      {
+        "event": "session.list.request",
+        "description": "Delegate list conversations to chat-session"
+      },
+      {
+        "event": "session.get.request",
+        "description": "Delegate get conversation to chat-session"
+      },
+      {
+        "event": "session.update.request",
+        "description": "Delegate update conversation to chat-session"
+      },
+      {
+        "event": "session.delete.request",
+        "description": "Delegate delete conversation to chat-session"
+      },
+      {
+        "event": "session.messages.request",
+        "description": "Delegate get messages to chat-session"
+      },
+      {
+        "event": "session.context.load.request",
+        "description": "Delegate load context to chat-session"
+      },
+      {
+        "event": "session.context.toggle.request",
+        "description": "Delegate toggle context to chat-session"
+      },
+      {
+        "event": "session.context.stats.request",
+        "description": "Delegate context stats to chat-session"
+      },
+      {
+        "event": "project.active.request",
+        "description": "Request active project from project-manager"
+      }
+    ],
     "subscribes": [
       {
         "event": "chat.send.response",
@@ -67,87 +112,6 @@
       }
     ]
   },
-
-  "apis": [
-    {
-      "method": "POST",
-      "path": "/conversations",
-      "handler": "handleCreateConversation",
-      "description": "Create conversation (delegates to chat-session)"
-    },
-    {
-      "method": "GET",
-      "path": "/conversations",
-      "handler": "handleListConversations",
-      "description": "List conversations (delegates to chat-session)"
-    },
-    {
-      "method": "GET",
-      "path": "/conversations/:id",
-      "handler": "handleGetConversation",
-      "description": "Get conversation with messages (delegates to chat-session)"
-    },
-    {
-      "method": "PUT",
-      "path": "/conversations/:id",
-      "handler": "handleUpdateConversation",
-      "description": "Update conversation (delegates to chat-session)"
-    },
-    {
-      "method": "DELETE",
-      "path": "/conversations/:id",
-      "handler": "handleDeleteConversation",
-      "description": "Delete conversation (delegates to chat-session)"
-    },
-    {
-      "method": "POST",
-      "path": "/conversations/:id/messages",
-      "handler": "handleSendMessage",
-      "description": "Send message and get AI response (delegates to chat-ai-bridge)"
-    },
-    {
-      "method": "GET",
-      "path": "/conversations/:id/messages",
-      "handler": "handleGetMessages",
-      "description": "Get conversation messages (delegates to chat-session)"
-    },
-    {
-      "method": "GET",
-      "path": "/conversations/:id/context",
-      "handler": "handleGetContext",
-      "description": "Get conversation context (delegates to chat-session)"
-    },
-    {
-      "method": "GET",
-      "path": "/ui/state",
-      "handler": "handleUIState",
-      "description": "UI-ready state for conversation management"
-    },
-    {
-      "method": "PUT",
-      "path": "/messages/:id/context",
-      "handler": "handleToggleContext",
-      "description": "Toggle message context inclusion (delegates to chat-session)"
-    },
-    {
-      "method": "GET",
-      "path": "/conversations/:id/context-stats",
-      "handler": "handleContextStats",
-      "description": "Get context statistics (delegates to chat-session)"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check endpoint"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Module metrics"
-    }
-  ],
 
   "ui": {
     "zone": "chat",

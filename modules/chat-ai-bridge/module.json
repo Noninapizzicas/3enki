@@ -69,7 +69,17 @@
 
   "ui": {
     "zone": "chat-config",
-    "icon": "🔗"
+    "icon": "🔗",
+    "handlers": {
+      "conversation": {
+        "actions": ["send"],
+        "note": "Primary frontend entry point for sending messages"
+      },
+      "chat-bridge": {
+        "actions": ["send", "status"],
+        "note": "Internal direct access"
+      }
+    }
   },
 
   "dependencies": [

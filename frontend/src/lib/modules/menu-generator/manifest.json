@@ -1,0 +1,27 @@
+{
+  "id": "menu-generator",
+  "name": "Menu Generator",
+  "description": "Genera cartas estructuradas desde texto usando IA",
+  "version": "3.0.0",
+  "zone": "work-bar",
+  "order": 4,
+  "icon": "📋",
+  "label": "Carta",
+  "panel": {
+    "component": "MenuGeneratorPanel",
+    "zones": ["work-bar"],
+    "defaultZone": "work-bar",
+    "width": 420,
+    "minWidth": 360,
+    "maxWidth": 560
+  },
+  "triggers": {
+    "events": [
+      "carta.generada",
+      "menu.error"
+    ]
+  },
+  "permissions": {
+    "mqtt": ["menu/*", "carta.*", "menu.*"]
+  }
+}

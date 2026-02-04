@@ -1,50 +1,36 @@
 {
   "name": "menu-generator",
-  "version": "1.0.0",
-  "description": "Generador de menú desde carta física usando IA - Enfoque generativo",
+  "version": "3.0.0",
+  "description": "Genera cartas estructuradas desde texto o imágenes usando IA. Solo genera, no almacena ni gestiona.",
   "author": "Pizzepos Team",
 
   "provides": {
-    "events": ["menu.generado", "menu.validado", "ai.request"],
-    "queries": ["menu.obtener_ultimo"]
+    "events": ["carta.generada", "menu.error"]
   },
 
   "events": {
     "publishes": [
       {
-        "event": "ai.request",
-        "description": "Solicitud de procesamiento IA para parsear carta de menú",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/ai_request"
-        }
+        "event": "ai.chat.request",
+        "description": "Solicitud a AI para estructurar texto de carta en JSON"
       },
       {
-        "event": "menu.generado",
-        "description": "Menú generado por IA con productos enriquecidos",
+        "event": "carta.generada",
+        "description": "Carta generada con categorías, productos e ingredientes estructurados",
         "schema": {
-          "$ref": "./schemas/events.json#/definitions/menu_generado"
-        }
-      },
-      {
-        "event": "menu.validado",
-        "description": "Menú validado por operador antes de aplicar",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/menu_validado"
+          "$ref": "./schemas/carta-output.json"
         }
       },
       {
         "event": "menu.error",
-        "description": "Error en generación o validación de menú",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/menu_error"
-        }
+        "description": "Error en generación de carta"
       }
     ],
     "subscribes": [
       {
-        "event": "ai.response",
-        "description": "Respuesta del ai-gateway con menú parseado",
-        "handler": "onAIResponse"
+        "event": "ai.chat.response",
+        "description": "Respuesta de AI con carta estructurada",
+        "handler": "onAIChatResponse"
       }
     ]
   },
@@ -52,48 +38,37 @@
   "apis": [
     {
       "method": "POST",
-      "path": "/upload",
-      "handler": "handleUploadMenu",
-      "description": "Subir carta física (imagen/PDF) para generar menú",
-      "request_schema": {
-        "$ref": "./schemas/menu.json#/definitions/upload_request"
+      "path": "/generate",
+      "handler": "handleGenerate",
+      "description": "Generar carta desde texto (OCR, JSON crudo, lista de productos)",
+      "request": {
+        "texto": "string (requerido) - Contenido de la carta",
+        "nombre": "string (opcional) - Nombre para la carta",
+        "provider": "string (opcional) - auto|deepseek|anthropic|openai"
       },
-      "response_schema": {
-        "$ref": "./schemas/menu.json#/definitions/upload_response"
+      "response": {
+        "carta_id": "string",
+        "correlation_id": "string",
+        "estado": "generando"
       }
     },
     {
       "method": "GET",
-      "path": "/menus",
-      "handler": "handleListMenus",
-      "description": "Listar menús generados (histórico)"
+      "path": "/list",
+      "handler": "handleList",
+      "description": "Listar cartas generadas (en memoria)"
     },
     {
       "method": "GET",
-      "path": "/menus/:id",
-      "handler": "handleGetMenu",
-      "description": "Obtener menú específico"
-    },
-    {
-      "method": "POST",
-      "path": "/menus/:id/validate",
-      "handler": "handleValidateMenu",
-      "description": "Validar menú generado (publica menu.validado)",
-      "request_schema": {
-        "$ref": "./schemas/menu.json#/definitions/validate_request"
-      }
+      "path": "/get/:id",
+      "handler": "handleGet",
+      "description": "Obtener carta generada por ID"
     },
     {
       "method": "GET",
       "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
+      "handler": "handleHealth",
+      "description": "Estado del módulo"
     }
   ],
 
@@ -106,262 +81,109 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "menu.upload.total",
-        "menu.generado.total",
-        "menu.validado.total",
-        "menu.errors.total"
-      ],
-      "gauges": [
-        "menu.pendientes_validacion.count"
-      ],
-      "timings": [
-        "menu.upload.duration",
-        "menu.generation.duration"
+        "menu.generate.requested",
+        "menu.generate.completed",
+        "menu.generate.errors"
       ]
     }
   },
 
   "ui": {
     "enabled": true,
-    "version": "2.0",
+    "version": "3.0",
     "title": "Menu Generator",
-    "icon": "📄",
-    "description": "Genera menús desde cartas físicas usando IA",
+    "icon": "📋",
+    "description": "Genera cartas desde texto usando IA",
 
     "views": {
       "main": {
         "type": "dashboard",
-        "permissions": ["gerente", "admin", "user"],
-
-        "layout": {
-          "type": "two-column",
-          "config": {
-            "leftWidth": "65%",
-            "rightWidth": "35%",
-            "gap": "var(--space-lg)"
-          }
-        },
+        "permissions": ["gerente", "admin"],
 
         "sections": [
           {
-            "id": "stats_total",
+            "id": "stats",
             "widget": "stat-card",
             "config": {
-              "label": "Total Menús",
-              "value": "@compute.count(@data.menus)",
-              "icon": "📄",
-              "color": "primary"
+              "items": [
+                { "label": "Generando", "value": "@data.health.generando", "icon": "⏳", "color": "warning" },
+                { "label": "Generadas", "value": "@data.health.generadas", "icon": "✅", "color": "success" }
+              ]
             }
           },
           {
-            "id": "stats_generando",
-            "widget": "stat-card",
+            "id": "generate_form",
+            "widget": "form",
             "config": {
-              "label": "Generando",
-              "value": "@compute.count(@compute.filter(@data.menus, 'estado', 'generando'))",
-              "icon": "⏳",
-              "color": "warning"
+              "title": "Generar Carta",
+              "endpoint": "menu/generate",
+              "fields": [
+                {
+                  "name": "texto",
+                  "label": "Contenido de la carta",
+                  "type": "textarea",
+                  "required": true,
+                  "placeholder": "Pega aquí el texto de la carta, resultado OCR, o JSON crudo...",
+                  "rows": 10
+                },
+                {
+                  "name": "nombre",
+                  "label": "Nombre de la carta",
+                  "type": "text",
+                  "required": false,
+                  "placeholder": "Carta Pizzicas"
+                },
+                {
+                  "name": "provider",
+                  "label": "Provider AI",
+                  "type": "select",
+                  "required": false,
+                  "options": [
+                    { "value": "auto", "label": "Automático (recomendado)" },
+                    { "value": "deepseek", "label": "DeepSeek" },
+                    { "value": "anthropic", "label": "Anthropic (Claude)" },
+                    { "value": "openai", "label": "OpenAI (GPT)" }
+                  ]
+                }
+              ]
             }
           },
           {
-            "id": "stats_pendientes",
-            "widget": "stat-card",
-            "config": {
-              "label": "Pendientes Validación",
-              "value": "@compute.count(@compute.filter(@data.menus, 'estado', 'generado'))",
-              "icon": "⚠️",
-              "color": "info"
-            }
-          },
-          {
-            "id": "stats_validados",
-            "widget": "stat-card",
-            "config": {
-              "label": "Validados",
-              "value": "@compute.count(@compute.filter(@data.menus, 'estado', 'validado'))",
-              "icon": "✅",
-              "color": "success"
-            }
-          },
-          {
-            "id": "menus_table",
+            "id": "cartas_list",
             "widget": "table-advanced",
             "config": {
-              "title": "📋 Menús Generados",
-              "dataSource": "@data.menus",
+              "title": "Cartas Generadas",
+              "dataSource": "@data.list.cartas",
               "columns": [
-                {
-                  "key": "id",
-                  "label": "ID",
-                  "type": "text",
-                  "width": "20%"
-                },
+                { "key": "nombre", "label": "Nombre", "type": "text" },
                 {
                   "key": "estado",
                   "label": "Estado",
                   "type": "badge",
-                  "width": "15%",
-                  "badgeColors": {
-                    "generando": "warning",
-                    "generado": "info",
-                    "validado": "success",
-                    "error": "danger"
-                  }
+                  "badgeColors": { "generando": "warning", "generado": "success" }
                 },
-                {
-                  "key": "productos_count",
-                  "label": "Productos",
-                  "type": "number",
-                  "width": "12%"
-                },
-                {
-                  "key": "categorias_count",
-                  "label": "Categorías",
-                  "type": "number",
-                  "width": "12%"
-                },
-                {
-                  "key": "created_at",
-                  "label": "Creado",
-                  "type": "datetime",
-                  "width": "20%"
-                },
-                {
-                  "key": "validated_at",
-                  "label": "Validado",
-                  "type": "datetime",
-                  "width": "20%"
-                }
+                { "key": "productos", "label": "Productos", "type": "number" },
+                { "key": "categorias", "label": "Categorías", "type": "number" },
+                { "key": "created_at", "label": "Creado", "type": "datetime" }
               ],
-              "sortable": true,
-              "filterable": true,
-              "paginated": true,
-              "pageSize": 10,
               "actions": [
                 {
-                  "label": "Ver Detalles",
+                  "label": "Ver",
                   "icon": "👁️",
                   "action": "view",
-                  "permissions": ["gerente", "admin"],
-                  "endpoint": "/modules/menu-generator/menus/{{id}}"
-                },
-                {
-                  "label": "Validar",
-                  "icon": "✅",
-                  "action": "validate",
-                  "permissions": ["gerente", "admin"],
-                  "endpoint": "/modules/menu-generator/menus/{{id}}/validate",
-                  "showWhen": "estado === 'generado'",
-                  "confirm": true,
-                  "confirmMessage": "¿Confirmar validación del menú?"
+                  "endpoint": "menu/get",
+                  "showWhen": "estado === 'generado'"
                 }
               ]
-            }
-          },
-          {
-            "id": "info_panel",
-            "widget": "card",
-            "config": {
-              "title": "ℹ️ Información",
-              "content": {
-                "type": "info",
-                "items": [
-                  {
-                    "label": "Versión",
-                    "value": "1.0.0",
-                    "icon": "🏷️"
-                  },
-                  {
-                    "label": "Estado",
-                    "value": "Activo",
-                    "color": "#22c55e"
-                  },
-                  {
-                    "label": "Procesador",
-                    "value": "IA Generativa",
-                    "icon": "🤖"
-                  }
-                ]
-              }
-            }
-          },
-          {
-            "id": "instructions_panel",
-            "widget": "card",
-            "config": {
-              "title": "📖 Instrucciones",
-              "content": {
-                "type": "markdown",
-                "text": "### Cómo usar Menu Generator\n\n1. **Subir carta**: Usa el endpoint `/upload` para subir imagen o PDF de tu carta\n2. **IA procesa**: El sistema extrae productos, categorías e ingredientes automáticamente\n3. **Validar**: Revisa y valida el menú generado\n4. **Aplicar**: Una vez validado, el menú se integra al sistema\n\n**Formatos soportados**: PDF, JPG, PNG, WEBP"
-              }
-            }
-          },
-          {
-            "id": "credentials_panel",
-            "widget": "card",
-            "config": {
-              "title": "🔐 Credenciales de IA",
-              "content": {
-                "type": "markdown",
-                "text": "### Requisitos\n\nPara usar Menu Generator necesitas configurar credenciales de proveedores de IA.\n\n**Proveedores soportados:**\n- 🤖 OpenAI (GPT-4, GPT-3.5)\n- 🔮 DeepSeek\n- 🧠 Anthropic (Claude)\n\n---\n\n**[🔐 Ir a Credential Manager →](/ui/modules/credential-manager)**\n\nConfigura tus API keys antes de generar menús."
-              }
             }
           }
         ]
-      },
-
-      "upload": {
-        "type": "form",
-        "permissions": ["gerente", "admin"],
-        "config": {
-          "title": "Subir Carta de Menú",
-          "endpoint": "/modules/menu-generator/upload",
-          "method": "POST",
-          "validation": true,
-          "fields": [
-            {
-              "name": "file_base64",
-              "label": "Archivo (Base64)",
-              "type": "textarea",
-              "required": true,
-              "placeholder": "Pega aquí el contenido en base64..."
-            },
-            {
-              "name": "file_name",
-              "label": "Nombre del archivo",
-              "type": "text",
-              "required": true,
-              "placeholder": "menu.pdf"
-            },
-            {
-              "name": "file_type",
-              "label": "Tipo de archivo",
-              "type": "select",
-              "required": false,
-              "options": [
-                { "value": "application/pdf", "label": "PDF" },
-                { "value": "image/jpeg", "label": "JPEG" },
-                { "value": "image/png", "label": "PNG" },
-                { "value": "image/webp", "label": "WEBP" }
-              ]
-            }
-          ],
-          "onSuccess": {
-            "message": "Menú en proceso de generación",
-            "redirect": "/ui/modules/menu-generator"
-          }
-        }
       }
     },
 
     "mqtt": {
       "enabled": true,
-      "topics": [
-        "menu.generado",
-        "menu.validado",
-        "menu.error",
-        "ai.response"
-      ],
+      "topics": ["carta.generada", "menu.error"],
       "auto_refresh": true
     }
   }

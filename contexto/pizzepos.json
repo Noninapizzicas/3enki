@@ -123,7 +123,7 @@
       "ui_domain": "productos",
       "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "sync_menu", "validar_menu", "ingredientes", "health", "metrics"],
       "eventos_publica": ["producto.creado", "producto.actualizado", "catalogo.actualizado"],
-      "eventos_suscribe": ["menu.generado", "menu.validado"]
+      "eventos_suscribe": ["carta.generada"]
     },
 
     "categorias": {
@@ -138,7 +138,7 @@
       "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos",
       "ui_domain": "ingredientes",
       "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "health"],
-      "eventos_suscribe": ["menu.generado", "producto.creado"]
+      "eventos_suscribe": ["carta.generada", "producto.creado"]
     },
 
     "variaciones": {
@@ -151,30 +151,25 @@
 
     "menu-generator": {
       "version": "3.0.0",
-      "descripcion": "Sistema de gestión de cartas: escaneo, chat conversacional, reglas de precios, programación horaria",
-      "ui_domain": "menu-generator",
-      "uiHandlers": ["upload", "list", "get", "validate", "health", "metrics"],
-      "eventos_publica": ["menu.generado", "menu.validado", "carta.scan.completado", "carta.respuesta"],
-      "flujo": "Foto/PDF → OCR → AI estructura → carta.json | Chat → comandos/NLU → modifica carta.json",
-      "lib": {
-        "carta-manager.js": "Motor central: carga cartas JSON, resuelve carta activa según contexto (hora/canal/zona), aplica reglas de precios, calcula alérgenos desde ingredientes"
+      "descripcion": "Genera cartas estructuradas desde texto o imágenes usando IA. SOLO genera, no almacena ni gestiona.",
+      "ui_domain": "menu",
+      "uiHandlers": ["generate", "list", "get", "health"],
+      "eventos_publica": ["carta.generada", "menu.error"],
+      "eventos_suscribe": ["ai.chat.response"],
+      "flujo": "texto/OCR/JSON crudo → ai.chat.request → AI estructura → parseAndStructure → carta.generada",
+      "output_schema": "schemas/carta-output.json",
+      "output_formato": {
+        "meta": "{ id, nombre, generado_desde, created_at }",
+        "categorias": "[{ id, nombre, orden }]",
+        "productos": "[{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji }] }]"
       },
-      "handlers_proyecto": {
-        "carta-chat.js": "Comandos /carta para gestión conversacional (precios, reglas, programación, CRUD cartas)",
-        "carta-scan.js": "Pipeline escaneo: foto/PDF → Sharp → Google Vision OCR → AI estructura → carta.json"
-      },
-      "arquitectura_cartas": {
-        "persistencia": "JSON puro — ingredientes.json + cartas/*.json + programacion.json",
-        "resolucion": "Contexto (hora, canal, zona, fecha) → programacion.json → carta activa → reglas → precios finales",
-        "alergenos": "Calculados en tiempo real desde ingredientes.json — solo se muestran cara al público",
-        "reglas": "Condiciones (canal, zona, horario, dias, fechas, categorias, productos) → efectos (precio %, precio fijo, disponible, etiqueta)",
-        "programacion": "N cartas programables por franja horaria, canal, zona, rango de fechas — prioridad resuelve conflictos"
-      },
-      "storage": {
-        "base": "data/projects/pizzepos/storage/",
-        "ingredientes": "ingredientes.json — maestro único compartido entre todas las cartas",
-        "cartas": "cartas/*.json — cada carta es autocontenida con productos, categorías y reglas",
-        "programacion": "programacion.json — qué carta se usa cuándo y dónde"
+      "separacion_responsabilidades": {
+        "menu-generator": "SOLO genera carta estructurada desde input (texto, OCR, JSON crudo). Emite carta.generada y listo.",
+        "carta-manager_legacy": "lib/carta-manager.js existe como referencia. Su lógica (CRUD cartas, programación, reglas, alérgenos) pertenece a futuros módulos de catálogo/operación.",
+        "handlers_proyecto_legacy": {
+          "carta-chat.js": "Usa CartaManager directamente. Pendiente de refactorizar cuando exista módulo de gestión de cartas.",
+          "carta-scan.js": "Pipeline OCR funcional. Usa CartaManager para guardar. Pendiente de refactorizar para emitir carta.generada en vez de guardar directamente."
+        }
       }
     },
 

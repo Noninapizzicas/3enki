@@ -272,5 +272,70 @@
     "registry": "core/providers/registry.js",
     "catalogo": "contexto/catalogo-servicios.json",
     "patrones_providers": "contexto/providers.json"
+  },
+
+  "skills_creados": {
+    "local.context-sync": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/context-sync/",
+      "descripcion": "Auditor del sistema — compara contexto/ (fuente de verdad) contra código real. Si el código no se ajusta al contexto, el código es el problema.",
+      "filosofia": {
+        "fuente_de_verdad": "contexto/ — define lo que el sistema DEBE ser",
+        "codigo": "Lo que el sistema ES",
+        "delta": "Lo que hay que corregir en el CÓDIGO, no en contexto"
+      },
+      "funciones": {
+        "audit": {
+          "evento": "local.context-sync.audit.request",
+          "descripcion": "Auditoría completa: providers + módulos. Retorna issues clasificados por severidad y tipo"
+        },
+        "audit-providers": {
+          "evento": "local.context-sync.audit-providers.request",
+          "descripcion": "Compara providers documentados en catalogo-servicios.json contra los que existen realmente en services/providers/local/",
+          "detecta": [
+            "MISSING_CODE — provider documentado pero no existe en código",
+            "MISSING_MANIFEST — provider existe pero sin manifest.json",
+            "MISSING_FUNCTION — función documentada pero no implementada",
+            "UNDOCUMENTED — provider en código pero no documentado en contexto"
+          ]
+        },
+        "audit-modules": {
+          "evento": "local.context-sync.audit-modules.request",
+          "descripcion": "Compara módulos documentados en catalogo-servicios.json contra los que existen en modules/",
+          "detecta": [
+            "MISSING_CODE — módulo documentado pero no existe",
+            "MISSING_MODULE_JSON — módulo existe sin module.json",
+            "UNDOCUMENTED — módulo en código pero no en contexto"
+          ]
+        },
+        "fix-manifests": {
+          "evento": "local.context-sync.fix-manifests.request",
+          "descripcion": "Genera manifest.json faltantes leyendo el index.js del provider y el catálogo de contexto",
+          "parametros": {
+            "dryRun": "boolean — si true, solo reporta sin crear archivos"
+          }
+        },
+        "report": {
+          "evento": "local.context-sync.report.request",
+          "descripcion": "Genera reporte legible con score de sincronización 0-100",
+          "scoring": {
+            "error_penalty": "10 puntos por ERROR (código faltante)",
+            "warning_penalty": "3 puntos por WARNING (manifest, documentación)",
+            "100": "Contexto y código sincronizados",
+            "80-99": "Drift menor",
+            "debajo_80": "Necesita atención"
+          }
+        }
+      },
+      "uso": {
+        "auditoria_completa": "services.call('local.context-sync', 'audit', {})",
+        "solo_providers": "services.call('local.context-sync', 'audit-providers', {})",
+        "solo_modulos": "services.call('local.context-sync', 'audit-modules', {})",
+        "reparar_manifests": "services.call('local.context-sync', 'fix-manifests', {})",
+        "reparar_dry_run": "services.call('local.context-sync', 'fix-manifests', { dryRun: true })",
+        "reporte_legible": "services.call('local.context-sync', 'report', {})"
+      }
+    }
   }
 }

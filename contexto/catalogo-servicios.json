@@ -480,6 +480,12 @@
       "local.facturas-db": {
         "descripcion": "Base de datos de facturas",
         "funciones": ["create", "list", "get", "update", "delete"]
+      },
+      "local.skills": {
+        "descripcion": "Generador automatizado de servicios locales con documentación",
+        "funciones": ["generate", "list", "get", "remove", "validate"],
+        "credenciales": "No requiere",
+        "nota": "Meta-servicio que crea otros servicios. Las funciones generadas se convierten en AI tools automáticamente."
       }
     }
   },
@@ -543,6 +549,13 @@
       "scheduler.list_jobs",
       "scheduler.create_job",
       "scheduler.trigger_job"
+    ],
+    "skills": [
+      "local.skills.generate",
+      "local.skills.list",
+      "local.skills.get",
+      "local.skills.remove",
+      "local.skills.validate"
     ]
   },
 

@@ -1,0 +1,276 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-02-04",
+  "_DESCRIPTION": "Sistema de Skills: Generador automatizado de servicios locales para Event-Core",
+
+  "_AI_INSTRUCTIONS": {
+    "CRITICAL": "Este sistema permite crear nuevos servicios locales (providers) automáticamente",
+    "rule_1": "Cada skill genera un servicio local completo: index.js + manifest.json + documentación",
+    "rule_2": "Los skills generados siguen TODOS los patrones de providers.json",
+    "rule_3": "Los skills se auto-descubren por el provider-loader al reiniciar",
+    "rule_4": "Las funciones del skill generado se convierten automáticamente en AI tools",
+    "ANTES_DE_USAR": "Leer este archivo para entender cómo crear skills correctamente"
+  },
+
+  "concepto": {
+    "que_es": "Un skill es un servicio local generado automáticamente. Convierte una definición declarativa (nombre, funciones, parámetros) en un provider completo y funcional con toda su documentación.",
+    "objetivo": "Automatizar la creación de servicios locales para expandir las capacidades del sistema — tanto para el usuario como para la IA.",
+    "ubicacion_provider": "services/providers/local/skills/",
+    "ubicacion_generados": "services/providers/local/{nombre-del-skill}/"
+  },
+
+  "arquitectura": {
+    "provider": {
+      "nombre": "local.skills",
+      "ubicacion": "services/providers/local/skills/index.js",
+      "manifest": "services/providers/local/skills/manifest.json"
+    },
+    "auto_discovery": {
+      "descripcion": "Los servicios generados se auto-descubren por core/providers/loader.js al reiniciar",
+      "requisito": "Solo necesita que exista services/providers/local/{nombre}/index.js",
+      "no_requiere": "No hay que tocar loader.js, registry.js ni ningún código core"
+    },
+    "documentacion_automatica": {
+      "catalogo": "contexto/catalogo-servicios.json se actualiza automáticamente en cada generate/remove",
+      "manifest": "Se genera manifest.json individual para cada skill"
+    }
+  },
+
+  "funciones": {
+    "generate": {
+      "evento": "local.skills.generate.request",
+      "descripcion": "Crea un nuevo servicio local completo",
+      "que_genera": [
+        "services/providers/local/{nombre}/index.js — código del provider con validación y estructura",
+        "services/providers/local/{nombre}/manifest.json — metadatos y schema de funciones",
+        "Entrada en contexto/catalogo-servicios.json — documentación centralizada"
+      ],
+      "parametros": {
+        "name": "string requerido — nombre en kebab-case (ej: text-analyzer, url-scraper)",
+        "description": "string requerido — descripción del servicio",
+        "functions": "array requerido — definiciones de funciones (ver estructura_funcion)",
+        "npmDependency": "string opcional — dependencia npm (genera lazy loader)",
+        "hasFileInput": "boolean opcional — genera helpers para base64/path resolution"
+      }
+    },
+    "list": {
+      "evento": "local.skills.list.request",
+      "descripcion": "Lista todos los servicios locales existentes con sus funciones",
+      "nota": "Escanea el directorio, no necesita cache"
+    },
+    "get": {
+      "evento": "local.skills.get.request",
+      "descripcion": "Detalles completos de un servicio: funciones, manifest, archivos",
+      "parametros": {
+        "name": "string requerido — nombre del servicio (con o sin prefijo 'local.')"
+      }
+    },
+    "remove": {
+      "evento": "local.skills.remove.request",
+      "descripcion": "Elimina un servicio y su entrada en el catálogo",
+      "protegidos": ["skills", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
+      "nota": "Los servicios protegidos no pueden eliminarse"
+    },
+    "validate": {
+      "evento": "local.skills.validate.request",
+      "descripcion": "Valida una definición antes de generar — útil para preview",
+      "parametros": {
+        "name": "string requerido",
+        "functions": "array requerido"
+      }
+    }
+  },
+
+  "estructura_funcion": {
+    "descripcion": "Cómo definir cada función dentro del array 'functions'",
+    "schema": {
+      "name": "string requerido — nombre en kebab-case (ej: extract, convert, analyze)",
+      "description": "string — descripción de la función",
+      "params": [
+        {
+          "name": "string requerido — nombre del parámetro",
+          "type": "string — tipo: string, number, boolean, array, object (default: string)",
+          "required": "boolean — si es obligatorio",
+          "default": "any — valor por defecto",
+          "description": "string — descripción del parámetro"
+        }
+      ],
+      "output": [
+        {
+          "name": "string requerido — nombre del campo de salida",
+          "type": "string — tipo del campo",
+          "description": "string — descripción"
+        }
+      ]
+    },
+    "ejemplo_completo": {
+      "name": "analyze",
+      "description": "Analiza texto y extrae entidades",
+      "params": [
+        { "name": "text", "type": "string", "required": true, "description": "Texto a analizar" },
+        { "name": "language", "type": "string", "default": "es", "description": "Idioma del texto" },
+        { "name": "maxEntities", "type": "number", "default": 10, "description": "Máximo de entidades" }
+      ],
+      "output": [
+        { "name": "entities", "type": "array", "description": "Entidades encontradas" },
+        { "name": "summary", "type": "string", "description": "Resumen del análisis" },
+        { "name": "confidence", "type": "number", "description": "Confianza 0-1" }
+      ]
+    }
+  },
+
+  "uso_desde_handlers": {
+    "generar_skill": {
+      "codigo": [
+        "const result = await services.call('local.skills', 'generate', {",
+        "  name: 'text-analyzer',",
+        "  description: 'Análisis de texto con extracción de entidades',",
+        "  functions: [",
+        "    {",
+        "      name: 'analyze',",
+        "      description: 'Analiza texto y extrae entidades',",
+        "      params: [",
+        "        { name: 'text', type: 'string', required: true, description: 'Texto a analizar' },",
+        "        { name: 'language', type: 'string', default: 'es' }",
+        "      ],",
+        "      output: [",
+        "        { name: 'entities', type: 'array', description: 'Entidades encontradas' },",
+        "        { name: 'confidence', type: 'number', description: 'Confianza 0-1' }",
+        "      ]",
+        "    }",
+        "  ],",
+        "  npmDependency: 'compromise'",
+        "});",
+        "",
+        "if (result.data?.created) {",
+        "  // Servicio creado en services/providers/local/text-analyzer/",
+        "  // Reiniciar para auto-discovery",
+        "}"
+      ]
+    },
+    "listar_skills": {
+      "codigo": [
+        "const result = await services.call('local.skills', 'list', {});",
+        "// result.data.skills = [{ name, description, functions }, ...]",
+        "// result.data.count = 18"
+      ]
+    },
+    "obtener_detalle": {
+      "codigo": [
+        "const result = await services.call('local.skills', 'get', { name: 'text-analyzer' });",
+        "// result.data.skill = { name, description, functions, manifest, path }",
+        "// result.data.files = [{ name: 'index.js', size: 2048 }, ...]"
+      ]
+    },
+    "validar_antes_de_crear": {
+      "codigo": [
+        "const check = await services.call('local.skills', 'validate', {",
+        "  name: 'my-service',",
+        "  functions: [{ name: 'process', params: [{ name: 'input', required: true }] }]",
+        "});",
+        "if (check.data.valid) {",
+        "  // Proceder con generate",
+        "} else {",
+        "  // check.data.errors contiene los problemas",
+        "}"
+      ]
+    }
+  },
+
+  "uso_desde_ai": {
+    "descripcion": "El AI puede usar local.skills como tool para crear nuevos servicios",
+    "herramientas_disponibles": [
+      "local.skills.generate — crear servicio",
+      "local.skills.list — listar servicios",
+      "local.skills.get — ver detalle",
+      "local.skills.remove — eliminar servicio",
+      "local.skills.validate — validar antes de crear"
+    ],
+    "ejemplo_conversacion": [
+      "Usuario: 'Necesito un servicio que convierta markdown a HTML'",
+      "AI: Usa local.skills.validate para verificar → luego local.skills.generate con:",
+      "  name: 'markdown-converter'",
+      "  description: 'Convierte Markdown a HTML'",
+      "  functions: [{ name: 'convert', params: [{ name: 'markdown', type: 'string', required: true }], output: [{ name: 'html', type: 'string' }] }]",
+      "  npmDependency: 'marked'",
+      "AI: Servicio creado. Después de reiniciar, disponible como local.markdown-converter.convert"
+    ]
+  },
+
+  "patron_eventos": {
+    "regla": "Los servicios generados siguen el patrón estándar de providers",
+    "patron": "local.{nombre}.{funcion}.request → local.{nombre}.{funcion}.response",
+    "ejemplos": [
+      "local.text-analyzer.analyze.request → local.text-analyzer.analyze.response",
+      "local.markdown-converter.convert.request → local.markdown-converter.convert.response",
+      "local.url-scraper.scrape.request → local.url-scraper.scrape.response"
+    ]
+  },
+
+  "que_genera_exactamente": {
+    "index_js": {
+      "incluye": [
+        "Header con documentación (nombre, descripción, eventos)",
+        "Lazy loading de dependencia npm si aplica",
+        "module.exports con name, description, functions",
+        "Definición completa de cada función (event, description, input, output)",
+        "Helpers para base64/path resolution si hasFileInput=true",
+        "Implementación skeleton de cada función con validación de parámetros",
+        "Manejo de errores consistente"
+      ],
+      "patrones_aplicados": [
+        "Lesson #7: Validar parámetros al inicio",
+        "Lesson #12: Detectar base64 por magic bytes",
+        "Lesson #14: Estructura de respuesta documentada y consistente"
+      ]
+    },
+    "manifest_json": {
+      "incluye": [
+        "$schema referencia",
+        "name, version, description",
+        "requires (credentials, npm)",
+        "functions con input/output schemas completos",
+        "Metadata de generación (generatedBy, generatedAt)"
+      ]
+    },
+    "catalogo_update": {
+      "incluye": [
+        "Entrada en service_providers.local del catálogo",
+        "Con descripción, funciones y flag generado_por"
+      ]
+    }
+  },
+
+  "limitaciones": {
+    "implementacion": "El código generado tiene TODOs donde debe implementarse la lógica real",
+    "hot_reload": "Requiere reiniciar Event-Core para que el loader descubra el nuevo servicio",
+    "complejidad": "Para servicios complejos con mucha lógica, puede ser mejor crear manualmente"
+  },
+
+  "flujo_completo": {
+    "pasos": [
+      "1. Definir el skill: nombre, descripción, funciones con params y output",
+      "2. Validar: services.call('local.skills', 'validate', definición)",
+      "3. Generar: services.call('local.skills', 'generate', definición)",
+      "4. Si tiene npmDependency: npm install {dependencia}",
+      "5. Implementar lógica: editar el index.js generado (buscar TODO)",
+      "6. Reiniciar Event-Core: el loader auto-descubre el nuevo provider",
+      "7. El servicio está disponible via eventos MQTT y como AI tool"
+    ],
+    "resultado": "Un servicio completo, documentado, integrado en el catálogo, disponible para handlers, flows y AI"
+  },
+
+  "servicios_protegidos": {
+    "lista": ["skills", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
+    "razon": "Son servicios core del sistema que no deben eliminarse accidentalmente"
+  },
+
+  "archivos_relacionados": {
+    "provider": "services/providers/local/skills/index.js",
+    "manifest": "services/providers/local/skills/manifest.json",
+    "auto_discovery": "core/providers/loader.js",
+    "registry": "core/providers/registry.js",
+    "catalogo": "contexto/catalogo-servicios.json",
+    "patrones_providers": "contexto/providers.json"
+  }
+}

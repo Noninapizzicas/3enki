@@ -172,16 +172,58 @@
         }
       },
       "frontend": {
-        "store": "frontend/src/lib/stores/menu-generator.ts",
-        "modulo": "frontend/src/lib/modules/menu-generator/",
+        "arquitectura": "5 micro-módulos en work-bar + store compartido. Cada módulo = 1 botón + 1 panel flotante.",
+        "store_compartido": "frontend/src/lib/stores/menu-generator.ts — generate, list, get, health, subscriptions",
         "pagina": "frontend/src/routes/menu-generator/+page.svelte",
-        "panel_flotante": "menu-generator-panel (registrado en panels.ts)",
-        "componentes": {
-          "MenuGeneratorPanel.svelte": "Panel flotante con 3 tabs: Generar, Cartas, Detalle",
-          "manifest.json": "Autodiscovery — zone: work-bar, icon: 📋",
-          "index.ts": "UIModule + re-exports del store"
+        "micro_modulos": {
+          "menu-pdf2img": {
+            "ubicacion": "modules/menu-pdf2img/",
+            "panel": "Pdf2ImgPanel.svelte (sm)",
+            "funcion": "Convierte PDF a imagen via mqttRequest('pdfjs', 'render')",
+            "icon": "📄",
+            "order": 1
+          },
+          "menu-prepare": {
+            "ubicacion": "modules/menu-prepare/",
+            "panel": "PreparePanel.svelte (sm)",
+            "funcion": "Prepara imagen para OCR via mqttRequest('sharp', 'prepare-ocr'). Opciones: grayscale, normalize, sharpen, threshold.",
+            "icon": "🖼️",
+            "order": 2
+          },
+          "menu-ocr": {
+            "ubicacion": "modules/menu-ocr/",
+            "panel": "OcrPanel.svelte (md)",
+            "funcion": "Extrae texto de imagen. Backends: auto, tesseract, scribe-ocr, document-processor.",
+            "icon": "🔍",
+            "order": 3
+          },
+          "menu-generate": {
+            "ubicacion": "modules/menu-generate/",
+            "panel": "GeneratePanel.svelte (md)",
+            "funcion": "Envía texto a AI para estructurar carta. Usa store compartido: generateMenu().",
+            "icon": "✨",
+            "order": 4
+          },
+          "menu-cartas": {
+            "ubicacion": "modules/menu-cartas/",
+            "panel": "CartasPanel.svelte (lg)",
+            "funcion": "Lista cartas generadas + vista detalle (categorías, productos, ingredientes). Usa store compartido.",
+            "icon": "📋",
+            "order": 5
+          }
         },
+        "pipeline_completo": "PDF→IMG → Preparar → OCR → Generar (AI) → Ver Cartas. El chat con prompt especializado permite refinar resultados.",
+        "modulo_antiguo_archivado": {
+          "MenuGeneratorPanel.svelte": "893 líneas, 3 tabs — conservado como referencia",
+          "manifest.json.archived": "Renombrado para que auto-discovery no lo cargue",
+          "index.ts": "Solo re-exports del store por compatibilidad"
+        },
+        "todos_paneles_en": "panels.ts — obligatorio registrar cada panel con lazy loader",
+        "route_filtering": "Todos los micro-módulos tienen routes: ['/menu-generator'] — solo visibles en esa ruta",
         "mqtt_requests": [
+          "mqttRequest('pdfjs', 'render', { filePath, page, scale })",
+          "mqttRequest('sharp', 'prepare-ocr', { input, grayscale, normalize, sharpen, threshold })",
+          "mqttRequest('tesseract', 'extract', { imagePath, language })",
           "mqttRequest('menu', 'generate', { texto, nombre, provider })",
           "mqttRequest('menu', 'list')",
           "mqttRequest('menu', 'get', { id })",
@@ -200,7 +242,11 @@
       "decisiones_tomadas": [
         "Precios multi-tamaño (Individual/Mediana/Familiar): se manejan como variaciones, NO en el generador",
         "CartaManager separado: su lógica CRUD/reglas/alérgenos NO pertenece al generador",
-        "menu-generator-v2 monolito (2913 líneas) archivado en otros-modulos/"
+        "menu-generator-v2 monolito (2913 líneas) archivado en otros-modulos/",
+        "Panel monolítico (893 líneas, 3 tabs) reemplazado por 5 micro-módulos independientes en work-bar",
+        "Cada micro-módulo = 1 manifest.json + 1 index.ts + 1 Panel.svelte — patrón estándar del sistema",
+        "Store compartido: los módulos menu-generate y menu-cartas comparten stores/menu-generator.ts",
+        "Route filtering: campo routes en manifest.json filtra qué módulos aparecen en cada ruta"
       ]
     },
 

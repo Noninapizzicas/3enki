@@ -1,0 +1,10 @@
+{
+  "id": "menu-generate",
+  "name": "Generar Carta",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 4,
+  "routes": ["/menu-generator"],
+  "icon": "✨",
+  "label": "Generar"
+}

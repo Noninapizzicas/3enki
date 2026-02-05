@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "zone": "work-bar",
   "order": 3,
+  "routes": ["/facturas"],
   "icon": "🧾",
   "label": "Facturas",
   "panel": {

@@ -27,6 +27,8 @@ export interface LazyModuleDefinition {
   label: string;
   // Dependencias que deben cargarse primero
   dependencies?: string[];
+  // Rutas donde el módulo es visible (sin definir = aparece en todas)
+  routes?: string[];
 }
 
 interface LoadedModule {
@@ -383,14 +385,30 @@ export function getAppState(): AppState {
 // STORES DERIVADOS
 // ============================================================================
 
-function filterDefinitionsByZone(defs: Map<string, LazyModuleDefinition>, zone: UIZone) {
+// Ruta actual — permite filtrar módulos por ruta
+const currentRouteStore = writable<string>('/');
+
+/**
+ * Informa la ruta actual al registry.
+ * Llamado desde LazyShell reactivamente con $page.url.pathname.
+ */
+export function setCurrentRoute(route: string): void {
+  currentRouteStore.set(route);
+}
+
+function filterDefinitionsByZone(defs: Map<string, LazyModuleDefinition>, zone: UIZone, currentRoute?: string) {
   return [...defs.values()]
     .filter(d => d.zone === zone)
+    .filter(d => !d.routes || !currentRoute || d.routes.some(r => currentRoute.startsWith(r)))
     .sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
 }
 
-// Definiciones por zona (para renderizar botones antes de cargar)
-export const workBarDefinitions = derived(definitionsStore, $d => filterDefinitionsByZone($d, 'work-bar'));
+// Work-bar filtra por ruta (cada ruta tiene su propia work-bar)
+export const workBarDefinitions = derived(
+  [definitionsStore, currentRouteStore],
+  ([$d, $route]) => filterDefinitionsByZone($d, 'work-bar', $route)
+);
+// Resto de zonas: compartidas en todas las rutas
 export const chatConfigDefinitions = derived(definitionsStore, $d => filterDefinitionsByZone($d, 'chat-config'));
 export const chatToolsDefinitions = derived(definitionsStore, $d => filterDefinitionsByZone($d, 'chat-tools'));
 export const systemBarDefinitions = derived(definitionsStore, $d => filterDefinitionsByZone($d, 'system-bar'));

@@ -492,6 +492,12 @@
         "funciones": ["audit", "audit-providers", "audit-modules", "fix-manifests", "report"],
         "credenciales": "No requiere",
         "nota": "contexto/ es la fuente de verdad. Si el código no se ajusta, el código es el problema."
+      },
+      "local.handler-generator": {
+        "descripcion": "Generador de handlers JavaScript con patrones reales de producción",
+        "funciones": ["generate", "list", "archive", "restore"],
+        "credenciales": "No requiere",
+        "nota": "Genera handlers con envelope pattern, filtros, services.call, emit, config/store. Soporta global y por proyecto."
       }
     }
   },
@@ -569,6 +575,12 @@
       "local.context-sync.audit-modules",
       "local.context-sync.fix-manifests",
       "local.context-sync.report"
+    ],
+    "handler_generator": [
+      "local.handler-generator.generate",
+      "local.handler-generator.list",
+      "local.handler-generator.archive",
+      "local.handler-generator.restore"
     ]
   },
 

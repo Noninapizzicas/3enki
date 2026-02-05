@@ -261,7 +261,7 @@
   },
 
   "servicios_protegidos": {
-    "lista": ["skills", "context-sync", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
+    "lista": ["skills", "context-sync", "handler-generator", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
     "razon": "Son servicios core del sistema que no deben eliminarse accidentalmente"
   },
 
@@ -355,6 +355,36 @@
         "reparar_manifests": "services.call('local.context-sync', 'fix-manifests', {})",
         "reparar_dry_run": "services.call('local.context-sync', 'fix-manifests', { dryRun: true })",
         "reporte_legible": "services.call('local.context-sync', 'report', {})"
+      }
+    },
+    "local.handler-generator": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/handler-generator/",
+      "descripcion": "Generador de handlers JavaScript siguiendo patrones reales de producción. Crea handlers con envelope pattern, filtros, services.call, emit, config/store.",
+      "funciones": {
+        "generate": {
+          "evento": "local.handler-generator.generate.request",
+          "descripcion": "Genera un handler JS completo con JSDoc, envelope unwrap, filtros, servicios y emit"
+        },
+        "list": {
+          "evento": "local.handler-generator.list.request",
+          "descripcion": "Lista handlers activos y archivados con estado"
+        },
+        "archive": {
+          "evento": "local.handler-generator.archive.request",
+          "descripcion": "Mueve handler a archived/ (soft delete)"
+        },
+        "restore": {
+          "evento": "local.handler-generator.restore.request",
+          "descripcion": "Restaura handler desde archived/ a activo"
+        }
+      },
+      "uso": {
+        "generar": "services.call('local.handler-generator', 'generate', { name, description, trigger, projectId?, filter?, extraTriggers?, services?, emits?, usesConfig?, usesStore? })",
+        "listar": "services.call('local.handler-generator', 'list', { projectId? })",
+        "archivar": "services.call('local.handler-generator', 'archive', { name, projectId? })",
+        "restaurar": "services.call('local.handler-generator', 'restore', { name, projectId? })"
       }
     }
   }

@@ -51,8 +51,12 @@
     display: flex;
     flex: 1;
     gap: 0.5rem;
-    flex-wrap: wrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;           /* Firefox */
   }
+  .workbar-content::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
 
   .collapsed .workbar-content {
     gap: 0.25rem;

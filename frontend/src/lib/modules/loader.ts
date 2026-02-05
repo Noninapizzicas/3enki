@@ -25,6 +25,8 @@ export interface ModuleManifest {
   dependencies?: string[];
   critical?: boolean;
   heavy?: boolean;
+  // Rutas donde el módulo es visible en work-bar (sin definir = todas)
+  routes?: string[];
 }
 
 // ============================================================================
@@ -65,6 +67,7 @@ function buildDefinitions(): LazyModuleDefinition[] {
         icon: manifest.icon,
         label: manifest.label,
         dependencies: manifest.dependencies,
+        routes: manifest.routes,
         loader: () => moduleLoaders[loaderPath]().then(m => m.default)
       });
     }

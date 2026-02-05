@@ -1,0 +1,10 @@
+{
+  "id": "menu-ocr",
+  "name": "OCR",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 3,
+  "routes": ["/menu-generator"],
+  "icon": "🔍",
+  "label": "OCR"
+}

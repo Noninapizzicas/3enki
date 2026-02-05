@@ -11,18 +11,23 @@
    */
 
   import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/stores';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import {
     defineModule,
     preloadModules,
     activePanel,
     getPanelConfig,
-    getPanelComponent
+    getPanelComponent,
+    setCurrentRoute
   } from '$lib/ui-core/lazy-registry';
   import { closePanel } from '$lib/stores/ui';
   import { initWorkspaceSubscriptions, initChatSubscriptions, initProjectsSubscriptions, initConversations } from '$lib/stores';
   import { moduleDefinitions, criticalModules } from '$lib/modules/definitions';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
+
+  // Informar ruta actual al registry para filtrar work-bar por ruta
+  $: setCurrentRoute($page.url.pathname);
 
   // Layout components (siempre cargados)
   import ChatArea from './ChatArea.svelte';

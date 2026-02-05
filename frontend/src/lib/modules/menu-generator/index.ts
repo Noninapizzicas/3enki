@@ -1,57 +1,14 @@
 /**
- * Modulo Menu Generator
+ * Modulo Menu Generator — ARCHIVADO
  *
- * Genera cartas estructuradas desde texto usando IA.
- * Responsabilidad unica: generar. No almacena ni gestiona.
+ * Reemplazado por 5 micro-módulos:
+ *   menu-pdf2img, menu-prepare, menu-ocr, menu-generate, menu-cartas
+ *
+ * Este archivo solo mantiene re-exports del store por compatibilidad.
+ * El panel monolítico (MenuGeneratorPanel.svelte) se conserva como referencia.
  */
 
-import type { UIModule } from '$lib/ui-core';
-import MenuGeneratorPanel from './MenuGeneratorPanel.svelte';
-
-export { default as MenuGeneratorPanel } from './MenuGeneratorPanel.svelte';
-
-export const menuGeneratorModule: UIModule = {
-  manifest: {
-    id: 'menu-generator',
-    name: 'Menu Generator',
-    version: '3.0.0',
-    zone: 'work-bar',
-    button: {
-      id: 'menu-generator-btn',
-      icon: '📋',
-      dynamicIcon: false,
-      label: 'Carta',
-      action: { type: 'panel', panelId: 'menu-generator-panel' },
-      order: 4
-    },
-    panels: [
-      {
-        id: 'menu-generator-panel',
-        title: 'Generador de Cartas',
-        size: 'lg'
-      }
-    ],
-    mqtt: {
-      publishes: [
-        'ui/request/menu/generate',
-        'ui/request/menu/list',
-        'ui/request/menu/get',
-        'ui/request/menu/health'
-      ],
-      subscribes: [
-        'carta.generada',
-        'menu.error',
-        'ui/response/+'
-      ]
-    }
-  },
-
-  PanelComponent: MenuGeneratorPanel
-};
-
-export default menuGeneratorModule;
-
-// Re-export store functions
+// Re-export store functions (backward compat)
 export {
   menuGeneratorStore,
   sortedCartas,

@@ -67,11 +67,15 @@
       "order": "number (optional)",
       "icon": "emoji",
       "label": "string",
-      "dependencies": ["module-id"] ,
+      "dependencies": ["module-id"],
       "critical": "boolean (preload on startup)",
-      "heavy": "boolean (load in background)"
+      "heavy": "boolean (load in background)",
+      "routes": "string[] (optional) — rutas donde el módulo aparece en work-bar. Sin definir = todas las rutas."
     },
-    "active_modules": ["project", "files", "provider", "prompts", "credentials", "menu-generator"]
+    "active_modules": ["project", "files", "provider", "prompts", "credentials", "facturas", "menu-pdf2img", "menu-prepare", "menu-ocr", "menu-generate", "menu-cartas"],
+    "archived_modules": {
+      "menu-generator": "Monolito 893 líneas, 3 tabs. Reemplazado por 5 micro-módulos. Manifest renombrado a .archived. Store compartido en stores/menu-generator.ts."
+    }
   },
   "stores": {
     "location": "frontend/src/lib/stores/",
@@ -171,6 +175,21 @@
     "registro_obligatorio": "Cada panel flotante DEBE estar en panels.ts con su loader. El autodiscovery de manifest.json descubre módulos pero los paneles se registran aparte.",
     "sizes": ["sm", "md", "lg"],
     "positions": ["top", "bottom", "left", "right", "center"]
+  },
+  "route_filtering": {
+    "descripcion": "La work-bar filtra módulos según la ruta actual. Cada ruta/modo de trabajo muestra solo sus herramientas.",
+    "implementacion": {
+      "manifest.json": "Campo routes: ['/menu-generator'] — indica en qué rutas aparece el módulo",
+      "loader.ts": "Propaga routes del manifest a LazyModuleDefinition",
+      "lazy-registry.ts": "currentRouteStore + setCurrentRoute() — workBarDefinitions filtra por ruta",
+      "LazyShell.svelte": "$: setCurrentRoute($page.url.pathname) — reactivo con SvelteKit page store"
+    },
+    "logica_filtrado": "Si un módulo NO tiene routes → aparece en TODAS las rutas. Si tiene routes → solo aparece si la ruta actual empieza con alguna de ellas (startsWith).",
+    "ejemplo": {
+      "facturas": "routes: ['/facturas'] → solo visible en /facturas",
+      "menu-pdf2img": "routes: ['/menu-generator'] → solo visible en /menu-generator",
+      "files": "sin routes → visible en todas las rutas"
+    }
   },
   "generation_rules": [
     "Never invent UX not defined in backend",

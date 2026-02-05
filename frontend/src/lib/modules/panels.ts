@@ -79,16 +79,56 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/credentials/CredentialsPanel.svelte')
   },
 
-  // === WORK BAR (barra de trabajo) ===
-  'menu-generator-panel': {
-    id: 'menu-generator-panel',
-    title: 'Generador de Cartas',
+  // === WORK BAR (barra de trabajo — micro-módulos menú) ===
+  'menu-pdf2img-panel': {
+    id: 'menu-pdf2img-panel',
+    title: 'PDF a Imagen',
+    icon: '📄',
+    size: 'sm',
+    position: 'top',
+    zone: 'work-bar',
+    order: 1,
+    loader: () => import('$lib/modules/menu-pdf2img/Pdf2ImgPanel.svelte')
+  },
+  'menu-prepare-panel': {
+    id: 'menu-prepare-panel',
+    title: 'Preparar Imagen para OCR',
+    icon: '🖼️',
+    size: 'sm',
+    position: 'top',
+    zone: 'work-bar',
+    order: 2,
+    loader: () => import('$lib/modules/menu-prepare/PreparePanel.svelte')
+  },
+  'menu-ocr-panel': {
+    id: 'menu-ocr-panel',
+    title: 'Extraer Texto (OCR)',
+    icon: '🔍',
+    size: 'md',
+    position: 'top',
+    zone: 'work-bar',
+    order: 3,
+    loader: () => import('$lib/modules/menu-ocr/OcrPanel.svelte')
+  },
+  'menu-generate-panel': {
+    id: 'menu-generate-panel',
+    title: 'Generar Carta',
+    icon: '✨',
+    size: 'md',
+    position: 'top',
+    zone: 'work-bar',
+    order: 4,
+    loader: () => import('$lib/modules/menu-generate/GeneratePanel.svelte')
+  },
+  'menu-cartas-panel': {
+    id: 'menu-cartas-panel',
+    title: 'Cartas Generadas',
     icon: '📋',
     size: 'lg',
     position: 'top',
     zone: 'work-bar',
-    order: 1,
-    loader: () => import('$lib/modules/menu-generator/MenuGeneratorPanel.svelte')
+    order: 5,
+    loader: () => import('$lib/modules/menu-cartas/CartasPanel.svelte')
   },
 
   // === CHAT TOOLS (barra inferior junto al chat) ===

@@ -1,0 +1,10 @@
+{
+  "id": "menu-pdf2img",
+  "name": "PDF a Imagen",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 1,
+  "routes": ["/menu-generator"],
+  "icon": "📄",
+  "label": "PDF→IMG"
+}

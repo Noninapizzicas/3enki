@@ -261,7 +261,7 @@
   },
 
   "servicios_protegidos": {
-    "lista": ["skills", "context-sync", "handler-generator", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
+    "lista": ["skills", "context-sync", "handler-generator", "backup-manager", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
     "razon": "Son servicios core del sistema que no deben eliminarse accidentalmente"
   },
 
@@ -415,6 +415,54 @@
       },
       "dependencias_npm": ["cheerio"],
       "generado_por": "local.skills"
+    },
+    "local.backup-manager": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/backup-manager/",
+      "descripcion": "Gestión de backups del sistema — respalda providers, handlers, contexto, config y datos de proyectos.",
+      "funciones": {
+        "create": {
+          "evento": "local.backup-manager.create.request",
+          "descripcion": "Crea backup completo o selectivo (scopes: full, providers, handlers, contexto, config, project)"
+        },
+        "list": {
+          "evento": "local.backup-manager.list.request",
+          "descripcion": "Lista backups disponibles con tamaño, fecha y scope"
+        },
+        "restore": {
+          "evento": "local.backup-manager.restore.request",
+          "descripcion": "Restaura un backup (dryRun=true por defecto para seguridad)"
+        },
+        "cleanup": {
+          "evento": "local.backup-manager.cleanup.request",
+          "descripcion": "Elimina backups antiguos según retención (keepDays + keepMin)"
+        },
+        "status": {
+          "evento": "local.backup-manager.status.request",
+          "descripcion": "Estado del sistema de backups — totales, último, espacio por scope"
+        }
+      },
+      "uso": {
+        "backup_completo": "services.call('local.backup-manager', 'create', { scope: 'full', nota: 'antes de deploy' })",
+        "backup_contexto": "services.call('local.backup-manager', 'create', { scope: 'contexto' })",
+        "backup_proyecto": "services.call('local.backup-manager', 'create', { scope: 'project', projectId: 'pizzepos' })",
+        "listar": "services.call('local.backup-manager', 'list', {})",
+        "restaurar_dry": "services.call('local.backup-manager', 'restore', { backupId: 'full_20260205_120000' })",
+        "restaurar_real": "services.call('local.backup-manager', 'restore', { backupId: 'full_20260205_120000', dryRun: false })",
+        "limpiar": "services.call('local.backup-manager', 'cleanup', { keepDays: 30, keepMin: 3 })",
+        "estado": "services.call('local.backup-manager', 'status', {})"
+      },
+      "scopes": {
+        "full": "Todo (providers + handlers + contexto + config + projects)",
+        "providers": "services/providers/local/",
+        "handlers": "handlers/",
+        "contexto": "contexto/",
+        "config": "config/ + .env",
+        "project": "data/projects/{projectId}/"
+      },
+      "almacenamiento": "data/backups/{backupId}/",
+      "seguridad": "restore usa dryRun=true por defecto, nunca sobrescribe sin confirmación"
     }
   }
 }

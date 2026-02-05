@@ -505,6 +505,12 @@
         "credenciales": "No requiere",
         "dependencias": ["cheerio"],
         "nota": "Extrae texto limpio/HTML, metadata OG, busca con selectores CSS. Generado por local.skills."
+      },
+      "local.backup-manager": {
+        "descripcion": "Gestión de backups — respalda providers, handlers, contexto y datos",
+        "funciones": ["create", "list", "restore", "cleanup", "status"],
+        "credenciales": "No requiere",
+        "nota": "Scopes: full, providers, handlers, contexto, config, project. Restore con dryRun por defecto."
       }
     }
   },
@@ -593,6 +599,13 @@
       "local.url-data.extract",
       "local.url-data.metadata",
       "local.url-data.search"
+    ],
+    "backup_manager": [
+      "local.backup-manager.create",
+      "local.backup-manager.list",
+      "local.backup-manager.restore",
+      "local.backup-manager.cleanup",
+      "local.backup-manager.status"
     ]
   },
 

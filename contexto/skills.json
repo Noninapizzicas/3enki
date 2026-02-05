@@ -261,7 +261,7 @@
   },
 
   "servicios_protegidos": {
-    "lista": ["skills", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
+    "lista": ["skills", "context-sync", "handler-generator", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
     "razon": "Son servicios core del sistema que no deben eliminarse accidentalmente"
   },
 
@@ -275,6 +275,26 @@
   },
 
   "skills_creados": {
+    "local.skills": {
+      "version": "1.0.0",
+      "created": "2026-02-04",
+      "ubicacion": "services/providers/local/skills/",
+      "descripcion": "Meta-servicio generador de servicios locales. Crea providers completos con index.js, manifest.json y documentación en catálogo.",
+      "funciones": {
+        "generate": { "evento": "local.skills.generate.request", "descripcion": "Genera un nuevo servicio local completo" },
+        "list": { "evento": "local.skills.list.request", "descripcion": "Lista todos los servicios locales" },
+        "get": { "evento": "local.skills.get.request", "descripcion": "Detalles de un servicio" },
+        "remove": { "evento": "local.skills.remove.request", "descripcion": "Elimina un servicio (protegidos excluidos)" },
+        "validate": { "evento": "local.skills.validate.request", "descripcion": "Valida definición antes de generar" }
+      },
+      "uso": {
+        "generar": "services.call('local.skills', 'generate', { name, description, functions, npmDependency?, hasFileInput? })",
+        "listar": "services.call('local.skills', 'list', {})",
+        "detalle": "services.call('local.skills', 'get', { name })",
+        "eliminar": "services.call('local.skills', 'remove', { name })",
+        "validar": "services.call('local.skills', 'validate', { name, functions })"
+      }
+    },
     "local.context-sync": {
       "version": "1.0.0",
       "created": "2026-02-05",
@@ -335,6 +355,36 @@
         "reparar_manifests": "services.call('local.context-sync', 'fix-manifests', {})",
         "reparar_dry_run": "services.call('local.context-sync', 'fix-manifests', { dryRun: true })",
         "reporte_legible": "services.call('local.context-sync', 'report', {})"
+      }
+    },
+    "local.handler-generator": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/handler-generator/",
+      "descripcion": "Generador de handlers JavaScript siguiendo patrones reales de producción. Crea handlers con envelope pattern, filtros, services.call, emit, config/store.",
+      "funciones": {
+        "generate": {
+          "evento": "local.handler-generator.generate.request",
+          "descripcion": "Genera un handler JS completo con JSDoc, envelope unwrap, filtros, servicios y emit"
+        },
+        "list": {
+          "evento": "local.handler-generator.list.request",
+          "descripcion": "Lista handlers activos y archivados con estado"
+        },
+        "archive": {
+          "evento": "local.handler-generator.archive.request",
+          "descripcion": "Mueve handler a archived/ (soft delete)"
+        },
+        "restore": {
+          "evento": "local.handler-generator.restore.request",
+          "descripcion": "Restaura handler desde archived/ a activo"
+        }
+      },
+      "uso": {
+        "generar": "services.call('local.handler-generator', 'generate', { name, description, trigger, projectId?, filter?, extraTriggers?, services?, emits?, usesConfig?, usesStore? })",
+        "listar": "services.call('local.handler-generator', 'list', { projectId? })",
+        "archivar": "services.call('local.handler-generator', 'archive', { name, projectId? })",
+        "restaurar": "services.call('local.handler-generator', 'restore', { name, projectId? })"
       }
     }
   }

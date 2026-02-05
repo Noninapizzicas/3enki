@@ -486,6 +486,12 @@
         "funciones": ["generate", "list", "get", "remove", "validate"],
         "credenciales": "No requiere",
         "nota": "Meta-servicio que crea otros servicios. Las funciones generadas se convierten en AI tools automáticamente."
+      },
+      "local.context-sync": {
+        "descripcion": "Auditor del sistema — compara contexto (fuente de verdad) contra código real",
+        "funciones": ["audit", "audit-providers", "audit-modules", "fix-manifests", "report"],
+        "credenciales": "No requiere",
+        "nota": "contexto/ es la fuente de verdad. Si el código no se ajusta, el código es el problema."
       }
     }
   },
@@ -556,6 +562,13 @@
       "local.skills.get",
       "local.skills.remove",
       "local.skills.validate"
+    ],
+    "context_sync": [
+      "local.context-sync.audit",
+      "local.context-sync.audit-providers",
+      "local.context-sync.audit-modules",
+      "local.context-sync.fix-manifests",
+      "local.context-sync.report"
     ]
   },
 

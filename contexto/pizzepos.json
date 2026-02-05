@@ -334,5 +334,84 @@
       "descripcion": "No hay tests para ningún módulo — prioridad en cobros, pedidos, persistencia",
       "solucion": "Tests unitarios para lógica de negocio pura (validarVariacion, calcularCambio, etc.)"
     }
-  ]
+  ],
+
+  "frontend_comandero": {
+    "descripcion": "Interfaz operativa del camarero — pantalla completa, sin chat, sin work-bar. Filosofía: fluidez, velocidad, mínimos toques.",
+    "ruta": "/comandero",
+    "layout": "standalone — NO usa LazyShell ni AppShell. Página autónoma con conexión MQTT propia.",
+
+    "filosofia": {
+      "principio": "No existe nada precreado. Las cuentas se crean en el momento según el tipo. La pantalla empieza vacía y cobra vida con el trabajo.",
+      "diferencia_vs_pos": "No es un POS típico con mapa de mesas fijo. Es un flujo de trabajo dinámico donde el tipo de cuenta define el proceso.",
+      "complemento_modulos": "cuentas (base universal: crear, estado, items, total) + cuentas-canales (estrategia por canal: tiempos, workflows específicos)"
+    },
+
+    "pantallas": {
+      "cuentas": {
+        "descripcion": "Pantalla principal — gateway de todo el sistema operativo",
+        "estado_inicial": "Vacía, limpia. Solo aparecen cuentas cuando se crean.",
+        "estructura": {
+          "sidebar": {
+            "posicion": "lateral (derecha o izquierda)",
+            "contenido": "Botones de tipos de cuenta, cada uno con su color identificativo",
+            "accion": "1 toque → crea cuenta nueva → abre comandero directamente",
+            "tipos_actuales": ["local", "delivery", "llevar"],
+            "extensible": "N tipos sin tocar código — solo configuración"
+          },
+          "area_principal": {
+            "tipo": "Grid responsive de tarjetas",
+            "columnas": { "mobile": 1, "tablet": 2, "desktop": 2, "wide": 3 },
+            "vacio": "Pantalla limpia cuando no hay cuentas"
+          }
+        },
+        "tarjeta_cuenta": {
+          "color": "Fondo/borde según tipo de cuenta — identificación visual inmediata",
+          "info_visual": ["nombre", "hora", "items", "total", "estado visual (iconos/indicadores, no texto)"],
+          "alertas": "Indicadores visuales cuando algo requiere atención (ej: pedido listo sin servir, cuenta esperando cobro)",
+          "doble_pulsacion": {
+            "lado_izquierdo": "Abre COMANDERO (añadir productos, gestionar pedido)",
+            "lado_derecho": "Abre CUENTA (resumen, estado, pago)"
+          }
+        },
+        "tiempo_real": {
+          "mqtt_topics": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
+          "comportamiento": "Las tarjetas aparecen, se actualizan y desaparecen automáticamente sin recargar"
+        },
+        "mqtt_handlers": [
+          "mqttRequest('cuenta', 'create', { tipo, nombre? })",
+          "mqttRequest('cuenta', 'list', { tipo?, estado? })",
+          "mqttRequest('cuenta', 'get', { id })",
+          "mqttRequest('cuenta', 'delete', { id })",
+          "mqttRequest('cuenta', 'stats')",
+          "mqttRequest('cuenta', 'health')"
+        ]
+      },
+      "comandero": {
+        "descripcion": "Pantalla de pedido — se abre al crear cuenta nueva o pulsar lado izquierdo de tarjeta",
+        "estado": "pendiente de diseñar",
+        "nota": "Pantalla completa que reemplaza cuentas. Se diseñará después."
+      }
+    },
+
+    "colores_tipo": {
+      "nota": "Cada tipo de cuenta tiene un color único para identificación visual instantánea",
+      "local": "#3b82f6",
+      "delivery": "#f59e0b",
+      "llevar": "#22c55e"
+    },
+
+    "componentes": {
+      "CuentasScreen.svelte": "Pantalla principal: sidebar + grid de tarjetas + conexión MQTT",
+      "CuentaCard.svelte": "Tarjeta de cuenta: color tipo, info visual, doble zona táctil (izq→comandero, der→cuenta)",
+      "TipoButton.svelte": "Botón de tipo en sidebar: color, icono, 1 toque → crear + abrir comandero"
+    },
+
+    "store": {
+      "ubicacion": "frontend/src/lib/stores/cuentas.ts",
+      "funciones": ["createCuenta()", "listCuentas()", "getCuenta()", "deleteCuenta()", "getStats()"],
+      "subscriptions": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
+      "estado": "{ cuentas: Map, loading, error }"
+    }
+  }
 }

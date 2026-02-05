@@ -11,6 +11,7 @@
  * - ToastContainer: Contenedor de toasts
  * - CodeEditor: Editor de código con líneas numeradas
  * - FileViewer: Visor de árbol de archivos
+ * - FilePicker: Selector de archivos navegable (reutilizable)
  * - Terminal: Output de terminal con input
  * - MarkdownRenderer: Renderiza markdown con syntax highlighting
  */
@@ -24,6 +25,7 @@ export { default as Toast } from './Toast.svelte';
 export { default as ToastContainer } from './ToastContainer.svelte';
 export { default as CodeEditor } from './CodeEditor.svelte';
 export { default as FileViewer } from './FileViewer.svelte';
+export { default as FilePicker } from './FilePicker.svelte';
 export { default as Terminal } from './Terminal.svelte';
 export { default as LazyButton } from './LazyButton.svelte';
 export { default as MarkdownRenderer } from './MarkdownRenderer.svelte';

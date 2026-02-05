@@ -7,6 +7,7 @@
    */
 
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { FilePicker } from '$lib/components/base';
 
   export let panelId: string = '';
 
@@ -48,12 +49,10 @@
 
 <div class="panel-body">
   <div class="form-group">
-    <label class="form-label" for="img-path">Ruta de la imagen</label>
-    <input
-      id="img-path"
-      type="text"
-      class="form-input"
-      placeholder="storage/carta_page1.png"
+    <label class="form-label">Imagen a preparar</label>
+    <FilePicker
+      extensions={['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif']}
+      placeholder="Seleccionar imagen..."
       bind:value={imagePath}
     />
   </div>

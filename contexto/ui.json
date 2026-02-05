@@ -46,6 +46,22 @@
     "location": "frontend/src/lib/components/{domain}/",
     "panel_features": ["tabs if needed", "loading states", "error handling"]
   },
+  "base_components": {
+    "location": "frontend/src/lib/components/base/",
+    "index": "frontend/src/lib/components/base/index.ts",
+    "componentes": ["Button", "Badge", "Chip", "Message", "ConnectionStatus", "Toast", "ToastContainer", "CodeEditor", "FileViewer", "FilePicker", "Terminal", "LazyButton", "MarkdownRenderer"],
+    "FilePicker": {
+      "descripcion": "Selector de archivos navegable — navega directorios del proyecto via MQTT (fs.list), filtra por extensiones, emite ruta seleccionada.",
+      "props": {
+        "extensions": "string[] — filtrar por extensiones (ej: ['.pdf', '.png']). Vacio = todos.",
+        "placeholder": "string — texto cuando no hay archivo seleccionado",
+        "value": "string — ruta del archivo seleccionado (bindable)"
+      },
+      "eventos": { "select": "string — ruta completa del archivo elegido" },
+      "uso": "<FilePicker extensions={['.pdf']} placeholder='Seleccionar PDF...' bind:value={filePath} on:select={handleSelect} />",
+      "usado_en": ["Pdf2ImgPanel", "PreparePanel", "OcrPanel"]
+    }
+  },
   "ui_modules": {
     "location": "frontend/src/lib/modules/",
     "loader": "frontend/src/lib/modules/loader.ts",

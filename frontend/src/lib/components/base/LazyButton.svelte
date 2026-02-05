@@ -107,6 +107,7 @@
     transition: all 0.15s ease;
     position: relative;
     color: var(--color-text-muted, #888);
+    flex-shrink: 0;
   }
 
   .lazy-btn:hover {

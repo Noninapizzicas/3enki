@@ -193,7 +193,7 @@
           "menu-ocr": {
             "ubicacion": "modules/menu-ocr/",
             "panel": "OcrPanel.svelte (md)",
-            "funcion": "Extrae texto de imagen. Backends: auto, tesseract, scribe-ocr, document-processor.",
+            "funcion": "Extrae texto de imagen. Backend principal: Google Vision (DOCUMENT_TEXT_DETECTION, TEXT_DETECTION, HANDWRITING). Fallbacks: tesseract, scribe-ocr, document-processor.",
             "icon": "🔍",
             "order": 3
           },
@@ -223,7 +223,9 @@
         "mqtt_requests": [
           "mqttRequest('pdfjs', 'render', { filePath, page, scale })",
           "mqttRequest('sharp', 'prepare-ocr', { input, grayscale, normalize, sharpen, threshold })",
-          "mqttRequest('tesseract', 'extract', { imagePath, language })",
+          "mqttRequest('google-vision', 'extract', { image, hint, languageHints }) — backend principal OCR",
+          "mqttRequest('tesseract', 'extract', { image, language }) — fallback local",
+          "mqttRequest('scribe-ocr', 'extract', { input, lang }) — fallback local WASM",
           "mqttRequest('menu', 'generate', { texto, nombre, provider })",
           "mqttRequest('menu', 'list')",
           "mqttRequest('menu', 'get', { id })",

@@ -2,7 +2,8 @@
   /**
    * OcrPanel - Extrae texto de una imagen usando OCR
    *
-   * Backends: tesseract, scribe-ocr, document-processor (auto).
+   * Backend principal: Google Vision (DOCUMENT_TEXT_DETECTION).
+   * Fallbacks: tesseract, scribe-ocr, document-processor.
    * Muestra el texto extraido con boton para copiar.
    */
 
@@ -12,8 +13,9 @@
 
   // State
   let imagePath = '';
-  let backend = 'auto';
-  let language = 'spa';
+  let backend = 'google-vision';
+  let hint = 'DOCUMENT_TEXT_DETECTION';
+  let language = 'es';
   let processing = false;
   let error = '';
   let extractedText = '';
@@ -30,22 +32,27 @@
     try {
       let res: any;
 
-      if (backend === 'auto' || backend === 'document-processor') {
-        res = await mqttRequest<any>('document-processor', 'process', {
-          document: imagePath.trim(),
-          backend: backend === 'auto' ? 'auto' : undefined,
-          language
-        }, { timeout: 30000 });
+      if (backend === 'google-vision') {
+        res = await mqttRequest<any>('google-vision', 'extract', {
+          image: imagePath.trim(),
+          hint,
+          languageHints: [language]
+        }, { timeout: 60000 });
       } else if (backend === 'tesseract') {
         res = await mqttRequest<any>('tesseract', 'extract', {
           image: imagePath.trim(),
-          language: language === 'spa' ? 'spa' : 'eng'
+          language: language === 'es' ? 'spa' : 'eng'
         }, { timeout: 20000 });
       } else if (backend === 'scribe-ocr') {
         res = await mqttRequest<any>('scribe-ocr', 'extract', {
           input: imagePath.trim(),
-          lang: language
+          lang: language === 'es' ? 'spa' : 'eng'
         }, { timeout: 20000 });
+      } else if (backend === 'document-processor') {
+        res = await mqttRequest<any>('document-processor', 'process', {
+          document: imagePath.trim(),
+          language
+        }, { timeout: 30000 });
       }
 
       extractedText = res?.data?.text || '';
@@ -64,7 +71,6 @@
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
     } catch {
-      // Fallback
       const ta = document.createElement('textarea');
       ta.value = extractedText;
       document.body.appendChild(ta);
@@ -93,20 +99,31 @@
     <div class="form-group compact">
       <label class="form-label" for="ocr-backend">Backend</label>
       <select id="ocr-backend" class="form-input" bind:value={backend}>
-        <option value="auto">Auto (mejor disponible)</option>
-        <option value="tesseract">Tesseract</option>
-        <option value="scribe-ocr">Scribe OCR</option>
+        <option value="google-vision">Google Vision</option>
+        <option value="tesseract">Tesseract (local)</option>
+        <option value="scribe-ocr">Scribe OCR (local)</option>
         <option value="document-processor">Document Processor</option>
       </select>
     </div>
     <div class="form-group compact">
       <label class="form-label" for="ocr-lang">Idioma</label>
       <select id="ocr-lang" class="form-input" bind:value={language}>
-        <option value="spa">Espanol</option>
-        <option value="eng">Ingles</option>
+        <option value="es">Espanol</option>
+        <option value="en">Ingles</option>
       </select>
     </div>
   </div>
+
+  {#if backend === 'google-vision'}
+    <div class="form-group">
+      <label class="form-label" for="ocr-hint">Modo de deteccion</label>
+      <select id="ocr-hint" class="form-input" bind:value={hint}>
+        <option value="DOCUMENT_TEXT_DETECTION">Documento (recomendado)</option>
+        <option value="TEXT_DETECTION">Texto general</option>
+        <option value="HANDWRITING">Escritura a mano</option>
+      </select>
+    </div>
+  {/if}
 
   <button class="btn-action" on:click={handleExtract} disabled={!imagePath.trim() || processing}>
     {processing ? 'Extrayendo...' : '🔍 Extraer Texto'}

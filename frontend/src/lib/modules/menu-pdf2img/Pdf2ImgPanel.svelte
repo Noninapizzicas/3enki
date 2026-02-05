@@ -7,6 +7,7 @@
    */
 
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { FilePicker } from '$lib/components/base';
 
   export let panelId: string = '';
 
@@ -58,18 +59,13 @@
 
 <div class="panel-body">
   <div class="form-group">
-    <label class="form-label" for="pdf-path">Ruta del PDF</label>
-    <div class="input-row">
-      <input
-        id="pdf-path"
-        type="text"
-        class="form-input"
-        placeholder="storage/carta.pdf"
-        bind:value={filePath}
-        on:keydown={(e) => e.key === 'Enter' && handleGetInfo()}
-      />
-      <button class="btn-sm" on:click={handleGetInfo} disabled={!filePath.trim()}>Info</button>
-    </div>
+    <label class="form-label">Archivo PDF</label>
+    <FilePicker
+      extensions={['.pdf']}
+      placeholder="Seleccionar PDF..."
+      bind:value={filePath}
+      on:select={() => handleGetInfo()}
+    />
   </div>
 
   {#if totalPages > 0}

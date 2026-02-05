@@ -386,6 +386,35 @@
         "archivar": "services.call('local.handler-generator', 'archive', { name, projectId? })",
         "restaurar": "services.call('local.handler-generator', 'restore', { name, projectId? })"
       }
+    },
+    "local.url-data": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/url-data/",
+      "descripcion": "Estación de datos de URL — extrae contenido, metadata y datos estructurados de páginas web usando cheerio.",
+      "funciones": {
+        "extract": {
+          "evento": "local.url-data.extract.request",
+          "descripcion": "Descarga y extrae contenido de una URL (texto limpio, HTML o raw)"
+        },
+        "metadata": {
+          "evento": "local.url-data.metadata.request",
+          "descripcion": "Extrae metadata: title, description, Open Graph, headings, links, idioma"
+        },
+        "search": {
+          "evento": "local.url-data.search.request",
+          "descripcion": "Busca texto o extrae datos con selectores CSS dentro del contenido"
+        }
+      },
+      "uso": {
+        "extraer_texto": "services.call('local.url-data', 'extract', { url: 'https://example.com' })",
+        "extraer_html": "services.call('local.url-data', 'extract', { url: 'https://example.com', format: 'html' })",
+        "metadata": "services.call('local.url-data', 'metadata', { url: 'https://example.com' })",
+        "buscar_texto": "services.call('local.url-data', 'search', { url: 'https://example.com', query: 'precio' })",
+        "buscar_selector": "services.call('local.url-data', 'search', { url: 'https://example.com', selector: 'table.datos' })"
+      },
+      "dependencias_npm": ["cheerio"],
+      "generado_por": "local.skills"
     }
   }
 }

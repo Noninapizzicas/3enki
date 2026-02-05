@@ -498,6 +498,13 @@
         "funciones": ["generate", "list", "archive", "restore"],
         "credenciales": "No requiere",
         "nota": "Genera handlers con envelope pattern, filtros, services.call, emit, config/store. Soporta global y por proyecto."
+      },
+      "local.url-data": {
+        "descripcion": "Estación de datos de URL — extrae contenido, metadata y datos estructurados",
+        "funciones": ["extract", "metadata", "search"],
+        "credenciales": "No requiere",
+        "dependencias": ["cheerio"],
+        "nota": "Extrae texto limpio/HTML, metadata OG, busca con selectores CSS. Generado por local.skills."
       }
     }
   },
@@ -581,6 +588,11 @@
       "local.handler-generator.list",
       "local.handler-generator.archive",
       "local.handler-generator.restore"
+    ],
+    "url_data": [
+      "local.url-data.extract",
+      "local.url-data.metadata",
+      "local.url-data.search"
     ]
   },
 

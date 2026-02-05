@@ -5,10 +5,10 @@
 
   "resumen": {
     "total_modulos": "42 (30 core + 12 pizzepos)",
-    "total_providers": 11,
+    "total_providers": 32,
     "total_apis": "200+",
-    "total_eventos": "190+ publicados, 120+ suscritos",
-    "total_tools_ai": "50+",
+    "total_eventos": "250+ publicados, 120+ suscritos",
+    "total_tools_ai": "110+",
     "verticales": ["pizzepos (POS pizzería, 12 módulos, 5 canales de venta)"]
   },
 
@@ -549,6 +549,86 @@
         "funciones": ["create", "list", "restore", "cleanup", "status"],
         "credenciales": "No requiere",
         "nota": "Scopes: full, providers, handlers, contexto, config, project. Restore con dryRun por defecto."
+      },
+      "local.coingecko": {
+        "descripcion": "Consultas CoinGecko API — precios, historial, conversión crypto",
+        "funciones": ["price", "history", "list", "convert", "trending"],
+        "credenciales": "No requiere (API gratuita)",
+        "nota": "API pública sin key. Rate limit ~10-30 req/min."
+      },
+      "local.notion": {
+        "descripcion": "Integración Notion API — páginas, bases de datos, búsqueda",
+        "funciones": ["query", "create-page", "update-page", "create-db", "search"],
+        "credenciales": "NOTION_API_KEY",
+        "nota": "Notion API version 2022-06-28. Requiere integration token."
+      },
+      "local.yahoo-finance": {
+        "descripcion": "Consultas Yahoo Finance — cotizaciones, historial, noticias bursátiles",
+        "funciones": ["quote", "history", "search", "news"],
+        "credenciales": "No requiere",
+        "nota": "Usa endpoints públicos de Yahoo Finance sin API key."
+      },
+      "local.esp32": {
+        "descripcion": "Comunicación con dispositivos ESP32 via MQTT — comandos, sensores, OTA",
+        "funciones": ["send-command", "read-sensor", "ota-update", "list-devices", "status"],
+        "credenciales": "No requiere",
+        "nota": "Topics MQTT: esp32/{deviceId}/command|status|sensor|ota. Registro en memoria de dispositivos."
+      },
+      "local.slack": {
+        "descripcion": "Integración Slack Bot API — mensajes, canales, archivos",
+        "funciones": ["send", "list-channels", "history", "upload", "react"],
+        "credenciales": "SLACK_BOT_TOKEN",
+        "nota": "Requiere Slack Bot con scopes: chat:write, channels:read, channels:history, files:write, reactions:write."
+      },
+      "local.ffmpeg": {
+        "descripcion": "Procesamiento audio/video con ffmpeg — convertir, recortar, fusionar",
+        "funciones": ["convert", "trim", "merge", "info", "waveform"],
+        "credenciales": "No requiere",
+        "requiere": "ffmpeg instalado en el sistema",
+        "nota": "Output en data/media/. Timeout configurable por operación."
+      },
+      "local.whatsapp": {
+        "descripcion": "Integración WhatsApp Business API — mensajes, media, templates",
+        "funciones": ["send", "send-media", "template", "read", "list-templates"],
+        "credenciales": "WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_BUSINESS_ID",
+        "nota": "Meta Cloud API v18.0. Soporta texto, imagen, documento, audio, video y templates aprobados."
+      },
+      "local.stripe": {
+        "descripcion": "Integración Stripe API — pagos, clientes, reembolsos, facturas",
+        "funciones": ["create-payment", "list-payments", "refund", "customers", "invoices"],
+        "credenciales": "STRIPE_SECRET_KEY",
+        "nota": "PaymentIntents API. Montos en céntimos (1000 = 10.00€)."
+      },
+      "local.woocommerce": {
+        "descripcion": "Integración WooCommerce REST API — productos, pedidos, stock, estadísticas",
+        "funciones": ["create-product", "list-products", "update-stock", "orders", "stats"],
+        "credenciales": "WOOCOMMERCE_URL, WOOCOMMERCE_KEY, WOOCOMMERCE_SECRET",
+        "nota": "WooCommerce REST API v3. Soporta HTTP y HTTPS."
+      },
+      "local.svg": {
+        "descripcion": "Generación de gráficos SVG — planos, esquemas, diagramas, gráficas",
+        "funciones": ["create", "from-data", "schematic", "floorplan"],
+        "credenciales": "No requiere",
+        "nota": "SVG puro sin dependencias. Output en data/svg/. Soporta bar/line/pie charts."
+      },
+      "local.dxf": {
+        "descripcion": "Parseo y generación de archivos DXF — planos técnicos, capas, export SVG",
+        "funciones": ["parse", "create", "layers", "export-svg"],
+        "credenciales": "No requiere",
+        "nota": "Parser DXF minimalista integrado. Soporta LINE, CIRCLE, TEXT, ARC. Export a SVG."
+      },
+      "local.whisper": {
+        "descripcion": "Transcripción de audio con Whisper — speech-to-text local",
+        "funciones": ["transcribe", "detect-language"],
+        "credenciales": "No requiere",
+        "requiere": "whisper (pip install openai-whisper)",
+        "nota": "Modelos: tiny, base, small, medium, large. Formatos salida: txt, srt, vtt, json."
+      },
+      "local.etherscan": {
+        "descripcion": "Consultas blockchain Ethereum via Etherscan — balances, transacciones, gas",
+        "funciones": ["balance", "transactions", "gas"],
+        "credenciales": "ETHERSCAN_API_KEY",
+        "nota": "API gratuita con key de etherscan.io. Ethereum mainnet."
       }
     }
   },
@@ -644,6 +724,89 @@
       "local.backup-manager.restore",
       "local.backup-manager.cleanup",
       "local.backup-manager.status"
+    ],
+    "coingecko": [
+      "local.coingecko.price",
+      "local.coingecko.history",
+      "local.coingecko.list",
+      "local.coingecko.convert",
+      "local.coingecko.trending"
+    ],
+    "notion": [
+      "local.notion.query",
+      "local.notion.create-page",
+      "local.notion.update-page",
+      "local.notion.create-db",
+      "local.notion.search"
+    ],
+    "yahoo_finance": [
+      "local.yahoo-finance.quote",
+      "local.yahoo-finance.history",
+      "local.yahoo-finance.search",
+      "local.yahoo-finance.news"
+    ],
+    "esp32": [
+      "local.esp32.send-command",
+      "local.esp32.read-sensor",
+      "local.esp32.ota-update",
+      "local.esp32.list-devices",
+      "local.esp32.status"
+    ],
+    "slack": [
+      "local.slack.send",
+      "local.slack.list-channels",
+      "local.slack.history",
+      "local.slack.upload",
+      "local.slack.react"
+    ],
+    "ffmpeg": [
+      "local.ffmpeg.convert",
+      "local.ffmpeg.trim",
+      "local.ffmpeg.merge",
+      "local.ffmpeg.info",
+      "local.ffmpeg.waveform"
+    ],
+    "whatsapp": [
+      "local.whatsapp.send",
+      "local.whatsapp.send-media",
+      "local.whatsapp.template",
+      "local.whatsapp.read",
+      "local.whatsapp.list-templates"
+    ],
+    "stripe": [
+      "local.stripe.create-payment",
+      "local.stripe.list-payments",
+      "local.stripe.refund",
+      "local.stripe.customers",
+      "local.stripe.invoices"
+    ],
+    "woocommerce": [
+      "local.woocommerce.create-product",
+      "local.woocommerce.list-products",
+      "local.woocommerce.update-stock",
+      "local.woocommerce.orders",
+      "local.woocommerce.stats"
+    ],
+    "svg": [
+      "local.svg.create",
+      "local.svg.from-data",
+      "local.svg.schematic",
+      "local.svg.floorplan"
+    ],
+    "dxf": [
+      "local.dxf.parse",
+      "local.dxf.create",
+      "local.dxf.layers",
+      "local.dxf.export-svg"
+    ],
+    "whisper": [
+      "local.whisper.transcribe",
+      "local.whisper.detect-language"
+    ],
+    "etherscan": [
+      "local.etherscan.balance",
+      "local.etherscan.transactions",
+      "local.etherscan.gas"
     ]
   },
 

@@ -463,6 +463,167 @@
       },
       "almacenamiento": "data/backups/{backupId}/",
       "seguridad": "restore usa dryRun=true por defecto, nunca sobrescribe sin confirmación"
+    },
+    "local.coingecko": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/coingecko/",
+      "descripcion": "Consultas CoinGecko API — precios crypto, historial, conversión, trending.",
+      "funciones": {
+        "price": { "evento": "local.coingecko.price.request", "descripcion": "Precio actual de criptomonedas" },
+        "history": { "evento": "local.coingecko.history.request", "descripcion": "Historial de precios" },
+        "list": { "evento": "local.coingecko.list.request", "descripcion": "Lista top criptomonedas" },
+        "convert": { "evento": "local.coingecko.convert.request", "descripcion": "Convierte entre crypto y fiat" },
+        "trending": { "evento": "local.coingecko.trending.request", "descripcion": "Criptomonedas trending" }
+      }
+    },
+    "local.notion": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/notion/",
+      "descripcion": "Integración Notion API — páginas, bases de datos, búsqueda.",
+      "funciones": {
+        "query": { "evento": "local.notion.query.request", "descripcion": "Consulta base de datos Notion" },
+        "create-page": { "evento": "local.notion.create-page.request", "descripcion": "Crea página en Notion" },
+        "update-page": { "evento": "local.notion.update-page.request", "descripcion": "Actualiza página" },
+        "create-db": { "evento": "local.notion.create-db.request", "descripcion": "Crea base de datos" },
+        "search": { "evento": "local.notion.search.request", "descripcion": "Busca en Notion" }
+      }
+    },
+    "local.yahoo-finance": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/yahoo-finance/",
+      "descripcion": "Consultas Yahoo Finance — cotizaciones, historial, noticias.",
+      "funciones": {
+        "quote": { "evento": "local.yahoo-finance.quote.request", "descripcion": "Cotización actual" },
+        "history": { "evento": "local.yahoo-finance.history.request", "descripcion": "Historial de precios" },
+        "search": { "evento": "local.yahoo-finance.search.request", "descripcion": "Busca símbolos" },
+        "news": { "evento": "local.yahoo-finance.news.request", "descripcion": "Noticias bursátiles" }
+      }
+    },
+    "local.esp32": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/esp32/",
+      "descripcion": "Comunicación con ESP32 via MQTT — comandos, sensores, OTA.",
+      "funciones": {
+        "send-command": { "evento": "local.esp32.send-command.request", "descripcion": "Envía comando via MQTT" },
+        "read-sensor": { "evento": "local.esp32.read-sensor.request", "descripcion": "Solicita lectura de sensor" },
+        "ota-update": { "evento": "local.esp32.ota-update.request", "descripcion": "Actualización OTA" },
+        "list-devices": { "evento": "local.esp32.list-devices.request", "descripcion": "Lista dispositivos" },
+        "status": { "evento": "local.esp32.status.request", "descripcion": "Estado de dispositivo" }
+      }
+    },
+    "local.slack": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/slack/",
+      "descripcion": "Integración Slack Bot API — mensajes, canales, archivos.",
+      "funciones": {
+        "send": { "evento": "local.slack.send.request", "descripcion": "Envía mensaje a Slack" },
+        "list-channels": { "evento": "local.slack.list-channels.request", "descripcion": "Lista canales" },
+        "history": { "evento": "local.slack.history.request", "descripcion": "Historial de mensajes" },
+        "upload": { "evento": "local.slack.upload.request", "descripcion": "Sube archivo" },
+        "react": { "evento": "local.slack.react.request", "descripcion": "Añade reacción emoji" }
+      }
+    },
+    "local.ffmpeg": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/ffmpeg/",
+      "descripcion": "Procesamiento audio/video con ffmpeg CLI.",
+      "funciones": {
+        "convert": { "evento": "local.ffmpeg.convert.request", "descripcion": "Convierte formato" },
+        "trim": { "evento": "local.ffmpeg.trim.request", "descripcion": "Recorta audio/video" },
+        "merge": { "evento": "local.ffmpeg.merge.request", "descripcion": "Fusiona archivos" },
+        "info": { "evento": "local.ffmpeg.info.request", "descripcion": "Info de archivo multimedia" },
+        "waveform": { "evento": "local.ffmpeg.waveform.request", "descripcion": "Genera waveform" }
+      }
+    },
+    "local.whatsapp": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/whatsapp/",
+      "descripcion": "Integración WhatsApp Business API — mensajes, media, templates.",
+      "funciones": {
+        "send": { "evento": "local.whatsapp.send.request", "descripcion": "Envía texto por WhatsApp" },
+        "send-media": { "evento": "local.whatsapp.send-media.request", "descripcion": "Envía imagen/doc/audio/video" },
+        "template": { "evento": "local.whatsapp.template.request", "descripcion": "Envía template aprobado" },
+        "read": { "evento": "local.whatsapp.read.request", "descripcion": "Marca como leído" },
+        "list-templates": { "evento": "local.whatsapp.list-templates.request", "descripcion": "Lista templates" }
+      }
+    },
+    "local.stripe": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/stripe/",
+      "descripcion": "Integración Stripe API — pagos, clientes, reembolsos, facturas.",
+      "funciones": {
+        "create-payment": { "evento": "local.stripe.create-payment.request", "descripcion": "Crea PaymentIntent" },
+        "list-payments": { "evento": "local.stripe.list-payments.request", "descripcion": "Lista pagos" },
+        "refund": { "evento": "local.stripe.refund.request", "descripcion": "Crea reembolso" },
+        "customers": { "evento": "local.stripe.customers.request", "descripcion": "Lista clientes" },
+        "invoices": { "evento": "local.stripe.invoices.request", "descripcion": "Lista facturas" }
+      }
+    },
+    "local.woocommerce": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/woocommerce/",
+      "descripcion": "Integración WooCommerce REST API — productos, pedidos, stock.",
+      "funciones": {
+        "create-product": { "evento": "local.woocommerce.create-product.request", "descripcion": "Crea producto" },
+        "list-products": { "evento": "local.woocommerce.list-products.request", "descripcion": "Lista productos" },
+        "update-stock": { "evento": "local.woocommerce.update-stock.request", "descripcion": "Actualiza stock" },
+        "orders": { "evento": "local.woocommerce.orders.request", "descripcion": "Lista pedidos" },
+        "stats": { "evento": "local.woocommerce.stats.request", "descripcion": "Estadísticas ventas" }
+      }
+    },
+    "local.svg": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/svg/",
+      "descripcion": "Generación de gráficos SVG — planos, esquemas, diagramas.",
+      "funciones": {
+        "create": { "evento": "local.svg.create.request", "descripcion": "Crea SVG desde elementos" },
+        "from-data": { "evento": "local.svg.from-data.request", "descripcion": "Genera gráfica de datos" },
+        "schematic": { "evento": "local.svg.schematic.request", "descripcion": "Diagrama de bloques" },
+        "floorplan": { "evento": "local.svg.floorplan.request", "descripcion": "Plano de planta" }
+      }
+    },
+    "local.dxf": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/dxf/",
+      "descripcion": "Parseo y generación de archivos DXF — planos técnicos.",
+      "funciones": {
+        "parse": { "evento": "local.dxf.parse.request", "descripcion": "Parsea archivo DXF" },
+        "create": { "evento": "local.dxf.create.request", "descripcion": "Crea archivo DXF" },
+        "layers": { "evento": "local.dxf.layers.request", "descripcion": "Lista capas" },
+        "export-svg": { "evento": "local.dxf.export-svg.request", "descripcion": "Convierte DXF a SVG" }
+      }
+    },
+    "local.whisper": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/whisper/",
+      "descripcion": "Transcripción de audio con Whisper — speech-to-text local.",
+      "funciones": {
+        "transcribe": { "evento": "local.whisper.transcribe.request", "descripcion": "Transcribe audio a texto" },
+        "detect-language": { "evento": "local.whisper.detect-language.request", "descripcion": "Detecta idioma" }
+      }
+    },
+    "local.etherscan": {
+      "version": "1.0.0",
+      "created": "2026-02-05",
+      "ubicacion": "services/providers/local/etherscan/",
+      "descripcion": "Consultas blockchain Ethereum via Etherscan.",
+      "funciones": {
+        "balance": { "evento": "local.etherscan.balance.request", "descripcion": "Balance ETH" },
+        "transactions": { "evento": "local.etherscan.transactions.request", "descripcion": "Lista transacciones" },
+        "gas": { "evento": "local.etherscan.gas.request", "descripcion": "Precios de gas" }
+      }
     }
   }
 }

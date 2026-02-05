@@ -440,20 +440,24 @@
     "local": {
       "local.pdf": {
         "descripcion": "Crea y manipula PDFs localmente",
-        "funciones": ["from_text", "from_html", "from_template"],
-        "credenciales": "No requiere"
+        "funciones": ["create"],
+        "credenciales": "No requiere",
+        "nota": "Función 'create' acepta tipo: text | html | template"
       },
       "local.csv": {
         "descripcion": "Procesamiento de CSV",
-        "funciones": ["parse", "generate", "transform"]
+        "funciones": ["create", "parse"],
+        "nota": "create genera CSV, parse lee CSV con manejo de quotes"
       },
       "local.xlsx": {
         "descripcion": "Manejo de archivos Excel",
-        "funciones": ["read", "write", "transform"]
+        "funciones": ["create", "parse"],
+        "nota": "Wrapper de ExcelJS con soporte multi-sheet"
       },
       "local.pdf-parse": {
         "descripcion": "Extracción de texto de PDF",
-        "funciones": ["extract_text", "extract_metadata"]
+        "funciones": ["extract"],
+        "nota": "Detección smart de input (base64/path), magic bytes validation"
       },
       "local.pdfjs": {
         "descripcion": "Renderizado de PDF con PDF.js",
@@ -470,7 +474,8 @@
       },
       "local.google-vision": {
         "descripcion": "Procesamiento Vision API local",
-        "funciones": ["ocr", "labels", "faces"]
+        "funciones": ["extract"],
+        "nota": "Multi-cuenta, credential chain, magic bytes para 8 formatos, confidence score"
       },
       "local.sharp": {
         "descripcion": "Procesamiento de imágenes local usando Sharp",
@@ -505,12 +510,14 @@
       },
       "local.gmail": {
         "descripcion": "Integración Gmail con OAuth2",
-        "funciones": ["send", "list", "get", "search"],
-        "requiere": "OAuth2 credentials"
+        "funciones": ["send", "search", "list", "read", "download"],
+        "requiere": "OAuth2 credentials",
+        "nota": "OAuth2 token management, MIME multipart, credential injection"
       },
       "local.facturas-db": {
         "descripcion": "Base de datos de facturas",
-        "funciones": ["create", "list", "get", "update", "delete"]
+        "funciones": ["init", "registrar", "actualizar", "listar", "obtener", "pendientes", "estadisticas", "exportar"],
+        "nota": "Schema 50+ cols, audit trail, multi-tenant, ISO week export"
       },
       "local.skills": {
         "descripcion": "Generador automatizado de servicios locales con documentación",

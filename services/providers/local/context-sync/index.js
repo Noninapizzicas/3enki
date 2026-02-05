@@ -253,6 +253,11 @@ module.exports = {
       for (const [category, modules] of Object.entries(modCategories)) {
         if (category.startsWith('_')) continue;
         for (const [modName, modInfo] of Object.entries(modules)) {
+          // Saltar metadata (claves que empiezan con _) y entradas no-módulo
+          if (modName.startsWith('_')) continue;
+          if (typeof modInfo === 'string') continue; // ej: _nota: "texto"
+          // 'handlers' en automatizacion describe el sistema de handlers, no un módulo en modules/
+          if (category === 'automatizacion' && modName === 'handlers') continue;
           docModules[modName] = { ...modInfo, category };
         }
       }
@@ -629,32 +634,39 @@ module.exports = {
 
       const functions = [];
 
-      // Buscar bloque functions: { ... }
-      // Extraer cada función con su event y description
-      const fnPattern = /['"]?([a-z][a-z0-9-]*)['"]?\s*:\s*\{[^}]*?event:\s*['"]([^'"]+)['"]/g;
-      const fnDescPattern = /['"]?([a-z][a-z0-9-]*)['"]?\s*:\s*\{[^}]*?description:\s*['"]([^'"]+)['"]/g;
-
-      const fnDescs = {};
+      // Estrategia: extraer funciones desde las declaraciones event: 'provider.function.request'
+      // Esto es robusto porque sigue el patrón de eventos del sistema
+      const eventPattern = /event:\s*['"]([^'"]+\.request)['"]/g;
+      const events = {};
       let match;
-      while ((match = fnDescPattern.exec(content)) !== null) {
-        fnDescs[match[1]] = match[2];
-      }
-
-      const fnEvents = {};
-      while ((match = fnPattern.exec(content)) !== null) {
-        fnEvents[match[1]] = match[2];
-      }
-
-      // Combinar
-      const allFnNames = new Set([...Object.keys(fnEvents), ...Object.keys(fnDescs)]);
-      for (const name of allFnNames) {
-        if (fnEvents[name]) { // Solo si tiene event (es una función del provider, no un helper)
-          functions.push({
-            name,
-            event: fnEvents[name],
-            description: fnDescs[name] || ''
-          });
+      while ((match = eventPattern.exec(content)) !== null) {
+        const event = match[1];
+        // Extraer nombre de función: local.backup-manager.create.request → create
+        const parts = event.replace('.request', '').split('.');
+        const fnName = parts[parts.length - 1];
+        if (fnName && fnName !== 'request') {
+          events[fnName] = event;
         }
+      }
+
+      // Extraer descriptions de funciones (buscar en bloque functions)
+      const fnDescPattern = /['"]?([a-z][a-z0-9-]*)['"]?\s*:\s*\{[^}]*?description:\s*['"]([^'"]+)['"]/g;
+      const fnDescs = {};
+      while ((match = fnDescPattern.exec(content)) !== null) {
+        const name = match[1];
+        // Filtrar: solo si es un nombre de función real (no 'functions', 'input', 'output')
+        if (name !== 'functions' && name !== 'input' && name !== 'output' && events[name]) {
+          fnDescs[name] = match[2];
+        }
+      }
+
+      // Construir lista de funciones
+      for (const [name, event] of Object.entries(events)) {
+        functions.push({
+          name,
+          event,
+          description: fnDescs[name] || ''
+        });
       }
 
       return { description, functions };

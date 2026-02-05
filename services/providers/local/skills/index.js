@@ -299,7 +299,7 @@ module.exports = {
     const cleanName = name.replace(/^local\./, '');
 
     // Proteger servicios del sistema
-    const protectedServices = ['skills', 'context-sync', 'handler-generator', 'learning', 'sharp', 'tesseract', 'csv', 'pdf', 'gmail'];
+    const protectedServices = ['skills', 'context-sync', 'handler-generator', 'backup-manager', 'learning', 'sharp', 'tesseract', 'csv', 'pdf', 'gmail'];
     if (protectedServices.includes(cleanName)) {
       return { success: false, error: `El servicio '${cleanName}' está protegido y no puede eliminarse`, data: { removed: false } };
     }

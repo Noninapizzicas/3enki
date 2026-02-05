@@ -7,7 +7,7 @@
  *   2. Descargar archivo via telegram.get_file
  *   3. Si PDF → local.pdf-to-png (cada página)
  *   4. Cada imagen → local.sharp prepare-ocr
- *   5. Imagen preparada → local.tesseract extract (idioma: spa)
+ *   5. Imagen preparada → local.google-vision extract (OCR)
  *   6. Guardar texto OCR en data/bots/Menugener_bot/ocr/
  *   7. Emitir menu.ocr.completed para que menu-generator pueda usarlo
  *   8. Notificar al usuario por Telegram
@@ -189,10 +189,9 @@ module.exports = {
         const sharpData = sharpResult?.data || sharpResult;
         const preparedImage = sharpData?.image || img.content;
 
-        // 5b. OCR con Tesseract
-        const ocrResult = await services.call('local.tesseract', 'extract', {
-          image: preparedImage,
-          language: 'spa'
+        // 5b. OCR con Google Vision
+        const ocrResult = await services.call('local.google-vision', 'extract', {
+          image: preparedImage
         });
         const ocrData = ocrResult?.data || ocrResult;
 

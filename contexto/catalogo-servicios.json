@@ -472,6 +472,37 @@
         "descripcion": "Procesamiento Vision API local",
         "funciones": ["ocr", "labels", "faces"]
       },
+      "local.sharp": {
+        "descripcion": "Procesamiento de imágenes local usando Sharp",
+        "funciones": ["prepare-ocr", "resize", "convert", "info", "crop", "trim"],
+        "credenciales": "No requiere"
+      },
+      "local.pdf-to-png": {
+        "descripcion": "Convierte páginas PDF a PNG usando pdftoppm (Poppler)",
+        "funciones": ["convert"],
+        "credenciales": "No requiere",
+        "requiere": "poppler-utils"
+      },
+      "local.document-processor": {
+        "descripcion": "Procesador unificado de documentos/facturas con múltiples backends y niveles de calidad",
+        "funciones": ["process", "extract-invoice", "list-backends"],
+        "credenciales": "Según backend (Google Vision, Anthropic, etc.)"
+      },
+      "local.google-documentai": {
+        "descripcion": "Google Document AI — extracción estructurada de documentos (facturas, formularios)",
+        "funciones": ["parse"],
+        "requiere": "Google Cloud credentials"
+      },
+      "local.learning": {
+        "descripcion": "Sistema de aprendizaje genérico reutilizable — almacena experiencias/feedback para procesos y agentes",
+        "funciones": ["save", "query", "stats", "domains", "best-action"],
+        "credenciales": "No requiere"
+      },
+      "local.zip": {
+        "descripcion": "Creación de archivos ZIP",
+        "funciones": ["create", "createFromFiles", "addDirectory"],
+        "credenciales": "No requiere"
+      },
       "local.gmail": {
         "descripcion": "Integración Gmail con OAuth2",
         "funciones": ["send", "list", "get", "search"],

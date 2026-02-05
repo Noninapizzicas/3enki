@@ -261,7 +261,7 @@
   },
 
   "servicios_protegidos": {
-    "lista": ["skills", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
+    "lista": ["skills", "context-sync", "learning", "sharp", "tesseract", "csv", "pdf", "gmail"],
     "razon": "Son servicios core del sistema que no deben eliminarse accidentalmente"
   },
 
@@ -275,6 +275,26 @@
   },
 
   "skills_creados": {
+    "local.skills": {
+      "version": "1.0.0",
+      "created": "2026-02-04",
+      "ubicacion": "services/providers/local/skills/",
+      "descripcion": "Meta-servicio generador de servicios locales. Crea providers completos con index.js, manifest.json y documentación en catálogo.",
+      "funciones": {
+        "generate": { "evento": "local.skills.generate.request", "descripcion": "Genera un nuevo servicio local completo" },
+        "list": { "evento": "local.skills.list.request", "descripcion": "Lista todos los servicios locales" },
+        "get": { "evento": "local.skills.get.request", "descripcion": "Detalles de un servicio" },
+        "remove": { "evento": "local.skills.remove.request", "descripcion": "Elimina un servicio (protegidos excluidos)" },
+        "validate": { "evento": "local.skills.validate.request", "descripcion": "Valida definición antes de generar" }
+      },
+      "uso": {
+        "generar": "services.call('local.skills', 'generate', { name, description, functions, npmDependency?, hasFileInput? })",
+        "listar": "services.call('local.skills', 'list', {})",
+        "detalle": "services.call('local.skills', 'get', { name })",
+        "eliminar": "services.call('local.skills', 'remove', { name })",
+        "validar": "services.call('local.skills', 'validate', { name, functions })"
+      }
+    },
     "local.context-sync": {
       "version": "1.0.0",
       "created": "2026-02-05",

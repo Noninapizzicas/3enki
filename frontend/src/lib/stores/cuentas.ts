@@ -2,8 +2,12 @@
  * Cuentas Store — Estado y operaciones MQTT
  *
  * Backend: modules/pizzepos/cuentas (uiHandler domain: 'cuenta')
+ * Persistencia: modules/pizzepos/persistencia-comandero (domain: 'persistencia')
+ *
  * Operaciones: create, list, get, delete, stats, health
  * Eventos RT: cuenta.creada, cuenta.actualizada, cuenta.eliminada, cuenta.estado_cambiado
+ *
+ * La fuente de verdad para cuentas activas es persistencia.cuentas_activas
  */
 
 import { writable, derived, get } from 'svelte/store';
@@ -57,6 +61,26 @@ export const TIPO_LABELS: Record<TipoCuenta, string> = {
   delivery: 'Delivery',
   llevar: 'Llevar'
 };
+
+// Mapeo de tipos de persistencia a tipos del store
+const TIPO_MAP: Record<string, TipoCuenta> = {
+  mesa: 'local',
+  local: 'local',
+  telefono: 'delivery',
+  delivery: 'delivery',
+  llevar: 'llevar',
+  recoger: 'llevar'
+};
+
+// Mapeo de estado de persistencia a EstadoCuenta
+function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
+  if (cuenta.estado === 'abierta') {
+    if (!cuenta.pedidos || cuenta.pedidos.length === 0) return 'pendiente';
+    // Si tiene pedidos, verificar si están enviados a cocina
+    return 'con_pedido';
+  }
+  return 'pendiente';
+}
 
 // =============================================================================
 // STORE
@@ -142,20 +166,127 @@ export async function getStats(): Promise<any> {
 }
 
 // =============================================================================
+// PERSISTENCIA — Fuente de verdad para cuentas activas
+// =============================================================================
+
+/**
+ * Carga cuentas activas desde persistencia-comandero
+ * Esta es la fuente de verdad — sobrevive reinicios del servidor/cliente
+ */
+export async function loadCuentasFromPersistencia(tipo?: string): Promise<void> {
+  cuentasStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const res = await mqttRequest<any>('persistencia', 'cuentas_activas', {
+      tipo: tipo || undefined
+    });
+
+    if (res?.status === 200 && res?.data?.cuentas) {
+      const cuentasPersistencia = res.data.cuentas;
+
+      // Convertir formato persistencia → formato store
+      const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => ({
+        id: cp.cuenta_id,
+        tipo: TIPO_MAP[cp.tipo] || 'local',
+        nombre: cp.datos_especificos?.nombre || cp.origen || `${cp.tipo} ${cp.cuenta_id.slice(-4)}`,
+        estado: mapEstadoPersistencia(cp),
+        hora: formatHora(cp.created_at),
+        items: countItems(cp.pedidos),
+        total: cp.total || 0,
+        alerta: checkAlerta(cp),
+        created_at: cp.created_at,
+        updated_at: cp.updated_at
+      }));
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas,
+        loading: false
+      }));
+
+      console.log('[Cuentas] Loaded from persistencia:', cuentas.length);
+    } else {
+      // Si no hay cuentas o error, usar lista vacía
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: [],
+        loading: false
+      }));
+    }
+  } catch (err: any) {
+    console.error('[Cuentas] Error loading from persistencia:', err);
+    cuentasStore.update(s => ({
+      ...s,
+      loading: false,
+      error: err.message || 'Error al cargar cuentas desde persistencia'
+    }));
+
+    // Fallback: intentar cargar desde módulo cuentas
+    await listCuentas(tipo as TipoCuenta);
+  }
+}
+
+/**
+ * Obtener cuenta activa con sus pedidos desde persistencia
+ */
+export async function getCuentaFromPersistencia(cuenta_id: string): Promise<any | null> {
+  try {
+    const res = await mqttRequest<any>('persistencia', 'cuentas_activas', {});
+
+    if (res?.status === 200 && res?.data?.cuentas) {
+      const cuenta = res.data.cuentas.find((c: any) => c.cuenta_id === cuenta_id);
+      return cuenta || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Helpers para mapeo
+function formatHora(isoDate: string): string {
+  try {
+    const date = new Date(isoDate);
+    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '--:--';
+  }
+}
+
+function countItems(pedidos: any[] | undefined): number {
+  if (!pedidos || pedidos.length === 0) return 0;
+  return pedidos.reduce((total, p) => {
+    if (p.items && Array.isArray(p.items)) {
+      return total + p.items.reduce((sum: number, item: any) => sum + (item.cantidad || 1), 0);
+    }
+    return total;
+  }, 0);
+}
+
+function checkAlerta(cuenta: any): boolean {
+  // Alerta si lleva más de 30 minutos sin actividad
+  if (!cuenta.updated_at) return false;
+  const updated = new Date(cuenta.updated_at).getTime();
+  const now = Date.now();
+  const minutos = (now - updated) / (1000 * 60);
+  return minutos > 30;
+}
+
+// =============================================================================
 // REALTIME SUBSCRIPTIONS
 // =============================================================================
 
 export function initCuentasSubscriptions(): () => void {
   const cleanups: (() => void)[] = [];
 
-  // cuenta.creada → añadir al store
+  // cuenta.creada → recargar desde persistencia
   cleanups.push(
     mqttSubscribe('cuenta.creada', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
 
-      // Recargar lista para obtener objeto completo
-      listCuentas();
+      // Recargar desde persistencia (fuente de verdad)
+      loadCuentasFromPersistencia();
     })
   );
 
@@ -206,8 +337,22 @@ export function initCuentasSubscriptions(): () => void {
     })
   );
 
-  // Carga inicial
-  listCuentas();
+  // pedido.creado → recargar (actualiza total e items en persistencia)
+  cleanups.push(
+    mqttSubscribe('pedido.creado', () => {
+      loadCuentasFromPersistencia();
+    })
+  );
+
+  // cuenta.cerrada → recargar (elimina de persistencia)
+  cleanups.push(
+    mqttSubscribe('cuenta.cerrada', () => {
+      loadCuentasFromPersistencia();
+    })
+  );
+
+  // Carga inicial desde persistencia (fuente de verdad)
+  loadCuentasFromPersistencia();
 
   return () => {
     for (const cleanup of cleanups) cleanup();

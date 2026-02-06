@@ -15,3 +15,4 @@ export { default as PedidoItem } from './PedidoItem.svelte';
 // Flotantes
 export { default as VariacionesPanel } from './VariacionesPanel.svelte';
 export { default as CobroPanel } from './CobroPanel.svelte';
+export { default as MitadMitadPanel } from './MitadMitadPanel.svelte';

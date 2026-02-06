@@ -41,6 +41,7 @@
   import PedidoList from './PedidoList.svelte';
   import VariacionesPanel from './VariacionesPanel.svelte';
   import CobroPanel from './CobroPanel.svelte';
+  import MitadMitadPanel from './MitadMitadPanel.svelte';
 
   /** ID de la cuenta activa */
   export let cuenta_id: string;
@@ -59,6 +60,9 @@
 
   // Estado del panel de cobro
   let showCobro = false;
+
+  // Estado del panel mitad y mitad
+  let showMitadMitad = false;
 
   // Botones especiales (configurables según negocio)
   const botonesEspeciales = [
@@ -145,9 +149,42 @@
   }
 
   function handleEspecialClick(e: CustomEvent<{ id: string }>) {
-    if (onOpenPanel) {
-      onOpenPanel(e.detail.id);
+    const { id } = e.detail;
+
+    switch (id) {
+      case 'mitad':
+        showMitadMitad = true;
+        break;
+      case 'algusto':
+      case 'menu':
+        if (onOpenPanel) onOpenPanel(id);
+        break;
     }
+  }
+
+  function handleMitadMitadClose() {
+    showMitadMitad = false;
+  }
+
+  function handleMitadMitadConfirm(e: CustomEvent<{
+    pizza_izquierda: any;
+    pizza_derecha: any;
+    precio_final: number;
+    nombre_compuesto: string;
+  }>) {
+    const { pizza_izquierda, pizza_derecha, precio_final, nombre_compuesto } = e.detail;
+
+    // Añadir como item especial al pedido
+    // Usamos el ID de la primera pizza como base, con metadata de combinación
+    addItem(pizza_izquierda.id, 1, [], {
+      tipo: 'mitad_mitad',
+      nombre_override: nombre_compuesto,
+      precio_override: precio_final,
+      pizza_izquierda: { id: pizza_izquierda.id, nombre: pizza_izquierda.nombre },
+      pizza_derecha: { id: pizza_derecha.id, nombre: pizza_derecha.nombre }
+    });
+
+    showMitadMitad = false;
   }
 
   async function handleAccionClick(e: CustomEvent<{ id: string }>) {
@@ -287,6 +324,15 @@
       visible={showCobro}
       on:close={handleCobroClose}
       on:success={handleCobroSuccess}
+    />
+  {/if}
+
+  <!-- Panel flotante: Mitad y Mitad -->
+  {#if showMitadMitad}
+    <MitadMitadPanel
+      visible={showMitadMitad}
+      on:close={handleMitadMitadClose}
+      on:confirm={handleMitadMitadConfirm}
     />
   {/if}
 </div>

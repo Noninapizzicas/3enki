@@ -39,6 +39,7 @@
   import AccionBtn from './AccionBtn.svelte';
   import ProductoBtn from './ProductoBtn.svelte';
   import PedidoList from './PedidoList.svelte';
+  import VariacionesPanel from './VariacionesPanel.svelte';
 
   /** ID de la cuenta activa */
   export let cuenta_id: string;
@@ -50,6 +51,10 @@
   export let onOpenPanel: ((panel: string, data?: any) => void) | null = null;
 
   let cleanupSubs: (() => void) | null = null;
+
+  // Estado del panel de variaciones
+  let showVariaciones = false;
+  let productoVariaciones: Producto | null = null;
 
   // Botones especiales (configurables según negocio)
   const botonesEspeciales = [
@@ -76,9 +81,32 @@
   }
 
   function handleProductoVariaciones(e: CustomEvent<{ producto: Producto }>) {
-    if (onOpenPanel) {
-      onOpenPanel('variaciones', { producto: e.detail.producto });
-    }
+    productoVariaciones = e.detail.producto;
+    showVariaciones = true;
+  }
+
+  function handleVariacionesClose() {
+    showVariaciones = false;
+    productoVariaciones = null;
+  }
+
+  function handleVariacionesConfirm(e: CustomEvent<{
+    producto_id: string;
+    ingredientes_quitar: string[];
+    ingredientes_anadir: { ingrediente_id: string; cantidad: number }[];
+    precio_total: number;
+  }>) {
+    const { producto_id, ingredientes_quitar, ingredientes_anadir } = e.detail;
+
+    // Añadir item con variaciones
+    addItem(producto_id, 1, [
+      ...ingredientes_quitar.map(id => ({ tipo: 'quitar', ingrediente_id: id })),
+      ...ingredientes_anadir.map(item => ({ tipo: 'anadir', ...item }))
+    ]);
+
+    // Cerrar panel
+    showVariaciones = false;
+    productoVariaciones = null;
   }
 
   function handleItemIncrement(e: CustomEvent<{ item_id: string }>) {
@@ -222,6 +250,16 @@
       />
     </main>
   </div>
+
+  <!-- Panel flotante: Variaciones -->
+  {#if showVariaciones && productoVariaciones}
+    <VariacionesPanel
+      producto={productoVariaciones}
+      visible={showVariaciones}
+      on:close={handleVariacionesClose}
+      on:confirm={handleVariacionesConfirm}
+    />
+  {/if}
 </div>
 
 <style>

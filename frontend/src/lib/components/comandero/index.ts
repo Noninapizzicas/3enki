@@ -11,3 +11,6 @@ export { default as AccionBtn } from './AccionBtn.svelte';
 export { default as ProductoBtn } from './ProductoBtn.svelte';
 export { default as PedidoList } from './PedidoList.svelte';
 export { default as PedidoItem } from './PedidoItem.svelte';
+
+// Flotantes
+export { default as VariacionesPanel } from './VariacionesPanel.svelte';

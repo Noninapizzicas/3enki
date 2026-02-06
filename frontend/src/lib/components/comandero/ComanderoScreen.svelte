@@ -1,0 +1,368 @@
+<script lang="ts">
+  /**
+   * ComanderoScreen — Pantalla de pedido
+   *
+   * Layout 3 zonas:
+   * ┌──────────────────────────────┬──────────┐
+   * │ Barra superior (especiales)  │          │
+   * ├──────────────────────────────┤ Sidebar  │
+   * │                              │(cat+acc) │
+   * │  Grid productos 3 columnas   │          │
+   * │                              │          │
+   * ├──────────────────────────────┤          │
+   * │  Pedido actual (scroll up)   │          │
+   * └──────────────────────────────┴──────────┘
+   */
+  import { onMount, onDestroy } from 'svelte';
+  import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
+  import {
+    comanderoStore,
+    categorias,
+    productos,
+    categoriaActiva,
+    pedidoItems,
+    pedidoTotal,
+    comanderoLoading,
+    initComandero,
+    selectCategoria,
+    addItem,
+    updateItem,
+    removeItem,
+    enviarCocina,
+    resetComandero,
+    initComanderoSubscriptions,
+    type Producto
+  } from '$lib/stores/comandero';
+
+  import BotonEspecial from './BotonEspecial.svelte';
+  import CategoriaBtn from './CategoriaBtn.svelte';
+  import AccionBtn from './AccionBtn.svelte';
+  import ProductoBtn from './ProductoBtn.svelte';
+  import PedidoList from './PedidoList.svelte';
+
+  /** ID de la cuenta activa */
+  export let cuenta_id: string;
+
+  /** Callback para navegar */
+  export let onNavigate: ((path: string) => void) | null = null;
+
+  /** Callback para abrir flotante */
+  export let onOpenPanel: ((panel: string, data?: any) => void) | null = null;
+
+  let cleanupSubs: (() => void) | null = null;
+
+  // Botones especiales (configurables según negocio)
+  const botonesEspeciales = [
+    { id: 'mitad', label: 'Mitad', icon: '🍕½', color: '#8b5cf6' },
+    { id: 'algusto', label: 'Al gusto', icon: '🎨', color: '#ec4899' },
+    { id: 'menu', label: 'Menú', icon: '📋', color: '#0ea5e9' }
+  ];
+
+  // Acciones sidebar
+  const acciones = [
+    { id: 'cuenta', label: 'Cuenta', icon: '📄', variant: 'default' as const },
+    { id: 'enviar', label: 'Enviar', icon: '🍳', variant: 'primary' as const },
+    { id: 'cobro', label: 'Cobro', icon: '💶', variant: 'default' as const },
+    { id: 'salir', label: 'Salir', icon: '↩️', variant: 'danger' as const }
+  ];
+
+  // Handlers
+  function handleCategoriaSelect(e: CustomEvent<{ id: string }>) {
+    selectCategoria(e.detail.id);
+  }
+
+  function handleProductoAdd(e: CustomEvent<{ producto: Producto }>) {
+    addItem(e.detail.producto.id);
+  }
+
+  function handleProductoVariaciones(e: CustomEvent<{ producto: Producto }>) {
+    if (onOpenPanel) {
+      onOpenPanel('variaciones', { producto: e.detail.producto });
+    }
+  }
+
+  function handleItemIncrement(e: CustomEvent<{ item_id: string }>) {
+    const item = $pedidoItems.find(i => i.id === e.detail.item_id);
+    if (item) {
+      updateItem(e.detail.item_id, { cantidad: item.cantidad + 1 });
+    }
+  }
+
+  function handleItemDecrement(e: CustomEvent<{ item_id: string }>) {
+    const item = $pedidoItems.find(i => i.id === e.detail.item_id);
+    if (item && item.cantidad > 1) {
+      updateItem(e.detail.item_id, { cantidad: item.cantidad - 1 });
+    }
+  }
+
+  function handleItemRemove(e: CustomEvent<{ item_id: string }>) {
+    removeItem(e.detail.item_id);
+  }
+
+  function handleEspecialClick(e: CustomEvent<{ id: string }>) {
+    if (onOpenPanel) {
+      onOpenPanel(e.detail.id);
+    }
+  }
+
+  async function handleAccionClick(e: CustomEvent<{ id: string }>) {
+    const { id } = e.detail;
+
+    switch (id) {
+      case 'cuenta':
+        if (onNavigate) onNavigate(`/comandero/${cuenta_id}?view=cuenta`);
+        break;
+      case 'enviar':
+        const result = await enviarCocina();
+        if (!result.success) {
+          console.error('[Comandero] Error enviando:', result.error);
+        }
+        break;
+      case 'cobro':
+        if (onOpenPanel) onOpenPanel('cobro');
+        break;
+      case 'salir':
+        if (onNavigate) onNavigate('/comandero');
+        break;
+    }
+  }
+
+  onMount(() => {
+    connect().then(() => {
+      initComandero(cuenta_id);
+      cleanupSubs = initComanderoSubscriptions();
+    }).catch((err) => {
+      console.error('[ComanderoScreen] MQTT connection failed', err);
+    });
+
+    setupVisibilityHandler();
+  });
+
+  onDestroy(() => {
+    cleanupSubs?.();
+    resetComandero();
+    disconnect();
+    removeVisibilityHandler();
+  });
+</script>
+
+<div class="comandero-screen">
+  <!-- Barra superior: botones especiales -->
+  <header class="top-bar">
+    {#each botonesEspeciales as btn}
+      <BotonEspecial
+        id={btn.id}
+        label={btn.label}
+        icon={btn.icon}
+        color={btn.color}
+        on:click={handleEspecialClick}
+      />
+    {/each}
+  </header>
+
+  <div class="main-body">
+    <!-- Sidebar: categorías + acciones -->
+    <aside class="sidebar">
+      <div class="categorias">
+        {#each $categorias as cat}
+          <CategoriaBtn
+            id={cat.id}
+            nombre={cat.nombre}
+            icon={cat.icon}
+            color={cat.color || '#6366f1'}
+            active={$categoriaActiva === cat.id}
+            on:select={handleCategoriaSelect}
+          />
+        {/each}
+      </div>
+
+      <div class="acciones">
+        {#each acciones as acc}
+          <AccionBtn
+            id={acc.id}
+            label={acc.label}
+            icon={acc.icon}
+            variant={acc.variant}
+            on:click={handleAccionClick}
+          />
+        {/each}
+      </div>
+    </aside>
+
+    <!-- Área principal: grid + pedido -->
+    <main class="content">
+      <!-- Grid de productos -->
+      <div class="productos-area">
+        {#if $comanderoLoading && $productos.length === 0}
+          <div class="loading">Cargando productos...</div>
+        {:else if $productos.length === 0}
+          <div class="empty">
+            <span>Selecciona una categoría</span>
+          </div>
+        {:else}
+          <div class="productos-grid">
+            {#each $productos as producto (producto.id)}
+              <ProductoBtn
+                {producto}
+                on:add={handleProductoAdd}
+                on:variaciones={handleProductoVariaciones}
+              />
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Lista pedido (anclada abajo) -->
+      <PedidoList
+        items={$pedidoItems}
+        total={$pedidoTotal}
+        on:increment={handleItemIncrement}
+        on:decrement={handleItemDecrement}
+        on:remove={handleItemRemove}
+      />
+    </main>
+  </div>
+</div>
+
+<style>
+  .comandero-screen {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background: #0a0a0a;
+    color: #e5e5e5;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Top bar */
+  .top-bar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #111;
+    border-bottom: 1px solid #222;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+
+  .top-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Main body */
+  .main-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 80px;
+    flex-shrink: 0;
+    background: #0d0d0d;
+    border-left: 1px solid #1a1a1a;
+    order: 1; /* Right side */
+  }
+
+  .categorias {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 6px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .acciones {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 6px;
+    border-top: 1px solid #222;
+    flex-shrink: 0;
+  }
+
+  /* Content */
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .productos-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 10px;
+    min-height: 0;
+  }
+
+  .productos-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    align-content: start;
+  }
+
+  .loading, .empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #555;
+    font-size: 0.85rem;
+  }
+
+  /* Mobile */
+  @media (max-width: 600px) {
+    .main-body {
+      flex-direction: column;
+    }
+
+    .sidebar {
+      flex-direction: row;
+      width: 100%;
+      height: auto;
+      order: 0; /* Top */
+      border-left: none;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .categorias {
+      flex-direction: row;
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 6px;
+    }
+
+    .acciones {
+      flex-direction: row;
+      border-top: none;
+      border-left: 1px solid #222;
+      padding: 6px;
+    }
+
+    .productos-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* Tablet */
+  @media (min-width: 601px) and (max-width: 900px) {
+    .productos-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>

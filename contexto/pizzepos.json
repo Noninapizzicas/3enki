@@ -389,8 +389,62 @@
       },
       "comandero": {
         "descripcion": "Pantalla de pedido — se abre al crear cuenta nueva o pulsar lado izquierdo de tarjeta",
-        "estado": "pendiente de diseñar",
-        "nota": "Pantalla completa que reemplaza cuentas. Se diseñará después."
+        "ruta": "/comandero/[cuenta_id]",
+        "layout": {
+          "barra_superior": {
+            "contenido": "Botones especiales con lógica compleja",
+            "ejemplos": ["Mitad y mitad", "Pizza al gusto", "Menú"],
+            "comportamiento": "Cada botón abre flotante específico",
+            "extensible": "Configurable según negocio"
+          },
+          "sidebar": {
+            "posicion": "lateral derecho",
+            "contenido_superior": "Categorías/familias de productos",
+            "contenido_inferior": [
+              "Cuenta → ver detalle cuenta",
+              "Enviar → enviar a cocina",
+              "Cobro → flotante de pago",
+              "Salir → salir sin enviar"
+            ],
+            "seleccion_categoria": "Al pulsar categoría, el grid muestra sus productos"
+          },
+          "area_principal": {
+            "tipo": "Grid de productos",
+            "columnas": 3,
+            "producto_con_variaciones": {
+              "doble_zona": true,
+              "lado_izquierdo": "Añade producto íntegro (sin variaciones)",
+              "lado_derecho": "Abre flotante de variaciones"
+            },
+            "producto_sin_variaciones": "Tap en cualquier sitio → añade directo"
+          },
+          "zona_inferior": {
+            "tipo": "Lista de pedido actual",
+            "scroll": "hacia arriba (crece hacia arriba)",
+            "anclaje": "fija en la parte inferior de la pantalla",
+            "funciones": ["ver items añadidos", "editar cantidad", "borrar item", "añadir notas"]
+          }
+        },
+        "flotantes": {
+          "nota": "Todo lo que se abre es overlay sobre la pantalla principal",
+          "paneles": [
+            "VariacionesPanel — selección de variaciones del producto",
+            "MitadMitadPanel — configurar pizza mitad y mitad",
+            "AlGustoPanel — pizza personalizada ingrediente a ingrediente",
+            "MenuPanel — selección de menú/combo",
+            "ComentarioPanel — añadir notas al item o pedido",
+            "CobroPanel — procesar pago"
+          ]
+        },
+        "mqtt_handlers": [
+          "mqttRequest('pedido', 'get', { cuenta_id })",
+          "mqttRequest('pedido', 'add_item', { cuenta_id, producto_id, cantidad, variaciones?, notas? })",
+          "mqttRequest('pedido', 'remove_item', { cuenta_id, item_id })",
+          "mqttRequest('pedido', 'update_item', { cuenta_id, item_id, cantidad?, notas? })",
+          "mqttRequest('pedido', 'enviar_cocina', { cuenta_id })",
+          "mqttRequest('categorias', 'list')",
+          "mqttRequest('productos', 'list', { categoria_id })"
+        ]
       }
     },
 
@@ -402,9 +456,24 @@
     },
 
     "componentes": {
-      "CuentasScreen.svelte": "Pantalla principal: sidebar + grid de tarjetas + conexión MQTT",
-      "CuentaCard.svelte": "Tarjeta de cuenta: color tipo, info visual, doble zona táctil (izq→comandero, der→cuenta)",
-      "TipoButton.svelte": "Botón de tipo en sidebar: color, icono, 1 toque → crear + abrir comandero"
+      "pantalla_cuentas": {
+        "CuentasScreen.svelte": "Pantalla principal: sidebar + grid de tarjetas + conexión MQTT",
+        "CuentaCard.svelte": "Tarjeta de cuenta: color tipo, info visual, doble zona táctil (izq→comandero, der→cuenta)",
+        "TipoButton.svelte": "Botón de tipo en sidebar: color, icono, 1 toque → crear + abrir comandero"
+      },
+      "pantalla_comandero": {
+        "ComanderoScreen.svelte": "Layout 3 zonas: barra superior + sidebar + área principal con grid y pedido",
+        "BotonEspecial.svelte": "Barra superior: botón con lógica especial (mitad, al gusto, menú)",
+        "CategoriaBtn.svelte": "Sidebar: botón de categoría/familia, selección activa",
+        "AccionBtn.svelte": "Sidebar: botones de acción (Cuenta, Enviar, Cobro, Salir)",
+        "ProductoBtn.svelte": "Grid: botón producto con doble zona si tiene variaciones (izq=añadir, der=variaciones)",
+        "PedidoList.svelte": "Zona inferior: lista de items del pedido, scroll hacia arriba",
+        "PedidoItem.svelte": "Item en la lista: nombre, cantidad, precio, botones editar/borrar"
+      },
+      "flotantes": {
+        "VariacionesPanel.svelte": "Selección de variaciones del producto",
+        "CobroPanel.svelte": "Procesar pago de la cuenta"
+      }
     },
 
     "store": {

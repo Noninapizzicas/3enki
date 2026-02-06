@@ -40,6 +40,7 @@
   import ProductoBtn from './ProductoBtn.svelte';
   import PedidoList from './PedidoList.svelte';
   import VariacionesPanel from './VariacionesPanel.svelte';
+  import CobroPanel from './CobroPanel.svelte';
 
   /** ID de la cuenta activa */
   export let cuenta_id: string;
@@ -55,6 +56,9 @@
   // Estado del panel de variaciones
   let showVariaciones = false;
   let productoVariaciones: Producto | null = null;
+
+  // Estado del panel de cobro
+  let showCobro = false;
 
   // Botones especiales (configurables según negocio)
   const botonesEspeciales = [
@@ -88,6 +92,19 @@
   function handleVariacionesClose() {
     showVariaciones = false;
     productoVariaciones = null;
+  }
+
+  function handleCobroClose() {
+    showCobro = false;
+  }
+
+  function handleCobroSuccess(e: CustomEvent<{ cobro_id: string; estado: string }>) {
+    console.log('[Comandero] Cobro completado:', e.detail);
+    showCobro = false;
+    // Limpiar pedido actual después de cobrar
+    resetComandero();
+    // Volver a lista de cuentas
+    if (onNavigate) onNavigate('/comandero');
   }
 
   function handleVariacionesConfirm(e: CustomEvent<{
@@ -147,7 +164,7 @@
         }
         break;
       case 'cobro':
-        if (onOpenPanel) onOpenPanel('cobro');
+        showCobro = true;
         break;
       case 'salir':
         if (onNavigate) onNavigate('/comandero');
@@ -258,6 +275,18 @@
       visible={showVariaciones}
       on:close={handleVariacionesClose}
       on:confirm={handleVariacionesConfirm}
+    />
+  {/if}
+
+  <!-- Panel flotante: Cobro -->
+  {#if showCobro}
+    <CobroPanel
+      {cuenta_id}
+      monto={$pedidoTotal}
+      pedido_ids={$pedidoItems.map(i => i.id)}
+      visible={showCobro}
+      on:close={handleCobroClose}
+      on:success={handleCobroSuccess}
     />
   {/if}
 </div>

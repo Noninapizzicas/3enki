@@ -3,8 +3,10 @@
    * VariacionesPanel — Flotante para personalizar producto
    *
    * - Ingredientes base: tap = rojo (quitar)
-   * - Extras disponibles: tap = verde (añadir)
+   * - Resto de ingredientes de la carta: tap = verde (añadir)
    * - Precio dinámico
+   *
+   * Usa módulos: variaciones (config) + ingredientes (catálogo completo)
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
@@ -13,7 +15,7 @@
     id: string;
     nombre: string;
     precio: number;
-    ingredientes?: { id: string; nombre: string }[];
+    ingredientes?: { id: string; nombre: string; emoji?: string }[];
   };
 
   export let visible: boolean = true;
@@ -32,14 +34,23 @@
   let loading = true;
   let error: string | null = null;
 
-  // Config del backend
+  // Config variaciones (del backend)
   let permiteQuitar: string[] = [];
   let permiteAnadir: boolean = false;
-  let extrasSugeridos: { ingrediente_id: string; nombre?: string; precio_extra: number }[] = [];
   let maxExtras: number = 5;
 
-  // Ingredientes base del producto (vienen del prop)
-  let ingredientesBase: { id: string; nombre: string }[] = [];
+  // Ingredientes base del producto
+  let ingredientesBase: { id: string; nombre: string; emoji?: string }[] = [];
+
+  // Catálogo completo de ingredientes (filtrado: sin los del producto)
+  let ingredientesDisponibles: {
+    id: string;
+    nombre: string;
+    emoji?: string;
+    precio_extra: number;
+    tipo?: string;
+    disponible: boolean;
+  }[] = [];
 
   // Selecciones del usuario
   let quitarSeleccionados: Set<string> = new Set();
@@ -53,9 +64,9 @@
   function calcularPrecioExtras(): number {
     let total = 0;
     anadirSeleccionados.forEach((cantidad, id) => {
-      const extra = extrasSugeridos.find(e => e.ingrediente_id === id);
-      if (extra) {
-        total += extra.precio_extra * cantidad;
+      const ing = ingredientesDisponibles.find(i => i.id === id);
+      if (ing) {
+        total += (ing.precio_extra || 0) * cantidad;
       }
     });
     return total;
@@ -68,7 +79,7 @@
     } else {
       quitarSeleccionados.add(id);
     }
-    quitarSeleccionados = new Set(quitarSeleccionados); // trigger reactivity
+    quitarSeleccionados = new Set(quitarSeleccionados);
   }
 
   // Toggle añadir ingrediente
@@ -80,30 +91,63 @@
         anadirSeleccionados.set(id, 1);
       }
     }
-    anadirSeleccionados = new Map(anadirSeleccionados); // trigger reactivity
+    anadirSeleccionados = new Map(anadirSeleccionados);
   }
 
-  // Cargar config de variaciones
-  async function loadVariaciones() {
+  // Cargar config de variaciones + catálogo de ingredientes
+  async function loadData() {
     loading = true;
     error = null;
 
     try {
-      const res = await mqttRequest('variaciones', 'get', { producto_id: producto.id });
+      // Cargar en paralelo: config variaciones + catálogo ingredientes
+      const [varRes, ingRes] = await Promise.all([
+        mqttRequest('variaciones', 'get', { producto_id: producto.id }),
+        mqttRequest('ingredientes', 'list', {})
+      ]);
 
-      if (res?.data) {
-        permiteQuitar = res.data.permite_quitar || [];
-        permiteAnadir = res.data.permite_anadir || false;
-        extrasSugeridos = res.data.extras_sugeridos || [];
-        maxExtras = res.data.max_ingredientes_extra || 5;
+      // Config variaciones
+      if (varRes?.data) {
+        permiteQuitar = varRes.data.permite_quitar || [];
+        permiteAnadir = varRes.data.permite_anadir !== false; // default true
+        maxExtras = varRes.data.max_ingredientes_extra || 10;
+      } else {
+        // Si no hay config, permitir todo por defecto
+        permiteAnadir = true;
+        maxExtras = 10;
       }
 
       // Ingredientes base del producto
       ingredientesBase = producto.ingredientes || [];
+      const baseIds = new Set(ingredientesBase.map(i => i.id));
+
+      // Si no tenemos permiteQuitar, asumir que todos los base se pueden quitar
+      if (permiteQuitar.length === 0 && ingredientesBase.length > 0) {
+        permiteQuitar = ingredientesBase.map(i => i.id);
+      }
+
+      // Catálogo: filtrar ingredientes que no están en el producto
+      const todosIngredientes = ingRes?.data?.ingredientes || [];
+      ingredientesDisponibles = todosIngredientes
+        .filter((ing: any) => !baseIds.has(ing.id))
+        .filter((ing: any) => ing.disponible !== false)
+        .map((ing: any) => ({
+          id: ing.id,
+          nombre: ing.nombre,
+          emoji: ing.emoji,
+          precio_extra: ing.precio_extra || 0,
+          tipo: ing.tipo,
+          disponible: ing.disponible !== false
+        }))
+        .sort((a: any, b: any) => {
+          // Ordenar por tipo, luego por nombre
+          if (a.tipo !== b.tipo) return (a.tipo || '').localeCompare(b.tipo || '');
+          return a.nombre.localeCompare(b.nombre);
+        });
 
       loading = false;
     } catch (err: any) {
-      error = err?.message || 'Error al cargar variaciones';
+      error = err?.message || 'Error al cargar datos';
       loading = false;
     }
   }
@@ -131,8 +175,16 @@
     return precio.toFixed(2) + ' €';
   }
 
+  function getIngredienteNombre(id: string): string {
+    const base = ingredientesBase.find(i => i.id === id);
+    if (base) return base.emoji ? `${base.emoji} ${base.nombre}` : base.nombre;
+    const extra = ingredientesDisponibles.find(i => i.id === id);
+    if (extra) return extra.emoji ? `${extra.emoji} ${extra.nombre}` : extra.nombre;
+    return id;
+  }
+
   onMount(() => {
-    loadVariaciones();
+    loadData();
   });
 </script>
 
@@ -151,14 +203,14 @@
       <!-- Content -->
       <div class="panel-content">
         {#if loading}
-          <div class="loading">⏳ Cargando...</div>
+          <div class="loading">⏳ Cargando ingredientes...</div>
         {:else if error}
           <div class="error">❌ {error}</div>
         {:else}
           <!-- Ingredientes base (quitar) -->
           {#if ingredientesBase.length > 0}
             <section class="section">
-              <h3 class="section-title">🧾 Ingredientes</h3>
+              <h3 class="section-title">🧾 Ingredientes del producto</h3>
               <div class="chips-grid">
                 {#each ingredientesBase as ing}
                   {@const canRemove = permiteQuitar.includes(ing.id)}
@@ -169,9 +221,12 @@
                     class:removed={isRemoved}
                     disabled={!canRemove}
                     on:click={() => canRemove && toggleQuitar(ing.id)}
+                    title={canRemove ? 'Pulsa para quitar' : 'No se puede quitar'}
                   >
                     {#if isRemoved}
                       <span class="chip-icon">🚫</span>
+                    {:else if ing.emoji}
+                      <span class="chip-icon">{ing.emoji}</span>
                     {/if}
                     <span class="chip-name">{ing.nombre}</span>
                   </button>
@@ -180,23 +235,35 @@
             </section>
           {/if}
 
-          <!-- Extras (añadir) -->
-          {#if permiteAnadir && extrasSugeridos.length > 0}
+          <!-- Todos los ingredientes de la carta (añadir) -->
+          {#if permiteAnadir && ingredientesDisponibles.length > 0}
             <section class="section">
-              <h3 class="section-title">➕ Añadir extras <span class="max-hint">(máx {maxExtras})</span></h3>
+              <h3 class="section-title">
+                ➕ Añadir de la carta
+                <span class="max-hint">({anadirSeleccionados.size}/{maxExtras})</span>
+              </h3>
               <div class="chips-grid">
-                {#each extrasSugeridos as extra}
-                  {@const isAdded = anadirSeleccionados.has(extra.ingrediente_id)}
+                {#each ingredientesDisponibles as ing}
+                  {@const isAdded = anadirSeleccionados.has(ing.id)}
+                  {@const isDisabled = !isAdded && anadirSeleccionados.size >= maxExtras}
                   <button
                     class="chip extra"
                     class:added={isAdded}
-                    on:click={() => toggleAnadir(extra.ingrediente_id)}
+                    disabled={isDisabled}
+                    on:click={() => !isDisabled && toggleAnadir(ing.id)}
+                    title={isDisabled ? `Máximo ${maxExtras} extras` : 'Pulsa para añadir'}
                   >
                     {#if isAdded}
                       <span class="chip-icon">✅</span>
+                    {:else if ing.emoji}
+                      <span class="chip-icon">{ing.emoji}</span>
                     {/if}
-                    <span class="chip-name">{extra.nombre || extra.ingrediente_id}</span>
-                    <span class="chip-price">+{formatPrecio(extra.precio_extra)}</span>
+                    <span class="chip-name">{ing.nombre}</span>
+                    {#if ing.precio_extra > 0}
+                      <span class="chip-price">+{formatPrecio(ing.precio_extra)}</span>
+                    {:else}
+                      <span class="chip-price free">gratis</span>
+                    {/if}
                   </button>
                 {/each}
               </div>
@@ -209,19 +276,13 @@
               {#if quitarSeleccionados.size > 0}
                 <p class="resumen-line quitar">
                   🚫 <strong>Sin:</strong>
-                  {Array.from(quitarSeleccionados).map(id => {
-                    const ing = ingredientesBase.find(i => i.id === id);
-                    return ing?.nombre || id;
-                  }).join(', ')}
+                  {Array.from(quitarSeleccionados).map(id => getIngredienteNombre(id)).join(', ')}
                 </p>
               {/if}
               {#if anadirSeleccionados.size > 0}
                 <p class="resumen-line anadir">
                   ✨ <strong>Con:</strong>
-                  {Array.from(anadirSeleccionados.keys()).map(id => {
-                    const extra = extrasSugeridos.find(e => e.ingrediente_id === id);
-                    return extra?.nombre || id;
-                  }).join(', ')}
+                  {Array.from(anadirSeleccionados.keys()).map(id => getIngredienteNombre(id)).join(', ')}
                 </p>
               {/if}
             </section>
@@ -260,8 +321,8 @@
     border: 1px solid #333;
     border-radius: 16px;
     width: 100%;
-    max-width: 420px;
-    max-height: 80vh;
+    max-width: 480px;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -335,6 +396,9 @@
   }
 
   .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -361,19 +425,20 @@
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 10px 14px;
+    padding: 8px 12px;
     border: 2px solid #333;
     border-radius: 10px;
     background: #1a1a1a;
     color: #ccc;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.15s;
     -webkit-tap-highlight-color: transparent;
+    min-width: 70px;
   }
 
   .chip:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
     cursor: not-allowed;
   }
 
@@ -388,7 +453,7 @@
     text-decoration: line-through;
   }
 
-  .chip.extra:not(.added):hover {
+  .chip.extra:not(.added):not(:disabled):hover {
     border-color: #555;
   }
 
@@ -399,17 +464,23 @@
   }
 
   .chip-icon {
-    font-size: 0.9rem;
+    font-size: 1rem;
     line-height: 1;
   }
 
   .chip-name {
     font-weight: 600;
+    text-align: center;
   }
 
   .chip-price {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     color: #888;
+  }
+
+  .chip-price.free {
+    color: #22c55e;
+    font-style: italic;
   }
 
   .chip.added .chip-price {
@@ -484,5 +555,18 @@
   .confirm-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 400px) {
+    .chip {
+      min-width: 60px;
+      padding: 6px 8px;
+      font-size: 0.7rem;
+    }
+
+    .chip-icon {
+      font-size: 0.9rem;
+    }
   }
 </style>

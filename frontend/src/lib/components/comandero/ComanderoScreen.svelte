@@ -42,6 +42,7 @@
   import VariacionesPanel from './VariacionesPanel.svelte';
   import CobroPanel from './CobroPanel.svelte';
   import MitadMitadPanel from './MitadMitadPanel.svelte';
+  import AlGustoPanel from './AlGustoPanel.svelte';
 
   /** ID de la cuenta activa */
   export let cuenta_id: string;
@@ -63,6 +64,9 @@
 
   // Estado del panel mitad y mitad
   let showMitadMitad = false;
+
+  // Estado del panel al gusto
+  let showAlGusto = false;
 
   // Botones especiales (configurables según negocio)
   const botonesEspeciales = [
@@ -156,6 +160,8 @@
         showMitadMitad = true;
         break;
       case 'algusto':
+        showAlGusto = true;
+        break;
       case 'menu':
         if (onOpenPanel) onOpenPanel(id);
         break;
@@ -185,6 +191,29 @@
     });
 
     showMitadMitad = false;
+  }
+
+  function handleAlGustoClose() {
+    showAlGusto = false;
+  }
+
+  function handleAlGustoConfirm(e: CustomEvent<{
+    ingredientes: any[];
+    precio_total: number;
+    nombre_compuesto: string;
+  }>) {
+    const { ingredientes, precio_total, nombre_compuesto } = e.detail;
+
+    // Añadir como item especial al pedido
+    // Usamos un ID especial para pizza al gusto
+    addItem('pizza_algusto', 1, [], {
+      tipo: 'al_gusto',
+      nombre_override: nombre_compuesto,
+      precio_override: precio_total,
+      ingredientes: ingredientes.map(i => ({ id: i.id, nombre: i.nombre, precio: i.precio_extra }))
+    });
+
+    showAlGusto = false;
   }
 
   async function handleAccionClick(e: CustomEvent<{ id: string }>) {
@@ -333,6 +362,15 @@
       visible={showMitadMitad}
       on:close={handleMitadMitadClose}
       on:confirm={handleMitadMitadConfirm}
+    />
+  {/if}
+
+  <!-- Panel flotante: Al Gusto -->
+  {#if showAlGusto}
+    <AlGustoPanel
+      visible={showAlGusto}
+      on:close={handleAlGustoClose}
+      on:confirm={handleAlGustoConfirm}
     />
   {/if}
 </div>

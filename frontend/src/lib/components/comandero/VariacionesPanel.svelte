@@ -142,7 +142,7 @@
       <!-- Header -->
       <header class="panel-header">
         <div class="producto-info">
-          <span class="producto-nombre">{producto.nombre}</span>
+          <span class="producto-nombre">🍕 {producto.nombre}</span>
           <span class="producto-precio">{formatPrecio(precioBase)}</span>
         </div>
         <button class="close-btn" on:click={handleClose}>✕</button>
@@ -151,14 +151,14 @@
       <!-- Content -->
       <div class="panel-content">
         {#if loading}
-          <div class="loading">Cargando...</div>
+          <div class="loading">⏳ Cargando...</div>
         {:else if error}
-          <div class="error">{error}</div>
+          <div class="error">❌ {error}</div>
         {:else}
           <!-- Ingredientes base (quitar) -->
           {#if ingredientesBase.length > 0}
             <section class="section">
-              <h3 class="section-title">Ingredientes</h3>
+              <h3 class="section-title">🧾 Ingredientes</h3>
               <div class="chips-grid">
                 {#each ingredientesBase as ing}
                   {@const canRemove = permiteQuitar.includes(ing.id)}
@@ -170,10 +170,10 @@
                     disabled={!canRemove}
                     on:click={() => canRemove && toggleQuitar(ing.id)}
                   >
-                    <span class="chip-name">{ing.nombre}</span>
                     {#if isRemoved}
-                      <span class="chip-badge removed">✕</span>
+                      <span class="chip-icon">🚫</span>
                     {/if}
+                    <span class="chip-name">{ing.nombre}</span>
                   </button>
                 {/each}
               </div>
@@ -183,7 +183,7 @@
           <!-- Extras (añadir) -->
           {#if permiteAnadir && extrasSugeridos.length > 0}
             <section class="section">
-              <h3 class="section-title">Añadir extras <span class="max-hint">(máx {maxExtras})</span></h3>
+              <h3 class="section-title">➕ Añadir extras <span class="max-hint">(máx {maxExtras})</span></h3>
               <div class="chips-grid">
                 {#each extrasSugeridos as extra}
                   {@const isAdded = anadirSeleccionados.has(extra.ingrediente_id)}
@@ -192,11 +192,11 @@
                     class:added={isAdded}
                     on:click={() => toggleAnadir(extra.ingrediente_id)}
                   >
+                    {#if isAdded}
+                      <span class="chip-icon">✅</span>
+                    {/if}
                     <span class="chip-name">{extra.nombre || extra.ingrediente_id}</span>
                     <span class="chip-price">+{formatPrecio(extra.precio_extra)}</span>
-                    {#if isAdded}
-                      <span class="chip-badge added">✓</span>
-                    {/if}
                   </button>
                 {/each}
               </div>
@@ -208,7 +208,7 @@
             <section class="section resumen">
               {#if quitarSeleccionados.size > 0}
                 <p class="resumen-line quitar">
-                  <strong>Sin:</strong>
+                  🚫 <strong>Sin:</strong>
                   {Array.from(quitarSeleccionados).map(id => {
                     const ing = ingredientesBase.find(i => i.id === id);
                     return ing?.nombre || id;
@@ -217,7 +217,7 @@
               {/if}
               {#if anadirSeleccionados.size > 0}
                 <p class="resumen-line anadir">
-                  <strong>Con:</strong>
+                  ✨ <strong>Con:</strong>
                   {Array.from(anadirSeleccionados.keys()).map(id => {
                     const extra = extrasSugeridos.find(e => e.ingrediente_id === id);
                     return extra?.nombre || id;
@@ -232,11 +232,11 @@
       <!-- Footer -->
       <footer class="panel-footer">
         <div class="total">
-          <span class="total-label">Total</span>
+          <span class="total-label">💰 Total</span>
           <span class="total-amount">{formatPrecio(precioTotal)}</span>
         </div>
         <button class="confirm-btn" on:click={handleConfirm} disabled={loading}>
-          Añadir
+          ✅ Añadir
         </button>
       </footer>
     </div>
@@ -398,6 +398,11 @@
     color: #22c55e;
   }
 
+  .chip-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+
   .chip-name {
     font-weight: 600;
   }
@@ -409,30 +414,6 @@
 
   .chip.added .chip-price {
     color: #22c55e;
-  }
-
-  .chip-badge {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    font-size: 0.6rem;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .chip-badge.removed {
-    background: #ef4444;
-    color: #fff;
-  }
-
-  .chip-badge.added {
-    background: #22c55e;
-    color: #fff;
   }
 
   /* Resumen */

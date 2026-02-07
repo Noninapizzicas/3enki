@@ -215,11 +215,11 @@ class CuentasModule {
 
       this.cuentas.set(cuenta_id, cuenta);
 
-      // Métricas
-      this.metrics.increment('cuenta.creada.total');
-      this.metrics.increment(`cuenta.tipo.${tipoFinal}`);
-      this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
-      this.metrics.timing('cuenta.create.duration', Date.now() - start_time);
+      // Métricas (con verificación de existencia)
+      this.metrics?.increment?.('cuenta.creada.total');
+      this.metrics?.increment?.(`cuenta.tipo.${tipoFinal}`);
+      this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
+      this.metrics?.timing?.('cuenta.create.duration', Date.now() - start_time);
 
       await this.publishCuentaCreada(cuenta);
 
@@ -230,7 +230,7 @@ class CuentasModule {
       return { status: 201, data: cuenta };
 
     } catch (error) {
-      this.metrics.increment('cuenta.errors.total', 1, { operation: 'create' });
+      this.metrics?.increment?.('cuenta.errors.total', 1, { operation: 'create' });
       this.logger.error('cuenta.create.error', { error: error.message });
       return { status: 500, error: error.message };
     }
@@ -277,8 +277,8 @@ class CuentasModule {
 
     this.cuentas.delete(id);
 
-    this.metrics.increment('cuenta.eliminada.total');
-    this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
+    this.metrics?.increment?.('cuenta.eliminada.total');
+    this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
 
     await this.publishCuentaEliminada(id, cuenta.tipo, 'eliminacion_manual');
 
@@ -365,6 +365,9 @@ class CuentasModule {
 
   startMetricsReporting() {
     this._metricsInterval = setInterval(() => {
+      // Verificar que metrics.gauge existe antes de llamarlo
+      if (!this.metrics?.gauge) return;
+
       this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
 
       const por_tipo = { local: 0, delivery: 0, llevar: 0 };

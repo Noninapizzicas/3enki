@@ -50,9 +50,21 @@
       "echo",
       "file-watcher",
       "security-p2p",
-      "scratch-designer"
+      "scratch-designer",
+      "system-inspector",
+      "cuentas",
+      "cuentas-canales",
+      "pedidos",
+      "cobros",
+      "cocina",
+      "comandero",
+      "productos",
+      "categorias",
+      "ingredientes",
+      "variaciones",
+      "persistencia-comandero"
     ],
-    "disabled": ["conversation-manager", "cobros", "cocina", "cuentas", "cuentas-canales", "comandero", "pedidos", "persistencia-comandero", "productos", "variaciones", "ingredientes", "categorias"]
+    "disabled": ["conversation-manager"]
   },
   "observability": {
     "logging": {

@@ -1,7 +1,22 @@
 {
-  "_VERSION": "3.0.0",
+  "_VERSION": "3.1.0",
   "_CREATED": "2026-02-03",
+  "_UPDATED": "2026-02-07",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
+
+  "_CHANGELOG": {
+    "3.1.0": {
+      "fecha": "2026-02-07",
+      "cambios": [
+        "frontend_comandero: UI completa — 14 componentes implementados",
+        "flotantes: CobroPanel (7 métodos pago), MitadMitadPanel (pizza mitad y mitad), AlGustoPanel (pizza personalizada)",
+        "persistencia-comandero: documentada arquitectura Event Sourcing completa",
+        "cuentas.ts: integración con persistencia como fuente de verdad",
+        "tipo_mapping: mesa→local, telefono→delivery, llevar→llevar",
+        "stores: documentación completa de cuentas.ts y comandero.ts"
+      ]
+    }
+  },
 
   "resumen": {
     "que_es": "Sistema de punto de venta (POS) para pizzerías con 5 canales de venta, gestión de cocina, catálogo de productos y persistencia de ventas",
@@ -254,11 +269,38 @@
 
     "persistencia-comandero": {
       "version": "2.0.0",
-      "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas",
+      "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas. FUENTE DE VERDAD para cuentas activas.",
       "ui_domain": "persistencia",
       "uiHandlers": ["cuentas_activas", "eventos", "eventos_fecha", "ventas", "ventas_fecha", "cuadre", "cuadre_fecha", "cierre", "iniciar_dia", "backup", "health", "metrics"],
       "eventos_suscribe": ["cuenta.creada", "cuenta.cerrada", "pedido.creado", "pedido.confirmado", "cobro.procesado", "cocina.pedido_listo"],
-      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día"]
+      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día"],
+      "arquitectura_event_sourcing": {
+        "patron": "Event Sourcing — estado reconstruido desde stream de eventos",
+        "cache_principal": "cuentasActivasCache — Map en memoria con todas las cuentas abiertas",
+        "persistencia_disco": "./data/current/cuentas_activas.json — sobrevive reinicios",
+        "flujo_evento": [
+          "1. Evento llega (cuenta.creada, pedido.creado, cobro.procesado, etc.)",
+          "2. Se graba en archivo de eventos del día",
+          "3. Se actualiza cuentasActivasCache",
+          "4. Se persiste cuentas_activas.json"
+        ],
+        "reconstruccion": "Al iniciar, lee cuentas_activas.json y restaura el cache",
+        "estructura_cuenta_activa": {
+          "cuenta_id": "string — ID único",
+          "tipo": "mesa | telefono | llevar | delivery | glovo | whatsapp",
+          "origen": "string — descripción del origen",
+          "datos_especificos": "object — nombre, telefono, etc.",
+          "pedidos": "array — lista de pedidos asociados",
+          "total": "number — total acumulado",
+          "created_at": "ISO timestamp",
+          "updated_at": "ISO timestamp"
+        }
+      },
+      "uso_frontend": {
+        "handler": "mqttRequest('persistencia', 'cuentas_activas', { tipo? })",
+        "respuesta": "{ cuentas: [...] } — array de cuentas activas del cache",
+        "integracion": "cuentas.ts usa loadCuentasFromPersistencia() para obtener estado real"
+      }
     }
   },
 
@@ -426,15 +468,47 @@
           }
         },
         "flotantes": {
-          "nota": "Todo lo que se abre es overlay sobre la pantalla principal",
-          "paneles": [
-            "VariacionesPanel — selección de variaciones del producto",
-            "MitadMitadPanel — configurar pizza mitad y mitad",
-            "AlGustoPanel — pizza personalizada ingrediente a ingrediente",
-            "MenuPanel — selección de menú/combo",
-            "ComentarioPanel — añadir notas al item o pedido",
-            "CobroPanel — procesar pago"
-          ]
+          "nota": "Todo lo que se abre es overlay sobre la pantalla principal — patrón consistente con backdrop oscuro",
+          "paneles": {
+            "VariacionesPanel": {
+              "estado": "IMPLEMENTADO",
+              "funcion": "Selección de variaciones del producto (quitar/añadir ingredientes)",
+              "mqtt": "mqttRequest('ingredientes', 'list') + producto.variaciones",
+              "precio": "precio_base ± ajustes de variaciones",
+              "ui": "Grid de toggles con ingredientes agrupados"
+            },
+            "CobroPanel": {
+              "estado": "IMPLEMENTADO",
+              "funcion": "Procesar pago de la cuenta",
+              "metodos_pago": ["efectivo", "tarjeta", "bizum", "transferencia", "mixto", "link_pago", "qr"],
+              "efectivo": "Botones rápidos (5€, 10€, 20€, 50€, 100€, Exacto) + cálculo de cambio",
+              "propinas": "Selección de propina (0, 5%, 10%, redondeo)",
+              "mqtt": "mqttRequest('cobros', 'procesar', { cuenta_id, metodo, monto_recibido?, propina? })"
+            },
+            "MitadMitadPanel": {
+              "estado": "IMPLEMENTADO",
+              "funcion": "Configurar pizza mitad y mitad",
+              "mqtt": "mqttRequest('productos', 'pizzas') — lista de pizzas disponibles",
+              "precio": "max(precio_izquierda, precio_derecha)",
+              "ui": "Dos columnas: seleccionar pizza para cada mitad con preview visual"
+            },
+            "AlGustoPanel": {
+              "estado": "IMPLEMENTADO",
+              "funcion": "Pizza personalizada ingrediente a ingrediente",
+              "mqtt": "mqttRequest('ingredientes', 'list') — todos los ingredientes",
+              "precio": "8€ base + suma de ingredientes extra",
+              "ui": "Grid de ingredientes agrupados por tipo (base, salsa, queso, proteína, vegetal...)"
+            },
+            "MenuPanel": {
+              "estado": "PENDIENTE",
+              "funcion": "Selección de menú/combo",
+              "nota": "Usuario indicó 'de momento no'"
+            },
+            "ComentarioPanel": {
+              "estado": "PENDIENTE",
+              "funcion": "Añadir notas al item o pedido"
+            }
+          }
         },
         "mqtt_handlers": [
           "mqttRequest('pedido', 'get', { cuenta_id })",
@@ -456,31 +530,114 @@
     },
 
     "componentes": {
+      "total": 14,
+      "estado": "UI COMPLETA — todos los componentes core implementados",
       "pantalla_cuentas": {
-        "CuentasScreen.svelte": "Pantalla principal: sidebar + grid de tarjetas + conexión MQTT",
-        "CuentaCard.svelte": "Tarjeta de cuenta: color tipo, info visual, doble zona táctil (izq→comandero, der→cuenta)",
-        "TipoButton.svelte": "Botón de tipo en sidebar: color, icono, 1 toque → crear + abrir comandero"
+        "CuentasScreen.svelte": "Pantalla principal: header + sidebar + grid de tarjetas + conexión MQTT + reloj",
+        "CuentaCard.svelte": "Tarjeta de cuenta: color tipo, info visual (items/total/hora/estado), doble zona táctil (izq→comandero, der→cuenta)",
+        "TipoButton.svelte": "Botón de tipo en sidebar: color, icono, 1 toque → crear cuenta + abrir comandero"
       },
       "pantalla_comandero": {
-        "ComanderoScreen.svelte": "Layout 3 zonas: barra superior + sidebar + área principal con grid y pedido",
+        "ComanderoScreen.svelte": "Layout 3 zonas + gestión de flotantes (showVariaciones, showCobro, showMitadMitad, showAlGusto)",
         "BotonEspecial.svelte": "Barra superior: botón con lógica especial (mitad, al gusto, menú)",
-        "CategoriaBtn.svelte": "Sidebar: botón de categoría/familia, selección activa",
-        "AccionBtn.svelte": "Sidebar: botones de acción (Cuenta, Enviar, Cobro, Salir)",
-        "ProductoBtn.svelte": "Grid: botón producto con doble zona si tiene variaciones (izq=añadir, der=variaciones)",
-        "PedidoList.svelte": "Zona inferior: lista de items del pedido, scroll hacia arriba",
-        "PedidoItem.svelte": "Item en la lista: nombre, cantidad, precio, botones editar/borrar"
+        "CategoriaBtn.svelte": "Sidebar: botón de categoría/familia, selección activa con color",
+        "AccionBtn.svelte": "Sidebar inferior: botones de acción (Cuenta, Enviar, Cobro, Salir) con iconos y colores",
+        "ProductoBtn.svelte": "Grid: botón producto con doble zona si tiene variaciones (izq=añadir directo, der=abrir variaciones)",
+        "PedidoList.svelte": "Zona inferior: lista de items del pedido actual, scroll hacia arriba, anclada abajo",
+        "PedidoItem.svelte": "Item en la lista: nombre, cantidad, precio, notas, botones cantidad +/- y borrar"
       },
       "flotantes": {
-        "VariacionesPanel.svelte": "Selección de variaciones del producto",
-        "CobroPanel.svelte": "Procesar pago de la cuenta"
+        "VariacionesPanel.svelte": "Selección de variaciones — toggles de ingredientes agrupados, precio recalculado en vivo",
+        "CobroPanel.svelte": "Procesamiento de pago — 7 métodos, efectivo con billetes rápidos, propinas, cambio calculado",
+        "MitadMitadPanel.svelte": "Pizza mitad y mitad — selección visual de 2 pizzas, precio = max de ambas",
+        "AlGustoPanel.svelte": "Pizza al gusto — selección de ingredientes individuales, precio = base + extras"
+      },
+      "base": {
+        "ConnectionStatus.svelte": "Indicador de conexión MQTT en header (importado de $lib/components/base)"
       }
     },
 
-    "store": {
-      "ubicacion": "frontend/src/lib/stores/cuentas.ts",
-      "funciones": ["createCuenta()", "listCuentas()", "getCuenta()", "deleteCuenta()", "getStats()"],
-      "subscriptions": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
-      "estado": "{ cuentas: Map, loading, error }"
+    "stores": {
+      "cuentas": {
+        "ubicacion": "frontend/src/lib/stores/cuentas.ts",
+        "descripcion": "Store principal de cuentas — INTEGRADO CON PERSISTENCIA como fuente de verdad",
+        "funciones_api": {
+          "createCuenta": "Crea cuenta nueva via cuenta.create",
+          "listCuentas": "Lista cuentas via cuenta.list",
+          "getCuenta": "Obtiene cuenta via cuenta.get",
+          "deleteCuenta": "Elimina cuenta via cuenta.delete",
+          "getStats": "Estadísticas via cuenta.stats"
+        },
+        "funciones_persistencia": {
+          "loadCuentasFromPersistencia": "Carga estado real desde persistencia.cuentas_activas — FUENTE DE VERDAD",
+          "getCuentaFromPersistencia": "Obtiene una cuenta específica desde persistencia"
+        },
+        "tipo_mapping": {
+          "nota": "Backend usa tipos diferentes, frontend los normaliza",
+          "mesa": "→ local",
+          "local": "→ local",
+          "telefono": "→ delivery",
+          "delivery": "→ delivery",
+          "llevar": "→ llevar",
+          "recoger": "→ llevar"
+        },
+        "helpers": {
+          "formatHora": "Formatea timestamp a HH:MM",
+          "countItems": "Cuenta items en pedidos",
+          "checkAlerta": "Detecta cuentas inactivas >30 min",
+          "mapEstadoPersistencia": "Mapea estado backend a frontend"
+        },
+        "subscriptions": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
+        "comportamiento_subscriptions": "Al recibir evento → recargar desde persistencia para estado consistente"
+      },
+      "comandero": {
+        "ubicacion": "frontend/src/lib/stores/comandero.ts",
+        "descripcion": "Store del pedido activo y catálogo de productos",
+        "funciones": {
+          "initComandero": "Inicializa store para una cuenta — carga pedido + categorías + productos",
+          "selectCategoria": "Cambia categoría activa y carga sus productos",
+          "addItem": "Añade producto al pedido",
+          "removeItem": "Elimina item del pedido",
+          "updateItem": "Actualiza cantidad/notas de item",
+          "enviarCocina": "Envía pedido a cocina",
+          "resetComandero": "Limpia estado"
+        },
+        "derived_stores": ["pedido", "pedidoItems", "pedidoTotal", "pedidoCount", "categorias", "productos", "categoriaActiva", "comanderoLoading", "comanderoError"],
+        "subscriptions": ["pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina"]
+      }
+    },
+
+    "rutas": {
+      "/comandero": {
+        "archivo": "frontend/src/routes/comandero/+page.svelte",
+        "componente": "CuentasScreen",
+        "descripcion": "Pantalla principal de cuentas activas"
+      },
+      "/comandero/[cuenta_id]": {
+        "archivo": "frontend/src/routes/comandero/[cuenta_id]/+page.svelte",
+        "componente": "ComanderoScreen",
+        "descripcion": "Pantalla de pedido para cuenta específica"
+      }
+    },
+
+    "exports": {
+      "archivo": "frontend/src/lib/components/comandero/index.ts",
+      "componentes": [
+        "CuentasScreen",
+        "ComanderoScreen",
+        "CuentaCard",
+        "TipoButton",
+        "BotonEspecial",
+        "CategoriaBtn",
+        "AccionBtn",
+        "ProductoBtn",
+        "PedidoList",
+        "PedidoItem",
+        "VariacionesPanel",
+        "CobroPanel",
+        "MitadMitadPanel",
+        "AlGustoPanel"
+      ]
     }
   }
 }

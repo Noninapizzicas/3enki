@@ -104,12 +104,21 @@ export const cuentasCount = derived(cuentasStore, $s => $s.cuentas.length);
 
 export async function createCuenta(tipo: TipoCuenta, nombre?: string): Promise<Cuenta | null> {
   try {
-    const res = await mqttRequest<{ status: number; data: Cuenta }>('cuenta', 'create', {
+    console.log('[Cuentas] createCuenta request:', { tipo, nombre });
+    const res = await mqttRequest<Cuenta>('cuenta', 'create', {
       tipo,
       nombre: nombre || undefined
     });
-    return res.data || null;
+    console.log('[Cuentas] createCuenta response:', res);
+
+    // La respuesta viene en res.data directamente
+    if (res.status === 201 || res.status === 200) {
+      return res.data || null;
+    }
+    console.error('[Cuentas] createCuenta failed status:', res.status);
+    return null;
   } catch (err: any) {
+    console.error('[Cuentas] createCuenta error:', err);
     cuentasStore.update(s => ({ ...s, error: err.message || 'Error al crear cuenta' }));
     return null;
   }

@@ -8,6 +8,7 @@
   import { createEventDispatcher } from 'svelte';
   import type { TipoCuenta } from '$lib/stores/cuentas';
   import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta } from '$lib/stores/cuentas';
+  import { status as mqttStatus } from '$lib/ui-core';
 
   export let tipo: TipoCuenta;
 
@@ -16,16 +17,37 @@
   }>();
 
   let creating = false;
+  let error = '';
 
   async function handleClick() {
     if (creating) return;
+
+    // Verificar conexión MQTT
+    if ($mqttStatus !== 'connected') {
+      error = 'Sin conexión';
+      setTimeout(() => error = '', 2000);
+      return;
+    }
+
     creating = true;
+    error = '';
 
     try {
+      console.log('[TipoButton] Creating cuenta tipo:', tipo);
       const cuenta = await createCuenta(tipo);
+
       if (cuenta) {
+        console.log('[TipoButton] Cuenta created:', cuenta.id);
         dispatch('created', { cuenta_id: cuenta.id, tipo: cuenta.tipo });
+      } else {
+        console.error('[TipoButton] createCuenta returned null');
+        error = 'Error';
+        setTimeout(() => error = '', 2000);
       }
+    } catch (err: any) {
+      console.error('[TipoButton] Error:', err);
+      error = 'Error';
+      setTimeout(() => error = '', 2000);
     } finally {
       creating = false;
     }
@@ -39,13 +61,14 @@
 <button
   class="tipo-btn"
   class:creating
+  class:error={!!error}
   style="--tipo-color: {color}"
   on:click={handleClick}
   disabled={creating}
   title="Nueva cuenta {label}"
 >
-  <span class="icon">{icon}</span>
-  <span class="label">{label}</span>
+  <span class="icon">{error ? '⚠' : icon}</span>
+  <span class="label">{error || label}</span>
 </button>
 
 <style>
@@ -80,6 +103,17 @@
 
   .tipo-btn.creating {
     animation: pulse-create 0.6s ease-in-out infinite;
+  }
+
+  .tipo-btn.error {
+    --tipo-color: #ef4444;
+    animation: shake 0.3s ease-in-out;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
   }
 
   .icon {

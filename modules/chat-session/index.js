@@ -34,6 +34,7 @@ class ChatSessionModule {
     // In-memory cache
     this.conversations = new Map(); // conversationId -> conversation
     this.initializedProjects = new Set(); // Track projects with initialized schema
+    this.activeProjectId = null; // Cached from project.activated event
 
     // Pending requests (for request/response pattern)
     this.pendingDbRequests = new Map();
@@ -1082,7 +1083,20 @@ class ChatSessionModule {
   // Helper: Get Active Project
   // ==========================================
 
+  /**
+   * Get active project ID.
+   * Uses cached value from project.activated event when available.
+   * Falls back to RPC query if cache is empty (e.g., module loaded after project was activated).
+   */
   async getActiveProjectId(correlationId) {
+    // Fast path: return cached value
+    if (this.activeProjectId) {
+      return this.activeProjectId;
+    }
+
+    // Slow path: RPC fallback
+    this.logger.debug('chat-session.getActiveProjectId.rpc_fallback', { correlationId });
+
     const requestId = crypto.randomUUID();
 
     return new Promise(async (resolve, reject) => {
@@ -1096,7 +1110,11 @@ class ChatSessionModule {
         if (data.request_id === requestId) {
           clearTimeout(timeout);
           unsub();
-          resolve(data.active_project_id || null);
+          const projectId = data.active_project_id || null;
+          if (projectId) {
+            this.activeProjectId = projectId;
+          }
+          resolve(projectId);
         }
       });
 
@@ -1122,6 +1140,9 @@ class ChatSessionModule {
     const correlationId = crypto.randomUUID();
 
     if (!project_id) return;
+
+    // Cache active project ID for fast lookup
+    this.activeProjectId = project_id;
 
     this.logger.info('chat-session.project.activated', { correlationId, project_id, name });
 
@@ -1170,6 +1191,11 @@ class ChatSessionModule {
     const { project_id } = data;
 
     if (!project_id) return;
+
+    // Clear cached active project ID
+    if (this.activeProjectId === project_id) {
+      this.activeProjectId = null;
+    }
 
     this.logger.info('chat-session.project.deactivated', { project_id });
 

@@ -474,8 +474,10 @@ class ProjectManagerModule {
 
     try {
       // Check if already exists in memory cache
+      // Primary: metadata.is_system flag (reliable, set on creation)
+      // Fallback: system_role === 'root' (composition field, set on creation)
       const existing = Array.from(this.projects.values()).find(
-        p => p.metadata?.is_system === true || (p.base_path && p.base_path.endsWith('/sistema'))
+        p => p.metadata?.is_system === true || p.system_role === 'root'
       );
 
       if (existing) {
@@ -1752,35 +1754,24 @@ class ProjectManagerModule {
   async listSystems(correlationId) {
     this.logger.debug({ correlationId }, 'Listing systems');
 
-    const systems = await this.queryDatabase(
-      'SELECT * FROM systems ORDER BY name',
-      [],
-      true,
-      correlationId
-    );
+    // Single query with LEFT JOIN instead of N+1
+    const systems = await this.queryDatabase(`
+      SELECT s.*, COUNT(p.id) as project_count
+      FROM systems s
+      LEFT JOIN projects p ON p.system_id = s.id
+      GROUP BY s.id
+      ORDER BY s.name
+    `, [], true, correlationId);
 
-    // Get project counts for each system
-    const result = [];
-    for (const system of systems) {
-      const projectCount = await this.queryDatabase(
-        'SELECT COUNT(*) as count FROM projects WHERE system_id = ?',
-        [system.id],
-        true,
-        correlationId
-      );
-
-      result.push({
-        id: system.id,
-        name: system.name,
-        description: system.description || '',
-        metadata: system.metadata ? JSON.parse(system.metadata) : {},
-        createdAt: system.created_at,
-        updatedAt: system.updated_at,
-        projectCount: projectCount[0]?.count || 0
-      });
-    }
-
-    return result;
+    return systems.map(system => ({
+      id: system.id,
+      name: system.name,
+      description: system.description || '',
+      metadata: system.metadata ? JSON.parse(system.metadata) : {},
+      createdAt: system.created_at,
+      updatedAt: system.updated_at,
+      projectCount: system.project_count || 0
+    }));
   }
 
   /**

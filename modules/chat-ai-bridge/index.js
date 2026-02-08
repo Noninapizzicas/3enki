@@ -36,6 +36,9 @@ class ChatAiBridgeModule {
     // Active conversations (tracking in-flight requests)
     this.activeRequests = new Map();
 
+    // Cached active project (updated via project.activated event)
+    this.activeProjectId = null;
+
     // Unsubscribe tracking for cleanup
     this.unsubscribes = [];
 
@@ -173,13 +176,28 @@ class ChatAiBridgeModule {
     );
     this.unsubscribes.push(unsubContext);
 
+    // Project lifecycle: cache active project ID
+    const unsubProjectActivated = await this.eventBus.subscribe(
+      EVENTS.PROJECT.ACTIVATED,
+      this.onProjectActivated.bind(this)
+    );
+    this.unsubscribes.push(unsubProjectActivated);
+
+    const unsubProjectDeactivated = await this.eventBus.subscribe(
+      'project.deactivated',
+      this.onProjectDeactivated.bind(this)
+    );
+    this.unsubscribes.push(unsubProjectDeactivated);
+
     this.logger.info('chat-ai-bridge.events.subscribed', {
       events: [
         'chat.send.request',
         'ai.chat.response',
         'session.save.response',
         'prompt.compose.response',
-        'session.context.load.response'
+        'session.context.load.response',
+        'project.activated',
+        'project.deactivated'
       ]
     });
   }
@@ -698,10 +716,54 @@ class ChatAiBridgeModule {
   // ==========================================
 
   // ==========================================
+  // Project Lifecycle
+  // ==========================================
+
+  /**
+   * Handle project.activated - cache the active project ID
+   * Eliminates the need for RPC call on every chat message
+   */
+  async onProjectActivated(event) {
+    const data = event.data || event;
+    const { project_id, name } = data;
+
+    if (!project_id) return;
+
+    this.activeProjectId = project_id;
+    this.logger.info('chat-ai-bridge.project.activated', { project_id, project_name: name });
+  }
+
+  /**
+   * Handle project.deactivated - clear cached project ID
+   */
+  async onProjectDeactivated(event) {
+    const data = event.data || event;
+    const { project_id } = data;
+
+    if (this.activeProjectId === project_id) {
+      this.activeProjectId = null;
+      this.logger.info('chat-ai-bridge.project.deactivated', { project_id });
+    }
+  }
+
+  // ==========================================
   // Helper: Get Active Project
   // ==========================================
 
+  /**
+   * Get active project ID.
+   * Uses cached value from project.activated event when available.
+   * Falls back to RPC query if cache is empty (e.g., module loaded after project was activated).
+   */
   async getActiveProjectId(correlationId) {
+    // Fast path: return cached value
+    if (this.activeProjectId) {
+      return this.activeProjectId;
+    }
+
+    // Slow path: RPC fallback (first call or after module restart)
+    this.logger.debug('chat-ai-bridge.getActiveProjectId.rpc_fallback', { correlationId });
+
     const requestId = crypto.randomUUID();
 
     return new Promise(async (resolve, reject) => {
@@ -715,7 +777,12 @@ class ChatAiBridgeModule {
         if (data.request_id === requestId) {
           clearTimeout(timeout);
           unsub();
-          resolve(data.active_project_id || null);
+          const projectId = data.active_project_id || null;
+          // Cache for next time
+          if (projectId) {
+            this.activeProjectId = projectId;
+          }
+          resolve(projectId);
         }
       });
 

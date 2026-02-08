@@ -16,7 +16,7 @@ const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constant
 class ProjectManagerModule {
   constructor() {
     this.name = 'project-manager';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
     // Dependencies (injected)
     this.logger = null;
@@ -2357,6 +2357,31 @@ class ProjectManagerModule {
     };
   }
 
+  // ==================== UI FORMAT HELPER ====================
+
+  /**
+   * Convert a project object to the standard UI format.
+   * Single source of truth for project→UI transformation.
+   * @param {Object} p - Raw project object from DB/cache
+   * @returns {Object} Formatted project for UI consumption
+   */
+  toUIFormat(p) {
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      color: p.metadata?.color || 'blue',
+      icon: p.metadata?.icon || '📁',
+      workspaceType: p.metadata?.workspaceType || 'general',
+      isActive: p.is_active === true || p.is_active === 1,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
+      systemId: p.system_id || null,
+      systemRole: p.system_role || null,
+      parentProjectId: p.parent_project_id || null
+    };
+  }
+
   // ==================== EVENT HANDLERS ====================
 
   /**
@@ -2462,21 +2487,7 @@ class ProjectManagerModule {
    * @private
    */
   async publishUIState() {
-    const projects = this.listProjects().map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description || '',
-      color: p.metadata?.color || 'blue',
-      icon: p.metadata?.icon || '📁',
-      workspaceType: p.metadata?.workspaceType || 'general',
-      isActive: p.is_active === true || p.is_active === 1,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-      // Composition fields (Fase 0)
-      systemId: p.system_id || null,
-      systemRole: p.system_role || null,
-      parentProjectId: p.parent_project_id || null
-    }));
+    const projects = this.listProjects().map(p => this.toUIFormat(p));
 
     const state = {
       projects,
@@ -2630,21 +2641,7 @@ class ProjectManagerModule {
    * Request: mqttRequest('project', 'list')
    */
   async handleUIList(data, request) {
-    const projects = this.listProjects().map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description || '',
-      color: p.metadata?.color || 'blue',
-      icon: p.metadata?.icon || '📁',
-      workspaceType: p.metadata?.workspaceType || 'general',
-      isActive: p.is_active === true || p.is_active === 1,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-      // Composition fields (Fase 0)
-      systemId: p.system_id || null,
-      systemRole: p.system_role || null,
-      parentProjectId: p.parent_project_id || null
-    }));
+    const projects = this.listProjects().map(p => this.toUIFormat(p));
 
     return {
       projects,
@@ -2669,23 +2666,7 @@ class ProjectManagerModule {
       throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
     }
 
-    return {
-      project: {
-        id: project.id,
-        name: project.name,
-        description: project.description || '',
-        color: project.metadata?.color || 'blue',
-        icon: project.metadata?.icon || '📁',
-        workspaceType: project.metadata?.workspaceType || 'general',
-        isActive: project.is_active === true || project.is_active === 1,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-        // Composition fields (Fase 0)
-        systemId: project.system_id || null,
-        systemRole: project.system_role || null,
-        parentProjectId: project.parent_project_id || null
-      }
-    };
+    return { project: this.toUIFormat(project) };
   }
 
   /**
@@ -2712,21 +2693,7 @@ class ProjectManagerModule {
     );
 
     return {
-      project: {
-        id: project.id,
-        name: project.name,
-        description: project.description || '',
-        color: project.metadata?.color || 'blue',
-        icon: project.metadata?.icon || '📁',
-        workspaceType: project.metadata?.workspaceType || 'general',
-        isActive: project.is_active === true || project.is_active === 1,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-        // Composition fields (Fase 0)
-        systemId: project.system_id || null,
-        systemRole: project.system_role || null,
-        parentProjectId: project.parent_project_id || null
-      },
+      project: this.toUIFormat(project),
       created: true
     };
   }
@@ -2762,21 +2729,7 @@ class ProjectManagerModule {
     const project = await this.updateProject(id, updates, correlationId);
 
     return {
-      project: {
-        id: project.id,
-        name: project.name,
-        description: project.description || '',
-        color: project.metadata?.color || 'blue',
-        icon: project.metadata?.icon || '📁',
-        workspaceType: project.metadata?.workspaceType || 'general',
-        isActive: project.is_active === true || project.is_active === 1,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-        // Composition fields (Fase 0)
-        systemId: project.system_id || null,
-        systemRole: project.system_role || null,
-        parentProjectId: project.parent_project_id || null
-      },
+      project: this.toUIFormat(project),
       updated: true
     };
   }

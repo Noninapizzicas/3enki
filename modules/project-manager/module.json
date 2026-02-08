@@ -11,12 +11,25 @@
       "project.updated",
       "project.deleted",
       "project.activated",
-      "project.deactivated"
+      "project.deactivated",
+      "project.linked",
+      "project.unlinked",
+      "project.dependency.added",
+      "project.dependency.removed",
+      "system.created",
+      "system.updated",
+      "system.deleted",
+      "project.joined_system",
+      "project.left_system",
+      "context.imported",
+      "context.removed",
+      "context.full.response"
     ],
     "queries": [
       "project.get.request",
       "project.list.request",
-      "project.active.request"
+      "project.active.request",
+      "context.full.request"
     ]
   },
 
@@ -66,6 +79,54 @@
         "event": "project/state",
         "description": "UI state: list of projects with active project",
         "handler": "publishUIState"
+      },
+      {
+        "event": "project.linked",
+        "description": "Two projects linked (Phase 1)"
+      },
+      {
+        "event": "project.unlinked",
+        "description": "Project link removed (Phase 1)"
+      },
+      {
+        "event": "project.dependency.added",
+        "description": "Dependency added between projects (Phase 2)"
+      },
+      {
+        "event": "project.dependency.removed",
+        "description": "Dependency removed (Phase 2)"
+      },
+      {
+        "event": "system.created",
+        "description": "System (logical container) created (Phase 3)"
+      },
+      {
+        "event": "system.updated",
+        "description": "System updated (Phase 3)"
+      },
+      {
+        "event": "system.deleted",
+        "description": "System deleted (Phase 3)"
+      },
+      {
+        "event": "project.joined_system",
+        "description": "Project assigned to a system (Phase 3)"
+      },
+      {
+        "event": "project.left_system",
+        "description": "Project removed from a system (Phase 3)"
+      },
+      {
+        "event": "context.imported",
+        "description": "Conversation shared between projects (Phase 4)"
+      },
+      {
+        "event": "context.removed",
+        "description": "Shared context removed (Phase 4)"
+      },
+      {
+        "event": "context.full.response",
+        "description": "Full project context for AI prompt composition (Phase 5)"
       }
     ],
     "subscribes": [
@@ -83,6 +144,11 @@
         "event": "project.active.request",
         "description": "Get active project ID",
         "handler": "onGetActiveProjectRequest"
+      },
+      {
+        "event": "context.full.request",
+        "description": "Request full project context for AI (Phase 5)",
+        "handler": "onContextFullRequest"
       },
       {
         "event": "db.query.response",

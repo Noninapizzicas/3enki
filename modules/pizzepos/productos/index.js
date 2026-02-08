@@ -1,28 +1,58 @@
 /**
- * Módulo Productos v2.1
+ * Módulo Productos v2.2
  * Catálogo de productos - Actualizado desde menús generados por IA
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ * Multi-tenant: cada proyecto tiene su propio catálogo
  *
  * Emite: producto.creado, producto.actualizado, producto.eliminado, catalogo.actualizado
  * Consume: menu.generado, menu.validado
  */
 
+const fs = require('fs').promises;
+const path = require('path');
+
 class ProductosModule {
   constructor() {
     this.name = 'productos';
-    this.version = '2.1.0';
+    this.version = '2.2.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
     this.uiHandler = null;
+    this.config = {};
 
-    // Estado en memoria
-    this.productos = new Map(); // producto_id -> producto
-    this.categorias = new Map(); // categoria_id -> categoria
-    this.ingredientes = new Map(); // ingrediente_id -> ingrediente
-    this.menusPendientes = new Map(); // menu_id -> productos_draft
+    // Estado en memoria - por proyecto
+    this.productosPerProject = new Map(); // project_id -> Map<producto_id, producto>
+    this.categoriasPerProject = new Map(); // project_id -> Map<categoria_id, categoria>
+    this.ingredientesPerProject = new Map(); // project_id -> Map<ingrediente_id, ingrediente>
+    this.menusPendientes = new Map(); // menu_id -> { project_id, productos_draft }
+
+    // Ruta base para proyectos
+    this.projectsDir = './data/projects';
+  }
+
+  // Helpers para obtener/crear maps por proyecto
+  getProductos(projectId) {
+    if (!this.productosPerProject.has(projectId)) {
+      this.productosPerProject.set(projectId, new Map());
+    }
+    return this.productosPerProject.get(projectId);
+  }
+
+  getCategorias(projectId) {
+    if (!this.categoriasPerProject.has(projectId)) {
+      this.categoriasPerProject.set(projectId, new Map());
+    }
+    return this.categoriasPerProject.get(projectId);
+  }
+
+  getIngredientes(projectId) {
+    if (!this.ingredientesPerProject.has(projectId)) {
+      this.ingredientesPerProject.set(projectId, new Map());
+    }
+    return this.ingredientesPerProject.get(projectId);
   }
 
   // ==========================================
@@ -34,6 +64,9 @@ class ProductosModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.config = core.config || {};
+
+    this.projectsDir = this.config.projects_dir || './data/projects';
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
@@ -50,16 +83,16 @@ class ProductosModule {
       const actions = [
         'list', 'get', 'search', 'update', 'delete',
         'categorias', 'ingredientes', 'pizzas',
-        'stats', 'health', 'metrics'
+        'stats', 'health', 'metrics', 'load_carta'
       ];
       for (const action of actions) {
         this.uiHandler.unregister('productos', action);
       }
     }
 
-    this.productos.clear();
-    this.categorias.clear();
-    this.ingredientes.clear();
+    this.productosPerProject.clear();
+    this.categoriasPerProject.clear();
+    this.ingredientesPerProject.clear();
     this.menusPendientes.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -86,9 +119,10 @@ class ProductosModule {
     this.uiHandler.register('productos', 'stats', this.handleGetStats.bind(this));
     this.uiHandler.register('productos', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('productos', 'metrics', this.handleGetMetrics.bind(this));
+    this.uiHandler.register('productos', 'load_carta', this.handleLoadCarta.bind(this));
 
     this.logger.info('productos.ui_handlers.registered', {
-      handlers: ['list', 'get', 'search', 'update', 'delete', 'categorias', 'ingredientes', 'pizzas', 'stats', 'health', 'metrics']
+      handlers: ['list', 'get', 'search', 'update', 'delete', 'categorias', 'ingredientes', 'pizzas', 'stats', 'health', 'metrics', 'load_carta']
     });
   }
 
@@ -112,11 +146,12 @@ class ProductosModule {
   async onMenuGenerado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { menu_id, productos, categorias, ingredientes_catalogo } = eventData;
+    const { menu_id, project_id, productos, categorias, ingredientes_catalogo } = eventData;
     const start_time = Date.now();
 
     this.logger.info('menu.generado.received', {
       menu_id,
+      project_id,
       productos_count: productos?.length || 0,
       categorias_count: categorias?.length || 0,
       ingredientes_count: ingredientes_catalogo?.length || 0,
@@ -125,6 +160,7 @@ class ProductosModule {
 
     try {
       this.menusPendientes.set(menu_id, {
+        project_id: project_id || null,
         productos: productos || [],
         categorias: categorias || [],
         ingredientes: ingredientes_catalogo || [],
@@ -133,6 +169,7 @@ class ProductosModule {
 
       this.logger.info('menu.productos_guardados', {
         menu_id,
+        project_id,
         productos_count: productos?.length || 0,
         estado: 'pendiente_validacion',
         correlation_id: correlationId,
@@ -142,11 +179,12 @@ class ProductosModule {
     } catch (error) {
       this.logger.error('menu.generado.error', {
         menu_id,
+        project_id,
         error: error.message,
         correlation_id: correlationId
       });
 
-      this.metrics.increment('producto.errors.total', 1, { operation: 'menu_generado' });
+      this.metrics?.increment?.('producto.errors.total', 1, { operation: 'menu_generado' });
     }
   }
 
@@ -172,21 +210,22 @@ class ProductosModule {
         return;
       }
 
-      let { productos, categorias, ingredientes } = menuPendiente;
+      let { project_id, productos, categorias, ingredientes } = menuPendiente;
 
       if (correcciones && correcciones.length > 0) {
         productos = this.applyCorrections(productos, correcciones);
       }
 
-      const stats = await this.syncCatalogo(menu_id, productos, categorias, correlationId);
+      const stats = await this.syncCatalogo(project_id, menu_id, productos, categorias, correlationId);
 
       if (ingredientes && ingredientes.length > 0) {
+        const ingredientesMap = this.getIngredientes(project_id);
         stats.ingredientes_nuevos = 0;
         for (const ing of ingredientes) {
-          if (!this.ingredientes.has(ing.id)) {
+          if (!ingredientesMap.has(ing.id)) {
             stats.ingredientes_nuevos++;
           }
-          this.ingredientes.set(ing.id, {
+          ingredientesMap.set(ing.id, {
             ...ing,
             activo: true,
             menu_source_id: menu_id,
@@ -197,14 +236,15 @@ class ProductosModule {
 
       this.menusPendientes.delete(menu_id);
 
-      this.metrics.increment('catalogo.actualizado.total');
-      this.metrics.timing('catalogo.sync.duration', Date.now() - start_time);
-      this.metrics.gauge('producto.activos.count', this.productos.size);
+      this.metrics?.increment?.('catalogo.actualizado.total');
+      this.metrics?.timing?.('catalogo.sync.duration', Date.now() - start_time);
+      this.metrics?.gauge?.('producto.activos.count', this.getProductos(project_id).size);
 
-      await this.publishCatalogoActualizado(menu_id, stats, Date.now() - start_time, correlationId);
+      await this.publishCatalogoActualizado(project_id, menu_id, stats, Date.now() - start_time, correlationId);
 
       this.logger.info('catalogo.sincronizado', {
         menu_id,
+        project_id,
         estadisticas: stats,
         correlation_id: correlationId,
         duration: Date.now() - start_time
@@ -218,7 +258,7 @@ class ProductosModule {
         correlation_id: correlationId
       });
 
-      this.metrics.increment('producto.errors.total', 1, { operation: 'menu_validado' });
+      this.metrics?.increment?.('producto.errors.total', 1, { operation: 'menu_validado' });
     }
   }
 
@@ -228,12 +268,26 @@ class ProductosModule {
 
   async handleListProductos(data) {
     const start_time = Date.now();
-    const { categoria, activo } = data || {};
+    const { project_id, categoria, categoria_id, activo } = data || {};
 
-    let productos = Array.from(this.productos.values());
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
 
+    // Intentar cargar desde archivo si no hay productos en memoria
+    const productosMap = this.getProductos(project_id);
+    if (productosMap.size === 0) {
+      await this.loadCartaFromProject(project_id);
+    }
+
+    let productos = Array.from(this.getProductos(project_id).values());
+
+    // Filtrar por categoria (nombre o id)
     if (categoria) {
       productos = productos.filter(p => p.categoria === categoria);
+    }
+    if (categoria_id) {
+      productos = productos.filter(p => p.categoria_id === categoria_id || p.categoria === categoria_id);
     }
 
     if (activo !== undefined) {
@@ -243,22 +297,27 @@ class ProductosModule {
 
     productos.sort((a, b) => {
       if (a.categoria !== b.categoria) {
-        return a.categoria.localeCompare(b.categoria);
+        return (a.categoria || '').localeCompare(b.categoria || '');
       }
-      return a.nombre.localeCompare(b.nombre);
+      return (a.nombre || '').localeCompare(b.nombre || '');
     });
 
-    this.metrics.timing('producto.list.duration', Date.now() - start_time);
+    this.metrics?.timing?.('producto.list.duration', Date.now() - start_time);
 
     return {
       status: 200,
-      data: { productos, total: productos.length }
+      data: { project_id, productos, total: productos.length }
     };
   }
 
   async handleGetProducto(data) {
-    const { id } = data;
-    const producto = this.productos.get(id);
+    const { project_id, id } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    const producto = this.getProductos(project_id).get(id);
 
     if (!producto) {
       return { status: 404, error: 'Producto no encontrado' };
@@ -269,48 +328,68 @@ class ProductosModule {
 
   async handleSearchProductos(data) {
     const start_time = Date.now();
-    const { q } = data || {};
+    const { project_id, q } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
 
     if (!q) {
       return { status: 400, error: 'Parámetro "q" requerido' };
     }
 
     const searchTerm = q.toLowerCase();
-    const resultados = Array.from(this.productos.values())
+    const resultados = Array.from(this.getProductos(project_id).values())
       .filter(p =>
         p.activo &&
-        (p.nombre.toLowerCase().includes(searchTerm) ||
+        ((p.nombre || '').toLowerCase().includes(searchTerm) ||
          (p.descripcion && p.descripcion.toLowerCase().includes(searchTerm)))
       );
 
-    this.metrics.timing('producto.search.duration', Date.now() - start_time);
+    this.metrics?.timing?.('producto.search.duration', Date.now() - start_time);
 
     return {
       status: 200,
-      data: { resultados, total: resultados.length, query: q }
+      data: { project_id, resultados, total: resultados.length, query: q }
     };
   }
 
-  async handleListCategorias() {
-    const categorias = Array.from(this.categorias.values())
-      .sort((a, b) => a.orden - b.orden);
+  async handleListCategorias(data) {
+    const { project_id } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    // Intentar cargar desde archivo si no hay categorías en memoria
+    const categoriasMap = this.getCategorias(project_id);
+    if (categoriasMap.size === 0) {
+      await this.loadCartaFromProject(project_id);
+    }
+
+    const categorias = Array.from(this.getCategorias(project_id).values())
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
 
     const categoriasConConteo = categorias.map(cat => ({
       ...cat,
-      productos_count: Array.from(this.productos.values())
-        .filter(p => p.categoria === cat.nombre && p.activo).length
+      productos_count: Array.from(this.getProductos(project_id).values())
+        .filter(p => (p.categoria === cat.nombre || p.categoria_id === cat.id) && p.activo !== false).length
     }));
 
     return {
       status: 200,
-      data: { categorias: categoriasConConteo, total: categorias.length }
+      data: { project_id, categorias: categoriasConConteo, total: categorias.length }
     };
   }
 
   async handleListIngredientes(data) {
-    const { tipo } = data || {};
+    const { project_id, tipo } = data || {};
 
-    let ingredientes = Array.from(this.ingredientes.values())
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    let ingredientes = Array.from(this.getIngredientes(project_id).values())
       .filter(i => i.activo !== false);
 
     if (tipo) {
@@ -318,36 +397,47 @@ class ProductosModule {
     }
 
     ingredientes.sort((a, b) => {
-      if (a.tipo !== b.tipo) {
-        return a.tipo.localeCompare(b.tipo);
+      if ((a.tipo || '') !== (b.tipo || '')) {
+        return (a.tipo || '').localeCompare(b.tipo || '');
       }
-      return a.nombre.localeCompare(b.nombre);
+      return (a.nombre || '').localeCompare(b.nombre || '');
     });
 
     return {
       status: 200,
-      data: { ingredientes, total: ingredientes.length }
+      data: { project_id, ingredientes, total: ingredientes.length }
     };
   }
 
-  async handleListPizzas() {
-    const pizzas = Array.from(this.productos.values())
+  async handleListPizzas(data) {
+    const { project_id } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    const pizzas = Array.from(this.getProductos(project_id).values())
       .filter(p =>
-        p.activo &&
+        p.activo !== false &&
         (p.categoria === 'Pizzas' || p.categoria === 'pizzas' || p.tipo === 'pizza')
       )
-      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+      .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
 
     return {
       status: 200,
-      data: { pizzas, total: pizzas.length }
+      data: { project_id, pizzas, total: pizzas.length }
     };
   }
 
   async handleUpdateProducto(data) {
-    const { id, ...updates } = data;
+    const { project_id, id, ...updates } = data || {};
 
-    const producto = this.productos.get(id);
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    const productosMap = this.getProductos(project_id);
+    const producto = productosMap.get(id);
     if (!producto) {
       return { status: 404, error: 'Producto no encontrado' };
     }
@@ -361,13 +451,14 @@ class ProductosModule {
     });
 
     producto.updated_at = new Date().toISOString();
-    this.productos.set(id, producto);
+    productosMap.set(id, producto);
 
-    this.metrics.increment('producto.actualizado.total');
+    this.metrics?.increment?.('producto.actualizado.total');
 
-    await this.publishProductoActualizado(id, cambios);
+    await this.publishProductoActualizado(project_id, id, cambios);
 
     this.logger.info('producto.actualizado', {
+      project_id,
       producto_id: id,
       cambios_count: Object.keys(cambios).length
     });
@@ -376,34 +467,68 @@ class ProductosModule {
   }
 
   async handleDeleteProducto(data) {
-    const { id } = data;
+    const { project_id, id } = data || {};
 
-    const producto = this.productos.get(id);
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    const productosMap = this.getProductos(project_id);
+    const producto = productosMap.get(id);
     if (!producto) {
       return { status: 404, error: 'Producto no encontrado' };
     }
 
-    this.productos.delete(id);
+    productosMap.delete(id);
 
-    this.metrics.increment('producto.eliminado.total');
-    this.metrics.gauge('producto.activos.count', this.productos.size);
+    this.metrics?.increment?.('producto.eliminado.total');
+    this.metrics?.gauge?.('producto.activos.count', productosMap.size);
 
-    await this.publishProductoEliminado(id, 'manual');
+    await this.publishProductoEliminado(project_id, id, 'manual');
 
-    this.logger.info('producto.eliminado', { producto_id: id });
+    this.logger.info('producto.eliminado', { project_id, producto_id: id });
 
     return {
       status: 200,
-      data: { message: 'Producto eliminado', producto_id: id }
+      data: { message: 'Producto eliminado', project_id, producto_id: id }
     };
   }
 
-  async handleGetStats() {
+  async handleGetStats(data) {
+    const { project_id } = data || {};
+
+    if (!project_id) {
+      // Stats globales de todos los proyectos
+      let totalProductos = 0;
+      let totalCategorias = 0;
+
+      for (const [, productos] of this.productosPerProject) {
+        totalProductos += productos.size;
+      }
+      for (const [, categorias] of this.categoriasPerProject) {
+        totalCategorias += categorias.size;
+      }
+
+      return {
+        status: 200,
+        data: {
+          proyectos_cargados: this.productosPerProject.size,
+          total_productos: totalProductos,
+          total_categorias: totalCategorias,
+          menus_pendientes_validacion: this.menusPendientes.size
+        }
+      };
+    }
+
+    const productosMap = this.getProductos(project_id);
+    const categoriasMap = this.getCategorias(project_id);
+
     const productosPorCategoria = {};
-    const productosActivos = Array.from(this.productos.values()).filter(p => p.activo);
+    const productosActivos = Array.from(productosMap.values()).filter(p => p.activo !== false);
 
     productosActivos.forEach(p => {
-      productosPorCategoria[p.categoria] = (productosPorCategoria[p.categoria] || 0) + 1;
+      const cat = p.categoria || 'Sin categoría';
+      productosPorCategoria[cat] = (productosPorCategoria[cat] || 0) + 1;
     });
 
     const productosConAlergenos = productosActivos.filter(p => p.alergenos && p.alergenos.length > 0).length;
@@ -411,10 +536,11 @@ class ProductosModule {
     return {
       status: 200,
       data: {
-        total_productos: this.productos.size,
+        project_id,
+        total_productos: productosMap.size,
         productos_activos: productosActivos.length,
-        productos_inactivos: this.productos.size - productosActivos.length,
-        total_categorias: this.categorias.size,
+        productos_inactivos: productosMap.size - productosActivos.length,
+        total_categorias: categoriasMap.size,
         productos_por_categoria: productosPorCategoria,
         productos_con_alergenos: productosConAlergenos,
         menus_pendientes_validacion: this.menusPendientes.size
@@ -423,6 +549,20 @@ class ProductosModule {
   }
 
   async handleHealthCheck() {
+    let totalProductos = 0;
+    let totalCategorias = 0;
+    let totalIngredientes = 0;
+
+    for (const [, productos] of this.productosPerProject) {
+      totalProductos += productos.size;
+    }
+    for (const [, categorias] of this.categoriasPerProject) {
+      totalCategorias += categorias.size;
+    }
+    for (const [, ingredientes] of this.ingredientesPerProject) {
+      totalIngredientes += ingredientes.size;
+    }
+
     return {
       status: 200,
       data: {
@@ -430,9 +570,10 @@ class ProductosModule {
         module: this.name,
         version: this.version,
         catalogo: {
-          productos: this.productos.size,
-          categorias: this.categorias.size,
-          ingredientes: this.ingredientes.size,
+          proyectos: this.productosPerProject.size,
+          productos: totalProductos,
+          categorias: totalCategorias,
+          ingredientes: totalIngredientes,
           menus_pendientes: this.menusPendientes.size
         }
       }
@@ -440,30 +581,77 @@ class ProductosModule {
   }
 
   async handleGetMetrics() {
+    let totalProductos = 0;
+    let totalCategorias = 0;
+    let totalIngredientes = 0;
+
+    for (const [, productos] of this.productosPerProject) {
+      totalProductos += productos.size;
+    }
+    for (const [, categorias] of this.categoriasPerProject) {
+      totalCategorias += categorias.size;
+    }
+    for (const [, ingredientes] of this.ingredientesPerProject) {
+      totalIngredientes += ingredientes.size;
+    }
+
     return {
       status: 200,
       data: {
         counters: {
-          'producto.creado.total': this.metrics.getCounter('producto.creado.total') || 0,
-          'producto.actualizado.total': this.metrics.getCounter('producto.actualizado.total') || 0,
-          'producto.eliminado.total': this.metrics.getCounter('producto.eliminado.total') || 0,
-          'catalogo.actualizado.total': this.metrics.getCounter('catalogo.actualizado.total') || 0
+          'producto.creado.total': this.metrics?.getCounter?.('producto.creado.total') || 0,
+          'producto.actualizado.total': this.metrics?.getCounter?.('producto.actualizado.total') || 0,
+          'producto.eliminado.total': this.metrics?.getCounter?.('producto.eliminado.total') || 0,
+          'catalogo.actualizado.total': this.metrics?.getCounter?.('catalogo.actualizado.total') || 0
         },
         gauges: {
-          'producto.activos.count': this.productos.size,
-          'categorias.count': this.categorias.size,
-          'ingredientes.count': this.ingredientes.size
+          'proyectos.count': this.productosPerProject.size,
+          'producto.activos.count': totalProductos,
+          'categorias.count': totalCategorias,
+          'ingredientes.count': totalIngredientes
         }
       }
     };
+  }
+
+  /**
+   * Carga la carta desde archivo del proyecto
+   */
+  async handleLoadCarta(data) {
+    const { project_id } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    try {
+      const result = await this.loadCartaFromProject(project_id);
+      return {
+        status: 200,
+        data: {
+          project_id,
+          productos: result.productos,
+          categorias: result.categorias,
+          ingredientes: result.ingredientes,
+          message: 'Carta cargada exitosamente'
+        }
+      };
+    } catch (error) {
+      this.logger.error('productos.load_carta.error', {
+        project_id,
+        error: error.message
+      });
+      return { status: 500, error: error.message };
+    }
   }
 
   // ==========================================
   // Event Publishers
   // ==========================================
 
-  async publishProductoCreado(producto, correlation_id) {
+  async publishProductoCreado(project_id, producto, correlation_id) {
     await this.eventBus.publish('producto.creado', {
+      project_id,
       producto_id: producto.id,
       nombre: producto.nombre,
       emoji: producto.emoji,
@@ -478,8 +666,9 @@ class ProductosModule {
     });
   }
 
-  async publishProductoActualizado(producto_id, cambios, correlation_id) {
+  async publishProductoActualizado(project_id, producto_id, cambios, correlation_id) {
     await this.eventBus.publish('producto.actualizado', {
+      project_id,
       producto_id,
       cambios,
       updated_at: new Date().toISOString()
@@ -488,8 +677,9 @@ class ProductosModule {
     });
   }
 
-  async publishProductoEliminado(producto_id, motivo, correlation_id) {
+  async publishProductoEliminado(project_id, producto_id, motivo, correlation_id) {
     await this.eventBus.publish('producto.eliminado', {
+      project_id,
       producto_id,
       motivo
     }, {
@@ -497,8 +687,9 @@ class ProductosModule {
     });
   }
 
-  async publishCatalogoActualizado(menu_id, estadisticas, sync_duration, correlation_id) {
+  async publishCatalogoActualizado(project_id, menu_id, estadisticas, sync_duration, correlation_id) {
     await this.eventBus.publish('catalogo.actualizado', {
+      project_id,
       menu_id,
       estadisticas,
       sync_duration
@@ -511,7 +702,7 @@ class ProductosModule {
   // Helper Methods
   // ==========================================
 
-  async syncCatalogo(menu_id, productos, categorias, correlation_id) {
+  async syncCatalogo(project_id, menu_id, productos, categorias, correlation_id) {
     const stats = {
       productos_nuevos: 0,
       productos_actualizados: 0,
@@ -519,17 +710,20 @@ class ProductosModule {
       categorias_nuevas: 0
     };
 
+    const categoriasMap = this.getCategorias(project_id);
+    const productosMap = this.getProductos(project_id);
+
     for (const cat of categorias) {
-      if (!this.categorias.has(cat.id)) {
-        this.categorias.set(cat.id, { ...cat, activa: true });
+      if (!categoriasMap.has(cat.id)) {
+        categoriasMap.set(cat.id, { ...cat, activa: true });
         stats.categorias_nuevas++;
       }
     }
 
-    const productosExistentes = new Set(this.productos.keys());
+    const productosExistentes = new Set(productosMap.keys());
 
     for (const prod of productos) {
-      const productoExistente = this.productos.get(prod.id);
+      const productoExistente = productosMap.get(prod.id);
 
       if (productoExistente) {
         const productoActualizado = {
@@ -539,10 +733,10 @@ class ProductosModule {
           menu_source_id: menu_id,
           updated_at: new Date().toISOString()
         };
-        this.productos.set(prod.id, productoActualizado);
+        productosMap.set(prod.id, productoActualizado);
         stats.productos_actualizados++;
 
-        await this.publishProductoActualizado(prod.id, { menu_source_id: menu_id }, correlation_id);
+        await this.publishProductoActualizado(project_id, prod.id, { menu_source_id: menu_id }, correlation_id);
 
       } else {
         const nuevoProducto = {
@@ -552,29 +746,116 @@ class ProductosModule {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
-        this.productos.set(prod.id, nuevoProducto);
+        productosMap.set(prod.id, nuevoProducto);
         stats.productos_nuevos++;
 
-        this.metrics.increment('producto.creado.total');
-        await this.publishProductoCreado(nuevoProducto, correlation_id);
+        this.metrics?.increment?.('producto.creado.total');
+        await this.publishProductoCreado(project_id, nuevoProducto, correlation_id);
       }
 
       productosExistentes.delete(prod.id);
     }
 
     for (const prod_id of productosExistentes) {
-      const producto = this.productos.get(prod_id);
+      const producto = productosMap.get(prod_id);
       if (producto && producto.activo) {
         producto.activo = false;
         producto.updated_at = new Date().toISOString();
-        this.productos.set(prod_id, producto);
+        productosMap.set(prod_id, producto);
         stats.productos_desactivados++;
 
-        await this.publishProductoActualizado(prod_id, { activo: false }, correlation_id);
+        await this.publishProductoActualizado(project_id, prod_id, { activo: false }, correlation_id);
       }
     }
 
     return stats;
+  }
+
+  /**
+   * Carga carta desde el sistema de archivos del proyecto
+   * Estructura esperada: data/projects/{project_id}/storage/cartas/
+   */
+  async loadCartaFromProject(project_id) {
+    const storagePath = path.join(this.projectsDir, project_id, 'storage');
+    const cartasDir = path.join(storagePath, 'cartas');
+    const ingredientesPath = path.join(storagePath, 'ingredientes.json');
+
+    const result = {
+      productos: 0,
+      categorias: 0,
+      ingredientes: 0
+    };
+
+    try {
+      // Cargar ingredientes si existen
+      try {
+        const ingredientesData = await fs.readFile(ingredientesPath, 'utf8');
+        const ingredientesJson = JSON.parse(ingredientesData);
+        const ingredientesMap = this.getIngredientes(project_id);
+
+        if (ingredientesJson.ingredientes) {
+          for (const ing of ingredientesJson.ingredientes) {
+            ingredientesMap.set(ing.id, { ...ing, activo: true });
+            result.ingredientes++;
+          }
+        }
+      } catch (e) {
+        // No hay archivo de ingredientes, continuar
+      }
+
+      // Cargar cartas
+      try {
+        const files = await fs.readdir(cartasDir);
+        const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+        for (const file of jsonFiles) {
+          const cartaPath = path.join(cartasDir, file);
+          const cartaData = await fs.readFile(cartaPath, 'utf8');
+          const carta = JSON.parse(cartaData);
+
+          // Cargar categorías de la carta
+          if (carta.categorias) {
+            const categoriasMap = this.getCategorias(project_id);
+            for (const cat of carta.categorias) {
+              categoriasMap.set(cat.id, { ...cat, activa: true });
+              result.categorias++;
+            }
+          }
+
+          // Cargar productos de la carta
+          if (carta.productos) {
+            const productosMap = this.getProductos(project_id);
+            for (const prod of carta.productos) {
+              productosMap.set(prod.id, {
+                ...prod,
+                activo: true,
+                carta_source: carta.meta?.id || file.replace('.json', ''),
+                loaded_at: new Date().toISOString()
+              });
+              result.productos++;
+            }
+          }
+        }
+      } catch (e) {
+        // No hay directorio de cartas
+        this.logger.debug('productos.no_cartas_dir', { project_id, path: cartasDir });
+      }
+
+      this.logger.info('productos.carta_loaded', {
+        project_id,
+        productos: result.productos,
+        categorias: result.categorias,
+        ingredientes: result.ingredientes
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.warn('productos.load_carta.error', {
+        project_id,
+        error: error.message
+      });
+      throw error;
+    }
   }
 
   applyCorrections(productos, correcciones) {

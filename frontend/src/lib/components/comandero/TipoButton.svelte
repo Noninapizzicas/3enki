@@ -4,6 +4,7 @@
    *
    * Un toque: crea cuenta del tipo + abre comandero
    * Colores identificativos por tipo
+   * Scoped por proyecto
    */
   import { createEventDispatcher } from 'svelte';
   import type { TipoCuenta } from '$lib/stores/cuentas';
@@ -11,6 +12,7 @@
   import { status as mqttStatus } from '$lib/ui-core';
 
   export let tipo: TipoCuenta;
+  export let projectId: string = '';
 
   const dispatch = createEventDispatcher<{
     created: { cuenta_id: string; tipo: TipoCuenta };
@@ -33,8 +35,8 @@
     error = '';
 
     try {
-      console.log('[TipoButton] Creating cuenta tipo:', tipo);
-      const cuenta = await createCuenta(tipo);
+      console.log('[TipoButton] Creating cuenta tipo:', tipo, 'project:', projectId);
+      const cuenta = await createCuenta(projectId, tipo);
 
       if (cuenta) {
         console.log('[TipoButton] Cuenta created:', cuenta.id);

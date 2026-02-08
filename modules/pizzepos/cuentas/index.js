@@ -174,10 +174,11 @@ class CuentasModule {
     cuenta.updated_at = new Date().toISOString();
 
     // Eliminar cuenta después de 5 minutos (con referencia para cleanup)
+    const project_id = cuenta.project_id;
     const timeout = setTimeout(() => {
       this._pendingTimeouts.delete(timeout);
       this.cuentas.delete(cuenta_id);
-      this.publishCuentaEliminada(cuenta_id, cuenta.tipo, 'cobro_completado');
+      this.publishCuentaEliminada(project_id, cuenta_id, cuenta.tipo, 'cobro_completado');
     }, 5 * 60 * 1000);
 
     this._pendingTimeouts.add(timeout);
@@ -191,7 +192,11 @@ class CuentasModule {
     const start_time = Date.now();
 
     try {
-      const { tipo, nombre } = data || {};
+      const { project_id, tipo, nombre } = data || {};
+
+      if (!project_id) {
+        return { status: 400, error: 'project_id es requerido' };
+      }
 
       const cuenta_id = crypto.randomUUID();
       const tipoFinal = tipo || 'local';
@@ -202,6 +207,7 @@ class CuentasModule {
 
       const cuenta = {
         id: cuenta_id,
+        project_id,
         tipo: tipoFinal,
         nombre: cuenta_nombre,
         estado: 'pendiente',
@@ -224,7 +230,7 @@ class CuentasModule {
       await this.publishCuentaCreada(cuenta);
 
       this.logger.info('cuenta.creada', {
-        cuenta_id, tipo: tipoFinal, nombre: cuenta_nombre, duration: Date.now() - start_time
+        project_id, cuenta_id, tipo: tipoFinal, nombre: cuenta_nombre, duration: Date.now() - start_time
       });
 
       return { status: 201, data: cuenta };
@@ -237,10 +243,14 @@ class CuentasModule {
   }
 
   async handleListCuentas(data) {
-    const { tipo, estado } = data || {};
+    const { project_id, tipo, estado } = data || {};
 
     let cuentas = Array.from(this.cuentas.values());
 
+    // Filtrar por proyecto
+    if (project_id) {
+      cuentas = cuentas.filter(c => c.project_id === project_id);
+    }
     if (tipo) {
       cuentas = cuentas.filter(c => c.tipo === tipo);
     }
@@ -257,22 +267,32 @@ class CuentasModule {
   }
 
   async handleGetCuenta(data) {
-    const { id } = data;
+    const { project_id, id } = data;
     const cuenta = this.cuentas.get(id);
 
     if (!cuenta) {
       return { status: 404, error: `Cuenta ${id} no encontrada` };
     }
 
+    // Verificar que pertenece al proyecto (si se especifica)
+    if (project_id && cuenta.project_id !== project_id) {
+      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
+    }
+
     return { status: 200, data: cuenta };
   }
 
   async handleDeleteCuenta(data) {
-    const { id } = data;
+    const { project_id, id } = data;
     const cuenta = this.cuentas.get(id);
 
     if (!cuenta) {
       return { status: 404, error: `Cuenta ${id} no encontrada` };
+    }
+
+    // Verificar que pertenece al proyecto (si se especifica)
+    if (project_id && cuenta.project_id !== project_id) {
+      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
     }
 
     this.cuentas.delete(id);
@@ -280,9 +300,9 @@ class CuentasModule {
     this.metrics?.increment?.('cuenta.eliminada.total');
     this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
 
-    await this.publishCuentaEliminada(id, cuenta.tipo, 'eliminacion_manual');
+    await this.publishCuentaEliminada(cuenta.project_id, id, cuenta.tipo, 'eliminacion_manual');
 
-    this.logger.info('cuenta.eliminada', { cuenta_id: id, tipo: cuenta.tipo });
+    this.logger.info('cuenta.eliminada', { project_id: cuenta.project_id, cuenta_id: id, tipo: cuenta.tipo });
 
     return { status: 200, data: { message: 'Cuenta eliminada' } };
   }
@@ -322,6 +342,7 @@ class CuentasModule {
 
   async publishCuentaCreada(cuenta) {
     await this.eventBus.publish('cuenta.creada', {
+      project_id: cuenta.project_id,
       cuenta_id: cuenta.id,
       tipo: cuenta.tipo,
       nombre: cuenta.nombre,
@@ -330,16 +351,18 @@ class CuentasModule {
     });
   }
 
-  async publishCuentaActualizada(cuenta_id, cambios) {
+  async publishCuentaActualizada(project_id, cuenta_id, cambios) {
     await this.eventBus.publish('cuenta.actualizada', {
+      project_id,
       cuenta_id,
       cambios,
       updated_at: new Date().toISOString()
     });
   }
 
-  async publishCuentaEliminada(cuenta_id, tipo, motivo) {
+  async publishCuentaEliminada(project_id, cuenta_id, tipo, motivo) {
     await this.eventBus.publish('cuenta.eliminada', {
+      project_id,
       cuenta_id,
       tipo,
       motivo

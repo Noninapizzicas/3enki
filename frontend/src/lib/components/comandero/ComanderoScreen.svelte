@@ -47,6 +47,9 @@
   /** ID de la cuenta activa */
   export let cuenta_id: string;
 
+  /** ID del proyecto */
+  export let projectId: string = '';
+
   /** Callback para navegar */
   export let onNavigate: ((path: string) => void) | null = null;
 
@@ -240,8 +243,8 @@
 
   onMount(() => {
     connect().then(() => {
-      initComandero(cuenta_id);
-      cleanupSubs = initComanderoSubscriptions();
+      initComandero(projectId, cuenta_id);
+      cleanupSubs = initComanderoSubscriptions(projectId);
     }).catch((err) => {
       console.error('[ComanderoScreen] MQTT connection failed', err);
     });

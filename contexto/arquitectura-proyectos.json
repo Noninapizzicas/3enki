@@ -1,0 +1,121 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-02-08",
+  "_DESCRIPTION": "Arquitectura proyecto-centric para pizzepos y verticales similares",
+
+  "principio": {
+    "resumen": "El proyecto es el contexto raíz. Todo cuelga del proyecto.",
+    "regla_pizzepos": "Proyecto con carta/ generada por menu-generator = proyecto pizzepos",
+    "deteccion": "existsSync(`data/projects/${project_id}/carta/`) → activa rutas pizzepos"
+  },
+
+  "estructura_datos": {
+    "raiz": "data/projects/",
+    "proyecto": {
+      "path": "data/projects/{project_id}/",
+      "contenido": {
+        "carta/": {
+          "descripcion": "Cartas generadas por menu-generator",
+          "archivos": [
+            "carta_2026-02-08.json",
+            "carta_v2.json",
+            "activa.json (puntero a carta en uso)"
+          ]
+        },
+        "persistencia/": {
+          "descripcion": "Estado operativo del negocio",
+          "archivos": [
+            "cuentas_activas.json",
+            "eventos/{fecha}.json",
+            "ventas/{fecha}.json"
+          ]
+        },
+        "config.json": "Configuración específica del proyecto"
+      }
+    }
+  },
+
+  "rutas_frontend": {
+    "entrada": "/{project_id}",
+    "ejemplo": "/pizzicas",
+    "estructura_sveltekit": {
+      "routes/+page.svelte": "Selector de proyectos (si hay varios) o redirect al único",
+      "routes/[project_id]/+layout.svelte": "Carga proyecto, valida existencia, pasa contexto",
+      "routes/[project_id]/+page.svelte": "Dashboard proyecto o redirect a /comandero",
+      "routes/[project_id]/comandero/+page.svelte": "CuentasScreen",
+      "routes/[project_id]/comandero/[cuenta_id]/+page.svelte": "ComanderoScreen",
+      "routes/[project_id]/cocina/+page.svelte": "KitchenScreen",
+      "routes/[project_id]/menu-generator/+page.svelte": "Generador de cartas",
+      "routes/[project_id]/reportes/+page.svelte": "Reportes"
+    },
+    "urls_ejemplo": [
+      "/pizzicas → redirect a /pizzicas/comandero",
+      "/pizzicas/comandero → CuentasScreen",
+      "/pizzicas/comandero/cuenta_abc123 → ComanderoScreen",
+      "/pizzicas/cocina → KitchenScreen",
+      "/pizzicas/menu-generator → Generador"
+    ]
+  },
+
+  "backend_changes": {
+    "todas_requests_llevan_project_id": true,
+    "ejemplo_request": "mqttRequest('cuenta', 'create', { project_id: 'pizzicas', tipo: 'local' })",
+    "modulos_afectados": [
+      "cuentas → lee/escribe en projects/{project_id}/persistencia/",
+      "productos → carga carta desde projects/{project_id}/carta/activa.json",
+      "persistencia-comandero → usa projects/{project_id}/persistencia/",
+      "pedidos → scoped por project_id",
+      "cobros → scoped por project_id"
+    ]
+  },
+
+  "frontend_changes": {
+    "layout_proyecto": {
+      "archivo": "[project_id]/+layout.svelte",
+      "responsabilidades": [
+        "Validar que proyecto existe",
+        "Verificar que tiene carta/ (es pizzepos)",
+        "Pasar project_id a todos los hijos via context",
+        "Header común con nombre del proyecto"
+      ]
+    },
+    "stores_scoped": {
+      "patron": "Todas las funciones reciben project_id como primer parámetro",
+      "ejemplo": "createCuenta(project_id, tipo, nombre?)"
+    }
+  },
+
+  "beneficios": [
+    "Multi-tenancy desde el inicio",
+    "Aislamiento total entre negocios",
+    "Backup = copiar carpeta proyecto",
+    "URLs limpias y semánticas",
+    "Escalabilidad horizontal"
+  ],
+
+  "implementacion_fases": {
+    "fase_1": {
+      "nombre": "Rutas SvelteKit",
+      "tareas": [
+        "Crear estructura [project_id]/",
+        "Layout con validación de proyecto",
+        "Mover comandero/ dentro de [project_id]/"
+      ]
+    },
+    "fase_2": {
+      "nombre": "Backend project-aware",
+      "tareas": [
+        "Añadir project_id a todos los handlers",
+        "Rutas de persistencia por proyecto",
+        "Carga de carta desde proyecto"
+      ]
+    },
+    "fase_3": {
+      "nombre": "Frontend stores",
+      "tareas": [
+        "Actualizar stores para recibir project_id",
+        "Context de proyecto en layout"
+      ]
+    }
+  }
+}

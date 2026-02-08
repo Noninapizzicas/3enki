@@ -1,6 +1,8 @@
 /**
  * Comandero Store — Estado del pedido y operaciones MQTT
  * Backend: modules/pizzepos/comandero (uiHandler domain: 'pedido')
+ *
+ * IMPORTANTE: Todas las operaciones reciben project_id como primer parámetro
  */
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest } from '$lib/ui-core/mqtt-request';
@@ -48,6 +50,7 @@ export interface Producto {
 }
 
 interface ComanderoState {
+  project_id: string | null;
   cuenta_id: string | null;
   pedido: Pedido | null;
   categorias: Categoria[];
@@ -59,6 +62,7 @@ interface ComanderoState {
 
 // Initial state
 const initialState: ComanderoState = {
+  project_id: null,
   cuenta_id: null,
   pedido: null,
   categorias: [],
@@ -85,14 +89,14 @@ export const comanderoError = derived(comanderoStore, $s => $s.error);
 // Actions
 
 /** Inicializa el comandero para una cuenta */
-export async function initComandero(cuenta_id: string): Promise<void> {
-  comanderoStore.update(s => ({ ...s, cuenta_id, loading: true, error: null }));
+export async function initComandero(project_id: string, cuenta_id: string): Promise<void> {
+  comanderoStore.update(s => ({ ...s, project_id, cuenta_id, loading: true, error: null }));
 
   try {
     // Cargar pedido, categorías y productos en paralelo
     const [pedidoRes, categoriasRes] = await Promise.all([
-      mqttRequest('pedido', 'get', { cuenta_id }),
-      mqttRequest('categorias', 'list', {})
+      mqttRequest('pedido', 'get', { project_id, cuenta_id }),
+      mqttRequest('categorias', 'list', { project_id })
     ]);
 
     const pedido = pedidoRes?.pedido || { cuenta_id, items: [], notas: '', total: 0 };
@@ -104,7 +108,7 @@ export async function initComandero(cuenta_id: string): Promise<void> {
 
     if (categorias.length > 0) {
       categoriaActiva = categorias[0].id;
-      const productosRes = await mqttRequest('productos', 'list', { categoria_id: categoriaActiva });
+      const productosRes = await mqttRequest('productos', 'list', { project_id, categoria_id: categoriaActiva });
       productos = productosRes?.productos || [];
     }
 
@@ -127,10 +131,11 @@ export async function initComandero(cuenta_id: string): Promise<void> {
 
 /** Cambia la categoría activa y carga sus productos */
 export async function selectCategoria(categoria_id: string): Promise<void> {
+  const state = get(comanderoStore);
   comanderoStore.update(s => ({ ...s, categoriaActiva: categoria_id, loading: true }));
 
   try {
-    const res = await mqttRequest('productos', 'list', { categoria_id });
+    const res = await mqttRequest('productos', 'list', { project_id: state.project_id, categoria_id });
     comanderoStore.update(s => ({
       ...s,
       productos: res?.productos || [],
@@ -157,6 +162,7 @@ export async function addItem(
 
   try {
     const res = await mqttRequest('pedido', 'add_item', {
+      project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       producto_id,
       cantidad,
@@ -181,6 +187,7 @@ export async function removeItem(item_id: string): Promise<{ success: boolean; e
 
   try {
     const res = await mqttRequest('pedido', 'remove_item', {
+      project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       item_id
     });
@@ -205,6 +212,7 @@ export async function updateItem(
 
   try {
     const res = await mqttRequest('pedido', 'update_item', {
+      project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       item_id,
       ...updates
@@ -227,7 +235,7 @@ export async function enviarCocina(): Promise<{ success: boolean; error?: string
   if (!state.pedido?.items?.length) return { success: false, error: 'No hay items en el pedido' };
 
   try {
-    await mqttRequest('pedido', 'enviar_cocina', { cuenta_id: state.cuenta_id });
+    await mqttRequest('pedido', 'enviar_cocina', { project_id: state.project_id, cuenta_id: state.cuenta_id });
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Error al enviar a cocina' };
@@ -240,14 +248,15 @@ export function resetComandero(): void {
 }
 
 /** Inicializa suscripciones MQTT para actualizar el pedido en tiempo real */
-export function initComanderoSubscriptions(): () => void {
-  const state = get(comanderoStore);
+export function initComanderoSubscriptions(projectId: string): () => void {
   const unsubs: (() => void)[] = [];
 
   // pedido.item_agregado
   unsubs.push(mqttSubscribe('pedido.item_agregado', (event: any) => {
     const data = event?.data || event?.payload || event;
     const currentState = get(comanderoStore);
+    // Solo procesar si es del mismo proyecto y cuenta
+    if (data?.project_id && data.project_id !== projectId) return;
     if (data?.cuenta_id === currentState.cuenta_id && data?.pedido) {
       comanderoStore.update(s => ({ ...s, pedido: data.pedido }));
     }
@@ -257,6 +266,7 @@ export function initComanderoSubscriptions(): () => void {
   unsubs.push(mqttSubscribe('pedido.item_eliminado', (event: any) => {
     const data = event?.data || event?.payload || event;
     const currentState = get(comanderoStore);
+    if (data?.project_id && data.project_id !== projectId) return;
     if (data?.cuenta_id === currentState.cuenta_id && data?.pedido) {
       comanderoStore.update(s => ({ ...s, pedido: data.pedido }));
     }
@@ -266,6 +276,7 @@ export function initComanderoSubscriptions(): () => void {
   unsubs.push(mqttSubscribe('pedido.enviado_cocina', (event: any) => {
     const data = event?.data || event?.payload || event;
     const currentState = get(comanderoStore);
+    if (data?.project_id && data.project_id !== projectId) return;
     if (data?.cuenta_id === currentState.cuenta_id) {
       // Notificar que se envió (el pedido NO se borra, puede seguir añadiendo)
       console.log('[Comandero] Pedido enviado a cocina', data);

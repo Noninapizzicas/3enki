@@ -5,9 +5,11 @@
    * Filosofía: empieza vacía, se llena de vida con el trabajo.
    * NO es un POS típico. Es flujo de trabajo dinámico.
    *
+   * Scoped por proyecto: recibe projectId como prop.
+   *
    * Layout:
    * ┌──────────────────────────────┬──────┐
-   * │ Header (título, reloj, conn) │      │
+   * │ Header (proyecto, reloj)     │      │
    * ├──────────────────────────────┤ Side │
    * │                              │ bar  │
    * │   Grid de CuentaCards        │(tipo │
@@ -31,8 +33,9 @@
   import TipoButton from './TipoButton.svelte';
   import CuentaCard from './CuentaCard.svelte';
 
-  // Callback when a card/button navigates somewhere
+  // Props
   export let onNavigate: ((path: string) => void) | null = null;
+  export let projectId: string = '';
 
   let cleanupSubs: (() => void) | null = null;
   let clock = '';
@@ -72,7 +75,7 @@
 
     // Connect MQTT + init subscriptions
     connect().then(() => {
-      cleanupSubs = initCuentasSubscriptions();
+      cleanupSubs = initCuentasSubscriptions(projectId);
     }).catch((err) => {
       console.error('[CuentasScreen] MQTT connection failed', err);
     });
@@ -92,7 +95,7 @@
   <!-- Header -->
   <header class="screen-header">
     <div class="header-left">
-      <h1 class="title">Cuentas</h1>
+      <h1 class="title">{projectId || 'Cuentas'}</h1>
       <span class="count">{$cuentasCount}</span>
     </div>
     <div class="header-right">
@@ -105,7 +108,7 @@
     <!-- Sidebar: type buttons (right on desktop, top on mobile) -->
     <aside class="sidebar">
       {#each tipos as tipo}
-        <TipoButton {tipo} on:created={handleCreated} />
+        <TipoButton {tipo} {projectId} on:created={handleCreated} />
       {/each}
     </aside>
 

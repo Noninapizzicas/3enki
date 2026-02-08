@@ -1,0 +1,154 @@
+{
+  "title": "Análisis Honesto del Project-Manager",
+  "date": "2026-02-08",
+  "version_analyzed": "2.0.0 (module.json) / 1.0.0 (constructor)",
+
+  "resumen": {
+    "archivo_unico": "index.js - 3731 líneas (125 KB)",
+    "funcionalidad": "5 fases de composición progresiva completamente implementadas",
+    "consumidores_reales": "Solo 2 módulos (filesystem, prompt-composer) consumen sus eventos",
+    "calificacion_general": "Ambicioso y bien pensado, pero con deuda técnica significativa"
+  },
+
+  "hallazgos": {
+    "positivos": [
+      "Las 5 fases de composición progresiva están realmente implementadas",
+      "La documentación en contexto/project-composition.json no miente sobre la funcionalidad",
+      "Migración de esquema idempotente (safe to run multiple times)",
+      "Validaciones correctas: no borrar proyectos activos, no borrar con dependientes, no auto-link",
+      "Cache en memoria para proyectos base (lecturas rápidas)",
+      "Evento re-emit en activateProject (útil para reconexiones)",
+      "Protección de path en deleteProjectDirectories (valida basePath)"
+    ],
+    "negativos": [
+      {
+        "issue": "Archivo monolítico de 3731 líneas",
+        "severidad": "alta",
+        "detalle": "5 fases + CRUD + HTTP + UI + Events en un solo archivo sin separación"
+      },
+      {
+        "issue": "module.json desactualizado",
+        "severidad": "alta",
+        "detalle": "No declara 12 eventos de composición ni APIs de composición"
+      },
+      {
+        "issue": "Versión inconsistente",
+        "severidad": "baja",
+        "detalle": "module.json dice 2.0.0, constructor dice 1.0.0"
+      },
+      {
+        "issue": "Doble sistema de comunicación redundante",
+        "severidad": "media",
+        "detalle": "EventBus handlers (fire-and-forget) + uiHandler (request/response) para las mismas operaciones"
+      },
+      {
+        "issue": "N+1 queries en listSystems",
+        "severidad": "media",
+        "detalle": "Hace una query por sistema para contar proyectos en vez de batch"
+      },
+      {
+        "issue": "6x duplicación del formateo UI",
+        "severidad": "media",
+        "detalle": "La transformación proyecto→formato_UI se repite 6 veces idéntica"
+      },
+      {
+        "issue": "Detección frágil del proyecto Sistema",
+        "severidad": "media",
+        "detalle": "Busca por metadata.is_system OR path.endsWith('/sistema')"
+      },
+      {
+        "issue": "Sin tracking de migraciones",
+        "severidad": "baja",
+        "detalle": "Ejecuta migraciones cada arranque sin saber qué versión tiene"
+      },
+      {
+        "issue": "Métricas comentadas (REMOVED)",
+        "severidad": "baja",
+        "detalle": "12+ líneas de métricas eliminadas, endpoint /metrics devuelve datos básicos"
+      },
+      {
+        "issue": "Baja adopción de eventos",
+        "severidad": "alta",
+        "detalle": "Emite 17+ eventos pero solo 2 módulos los consumen"
+      }
+    ]
+  },
+
+  "fases_implementadas": {
+    "base_crud": {
+      "estado": "implementado",
+      "lineas": "728-983",
+      "funciones": ["createProject", "updateProject", "deleteProject", "activateProject"],
+      "notas": "Incluye session state y AI config por proyecto"
+    },
+    "fase_1_links": {
+      "estado": "implementado",
+      "lineas": "1266-1461",
+      "funciones": ["linkProjects", "unlinkProjects", "getProjectLinks", "getRelatedProjects"],
+      "link_types": ["inspired_by", "related_to", "evolved_from"]
+    },
+    "fase_2_dependencies": {
+      "estado": "implementado",
+      "lineas": "1463-1653",
+      "funciones": ["addDependency", "removeDependency", "getDependencies", "getDependents", "hasDependents"],
+      "dependency_types": ["data", "code", "api", "context"],
+      "notas": "Bloquea delete si hay dependientes (salvo force=true)"
+    },
+    "fase_3_systems": {
+      "estado": "implementado",
+      "lineas": "1655-2021",
+      "funciones": ["createSystem", "getSystem", "listSystems", "updateSystem", "deleteSystem", "addProjectToSystem", "removeProjectFromSystem", "getUnassignedProjects"],
+      "notas": "Delete sistema no borra proyectos, solo quita system_id"
+    },
+    "fase_4_shared_context": {
+      "estado": "implementado",
+      "lineas": "2023-2358",
+      "funciones": ["importContext", "removeSharedContext", "getSharedContext", "getExportedContext", "getAvailableContextSources", "getFullProjectContext"],
+      "notas": "Integrado con prompt-composer via context.full.request/response"
+    },
+    "fase_5_inherited_context": {
+      "estado": "implementado",
+      "lineas": "2420-2452",
+      "funciones": ["onContextFullRequest"],
+      "notas": "Responde a prompt-composer con contexto completo del proyecto"
+    }
+  },
+
+  "esquema_bd": {
+    "tabla_projects": {
+      "columnas": ["id", "name", "description", "created_at", "updated_at", "is_active", "metadata", "last_conversation_id", "provider", "model", "prompt_id", "base_path", "session_state", "system_id", "system_role", "parent_project_id"],
+      "total": 16
+    },
+    "tabla_systems": {
+      "columnas": ["id", "name", "description", "created_at", "updated_at", "metadata"]
+    },
+    "tabla_project_links": {
+      "columnas": ["id", "source_project_id", "target_project_id", "link_type", "reason", "created_at"]
+    },
+    "tabla_project_dependencies": {
+      "columnas": ["id", "project_id", "depends_on_project_id", "dependency_type", "description", "created_at"]
+    },
+    "tabla_shared_context": {
+      "columnas": ["id", "from_project_id", "to_project_id", "conversation_id", "reason", "imported_at"]
+    },
+    "indices": 8,
+    "nota": "La tabla 'projects' tiene 3 columnas más que la documentación en contexto/ (parent_project_id, session_state, last_conversation_id)"
+  },
+
+  "handlers_registrados": {
+    "domain_project": ["list", "get", "create", "update", "delete", "activate", "saveSession", "restoreSession", "setAIConfig", "setLastConversation", "link", "unlink", "getLinks", "getRelated", "addDependency", "removeDependency", "getDependencies", "getDependents"],
+    "domain_system": ["create", "list", "get", "update", "delete", "addProject", "removeProject", "getUnassigned"],
+    "domain_context": ["import", "remove", "getShared", "getExported", "getSources", "getFull"],
+    "total": 32
+  },
+
+  "recomendaciones": [
+    "Separar index.js en módulos: core.js, composition.js, systems.js, context.js, handlers/",
+    "Actualizar module.json con TODOS los eventos y handlers reales",
+    "Extraer toUIFormat(project) para eliminar las 6 duplicaciones",
+    "Fijar la versión en el constructor a 2.0.0",
+    "Eliminar los handlers EventBus redundantes (project/create, etc.) o documentar su propósito",
+    "Optimizar listSystems con JOIN en vez de N+1",
+    "Evaluar si las fases de composición se usan realmente en producción"
+  ]
+}

@@ -181,6 +181,9 @@ class ProjectManagerModule {
       this.onProjectStateRequest.bind(this));
     this.unsubscribes.push(unsubStateReq);
 
+    // NOTE: project/create, project/update, project/delete, project/activate EventBus handlers
+    // are LEGACY fire-and-forget paths. Frontend now uses uiHandler (mqttRequest) exclusively.
+    // Kept for potential inter-module use. Remove if no module publishes to these topics.
     const unsubCreate = await this.eventBus.subscribe('project/create',
       this.onProjectCreate.bind(this));
     this.unsubscribes.push(unsubCreate);

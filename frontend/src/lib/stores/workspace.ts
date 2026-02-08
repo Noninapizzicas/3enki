@@ -85,12 +85,12 @@ export const hasValidCredentials = derived(credentialStatus, ($status) => $statu
 // ============================================================================
 
 /**
- * Seleccionar proyecto
+ * Seleccionar proyecto (local state only)
+ * Backend activation goes through activateProject() in projects.ts via mqttRequest
  */
 export function selectProject(project: Project): void {
   activeProject.set(project);
   updateAppState({ project });
-  publish('project/activate', { projectId: project.id });
   saveWorkspace({ projectId: project.id });
 }
 

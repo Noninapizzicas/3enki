@@ -39,7 +39,8 @@
       {
         "issue": "Doble sistema de comunicación redundante",
         "severidad": "media",
-        "detalle": "EventBus handlers (fire-and-forget) + uiHandler (request/response) para las mismas operaciones"
+        "detalle": "EventBus handlers (fire-and-forget) + uiHandler (request/response) para las mismas operaciones",
+        "estado": "MITIGADO - Frontend unificado a usar solo mqttRequest. EventBus handlers marcados como legacy."
       },
       {
         "issue": "N+1 queries en listSystems",

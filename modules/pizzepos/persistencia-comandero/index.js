@@ -239,9 +239,14 @@ class PersistenciaComanderoModule {
       .filter(e => e.event_type === 'pedido.creado')
       .filter(e => e.payload?.cuenta_id === cuenta_id);
 
+    // Obtener project_id de la cuenta activa en cache
+    const cuentaActiva = this.cuentasActivasCache.get(cuenta_id);
+    const project_id = eventData.project_id || cuentaActiva?.project_id || null;
+
     const venta = {
       venta_id: `venta_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
+      project_id,
       cuenta: {
         cuenta_id,
         tipo,
@@ -292,10 +297,11 @@ class PersistenciaComanderoModule {
 
     await this.onEvento(event);
 
-    const { cuenta_id, tipo, origen, metadata } = eventData;
+    const { cuenta_id, project_id, tipo, origen, metadata } = eventData;
 
     const cuentaActiva = {
       cuenta_id,
+      project_id: project_id || null,
       tipo,
       origen,
       estado: 'abierta',
@@ -311,6 +317,7 @@ class PersistenciaComanderoModule {
 
     this.logger.info('persistencia.cuenta_activa.agregada', {
       correlation_id: correlationId,
+      project_id,
       cuenta_id,
       tipo
     });
@@ -528,9 +535,14 @@ class PersistenciaComanderoModule {
   // ==========================================
 
   async handleGetCuentasActivas(data) {
-    const { tipo } = data || {};
+    const { project_id, tipo } = data || {};
 
     let cuentas = Array.from(this.cuentasActivasCache.values());
+
+    // Filtrar por proyecto
+    if (project_id) {
+      cuentas = cuentas.filter(c => c.project_id === project_id);
+    }
 
     if (tipo) {
       cuentas = cuentas.filter(c => c.tipo === tipo);
@@ -540,19 +552,30 @@ class PersistenciaComanderoModule {
       status: 200,
       data: {
         fecha: this.fechaActual,
+        project_id: project_id || null,
         cuentas,
         total: cuentas.length
       }
     };
   }
 
-  async handleGetEventos() {
+  async handleGetEventos(data) {
+    const { project_id } = data || {};
+
+    let eventos = this.eventosCache;
+
+    // Filtrar por proyecto si se especifica
+    if (project_id) {
+      eventos = eventos.filter(e => e.payload?.project_id === project_id);
+    }
+
     return {
       status: 200,
       data: {
         fecha: this.fechaActual,
-        eventos: this.eventosCache,
-        total: this.eventosCache.length
+        project_id: project_id || null,
+        eventos,
+        total: eventos.length
       }
     };
   }
@@ -571,16 +594,26 @@ class PersistenciaComanderoModule {
     }
   }
 
-  async handleGetVentas() {
-    const resumen = this.calcularResumenDia();
+  async handleGetVentas(data) {
+    const { project_id } = data || {};
+
+    let ventas = this.ventasCache;
+
+    // Filtrar por proyecto
+    if (project_id) {
+      ventas = ventas.filter(v => v.project_id === project_id);
+    }
+
+    const resumen = this.calcularResumenDia(ventas);
 
     return {
       status: 200,
       data: {
         fecha: this.fechaActual,
-        ventas: this.ventasCache,
+        project_id: project_id || null,
+        ventas,
         resumen_dia: resumen,
-        total: this.ventasCache.length
+        total: ventas.length
       }
     };
   }
@@ -599,13 +632,21 @@ class PersistenciaComanderoModule {
     }
   }
 
-  async handleCuadreCaja() {
-    const resumen = this.calcularResumenDia();
+  async handleCuadreCaja(data) {
+    const { project_id } = data || {};
+
+    let ventas = this.ventasCache;
+    if (project_id) {
+      ventas = ventas.filter(v => v.project_id === project_id);
+    }
+
+    const resumen = this.calcularResumenDia(ventas);
 
     return {
       status: 200,
       data: {
         fecha: this.fechaActual,
+        project_id: project_id || null,
         timestamp: new Date().toISOString(),
         cuadre: resumen
       }
@@ -797,9 +838,11 @@ class PersistenciaComanderoModule {
     }
   }
 
-  calcularResumenDia() {
+  calcularResumenDia(ventas = null) {
+    const ventasToProcess = ventas || this.ventasCache;
+
     const resumen = {
-      total_ventas: this.ventasCache.length,
+      total_ventas: ventasToProcess.length,
       total_ingresos: 0,
       total_propinas: 0,
       por_metodo_pago: {
@@ -816,7 +859,7 @@ class PersistenciaComanderoModule {
       por_camarero: {}
     };
 
-    for (const venta of this.ventasCache) {
+    for (const venta of ventasToProcess) {
       resumen.total_ingresos += venta.resumen.total_final;
       resumen.total_propinas += venta.resumen.propina;
 

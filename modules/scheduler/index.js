@@ -43,6 +43,9 @@ class SchedulerModule {
     this.executions = [];
     this.maxExecutionHistory = 100;
 
+    // Active project tracking
+    this.activeProjectId = null;
+
     // Stats
     this.stats = {
       jobsCreated: 0,
@@ -89,6 +92,13 @@ class SchedulerModule {
 
     // Register UI handlers
     this.registerUIHandlers();
+
+    // Subscribe to project lifecycle events
+    const unsubProjectActivated = await this.eventBus.subscribe(
+      'project.activated',
+      this.onProjectActivated.bind(this)
+    );
+    this.unsubscribes.push(unsubProjectActivated);
 
     // Subscribe to events for event-based triggers
     await this.subscribeToEventTriggers();
@@ -195,6 +205,29 @@ class SchedulerModule {
     });
   }
 
+  // ==================== PROJECT LIFECYCLE ====================
+
+  /**
+   * Handle project.activated event
+   * Stores the active project ID so job executions can include project context.
+   */
+  async onProjectActivated(event) {
+    const data = event.data || event;
+    const { project_id, name } = data;
+
+    if (!project_id) return;
+
+    this.activeProjectId = project_id;
+
+    const projectJobs = this.jobManager.getByProject(project_id);
+
+    this.logger.info('scheduler.project.activated', {
+      project_id,
+      project_name: name,
+      projectJobs: projectJobs.length
+    });
+  }
+
   async startAllJobs() {
     const jobs = this.jobManager.getAll();
 
@@ -275,6 +308,7 @@ class SchedulerModule {
     await this.eventBus.publish('scheduler.job.triggered', {
       jobId: job.id,
       jobName: job.name,
+      project_id: job.project_id || null,
       executionId,
       trigger: triggerInfo,
       timestamp: new Date().toISOString()
@@ -285,6 +319,7 @@ class SchedulerModule {
       id: executionId,
       jobId: job.id,
       jobName: job.name,
+      project_id: job.project_id || null,
       trigger: triggerInfo,
       startedAt: new Date().toISOString(),
       status: 'running',
@@ -577,7 +612,18 @@ class SchedulerModule {
 
   async handleUIListJobs(data, context) {
     try {
-      const jobs = this.jobManager.getAll();
+      const { project_id } = data || {};
+      let jobs;
+
+      if (project_id) {
+        // Filter by project: return project-specific + global jobs
+        const projectJobs = this.jobManager.getByProject(project_id);
+        const globalJobs = this.jobManager.getGlobal();
+        jobs = [...projectJobs, ...globalJobs];
+      } else {
+        jobs = this.jobManager.getAll();
+      }
+
       const jobsWithStatus = jobs.map(job => ({
         ...job,
         status: this.triggerManager.getStatus(job.id)
@@ -617,7 +663,7 @@ class SchedulerModule {
 
   async handleUICreateJob(data, context) {
     try {
-      const { name, description, trigger, action, options, metadata } = data;
+      const { name, description, trigger, action, options, metadata, project_id } = data;
 
       if (!name) {
         return { status: 400, error: 'name is required' };
@@ -632,6 +678,7 @@ class SchedulerModule {
       const job = this.jobManager.create({
         name,
         description,
+        project_id: project_id || null,
         trigger,
         action,
         options: {

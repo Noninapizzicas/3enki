@@ -105,6 +105,7 @@ class JobManager {
       id,
       name: jobData.name,
       description: jobData.description || '',
+      project_id: jobData.project_id || null,
       trigger: jobData.trigger,
       action: jobData.action,
       enabled: jobData.enabled !== false,
@@ -141,6 +142,23 @@ class JobManager {
    */
   getAll() {
     return Array.from(this.jobs.values());
+  }
+
+  /**
+   * Get all jobs for a specific project
+   * @param {string} projectId - Project ID to filter by
+   * @returns {Array} Jobs belonging to this project
+   */
+  getByProject(projectId) {
+    return Array.from(this.jobs.values()).filter(job => job.project_id === projectId);
+  }
+
+  /**
+   * Get all global jobs (not assigned to any project)
+   * @returns {Array} Jobs without a project_id
+   */
+  getGlobal() {
+    return Array.from(this.jobs.values()).filter(job => !job.project_id);
   }
 
   /**

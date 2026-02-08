@@ -8,6 +8,8 @@
  * Eventos RT: cuenta.creada, cuenta.actualizada, cuenta.eliminada, cuenta.estado_cambiado
  *
  * La fuente de verdad para cuentas activas es persistencia.cuentas_activas
+ *
+ * IMPORTANTE: Todas las operaciones reciben project_id como primer parámetro
  */
 
 import { writable, derived, get } from 'svelte/store';
@@ -102,10 +104,11 @@ export const cuentasCount = derived(cuentasStore, $s => $s.cuentas.length);
 // OPERATIONS
 // =============================================================================
 
-export async function createCuenta(tipo: TipoCuenta, nombre?: string): Promise<Cuenta | null> {
+export async function createCuenta(projectId: string, tipo: TipoCuenta, nombre?: string): Promise<Cuenta | null> {
   try {
-    console.log('[Cuentas] createCuenta request:', { tipo, nombre });
+    console.log('[Cuentas] createCuenta request:', { project_id: projectId, tipo, nombre });
     const res = await mqttRequest<Cuenta>('cuenta', 'create', {
+      project_id: projectId,
       tipo,
       nombre: nombre || undefined
     });
@@ -124,11 +127,12 @@ export async function createCuenta(tipo: TipoCuenta, nombre?: string): Promise<C
   }
 }
 
-export async function listCuentas(tipo?: TipoCuenta, estado?: EstadoCuenta): Promise<void> {
+export async function listCuentas(projectId: string, tipo?: TipoCuenta, estado?: EstadoCuenta): Promise<void> {
   cuentasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
     const res = await mqttRequest<any>('cuenta', 'list', {
+      project_id: projectId,
       tipo: tipo || undefined,
       estado: estado || undefined
     });
@@ -146,18 +150,18 @@ export async function listCuentas(tipo?: TipoCuenta, estado?: EstadoCuenta): Pro
   }
 }
 
-export async function getCuenta(id: string): Promise<Cuenta | null> {
+export async function getCuenta(projectId: string, id: string): Promise<Cuenta | null> {
   try {
-    const res = await mqttRequest<any>('cuenta', 'get', { id });
+    const res = await mqttRequest<any>('cuenta', 'get', { project_id: projectId, id });
     return res.data || null;
   } catch {
     return null;
   }
 }
 
-export async function deleteCuenta(id: string): Promise<boolean> {
+export async function deleteCuenta(projectId: string, id: string): Promise<boolean> {
   try {
-    await mqttRequest<any>('cuenta', 'delete', { id });
+    await mqttRequest<any>('cuenta', 'delete', { project_id: projectId, id });
     return true;
   } catch (err: any) {
     cuentasStore.update(s => ({ ...s, error: err.message || 'Error al eliminar cuenta' }));
@@ -165,9 +169,9 @@ export async function deleteCuenta(id: string): Promise<boolean> {
   }
 }
 
-export async function getStats(): Promise<any> {
+export async function getStats(projectId: string): Promise<any> {
   try {
-    const res = await mqttRequest<any>('cuenta', 'stats');
+    const res = await mqttRequest<any>('cuenta', 'stats', { project_id: projectId });
     return res.data || null;
   } catch {
     return null;
@@ -182,11 +186,12 @@ export async function getStats(): Promise<any> {
  * Carga cuentas activas desde persistencia-comandero
  * Esta es la fuente de verdad — sobrevive reinicios del servidor/cliente
  */
-export async function loadCuentasFromPersistencia(tipo?: string): Promise<void> {
+export async function loadCuentasFromPersistencia(projectId: string, tipo?: string): Promise<void> {
   cuentasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
     const res = await mqttRequest<any>('persistencia', 'cuentas_activas', {
+      project_id: projectId,
       tipo: tipo || undefined
     });
 
@@ -213,7 +218,7 @@ export async function loadCuentasFromPersistencia(tipo?: string): Promise<void> 
         loading: false
       }));
 
-      console.log('[Cuentas] Loaded from persistencia:', cuentas.length);
+      console.log('[Cuentas] Loaded from persistencia:', cuentas.length, 'project:', projectId);
     } else {
       // Si no hay cuentas o error, usar lista vacía
       cuentasStore.update(s => ({
@@ -231,16 +236,16 @@ export async function loadCuentasFromPersistencia(tipo?: string): Promise<void> 
     }));
 
     // Fallback: intentar cargar desde módulo cuentas
-    await listCuentas(tipo as TipoCuenta);
+    await listCuentas(projectId, tipo as TipoCuenta);
   }
 }
 
 /**
  * Obtener cuenta activa con sus pedidos desde persistencia
  */
-export async function getCuentaFromPersistencia(cuenta_id: string): Promise<any | null> {
+export async function getCuentaFromPersistencia(projectId: string, cuenta_id: string): Promise<any | null> {
   try {
-    const res = await mqttRequest<any>('persistencia', 'cuentas_activas', {});
+    const res = await mqttRequest<any>('persistencia', 'cuentas_activas', { project_id: projectId });
 
     if (res?.status === 200 && res?.data?.cuentas) {
       const cuenta = res.data.cuentas.find((c: any) => c.cuenta_id === cuenta_id);
@@ -285,7 +290,7 @@ function checkAlerta(cuenta: any): boolean {
 // REALTIME SUBSCRIPTIONS
 // =============================================================================
 
-export function initCuentasSubscriptions(): () => void {
+export function initCuentasSubscriptions(projectId: string): () => void {
   const cleanups: (() => void)[] = [];
 
   // cuenta.creada → recargar desde persistencia
@@ -293,9 +298,11 @@ export function initCuentasSubscriptions(): () => void {
     mqttSubscribe('cuenta.creada', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
+      // Solo recargar si es del mismo proyecto
+      if (data.project_id && data.project_id !== projectId) return;
 
       // Recargar desde persistencia (fuente de verdad)
-      loadCuentasFromPersistencia();
+      loadCuentasFromPersistencia(projectId);
     })
   );
 
@@ -304,6 +311,7 @@ export function initCuentasSubscriptions(): () => void {
     mqttSubscribe('cuenta.actualizada', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
+      if (data.project_id && data.project_id !== projectId) return;
 
       cuentasStore.update(s => ({
         ...s,
@@ -321,6 +329,7 @@ export function initCuentasSubscriptions(): () => void {
     mqttSubscribe('cuenta.eliminada', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
+      if (data.project_id && data.project_id !== projectId) return;
 
       cuentasStore.update(s => ({
         ...s,
@@ -334,6 +343,7 @@ export function initCuentasSubscriptions(): () => void {
     mqttSubscribe('cuenta.estado_cambiado', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
+      if (data.project_id && data.project_id !== projectId) return;
 
       cuentasStore.update(s => ({
         ...s,
@@ -348,20 +358,24 @@ export function initCuentasSubscriptions(): () => void {
 
   // pedido.creado → recargar (actualiza total e items en persistencia)
   cleanups.push(
-    mqttSubscribe('pedido.creado', () => {
-      loadCuentasFromPersistencia();
+    mqttSubscribe('pedido.creado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (data?.project_id && data.project_id !== projectId) return;
+      loadCuentasFromPersistencia(projectId);
     })
   );
 
   // cuenta.cerrada → recargar (elimina de persistencia)
   cleanups.push(
-    mqttSubscribe('cuenta.cerrada', () => {
-      loadCuentasFromPersistencia();
+    mqttSubscribe('cuenta.cerrada', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (data?.project_id && data.project_id !== projectId) return;
+      loadCuentasFromPersistencia(projectId);
     })
   );
 
   // Carga inicial desde persistencia (fuente de verdad)
-  loadCuentasFromPersistencia();
+  loadCuentasFromPersistencia(projectId);
 
   return () => {
     for (const cleanup of cleanups) cleanup();

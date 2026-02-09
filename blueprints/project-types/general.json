@@ -2,15 +2,23 @@
   "type": "general",
   "label": "General",
   "icon": "📁",
-  "description": "Proyecto genérico sin estructura predefinida",
+  "description": "Proyecto genérico",
   "defaultColor": "blue",
+  "createsSystem": false,
 
-  "directories": [
-    "config",
-    "handlers"
+  "projects": [
+    {
+      "suffix": "",
+      "label": "",
+      "icon": "📁",
+      "color": "blue",
+      "directories": [
+        "config",
+        "handlers"
+      ],
+      "config": {}
+    }
   ],
-
-  "config": {},
 
   "postCreateHint": "Proyecto listo. Añade handlers y configuración según necesites."
 }

@@ -187,6 +187,25 @@
   $: filteredProjects = searchQuery
     ? $projectsStore.projects.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : $projectsStore.projects;
+
+  // Agrupar por sistema
+  $: systemsMap = (() => {
+    const map = new Map<string, { name: string; icon: string; projects: typeof filteredProjects }>();
+    const systems = $projectsStore.systems || [];
+
+    for (const sys of systems) {
+      const sysProjects = filteredProjects.filter(p => p.systemId === sys.id);
+      if (sysProjects.length > 0) {
+        const icon = (sys.metadata as any)?.icon || '🏢';
+        map.set(sys.id, { name: sys.name, icon, projects: sysProjects });
+      }
+    }
+
+    return map;
+  })();
+
+  $: ungroupedProjects = filteredProjects.filter(p => !p.systemId);
+  $: hasSystems = systemsMap.size > 0;
 </script>
 
 <div class="project-panel">
@@ -274,6 +293,48 @@
     </div>
   {/if}
 
+  <!-- ===== PROJECT ITEM SNIPPET ===== -->
+  {#snippet projectItem(project: typeof $projectsStore.projects[0])}
+    {#if editingId === project.id}
+      <div class="project-item editing">
+        <input
+          type="text"
+          class="edit-input"
+          bind:value={editForm.name}
+          on:keydown={(e) => e.key === 'Enter' && handleUpdate(project.id)}
+          on:keydown={(e) => e.key === 'Escape' && cancelEdit()}
+          disabled={saving}
+        />
+        <button class="btn-icon save" on:click={() => handleUpdate(project.id)} disabled={saving || !editForm.name.trim()} title="Guardar">✓</button>
+        <button class="btn-icon cancel" on:click={cancelEdit} disabled={saving} title="Cancelar">✕</button>
+      </div>
+    {:else}
+      <div
+        class="project-item"
+        class:active={$activeProject?.id === project.id}
+        class:nested={!!project.systemId}
+        role="button"
+        tabindex="0"
+        on:click={() => handleActivate(project)}
+        on:keydown={(e) => e.key === 'Enter' && handleActivate(project)}
+      >
+        <span class="color-indicator" style="background: {getColorHex(project.color)}"></span>
+        <span class="project-icon">{project.icon || getColorEmoji(project.color)}</span>
+        <span class="project-name">{project.name}</span>
+        {#if $activeProject?.id === project.id}
+          <span class="active-badge">activo</span>
+        {/if}
+        <button class="btn-icon edit" on:click|stopPropagation={(e) => startEdit(project, e)} title="Editar">✏️</button>
+        <button
+          class="btn-icon delete"
+          on:click|stopPropagation={() => handleDelete(project.id)}
+          disabled={$activeProject?.id === project.id || deletingId === project.id}
+          title={$activeProject?.id === project.id ? 'No puedes eliminar el proyecto activo' : 'Eliminar'}
+        >{deletingId === project.id ? '...' : '🗑️'}</button>
+      </div>
+    {/if}
+  {/snippet}
+
   <!-- ===== LISTA ===== -->
   <div class="projects-list">
     {#if $projectsStore.loading}
@@ -283,70 +344,23 @@
         {searchQuery ? 'Sin resultados' : 'No hay proyectos'}
       </div>
     {:else}
-      {#each filteredProjects as project (project.id)}
-        {#if editingId === project.id}
-          <!-- MODO EDICIÓN -->
-          <div class="project-item editing">
-            <input
-              type="text"
-              class="edit-input"
-              bind:value={editForm.name}
-              on:keydown={(e) => e.key === 'Enter' && handleUpdate(project.id)}
-              on:keydown={(e) => e.key === 'Escape' && cancelEdit()}
-              disabled={saving}
-            />
-            <button
-              class="btn-icon save"
-              on:click={() => handleUpdate(project.id)}
-              disabled={saving || !editForm.name.trim()}
-              title="Guardar"
-            >
-              ✓
-            </button>
-            <button
-              class="btn-icon cancel"
-              on:click={cancelEdit}
-              disabled={saving}
-              title="Cancelar"
-            >
-              ✕
-            </button>
+      <!-- Proyectos agrupados por sistema -->
+      {#each [...systemsMap] as [sysId, sys] (sysId)}
+        <div class="system-group">
+          <div class="system-header">
+            <span class="system-icon">{sys.icon}</span>
+            <span class="system-name">{sys.name}</span>
+            <span class="system-count">{sys.projects.length}</span>
           </div>
-        {:else}
-          <!-- MODO NORMAL -->
-          <div
-            class="project-item"
-            class:active={$activeProject?.id === project.id}
-            role="button"
-            tabindex="0"
-            on:click={() => handleActivate(project)}
-            on:keydown={(e) => e.key === 'Enter' && handleActivate(project)}
-          >
-            <span class="color-indicator" style="background: {getColorHex(project.color)}"></span>
-            <span class="project-icon">{getColorEmoji(project.color)}</span>
-            <span class="project-name">{project.name}</span>
+          {#each sys.projects as project (project.id)}
+            {@render projectItem(project)}
+          {/each}
+        </div>
+      {/each}
 
-            {#if $activeProject?.id === project.id}
-              <span class="active-badge">activo</span>
-            {/if}
-
-            <button
-              class="btn-icon edit"
-              on:click|stopPropagation={(e) => startEdit(project, e)}
-              title="Editar"
-            >
-              ✏️
-            </button>
-            <button
-              class="btn-icon delete"
-              on:click|stopPropagation={() => handleDelete(project.id)}
-              disabled={$activeProject?.id === project.id || deletingId === project.id}
-              title={$activeProject?.id === project.id ? 'No puedes eliminar el proyecto activo' : 'Eliminar'}
-            >
-              {deletingId === project.id ? '...' : '🗑️'}
-            </button>
-          </div>
-        {/if}
+      <!-- Proyectos sin sistema -->
+      {#each ungroupedProjects as project (project.id)}
+        {@render projectItem(project)}
       {/each}
     {/if}
   </div>
@@ -576,7 +590,46 @@
     font-size: 0.9375rem;
   }
 
+  /* ===== SYSTEM GROUP ===== */
+  .system-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .system-header {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .system-icon {
+    font-size: 0.875rem;
+  }
+
+  .system-name {
+    flex: 1;
+  }
+
+  .system-count {
+    padding: 0.0625rem 0.3125rem;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 0.25rem;
+    font-size: 0.6875rem;
+  }
+
   /* ===== ITEM ===== */
+  .project-item.nested {
+    margin-left: 1rem;
+    border-left: 2px solid rgba(255, 255, 255, 0.08);
+  }
+
   .project-item {
     display: flex;
     align-items: center;

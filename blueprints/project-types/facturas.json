@@ -1,38 +1,26 @@
 {
-  "type": "facturas",
+  "id": "facturas",
   "label": "Facturas",
   "icon": "🧾",
-  "description": "Pipeline OCR + IA + CSV fiscal",
-  "defaultColor": "green",
-  "createsSystem": false,
+  "description": "Pipeline OCR + IA + CSV",
+  "createsProject": true,
 
-  "projects": [
-    {
-      "suffix": "",
-      "label": "",
-      "icon": "🧾",
-      "color": "green",
-      "directories": [
-        "config",
-        "handlers",
-        "storage/procesados",
-        "storage/pendientes",
-        "storage/preprocesadas",
-        "storage/ocr",
-        "storage/estructuradas",
-        "storage/export"
-      ],
-      "config": {
-        "telegram": { "botName": "" },
-        "gmail": { "account": "", "query": "has:attachment is:unread", "maxResults": 20 },
-        "storage": {
-          "procesados": "./data/projects/{{slug}}/storage/procesados",
-          "pendientes": "./data/projects/{{slug}}/storage/pendientes"
-        }
-      },
-      "copyHandlersFrom": "facturas-nonina"
-    }
+  "directories": [
+    "storage/procesados",
+    "storage/pendientes",
+    "storage/preprocesadas",
+    "storage/ocr",
+    "storage/estructuradas",
+    "storage/export"
   ],
 
-  "postCreateHint": "Configura el bot de Telegram y la cuenta Gmail en config.json"
+  "config": {
+    "facturas": {
+      "enabled": true,
+      "gmail": { "account": "", "query": "has:attachment is:unread", "maxResults": 20 },
+      "processing": { "language": "es" }
+    }
+  },
+
+  "copyHandlersFrom": "facturas-nonina"
 }

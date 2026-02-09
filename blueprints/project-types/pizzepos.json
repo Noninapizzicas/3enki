@@ -1,68 +1,24 @@
 {
-  "type": "pizzepos",
+  "id": "pizzepos",
   "label": "PizzePOS",
   "icon": "🍕",
-  "description": "Negocio hostelería: POS + Facturas",
-  "defaultColor": "orange",
-  "createsSystem": true,
+  "description": "Comandero, cocina y cobros",
+  "createsProject": false,
 
-  "projects": [
-    {
-      "suffix": "pizzepos",
-      "label": "POS",
-      "icon": "🍕",
-      "color": "orange",
-      "role": "core",
-      "directories": [
-        "config",
-        "handlers",
-        "storage/cartas"
-      ],
-      "config": {
-        "telegram": { "botName": "" },
-        "storage": {
-          "cartas": "./data/projects/{{slug}}/storage/cartas",
-          "ingredientes": "./data/projects/{{slug}}/storage/ingredientes.json",
-          "programacion": "./data/projects/{{slug}}/storage/programacion.json"
-        }
-      },
-      "copyHandlersFrom": "pizzepos",
-      "initialFiles": {
-        "storage/ingredientes.json": [],
-        "storage/programacion.json": { "reglas": [] }
-      }
-    },
-    {
-      "suffix": "facturas",
-      "label": "Facturas",
-      "icon": "🧾",
-      "color": "green",
-      "role": "support",
-      "directories": [
-        "config",
-        "handlers",
-        "storage/procesados",
-        "storage/pendientes",
-        "storage/preprocesadas",
-        "storage/ocr",
-        "storage/estructuradas",
-        "storage/export"
-      ],
-      "config": {
-        "telegram": { "botName": "" },
-        "gmail": { "account": "", "query": "has:attachment is:unread", "maxResults": 20 },
-        "storage": {
-          "procesados": "./data/projects/{{slug}}/storage/procesados",
-          "pendientes": "./data/projects/{{slug}}/storage/pendientes"
-        }
-      },
-      "copyHandlersFrom": "facturas-nonina"
+  "directories": [
+    "storage/cartas"
+  ],
+
+  "config": {
+    "pizzepos": {
+      "enabled": true
     }
-  ],
+  },
 
-  "dependencies": [
-    { "from": "pizzepos", "to": "facturas", "type": "data", "description": "Datos fiscales" }
-  ],
+  "copyHandlersFrom": "pizzepos",
 
-  "postCreateHint": "Sistema creado. Configura los bots de Telegram y la cuenta Gmail en cada proyecto."
+  "initialFiles": {
+    "storage/ingredientes.json": [],
+    "storage/programacion.json": { "reglas": [] }
+  }
 }

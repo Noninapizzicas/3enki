@@ -2700,17 +2700,10 @@ class ProjectManagerModule {
    * Request: mqttRequest('project', 'list')
    */
   async handleUIList(data, request) {
-    const correlationId = crypto.randomUUID();
     const projects = this.listProjects().map(p => this.toUIFormat(p));
-
-    let systems = [];
-    try {
-      systems = await this.listSystems(correlationId);
-    } catch { /* systems table may not exist yet */ }
 
     return {
       projects,
-      systems,
       activeProjectId: this.activeProjectId,
       count: projects.length
     };
@@ -2740,7 +2733,7 @@ class ProjectManagerModule {
    * Request: mqttRequest('project', 'create', { name, description, color, icon, workspaceType })
    */
   async handleUICreate(data, request) {
-    const { name, description, color, icon, workspaceType, projectType } = data;
+    const { name, description, color, icon, workspaceType, features } = data;
     const correlationId = crypto.randomUUID();
 
     if (!name || name.trim().length === 0) {
@@ -2748,88 +2741,93 @@ class ProjectManagerModule {
     }
 
     const trimmedName = name.trim();
-    const resolvedType = projectType || 'general';
-    const baseSlug = this.slugify(trimmedName);
+    const slug = this.slugify(trimmedName);
+    const selectedFeatures = Array.isArray(features) ? features : [];
 
-    // Load blueprint
-    let blueprint = null;
-    try {
-      const bpPath = path.join(process.cwd(), 'blueprints', 'project-types', `${resolvedType}.json`);
-      blueprint = JSON.parse(await fs.promises.readFile(bpPath, 'utf-8'));
-    } catch { /* no blueprint, treat as general */ }
+    // Create main project
+    const project = await this.createProject(
+      trimmedName,
+      description?.trim() || '',
+      {
+        color: color || 'blue',
+        icon: icon || '📁',
+        workspaceType: workspaceType || 'general',
+        features: selectedFeatures
+      },
+      correlationId
+    );
 
-    const projectDefs = blueprint?.projects || [{ suffix: '', icon: '📁', color: 'blue', directories: ['config', 'handlers'], config: {} }];
+    // Always create base dirs
+    const basePath = project.base_path;
+    await fs.promises.mkdir(path.join(basePath, 'config'), { recursive: true });
+    await fs.promises.mkdir(path.join(basePath, 'handlers'), { recursive: true });
 
-    // If blueprint creates a system (e.g. PizzePOS → system + subprojects)
-    let systemId = null;
-    if (blueprint?.createsSystem && projectDefs.length > 1) {
-      const system = await this.createSystem(
-        trimmedName,
-        description?.trim() || `Sistema ${trimmedName}`,
-        { projectType: resolvedType, icon: blueprint.icon },
-        correlationId
-      );
-      systemId = system.id;
-      this.logger.info({ correlationId, systemId, name: trimmedName }, 'System created from blueprint');
-    }
-
-    // Create each project defined in blueprint
+    // Process each selected feature
+    const inlineFeatures = [];
     const createdProjects = [];
-    for (const projectDef of projectDefs) {
-      const projectName = projectDef.suffix
-        ? `${trimmedName} ${projectDef.label || projectDef.suffix}`
-        : trimmedName;
-      const projectSlug = projectDef.suffix
-        ? `${baseSlug}-${projectDef.suffix}`
-        : baseSlug;
+    const mergedConfig = {};
 
-      const project = await this.createProject(
-        projectName,
-        description?.trim() || '',
-        {
-          color: color || projectDef.color || blueprint?.defaultColor || 'blue',
-          icon: icon || projectDef.icon || blueprint?.icon || '📁',
-          workspaceType: workspaceType || 'general',
-          projectType: resolvedType,
-          blueprintSuffix: projectDef.suffix || null
-        },
-        correlationId
-      );
+    for (const featureId of selectedFeatures) {
+      try {
+        const bpPath = path.join(process.cwd(), 'blueprints', 'project-types', `${featureId}.json`);
+        const blueprint = JSON.parse(await fs.promises.readFile(bpPath, 'utf-8'));
 
-      // Initialize directories, config, handlers from blueprint def
-      await this.initializeFromBlueprint(project.base_path, projectSlug, projectDef, correlationId);
+        if (blueprint.createsProject) {
+          // Feature creates a separate sub-project
+          const subName = `${blueprint.label} ${trimmedName}`;
+          const subSlug = this.slugify(subName);
 
-      // Add to system if one was created
-      if (systemId) {
-        await this.addProjectToSystem(systemId, project.id, projectDef.role || null, correlationId);
-      }
+          const subProject = await this.createProject(
+            subName,
+            blueprint.description || '',
+            {
+              color: color || 'blue',
+              icon: blueprint.icon || '📁',
+              workspaceType: featureId,
+              parentProjectId: project.id,
+              features: [featureId]
+            },
+            correlationId
+          );
 
-      createdProjects.push(project);
-    }
+          const subBasePath = subProject.base_path;
+          await fs.promises.mkdir(path.join(subBasePath, 'config'), { recursive: true });
+          await fs.promises.mkdir(path.join(subBasePath, 'handlers'), { recursive: true });
+          await this.initializeFromBlueprint(subBasePath, subSlug, blueprint, correlationId);
 
-    // Create dependencies between projects if defined
-    if (blueprint?.dependencies && createdProjects.length > 1) {
-      for (const dep of blueprint.dependencies) {
-        const fromProject = createdProjects.find(p => (p.metadata?.blueprintSuffix || '') === dep.from);
-        const toProject = createdProjects.find(p => (p.metadata?.blueprintSuffix || '') === dep.to);
-        if (fromProject && toProject) {
-          try {
-            await this.addDependency(fromProject.id, toProject.id, dep.type || 'data', dep.description || '', correlationId);
-          } catch (err) {
-            this.logger.warn({ correlationId, error: err.message }, 'Failed to create dependency, skipping');
+          createdProjects.push({ id: subProject.id, name: subName, feature: featureId });
+          this.logger.info({ correlationId, featureId, subProjectId: subProject.id }, 'Feature sub-project created');
+        } else {
+          // Feature adds structure inline to the main project
+          await this.initializeFromBlueprint(basePath, slug, blueprint, correlationId);
+
+          if (blueprint.config) {
+            Object.assign(mergedConfig, blueprint.config);
           }
+
+          inlineFeatures.push(featureId);
         }
+      } catch (err) {
+        this.logger.warn({ correlationId, featureId, error: err.message }, 'Feature blueprint not found, skipping');
       }
     }
 
-    // Return first project (the "main" one) for UI activation
-    const mainProject = createdProjects[0];
+    // Write merged config for inline features
+    if (Object.keys(mergedConfig).length > 0) {
+      const configStr = JSON.stringify(mergedConfig, null, 2)
+        .replace(/\{\{slug\}\}/g, slug);
+      await fs.promises.writeFile(
+        path.join(basePath, 'config', 'config.json'),
+        configStr,
+        'utf-8'
+      );
+    }
+
     return {
-      project: this.toUIFormat(mainProject),
+      project: this.toUIFormat(project),
       created: true,
-      projectType: resolvedType,
-      systemId,
-      projectsCreated: createdProjects.map(p => ({ id: p.id, name: p.name }))
+      features: inlineFeatures,
+      createdProjects
     };
   }
 

@@ -3,7 +3,8 @@
    * ProjectPanel - Panel de gestión de proyectos (MQTT)
    *
    * - Lista de proyectos con búsqueda
-   * - Crear nuevo proyecto con checklist de features
+   * - Crear nuevo proyecto
+   * - Añadir módulos al proyecto activo (checklist)
    * - Editar/eliminar proyecto
    * - Seleccionar/activar proyecto
    */
@@ -16,7 +17,8 @@
     createProjectMqtt,
     updateProjectMqtt,
     deleteProjectMqtt,
-    activateProjectMqtt
+    activateProjectMqtt,
+    addFeaturesMqtt
   } from '$lib/stores';
   import { PROJECT_COLORS } from '$lib/ui-core';
 
@@ -43,8 +45,12 @@
     description: '',
     color: 'blue'
   };
-  let selectedFeatures: Set<string> = new Set();
   let creating = false;
+
+  // Añadir módulos
+  let showFeatures = false;
+  let selectedFeatures: Set<string> = new Set();
+  let addingFeatures = false;
 
   // Edición inline
   let editingId: string | null = null;
@@ -84,18 +90,29 @@
     createProjectMqtt(
       createForm.name.trim(),
       createForm.description.trim(),
-      createForm.color,
-      undefined,
-      undefined,
-      [...selectedFeatures]
+      createForm.color
     );
 
     setTimeout(() => {
       createForm = { name: '', description: '', color: 'blue' };
-      selectedFeatures = new Set();
       showCreateForm = false;
       creating = false;
     }, 300);
+  }
+
+  async function handleAddFeatures(): Promise<void> {
+    if (!$activeProject || selectedFeatures.size === 0 || addingFeatures) return;
+
+    addingFeatures = true;
+    try {
+      await addFeaturesMqtt($activeProject.id, [...selectedFeatures]);
+      selectedFeatures = new Set();
+      showFeatures = false;
+    } catch (err) {
+      console.error('[ProjectPanel] Add features failed:', err);
+    } finally {
+      addingFeatures = false;
+    }
   }
 
   function handleUpdate(id: string): void {
@@ -166,31 +183,6 @@
     <form class="create-form" on:submit|preventDefault={handleCreate}>
       <input type="text" class="input" placeholder="Nombre del proyecto" bind:value={createForm.name} disabled={creating} />
       <input type="text" class="input" placeholder="Descripción (opcional)" bind:value={createForm.description} disabled={creating} />
-
-      <!-- Features checklist -->
-      <div class="features-row">
-        <span class="features-label">Módulos:</span>
-        <div class="features-options">
-          {#each FEATURES as feat (feat.id)}
-            <button
-              type="button"
-              class="feature-btn"
-              class:selected={selectedFeatures.has(feat.id)}
-              class:creates-project={feat.createsProject}
-              on:click={() => toggleFeature(feat.id)}
-              title={feat.description + (feat.createsProject ? ' (crea subproyecto)' : '')}
-            >
-              <span class="feature-check">{selectedFeatures.has(feat.id) ? '☑' : '☐'}</span>
-              <span class="feature-icon">{feat.icon}</span>
-              <span class="feature-name">{feat.label}</span>
-              {#if feat.createsProject}
-                <span class="sub-badge">+proy</span>
-              {/if}
-            </button>
-          {/each}
-        </div>
-      </div>
-
       <div class="color-row">
         <span class="color-label">Color:</span>
         <div class="color-options">
@@ -204,6 +196,46 @@
         {creating ? 'Creando...' : 'Crear proyecto'}
       </button>
     </form>
+  {/if}
+
+  <!-- ===== AÑADIR MÓDULOS (proyecto activo) ===== -->
+  {#if $activeProject}
+    <div class="features-section">
+      <button class="features-toggle" on:click={() => showFeatures = !showFeatures}>
+        <span>{showFeatures ? '▾' : '▸'} Añadir módulos</span>
+        <span class="features-project">{$activeProject.name}</span>
+      </button>
+
+      {#if showFeatures}
+        <div class="features-list">
+          {#each FEATURES as feat (feat.id)}
+            <button
+              type="button"
+              class="feature-btn"
+              class:selected={selectedFeatures.has(feat.id)}
+              on:click={() => toggleFeature(feat.id)}
+              title={feat.description}
+            >
+              <span class="feature-check">{selectedFeatures.has(feat.id) ? '☑' : '☐'}</span>
+              <span class="feature-icon">{feat.icon}</span>
+              <span class="feature-info">
+                <span class="feature-name">{feat.label}</span>
+                <span class="feature-desc">{feat.description}</span>
+              </span>
+              {#if feat.createsProject}
+                <span class="sub-badge">+proy</span>
+              {/if}
+            </button>
+          {/each}
+
+          {#if selectedFeatures.size > 0}
+            <button class="btn-apply" on:click={handleAddFeatures} disabled={addingFeatures}>
+              {addingFeatures ? 'Aplicando...' : `Aplicar ${selectedFeatures.size} módulo${selectedFeatures.size > 1 ? 's' : ''}`}
+            </button>
+          {/if}
+        </div>
+      {/if}
+    </div>
   {/if}
 
   <!-- ===== ERROR ===== -->
@@ -308,39 +340,72 @@
   .input:focus { outline: none; border-color: var(--color-primary, #3b82f6); }
   .input:disabled { opacity: 0.6; }
 
-  /* ===== FEATURES CHECKLIST ===== */
-  .features-row { display: flex; flex-direction: column; gap: 0.375rem; }
-  .features-label { font-size: 0.8125rem; color: var(--color-text-muted, #888); }
-  .features-options { display: flex; gap: 0.375rem; }
+  /* ===== AÑADIR MÓDULOS ===== */
+  .features-section {
+    flex-shrink: 0;
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  .features-toggle {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-surface, rgba(255, 255, 255, 0.04));
+    border: none; color: var(--color-text, #e5e5e5);
+    font-size: 0.8125rem; cursor: pointer;
+    transition: background-color 0.15s;
+  }
+  .features-toggle:hover { background: rgba(255, 255, 255, 0.06); }
+  .features-project {
+    font-size: 0.75rem; color: var(--color-text-muted, #888);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;
+  }
+
+  .features-list {
+    display: flex; flex-direction: column; gap: 0.375rem;
+    padding: 0.5rem;
+  }
 
   .feature-btn {
-    flex: 1;
-    display: flex; align-items: center; justify-content: center; gap: 0.25rem;
-    padding: 0.5rem 0.25rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
     background: var(--color-bg, #0d0d0d);
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
     border-radius: 0.375rem;
     color: var(--color-text-muted, #888); font-size: 0.8125rem;
     cursor: pointer; transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+    text-align: left;
   }
   .feature-btn:hover { border-color: rgba(255, 255, 255, 0.25); color: var(--color-text, #e5e5e5); }
   .feature-btn.selected {
     border-color: var(--color-success, #22c55e);
     color: var(--color-text, #e5e5e5);
-    background: rgba(34, 197, 94, 0.1);
+    background: rgba(34, 197, 94, 0.08);
   }
-  .feature-check { font-size: 0.875rem; }
-  .feature-icon { font-size: 0.9375rem; }
-  .feature-name { font-size: 0.8125rem; }
+  .feature-check { font-size: 0.875rem; flex-shrink: 0; }
+  .feature-icon { font-size: 1rem; flex-shrink: 0; }
+  .feature-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .feature-name { font-size: 0.8125rem; font-weight: 500; }
+  .feature-desc { font-size: 0.6875rem; color: var(--color-text-muted, #888); }
   .sub-badge {
-    font-size: 0.5625rem;
-    padding: 0.0625rem 0.25rem;
+    font-size: 0.5625rem; flex-shrink: 0;
+    padding: 0.125rem 0.3125rem;
     background: rgba(59, 130, 246, 0.2);
     color: var(--color-primary, #3b82f6);
     border-radius: 0.1875rem;
-    text-transform: uppercase;
-    font-weight: 600;
+    text-transform: uppercase; font-weight: 600;
   }
+
+  .btn-apply {
+    padding: 0.5rem;
+    background: var(--color-success, #22c55e);
+    border: none; border-radius: 0.375rem;
+    color: white; font-size: 0.8125rem; font-weight: 500;
+    cursor: pointer; transition: background-color 0.15s;
+  }
+  .btn-apply:hover:not(:disabled) { background: #16a34a; }
+  .btn-apply:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ===== COLOR ===== */
   .color-row { display: flex; align-items: center; gap: 0.5rem; }

@@ -136,8 +136,7 @@ export async function createProject(
   description: string = '',
   color: string = 'blue',
   icon: string = '📁',
-  workspaceType: string = 'general',
-  features: string[] = []
+  workspaceType: string = 'general'
 ): Promise<Project> {
   projectsStore.update(s => ({ ...s, loading: true, error: null }));
 
@@ -147,8 +146,7 @@ export async function createProject(
       description,
       color,
       icon,
-      workspaceType,
-      features
+      workspaceType
     });
 
     // Recargar lista para tener estado actualizado
@@ -245,6 +243,28 @@ export async function activateProject(id: string): Promise<void> {
     const errorMessage = getErrorMessage(error);
     projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
     console.error('[Projects] Activate failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
+ * Añade módulos/features a un proyecto existente
+ */
+export async function addFeatures(projectId: string, features: string[]): Promise<void> {
+  projectsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<{ applied: string[]; createdProjects: unknown[] }>('project', 'add-features', {
+      id: projectId,
+      features
+    });
+
+    await loadProjects();
+    console.log('[Projects] Features added:', features);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    projectsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Projects] Add features failed:', errorMessage);
     throw error;
   }
 }

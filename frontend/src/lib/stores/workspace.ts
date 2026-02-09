@@ -11,7 +11,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { publish, subscribe, updateAppState } from '$lib/ui-core';
+import { publish, subscribe, updateAppState, mqttRequest } from '$lib/ui-core';
 import type { Project, Provider, Prompt, CredentialStatus, WorkspacesMap } from '$lib/ui-core';
 import { saveWorkspace, getState } from './persistence';
 
@@ -96,11 +96,15 @@ export function selectProject(project: Project): void {
 
 /**
  * Limpiar proyecto activo
+ * Notifies backend to deactivate the current project
  */
 export function clearProject(): void {
   activeProject.set(null);
   updateAppState({ project: null });
   saveWorkspace({ projectId: null });
+  mqttRequest('project', 'deactivate', {}).catch(err => {
+    console.warn('[Workspace] Deactivate failed:', err);
+  });
 }
 
 /**

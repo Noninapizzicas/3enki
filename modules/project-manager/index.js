@@ -219,6 +219,7 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('project', 'delete', this.handleUIDelete.bind(this));
       this.uiHandler.register('project', 'activate', this.handleUIActivate.bind(this));
+      this.uiHandler.register('project', 'deactivate', this.handleUIDeactivate.bind(this));
       // Session & AI Config handlers
       this.uiHandler.register('project', 'saveSession', this.handleUISaveSession.bind(this));
       this.uiHandler.register('project', 'restoreSession', this.handleUIRestoreSession.bind(this));
@@ -2778,6 +2779,53 @@ class ProjectManagerModule {
     return {
       activated: true,
       activeProjectId: id
+    };
+  }
+
+  /**
+   * UI Handler: Deactivate current project (no project selected)
+   * Request: mqttRequest('project', 'deactivate', {})
+   */
+  async handleUIDeactivate(data, request) {
+    const correlationId = crypto.randomUUID();
+
+    if (!this.activeProjectId) {
+      return { deactivated: true, activeProjectId: null };
+    }
+
+    const previousId = this.activeProjectId;
+    const prevProject = this.projects.get(previousId);
+
+    // Deactivate in DB
+    await this.queryDatabase(
+      'UPDATE projects SET is_active = 0 WHERE id = ?',
+      [previousId],
+      false,
+      correlationId
+    );
+
+    // Update cache
+    if (prevProject) {
+      prevProject.is_active = false;
+      this.projects.set(previousId, prevProject);
+    }
+    this.activeProjectId = null;
+
+    // Notify listeners
+    await this.eventBus.publish('project.deactivated', {
+      project_id: previousId,
+      name: prevProject?.name,
+      deactivated_at: new Date().toISOString()
+    });
+
+    // Update UI state
+    await this.publishUIState();
+
+    this.logger.info({ correlationId, previousId }, 'Project deactivated');
+
+    return {
+      deactivated: true,
+      activeProjectId: null
     };
   }
 

@@ -15,6 +15,7 @@ import type { Message, Attachment } from '$lib/ui-core';
 import { attachments, clearAttachments } from './attachments';
 import { activeProjectId } from './projects';
 import { notifyError } from './ui';
+import { generateUUID } from '$lib/utils';
 
 // ============================================================================
 // STORES
@@ -78,7 +79,7 @@ export async function sendMessage(content: string): Promise<void> {
 
   // Crear mensaje del usuario
   const userMessage: Message = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     role: 'user',
     content: content.trim(),
     timestamp: new Date().toISOString(),
@@ -138,7 +139,7 @@ export async function sendMessage(content: string): Promise<void> {
 
         // No streaming happened: add the message normally
         return [...msgs, {
-          id: data.assistant_message.id || crypto.randomUUID(),
+          id: data.assistant_message.id || generateUUID(),
           role: 'assistant',
           content: data.assistant_message.content,
           timestamp: data.assistant_message.created_at || new Date().toISOString(),
@@ -281,7 +282,7 @@ export async function loadConversation(id: string): Promise<void> {
  * Nueva conversación
  */
 export function newConversation(): void {
-  const newId = crypto.randomUUID();
+  const newId = generateUUID();
   conversationId.set(newId);
   messages.set([]);
 }
@@ -354,7 +355,7 @@ export function initChatSubscriptions(): () => void {
   unsubs.push(subscribe('conversation/+/message', (topic, payload) => {
     const data = payload as Message;
     addMessage({
-      id: data.id || crypto.randomUUID(),
+      id: data.id || generateUUID(),
       role: data.role,
       content: data.content,
       timestamp: data.timestamp || new Date().toISOString(),

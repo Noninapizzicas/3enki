@@ -34,6 +34,7 @@ class ChatSessionModule {
     // In-memory cache
     this.conversations = new Map(); // conversationId -> conversation
     this.initializedProjects = new Set(); // Track projects with initialized schema
+    this.activeProjectId = null; // Cached from project.activated event
 
     // Pending requests (for request/response pattern)
     this.pendingDbRequests = new Map();
@@ -151,6 +152,19 @@ class ChatSessionModule {
     );
     this.unsubscribes.push(unsubDb);
 
+    // Subscribe to project lifecycle events
+    const unsubProjectActivated = await this.eventBus.subscribe(
+      EVENTS.PROJECT.ACTIVATED,
+      this.onProjectActivated.bind(this)
+    );
+    this.unsubscribes.push(unsubProjectActivated);
+
+    const unsubProjectDeactivated = await this.eventBus.subscribe(
+      'project.deactivated',
+      this.onProjectDeactivated.bind(this)
+    );
+    this.unsubscribes.push(unsubProjectDeactivated);
+
     // Subscribe to session requests (from other modules like chat-ai-bridge)
     const unsubCreate = await this.eventBus.subscribe(
       'session.create.request',
@@ -215,6 +229,8 @@ class ChatSessionModule {
     this.logger.info('chat-session.events.subscribed', {
       events: [
         'db.query.response',
+        'project.activated',
+        'project.deactivated',
         'session.create.request',
         'session.list.request',
         'session.get.request',
@@ -1067,7 +1083,20 @@ class ChatSessionModule {
   // Helper: Get Active Project
   // ==========================================
 
+  /**
+   * Get active project ID.
+   * Uses cached value from project.activated event when available.
+   * Falls back to RPC query if cache is empty (e.g., module loaded after project was activated).
+   */
   async getActiveProjectId(correlationId) {
+    // Fast path: return cached value
+    if (this.activeProjectId) {
+      return this.activeProjectId;
+    }
+
+    // Slow path: RPC fallback
+    this.logger.debug('chat-session.getActiveProjectId.rpc_fallback', { correlationId });
+
     const requestId = crypto.randomUUID();
 
     return new Promise(async (resolve, reject) => {
@@ -1081,7 +1110,11 @@ class ChatSessionModule {
         if (data.request_id === requestId) {
           clearTimeout(timeout);
           unsub();
-          resolve(data.active_project_id || null);
+          const projectId = data.active_project_id || null;
+          if (projectId) {
+            this.activeProjectId = projectId;
+          }
+          resolve(projectId);
         }
       });
 
@@ -1090,6 +1123,97 @@ class ChatSessionModule {
         correlation_id: correlationId
       });
     });
+  }
+
+  // ==========================================
+  // Project Lifecycle Handlers
+  // ==========================================
+
+  /**
+   * Handle project.activated event
+   * Pre-loads conversations for the activated project so they're ready in cache.
+   * Emits session.project.ready with the last conversation for this project.
+   */
+  async onProjectActivated(event) {
+    const data = event.data || event;
+    const { project_id, name } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!project_id) return;
+
+    // Cache active project ID for fast lookup
+    this.activeProjectId = project_id;
+
+    this.logger.info('chat-session.project.activated', { correlationId, project_id, name });
+
+    try {
+      // Ensure project schema exists
+      await this.ensureProjectSchema(project_id, correlationId);
+
+      // Pre-load recent conversations into cache
+      const conversations = await this.listConversations(project_id, 20, correlationId);
+
+      // Find the most recent conversation (already sorted by updated_at DESC)
+      const lastConversation = conversations.length > 0 ? conversations[0] : null;
+
+      // Emit event so UI/other modules know sessions are ready
+      await this.eventBus.publish('session.project.ready', {
+        project_id,
+        project_name: name,
+        conversation_count: conversations.length,
+        last_conversation_id: lastConversation?.id || null,
+        last_conversation_title: lastConversation?.title || null,
+        correlation_id: correlationId
+      });
+
+      this.logger.info('chat-session.project.conversations.loaded', {
+        correlationId,
+        project_id,
+        count: conversations.length,
+        lastConversationId: lastConversation?.id || null
+      });
+    } catch (error) {
+      this.logger.warn('chat-session.project.activated.error', {
+        correlationId,
+        project_id,
+        error: error.message
+      });
+      // Non-fatal: project activation should not fail because of session loading
+    }
+  }
+
+  /**
+   * Handle project.deactivated event
+   * Clears cached conversations for the deactivated project to free memory.
+   */
+  async onProjectDeactivated(event) {
+    const data = event.data || event;
+    const { project_id } = data;
+
+    if (!project_id) return;
+
+    // Clear cached active project ID
+    if (this.activeProjectId === project_id) {
+      this.activeProjectId = null;
+    }
+
+    this.logger.info('chat-session.project.deactivated', { project_id });
+
+    // Clear conversations belonging to this project from cache
+    let cleared = 0;
+    for (const [convId, conv] of this.conversations.entries()) {
+      if (conv.project_id === project_id) {
+        this.conversations.delete(convId);
+        cleared++;
+      }
+    }
+
+    if (cleared > 0) {
+      this.logger.debug('chat-session.project.cache.cleared', {
+        project_id,
+        conversations_cleared: cleared
+      });
+    }
   }
 
   // ==========================================

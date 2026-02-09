@@ -11,7 +11,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { publish, subscribe, updateAppState } from '$lib/ui-core';
+import { publish, subscribe, updateAppState, mqttRequest } from '$lib/ui-core';
 import type { Project, Provider, Prompt, CredentialStatus, WorkspacesMap } from '$lib/ui-core';
 import { saveWorkspace, getState } from './persistence';
 
@@ -85,22 +85,26 @@ export const hasValidCredentials = derived(credentialStatus, ($status) => $statu
 // ============================================================================
 
 /**
- * Seleccionar proyecto
+ * Seleccionar proyecto (local state only)
+ * Backend activation goes through activateProject() in projects.ts via mqttRequest
  */
 export function selectProject(project: Project): void {
   activeProject.set(project);
   updateAppState({ project });
-  publish('project/activate', { projectId: project.id });
   saveWorkspace({ projectId: project.id });
 }
 
 /**
  * Limpiar proyecto activo
+ * Notifies backend to deactivate the current project
  */
 export function clearProject(): void {
   activeProject.set(null);
   updateAppState({ project: null });
   saveWorkspace({ projectId: null });
+  mqttRequest('project', 'deactivate', {}).catch(err => {
+    console.warn('[Workspace] Deactivate failed:', err);
+  });
 }
 
 /**

@@ -16,7 +16,7 @@ const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constant
 class ProjectManagerModule {
   constructor() {
     this.name = 'project-manager';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
     // Dependencies (injected)
     this.logger = null;
@@ -181,6 +181,9 @@ class ProjectManagerModule {
       this.onProjectStateRequest.bind(this));
     this.unsubscribes.push(unsubStateReq);
 
+    // NOTE: project/create, project/update, project/delete, project/activate EventBus handlers
+    // are LEGACY fire-and-forget paths. Frontend now uses uiHandler (mqttRequest) exclusively.
+    // Kept for potential inter-module use. Remove if no module publishes to these topics.
     const unsubCreate = await this.eventBus.subscribe('project/create',
       this.onProjectCreate.bind(this));
     this.unsubscribes.push(unsubCreate);
@@ -216,6 +219,7 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('project', 'delete', this.handleUIDelete.bind(this));
       this.uiHandler.register('project', 'activate', this.handleUIActivate.bind(this));
+      this.uiHandler.register('project', 'deactivate', this.handleUIDeactivate.bind(this));
       // Session & AI Config handlers
       this.uiHandler.register('project', 'saveSession', this.handleUISaveSession.bind(this));
       this.uiHandler.register('project', 'restoreSession', this.handleUIRestoreSession.bind(this));
@@ -474,8 +478,10 @@ class ProjectManagerModule {
 
     try {
       // Check if already exists in memory cache
+      // Primary: metadata.is_system flag (reliable, set on creation)
+      // Fallback: system_role === 'root' (composition field, set on creation)
       const existing = Array.from(this.projects.values()).find(
-        p => p.metadata?.is_system === true || (p.base_path && p.base_path.endsWith('/sistema'))
+        p => p.metadata?.is_system === true || p.system_role === 'root'
       );
 
       if (existing) {
@@ -1752,35 +1758,24 @@ class ProjectManagerModule {
   async listSystems(correlationId) {
     this.logger.debug({ correlationId }, 'Listing systems');
 
-    const systems = await this.queryDatabase(
-      'SELECT * FROM systems ORDER BY name',
-      [],
-      true,
-      correlationId
-    );
+    // Single query with LEFT JOIN instead of N+1
+    const systems = await this.queryDatabase(`
+      SELECT s.*, COUNT(p.id) as project_count
+      FROM systems s
+      LEFT JOIN projects p ON p.system_id = s.id
+      GROUP BY s.id
+      ORDER BY s.name
+    `, [], true, correlationId);
 
-    // Get project counts for each system
-    const result = [];
-    for (const system of systems) {
-      const projectCount = await this.queryDatabase(
-        'SELECT COUNT(*) as count FROM projects WHERE system_id = ?',
-        [system.id],
-        true,
-        correlationId
-      );
-
-      result.push({
-        id: system.id,
-        name: system.name,
-        description: system.description || '',
-        metadata: system.metadata ? JSON.parse(system.metadata) : {},
-        createdAt: system.created_at,
-        updatedAt: system.updated_at,
-        projectCount: projectCount[0]?.count || 0
-      });
-    }
-
-    return result;
+    return systems.map(system => ({
+      id: system.id,
+      name: system.name,
+      description: system.description || '',
+      metadata: system.metadata ? JSON.parse(system.metadata) : {},
+      createdAt: system.created_at,
+      updatedAt: system.updated_at,
+      projectCount: system.project_count || 0
+    }));
   }
 
   /**
@@ -2357,6 +2352,31 @@ class ProjectManagerModule {
     };
   }
 
+  // ==================== UI FORMAT HELPER ====================
+
+  /**
+   * Convert a project object to the standard UI format.
+   * Single source of truth for project→UI transformation.
+   * @param {Object} p - Raw project object from DB/cache
+   * @returns {Object} Formatted project for UI consumption
+   */
+  toUIFormat(p) {
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      color: p.metadata?.color || 'blue',
+      icon: p.metadata?.icon || '📁',
+      workspaceType: p.metadata?.workspaceType || 'general',
+      isActive: p.is_active === true || p.is_active === 1,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
+      systemId: p.system_id || null,
+      systemRole: p.system_role || null,
+      parentProjectId: p.parent_project_id || null
+    };
+  }
+
   // ==================== EVENT HANDLERS ====================
 
   /**
@@ -2462,21 +2482,7 @@ class ProjectManagerModule {
    * @private
    */
   async publishUIState() {
-    const projects = this.listProjects().map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description || '',
-      color: p.metadata?.color || 'blue',
-      icon: p.metadata?.icon || '📁',
-      workspaceType: p.metadata?.workspaceType || 'general',
-      isActive: p.is_active === true || p.is_active === 1,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-      // Composition fields (Fase 0)
-      systemId: p.system_id || null,
-      systemRole: p.system_role || null,
-      parentProjectId: p.parent_project_id || null
-    }));
+    const projects = this.listProjects().map(p => this.toUIFormat(p));
 
     const state = {
       projects,
@@ -2630,21 +2636,7 @@ class ProjectManagerModule {
    * Request: mqttRequest('project', 'list')
    */
   async handleUIList(data, request) {
-    const projects = this.listProjects().map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description || '',
-      color: p.metadata?.color || 'blue',
-      icon: p.metadata?.icon || '📁',
-      workspaceType: p.metadata?.workspaceType || 'general',
-      isActive: p.is_active === true || p.is_active === 1,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-      // Composition fields (Fase 0)
-      systemId: p.system_id || null,
-      systemRole: p.system_role || null,
-      parentProjectId: p.parent_project_id || null
-    }));
+    const projects = this.listProjects().map(p => this.toUIFormat(p));
 
     return {
       projects,
@@ -2669,23 +2661,7 @@ class ProjectManagerModule {
       throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
     }
 
-    return {
-      project: {
-        id: project.id,
-        name: project.name,
-        description: project.description || '',
-        color: project.metadata?.color || 'blue',
-        icon: project.metadata?.icon || '📁',
-        workspaceType: project.metadata?.workspaceType || 'general',
-        isActive: project.is_active === true || project.is_active === 1,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-        // Composition fields (Fase 0)
-        systemId: project.system_id || null,
-        systemRole: project.system_role || null,
-        parentProjectId: project.parent_project_id || null
-      }
-    };
+    return { project: this.toUIFormat(project) };
   }
 
   /**
@@ -2712,21 +2688,7 @@ class ProjectManagerModule {
     );
 
     return {
-      project: {
-        id: project.id,
-        name: project.name,
-        description: project.description || '',
-        color: project.metadata?.color || 'blue',
-        icon: project.metadata?.icon || '📁',
-        workspaceType: project.metadata?.workspaceType || 'general',
-        isActive: project.is_active === true || project.is_active === 1,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-        // Composition fields (Fase 0)
-        systemId: project.system_id || null,
-        systemRole: project.system_role || null,
-        parentProjectId: project.parent_project_id || null
-      },
+      project: this.toUIFormat(project),
       created: true
     };
   }
@@ -2762,21 +2724,7 @@ class ProjectManagerModule {
     const project = await this.updateProject(id, updates, correlationId);
 
     return {
-      project: {
-        id: project.id,
-        name: project.name,
-        description: project.description || '',
-        color: project.metadata?.color || 'blue',
-        icon: project.metadata?.icon || '📁',
-        workspaceType: project.metadata?.workspaceType || 'general',
-        isActive: project.is_active === true || project.is_active === 1,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-        // Composition fields (Fase 0)
-        systemId: project.system_id || null,
-        systemRole: project.system_role || null,
-        parentProjectId: project.parent_project_id || null
-      },
+      project: this.toUIFormat(project),
       updated: true
     };
   }
@@ -2831,6 +2779,53 @@ class ProjectManagerModule {
     return {
       activated: true,
       activeProjectId: id
+    };
+  }
+
+  /**
+   * UI Handler: Deactivate current project (no project selected)
+   * Request: mqttRequest('project', 'deactivate', {})
+   */
+  async handleUIDeactivate(data, request) {
+    const correlationId = crypto.randomUUID();
+
+    if (!this.activeProjectId) {
+      return { deactivated: true, activeProjectId: null };
+    }
+
+    const previousId = this.activeProjectId;
+    const prevProject = this.projects.get(previousId);
+
+    // Deactivate in DB
+    await this.queryDatabase(
+      'UPDATE projects SET is_active = 0 WHERE id = ?',
+      [previousId],
+      false,
+      correlationId
+    );
+
+    // Update cache
+    if (prevProject) {
+      prevProject.is_active = false;
+      this.projects.set(previousId, prevProject);
+    }
+    this.activeProjectId = null;
+
+    // Notify listeners
+    await this.eventBus.publish('project.deactivated', {
+      project_id: previousId,
+      name: prevProject?.name,
+      deactivated_at: new Date().toISOString()
+    });
+
+    // Update UI state
+    await this.publishUIState();
+
+    this.logger.info({ correlationId, previousId }, 'Project deactivated');
+
+    return {
+      deactivated: true,
+      activeProjectId: null
     };
   }
 

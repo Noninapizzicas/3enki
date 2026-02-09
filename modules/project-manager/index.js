@@ -2793,10 +2793,8 @@ class ProjectManagerModule {
 
     const basePath = project.base_path;
     const slug = this.slugify(project.name);
-    const projectName = project.name;
 
-    const inlineFeatures = [];
-    const createdProjects = [];
+    const applied = [];
     const mergedConfig = {};
 
     for (const featureId of selectedFeatures) {
@@ -2804,49 +2802,21 @@ class ProjectManagerModule {
         const bpPath = path.join(process.cwd(), 'blueprints', 'project-types', `${featureId}.json`);
         const blueprint = JSON.parse(await fs.promises.readFile(bpPath, 'utf-8'));
 
-        if (blueprint.createsProject) {
-          // Crea subproyecto separado
-          const subName = `${blueprint.label} ${projectName}`;
-          const subSlug = this.slugify(subName);
+        // Todo inline — dirs, handlers y config dentro del proyecto
+        await this.initializeFromBlueprint(basePath, slug, blueprint, correlationId);
 
-          const subProject = await this.createProject(
-            subName,
-            blueprint.description || '',
-            {
-              color: project.metadata?.color || 'blue',
-              icon: blueprint.icon || '📁',
-              workspaceType: featureId,
-              parentProjectId: project.id,
-              features: [featureId]
-            },
-            correlationId
-          );
-
-          const subBasePath = subProject.base_path;
-          await fs.promises.mkdir(path.join(subBasePath, 'config'), { recursive: true });
-          await fs.promises.mkdir(path.join(subBasePath, 'handlers'), { recursive: true });
-          await this.initializeFromBlueprint(subBasePath, subSlug, blueprint, correlationId);
-
-          createdProjects.push({ id: subProject.id, name: subName, feature: featureId });
-          this.logger.info({ correlationId, featureId, subProjectId: subProject.id }, 'Feature sub-project created');
-        } else {
-          // Añade estructura inline al proyecto
-          await this.initializeFromBlueprint(basePath, slug, blueprint, correlationId);
-
-          if (blueprint.config) {
-            Object.assign(mergedConfig, blueprint.config);
-          }
-
-          inlineFeatures.push(featureId);
+        if (blueprint.config) {
+          Object.assign(mergedConfig, blueprint.config);
         }
+
+        applied.push(featureId);
       } catch (err) {
         this.logger.warn({ correlationId, featureId, error: err.message }, 'Feature blueprint not found, skipping');
       }
     }
 
-    // Escribir config mergeado para features inline
+    // Mergear config con el existente
     if (Object.keys(mergedConfig).length > 0) {
-      // Leer config existente y mergear
       const configPath = path.join(basePath, 'config', 'config.json');
       let existingConfig = {};
       try {
@@ -2860,17 +2830,14 @@ class ProjectManagerModule {
       await fs.promises.writeFile(configPath, configStr, 'utf-8');
     }
 
-    // Actualizar metadata del proyecto con las features aplicadas
+    // Actualizar metadata con features aplicadas
     const existingFeatures = project.metadata?.features || [];
-    const updatedFeatures = [...new Set([...existingFeatures, ...inlineFeatures])];
+    const updatedFeatures = [...new Set([...existingFeatures, ...applied])];
     await this.updateProject(id, {
       metadata: { ...(project.metadata || {}), features: updatedFeatures }
     }, correlationId);
 
-    return {
-      applied: inlineFeatures,
-      createdProjects
-    };
+    return { applied };
   }
 
   /**

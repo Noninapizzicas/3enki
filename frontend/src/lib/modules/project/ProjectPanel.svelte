@@ -31,11 +31,10 @@
 
   let searchQuery = '';
 
-  // Features disponibles (checklist)
-  // createsProject: true = crea subproyecto separado, false = añade al proyecto actual
+  // Módulos disponibles (checklist) — todo inline dentro del proyecto
   const FEATURES = [
-    { id: 'pizzepos',  label: 'PizzePOS',  icon: '🍕', description: 'Comandero, cocina y cobros', createsProject: false },
-    { id: 'facturas',  label: 'Facturas',  icon: '🧾', description: 'Pipeline OCR + IA + CSV', createsProject: true }
+    { id: 'pizzepos',  label: 'PizzePOS',  icon: '🍕', description: 'Comandero, cocina y cobros' },
+    { id: 'facturas',  label: 'Facturas',  icon: '🧾', description: 'Pipeline OCR + IA + CSV' }
   ];
 
   // Form crear
@@ -222,9 +221,6 @@
                 <span class="feature-name">{feat.label}</span>
                 <span class="feature-desc">{feat.description}</span>
               </span>
-              {#if feat.createsProject}
-                <span class="sub-badge">+proy</span>
-              {/if}
             </button>
           {/each}
 
@@ -388,14 +384,6 @@
   .feature-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .feature-name { font-size: 0.8125rem; font-weight: 500; }
   .feature-desc { font-size: 0.6875rem; color: var(--color-text-muted, #888); }
-  .sub-badge {
-    font-size: 0.5625rem; flex-shrink: 0;
-    padding: 0.125rem 0.3125rem;
-    background: rgba(59, 130, 246, 0.2);
-    color: var(--color-primary, #3b82f6);
-    border-radius: 0.1875rem;
-    text-transform: uppercase; font-weight: 600;
-  }
 
   .btn-apply {
     padding: 0.5rem;

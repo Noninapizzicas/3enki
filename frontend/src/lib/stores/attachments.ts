@@ -9,6 +9,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import type { Attachment } from '$lib/ui-core';
+import { generateUUID } from '$lib/utils';
 
 // ============================================================================
 // CONFIGURACIÓN
@@ -79,7 +80,7 @@ export function addAttachment(attachment: Omit<Attachment, 'id'>): boolean {
 
   const newAttachment: Attachment = {
     ...attachment,
-    id: crypto.randomUUID()
+    id: generateUUID()
   };
 
   attachments.update(list => [...list, newAttachment]);

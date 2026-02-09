@@ -15,6 +15,7 @@ import {
   closePanel as registryClosePanel
 } from '$lib/ui-core/registry';
 import { saveUI, getState } from './persistence';
+import { generateUUID } from '$lib/utils';
 
 // ============================================================================
 // PANEL ACTIVO (delegado al registry para consistencia)
@@ -76,7 +77,7 @@ export const notificationCount = derived(notifications, ($notifications) => $not
 
 export function addNotification(type: Notification['type'], message: string): void {
   const notification: Notification = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     type,
     message,
     timestamp: new Date().toISOString()

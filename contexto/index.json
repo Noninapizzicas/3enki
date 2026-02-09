@@ -31,8 +31,10 @@
 
   "project": {
     "name": "event-core",
-    "version": "1.4.0",
-    "description": "Meta-Core Event-Driven Framework"
+    "version": "1.5.0",
+    "description": "Meta-Core Event-Driven Framework",
+    "last_context_update": "2026-02-09",
+    "module_count": { "core": 28, "pizzepos": 12, "total": 40 }
   },
 
   "context_files": [
@@ -98,8 +100,18 @@
     },
     {
       "file": "chat-refactoring.json",
-      "purpose": "Plan de refactorización del sistema de chat",
-      "when": "Trabajar en conversation-manager, chat-session, chat-ai-bridge"
+      "purpose": "Plan de refactorización del sistema de chat (COMPLETADO - facade eliminada)",
+      "when": "Referencia histórica del refactoring. Para estado actual ver modules.json secciones chat-session y chat-ai-bridge"
+    },
+    {
+      "file": "analisis-project-manager.json",
+      "purpose": "Análisis honesto del project-manager: hallazgos, fases, deuda técnica",
+      "when": "Evaluar estado del project-manager, planificar refactoring"
+    },
+    {
+      "file": "arquitectura-proyectos.json",
+      "purpose": "Arquitectura proyecto-centric para pizzepos y verticales similares",
+      "when": "Implementar multi-tenancy, rutas por proyecto, backend project-aware"
     },
     {
       "file": "templates.json",
@@ -151,6 +163,11 @@
     "handlers": {
       "global": "handlers/*.js → credenciales GLOBAL",
       "proyecto": "data/projects/{id}/handlers/*.js → credenciales PROJECT_{id}"
+    },
+    "recent_patterns": {
+      "project_lifecycle_caching": "Módulos cachean proyecto activo via project.activated/deactivated",
+      "direct_ui_handlers": "Sin facade - cada módulo registra sus UI handlers directamente",
+      "project_scoped": "Operaciones scoped por project_id (chat-session, scheduler)"
     }
   }
 }

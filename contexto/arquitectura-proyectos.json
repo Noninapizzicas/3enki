@@ -1,6 +1,7 @@
 {
-  "_VERSION": "1.0.0",
+  "_VERSION": "1.1.0",
   "_CREATED": "2026-02-08",
+  "_UPDATED": "2026-02-09",
   "_DESCRIPTION": "Arquitectura proyecto-centric para pizzepos y verticales similares",
 
   "principio": {
@@ -96,6 +97,7 @@
   "implementacion_fases": {
     "fase_1": {
       "nombre": "Rutas SvelteKit",
+      "estado": "pendiente",
       "tareas": [
         "Crear estructura [project_id]/",
         "Layout con validación de proyecto",
@@ -104,18 +106,33 @@
     },
     "fase_2": {
       "nombre": "Backend project-aware",
+      "estado": "avanzado",
       "tareas": [
         "Añadir project_id a todos los handlers",
         "Rutas de persistencia por proyecto",
         "Carga de carta desde proyecto"
+      ],
+      "completado": [
+        "✓ persistencia-comandero usa projects/{project_id}/persistencia/ (commit b9072b2)",
+        "✓ productos carga carta desde projects/{project_id}/carta/ (commit b9072b2)",
+        "✓ cuentas soporta project_id (commit 0a6eb16)",
+        "✓ scheduler project-scoped con metadata.projectId",
+        "✓ chat-session schema por proyecto"
       ]
     },
     "fase_3": {
       "nombre": "Frontend stores",
+      "estado": "pendiente",
       "tareas": [
         "Actualizar stores para recibir project_id",
         "Context de proyecto en layout"
       ]
     }
+  },
+
+  "integracion_lifecycle": {
+    "descripcion": "Módulos que reaccionan a project.activated/deactivated",
+    "modulos": ["chat-ai-bridge", "chat-session", "scheduler", "filesystem"],
+    "patron": "Cache event-driven del proyecto activo en cada módulo"
   }
 }

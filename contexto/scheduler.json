@@ -1,7 +1,8 @@
 {
   "module": "scheduler",
   "version": "2.0.0",
-  "description": "Gestor central de alarmas - cada proyecto crea sus propias alarmas",
+  "description": "Gestor central de alarmas project-scoped - cada proyecto crea sus propias alarmas",
+  "_updated": "2026-02-09",
 
   "_AI_INSTRUCTIONS": {
     "concepto_clave": "Cada proyecto crea SUS alarmas cuando las necesita. NO hay alarmas predefinidas del sistema.",
@@ -13,10 +14,12 @@
     "SI_hacer": [
       "El proyecto crea su alarma: 'lunes 8am' → emite schedule.time",
       "Scheduler añade _time automáticamente con datos de tiempo",
-      "Handler del proyecto escucha y actúa con SU config"
+      "Handler del proyecto escucha y actúa con SU config",
+      "Usar project_id para scoping de jobs por proyecto"
     ],
     "filosofia": "Solo se emiten eventos cuando alguien los programa. Sin ruido innecesario.",
-    "ampliable": "Misma filosofía para clima, sistema, externos en el futuro"
+    "ampliable": "Misma filosofía para clima, sistema, externos en el futuro",
+    "project_scoped": "Jobs pueden tener project_id. getByProject(id) y getGlobal() disponibles en JobManager"
   },
 
   "arquitectura": {
@@ -206,6 +209,25 @@
     "weather": "Alarmas climáticas - FUTURO (via API externa)",
     "system": "Alarmas del sistema - FUTURO (errores, health)",
     "external": "Alarmas de APIs externas - FUTURO"
+  },
+
+  "project_scoping": {
+    "descripcion": "Jobs pueden ser globales o pertenecer a un proyecto específico",
+    "campo": "metadata.projectId en el job",
+    "metodos_JobManager": {
+      "getByProject(projectId)": "Obtener jobs de un proyecto específico",
+      "getGlobal()": "Obtener jobs sin proyecto asignado"
+    },
+    "tools_ai": ["scheduler.list_jobs", "scheduler.create_job", "scheduler.trigger_job"],
+    "config": {
+      "jobsPath": "./data/scheduler/jobs.json",
+      "autoSave": true,
+      "saveInterval": 30000,
+      "defaultTimezone": "Europe/Madrid",
+      "maxConcurrentJobs": 100,
+      "defaultTimeout": 300000,
+      "defaultRetries": 3
+    }
   },
 
   "ubicacion_archivos": {

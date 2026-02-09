@@ -1,0 +1,38 @@
+{
+  "type": "facturas",
+  "label": "Facturas",
+  "icon": "🧾",
+  "description": "Pipeline OCR + IA + CSV fiscal",
+  "defaultColor": "green",
+  "createsSystem": false,
+
+  "projects": [
+    {
+      "suffix": "",
+      "label": "",
+      "icon": "🧾",
+      "color": "green",
+      "directories": [
+        "config",
+        "handlers",
+        "storage/procesados",
+        "storage/pendientes",
+        "storage/preprocesadas",
+        "storage/ocr",
+        "storage/estructuradas",
+        "storage/export"
+      ],
+      "config": {
+        "telegram": { "botName": "" },
+        "gmail": { "account": "", "query": "has:attachment is:unread", "maxResults": 20 },
+        "storage": {
+          "procesados": "./data/projects/{{slug}}/storage/procesados",
+          "pendientes": "./data/projects/{{slug}}/storage/pendientes"
+        }
+      },
+      "copyHandlersFrom": "facturas-nonina"
+    }
+  ],
+
+  "postCreateHint": "Configura el bot de Telegram y la cuenta Gmail en config.json"
+}

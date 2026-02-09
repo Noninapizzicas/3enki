@@ -93,6 +93,70 @@ class ProjectManagerModule {
   }
 
   /**
+   * Initialize project from a blueprint project definition
+   * Copies handlers, creates config, and sets up directory structure
+   * @param {string} basePath - Project base path
+   * @param {string} slug - Project slug
+   * @param {object} projectDef - Project definition from blueprint (directories, config, copyHandlersFrom, initialFiles)
+   * @param {string} correlationId - Correlation ID
+   */
+  async initializeFromBlueprint(basePath, slug, projectDef, correlationId) {
+    this.logger.info({ correlationId, slug }, 'Initializing project from blueprint');
+
+    // 1. Create directories
+    const dirs = projectDef.directories || ['config', 'handlers'];
+    for (const dir of dirs) {
+      await fs.promises.mkdir(path.join(basePath, dir), { recursive: true });
+    }
+
+    // 2. Create config.json (replace {{slug}} with actual slug)
+    if (projectDef.config && Object.keys(projectDef.config).length > 0) {
+      const configStr = JSON.stringify(projectDef.config, null, 2)
+        .replace(/\{\{slug\}\}/g, slug);
+      const configDir = path.join(basePath, 'config');
+      await fs.promises.mkdir(configDir, { recursive: true });
+      await fs.promises.writeFile(path.join(configDir, 'config.json'), configStr, 'utf-8');
+    }
+
+    // 3. Copy handlers from source project
+    if (projectDef.copyHandlersFrom) {
+      const sourcePath = path.join(this.projectsBasePath, projectDef.copyHandlersFrom, 'handlers');
+      const targetPath = path.join(basePath, 'handlers');
+
+      try {
+        await fs.promises.mkdir(targetPath, { recursive: true });
+        const files = await fs.promises.readdir(sourcePath);
+        let copied = 0;
+
+        for (const file of files) {
+          if (!file.endsWith('.js')) continue;
+          const srcFile = path.join(sourcePath, file);
+          const stat = await fs.promises.stat(srcFile);
+          if (stat.isFile()) {
+            await fs.promises.copyFile(srcFile, path.join(targetPath, file));
+            copied++;
+          }
+        }
+
+        this.logger.info({ correlationId, source: projectDef.copyHandlersFrom, copied }, 'Handlers copied');
+      } catch (error) {
+        this.logger.warn({ correlationId, source: projectDef.copyHandlersFrom, error: error.message }, 'Could not copy handlers');
+      }
+    }
+
+    // 4. Create initial seed files
+    if (projectDef.initialFiles) {
+      for (const [filePath, content] of Object.entries(projectDef.initialFiles)) {
+        const fullPath = path.join(basePath, filePath);
+        await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.promises.writeFile(fullPath, JSON.stringify(content, null, 2), 'utf-8');
+      }
+    }
+
+    this.logger.info({ correlationId, slug }, 'Project initialized from blueprint');
+  }
+
+  /**
    * Check if a project name already exists
    */
   async projectNameExists(name, correlationId) {
@@ -2636,10 +2700,17 @@ class ProjectManagerModule {
    * Request: mqttRequest('project', 'list')
    */
   async handleUIList(data, request) {
+    const correlationId = crypto.randomUUID();
     const projects = this.listProjects().map(p => this.toUIFormat(p));
+
+    let systems = [];
+    try {
+      systems = await this.listSystems(correlationId);
+    } catch { /* systems table may not exist yet */ }
 
     return {
       projects,
+      systems,
       activeProjectId: this.activeProjectId,
       count: projects.length
     };
@@ -2669,27 +2740,96 @@ class ProjectManagerModule {
    * Request: mqttRequest('project', 'create', { name, description, color, icon, workspaceType })
    */
   async handleUICreate(data, request) {
-    const { name, description, color, icon, workspaceType } = data;
+    const { name, description, color, icon, workspaceType, projectType } = data;
     const correlationId = crypto.randomUUID();
 
     if (!name || name.trim().length === 0) {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project name is required' };
     }
 
-    const project = await this.createProject(
-      name.trim(),
-      description?.trim() || '',
-      {
-        color: color || 'blue',
-        icon: icon || '📁',
-        workspaceType: workspaceType || 'general'
-      },
-      correlationId
-    );
+    const trimmedName = name.trim();
+    const resolvedType = projectType || 'general';
+    const baseSlug = this.slugify(trimmedName);
 
+    // Load blueprint
+    let blueprint = null;
+    try {
+      const bpPath = path.join(process.cwd(), 'blueprints', 'project-types', `${resolvedType}.json`);
+      blueprint = JSON.parse(await fs.promises.readFile(bpPath, 'utf-8'));
+    } catch { /* no blueprint, treat as general */ }
+
+    const projectDefs = blueprint?.projects || [{ suffix: '', icon: '📁', color: 'blue', directories: ['config', 'handlers'], config: {} }];
+
+    // If blueprint creates a system (e.g. PizzePOS → system + subprojects)
+    let systemId = null;
+    if (blueprint?.createsSystem && projectDefs.length > 1) {
+      const system = await this.createSystem(
+        trimmedName,
+        description?.trim() || `Sistema ${trimmedName}`,
+        { projectType: resolvedType, icon: blueprint.icon },
+        correlationId
+      );
+      systemId = system.id;
+      this.logger.info({ correlationId, systemId, name: trimmedName }, 'System created from blueprint');
+    }
+
+    // Create each project defined in blueprint
+    const createdProjects = [];
+    for (const projectDef of projectDefs) {
+      const projectName = projectDef.suffix
+        ? `${trimmedName} ${projectDef.label || projectDef.suffix}`
+        : trimmedName;
+      const projectSlug = projectDef.suffix
+        ? `${baseSlug}-${projectDef.suffix}`
+        : baseSlug;
+
+      const project = await this.createProject(
+        projectName,
+        description?.trim() || '',
+        {
+          color: color || projectDef.color || blueprint?.defaultColor || 'blue',
+          icon: icon || projectDef.icon || blueprint?.icon || '📁',
+          workspaceType: workspaceType || 'general',
+          projectType: resolvedType,
+          blueprintSuffix: projectDef.suffix || null
+        },
+        correlationId
+      );
+
+      // Initialize directories, config, handlers from blueprint def
+      await this.initializeFromBlueprint(project.base_path, projectSlug, projectDef, correlationId);
+
+      // Add to system if one was created
+      if (systemId) {
+        await this.addProjectToSystem(systemId, project.id, projectDef.role || null, correlationId);
+      }
+
+      createdProjects.push(project);
+    }
+
+    // Create dependencies between projects if defined
+    if (blueprint?.dependencies && createdProjects.length > 1) {
+      for (const dep of blueprint.dependencies) {
+        const fromProject = createdProjects.find(p => (p.metadata?.blueprintSuffix || '') === dep.from);
+        const toProject = createdProjects.find(p => (p.metadata?.blueprintSuffix || '') === dep.to);
+        if (fromProject && toProject) {
+          try {
+            await this.addDependency(fromProject.id, toProject.id, dep.type || 'data', dep.description || '', correlationId);
+          } catch (err) {
+            this.logger.warn({ correlationId, error: err.message }, 'Failed to create dependency, skipping');
+          }
+        }
+      }
+    }
+
+    // Return first project (the "main" one) for UI activation
+    const mainProject = createdProjects[0];
     return {
-      project: this.toUIFormat(project),
-      created: true
+      project: this.toUIFormat(mainProject),
+      created: true,
+      projectType: resolvedType,
+      systemId,
+      projectsCreated: createdProjects.map(p => ({ id: p.id, name: p.name }))
     };
   }
 

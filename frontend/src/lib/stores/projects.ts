@@ -32,10 +32,21 @@ export interface Project {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+  systemId?: string | null;
+  systemRole?: string | null;
+}
+
+export interface ProjectSystem {
+  id: string;
+  name: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  projectCount: number;
 }
 
 export interface ProjectsState {
   projects: Project[];
+  systems: ProjectSystem[];
   activeProjectId: string | null;
   count: number;
   loading: boolean;
@@ -44,6 +55,7 @@ export interface ProjectsState {
 
 interface ListResponse {
   projects: Project[];
+  systems: ProjectSystem[];
   activeProjectId: string | null;
   count: number;
 }
@@ -70,6 +82,7 @@ interface ActivateResponse {
 
 const initialState: ProjectsState = {
   projects: [],
+  systems: [],
   activeProjectId: null,
   count: 0,
   loading: false,
@@ -99,6 +112,7 @@ export async function loadProjects(): Promise<void> {
     projectsStore.update(s => ({
       ...s,
       projects: response.data.projects || [],
+      systems: response.data.systems || [],
       activeProjectId: response.data.activeProjectId || null,
       count: response.data.count || 0,
       loading: false,
@@ -122,7 +136,8 @@ export async function createProject(
   description: string = '',
   color: string = 'blue',
   icon: string = '📁',
-  workspaceType: string = 'general'
+  workspaceType: string = 'general',
+  projectType: string = 'general'
 ): Promise<Project> {
   projectsStore.update(s => ({ ...s, loading: true, error: null }));
 
@@ -132,7 +147,8 @@ export async function createProject(
       description,
       color,
       icon,
-      workspaceType
+      workspaceType,
+      projectType
     });
 
     // Recargar lista para tener estado actualizado

@@ -165,6 +165,7 @@ export {
   deleteProject as deleteProjectMqtt,
   activateProject as activateProjectMqtt,
   addFeatures as addFeaturesMqtt,
+  listFeatures as listFeaturesMqtt,
   projectsList,
   activeProjectId as activeProjectIdMqtt,
   activeProjectData,

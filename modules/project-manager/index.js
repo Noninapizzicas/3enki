@@ -281,6 +281,7 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'get', this.handleUIGet.bind(this));
       this.uiHandler.register('project', 'create', this.handleUICreate.bind(this));
       this.uiHandler.register('project', 'add-features', this.handleUIAddFeatures.bind(this));
+      this.uiHandler.register('project', 'list-features', this.handleUIListFeatures.bind(this));
       this.uiHandler.register('project', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('project', 'delete', this.handleUIDelete.bind(this));
       this.uiHandler.register('project', 'activate', this.handleUIActivate.bind(this));
@@ -2772,6 +2773,44 @@ class ProjectManagerModule {
    * Cada blueprint declara createsProject:
    *   false → añade dirs, handlers y config inline al proyecto
    *   true  → crea un subproyecto separado
+   */
+  /**
+   * UI Handler: Lista de features/módulos disponibles
+   * Lee dinámicamente los blueprints de blueprints/project-types/*.json
+   * Request: mqttRequest('project', 'list-features', {})
+   */
+  async handleUIListFeatures(data, request) {
+    const bpDir = path.join(process.cwd(), 'blueprints', 'project-types');
+
+    try {
+      const files = await fs.promises.readdir(bpDir);
+      const features = [];
+
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        try {
+          const content = JSON.parse(await fs.promises.readFile(path.join(bpDir, file), 'utf-8'));
+          features.push({
+            id: content.id || file.replace('.json', ''),
+            label: content.label || content.id || file.replace('.json', ''),
+            icon: content.icon || '',
+            description: content.description || ''
+          });
+        } catch (err) {
+          this.logger.warn({ file, error: err.message }, 'Invalid blueprint file, skipping');
+        }
+      }
+
+      return { features };
+    } catch (err) {
+      this.logger.warn({ error: err.message }, 'Could not read blueprints directory');
+      return { features: [] };
+    }
+  }
+
+  /**
+   * UI Handler: Añadir features/módulos a un proyecto existente
+   * Request: mqttRequest('project', 'add-features', { id, features: ['pizzepos', 'facturas'] })
    */
   async handleUIAddFeatures(data, request) {
     const { id, features } = data;

@@ -18,9 +18,12 @@
     updateProjectMqtt,
     deleteProjectMqtt,
     activateProjectMqtt,
-    addFeaturesMqtt
+    addFeaturesMqtt,
+    listFeaturesMqtt
   } from '$lib/stores';
   import { PROJECT_COLORS } from '$lib/ui-core';
+
+  interface Feature { id: string; label: string; icon: string; description: string; }
 
   // Props
   export let panelId: string = '';
@@ -31,11 +34,8 @@
 
   let searchQuery = '';
 
-  // Módulos disponibles (checklist) — todo inline dentro del proyecto
-  const FEATURES = [
-    { id: 'pizzepos',  label: 'PizzePOS',  icon: '🍕', description: 'Comandero, cocina y cobros' },
-    { id: 'facturas',  label: 'Facturas',  icon: '🧾', description: 'Pipeline OCR + IA + CSV' }
-  ];
+  // Módulos disponibles — cargados dinámicamente desde blueprints
+  let availableFeatures: Feature[] = [];
 
   // Form crear
   let showCreateForm = false;
@@ -66,7 +66,10 @@
   // SUSCRIPCIÓN MQTT
   // ============================================================================
 
-  onMount(() => { cleanup = initProjectsSubscriptions(); });
+  onMount(async () => {
+    cleanup = initProjectsSubscriptions();
+    availableFeatures = await listFeaturesMqtt();
+  });
   onDestroy(() => { cleanup?.(); });
 
   // ============================================================================
@@ -207,7 +210,7 @@
 
       {#if showFeatures}
         <div class="features-list">
-          {#each FEATURES as feat (feat.id)}
+          {#each availableFeatures as feat (feat.id)}
             <button
               type="button"
               class="feature-btn"

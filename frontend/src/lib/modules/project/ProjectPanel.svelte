@@ -39,12 +39,20 @@
 
   let searchQuery = '';
 
+  // Tipos de proyecto disponibles
+  const PROJECT_TYPES = [
+    { id: 'general',   label: 'General',   icon: '📁', description: 'Proyecto genérico' },
+    { id: 'pizzepos',  label: 'PizzePOS',  icon: '🍕', description: 'POS hostelería' },
+    { id: 'facturas',  label: 'Facturas',  icon: '🧾', description: 'Pipeline facturas' }
+  ];
+
   // Form crear
   let showCreateForm = false;
   let createForm = {
     name: '',
     description: '',
-    color: 'blue'
+    color: 'blue',
+    projectType: 'general'
   };
   let creating = false;
 
@@ -85,12 +93,15 @@
     createProjectMqtt(
       createForm.name.trim(),
       createForm.description.trim(),
-      createForm.color
+      createForm.color,
+      undefined, // icon (default)
+      undefined, // workspaceType (default)
+      createForm.projectType
     );
 
     // Reset form después de un momento (el store se actualiza via MQTT)
     setTimeout(() => {
-      createForm = { name: '', description: '', color: 'blue' };
+      createForm = { name: '', description: '', color: 'blue', projectType: 'general' };
       showCreateForm = false;
       creating = false;
     }, 300);
@@ -200,6 +211,23 @@
   <!-- ===== FORM CREAR ===== -->
   {#if showCreateForm}
     <form class="create-form" on:submit|preventDefault={handleCreate}>
+      <div class="type-row">
+        <span class="type-label">Tipo:</span>
+        <div class="type-options">
+          {#each PROJECT_TYPES as ptype (ptype.id)}
+            <button
+              type="button"
+              class="type-btn"
+              class:selected={createForm.projectType === ptype.id}
+              on:click={() => createForm.projectType = ptype.id}
+              title={ptype.description}
+            >
+              <span class="type-icon">{ptype.icon}</span>
+              <span class="type-name">{ptype.label}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
       <input
         type="text"
         class="input"
@@ -407,6 +435,58 @@
 
   .input:disabled {
     opacity: 0.6;
+  }
+
+  /* ===== TIPO PROYECTO ===== */
+  .type-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .type-label {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted, #888);
+  }
+
+  .type-options {
+    display: flex;
+    gap: 0.375rem;
+  }
+
+  .type-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.375rem;
+    background: var(--color-bg, #0d0d0d);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+    border-radius: 0.375rem;
+    color: var(--color-text-muted, #888);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+  }
+
+  .type-btn:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    color: var(--color-text, #e5e5e5);
+  }
+
+  .type-btn.selected {
+    border-color: var(--color-primary, #3b82f6);
+    color: var(--color-text, #e5e5e5);
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .type-icon {
+    font-size: 1rem;
+  }
+
+  .type-name {
+    font-size: 0.8125rem;
   }
 
   .color-row {

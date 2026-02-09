@@ -1,0 +1,36 @@
+{
+  "type": "pizzepos",
+  "label": "PizzePOS",
+  "icon": "🍕",
+  "description": "POS para pizzería/hostelería con comandero, cocina y cobros",
+  "defaultColor": "orange",
+
+  "directories": [
+    "config",
+    "handlers",
+    "storage/cartas"
+  ],
+
+  "config": {
+    "telegram": {
+      "botName": ""
+    },
+    "storage": {
+      "cartas": "./data/projects/{{slug}}/storage/cartas",
+      "ingredientes": "./data/projects/{{slug}}/storage/ingredientes.json",
+      "programacion": "./data/projects/{{slug}}/storage/programacion.json"
+    }
+  },
+
+  "copyHandlersFrom": "pizzepos",
+
+  "initialFiles": {
+    "storage/ingredientes.json": [],
+    "storage/programacion.json": {
+      "reglas": [],
+      "descripcion": "Reglas de programación de carta por horario/día"
+    }
+  },
+
+  "postCreateHint": "Genera tu carta con el chat: escribe o pega el menú y usa /carta"
+}

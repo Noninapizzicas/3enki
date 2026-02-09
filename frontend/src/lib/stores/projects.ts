@@ -122,7 +122,8 @@ export async function createProject(
   description: string = '',
   color: string = 'blue',
   icon: string = '📁',
-  workspaceType: string = 'general'
+  workspaceType: string = 'general',
+  projectType: string = 'general'
 ): Promise<Project> {
   projectsStore.update(s => ({ ...s, loading: true, error: null }));
 
@@ -132,7 +133,8 @@ export async function createProject(
       description,
       color,
       icon,
-      workspaceType
+      workspaceType,
+      projectType
     });
 
     // Recargar lista para tener estado actualizado

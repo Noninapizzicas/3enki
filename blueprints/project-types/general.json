@@ -1,0 +1,16 @@
+{
+  "type": "general",
+  "label": "General",
+  "icon": "📁",
+  "description": "Proyecto genérico sin estructura predefinida",
+  "defaultColor": "blue",
+
+  "directories": [
+    "config",
+    "handlers"
+  ],
+
+  "config": {},
+
+  "postCreateHint": "Proyecto listo. Añade handlers y configuración según necesites."
+}

@@ -1,0 +1,62 @@
+{
+  "type": "facturas",
+  "label": "Facturas",
+  "icon": "🧾",
+  "description": "Pipeline OCR + IA + CSV fiscal para procesamiento de facturas",
+  "defaultColor": "green",
+
+  "directories": [
+    "config",
+    "handlers",
+    "storage/procesados",
+    "storage/pendientes",
+    "storage/preprocesadas",
+    "storage/ocr",
+    "storage/estructuradas",
+    "storage/export"
+  ],
+
+  "config": {
+    "telegram": {
+      "botName": "",
+      "chatId": null,
+      "commands": {
+        "/listar": "Lista archivos pendientes en bandeja",
+        "/ocr": "OCR manual de un archivo",
+        "/ia": "Estructura OCR con IA",
+        "/validar": "Valida datos extraidos",
+        "/guardar": "Archiva factura validada",
+        "/procesarfacturas": "Pipeline automatico",
+        "/estado": "Ver estadisticas de facturas",
+        "/ayuda": "Muestra ayuda de comandos"
+      }
+    },
+    "gmail": {
+      "account": "",
+      "query": "has:attachment is:unread",
+      "maxResults": 20
+    },
+    "processing": {
+      "backend": "google_document_ai",
+      "language": "es",
+      "moveOriginal": true,
+      "confidenceThreshold": 0.85
+    },
+    "storage": {
+      "inbox": {
+        "telegram": "./data/bots/{{slug}}_bot/received",
+        "gmail": "./data/gmail/{{slug}}"
+      },
+      "procesados": "./data/projects/{{slug}}/storage/procesados",
+      "pendientes": "./data/projects/{{slug}}/storage/pendientes"
+    },
+    "asesoria": {
+      "email": "",
+      "formatos": ["ZIP con PDFs originales", "resumen.csv"]
+    }
+  },
+
+  "copyHandlersFrom": "facturas-nonina",
+
+  "postCreateHint": "Configura el bot de Telegram y la cuenta Gmail en config.json"
+}

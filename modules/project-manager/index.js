@@ -280,6 +280,7 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'list', this.handleUIList.bind(this));
       this.uiHandler.register('project', 'get', this.handleUIGet.bind(this));
       this.uiHandler.register('project', 'create', this.handleUICreate.bind(this));
+      this.uiHandler.register('project', 'add-features', this.handleUIAddFeatures.bind(this));
       this.uiHandler.register('project', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('project', 'delete', this.handleUIDelete.bind(this));
       this.uiHandler.register('project', 'activate', this.handleUIActivate.bind(this));
@@ -2733,7 +2734,7 @@ class ProjectManagerModule {
    * Request: mqttRequest('project', 'create', { name, description, color, icon, workspaceType })
    */
   async handleUICreate(data, request) {
-    const { name, description, color, icon, workspaceType, features } = data;
+    const { name, description, color, icon, workspaceType } = data;
     const correlationId = crypto.randomUUID();
 
     if (!name || name.trim().length === 0) {
@@ -2741,28 +2742,59 @@ class ProjectManagerModule {
     }
 
     const trimmedName = name.trim();
-    const slug = this.slugify(trimmedName);
-    const selectedFeatures = Array.isArray(features) ? features : [];
 
-    // Create main project
     const project = await this.createProject(
       trimmedName,
       description?.trim() || '',
       {
         color: color || 'blue',
         icon: icon || '📁',
-        workspaceType: workspaceType || 'general',
-        features: selectedFeatures
+        workspaceType: workspaceType || 'general'
       },
       correlationId
     );
 
-    // Always create base dirs
+    // Create base dirs
     const basePath = project.base_path;
     await fs.promises.mkdir(path.join(basePath, 'config'), { recursive: true });
     await fs.promises.mkdir(path.join(basePath, 'handlers'), { recursive: true });
 
-    // Process each selected feature
+    return {
+      project: this.toUIFormat(project),
+      created: true
+    };
+  }
+
+  /**
+   * UI Handler: Añadir features/módulos a un proyecto existente
+   * Request: mqttRequest('project', 'add-features', { id, features: ['pizzepos', 'facturas'] })
+   *
+   * Cada blueprint declara createsProject:
+   *   false → añade dirs, handlers y config inline al proyecto
+   *   true  → crea un subproyecto separado
+   */
+  async handleUIAddFeatures(data, request) {
+    const { id, features } = data;
+    const correlationId = crypto.randomUUID();
+
+    if (!id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
+    }
+
+    const project = this.getProject(id);
+    if (!project) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+
+    const selectedFeatures = Array.isArray(features) ? features : [];
+    if (selectedFeatures.length === 0) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'At least one feature is required' };
+    }
+
+    const basePath = project.base_path;
+    const slug = this.slugify(project.name);
+    const projectName = project.name;
+
     const inlineFeatures = [];
     const createdProjects = [];
     const mergedConfig = {};
@@ -2773,15 +2805,15 @@ class ProjectManagerModule {
         const blueprint = JSON.parse(await fs.promises.readFile(bpPath, 'utf-8'));
 
         if (blueprint.createsProject) {
-          // Feature creates a separate sub-project
-          const subName = `${blueprint.label} ${trimmedName}`;
+          // Crea subproyecto separado
+          const subName = `${blueprint.label} ${projectName}`;
           const subSlug = this.slugify(subName);
 
           const subProject = await this.createProject(
             subName,
             blueprint.description || '',
             {
-              color: color || 'blue',
+              color: project.metadata?.color || 'blue',
               icon: blueprint.icon || '📁',
               workspaceType: featureId,
               parentProjectId: project.id,
@@ -2798,7 +2830,7 @@ class ProjectManagerModule {
           createdProjects.push({ id: subProject.id, name: subName, feature: featureId });
           this.logger.info({ correlationId, featureId, subProjectId: subProject.id }, 'Feature sub-project created');
         } else {
-          // Feature adds structure inline to the main project
+          // Añade estructura inline al proyecto
           await this.initializeFromBlueprint(basePath, slug, blueprint, correlationId);
 
           if (blueprint.config) {
@@ -2812,21 +2844,31 @@ class ProjectManagerModule {
       }
     }
 
-    // Write merged config for inline features
+    // Escribir config mergeado para features inline
     if (Object.keys(mergedConfig).length > 0) {
-      const configStr = JSON.stringify(mergedConfig, null, 2)
+      // Leer config existente y mergear
+      const configPath = path.join(basePath, 'config', 'config.json');
+      let existingConfig = {};
+      try {
+        existingConfig = JSON.parse(await fs.promises.readFile(configPath, 'utf-8'));
+      } catch { /* no existing config */ }
+
+      const finalConfig = { ...existingConfig, ...mergedConfig };
+      const configStr = JSON.stringify(finalConfig, null, 2)
         .replace(/\{\{slug\}\}/g, slug);
-      await fs.promises.writeFile(
-        path.join(basePath, 'config', 'config.json'),
-        configStr,
-        'utf-8'
-      );
+      await fs.promises.mkdir(path.join(basePath, 'config'), { recursive: true });
+      await fs.promises.writeFile(configPath, configStr, 'utf-8');
     }
 
+    // Actualizar metadata del proyecto con las features aplicadas
+    const existingFeatures = project.metadata?.features || [];
+    const updatedFeatures = [...new Set([...existingFeatures, ...inlineFeatures])];
+    await this.updateProject(id, {
+      metadata: { ...(project.metadata || {}), features: updatedFeatures }
+    }, correlationId);
+
     return {
-      project: this.toUIFormat(project),
-      created: true,
-      features: inlineFeatures,
+      applied: inlineFeatures,
       createdProjects
     };
   }

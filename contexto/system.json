@@ -29,15 +29,21 @@
 
   "directories": {
     "core": "Core framework code (EventBus, ServiceExecutor, HandlerLoader, etc)",
-    "modules": "Loadable modules (each with module.json + index.js)",
+    "modules": "Loadable modules (28 core + 12 pizzepos = 40 total)",
     "handlers": "Global event handlers (JavaScript directo)",
-    "frontend": "SvelteKit app",
-    "data": "Runtime data (projects, logs, etc)",
-    "data/projects/{id}": "Datos de un proyecto específico",
+    "frontend": "SvelteKit 2 + Svelte 5 + TypeScript app",
+    "data": "Runtime data (projects, logs, scheduler, etc)",
+    "data/projects/{id}": "Datos de un proyecto específico (handlers, storage, config, handler-store)",
+    "data/scheduler": "Jobs del scheduler (jobs.json)",
     "services/providers": "Service providers (local.*, google.*, etc)",
-    "contexto": "AI context files (this directory)",
-    "docs": "Human documentation",
-    "prompts": "AI prompts and tutorials"
+    "contexto": "AI context files (26 archivos JSON)",
+    "docs": "Human documentation (35+ archivos)",
+    "prompts": "AI prompts and tutorials (15 especializados)",
+    "plugins": "JSON-based plugins (github, slack, weather, http-utils)",
+    "blueprints": "YAML scaffolding para generación de módulos",
+    "scripts": "Utility scripts (create-module, generate-constants)",
+    "network": "Multi-machine deployment scripts",
+    "docker": "Docker setup y compose"
   },
 
   "project_structure": {
@@ -133,12 +139,32 @@
     "descripcion": "Providers que ejecutan operaciones via eventos request/response",
     "patron": "{service}.{action}.request → {service}.{action}.response",
     "tipos": {
-      "local": "Ejecución local (local.pdf-to-png, local.tesseract)",
+      "local": "Ejecución local (local.pdf-to-png, local.tesseract, local.sharp)",
       "cloud": "APIs externas (google.vision, anthropic.chat)"
     },
     "credenciales": {
       "resolucion": "PROJECT_{id} → GLOBAL (cascada automática)",
       "documentacion": "Ver contexto/credentials.json"
+    }
+  },
+
+  "patrones_recientes": {
+    "_updated": "2026-02-09",
+    "project_lifecycle_caching": {
+      "descripcion": "Los módulos cachean el proyecto activo via eventos en lugar de RPC repetido",
+      "eventos": ["project.activated → cache", "project.deactivated → clear cache"],
+      "modulos_que_cachean": ["chat-ai-bridge", "chat-session", "scheduler"],
+      "beneficio": "Elimina N+1 queries a project-manager"
+    },
+    "direct_ui_handlers": {
+      "descripcion": "Módulos registran handlers UI directamente sin facade intermediaria",
+      "patron": "context.uiHandler.register('domain', 'action', handler)",
+      "ejemplo": "chat-ai-bridge registra ('conversation', 'send', handleSend)",
+      "nota": "conversation-manager ya NO es facade, cada módulo registra sus propios handlers"
+    },
+    "project_scoped_operations": {
+      "descripcion": "Operaciones scoped por proyecto via project_id",
+      "modulos": ["chat-session (esquema SQLite por proyecto)", "scheduler (jobs con project_id)", "project-manager (composición 5 fases)"]
     }
   }
 }

@@ -72,27 +72,33 @@
   },
   "active_modules": [
     "admin-panel",
+    "agent-manager",
     "ai-agent-framework",
     "ai-gateway",
+    "bot-manager",
     "calling-generator",
     "chat-ai-bridge",
     "chat-session",
+    "code-executor",
+    "conversation-manager",
     "credential-manager",
     "dashboard",
     "database-manager",
     "filesystem",
     "flow-engine",
     "log-manager",
-    "menu-generator",
     "metricas",
     "notas",
+    "pdf-viewer",
     "plugin-manager",
     "project-manager",
     "prompt-composer",
     "prompt-manager",
     "scheduler",
+    "scratch-designer",
     "system-inspector",
     "telegram-service",
+    "text-editor",
     "ui-designer",
     "pizzepos/cuentas-canales",
     "pizzepos/pedidos",
@@ -107,26 +113,31 @@
     "pizzepos/persistencia-comandero",
     "pizzepos/cuentas"
   ],
+  "module_count": {
+    "core": 28,
+    "pizzepos": 12,
+    "total": 40
+  },
   "module_categories": {
     "ai": {
       "description": "Módulos de inteligencia artificial",
-      "modules": ["ai-gateway", "ai-agent-framework", "menu-generator", "calling-generator"]
+      "modules": ["ai-gateway", "ai-agent-framework", "agent-manager", "calling-generator"]
     },
     "chat": {
       "description": "Módulos del stack de chat/conversaciones",
-      "modules": ["chat-session", "chat-ai-bridge", "prompt-composer"]
+      "modules": ["chat-session", "chat-ai-bridge", "prompt-composer", "conversation-manager (legacy facade)"]
     },
     "project": {
-      "description": "Módulos de gestión de proyectos y composición",
+      "description": "Módulos de gestión de proyectos y composición (5 fases)",
       "modules": ["project-manager"]
     },
-    "communication": {
-      "description": "Módulos de comunicación externa",
-      "modules": ["telegram-service"]
+    "bots": {
+      "description": "Módulos de bots y comunicación externa",
+      "modules": ["telegram-service", "bot-manager"]
     },
     "processing": {
       "description": "Módulos de procesamiento de datos",
-      "modules": ["pdf-viewer"]
+      "modules": ["pdf-viewer", "code-executor"]
     },
     "storage": {
       "description": "Módulos de almacenamiento",
@@ -134,7 +145,7 @@
     },
     "ui": {
       "description": "Módulos de interfaz de usuario",
-      "modules": ["admin-panel", "dashboard", "ui-designer", "notas"]
+      "modules": ["admin-panel", "dashboard", "ui-designer", "notas", "text-editor", "scratch-designer"]
     },
     "system": {
       "description": "Módulos del sistema",
@@ -241,7 +252,9 @@
       "tables": ["projects", "systems", "project_links", "project_dependencies", "shared_context"],
       "events": {
         "publishes": [
-          "project.created", "project.updated", "project.deleted", "project.activated",
+          "project.created", "project.updated", "project.deleted",
+          "project.activated", "project.deactivated",
+          "project/state",
           "project.linked", "project.unlinked",
           "project.dependency.added", "project.dependency.removed",
           "system.created", "system.updated", "system.deleted",
@@ -251,8 +264,13 @@
         ],
         "subscribes": [
           "project.get.request", "project.list.request", "project.active.request",
-          "context.full.request"
+          "context.full.request", "db.query.response"
         ]
+      },
+      "observability": {
+        "counters": ["project.created.total", "updated.total", "deleted.total", "activated.total"],
+        "gauges": ["project.active.count", "project.total.count"],
+        "timings": ["project.creation.duration", "project.query.duration"]
       },
       "ui_handlers": {
         "project": ["list", "get", "create", "update", "delete", "activate", "link", "unlink", "getLinks", "addDependency", "removeDependency", "getDependencies", "getDependents"],
@@ -288,30 +306,49 @@
       "responsibilities": [
         "CRUD de conversaciones en SQLite",
         "CRUD de mensajes",
-        "Context FIFO management",
-        "Schema management por proyecto"
+        "Context FIFO management (ventana de 20 mensajes)",
+        "Schema management por proyecto",
+        "Cache de proyecto activo (event-driven)"
       ],
       "events": {
-        "publishes": ["session.*.response", "conversation.created", "message.saved"],
-        "subscribes": ["session.*.request"]
-      }
+        "publishes": ["session.*.response", "session.created", "session.updated", "session.deleted", "session.message.saved"],
+        "subscribes": ["session.*.request", "db.query.response", "project.activated", "project.deactivated"]
+      },
+      "apis": [
+        "POST /conversations - Crear conversación",
+        "GET /conversations - Listar conversaciones",
+        "GET /conversations/:id/messages - Obtener mensajes",
+        "POST/GET /conversations/:id/context - Gestión de contexto",
+        "POST /messages/:id/toggle-context - Toggle contexto mensaje"
+      ],
+      "tools": ["session.list_conversations", "session.get_conversation", "session.get_messages"],
+      "config": { "contextWindow": 20, "dbTimeout": 10000 },
+      "dependencies": ["database-manager", "project-manager"]
     },
     "chat-ai-bridge": {
       "version": "1.0.0",
       "description": "Orquestador de flujo entre chat y ai-gateway",
       "responsibilities": [
         "Coordinar flujo: session → prompt → ai-gateway",
-        "Manejar respuesta y guardar mensaje",
+        "Agentic loop con tools (post-hoc streaming)",
+        "Cache de proyecto activo (event-driven)",
         "Flow state tracking con stages"
       ],
       "events": {
         "publishes": ["chat.send.response", "ai.chat.request", "session.save.request", "prompt.compose.request"],
-        "subscribes": ["chat.send.request", "ai.chat.response", "session.save.response", "prompt.compose.response"]
-      }
+        "subscribes": ["chat.send.request", "ai.chat.response", "session.save.response", "prompt.compose.response", "session.context.load.response", "project.activated", "project.deactivated"]
+      },
+      "apis": [
+        "POST /send - Enviar mensaje y obtener respuesta AI",
+        "GET /status - Estado de requests pendientes",
+        "GET /health - Health check"
+      ],
+      "tools": ["chat.send_message"],
+      "dependencies": ["chat-session", "prompt-composer", "ai-gateway"]
     },
     "scheduler": {
       "version": "1.0.0",
-      "description": "Sistema avanzado de scheduling con múltiples tipos de triggers",
+      "description": "Sistema avanzado de scheduling con múltiples tipos de triggers, project-scoped",
       "trigger_types": {
         "cron": "Expresiones cron estándar (0 3 * * *)",
         "interval": "Intervalos fijos (30s, 5m, 1h)",
@@ -326,6 +363,8 @@
         "module": "Llamar método de módulo via eventos"
       },
       "features": [
+        "Jobs project-scoped (campo project_id en schema)",
+        "getByProject(projectId) y getGlobal() en JobManager",
         "Templates en topics y payloads ({{now}}, {{job.id}}, {{event.payload}})",
         "Persistencia en JSON (data/scheduler/jobs.json)",
         "Retry con backoff configurable",
@@ -342,16 +381,31 @@
           "scheduler.job.triggered",
           "scheduler.job.completed",
           "scheduler.job.failed"
-        ]
+        ],
+        "subscribes": ["scheduler.trigger.check"]
       },
       "key_apis": [
-        "GET /jobs - Listar jobs",
-        "POST /jobs - Crear job",
-        "POST /jobs/:id/trigger - Disparar manualmente",
-        "GET /triggers/types - Tipos de triggers disponibles"
+        "GET /jobs - Listar jobs (filtrable por project_id)",
+        "POST /jobs - Crear job (con project_id opcional)",
+        "PUT /jobs/:jobId - Actualizar job",
+        "DELETE /jobs/:jobId - Eliminar job",
+        "POST /jobs/:jobId/enable - Habilitar",
+        "POST /jobs/:jobId/disable - Deshabilitar",
+        "POST /jobs/:jobId/trigger - Disparar manualmente",
+        "GET /triggers/types - Tipos de triggers disponibles",
+        "GET /executions - Historial de ejecuciones",
+        "GET /stats - Estadísticas"
       ],
+      "tools": ["scheduler.list_jobs", "scheduler.create_job", "scheduler.trigger_job"],
       "ui_handlers": {
         "scheduler": ["list", "get", "create", "update", "delete", "enable", "disable", "trigger", "triggers", "stats", "executions"]
+      },
+      "config": {
+        "jobsPath": "./data/scheduler/jobs.json",
+        "defaultTimezone": "Europe/Madrid",
+        "maxConcurrentJobs": 100,
+        "defaultTimeout": 300000,
+        "defaultRetries": 3
       }
     },
     "flow-engine": {
@@ -461,7 +515,7 @@
       "send_flow": [
         "1. Frontend: mqttRequest('conversation', 'send', { conversationId, content })",
         "2. UIRequestHandler → chat-ai-bridge.handleConversationSend()",
-        "3. chat-ai-bridge obtiene proyecto activo (project.active.request)",
+        "3. chat-ai-bridge usa proyecto activo CACHEADO (fast path, sin RPC)",
         "4. chat-ai-bridge crea conversación si no existe (session.create.request → chat-session)",
         "5. chat-ai-bridge guarda mensaje usuario (session.save.request → chat-session)",
         "6. chat-ai-bridge compone prompt (prompt.compose.request → prompt-composer)",
@@ -469,6 +523,15 @@
         "8. chat-ai-bridge guarda respuesta + safety-net MQTT QoS 1",
         "9. UIRequestHandler devuelve resultado al frontend"
       ]
+    },
+    "project_lifecycle_caching": {
+      "description": "Patrón de caching del proyecto activo via eventos (evita N+1 RPC)",
+      "subscribers": ["chat-ai-bridge", "chat-session", "scheduler"],
+      "events": {
+        "project.activated": "→ cache activeProjectId en cada módulo suscrito",
+        "project.deactivated": "→ clear cache activeProjectId"
+      },
+      "beneficio": "Elimina RPC redundante a project-manager en cada operación"
     }
   }
 }

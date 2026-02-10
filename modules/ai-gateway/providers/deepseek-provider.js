@@ -5,6 +5,11 @@ const BaseProvider = require('./base-provider');
  *
  * Implementación del proveedor DeepSeek (https://api.deepseek.com)
  * Priority: 1 (primera opción por costo/performance)
+ *
+ * Soporta:
+ * - deepseek-chat: modelo estándar
+ * - deepseek-reasoner: modo razonamiento (chain-of-thought visible)
+ *   Activar con options.reasoning = true o model = 'deepseek-reasoner'
  */
 class DeepSeekProvider extends BaseProvider {
   constructor(config, logger, credentialResolver) {
@@ -93,8 +98,9 @@ class DeepSeekProvider extends BaseProvider {
 
     // Check for vision content and select appropriate model
     const hasImages = this.hasVisionContent(messages);
-    // Use deepseek-vl-7b-chat for vision, or specified model, or default
-    const model = options.model || (hasImages ? 'deepseek-chat' : this.config.default_model);
+    // Reasoning mode: explicit model or options.reasoning flag
+    const useReasoning = options.reasoning === true || options.model === 'deepseek-reasoner';
+    const model = options.model || (useReasoning ? 'deepseek-reasoner' : (hasImages ? 'deepseek-chat' : this.config.default_model));
 
     // Convert messages for vision if needed
     const processedMessages = hasImages ? this.convertMessagesForVision(messages) : messages;
@@ -109,18 +115,22 @@ class DeepSeekProvider extends BaseProvider {
       throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
     }
 
-    // Build request
+    // Build request — deepseek-reasoner does not support temperature/top_p
     const requestData = {
       model,
       messages: processedMessages,
-      temperature: options.temperature || (hasImages ? 0.3 : 0.7), // Lower temp for vision
-      max_tokens: options.max_tokens || (hasImages ? 4000 : 2000), // More tokens for menu extraction
-      top_p: options.top_p || 1,
+      max_tokens: options.max_tokens || (hasImages ? 4000 : 2000),
       stream: false
     };
 
+    if (!useReasoning) {
+      requestData.temperature = options.temperature || (hasImages ? 0.3 : 0.7);
+      requestData.top_p = options.top_p || 1;
+    }
+
     // Add tools if provided (DeepSeek supports OpenAI function calling format)
     // DeepSeek only accepts [a-zA-Z0-9_-] in tool names, so transform dots to underscores
+    // Note: deepseek-reasoner V3.2+ supports tools in reasoning mode
     if (options.tools && options.tools.length > 0) {
       requestData.tools = this.translateToolNames(options.tools);
       requestData.tool_choice = options.tool_choice || 'auto';
@@ -152,15 +162,17 @@ class DeepSeekProvider extends BaseProvider {
     // Extract response
     const message = response.choices[0]?.message || {};
     const content = message.content || '';
+    const reasoningContent = message.reasoning_content || null; // Chain-of-thought (reasoner only)
     const toolCalls = message.tool_calls || null;  // Extract tool_calls if present
     const inputTokens = response.usage?.prompt_tokens || estimatedTokens;
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
+    const reasoningTokens = response.usage?.completion_tokens_details?.reasoning_tokens || 0;
     const totalTokens = inputTokens + outputTokens;
 
     // Record usage
     this.recordUsage(totalTokens);
 
-    // Calculate cost
+    // Calculate cost — reasoning tokens may have different pricing
     const cost = this.calculateCost(inputTokens, outputTokens);
 
     const result = {
@@ -170,11 +182,17 @@ class DeepSeekProvider extends BaseProvider {
       usage: {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
-        total_tokens: totalTokens
+        total_tokens: totalTokens,
+        reasoning_tokens: reasoningTokens || undefined
       },
       cost,
       finish_reason: response.choices[0]?.finish_reason || 'stop'
     };
+
+    // Include reasoning chain-of-thought if present
+    if (reasoningContent) {
+      result.reasoning_content = reasoningContent;
+    }
 
     // Include tool_calls if present (transform names back: underscore → dot)
     if (toolCalls && toolCalls.length > 0) {

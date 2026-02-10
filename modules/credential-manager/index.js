@@ -1251,6 +1251,8 @@ class CredentialManagerModule {
       { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
       { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
       { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
+      { id: 'GROQ', name: 'Groq', icon: '⚡' },
+      { id: 'GEMINI', name: 'Google Gemini', icon: '💎' },
       { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
       { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
       { id: 'GMAIL', name: 'Gmail', icon: '📧' }
@@ -1517,6 +1519,16 @@ class CredentialManagerModule {
 
         case 'ANTHROPIC':
           valid = await this.testAnthropic(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
+        case 'GROQ':
+          valid = await this.testGroq(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
+        case 'GEMINI':
+          valid = await this.testGemini(api_key);
           message = valid ? 'API key válida' : 'API key inválida';
           break;
 
@@ -2142,6 +2154,16 @@ class CredentialManagerModule {
           message = valid ? 'API key válida' : 'API key inválida';
           break;
 
+        case 'GROQ':
+          valid = await this.testGroq(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
+        case 'GEMINI':
+          valid = await this.testGemini(api_key);
+          message = valid ? 'API key válida' : 'API key inválida';
+          break;
+
         case 'OLLAMA':
           // Ollama es local, no necesita validación de API key
           valid = api_key && api_key.length > 0;
@@ -2230,6 +2252,32 @@ class CredentialManagerModule {
       });
       // 200 = válida, 401 = inválida, otros pueden ser rate limit pero key válida
       return response.status !== 401;
+    } catch {
+      return false;
+    }
+  }
+
+  async testGroq(apiKey) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async testGemini(apiKey) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+        method: 'GET'
+      });
+      return response.ok;
     } catch {
       return false;
     }

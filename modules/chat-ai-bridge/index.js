@@ -467,13 +467,37 @@ class ChatAiBridgeModule {
     }
 
     // Conversation history (from context)
+    // Estimate tokens to avoid exceeding provider limits
+    const maxContextTokens = this.config.maxContextTokens || 12000;
+    let estimatedTokens = this.estimateTokens(systemPrompt || '');
+
     if (context.messages && context.messages.length > 0) {
+      // Add messages from oldest to newest, but skip old ones if we'd exceed limit
+      const historyMessages = [];
       for (const msg of context.messages) {
-        messages.push({
-          role: msg.role,
-          content: msg.content
+        historyMessages.push({ role: msg.role, content: msg.content });
+      }
+
+      // Try all messages first; trim oldest if over budget
+      let totalHistoryTokens = historyMessages.reduce((sum, m) => sum + this.estimateTokens(m.content), 0);
+      let startIdx = 0;
+      while (totalHistoryTokens + estimatedTokens > maxContextTokens && startIdx < historyMessages.length - 2) {
+        totalHistoryTokens -= this.estimateTokens(historyMessages[startIdx].content);
+        startIdx++;
+      }
+
+      if (startIdx > 0) {
+        this.logger.info('chat-ai-bridge.context.trimmed', {
+          dropped: startIdx,
+          remaining: historyMessages.length - startIdx,
+          estimatedTokens: totalHistoryTokens + estimatedTokens
         });
       }
+
+      for (let i = startIdx; i < historyMessages.length; i++) {
+        messages.push(historyMessages[i]);
+      }
+      estimatedTokens += totalHistoryTokens;
     }
 
     // Current user message (if not already in context)
@@ -483,6 +507,14 @@ class ChatAiBridgeModule {
     }
 
     return messages;
+  }
+
+  /**
+   * Rough token estimation (~4 chars per token for mixed content)
+   */
+  estimateTokens(text) {
+    if (!text) return 0;
+    return Math.ceil(text.length / 4);
   }
 
   /**

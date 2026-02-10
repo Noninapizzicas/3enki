@@ -4,6 +4,8 @@ const DeepSeekProvider = require('./providers/deepseek-provider');
 const AnthropicProvider = require('./providers/anthropic-provider');
 const OpenAIProvider = require('./providers/openai-provider');
 const OllamaProvider = require('./providers/ollama-provider');
+const GroqProvider = require('./providers/groq-provider');
+const GeminiProvider = require('./providers/gemini-provider');
 
 const { EVENTS } = require('../../core/constants');
 
@@ -55,7 +57,9 @@ class AIGatewayModule {
       deepseek: 'DeepSeek',
       anthropic: 'Anthropic Claude',
       openai: 'OpenAI',
-      ollama: 'Ollama (Local)'
+      ollama: 'Ollama (Local)',
+      groq: 'Groq',
+      gemini: 'Google Gemini'
     };
     return displayNames[providerId] || providerId;
   }
@@ -68,7 +72,9 @@ class AIGatewayModule {
       deepseek: '🔮',
       anthropic: '🧠',
       openai: '🤖',
-      ollama: '🦙'
+      ollama: '🦙',
+      groq: '⚡',
+      gemini: '💎'
     };
     return icons[providerId] || '⚡';
   }
@@ -86,10 +92,16 @@ class AIGatewayModule {
       'gpt-4o': 'GPT-4o',
       'gpt-4o-mini': 'GPT-4o Mini',
       'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+      'deepseek-reasoner': 'DeepSeek Reasoner',
       'llama2': 'Llama 2',
       'codellama': 'Code Llama',
       'mistral': 'Mistral',
-      'mixtral': 'Mixtral'
+      'mixtral': 'Mixtral',
+      'llama-3.3-70b-versatile': 'Llama 3.3 70B',
+      'mixtral-8x7b-32768': 'Mixtral 8x7B',
+      'gemma2-9b-it': 'Gemma 2 9B',
+      'gemini-2.5-flash': 'Gemini 2.5 Flash',
+      'gemini-2.5-pro': 'Gemini 2.5 Pro'
     };
     return displayNames[modelId] || modelId;
   }
@@ -497,7 +509,9 @@ class AIGatewayModule {
       deepseek: DeepSeekProvider,
       anthropic: AnthropicProvider,
       openai: OpenAIProvider,
-      ollama: OllamaProvider
+      ollama: OllamaProvider,
+      groq: GroqProvider,
+      gemini: GeminiProvider
     };
 
     // Create credential resolver bound to this gateway
@@ -1490,40 +1504,28 @@ class AIGatewayModule {
           }
         }));
 
+      case 'gemini':
+        // Gemini format: handled inside gemini-provider.convertTools()
+        // Pass through as-is — the provider will convert
+        return tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.parameters || {
+              type: 'object',
+              properties: {},
+              required: []
+            }
+          }
+        }));
+
       case 'openai':
       case 'deepseek':
-        // OpenAI/DeepSeek format: { type: 'function', function: { name, description, parameters } }
-        return tools.map(tool => ({
-          type: 'function',
-          function: {
-            name: tool.name,
-            description: tool.description || '',
-            parameters: tool.parameters || {
-              type: 'object',
-              properties: {},
-              required: []
-            }
-          }
-        }));
-
+      case 'groq':
       case 'ollama':
-        // Ollama format (for models that support tools): same as OpenAI
-        // Note: Not all Ollama models support function calling
-        return tools.map(tool => ({
-          type: 'function',
-          function: {
-            name: tool.name,
-            description: tool.description || '',
-            parameters: tool.parameters || {
-              type: 'object',
-              properties: {},
-              required: []
-            }
-          }
-        }));
-
       default:
-        // Default to OpenAI format
+        // OpenAI-compatible format (DeepSeek, Groq, Ollama all use this)
         return tools.map(tool => ({
           type: 'function',
           function: {
@@ -1602,6 +1604,28 @@ class AIGatewayModule {
         }
         break;
 
+      case 'groq':
+        // Groq: OpenAI-compatible format
+        if (response.tool_calls && Array.isArray(response.tool_calls)) {
+          toolCalls = response.tool_calls.map(tc => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: this.safeParseArguments(tc.function?.arguments)
+          }));
+        }
+        break;
+
+      case 'gemini':
+        // Gemini: tool_calls already normalized by gemini-provider
+        if (response.tool_calls && Array.isArray(response.tool_calls)) {
+          toolCalls = response.tool_calls.map(tc => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: this.safeParseArguments(tc.function?.arguments)
+          }));
+        }
+        break;
+
       case 'ollama':
         // Ollama: similar to OpenAI when tools are supported
         if (response.message?.tool_calls) {
@@ -1657,11 +1681,21 @@ class AIGatewayModule {
           content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
         }));
 
+      case 'groq':
       case 'ollama':
-        // Ollama: same as OpenAI for tool-capable models
+        // Groq/Ollama: same as OpenAI
         return results.map(r => ({
           role: 'tool',
           tool_call_id: r.tool_call_id,
+          content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
+        }));
+
+      case 'gemini':
+        // Gemini: functionResponse parts
+        return results.map(r => ({
+          role: 'tool',
+          tool_call_id: r.tool_call_id,
+          name: r.name,
           content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result)
         }));
 

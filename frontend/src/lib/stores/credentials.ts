@@ -127,32 +127,18 @@ interface TestResponse {
 }
 
 // =============================================================================
-// DEFAULT DATA (fallback si MQTT no responde)
+// NOTE: No hardcoded defaults - credential-manager backend is the single
+// source of truth for providers and levels (via getUIState()).
+// The store starts empty and populates from MQTT on init.
 // =============================================================================
-
-const DEFAULT_PROVIDERS: ProviderOption[] = [
-  { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
-  { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
-  { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
-  { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
-  { id: 'GMAIL', name: 'Gmail', icon: '📧' },
-  { id: 'TELEGRAM', name: 'Telegram', icon: '📱' }
-];
-
-const DEFAULT_LEVELS: LevelOption[] = [
-  { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },
-  { id: 'PROJECT', name: 'Proyecto', icon: '🔵', requiresIdentifier: true },
-  { id: 'CLIENT', name: 'Cliente', icon: '🟡', requiresIdentifier: true },
-  { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true }
-];
 
 // =============================================================================
 // INITIAL STATE
 // =============================================================================
 
 const initialState: CredentialsState = {
-  providers: DEFAULT_PROVIDERS,
-  levels: DEFAULT_LEVELS,
+  providers: [],
+  levels: [],
   credentials: {
     GLOBAL: [],
     PROJECT: [],
@@ -161,7 +147,7 @@ const initialState: CredentialsState = {
   },
   stats: { total: 0, byLevel: {} },
   oauthConfigs: [],
-  loading: false,
+  loading: true,
   error: null,
   selectedKey: null,
   activeTab: 'lista',
@@ -191,8 +177,8 @@ export async function loadCredentials(): Promise<void> {
 
     credentialsStore.update(s => ({
       ...s,
-      providers: response.data.providers?.length > 0 ? response.data.providers : DEFAULT_PROVIDERS,
-      levels: response.data.levels?.length > 0 ? response.data.levels : DEFAULT_LEVELS,
+      providers: response.data.providers || [],
+      levels: response.data.levels || [],
       credentials: {
         GLOBAL: response.data.credentials?.GLOBAL || [],
         PROJECT: response.data.credentials?.PROJECT || [],

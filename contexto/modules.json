@@ -197,7 +197,28 @@
       "version": "1.0.0",
       "description": "Framework para agentes AI event-driven",
       "components": ["Agent", "ContextManager", "ToolManager"],
-      "builtin_tools": ["http_request", "publish_event", "read_file", "write_file"],
+      "tools_unification": {
+        "description": "ToolManager v2.0.0 importa ALL tools de ModuleLoader.toolsRegistry en modo unificado",
+        "modes": {
+          "UNIFIED": "Importa tools de moduleLoader + 13 builtins únicos + 7 aliases backward-compatible",
+          "STANDALONE": "Fallback original si moduleLoader no disponible"
+        },
+        "agent_exclusive_builtins": [
+          "http_request", "publish_event", "create_prompt", "create_agent",
+          "list_agents", "flow_list", "flow_trigger", "flow_status",
+          "project_config_get", "project_config_update",
+          "facturas_list", "facturas_process", "facturas_export"
+        ],
+        "backward_aliases": {
+          "read_file": "fs.read",
+          "write_file": "fs.write",
+          "fs_copy": "fs.copy",
+          "fs_write": "fs.write",
+          "telegram_send_message": "telegram.send_message",
+          "telegram_get_file": "telegram.get_file",
+          "db_execute": "db.query"
+        }
+      },
       "events": {
         "publishes": [
           "agent.{name}.started",

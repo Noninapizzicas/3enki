@@ -82,62 +82,28 @@
 
   "tools_architecture": {
     "_DESCRIPTION": "Sistema unificado de tools para AI",
-    "_UPDATED": "2026-01-14",
+    "_UPDATED": "2026-02-10",
     "_STATUS": "IMPLEMENTED",
 
-    "current_problem": {
-      "description": "Hay DOS sistemas de tools desconectados",
-      "system_1": {
-        "name": "ModuleLoader.toolsRegistry",
-        "location": "core/modules/loader.js",
-        "source": "Tools definidos en module.json de cada módulo",
-        "used_by": "ai-gateway.getAvailableTools() → moduleLoader.getToolsForAI()",
-        "examples": ["echo.ping", "project.list", "agent.execute"]
+    "unified_system": {
+      "description": "ToolManager v2.0.0 importa tools de ModuleLoader.toolsRegistry en modo unificado",
+      "how_it_works": {
+        "1_moduleLoader_registers": "ModuleLoader registra tools de module.json + providers en toolsRegistry",
+        "2_injection": "ai-agent-framework/index.js pasa context.moduleLoader a ToolManager",
+        "3_import": "ToolManager.importModuleLoaderTools() importa ALL tools con handlers",
+        "4_agent_builtins": "ToolManager registra 13 tools únicos de agentes (http_request, publish_event, etc.)",
+        "5_aliases": "7 aliases backward-compatible (read_file→fs.read, write_file→fs.write, etc.)",
+        "6_fallback": "Si moduleLoader no disponible, modo standalone con tools duplicados (original)"
       },
-      "system_2": {
-        "name": "ai-agent-framework/ToolManager",
-        "location": "modules/ai-agent-framework/tool-manager.js",
-        "source": "Tools built-in + providers de services/providers/",
-        "used_by": "Solo agentes de ai-agent-framework",
-        "examples": ["gmail_send", "gmail_list", "tesseract_extract", "pdf_create"]
-      },
-      "consequence": "El chat NO tiene acceso a Gmail, OCR, PDF, etc. porque usa sistema_1"
+      "result": "Chat (ai-gateway) y agentes (ai-agent-framework) comparten el mismo registro de tools"
     },
-
-    "proposed_solution": {
-      "strategy": "Unificar en ModuleLoader.toolsRegistry",
-      "reason": "ModuleLoader ya se pasa a todos los módulos y ai-gateway lo usa",
-      "changes": {
-        "1_moduleLoader": {
-          "file": "core/modules/loader.js",
-          "add_method": "registerProviderTools(providerRegistry)",
-          "description": "Registra funciones de providers como tools en toolsRegistry"
-        },
-        "2_index_js": {
-          "file": "index.js",
-          "add_call": "moduleLoader.registerProviderTools(providerRegistry)",
-          "when": "Después de cargar providers y antes de cargar módulos"
-        }
-      },
-      "result": "getToolsForAI() devuelve tools de módulos + providers"
-    },
-
-    "unified_flow": [
-      "1. index.js inicia",
-      "2. ProviderLoader.loadAll() → carga providers de services/providers/",
-      "3. ProviderRegistry tiene providers con sus funciones",
-      "4. ModuleLoader.registerProviderTools(providerRegistry) ← NUEVO",
-      "5. toolsRegistry tiene tools de providers (gmail_send, etc.)",
-      "6. ModuleLoader.loadAll() → carga módulos",
-      "7. toolsRegistry tiene tools de módulos (de module.json)",
-      "8. ai-gateway.getAvailableTools() → moduleLoader.getToolsForAI()",
-      "9. Chat tiene acceso a TODOS los tools (módulos + providers)"
-    ],
 
     "tool_naming_convention": {
-      "module_tools": "{module}.{action} → ej: project.list, agent.execute",
+      "module_tools": "{module}.{action} → ej: project.list, agent.execute, fs.read",
       "provider_tools": "{provider}_{function} → ej: gmail_send, tesseract_extract",
-      "note": "DeepSeek requiere solo [a-zA-Z0-9_-], se transforma automáticamente"
+      "agent_builtins": "snake_case → ej: http_request, publish_event, create_agent",
+      "backward_aliases": "Legacy names map to canonical: read_file→fs.read, write_file→fs.write",
+      "note": "DeepSeek requiere solo [a-zA-Z0-9_-], se transforma automáticamente en deepseek-provider.js"
     }
   },
 

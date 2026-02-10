@@ -70,6 +70,17 @@
         "version": "1.0.0",
         "descripcion": "Framework para agentes AI event-driven con gestión de contexto y tool calling",
         "apis": ["CRUD de agentes", "Gestión de contexto", "Stats", "Listado de tools"],
+        "tools_unificados": {
+          "descripcion": "ToolManager v2.0.0 importa tools de ModuleLoader en modo unificado",
+          "modo": "UNIFIED cuando moduleLoader disponible, STANDALONE como fallback",
+          "resultado": "Agentes acceden a TODOS los tools del sistema + 13 builtins exclusivos"
+        },
+        "agent_builtin_tools": [
+          "http_request", "publish_event", "create_prompt", "create_agent",
+          "list_agents", "flow_list", "flow_trigger", "flow_status",
+          "project_config_get", "project_config_update",
+          "facturas_list", "facturas_process", "facturas_export"
+        ],
         "config": {
           "max_agentes": 100,
           "context_ttl_mins": 1440,
@@ -634,6 +645,22 @@
   },
 
   "tools_ai": {
+    "_nota_unificacion": "Desde ToolManager v2.0.0, chat y agentes comparten el mismo registro de tools. Los agentes tienen 13 tools adicionales exclusivos listados en 'agent_builtins'",
+    "agent_builtins": [
+      "http_request (peticiones HTTP desde agentes)",
+      "publish_event (publicar eventos MQTT)",
+      "create_prompt (crear prompt en prompt-manager)",
+      "create_agent (crear agente)",
+      "list_agents (listar agentes)",
+      "flow_list (listar flows)",
+      "flow_trigger (disparar flow)",
+      "flow_status (estado de flow)",
+      "project_config_get (leer config de proyecto)",
+      "project_config_update (actualizar config de proyecto)",
+      "facturas_list (listar facturas)",
+      "facturas_process (procesar factura)",
+      "facturas_export (exportar facturas)"
+    ],
     "chat_sesiones": [
       "session.list_conversations",
       "session.get_conversation",

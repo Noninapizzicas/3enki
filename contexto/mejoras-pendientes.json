@@ -53,24 +53,34 @@
       "id": "centralizar-tools-ai-gateway",
       "titulo": "Centralizar tool loop en ai-gateway (eliminar duplicación)",
       "prioridad": "media",
-      "estado": "pendiente",
+      "estado": "descartado",
       "fecha_propuesta": "2026-02-04",
+      "fecha_resolucion": "2026-02-10",
       "descripcion": "Actualmente el tool loop (agentic loop) está en chat-ai-bridge. ai-gateway tiene código de tools que NO se usa (~360 líneas). El plan original (chat-refactoring.json option_a) proponía centralizar todo en ai-gateway con execute_tools=true",
-      "beneficios": [
-        "Eliminar duplicación de lógica de tools entre chat-ai-bridge y ai-gateway",
-        "ai-gateway manejaría diferencias entre providers automáticamente",
-        "chat-ai-bridge se simplificaría eliminando el agentic loop interno"
-      ],
-      "implementacion": {
-        "actual": "chat-ai-bridge maneja el tool loop internamente (option_b del plan)",
-        "propuesto": "ai-gateway acepta execute_tools=true y ejecuta loop interno (option_a del plan)",
-        "nota": "option_b se eligió por necesidad de control granular de streaming post-hoc y tool status"
-      },
+      "nota_resolucion": "En vez de mover el tool loop, se unificó el REGISTRO de tools: ToolManager ahora importa de ModuleLoader.toolsRegistry en modo unificado (ver unificar-tool-registries)",
       "archivos_afectados": [
         "modules/ai-gateway/index.js",
         "modules/chat-ai-bridge/index.js"
+      ]
+    },
+    {
+      "id": "unificar-tool-registries",
+      "titulo": "Unificar registros de tools (ModuleLoader + ToolManager)",
+      "prioridad": "alta",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-02-10",
+      "fecha_implementacion": "2026-02-10",
+      "descripcion": "Había DOS sistemas de tools desconectados: ModuleLoader.toolsRegistry (chat) y ai-agent-framework/ToolManager (agentes). ToolManager v2.0.0 ahora importa tools de moduleLoader en modo unificado, manteniendo fallback standalone",
+      "implementacion": {
+        "modo_unificado": "ToolManager importa ALL tools de moduleLoader.toolsRegistry + registra 13 builtins únicos de agentes + 7 aliases backward-compatible",
+        "modo_standalone": "Fallback original si moduleLoader no está disponible",
+        "inyeccion": "ai-agent-framework/index.js pasa context.moduleLoader a toolManager.setModuleLoader()"
+      },
+      "archivos_modificados": [
+        "modules/ai-agent-framework/tool-manager.js",
+        "modules/ai-agent-framework/index.js"
       ],
-      "cuando_implementar": "Cuando se necesite soporte multi-provider para tools o se refactorice el streaming"
+      "resultado": "Chat y agentes comparten el mismo registro de tools. Agentes tienen 13 tools adicionales únicos"
     },
     {
       "id": "streaming-nativo-sse",

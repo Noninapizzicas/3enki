@@ -37,6 +37,14 @@ class PromptComposerModule {
     this.managedPromptsCacheTime = null;
     this.CACHE_TTL = 60000; // 1 minute cache
 
+    // Project context cache: avoids RPC per turn (keyed by projectId)
+    this._projectContextCache = new Map();
+    this._inheritedContextCache = new Map();
+    this.PROJECT_CACHE_TTL = 300000; // 5 minutes
+
+    // Active project tracking (event-driven invalidation)
+    this.activeProjectId = null;
+
     // Unsubscribe tracking for cleanup
     this.unsubscribes = [];
 
@@ -53,6 +61,7 @@ class PromptComposerModule {
     this.eventBus = context.eventBus;
     this.uiHandler = context.uiHandler;
     this.config = context.config || {};
+    this.moduleLoader = context.moduleLoader || null;
 
     this.logger.info('prompt-composer.loading', {
       module: this.name,
@@ -111,7 +120,7 @@ class PromptComposerModule {
   // ==========================================
 
   loadDefaultTemplates() {
-    // Template: assistant básico
+    // Template: assistant básico (used as fallback)
     this.templates.set('default', {
       id: 'default',
       name: 'Asistente General',
@@ -120,50 +129,28 @@ class PromptComposerModule {
     });
 
     // Template: con contexto de proyecto
+    // NOTE: Project Context section is auto-added by composeSystemPrompt — don't duplicate here
     this.templates.set('project-aware', {
       id: 'project-aware',
       name: 'Asistente con Contexto',
       prompt: `You are a helpful AI assistant working on the project "{{project_name}}".
-
-{{#if project_description}}
-Project Description: {{project_description}}
-{{/if}}
-
 Current date: {{date}}`,
-      variables: ['project_name', 'project_description', 'date']
+      variables: ['project_name', 'date']
     });
 
     // Template: desarrollador
+    // NOTE: Project Context auto-added by composeSystemPrompt — only include dev guidelines here
     this.templates.set('developer', {
       id: 'developer',
       name: 'Asistente de Desarrollo',
       prompt: `You are an expert software developer assistant.
-
-## Project Context
-- **Project**: {{project_name}}
-- **Files**: {{file_count}} files ({{storage_size}})
 
 ## Guidelines
 - Write clean, maintainable code
 - Follow project conventions
 - Explain your reasoning when making technical decisions
 - Consider security and performance implications`,
-      variables: ['project_name', 'file_count', 'storage_size']
-    });
-
-    // Template: con tools
-    this.templates.set('tools-enabled', {
-      id: 'tools-enabled',
-      name: 'Asistente con Herramientas',
-      prompt: `You are a helpful AI assistant with access to {{tools_count}} tool(s).
-
-{{#if tools_description}}
-## Available Tools
-{{tools_description}}
-{{/if}}
-
-Use these tools when appropriate to provide accurate and helpful responses.`,
-      variables: ['tools_count', 'tools_description']
+      variables: []
     });
 
     // Template: administrador del sistema
@@ -269,6 +256,26 @@ Fecha actual: {{date}}`,
     );
     this.unsubscribes.push(unsubInheritedContext);
 
+    // Subscribe to project lifecycle for cache invalidation
+    const unsubActivated = await this.eventBus.subscribe(
+      'project.activated',
+      (event) => {
+        const data = event.data || event;
+        this.activeProjectId = data.project_id;
+        this._projectContextCache.delete(data.project_id);
+        this._inheritedContextCache.delete(data.project_id);
+      }
+    );
+    this.unsubscribes.push(unsubActivated);
+
+    const unsubDeactivated = await this.eventBus.subscribe(
+      'project.deactivated',
+      () => {
+        this.activeProjectId = null;
+      }
+    );
+    this.unsubscribes.push(unsubDeactivated);
+
     this.logger.info('prompt-composer.events.subscribed', {
       events: [
         'prompt.compose.request',
@@ -276,7 +283,9 @@ Fecha actual: {{date}}`,
         'storage.info.response',
         'prompt.get.response',
         'prompt.list.response',
-        'context.full.response'
+        'context.full.response',
+        'project.activated',
+        'project.deactivated'
       ]
     });
   }
@@ -347,11 +356,17 @@ Fecha actual: {{date}}`,
         }
       }
 
+      // Load tools info for system prompt (so the AI knows its capabilities)
+      let effectiveTools = tools || null;
+      if (include_tools && !effectiveTools && this.moduleLoader) {
+        effectiveTools = this.moduleLoader.getToolsForAI();
+      }
+
       // Compose the prompt (with inherited context if available)
       const composedPrompt = this.composeSystemPrompt(
         { system_prompt: effectiveBasePrompt },
         projectContext,
-        include_tools ? tools : null,
+        effectiveTools,
         inheritedContext // Phase 5
       );
 
@@ -605,6 +620,13 @@ Fecha actual: {{date}}`,
       };
     }
 
+    // Check cache first — project context rarely changes during a conversation
+    const cached = this._projectContextCache.get(projectId);
+    if (cached && (Date.now() - cached._ts < this.PROJECT_CACHE_TTL)) {
+      this.logger.debug('prompt-composer.context.cache_hit', { projectId });
+      return cached;
+    }
+
     this.logger.debug('prompt-composer.context.loading', { correlationId, projectId });
 
     const requestId = crypto.randomUUID();
@@ -665,8 +687,12 @@ Fecha actual: {{date}}`,
       project_name: projectData?.name || 'Unknown Project',
       project_description: projectData?.description || '',
       storage_info: storageInfo,
-      metadata: projectData?.metadata || {}
+      metadata: projectData?.metadata || {},
+      _ts: Date.now()
     };
+
+    // Cache for subsequent turns in the same conversation
+    this._projectContextCache.set(projectId, context);
 
     // Publish context loaded event for interested subscribers
     await this.eventBus.publish('prompt.context.loaded', {
@@ -689,6 +715,13 @@ Fecha actual: {{date}}`,
   async loadInheritedContext(projectId, correlationId) {
     if (!projectId) {
       return null;
+    }
+
+    // Check cache first — inherited context changes even less frequently
+    const cached = this._inheritedContextCache.get(projectId);
+    if (cached !== undefined && (Date.now() - (cached?._ts || 0) < this.PROJECT_CACHE_TTL)) {
+      this.logger.debug('prompt-composer.inherited_context.cache_hit', { projectId });
+      return cached;
     }
 
     // Skip if inherited context is disabled in config
@@ -720,6 +753,7 @@ Fecha actual: {{date}}`,
     try {
       const inheritedContext = await contextPromise;
       if (inheritedContext) {
+        inheritedContext._ts = Date.now();
         this.logger.debug('prompt-composer.inherited_context.loaded', {
           correlationId,
           projectId,
@@ -729,6 +763,8 @@ Fecha actual: {{date}}`,
           sharedContextCount: inheritedContext.sharedContext?.length || 0
         });
       }
+      // Cache (even null — avoids RPC when project has no relations)
+      this._inheritedContextCache.set(projectId, inheritedContext);
       return inheritedContext;
     } catch (error) {
       this.logger.warn('prompt-composer.inherited_context.failed', {
@@ -812,29 +848,33 @@ Fecha actual: {{date}}`,
       }
     }
 
-    // Add tools info if enabled and tools are available
+    // Add tools summary if enabled and tools are available
+    // Summarize by category to save tokens (listing 100+ tools individually is wasteful)
     if ((this.config.includeTools !== false) && tools && tools.length > 0) {
       const toolsSection = [];
-      toolsSection.push('## Available Tools');
-      toolsSection.push(`You have access to ${tools.length} tool(s) that you can call to help the user:`);
+      toolsSection.push('## Capabilities');
+      toolsSection.push(`You have ${tools.length} tools available. Key capabilities:`);
 
+      // Group tools by prefix (fs.*, db.*, telegram.*, etc.)
+      const groups = new Map();
       for (const tool of tools) {
-        const name = tool.function?.name || tool.name;
-        const desc = tool.function?.description || tool.description || '';
-        toolsSection.push(`- **${name}**: ${desc}`);
+        const name = tool.function?.name || tool.name || '';
+        const prefix = name.includes('.') ? name.split('.')[0] : name.split('_')[0];
+        if (!groups.has(prefix)) groups.set(prefix, []);
+        groups.get(prefix).push(name);
       }
 
-      toolsSection.push('\nUse these tools when appropriate to provide accurate and helpful responses.');
+      for (const [prefix, names] of groups) {
+        if (names.length === 1) {
+          toolsSection.push(`- **${names[0]}**`);
+        } else {
+          toolsSection.push(`- **${prefix}**: ${names.join(', ')}`);
+        }
+      }
+
+      toolsSection.push('\nCall tools proactively when they help answer the user accurately.');
       sections.push(toolsSection.join('\n'));
     }
-
-    // Add filesystem guidelines (standard for all prompts)
-    const fsSection = [];
-    fsSection.push('## Filesystem Guidelines');
-    fsSection.push('When saving files, organize them according to the context of what we are working on.');
-    fsSection.push('Create directories that reflect the current task or theme.');
-    fsSection.push('Avoid generic names like `temp/`, `output/`, `files/`.');
-    sections.push(fsSection.join('\n'));
 
     // Combine all sections
     return sections.join('\n\n');

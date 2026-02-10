@@ -31,6 +31,8 @@
     dependencies: string[];
     installed: boolean;
     handlersAvailable: boolean;
+    subProjectId: string | null;
+    subProjectName: string | null;
   }
 
   // Props
@@ -236,7 +238,15 @@
               <span class="feature-icon">{feat.icon}</span>
               <span class="feature-info">
                 <span class="feature-name">{feat.label}</span>
-                <span class="feature-desc">{feat.installed ? 'Instalado' : feat.description}</span>
+                <span class="feature-desc">
+                  {#if feat.installed && feat.subProjectName}
+                    {feat.subProjectName}
+                  {:else if feat.installed}
+                    Instalado
+                  {:else}
+                    {feat.description}
+                  {/if}
+                </span>
               </span>
               {#if !feat.handlersAvailable && !feat.installed}
                 <span class="warn-badge">sin handlers</span>

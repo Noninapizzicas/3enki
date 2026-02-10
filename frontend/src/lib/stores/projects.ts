@@ -259,6 +259,8 @@ export interface FeatureInfo {
   dependencies: string[];
   installed: boolean;
   handlersAvailable: boolean;
+  subProjectId: string | null;
+  subProjectName: string | null;
 }
 
 export async function listFeatures(projectId?: string): Promise<FeatureInfo[]> {

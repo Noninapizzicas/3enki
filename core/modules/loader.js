@@ -1015,6 +1015,15 @@ class ModuleLoader {
       throw new Error(`Tool not found: ${toolName}`);
     }
 
+    // Validate required parameters against schema
+    const params = tool.parameters;
+    if (params?.required && Array.isArray(params.required)) {
+      const missing = params.required.filter(p => args[p] === undefined);
+      if (missing.length > 0) {
+        throw new Error(`Tool '${toolName}' missing required params: ${missing.join(', ')}`);
+      }
+    }
+
     if (this.logger) {
       this.logger.info('tool.executing', {
         tool: toolName,

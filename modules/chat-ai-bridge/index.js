@@ -561,8 +561,8 @@ class ChatAiBridgeModule {
     await this.eventBus.publish(EVENTS.AI.CHAT_REQUEST, {
       request_id: requestId,
       messages,
-      tools: use_tools,
-      execute_tools: use_tools,
+      tools: use_tools ? true : false,       // true = load from moduleLoader
+      execute_tools: use_tools ? true : false,
       max_tool_iterations: this.config.maxToolIterations || 10,
       provider: 'auto',
       stream: canStream,

@@ -1,105 +1,111 @@
 {
-  "_VERSION": "1.0.0",
+  "_VERSION": "2.0.0",
   "_CREATED": "2026-02-10",
-  "_DESCRIPTION": "Sistema de blueprints y features para composición de proyectos",
+  "_UPDATED": "2026-02-10",
+  "_DESCRIPTION": "Sistema de blueprints y features: composición de proyectos con subproyectos + 5 fases PM",
 
   "resumen": {
-    "que_es": "Sistema para añadir módulos/funcionalidades a proyectos existentes mediante blueprints declarativos",
-    "principio": "Todo inline dentro del proyecto raíz. Sin subproyectos. Un proyecto = un negocio con N módulos.",
+    "que_es": "Sistema para añadir módulos a un negocio mediante blueprints declarativos. Cada módulo crea un subproyecto aislado.",
+    "principio": "Proyecto raíz = negocio. Cada feature = subproyecto con su propio ciclo de vida. Agrupados en un sistema PM.",
+    "por_que_subproyectos": [
+      "Aislamiento: fallo en facturas no afecta a pizzepos",
+      "Ciclo de vida independiente por módulo",
+      "Las 5 fases de PM trabajan a pleno (links, deps, sistemas, contexto compartido, heredado)",
+      "Escala con la complejidad del negocio",
+      "Cada subproyecto tiene sus propios handlers, config, storage"
+    ],
     "donde_vive": "Backend en modules/project-manager/index.js, blueprints en blueprints/project-types/*.json",
-    "flujo": "UI → store (listFeatures/addFeatures) → MQTT → project-manager → filesystem + BD"
+    "flujo": "UI → store → MQTT → project-manager → createProject + createSystem + addProjectToSystem + addDependency + linkProjects"
+  },
+
+  "arquitectura": {
+    "estructura_ejemplo": {
+      "negocio": "Pepone Pizzicería",
+      "resultado": {
+        "sistema": "Pepone Pizzicería (sistema PM)",
+        "proyecto_raiz": "Pepone Pizzicería (role: root) — metadata.features=['pizzepos','facturas']",
+        "subproyecto_1": "PizzePOS Pepone Pizzicería (role: pizzepos) — handlers, config, storage propios",
+        "subproyecto_2": "Facturas Pepone Pizzicería (role: facturas) — handlers, config, storage propios",
+        "relaciones": [
+          "link: Pepone → PizzePOS Pepone (related_to, 'Módulo PizzePOS')",
+          "link: Pepone → Facturas Pepone (related_to, 'Módulo Facturas')",
+          "dependency: Facturas Pepone → PizzePOS Pepone (si facturas depende de pizzepos)"
+        ]
+      },
+      "filesystem": {
+        "data/projects/pepone-pizziceria/": "Proyecto raíz (config, handlers base)",
+        "data/projects/pizzepos-pepone-pizziceria/": "Subproyecto PizzePOS con storage/cartas, handlers, config",
+        "data/projects/facturas-pepone-pizziceria/": "Subproyecto Facturas con storage/procesados, etc."
+      }
+    },
+    "fases_pm_usadas": {
+      "fase_1_links": "Cada subproyecto se vincula al raíz con linkProjects(root, sub, 'related_to')",
+      "fase_2_dependencies": "blueprint.dependencies[] crea addDependency() entre subproyectos del mismo sistema",
+      "fase_3_systems": "Auto-crea sistema con nombre del negocio. Raíz role='root', subproyectos role=featureId",
+      "fase_4_shared_context": "Disponible entre subproyectos del sistema (compartir conversaciones)",
+      "fase_5_inherited_context": "getFullProjectContext() retorna todo: sistema, siblings, deps, links, shared context"
+    }
   },
 
   "blueprint_schema": {
     "ubicacion": "blueprints/project-types/{feature-id}.json",
     "campos": {
       "id": { "tipo": "string", "requerido": true, "descripcion": "Identificador único del módulo" },
-      "label": { "tipo": "string", "requerido": true, "descripcion": "Nombre visible en UI" },
+      "label": { "tipo": "string", "requerido": true, "descripcion": "Nombre visible en UI y en nombre del subproyecto" },
       "icon": { "tipo": "string", "requerido": false, "descripcion": "Emoji o icono" },
       "description": { "tipo": "string", "requerido": false, "descripcion": "Descripción corta" },
-      "dependencies": { "tipo": "string[]", "requerido": false, "default": "[]", "descripcion": "IDs de features que deben estar instaladas antes" },
-      "directories": { "tipo": "string[]", "requerido": false, "descripcion": "Directorios a crear dentro del proyecto" },
-      "config": { "tipo": "object", "requerido": false, "descripcion": "Config a mergear en config/config.json del proyecto. Soporta {{slug}}" },
+      "dependencies": { "tipo": "string[]", "requerido": false, "default": "[]", "descripcion": "IDs de features que deben estar instaladas. Se crean dependencies PM entre subproyectos" },
+      "directories": { "tipo": "string[]", "requerido": false, "descripcion": "Directorios a crear dentro del subproyecto" },
+      "config": { "tipo": "object", "requerido": false, "descripcion": "Config para config/config.json del subproyecto. Soporta {{slug}}" },
       "copyHandlersFrom": { "tipo": "string", "requerido": false, "descripcion": "Slug del proyecto template del cual copiar handlers/*.js" },
-      "initialFiles": { "tipo": "object", "requerido": false, "descripcion": "Archivos seed a crear. Clave = ruta relativa, valor = contenido JSON" }
-    },
-    "ejemplo_minimo": {
-      "id": "mi-modulo",
-      "label": "Mi Módulo",
-      "directories": ["storage/datos"],
-      "config": { "miModulo": { "enabled": true } }
+      "initialFiles": { "tipo": "object", "requerido": false, "descripcion": "Archivos seed. Clave = ruta relativa, valor = contenido JSON" }
     }
   },
 
   "handlers_mqtt": {
     "list-features": {
       "request": "mqttRequest('project', 'list-features', { projectId? })",
-      "descripcion": "Lista features disponibles. Si se pasa projectId, indica cuáles ya tiene instaladas.",
+      "descripcion": "Lista features disponibles. Con projectId indica installed + subproyecto asociado.",
       "response": {
-        "features": [
-          {
-            "id": "string",
-            "label": "string",
-            "icon": "string",
-            "description": "string",
-            "dependencies": ["string"],
-            "installed": "boolean — true si ya está en metadata.features del proyecto",
-            "handlersAvailable": "boolean — true si el proyecto template de handlers existe"
-          }
-        ],
-        "projectId": "string|null"
+        "features": [{
+          "id": "string",
+          "label": "string",
+          "icon": "string",
+          "description": "string",
+          "dependencies": ["string"],
+          "installed": "boolean",
+          "handlersAvailable": "boolean",
+          "subProjectId": "string|null — ID del subproyecto creado",
+          "subProjectName": "string|null — nombre del subproyecto"
+        }],
+        "projectId": "string|null",
+        "systemProjects": "[{id, name, role, features}] — todos los subproyectos del sistema"
       }
     },
     "add-features": {
       "request": "mqttRequest('project', 'add-features', { id, features: ['pizzepos', 'facturas'] })",
-      "descripcion": "Aplica features a un proyecto existente. Todo inline.",
-      "validaciones": [
-        "Proyecto debe existir (404)",
-        "Al menos una feature requerida (400)",
-        "Features ya instaladas se ignoran (skipped en response)",
-        "Dependencias entre features se validan (400 MISSING_DEPENDENCIES)",
-        "Handlers template se validan (warning si no existe, no fatal)"
-      ],
+      "descripcion": "Crea subproyectos, sistema, links y dependencias usando infraestructura PM completa.",
       "proceso": [
-        "1. Detectar features ya instaladas → skip",
-        "2. Cargar blueprints de disco",
-        "3. Validar dependencias entre features",
-        "4. Para cada feature: initializeFromBlueprint (dirs, handlers, seed files)",
-        "5. Mergear config con config existente del proyecto",
-        "6. Actualizar metadata.features en BD"
+        "1. Validar proyecto existe y features no duplicadas",
+        "2. Cargar blueprints y validar dependencias entre features",
+        "3. FASE 3: Auto-crear sistema si no existe (nombre = proyecto raíz)",
+        "4. FASE 3: Agregar raíz al sistema con role='root'",
+        "5. Por cada feature:",
+        "   a. Crear subproyecto '{Label} {NombreRaíz}' (createProject)",
+        "   b. Inicializar filesystem (initializeFromBlueprint)",
+        "   c. FASE 3: Agregar al sistema con role=featureId",
+        "   d. FASE 1: Link raíz → subproyecto (related_to)",
+        "   e. FASE 2: Dependencies entre subproyectos según blueprint.dependencies",
+        "6. Actualizar metadata.features del proyecto raíz"
       ],
       "response": {
-        "applied": ["string — features aplicadas"],
-        "skipped": ["string — features que ya estaban instaladas"],
-        "warnings": ["{ featureId, warning } — avisos no fatales"],
-        "loadErrors": ["{ featureId, error } — blueprints que no se pudieron cargar"]
+        "applied": ["string"],
+        "createdProjects": "[{id, name, feature, systemId, role}]",
+        "systemId": "string",
+        "skipped": ["string"],
+        "warnings": "opcional",
+        "loadErrors": "opcional"
       }
-    }
-  },
-
-  "initializeFromBlueprint": {
-    "descripcion": "Método interno que materializa un blueprint en el filesystem del proyecto",
-    "pasos": [
-      "1. Crear directorios declarados en blueprint.directories",
-      "2. Escribir config.json (reemplaza {{slug}} con slug del proyecto)",
-      "3. Copiar handlers/*.js desde proyecto template (blueprint.copyHandlersFrom)",
-      "4. Crear archivos seed de blueprint.initialFiles"
-    ],
-    "ubicacion": "modules/project-manager/index.js:103-157"
-  },
-
-  "integracion_con_project_manager": {
-    "metadata_features": {
-      "donde": "project.metadata.features (array de strings en BD)",
-      "que_guarda": "Lista de feature IDs aplicados al proyecto",
-      "uso": "list-features consulta metadata para marcar installed: true"
-    },
-    "relacion_5_fases": {
-      "fase_1_links": "Features NO crean links. Links son entre PROYECTOS, no módulos internos.",
-      "fase_2_dependencies": "blueprint.dependencies valida entre features (no entre proyectos). Si feature A requiere feature B, B debe estar instalada antes.",
-      "fase_3_systems": "Un proyecto con features puede pertenecer a un sistema. El sistema no sabe qué features tiene.",
-      "fase_4_shared_context": "Contexto compartido es entre proyectos. Las features comparten contexto implícitamente (mismo proyecto).",
-      "fase_5_inherited_context": "getFullProjectContext() incluye metadata.features, así la IA sabe qué módulos tiene el proyecto."
     }
   },
 
@@ -107,61 +113,37 @@
     "componente": "frontend/src/lib/modules/project/ProjectPanel.svelte",
     "store": "frontend/src/lib/stores/projects.ts",
     "flujo_ui": [
-      "1. Al abrir panel de proyectos, se cargan features con listFeaturesMqtt(activeProjectId)",
-      "2. Sección 'Módulos' (colapsable) muestra checklist",
-      "3. Features instaladas: ✓ con fondo verde, deshabilitadas",
+      "1. Sección 'Módulos' (colapsable) en panel de proyectos",
+      "2. Carga features con listFeaturesMqtt(activeProjectId)",
+      "3. Features instaladas: ✓ + nombre del subproyecto + disabled",
       "4. Features disponibles: ☐/☑ para seleccionar",
-      "5. Badge 'sin handlers' si el template no existe",
-      "6. Botón 'Aplicar N módulos' ejecuta addFeaturesMqtt()",
-      "7. Tras aplicar, recarga la lista para actualizar estados"
+      "5. Badge 'sin handlers' si template no existe",
+      "6. Botón 'Aplicar N módulos' → crea subproyectos + sistema",
+      "7. Tras aplicar, recarga para mostrar nuevos subproyectos"
     ]
   },
 
-  "blueprints_existentes": {
-    "pizzepos": {
-      "archivo": "blueprints/project-types/pizzepos.json",
-      "crea": ["storage/cartas/", "storage/ingredientes.json", "storage/programacion.json"],
-      "config": { "pizzepos.enabled": true },
-      "handlers_de": "pizzepos",
-      "dependencies": []
-    },
-    "facturas": {
-      "archivo": "blueprints/project-types/facturas.json",
-      "crea": ["storage/procesados/", "storage/pendientes/", "storage/preprocesadas/", "storage/ocr/", "storage/estructuradas/", "storage/export/"],
-      "config": { "facturas.enabled": true, "facturas.gmail": "...", "facturas.processing": "..." },
-      "handlers_de": "facturas-nonina",
-      "dependencies": []
-    }
-  },
-
   "como_anadir_nuevo_modulo": [
-    "1. Crear blueprints/project-types/mi-modulo.json con el schema definido arriba",
-    "2. Si necesita handlers, crear un proyecto template con handlers/ como fuente (copyHandlersFrom)",
-    "3. El módulo aparece automáticamente en la UI al abrir 'Módulos'",
-    "4. Si depende de otro módulo, añadir su ID en dependencies[]"
+    "1. Crear blueprints/project-types/mi-modulo.json",
+    "2. Si necesita handlers template, crear proyecto con handlers/ como fuente",
+    "3. Si depende de otro módulo, añadir su ID en dependencies[]",
+    "4. El módulo aparece automáticamente en la UI",
+    "5. Al aplicarlo: se crea subproyecto, se agrega al sistema, se crean links y deps"
   ],
 
   "ejemplo_flujo_completo": {
     "escenario": "Nuevo negocio Pepone Pizzicería con PizzePOS y Facturas",
     "pasos": [
-      "1. Crear proyecto 'Pepone Pizzicería' (nombre, color) → data/projects/pepone-pizziceria/",
+      "1. Crear proyecto 'Pepone Pizzicería'",
       "2. Activar proyecto",
-      "3. Abrir panel Proyectos → sección Módulos",
-      "4. Seleccionar ☑ PizzePOS ☑ Facturas",
-      "5. Aplicar 2 módulos",
-      "6. Resultado en data/projects/pepone-pizziceria/:",
-      "   ├── config/config.json (pizzepos + facturas mergeados)",
-      "   ├── handlers/ (copiados de pizzepos + facturas-nonina)",
-      "   ├── storage/cartas/",
-      "   ├── storage/ingredientes.json",
-      "   ├── storage/programacion.json",
-      "   ├── storage/procesados/",
-      "   ├── storage/pendientes/",
-      "   ├── storage/preprocesadas/",
-      "   ├── storage/ocr/",
-      "   ├── storage/estructuradas/",
-      "   └── storage/export/",
-      "7. metadata.features = ['pizzepos', 'facturas'] en BD"
+      "3. Abrir Módulos → ☑ PizzePOS ☑ Facturas → Aplicar",
+      "4. Se crea sistema 'Pepone Pizzicería'",
+      "5. Pepone se agrega al sistema (role: root)",
+      "6. Se crea subproyecto 'PizzePOS Pepone Pizzicería' → sistema (role: pizzepos)",
+      "7. Se crea subproyecto 'Facturas Pepone Pizzicería' → sistema (role: facturas)",
+      "8. Links: Pepone → PizzePOS, Pepone → Facturas",
+      "9. getFullProjectContext('pepone') retorna: sistema con siblings, links, deps",
+      "10. La IA sabe que Pepone tiene PizzePOS y Facturas como módulos"
     ]
   }
 }

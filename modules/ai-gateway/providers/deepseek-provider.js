@@ -179,6 +179,7 @@ class DeepSeekProvider extends BaseProvider {
     // Include tool_calls if present (transform names back: underscore → dot)
     if (toolCalls && toolCalls.length > 0) {
       result.tool_calls = this.restoreToolNames(toolCalls);
+      result._raw_tool_calls = toolCalls; // preserve API-format names for conversation history
     }
 
     return result;

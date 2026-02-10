@@ -739,10 +739,11 @@ class AIGatewayModule {
         }
 
         // Add assistant message with tool calls to conversation
+        // Use raw API names (_raw_tool_calls) so the provider sees its own names echoed back
         messages.push({
           role: 'assistant',
           content: result.content || null,
-          tool_calls: result.tool_calls
+          tool_calls: result._raw_tool_calls || result.tool_calls
         });
 
         // Add tool results to conversation

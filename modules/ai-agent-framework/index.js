@@ -55,6 +55,11 @@ class AIAgentFrameworkModule {
       this.toolManager.setProviderRegistry(context.providerRegistry);
     }
 
+    // Inject moduleLoader for unified tool access (shares tools with chat/ai-gateway)
+    if (context.moduleLoader) {
+      this.toolManager.setModuleLoader(context.moduleLoader);
+    }
+
     await this.toolManager.initialize();
 
     // Get dependencies from other modules

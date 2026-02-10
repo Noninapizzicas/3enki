@@ -179,6 +179,7 @@ class DeepSeekProvider extends BaseProvider {
     // Include tool_calls if present (transform names back: underscore → dot)
     if (toolCalls && toolCalls.length > 0) {
       result.tool_calls = this.restoreToolNames(toolCalls);
+      result._raw_tool_calls = toolCalls; // preserve API-format names for conversation history
     }
 
     return result;
@@ -187,15 +188,28 @@ class DeepSeekProvider extends BaseProvider {
   /**
    * Transform tool names for DeepSeek API (dot → underscore)
    * DeepSeek only accepts pattern: ^[a-zA-Z0-9_-]+$
+   *
+   * Stores a reverse map so restoreToolNames can restore ONLY the names
+   * that were actually translated (avoids corrupting names with underscores).
    */
   translateToolNames(tools) {
+    // Reset reverse map for this request
+    this._toolNameMap = new Map();
+
     return tools.map(tool => {
       if (tool.type === 'function' && tool.function?.name) {
+        const original = tool.function.name;
+        const sanitized = original.replace(/\./g, '_');
+
+        if (sanitized !== original) {
+          this._toolNameMap.set(sanitized, original);
+        }
+
         return {
           ...tool,
           function: {
             ...tool.function,
-            name: tool.function.name.replace(/\./g, '_')
+            name: sanitized
           }
         };
       }
@@ -204,14 +218,18 @@ class DeepSeekProvider extends BaseProvider {
   }
 
   /**
-   * Restore tool names from DeepSeek response (underscore → dot)
+   * Restore tool names from DeepSeek response using the reverse map.
+   * Only restores names that were actually translated (dot→underscore).
+   * Names that originally had underscores (gmail_send, http_request) stay unchanged.
    */
   restoreToolNames(toolCalls) {
+    const map = this._toolNameMap || new Map();
+
     return toolCalls.map(tc => ({
       ...tc,
       function: {
         ...tc.function,
-        name: tc.function?.name?.replace(/_/g, '.') || tc.function?.name
+        name: map.get(tc.function?.name) || tc.function?.name
       }
     }));
   }

@@ -290,12 +290,14 @@ class ProviderLoader {
       const unsubscribe = this.eventBus.subscribe(eventName, async (event) => {
         const requestId = event.data?.request_id || event.request_id || this.generateRequestId();
         let input = { ...(event.data || event) };
+        const correlationId = input._correlationId;
 
         // Buscar función por evento
         const fnInfo = this.registry.findByEvent(eventName);
         if (!fnInfo) {
           await this.eventBus.publish(responseEvent, {
             request_id: requestId,
+            _correlationId: correlationId,
             success: false,
             error: `Handler not found for event: ${eventName}`
           });
@@ -310,6 +312,7 @@ class ProviderLoader {
           } catch (credError) {
             await this.eventBus.publish(responseEvent, {
               request_id: requestId,
+              _correlationId: correlationId,
               success: false,
               error: `Credential resolution failed: ${credError.message}`
             });
@@ -327,6 +330,7 @@ class ProviderLoader {
         // Publicar respuesta
         await this.eventBus.publish(responseEvent, {
           request_id: requestId,
+          _correlationId: correlationId,
           ...result
         });
       });

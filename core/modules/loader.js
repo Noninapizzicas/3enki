@@ -947,16 +947,20 @@ class ModuleLoader {
         throw new Error('EventBus not available');
       }
 
-      // Calculate response event name
+      const correlationId = `${fnName}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const responseEvent = eventName.replace(/\.request$/, '.response');
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
+          unsubscribe();
           reject(new Error(`Timeout waiting for ${responseEvent}`));
         }, 30000);
 
-        // Subscribe to response
         const unsubscribe = self.core.eventBus.subscribe(responseEvent, (response) => {
+          // Skip responses from other concurrent calls
+          if (response._correlationId && response._correlationId !== correlationId) {
+            return;
+          }
           clearTimeout(timeout);
           unsubscribe();
 
@@ -967,8 +971,7 @@ class ModuleLoader {
           }
         });
 
-        // Publish request
-        self.core.eventBus.publish(eventName, args);
+        self.core.eventBus.publish(eventName, { ...args, _correlationId: correlationId });
       });
     };
   }
@@ -1010,6 +1013,15 @@ class ModuleLoader {
 
     if (!tool) {
       throw new Error(`Tool not found: ${toolName}`);
+    }
+
+    // Validate required parameters against schema
+    const params = tool.parameters;
+    if (params?.required && Array.isArray(params.required)) {
+      const missing = params.required.filter(p => args[p] === undefined);
+      if (missing.length > 0) {
+        throw new Error(`Tool '${toolName}' missing required params: ${missing.join(', ')}`);
+      }
     }
 
     if (this.logger) {

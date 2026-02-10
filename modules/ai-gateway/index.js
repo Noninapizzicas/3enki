@@ -127,14 +127,16 @@ class AIGatewayModule {
     // Subscribe to events
     await this.subscribeToEvents();
 
+    const availableProviders = await this.getAvailableProviderNames();
+
     this.activity?.action('module.loaded', {
       providers_count: this.providers.size,
-      providers_available: this.getAvailableProviderNames()
+      providers_available: availableProviders
     });
 
     this.logger.info('ai-gateway.loaded', {
       providers_count: this.providers.size,
-      providers_available: this.getAvailableProviderNames()
+      providers_available: availableProviders
     });
   }
 
@@ -524,10 +526,14 @@ class AIGatewayModule {
   /**
    * Get available provider names
    */
-  getAvailableProviderNames() {
-    return Array.from(this.providers.entries())
-      .filter(async ([_, provider]) => await provider.isAvailable())
-      .map(([name, _]) => name);
+  async getAvailableProviderNames() {
+    const names = [];
+    for (const [name, provider] of this.providers.entries()) {
+      if (await provider.isAvailable()) {
+        names.push(name);
+      }
+    }
+    return names;
   }
 
   /**
@@ -1450,6 +1456,7 @@ class AIGatewayModule {
           tool_call_id: id,
           name,
           status: 'error',
+          result: `Error executing ${name}: ${error.message}`,
           error: error.message
         });
       }

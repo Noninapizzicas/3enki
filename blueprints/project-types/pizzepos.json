@@ -3,7 +3,8 @@
   "label": "PizzePOS",
   "icon": "🍕",
   "description": "Comandero, cocina y cobros",
-  "createsProject": false,
+
+  "dependencies": [],
 
   "directories": [
     "storage/cartas"

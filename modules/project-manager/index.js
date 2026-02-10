@@ -281,6 +281,7 @@ class ProjectManagerModule {
       this.uiHandler.register('project', 'get', this.handleUIGet.bind(this));
       this.uiHandler.register('project', 'create', this.handleUICreate.bind(this));
       this.uiHandler.register('project', 'add-features', this.handleUIAddFeatures.bind(this));
+      this.uiHandler.register('project', 'list-features', this.handleUIListFeatures.bind(this));
       this.uiHandler.register('project', 'update', this.handleUIUpdate.bind(this));
       this.uiHandler.register('project', 'delete', this.handleUIDelete.bind(this));
       this.uiHandler.register('project', 'activate', this.handleUIActivate.bind(this));
@@ -2773,6 +2774,72 @@ class ProjectManagerModule {
    *   false → añade dirs, handlers y config inline al proyecto
    *   true  → crea un subproyecto separado
    */
+  /**
+   * UI Handler: Lista de features/módulos disponibles
+   * Lee dinámicamente los blueprints de blueprints/project-types/*.json
+   * Si se pasa projectId, indica qué features ya tiene instaladas
+   * Request: mqttRequest('project', 'list-features', { projectId? })
+   */
+  async handleUIListFeatures(data, request) {
+    const bpDir = path.join(process.cwd(), 'blueprints', 'project-types');
+    const { projectId } = data || {};
+
+    // Obtener features ya instaladas en el proyecto (si se pasa projectId)
+    let installedFeatures = [];
+    if (projectId) {
+      const project = this.getProject(projectId);
+      if (project) {
+        installedFeatures = project.metadata?.features || [];
+      }
+    }
+
+    try {
+      const files = await fs.promises.readdir(bpDir);
+      const features = [];
+
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        try {
+          const content = JSON.parse(await fs.promises.readFile(path.join(bpDir, file), 'utf-8'));
+          const featureId = content.id || file.replace('.json', '');
+
+          // Validar si handlers template existe
+          let handlersAvailable = true;
+          if (content.copyHandlersFrom) {
+            const sourcePath = path.join(this.projectsBasePath, content.copyHandlersFrom, 'handlers');
+            try {
+              await fs.promises.access(sourcePath);
+            } catch {
+              handlersAvailable = false;
+            }
+          }
+
+          features.push({
+            id: featureId,
+            label: content.label || featureId,
+            icon: content.icon || '',
+            description: content.description || '',
+            dependencies: content.dependencies || [],
+            installed: installedFeatures.includes(featureId),
+            handlersAvailable
+          });
+        } catch (err) {
+          this.logger.warn({ file, error: err.message }, 'Invalid blueprint file, skipping');
+        }
+      }
+
+      return { features, projectId: projectId || null };
+    } catch (err) {
+      this.logger.warn({ error: err.message }, 'Could not read blueprints directory');
+      return { features: [], projectId: projectId || null };
+    }
+  }
+
+  /**
+   * UI Handler: Añadir features/módulos a un proyecto existente
+   * Valida dependencias entre features, detecta duplicados, mergea config.
+   * Request: mqttRequest('project', 'add-features', { id, features: ['pizzepos', 'facturas'] })
+   */
   async handleUIAddFeatures(data, request) {
     const { id, features } = data;
     const correlationId = crypto.randomUUID();
@@ -2791,62 +2858,84 @@ class ProjectManagerModule {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'At least one feature is required' };
     }
 
-    const basePath = project.base_path;
-    const slug = this.slugify(project.name);
-    const projectName = project.name;
+    // Detectar features ya instaladas
+    const existingFeatures = project.metadata?.features || [];
+    const newFeatures = selectedFeatures.filter(f => !existingFeatures.includes(f));
+    if (newFeatures.length === 0) {
+      return { applied: [], skipped: selectedFeatures, reason: 'all_already_installed' };
+    }
 
-    const inlineFeatures = [];
-    const createdProjects = [];
-    const mergedConfig = {};
+    // Cargar todos los blueprints solicitados
+    const bpDir = path.join(process.cwd(), 'blueprints', 'project-types');
+    const blueprints = new Map();
+    const loadErrors = [];
 
-    for (const featureId of selectedFeatures) {
+    for (const featureId of newFeatures) {
       try {
-        const bpPath = path.join(process.cwd(), 'blueprints', 'project-types', `${featureId}.json`);
-        const blueprint = JSON.parse(await fs.promises.readFile(bpPath, 'utf-8'));
-
-        if (blueprint.createsProject) {
-          // Crea subproyecto separado
-          const subName = `${blueprint.label} ${projectName}`;
-          const subSlug = this.slugify(subName);
-
-          const subProject = await this.createProject(
-            subName,
-            blueprint.description || '',
-            {
-              color: project.metadata?.color || 'blue',
-              icon: blueprint.icon || '📁',
-              workspaceType: featureId,
-              parentProjectId: project.id,
-              features: [featureId]
-            },
-            correlationId
-          );
-
-          const subBasePath = subProject.base_path;
-          await fs.promises.mkdir(path.join(subBasePath, 'config'), { recursive: true });
-          await fs.promises.mkdir(path.join(subBasePath, 'handlers'), { recursive: true });
-          await this.initializeFromBlueprint(subBasePath, subSlug, blueprint, correlationId);
-
-          createdProjects.push({ id: subProject.id, name: subName, feature: featureId });
-          this.logger.info({ correlationId, featureId, subProjectId: subProject.id }, 'Feature sub-project created');
-        } else {
-          // Añade estructura inline al proyecto
-          await this.initializeFromBlueprint(basePath, slug, blueprint, correlationId);
-
-          if (blueprint.config) {
-            Object.assign(mergedConfig, blueprint.config);
-          }
-
-          inlineFeatures.push(featureId);
-        }
+        const bpPath = path.join(bpDir, `${featureId}.json`);
+        blueprints.set(featureId, JSON.parse(await fs.promises.readFile(bpPath, 'utf-8')));
       } catch (err) {
-        this.logger.warn({ correlationId, featureId, error: err.message }, 'Feature blueprint not found, skipping');
+        loadErrors.push({ featureId, error: err.message });
       }
     }
 
-    // Escribir config mergeado para features inline
+    // Validar dependencias
+    const missingDeps = [];
+    for (const [featureId, blueprint] of blueprints) {
+      const deps = blueprint.dependencies || [];
+      for (const dep of deps) {
+        const depInstalled = existingFeatures.includes(dep) || newFeatures.includes(dep);
+        if (!depInstalled) {
+          missingDeps.push({ feature: featureId, requires: dep });
+        }
+      }
+    }
+
+    if (missingDeps.length > 0) {
+      throw {
+        status: 400,
+        code: 'MISSING_DEPENDENCIES',
+        message: `Dependencias no satisfechas: ${missingDeps.map(d => `${d.feature} requiere ${d.requires}`).join(', ')}`,
+        missingDeps
+      };
+    }
+
+    // Aplicar features
+    const basePath = project.base_path;
+    const slug = this.slugify(project.name);
+    const applied = [];
+    const warnings = [];
+    const mergedConfig = {};
+
+    for (const [featureId, blueprint] of blueprints) {
+      try {
+        // Validar handlers template
+        if (blueprint.copyHandlersFrom) {
+          const sourcePath = path.join(this.projectsBasePath, blueprint.copyHandlersFrom, 'handlers');
+          try {
+            await fs.promises.access(sourcePath);
+          } catch {
+            warnings.push({ featureId, warning: `Handlers template '${blueprint.copyHandlersFrom}' no encontrado, se omiten handlers` });
+            // Continúa sin copiar handlers — no es fatal
+          }
+        }
+
+        await this.initializeFromBlueprint(basePath, slug, blueprint, correlationId);
+
+        if (blueprint.config) {
+          Object.assign(mergedConfig, blueprint.config);
+        }
+
+        applied.push(featureId);
+        this.logger.info({ correlationId, featureId, projectId: id }, 'Feature applied');
+      } catch (err) {
+        this.logger.error({ correlationId, featureId, error: err.message }, 'Feature apply failed');
+        warnings.push({ featureId, warning: `Error aplicando: ${err.message}` });
+      }
+    }
+
+    // Mergear config con el existente
     if (Object.keys(mergedConfig).length > 0) {
-      // Leer config existente y mergear
       const configPath = path.join(basePath, 'config', 'config.json');
       let existingConfig = {};
       try {
@@ -2860,16 +2949,17 @@ class ProjectManagerModule {
       await fs.promises.writeFile(configPath, configStr, 'utf-8');
     }
 
-    // Actualizar metadata del proyecto con las features aplicadas
-    const existingFeatures = project.metadata?.features || [];
-    const updatedFeatures = [...new Set([...existingFeatures, ...inlineFeatures])];
+    // Actualizar metadata con features aplicadas
+    const updatedFeatures = [...new Set([...existingFeatures, ...applied])];
     await this.updateProject(id, {
       metadata: { ...(project.metadata || {}), features: updatedFeatures }
     }, correlationId);
 
     return {
-      applied: inlineFeatures,
-      createdProjects
+      applied,
+      skipped: selectedFeatures.filter(f => existingFeatures.includes(f)),
+      warnings: warnings.length > 0 ? warnings : undefined,
+      loadErrors: loadErrors.length > 0 ? loadErrors : undefined
     };
   }
 

@@ -248,6 +248,32 @@ export async function activateProject(id: string): Promise<void> {
 }
 
 /**
+ * Obtiene la lista de features/módulos disponibles (desde blueprints)
+ * Si se pasa projectId, indica cuáles ya están instaladas
+ */
+export interface FeatureInfo {
+  id: string;
+  label: string;
+  icon: string;
+  description: string;
+  dependencies: string[];
+  installed: boolean;
+  handlersAvailable: boolean;
+}
+
+export async function listFeatures(projectId?: string): Promise<FeatureInfo[]> {
+  try {
+    const response = await mqttRequest<{ features: FeatureInfo[] }>(
+      'project', 'list-features', { projectId: projectId || undefined }
+    );
+    return response.data.features;
+  } catch (error) {
+    console.error('[Projects] List features failed:', getErrorMessage(error));
+    return [];
+  }
+}
+
+/**
  * Añade módulos/features a un proyecto existente
  */
 export async function addFeatures(projectId: string, features: string[]): Promise<void> {

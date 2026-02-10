@@ -33,7 +33,7 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA", "GOOGLE", "GMAIL"],
+            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "GROQ", "GEMINI", "OLLAMA", "GOOGLE", "GMAIL"],
             "description": "Filtrar por proveedor (opcional)"
           }
         },
@@ -437,7 +437,7 @@
     "provider": {
       "type": "enum",
       "label": "Provider",
-      "enum": ["OPENAI", "ANTHROPIC", "DEEPSEEK", "OLLAMA", "GMAIL", "CUSTOM"],
+      "enum": ["OPENAI", "ANTHROPIC", "DEEPSEEK", "GROQ", "GEMINI", "OLLAMA", "GMAIL", "CUSTOM"],
       "required": true
     },
     "level": {

@@ -3,7 +3,8 @@
   "label": "Facturas",
   "icon": "🧾",
   "description": "Pipeline OCR + IA + CSV",
-  "createsProject": false,
+
+  "dependencies": [],
 
   "directories": [
     "storage/procesados",

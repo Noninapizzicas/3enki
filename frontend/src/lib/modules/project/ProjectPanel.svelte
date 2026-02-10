@@ -23,7 +23,15 @@
   } from '$lib/stores';
   import { PROJECT_COLORS } from '$lib/ui-core';
 
-  interface Feature { id: string; label: string; icon: string; description: string; }
+  interface Feature {
+    id: string;
+    label: string;
+    icon: string;
+    description: string;
+    dependencies: string[];
+    installed: boolean;
+    handlersAvailable: boolean;
+  }
 
   // Props
   export let panelId: string = '';
@@ -66,9 +74,13 @@
   // SUSCRIPCIÓN MQTT
   // ============================================================================
 
+  async function loadFeatures(): Promise<void> {
+    availableFeatures = await listFeaturesMqtt($activeProject?.id);
+  }
+
   onMount(async () => {
     cleanup = initProjectsSubscriptions();
-    availableFeatures = await listFeaturesMqtt();
+    await loadFeatures();
   });
   onDestroy(() => { cleanup?.(); });
 
@@ -109,7 +121,7 @@
     try {
       await addFeaturesMqtt($activeProject.id, [...selectedFeatures]);
       selectedFeatures = new Set();
-      showFeatures = false;
+      await loadFeatures(); // Recargar estado
     } catch (err) {
       console.error('[ProjectPanel] Add features failed:', err);
     } finally {
@@ -203,8 +215,8 @@
   <!-- ===== AÑADIR MÓDULOS (proyecto activo) ===== -->
   {#if $activeProject}
     <div class="features-section">
-      <button class="features-toggle" on:click={() => showFeatures = !showFeatures}>
-        <span>{showFeatures ? '▾' : '▸'} Añadir módulos</span>
+      <button class="features-toggle" on:click={() => { showFeatures = !showFeatures; if (showFeatures) loadFeatures(); }}>
+        <span>{showFeatures ? '▾' : '▸'} Módulos</span>
         <span class="features-project">{$activeProject.name}</span>
       </button>
 
@@ -214,16 +226,21 @@
             <button
               type="button"
               class="feature-btn"
-              class:selected={selectedFeatures.has(feat.id)}
-              on:click={() => toggleFeature(feat.id)}
-              title={feat.description}
+              class:installed={feat.installed}
+              class:selected={!feat.installed && selectedFeatures.has(feat.id)}
+              on:click={() => !feat.installed && toggleFeature(feat.id)}
+              disabled={feat.installed}
+              title={feat.installed ? `${feat.label} ya instalado` : feat.description}
             >
-              <span class="feature-check">{selectedFeatures.has(feat.id) ? '☑' : '☐'}</span>
+              <span class="feature-check">{feat.installed ? '✓' : selectedFeatures.has(feat.id) ? '☑' : '☐'}</span>
               <span class="feature-icon">{feat.icon}</span>
               <span class="feature-info">
                 <span class="feature-name">{feat.label}</span>
-                <span class="feature-desc">{feat.description}</span>
+                <span class="feature-desc">{feat.installed ? 'Instalado' : feat.description}</span>
               </span>
+              {#if !feat.handlersAvailable && !feat.installed}
+                <span class="warn-badge">sin handlers</span>
+              {/if}
             </button>
           {/each}
 
@@ -387,6 +404,22 @@
   .feature-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .feature-name { font-size: 0.8125rem; font-weight: 500; }
   .feature-desc { font-size: 0.6875rem; color: var(--color-text-muted, #888); }
+
+  .feature-btn.installed {
+    opacity: 0.6; cursor: default;
+    border-color: rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.05);
+  }
+  .feature-btn.installed .feature-check { color: var(--color-success, #22c55e); }
+
+  .warn-badge {
+    font-size: 0.5625rem; flex-shrink: 0;
+    padding: 0.125rem 0.3125rem;
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border-radius: 0.1875rem;
+    font-weight: 600;
+  }
 
   .btn-apply {
     padding: 0.5rem;

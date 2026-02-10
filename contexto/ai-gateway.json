@@ -1,12 +1,12 @@
 {
-  "_VERSION": "1.1.0",
+  "_VERSION": "1.2.0",
   "_CREATED": "2026-01-10",
-  "_UPDATED": "2026-01-14",
-  "_DESCRIPTION": "AI Gateway - Multi-provider LLM client",
+  "_UPDATED": "2026-02-10",
+  "_DESCRIPTION": "AI Gateway - Multi-provider LLM client (6 providers)",
 
   "_AI_INSTRUCTIONS": {
     "IMPORTANT": "ai-gateway tiene sus propios providers internos para LLMs",
-    "rule_1": "Los providers de LLM (DeepSeek, OpenAI, Anthropic, Ollama) NO van en services/",
+    "rule_1": "Los providers de LLM (DeepSeek, OpenAI, Anthropic, Groq, Gemini, Ollama) NO van en services/",
     "rule_2": "Cada provider LLM maneja sus propias peculiaridades internamente",
     "rule_3": "La transformación de datos (tools, messages) es responsabilidad del provider"
   },
@@ -18,8 +18,10 @@
     "providers_dir": "modules/ai-gateway/providers/",
     "providers": {
       "deepseek": "providers/deepseek-provider.js",
-      "openai": "providers/openai-provider.js",
       "anthropic": "providers/anthropic-provider.js",
+      "openai": "providers/openai-provider.js",
+      "groq": "providers/groq-provider.js",
+      "gemini": "providers/gemini-provider.js",
       "ollama": "providers/ollama-provider.js"
     },
     "base_class": "providers/base-provider.js"
@@ -28,9 +30,53 @@
   "provider_responsibilities": {
     "description": "Cada provider encapsula las peculiaridades de su API",
     "examples": {
-      "message_format": "Anthropic usa content blocks, OpenAI usa strings",
-      "tool_format": "Anthropic usa input_schema, OpenAI usa parameters",
-      "tool_names": "DeepSeek solo acepta [a-zA-Z0-9_-], otros aceptan dots"
+      "message_format": "Anthropic usa content blocks, Gemini usa contents/parts, OpenAI/Groq/DeepSeek usan strings",
+      "tool_format": "Anthropic usa input_schema, Gemini usa functionDeclarations, OpenAI usa parameters",
+      "tool_names": "DeepSeek solo acepta [a-zA-Z0-9_-], otros aceptan dots",
+      "auth": "OpenAI/DeepSeek/Groq: Bearer token. Anthropic: x-api-key. Gemini: x-goog-api-key"
+    }
+  },
+
+  "providers_summary": {
+    "deepseek": {
+      "priority": 1, "api_compatible": "OpenAI",
+      "modelos": ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
+      "features": ["reasoning mode (dual thinking/non-thinking)", "auto prefix caching (10x cheaper)", "tool calling"],
+      "env_keys": ["DEEPSEEK_API_KEY"]
+    },
+    "anthropic": {
+      "priority": 2, "api_compatible": "Anthropic Messages",
+      "modelos": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
+      "features": ["vision", "tool calling", "content blocks"],
+      "features_pendientes": ["extended thinking (adaptive)", "prompt caching", "code execution", "MCP connector"],
+      "env_keys": ["ANTHROPIC_API_KEY"]
+    },
+    "openai": {
+      "priority": 3, "api_compatible": "OpenAI",
+      "modelos": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+      "features": ["vision", "tool calling", "structured outputs"],
+      "features_pendientes": ["Responses API (agentic loop)", "vector stores", "file search", "code interpreter"],
+      "env_keys": ["OPENAI_API_KEY"]
+    },
+    "groq": {
+      "priority": 4, "api_compatible": "OpenAI",
+      "modelos": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"],
+      "features": ["ultra-baja latencia (LPU)", "tool calling", "streaming"],
+      "features_pendientes": ["compound models (server-side web search + code execution)"],
+      "env_keys": ["GROQ_API_KEY"]
+    },
+    "gemini": {
+      "priority": 5, "api_compatible": "Gemini (contents/parts)",
+      "modelos": ["gemini-2.5-flash", "gemini-2.5-pro"],
+      "features": ["vision", "tool calling", "1M context window", "streaming SSE"],
+      "features_pendientes": ["File Search (RAG gestionado, storage gratis)", "grounding Google Search", "code execution"],
+      "env_keys": ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+    },
+    "ollama": {
+      "priority": 6, "api_compatible": "Ollama (/api/chat)",
+      "modelos": ["llama2", "codellama", "mistral", "mixtral"],
+      "features": ["local/privado", "tool calling (modelos compatibles)", "sin coste"],
+      "env_keys": []
     }
   },
 

@@ -55,16 +55,18 @@
 
     "ai_llm": {
       "ai-gateway": {
-        "version": "1.0.0",
-        "descripcion": "Gateway unificado para múltiples proveedores LLM",
+        "version": "1.1.0",
+        "descripcion": "Gateway unificado para 6 proveedores LLM",
         "providers": {
-          "deepseek": {"prioridad": 1, "modelos": ["deepseek-chat", "deepseek-coder"]},
+          "deepseek": {"prioridad": 1, "modelos": ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"]},
           "anthropic": {"prioridad": 2, "modelos": ["claude-3-5-sonnet", "claude-3-opus", "claude-3-haiku"]},
           "openai": {"prioridad": 3, "modelos": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]},
-          "ollama": {"prioridad": 4, "modelos": ["llama2", "codellama", "mistral", "mixtral"]}
+          "groq": {"prioridad": 4, "modelos": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"]},
+          "gemini": {"prioridad": 5, "modelos": ["gemini-2.5-flash", "gemini-2.5-pro"]},
+          "ollama": {"prioridad": 6, "modelos": ["llama2", "codellama", "mistral", "mixtral"]}
         },
         "apis": ["POST /chat", "POST /chat/stream", "GET /providers", "GET /models", "GET /usage", "GET /tools"],
-        "caracteristicas": ["Fallback automático", "Streaming SSE", "Tracking de costos", "Rate limiting"]
+        "caracteristicas": ["Fallback automático", "Streaming SSE", "Tracking de costos", "Rate limiting", "Reasoning mode (DeepSeek)"]
       },
       "ai-agent-framework": {
         "version": "1.0.0",
@@ -197,7 +199,7 @@
         "niveles_prioridad": ["CUSTOM (1)", "CLIENT (2)", "PROJECT (3)", "GLOBAL (4)"],
         "apis": ["CRUD credenciales", "Resolución con cascada", "Listado", "Niveles"],
         "tools": ["credential.list (solo metadata, nunca valores)"],
-        "providers_soportados": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "OLLAMA", "GOOGLE", "GMAIL"],
+        "providers_soportados": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "GROQ", "GEMINI", "OLLAMA", "GOOGLE", "GMAIL"],
         "caracteristicas": ["OAuth2 para Gmail/Google", "Enmascaramiento de API keys"]
       },
       "filesystem": {

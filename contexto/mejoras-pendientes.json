@@ -83,6 +83,103 @@
       "resultado": "Chat y agentes comparten el mismo registro de tools. Agentes tienen 13 tools adicionales únicos"
     },
     {
+      "id": "nuevos-providers-groq-gemini",
+      "titulo": "Añadir proveedores Groq y Gemini al ai-gateway",
+      "prioridad": "alta",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-02-10",
+      "fecha_implementacion": "2026-02-10",
+      "descripcion": "Groq (LPU, ultra-baja latencia, API OpenAI-compatible) y Gemini (Google, RAG gestionado, 1M context). Ambos con tool calling y streaming.",
+      "archivos_creados": [
+        "modules/ai-gateway/providers/groq-provider.js",
+        "modules/ai-gateway/providers/gemini-provider.js"
+      ],
+      "archivos_modificados": [
+        "modules/ai-gateway/index.js",
+        "modules/ai-gateway/module.json"
+      ],
+      "env_keys_nuevas": ["GROQ_API_KEY", "GEMINI_API_KEY"]
+    },
+    {
+      "id": "deepseek-reasoning-mode",
+      "titulo": "Soporte para DeepSeek reasoning mode (deepseek-reasoner)",
+      "prioridad": "alta",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-02-10",
+      "fecha_implementacion": "2026-02-10",
+      "descripcion": "deepseek-reasoner con chain-of-thought visible. Activar con options.reasoning=true o model='deepseek-reasoner'. No soporta temperature/top_p. Devuelve reasoning_content + reasoning_tokens.",
+      "archivos_modificados": [
+        "modules/ai-gateway/providers/deepseek-provider.js",
+        "modules/ai-gateway/module.json"
+      ]
+    },
+    {
+      "id": "anthropic-prompt-caching",
+      "titulo": "Implementar Prompt Caching de Anthropic (90% ahorro en lecturas)",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-10",
+      "descripcion": "Marcar system prompt como cacheable en Anthropic. Cache de prefijos idénticos — 90% ahorro en lecturas, reducción latencia hasta 85%. Requiere header anthropic-beta y cache_control en system messages.",
+      "implementacion": {
+        "donde": "modules/ai-gateway/providers/anthropic-provider.js",
+        "como": "Añadir cache_control: {type: 'ephemeral'} al system message y anthropic-beta: 'prompt-caching-2024-07-31' al header"
+      },
+      "beneficios": ["90% ahorro tokens system prompt repetido", "Reducción latencia 85%", "Sin cambios en lógica"]
+    },
+    {
+      "id": "anthropic-extended-thinking",
+      "titulo": "Activar Extended Thinking (adaptive) en Anthropic para tareas complejas",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-10",
+      "descripcion": "Claude Opus 4.6 soporta thinking adaptivo — el modelo decide cuándo pensar en profundidad. Ideal para análisis de facturas ambiguas, debugging handlers complejos.",
+      "implementacion": {
+        "donde": "modules/ai-gateway/providers/anthropic-provider.js",
+        "como": "Añadir thinking: {type: 'adaptive'} al request cuando options.thinking=true",
+        "nota": "Solo funciona con modelos que soporten thinking (Opus 4.6, Sonnet 4.5)"
+      }
+    },
+    {
+      "id": "anthropic-code-execution",
+      "titulo": "Integrar Code Execution sandbox de Anthropic",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-10",
+      "descripcion": "Sandbox Ubuntu con Python + Node.js + pip. Ejecución de código sin riesgo local. Container reuse entre llamadas.",
+      "implementacion": {
+        "donde": "modules/ai-gateway/providers/anthropic-provider.js",
+        "como": "Añadir tool type='code_execution' a requestData.tools, gestionar container_id para reuse"
+      },
+      "beneficios": ["Cálculos de facturas server-side", "Transformaciones de datos sin riesgo", "Persistencia de estado entre llamadas"]
+    },
+    {
+      "id": "openai-responses-api",
+      "titulo": "Migrar OpenAI a Responses API (agentic loop server-side)",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-10",
+      "descripcion": "Responses API reemplaza Assistants (deprecated agosto 2026). Agentic loop server-side con file search, code interpreter, web search. Elimina necesidad de orquestación cliente.",
+      "cuando_implementar": "Cuando se necesiten capacidades RAG gestionadas o code interpreter de OpenAI"
+    },
+    {
+      "id": "gemini-file-search-rag",
+      "titulo": "Integrar File Search (RAG gestionado) de Gemini",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-10",
+      "descripcion": "RAG gestionado por Google: storage GRATIS, 150+ formatos, búsqueda semántica automática. Solo pagas indexación ($0.15/1M tokens). Ideal para facturas y documentos de proyecto.",
+      "cuando_implementar": "Cuando se necesite búsqueda semántica sobre documentos sin infraestructura propia"
+    },
+    {
+      "id": "groq-compound-models",
+      "titulo": "Integrar Groq Compound (web search + code execution server-side)",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-10",
+      "descripcion": "groq/compound-beta: agent server-side que combina web search + code execution + browser. Una request → resultado completo sin orquestación.",
+      "cuando_implementar": "Cuando se necesiten capacidades de búsqueda web o ejecución de código desde el chat"
+    },
+    {
       "id": "streaming-nativo-sse",
       "titulo": "Implementar streaming nativo en lugar de post-hoc",
       "prioridad": "baja",

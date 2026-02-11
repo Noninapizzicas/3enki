@@ -66,6 +66,31 @@ class GeminiProvider extends BaseProvider {
       const role = m.role === 'assistant' ? 'model' : 'user';
       const parts = [];
 
+      // Assistant messages with tool_calls: convert to functionCall parts
+      if (m.role === 'assistant' && m.tool_calls && Array.isArray(m.tool_calls)) {
+        if (m.content) {
+          parts.push({ text: m.content });
+        }
+        for (const tc of m.tool_calls) {
+          let args = {};
+          if (tc.function?.arguments) {
+            try {
+              args = typeof tc.function.arguments === 'string'
+                ? JSON.parse(tc.function.arguments)
+                : tc.function.arguments;
+            } catch { args = {}; }
+          }
+          parts.push({
+            functionCall: {
+              name: tc.function?.name || tc.name,
+              args
+            }
+          });
+        }
+        contents.push({ role, parts });
+        continue;
+      }
+
       // Handle image content
       if (m.image_base64) {
         parts.push({

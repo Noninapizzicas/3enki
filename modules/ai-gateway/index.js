@@ -1572,15 +1572,14 @@ class AIGatewayModule {
 
     switch (providerName) {
       case 'anthropic':
-        // Anthropic: content array with type: 'tool_use' blocks
-        if (Array.isArray(response.content)) {
-          toolCalls = response.content
-            .filter(block => block.type === 'tool_use')
-            .map(block => ({
-              id: block.id,
-              name: block.name,
-              arguments: block.input || {}
-            }));
+        // Anthropic provider already normalizes tool_use blocks to OpenAI-compatible
+        // tool_calls format in chatCompletion(), so read from response.tool_calls
+        if (response.tool_calls && Array.isArray(response.tool_calls)) {
+          toolCalls = response.tool_calls.map(tc => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: this.safeParseArguments(tc.function?.arguments)
+          }));
         }
         break;
 

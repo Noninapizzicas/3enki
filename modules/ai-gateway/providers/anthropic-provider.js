@@ -55,7 +55,53 @@ class AnthropicProvider extends BaseProvider {
     }).join('\n');
 
     const anthropicMessages = chatMessages.map(m => {
+      // Tool result messages: convert from OpenAI format to Anthropic format
+      // { role: 'tool', tool_call_id, content } → { role: 'user', content: [{ type: 'tool_result', ... }] }
+      if (m.role === 'tool' && m.tool_call_id) {
+        return {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: m.tool_call_id,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          }]
+        };
+      }
+
+      // User messages with tool_result content array: pass through directly
+      if (m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool_result')) {
+        return { role: 'user', content: m.content };
+      }
+
       const role = m.role === 'assistant' ? 'assistant' : 'user';
+
+      // Assistant messages with tool_calls: convert to Anthropic tool_use content blocks
+      if (m.role === 'assistant' && m.tool_calls && Array.isArray(m.tool_calls)) {
+        const contentParts = [];
+        // Add text content first if present
+        if (m.content) {
+          contentParts.push({ type: 'text', text: m.content });
+        }
+        // Convert each tool_call to tool_use block
+        for (const tc of m.tool_calls) {
+          let input = {};
+          if (tc.function?.arguments) {
+            try {
+              input = typeof tc.function.arguments === 'string'
+                ? JSON.parse(tc.function.arguments)
+                : tc.function.arguments;
+            } catch { input = {}; }
+          }
+          // Use tc.input for Anthropic-native format or tc.function for OpenAI format
+          contentParts.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function?.name || tc.name,
+            input: tc.input || input
+          });
+        }
+        return { role: 'assistant', content: contentParts };
+      }
 
       // Check if message has image content (vision support)
       if (m.image_base64 || (Array.isArray(m.content) && m.content.some(c => c.type === 'image'))) {

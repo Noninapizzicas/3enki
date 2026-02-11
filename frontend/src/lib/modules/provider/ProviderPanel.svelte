@@ -15,12 +15,15 @@
 
   export let panelId: string;
 
-  // Demo providers - en producción vendrían del backend
+  // Espejo de ai-gateway/module.json providers
+  // Fuente de verdad: modules/ai-gateway/module.json config.providers
   const providers: Provider[] = [
     { id: 'deepseek', name: 'DeepSeek', icon: '🔮', models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'] },
-    { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] },
-    { id: 'anthropic', name: 'Anthropic', icon: '🧠', models: ['claude-3-5-sonnet', 'claude-3-opus', 'claude-3-haiku'] },
-    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama3.2', 'mistral', 'codellama', 'phi3'] },
+    { id: 'anthropic', name: 'Anthropic', icon: '🧠', models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'] },
+    { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
+    { id: 'groq', name: 'Groq', icon: '⚡', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
+    { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
+    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama2', 'codellama', 'mistral', 'mixtral'] },
   ];
 
   let selectedProvider: Provider | null = $activeProvider || providers[0];

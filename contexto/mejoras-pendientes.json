@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-02-09",
+  "_updated": "2026-02-11",
   "mejoras": [
     {
       "id": "refactor-ai-gateway",
@@ -231,6 +231,61 @@
       "nota": "chat-session y chat-ai-bridge manejan directamente toda la funcionalidad",
       "archivos_afectados": ["modules/conversation-manager/"],
       "cuando_implementar": "Cuando se confirme que ningún handler o módulo depende de conversation-manager"
+    },
+    {
+      "id": "fix-tool-execution-bugs",
+      "titulo": "Corregir bugs críticos en flujo de ejecución de tools",
+      "prioridad": "alta",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-02-10",
+      "fecha_implementacion": "2026-02-10",
+      "descripcion": "4 bugs en chat-ai-bridge y ai-gateway: validación de params requeridos, preservación de _raw_tool_calls para historial, boolean explícito en tools (true vs array), null check en nombre de tool",
+      "archivos_modificados": [
+        "modules/chat-ai-bridge/index.js",
+        "modules/ai-gateway/index.js"
+      ]
+    },
+    {
+      "id": "fix-tool-calling-anthropic-gemini",
+      "titulo": "Corregir ciclo completo de tool calling para Anthropic y Gemini",
+      "prioridad": "alta",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-02-11",
+      "fecha_implementacion": "2026-02-11",
+      "descripcion": "4 fallos que rompían el ciclo de tools: (1) parseToolCallsFromProvider leía response.content (string) en vez de response.tool_calls para Anthropic, (2) convertMessages de Anthropic no convertía assistant.tool_calls a tool_use blocks, (3) convertMessages de Anthropic no manejaba tool_result content, (4) convertMessages de Gemini no generaba functionCall parts",
+      "archivos_modificados": [
+        "modules/ai-gateway/index.js",
+        "modules/ai-gateway/providers/anthropic-provider.js",
+        "modules/ai-gateway/providers/gemini-provider.js"
+      ],
+      "resultado": "Los 6 providers tienen ciclo de tool calling funcional completo"
+    },
+    {
+      "id": "chat-context-optimization",
+      "titulo": "Optimizar contexto del chat para efectividad AI",
+      "prioridad": "media",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-02-10",
+      "fecha_implementacion": "2026-02-10",
+      "descripcion": "Caching de system prompt (evita recomposición cada mensaje), templates por tipo de proyecto (pizzepos, facturas, generic), gestión de tokens para no exceder ventana de contexto",
+      "archivos_modificados": [
+        "modules/prompt-composer/index.js",
+        "modules/chat-ai-bridge/index.js"
+      ]
+    },
+    {
+      "id": "frontend-providers-alignment",
+      "titulo": "Alinear frontend con backend para providers",
+      "prioridad": "media",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-02-11",
+      "fecha_implementacion": "2026-02-11",
+      "descripcion": "Frontend tenía listas hardcodeadas de providers desincronizadas del backend. DEFAULT_PROVIDERS en credentials.ts ahora espeja credential-manager.getUIState() (8 providers). ProviderPanel.svelte ahora espeja ai-gateway/module.json (6 providers AI).",
+      "archivos_modificados": [
+        "frontend/src/lib/stores/credentials.ts",
+        "frontend/src/lib/modules/provider/ProviderPanel.svelte"
+      ],
+      "nota": "Los comentarios en cada fichero documentan la fuente de verdad para futuras actualizaciones"
     }
   ]
 }

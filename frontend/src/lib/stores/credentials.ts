@@ -127,18 +127,36 @@ interface TestResponse {
 }
 
 // =============================================================================
-// NOTE: No hardcoded defaults - credential-manager backend is the single
-// source of truth for providers and levels (via getUIState()).
-// The store starts empty and populates from MQTT on init.
+// DEFAULTS — Espejo de credential-manager.getUIState()
+// Se usan como estado inicial antes de que MQTT responda.
+// Fuente de verdad: modules/credential-manager/index.js getUIState()
 // =============================================================================
+
+const DEFAULT_PROVIDERS: ProviderOption[] = [
+  { id: 'DEEPSEEK', name: 'DeepSeek', icon: '🔮' },
+  { id: 'ANTHROPIC', name: 'Anthropic', icon: '🧠' },
+  { id: 'OPENAI', name: 'OpenAI', icon: '🤖' },
+  { id: 'GROQ', name: 'Groq', icon: '⚡' },
+  { id: 'GEMINI', name: 'Google Gemini', icon: '💎' },
+  { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
+  { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
+  { id: 'GMAIL', name: 'Gmail', icon: '📧' }
+];
+
+const DEFAULT_LEVELS: LevelOption[] = [
+  { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },
+  { id: 'PROJECT', name: 'Proyecto', icon: '🔵', requiresIdentifier: true },
+  { id: 'CLIENT', name: 'Cliente', icon: '🟡', requiresIdentifier: true },
+  { id: 'CUSTOM', name: 'Custom', icon: '🔴', requiresIdentifier: true }
+];
 
 // =============================================================================
 // INITIAL STATE
 // =============================================================================
 
 const initialState: CredentialsState = {
-  providers: [],
-  levels: [],
+  providers: DEFAULT_PROVIDERS,
+  levels: DEFAULT_LEVELS,
   credentials: {
     GLOBAL: [],
     PROJECT: [],
@@ -147,7 +165,7 @@ const initialState: CredentialsState = {
   },
   stats: { total: 0, byLevel: {} },
   oauthConfigs: [],
-  loading: true,
+  loading: false,
   error: null,
   selectedKey: null,
   activeTab: 'lista',
@@ -177,8 +195,8 @@ export async function loadCredentials(): Promise<void> {
 
     credentialsStore.update(s => ({
       ...s,
-      providers: response.data.providers || [],
-      levels: response.data.levels || [],
+      providers: response.data.providers?.length > 0 ? response.data.providers : DEFAULT_PROVIDERS,
+      levels: response.data.levels?.length > 0 ? response.data.levels : DEFAULT_LEVELS,
       credentials: {
         GLOBAL: response.data.credentials?.GLOBAL || [],
         PROJECT: response.data.credentials?.PROJECT || [],

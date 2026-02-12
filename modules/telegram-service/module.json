@@ -110,16 +110,20 @@
       }
     ],
     "subscribes": [
-      {
-        "event": "credential.saved",
-        "description": "Listen for new Telegram bot credentials",
-        "handler": "onCredentialSaved"
-      },
-      {
-        "event": "credential.deleted",
-        "description": "Listen for removed Telegram bot credentials",
-        "handler": "onCredentialDeleted"
-      }
+      { "event": "credential.saved", "handler": "onCredentialSaved" },
+      { "event": "credential.deleted", "handler": "onCredentialDeleted" },
+      { "event": "telegram.send_message.request", "handler": "onSendMessageRequest" },
+      { "event": "telegram.get_file.request", "handler": "onGetFileRequest" },
+      { "event": "telegram.send_photo.request", "handler": "onSendPhotoRequest" },
+      { "event": "telegram.send_document.request", "handler": "onSendDocumentRequest" },
+      { "event": "telegram.send_video.request", "handler": "onSendVideoRequest" },
+      { "event": "telegram.send_location.request", "handler": "onSendLocationRequest" },
+      { "event": "telegram.edit_message.request", "handler": "onEditMessageRequest" },
+      { "event": "telegram.delete_message.request", "handler": "onDeleteMessageRequest" },
+      { "event": "telegram.answer_callback.request", "handler": "onAnswerCallbackRequest" },
+      { "event": "telegram.get_chat.request", "handler": "onGetChatRequest" },
+      { "event": "telegram.set_commands.request", "handler": "onSetCommandsRequest" },
+      { "event": "telegram.list_bots.request", "handler": "onListBotsRequest" }
     ]
   },
 

@@ -75,8 +75,7 @@ class TelegramServiceModule {
       version: this.version
     });
 
-    // Subscribe to credential events
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired by the loader from module.json
 
     // Load existing Telegram credentials
     await this.loadExistingBots();
@@ -98,126 +97,12 @@ class TelegramServiceModule {
     }
     this.bots.clear();
 
-    // Unsubscribe all
-    for (const unsub of this.unsubscribes) {
-      if (typeof unsub === 'function') {
-        await unsub();
-      }
-    }
-    this.unsubscribes = [];
-
+    // Event subscriptions are auto-cleaned by the loader
     this.logger.info('module.unloaded', { module: this.name });
   }
 
-  async subscribeToEvents() {
-    // Listen for credential changes
-    const unsubSaved = await this.eventBus.subscribe(
-      'credential.saved',
-      this.onCredentialSaved.bind(this)
-    );
-    this.unsubscribes.push(unsubSaved);
-
-    const unsubDeleted = await this.eventBus.subscribe(
-      'credential.deleted',
-      this.onCredentialDeleted.bind(this)
-    );
-    this.unsubscribes.push(unsubDeleted);
-
-    // Listen for action requests (event-driven API for agents)
-    const unsubSendMessage = await this.eventBus.subscribe(
-      'telegram.send_message.request',
-      this.onSendMessageRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubSendMessage);
-
-    const unsubGetFile = await this.eventBus.subscribe(
-      'telegram.get_file.request',
-      this.onGetFileRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubGetFile);
-
-    const unsubSendPhoto = await this.eventBus.subscribe(
-      'telegram.send_photo.request',
-      this.onSendPhotoRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubSendPhoto);
-
-    const unsubSendDocument = await this.eventBus.subscribe(
-      'telegram.send_document.request',
-      this.onSendDocumentRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubSendDocument);
-
-    const unsubSendVideo = await this.eventBus.subscribe(
-      'telegram.send_video.request',
-      this.onSendVideoRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubSendVideo);
-
-    const unsubSendLocation = await this.eventBus.subscribe(
-      'telegram.send_location.request',
-      this.onSendLocationRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubSendLocation);
-
-    const unsubEditMessage = await this.eventBus.subscribe(
-      'telegram.edit_message.request',
-      this.onEditMessageRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubEditMessage);
-
-    const unsubDeleteMessage = await this.eventBus.subscribe(
-      'telegram.delete_message.request',
-      this.onDeleteMessageRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubDeleteMessage);
-
-    const unsubAnswerCallback = await this.eventBus.subscribe(
-      'telegram.answer_callback.request',
-      this.onAnswerCallbackRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubAnswerCallback);
-
-    const unsubGetChat = await this.eventBus.subscribe(
-      'telegram.get_chat.request',
-      this.onGetChatRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubGetChat);
-
-    const unsubSetCommands = await this.eventBus.subscribe(
-      'telegram.set_commands.request',
-      this.onSetCommandsRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubSetCommands);
-
-    const unsubListBots = await this.eventBus.subscribe(
-      'telegram.list_bots.request',
-      this.onListBotsRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubListBots);
-
-    this.logger.info('telegram.events.subscribed', {
-      events: [
-        'credential.saved',
-        'credential.deleted',
-        'telegram.send_message.request',
-        'telegram.get_file.request',
-        'telegram.send_photo.request',
-        'telegram.send_document.request',
-        'telegram.send_video.request',
-        'telegram.send_location.request',
-        'telegram.edit_message.request',
-        'telegram.delete_message.request',
-        'telegram.answer_callback.request',
-        'telegram.get_chat.request',
-        'telegram.set_commands.request',
-        'telegram.list_bots.request'
-      ]
-    });
-  }
-
   // ==========================================
-  // Request Event Handlers (for agents)
+  // Request Event Handlers (wired by loader from module.json)
   // ==========================================
 
   async onSendMessageRequest(event) {

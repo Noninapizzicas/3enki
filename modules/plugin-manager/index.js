@@ -49,8 +49,7 @@ class PluginManagerModule {
     // Ensure plugins directory exists
     this.ensurePluginsDirectory();
 
-    // Subscribe to events
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired by the loader from module.json
 
     // Discover and load plugins
     await this.discoverPlugins();
@@ -128,27 +127,7 @@ class PluginManagerModule {
   }
 
   // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe(
-      'plugin.get.request',
-      this.onGetPluginRequest.bind(this)
-    );
-
-    await this.eventBus.subscribe(
-      'plugin.list.request',
-      this.onListPluginsRequest.bind(this)
-    );
-
-    this.logger.info('events.subscribed', {
-      events: ['plugin.get.request', 'plugin.list.request']
-    });
-  }
-
-  // ==========================================
-  // Event Handlers
+  // Event Handlers (wired by loader from module.json)
   // ==========================================
 
   async onGetPluginRequest(event) {

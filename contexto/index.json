@@ -166,8 +166,9 @@
       "proyecto": "data/projects/{id}/handlers/*.js → credenciales PROJECT_{id}"
     },
     "recent_patterns": {
+      "loader_auto_wiring": "Subscribes y UI handlers declarados en module.json, auto-wired por el loader — sin código imperativo en onLoad/onUnload (28/28 módulos migrados)",
       "project_lifecycle_caching": "Módulos cachean proyecto activo via project.activated/deactivated",
-      "direct_ui_handlers": "Sin facade - cada módulo registra sus UI handlers directamente",
+      "direct_ui_handlers": "Sin facade - handlers UI declarados en module.json ui_handlers array",
       "project_scoped": "Operaciones scoped por project_id (chat-session, scheduler)"
     }
   }

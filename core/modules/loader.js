@@ -347,6 +347,19 @@ class ModuleLoader {
         this.registerToolsForAI(moduleName, manifest.tools, instance);
       }
 
+      // Auto-wire event subscriptions from manifest
+      const eventUnsubs = this.wireEventSubscriptions(manifest, instance);
+
+      // Auto-wire UI handlers from manifest
+      const uiRegistrations = this.wireUIHandlers(manifest, instance);
+
+      // Store wiring data for automatic cleanup on unload
+      const moduleData = this.loadedModules.get(moduleName);
+      if (moduleData) {
+        moduleData._eventUnsubs = eventUnsubs;
+        moduleData._uiRegistrations = uiRegistrations;
+      }
+
       if (this.logger) {
         this.logger.info('module.loaded', {
           module: moduleName,
@@ -392,7 +405,33 @@ class ModuleLoader {
     }
 
     try {
-      // Ejecutar onUnload si existe
+      // Auto-cleanup: unsubscribe all events wired from manifest
+      if (moduleData._eventUnsubs) {
+        for (const unsub of moduleData._eventUnsubs) {
+          try { unsub(); } catch (e) { /* already cleaned */ }
+        }
+        if (this.logger) {
+          this.logger.debug('module.events.unwired', {
+            module: moduleName,
+            count: moduleData._eventUnsubs.length
+          });
+        }
+      }
+
+      // Auto-cleanup: unregister all UI handlers wired from manifest
+      if (moduleData._uiRegistrations && this.core?.uiHandler) {
+        for (const { domain, action } of moduleData._uiRegistrations) {
+          try { this.core.uiHandler.unregister(domain, action); } catch (e) { /* already cleaned */ }
+        }
+        if (this.logger) {
+          this.logger.debug('module.ui_handlers.unwired', {
+            module: moduleName,
+            count: moduleData._uiRegistrations.length
+          });
+        }
+      }
+
+      // Ejecutar onUnload si existe (solo para cleanup propio del módulo)
       if (typeof moduleData.instance.onUnload === 'function') {
         await moduleData.instance.onUnload();
       }
@@ -663,6 +702,166 @@ class ModuleLoader {
    */
   isLoaded(moduleName) {
     return this.loadedModules.has(moduleName);
+  }
+
+  // ==========================================
+  // Declarative Wiring from module.json
+  // ==========================================
+
+  /**
+   * Normalizes subscribes from module.json into a consistent format.
+   * Accepts all legacy formats:
+   *   - root "subscribes": ["event.name", ...]
+   *   - root "subscribes": [{ event, handler }, ...]
+   *   - nested "events.subscribes": ["event.name", ...]
+   *   - nested "events.subscribes": [{ event, handler }, ...]
+   *
+   * @param {Object} manifest - Module manifest
+   * @returns {Array<{event: string, handler: string|null}>}
+   */
+  normalizeSubscriptions(manifest) {
+    // Merge both sources (root and nested), root takes priority
+    const raw = manifest.subscribes || manifest.events?.subscribes || [];
+
+    return raw.map(entry => {
+      if (typeof entry === 'string') {
+        return { event: entry, handler: null };
+      }
+      return {
+        event: entry.event || entry.topic || entry,
+        handler: entry.handler || null
+      };
+    });
+  }
+
+  /**
+   * Auto-wires event subscriptions declared in module.json.
+   * Resolves handler strings to bound methods on the instance.
+   * Returns array of unsubscribe functions for automatic cleanup.
+   *
+   * @param {Object} manifest - Module manifest
+   * @param {Object} instance - Module instance
+   * @returns {Array<Function>} Unsubscribe functions
+   */
+  wireEventSubscriptions(manifest, instance) {
+    const unsubs = [];
+    const eventBus = this.core?.eventBus;
+
+    if (!eventBus) return unsubs;
+
+    const subscriptions = this.normalizeSubscriptions(manifest);
+
+    for (const sub of subscriptions) {
+      if (!sub.handler) continue;
+
+      const handlerFn = instance[sub.handler];
+      if (typeof handlerFn !== 'function') {
+        if (this.logger) {
+          this.logger.warn('module.event.handler.missing', {
+            module: manifest.name,
+            event: sub.event,
+            expected: sub.handler
+          });
+        }
+        continue;
+      }
+
+      const unsub = eventBus.subscribe(sub.event, handlerFn.bind(instance));
+      unsubs.push(unsub);
+
+      if (this.logger) {
+        this.logger.debug('module.event.wired', {
+          module: manifest.name,
+          event: sub.event,
+          handler: sub.handler
+        });
+      }
+    }
+
+    if (unsubs.length > 0 && this.logger) {
+      this.logger.info('module.events.wired', {
+        module: manifest.name,
+        count: unsubs.length
+      });
+    }
+
+    return unsubs;
+  }
+
+  /**
+   * Normalizes UI handler declarations from module.json.
+   * Accepts legacy formats:
+   *   - "handlers": [{ domain, action, method }]   (filesystem)
+   *   - "uiActions": [{ domain, action, handler }]  (scheduler)
+   *   - "ui_handlers": [{ domain, action, handler }] (standard)
+   *
+   * @param {Object} manifest - Module manifest
+   * @returns {Array<{domain: string, action: string, handler: string}>}
+   */
+  normalizeUIHandlers(manifest) {
+    const raw = manifest.ui_handlers || manifest.uiActions || manifest.handlers || [];
+
+    return raw.map(entry => ({
+      domain: entry.domain,
+      action: entry.action,
+      handler: entry.handler || entry.method || null
+    }));
+  }
+
+  /**
+   * Auto-wires UI request handlers declared in module.json.
+   * Resolves handler strings to bound methods on the instance.
+   * Returns registration records for automatic cleanup.
+   *
+   * @param {Object} manifest - Module manifest
+   * @param {Object} instance - Module instance
+   * @returns {Array<{domain: string, action: string}>} Registrations for cleanup
+   */
+  wireUIHandlers(manifest, instance) {
+    const registrations = [];
+    const uiHandler = this.core?.uiHandler;
+
+    if (!uiHandler) return registrations;
+
+    const handlers = this.normalizeUIHandlers(manifest);
+
+    for (const h of handlers) {
+      if (!h.handler || !h.domain || !h.action) continue;
+
+      const handlerFn = instance[h.handler];
+      if (typeof handlerFn !== 'function') {
+        if (this.logger) {
+          this.logger.warn('module.ui_handler.missing', {
+            module: manifest.name,
+            domain: h.domain,
+            action: h.action,
+            expected: h.handler
+          });
+        }
+        continue;
+      }
+
+      uiHandler.register(h.domain, h.action, handlerFn.bind(instance));
+      registrations.push({ domain: h.domain, action: h.action });
+
+      if (this.logger) {
+        this.logger.debug('module.ui_handler.wired', {
+          module: manifest.name,
+          domain: h.domain,
+          action: h.action,
+          handler: h.handler
+        });
+      }
+    }
+
+    if (registrations.length > 0 && this.logger) {
+      this.logger.info('module.ui_handlers.wired', {
+        module: manifest.name,
+        count: registrations.length
+      });
+    }
+
+    return registrations;
   }
 
   // ==========================================

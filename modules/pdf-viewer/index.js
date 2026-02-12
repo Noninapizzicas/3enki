@@ -34,21 +34,7 @@ class PdfViewerModule {
 
     this.logger.info('pdf-viewer.loading', { module: this.name });
 
-    // Register UI handlers
-    this.registerUIHandlers();
-
-    // Subscribe to events
-    const unsubView = await this.eventBus.subscribe(EVENTS.PDF.VIEW_REQUEST, this.handleViewRequest.bind(this));
-    this.unsubscribes.push(unsubView);
-
-    const unsubExtract = await this.eventBus.subscribe(EVENTS.PDF.EXTRACT_REQUEST, this.handleExtractRequest.bind(this));
-    this.unsubscribes.push(unsubExtract);
-
-    const unsubMetadata = await this.eventBus.subscribe(EVENTS.PDF.METADATA_REQUEST, this.handleMetadataRequest.bind(this));
-    this.unsubscribes.push(unsubMetadata);
-
-    const unsubList = await this.eventBus.subscribe(EVENTS.PDF.LIST_REQUEST, this.handleListRequest.bind(this));
-    this.unsubscribes.push(unsubList);
+    // Event subscriptions and UI handlers are auto-wired by the loader from module.json
 
     // Setup cache cleanup
     if (this.config.cache_enabled) {
@@ -62,9 +48,7 @@ class PdfViewerModule {
     if (this.cacheCleanupInterval) {
       clearInterval(this.cacheCleanupInterval);
     }
-    for (const unsub of this.unsubscribes) {
-      await unsub();
-    }
+    // Event subscriptions and UI handlers are auto-cleaned by the loader
     this.logger.info('pdf-viewer.unloaded', { module: this.name });
   }
 
@@ -546,20 +530,7 @@ class PdfViewerModule {
   // UI Request/Response Handlers (MQTT)
   // ==========================================
 
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('pdf-viewer.ui_handlers.no_handler');
-      return;
-    }
-
-    this.uiHandler.register('pdf', 'view', this.handleUIView.bind(this));
-    this.uiHandler.register('pdf', 'metadata', this.handleUIMetadata.bind(this));
-    this.uiHandler.register('pdf', 'list', this.handleUIListPdfs.bind(this));
-
-    this.logger.info('pdf-viewer.ui_handlers.registered', {
-      handlers: ['pdf/view', 'pdf/metadata', 'pdf/list']
-    });
-  }
+  // UI handlers are wired by the loader from module.json
 
   async handleUIView(data) {
     const { project_id, file_path } = data || {};

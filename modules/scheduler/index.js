@@ -90,17 +90,9 @@ class SchedulerModule {
     // Load persisted jobs
     await this.jobManager.load();
 
-    // Register UI handlers
-    this.registerUIHandlers();
+    // Static event subscriptions and UI handlers are auto-wired by the loader from module.json
 
-    // Subscribe to project lifecycle events
-    const unsubProjectActivated = await this.eventBus.subscribe(
-      'project.activated',
-      this.onProjectActivated.bind(this)
-    );
-    this.unsubscribes.push(unsubProjectActivated);
-
-    // Subscribe to events for event-based triggers
+    // Subscribe to dynamic events for event-based triggers (these depend on job config, can't be in manifest)
     await this.subscribeToEventTriggers();
 
     // Start all enabled jobs
@@ -123,7 +115,7 @@ class SchedulerModule {
     // Save jobs before unloading
     await this.jobManager.save();
 
-    // Unsubscribe from all events
+    // Dynamic event trigger subscriptions cleanup
     for (const unsub of this.unsubscribes) {
       if (typeof unsub === 'function') {
         await unsub();
@@ -131,6 +123,7 @@ class SchedulerModule {
     }
     this.unsubscribes = [];
 
+    // Static event subscriptions and UI handlers are auto-cleaned by the loader
     this.logger.info('scheduler.unloaded');
   }
 
@@ -157,21 +150,7 @@ class SchedulerModule {
 
   // ==================== INITIALIZATION ====================
 
-  registerUIHandlers() {
-    if (!this.uiHandler) return;
-
-    this.uiHandler.register('scheduler', 'list', this.handleUIListJobs.bind(this));
-    this.uiHandler.register('scheduler', 'get', this.handleUIGetJob.bind(this));
-    this.uiHandler.register('scheduler', 'create', this.handleUICreateJob.bind(this));
-    this.uiHandler.register('scheduler', 'update', this.handleUIUpdateJob.bind(this));
-    this.uiHandler.register('scheduler', 'delete', this.handleUIDeleteJob.bind(this));
-    this.uiHandler.register('scheduler', 'enable', this.handleUIEnableJob.bind(this));
-    this.uiHandler.register('scheduler', 'disable', this.handleUIDisableJob.bind(this));
-    this.uiHandler.register('scheduler', 'trigger', this.handleUITriggerJob.bind(this));
-    this.uiHandler.register('scheduler', 'triggers', this.handleUIGetTriggerTypes.bind(this));
-    this.uiHandler.register('scheduler', 'stats', this.handleUIGetStats.bind(this));
-    this.uiHandler.register('scheduler', 'executions', this.handleUIListExecutions.bind(this));
-  }
+  // UI handlers are wired by the loader from module.json (uiActions)
 
   async subscribeToEventTriggers() {
     // Get all unique event topics from jobs with event triggers

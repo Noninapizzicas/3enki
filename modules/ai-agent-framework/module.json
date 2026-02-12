@@ -11,7 +11,8 @@
   "subscribes": [
     "agent.*.created",
     "agent.*.completed",
-    "agent.*.failed"
+    "agent.*.failed",
+    { "event": "agent.execute.request", "handler": "onExecuteRequest" }
   ],
   "apis": [
     {

@@ -45,9 +45,6 @@ class PromptComposerModule {
     // Active project tracking (event-driven invalidation)
     this.activeProjectId = null;
 
-    // Unsubscribe tracking for cleanup
-    this.unsubscribes = [];
-
     // Startup time for health check
     this.startTime = Date.now();
   }
@@ -71,12 +68,6 @@ class PromptComposerModule {
     // Load default templates
     this.loadDefaultTemplates();
 
-    // Register UI handlers (MQTT request/response)
-    await this.registerUIHandlers();
-
-    // Subscribe to events
-    await this.subscribeToEvents();
-
     this.logger.info('prompt-composer.loaded', {
       module: this.name,
       templatesLoaded: this.templates.size,
@@ -86,19 +77,6 @@ class PromptComposerModule {
 
   async onUnload() {
     this.logger.info('prompt-composer.unloading', { module: this.name });
-
-    // Unregister UI handlers
-    if (this.uiHandler) {
-      this.uiHandler.unregister('prompt', 'compose');
-      this.uiHandler.unregister('prompt', 'templates');
-      this.uiHandler.unregister('prompt', 'context');
-    }
-
-    // Unsubscribe all event handlers
-    for (const unsub of this.unsubscribes) {
-      await unsub();
-    }
-    this.unsubscribes = [];
 
     // Clear pending requests
     for (const pending of [this.pendingProjectRequests, this.pendingStorageRequests, this.pendingComposeRequests, this.pendingPromptManagerRequests]) {
@@ -189,104 +167,6 @@ Fecha actual: {{date}}`,
     this.logger.debug('prompt-composer.templates.loaded', {
       count: this.templates.size,
       templates: Array.from(this.templates.keys())
-    });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  async registerUIHandlers() {
-    if (!this.uiHandler) return;
-
-    // Register handlers for UI requests via MQTT
-    this.uiHandler.register('prompt', 'compose', this.handleUICompose.bind(this));
-    this.uiHandler.register('prompt', 'templates', this.handleUITemplates.bind(this));
-    this.uiHandler.register('prompt', 'context', this.handleUIContext.bind(this));
-
-    this.logger.info('prompt-composer.ui_handlers.registered', {
-      domain: 'prompt',
-      actions: ['compose', 'templates', 'context']
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    // Subscribe to compose requests
-    const unsubCompose = await this.eventBus.subscribe(
-      'prompt.compose.request',
-      this.onComposeRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubCompose);
-
-    // Subscribe to project responses (for async context loading)
-    const unsubProject = await this.eventBus.subscribe(
-      EVENTS.PROJECT.GET_RESPONSE,
-      this.onProjectGetResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubProject);
-
-    // Subscribe to storage responses
-    const unsubStorage = await this.eventBus.subscribe(
-      EVENTS.STORAGE.INFO_RESPONSE,
-      this.onStorageInfoResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubStorage);
-
-    // Subscribe to prompt-manager responses
-    const unsubPromptGet = await this.eventBus.subscribe(
-      'prompt.get.response',
-      this.onPromptManagerGetResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubPromptGet);
-
-    const unsubPromptList = await this.eventBus.subscribe(
-      'prompt.list.response',
-      this.onPromptManagerListResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubPromptList);
-
-    // Subscribe to inherited context responses (Phase 5)
-    const unsubInheritedContext = await this.eventBus.subscribe(
-      'context.full.response',
-      this.onInheritedContextResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubInheritedContext);
-
-    // Subscribe to project lifecycle for cache invalidation
-    const unsubActivated = await this.eventBus.subscribe(
-      'project.activated',
-      (event) => {
-        const data = event.data || event;
-        this.activeProjectId = data.project_id;
-        this._projectContextCache.delete(data.project_id);
-        this._inheritedContextCache.delete(data.project_id);
-      }
-    );
-    this.unsubscribes.push(unsubActivated);
-
-    const unsubDeactivated = await this.eventBus.subscribe(
-      'project.deactivated',
-      () => {
-        this.activeProjectId = null;
-      }
-    );
-    this.unsubscribes.push(unsubDeactivated);
-
-    this.logger.info('prompt-composer.events.subscribed', {
-      events: [
-        'prompt.compose.request',
-        'project.get.response',
-        'storage.info.response',
-        'prompt.get.response',
-        'prompt.list.response',
-        'context.full.response',
-        'project.activated',
-        'project.deactivated'
-      ]
     });
   }
 
@@ -484,6 +364,23 @@ Fecha actual: {{date}}`,
     } else {
       pending.resolve(null); // Return null on failure (optional feature)
     }
+  }
+
+  /**
+   * Handle project activation — invalidate caches for the activated project
+   */
+  onProjectActivated(event) {
+    const data = event.data || event;
+    this.activeProjectId = data.project_id;
+    this._projectContextCache.delete(data.project_id);
+    this._inheritedContextCache.delete(data.project_id);
+  }
+
+  /**
+   * Handle project deactivation — clear active project tracking
+   */
+  onProjectDeactivated() {
+    this.activeProjectId = null;
   }
 
   // ==========================================

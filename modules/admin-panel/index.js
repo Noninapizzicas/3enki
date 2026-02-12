@@ -42,11 +42,7 @@ class AdminPanelModule {
       version: this.version
     });
 
-    // Subscribe to events for cache updates
-    this.eventBus.subscribe('plugin.loaded', (data) => {
-      this.logger.debug('admin-panel.plugin.loaded', data);
-      this.refreshPluginsCache();
-    });
+    // Event subscriptions are auto-wired by the loader from module.json
 
     // Initial cache load
     await this.refreshAllCaches();
@@ -56,6 +52,15 @@ class AdminPanelModule {
 
   async onUnload() {
     this.logger.info('admin-panel.unloading', 'Unloading Admin Panel Module');
+  }
+
+  // ==========================================
+  // Event Handlers (wired by loader from module.json)
+  // ==========================================
+
+  onPluginLoaded(data) {
+    this.logger.debug('admin-panel.plugin.loaded', data);
+    this.refreshPluginsCache();
   }
 
   /**

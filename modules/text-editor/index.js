@@ -28,29 +28,13 @@ class TextEditorModule {
 
     this.logger.info('text-editor.loading', { module: this.name });
 
-    // Register UI handlers
-    this.registerUIHandlers();
-
-    // Subscribe to events
-    const unsubOpen = await this.eventBus.subscribe(EVENTS.EDITOR.OPEN_REQUEST, this.handleOpenRequest.bind(this));
-    this.unsubscribes.push(unsubOpen);
-
-    const unsubSave = await this.eventBus.subscribe(EVENTS.EDITOR.SAVE_REQUEST, this.handleSaveRequest.bind(this));
-    this.unsubscribes.push(unsubSave);
-
-    const unsubValidate = await this.eventBus.subscribe(EVENTS.EDITOR.VALIDATE_REQUEST, this.handleValidateRequest.bind(this));
-    this.unsubscribes.push(unsubValidate);
-
-    const unsubFormat = await this.eventBus.subscribe(EVENTS.EDITOR.FORMAT_REQUEST, this.handleFormatRequest.bind(this));
-    this.unsubscribes.push(unsubFormat);
+    // Event subscriptions and UI handlers are auto-wired by the loader from module.json
 
     this.logger.info('text-editor.loaded', { module: this.name });
   }
 
   async onUnload() {
-    for (const unsub of this.unsubscribes) {
-      await unsub();
-    }
+    // Event subscriptions and UI handlers are auto-cleaned by the loader
     this.logger.info('text-editor.unloaded', { module: this.name });
   }
 
@@ -477,21 +461,7 @@ class TextEditorModule {
   // UI Request/Response Handlers (MQTT)
   // ==========================================
 
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('text-editor.ui_handlers.no_handler');
-      return;
-    }
-
-    this.uiHandler.register('editor', 'open', this.handleUIOpen.bind(this));
-    this.uiHandler.register('editor', 'save', this.handleUISave.bind(this));
-    this.uiHandler.register('editor', 'validate', this.handleUIValidate.bind(this));
-    this.uiHandler.register('editor', 'format', this.handleUIFormat.bind(this));
-
-    this.logger.info('text-editor.ui_handlers.registered', {
-      handlers: ['editor/open', 'editor/save', 'editor/validate', 'editor/format']
-    });
-  }
+  // UI handlers are wired by the loader from module.json
 
   async handleUIOpen(data) {
     const { project_id, file_path } = data || {};

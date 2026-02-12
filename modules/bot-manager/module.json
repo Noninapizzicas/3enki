@@ -12,15 +12,14 @@
 
   "events": {
     "subscribes": [
-      "telegram.document.received",
-      "telegram.photo.received",
-      "telegram.video.received",
-      "telegram.audio.received",
-      "telegram.voice.received",
-      "telegram.text.received",
-      "telegram.command.received",
-      "credential.saved",
-      "credential.deleted"
+      { "event": "telegram.document.received", "handler": "onFileReceived" },
+      { "event": "telegram.photo.received", "handler": "onFileReceived" },
+      { "event": "telegram.video.received", "handler": "onFileReceived" },
+      { "event": "telegram.audio.received", "handler": "onFileReceived" },
+      { "event": "telegram.voice.received", "handler": "onFileReceived" },
+      { "event": "telegram.text.received", "handler": "onTextReceived" },
+      { "event": "telegram.command.received", "handler": "onCommandReceived" },
+      { "event": "credential.saved", "handler": "onCredentialSaved" }
     ],
     "publishes": [
       "bot.file.stored",

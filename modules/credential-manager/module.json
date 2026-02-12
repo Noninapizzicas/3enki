@@ -104,9 +104,28 @@
         "event": "credential/delete",
         "description": "Frontend deletes a credential via MQTT",
         "handler": "onDeleteCredential"
+      },
+      {
+        "event": "credential.oauth.resolve.request",
+        "description": "OAuth credential resolution for Gmail and other OAuth providers",
+        "handler": "onOAuthResolveRequest"
       }
     ]
   },
+
+  "ui_handlers": [
+    { "domain": "credential", "action": "list", "handler": "handleUIList" },
+    { "domain": "credential", "action": "get", "handler": "handleUIGet" },
+    { "domain": "credential", "action": "create", "handler": "handleUICreate" },
+    { "domain": "credential", "action": "update", "handler": "handleUIUpdate" },
+    { "domain": "credential", "action": "delete", "handler": "handleUIDelete" },
+    { "domain": "credential", "action": "test", "handler": "handleUITest" },
+    { "domain": "credential", "action": "oauth.start", "handler": "handleUIOAuthStart" },
+    { "domain": "credential", "action": "oauth.status", "handler": "handleUIOAuthStatus" },
+    { "domain": "credential", "action": "oauth.config.list", "handler": "handleUIOAuthConfigList" },
+    { "domain": "credential", "action": "oauth.config.save", "handler": "handleUIOAuthConfigSave" },
+    { "domain": "credential", "action": "oauth.config.delete", "handler": "handleUIOAuthConfigDelete" }
+  ],
 
   "ui": {
     "enabled": true,

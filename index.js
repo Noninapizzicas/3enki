@@ -416,7 +416,7 @@ async function main() {
     }
 
     // ========================================================================
-    // Step 6.7: Initialize Handler System
+    // Step 6.7: Initialize Handler System (Centralized Actions)
     // ========================================================================
     console.log('⚡ [6.7/8] Loading Event Handlers...');
 
@@ -426,21 +426,10 @@ async function main() {
     // Create Handler Loader
     core.handlerLoader = new HandlerLoader(core.eventBus, core.serviceExecutor, core.logger);
 
-    // Load global handlers
-    core.handlerLoader.loadGlobal('./handlers');
-
-    // Load handlers for each project
-    const projectsPath = path.resolve(__dirname, './data/projects');
-    if (fs.existsSync(projectsPath)) {
-      const projects = fs.readdirSync(projectsPath).filter(f => {
-        const projectPath = path.join(projectsPath, f);
-        return fs.statSync(projectPath).isDirectory();
-      });
-
-      for (const projectId of projects) {
-        core.handlerLoader.loadProject(projectId);
-      }
-    }
+    // Centralized loading: single tree at ./handlers/
+    // Structure: handlers/global/ + handlers/projects/{id}/
+    // Also loads legacy: handlers/*.js + data/projects/{id}/handlers/
+    core.handlerLoader.loadCentralized('./handlers', './data/projects');
 
     const handlerStats = core.handlerLoader.getStats();
     console.log(`   ✅ Loaded ${handlerStats.total} handler(s):`);

@@ -68,28 +68,7 @@ class CredentialManagerModule {
     // Load existing credentials
     await this.loadEnvFile();
 
-    // Subscribe to events
-    await this.subscribeToEvents();
-
-    // Register UI Request/Response handlers
-    if (this.uiHandler) {
-      this.uiHandler.register('credential', 'list', this.handleUIList.bind(this));
-      this.uiHandler.register('credential', 'get', this.handleUIGet.bind(this));
-      this.uiHandler.register('credential', 'create', this.handleUICreate.bind(this));
-      this.uiHandler.register('credential', 'update', this.handleUIUpdate.bind(this));
-      this.uiHandler.register('credential', 'delete', this.handleUIDelete.bind(this));
-      this.uiHandler.register('credential', 'test', this.handleUITest.bind(this));
-      this.uiHandler.register('credential', 'oauth.start', this.handleUIOAuthStart.bind(this));
-      this.uiHandler.register('credential', 'oauth.status', this.handleUIOAuthStatus.bind(this));
-      // OAuth Config handlers - para configurar Client ID y Secret por cuenta
-      this.uiHandler.register('credential', 'oauth.config.list', this.handleUIOAuthConfigList.bind(this));
-      this.uiHandler.register('credential', 'oauth.config.save', this.handleUIOAuthConfigSave.bind(this));
-      this.uiHandler.register('credential', 'oauth.config.delete', this.handleUIOAuthConfigDelete.bind(this));
-
-      this.logger.info('credential-manager.ui_handlers.registered', {
-        handlers: ['list', 'get', 'create', 'update', 'delete', 'test', 'oauth.start', 'oauth.status', 'oauth.config.list', 'oauth.config.save', 'oauth.config.delete']
-      });
-    }
+    // Event subscriptions and UI handlers are auto-wired by the loader from module.json
 
     // Update metrics
     this.updateCredentialMetrics();
@@ -108,17 +87,7 @@ class CredentialManagerModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    // Unregister UI handlers
-    if (this.uiHandler) {
-      this.uiHandler.unregister('credential', 'list');
-      this.uiHandler.unregister('credential', 'get');
-      this.uiHandler.unregister('credential', 'create');
-      this.uiHandler.unregister('credential', 'update');
-      this.uiHandler.unregister('credential', 'delete');
-      this.uiHandler.unregister('credential', 'test');
-      this.uiHandler.unregister('credential', 'oauth.start');
-      this.uiHandler.unregister('credential', 'oauth.status');
-    }
+    // UI handlers and event subscriptions are auto-cleaned by the loader
 
     this.credentials.clear();
     this.oauthPending.clear();
@@ -311,55 +280,8 @@ class CredentialManagerModule {
   }
 
   // ==========================================
-  // Event Subscriptions
+  // Event Handlers (wired by loader from module.json)
   // ==========================================
-
-  async subscribeToEvents() {
-    // Internal event subscriptions
-    await this.eventBus.subscribe(
-      EVENTS.CREDENTIAL.RESOLVE_REQUEST,
-      this.onResolveRequest.bind(this)
-    );
-
-    // UI event subscriptions via eventBus (topics transformados)
-    // Frontend publica a core/*/events/credential/state/request, etc.
-    await this.eventBus.subscribe(
-      EVENTS.CREDENTIAL.STATE_REQUEST,
-      this.onStateRequest.bind(this)
-    );
-
-    await this.eventBus.subscribe(
-      EVENTS.CREDENTIAL.CREATE,
-      this.onCreateCredential.bind(this)
-    );
-
-    await this.eventBus.subscribe(
-      EVENTS.CREDENTIAL.UPDATE,
-      this.onUpdateCredential.bind(this)
-    );
-
-    await this.eventBus.subscribe(
-      EVENTS.CREDENTIAL.DELETE,
-      this.onDeleteCredential.bind(this)
-    );
-
-    // OAuth credential resolution (for Gmail and other OAuth providers)
-    await this.eventBus.subscribe(
-      'credential.oauth.resolve.request',
-      this.onOAuthResolveRequest.bind(this)
-    );
-
-    this.logger.info('credential-manager.eventbus.subscribed', {
-      events: [
-        EVENTS.CREDENTIAL.RESOLVE_REQUEST,
-        EVENTS.CREDENTIAL.STATE_REQUEST,
-        EVENTS.CREDENTIAL.CREATE,
-        EVENTS.CREDENTIAL.UPDATE,
-        EVENTS.CREDENTIAL.DELETE,
-        'credential.oauth.resolve.request'
-      ]
-    });
-  }
 
   /**
    * Handler para solicitudes de estado desde el frontend

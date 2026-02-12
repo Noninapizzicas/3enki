@@ -13,9 +13,9 @@
 
   "events": {
     "subscribes": [
-      "bot.file.stored",
-      "bot.message.received",
-      "bot.command.received",
+      { "event": "bot.file.stored", "handler": "onBotFileStored" },
+      { "event": "bot.message.received", "handler": "onBotMessageReceived" },
+      { "event": "bot.command.received", "handler": "onBotCommandReceived" },
       "agent.*.completed",
       "agent.*.failed"
     ],

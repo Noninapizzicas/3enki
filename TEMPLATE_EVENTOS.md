@@ -8,11 +8,21 @@
 
 ## 🎯 PRINCIPIOS NO NEGOCIABLES
 
-### 1. ✅ 100% Event-Driven
+### 1. ✅ 100% Event-Driven + Declarativo
 
-**SÍ:**
+**SÍ (declarar suscripciones en module.json — auto-wired por el loader):**
+```json
+{
+  "events": {
+    "subscribes": [
+      { "event": "cuenta.creada", "handler": "onCuentaCreada" }
+    ]
+  }
+}
+```
+
 ```javascript
-// Publicar evento
+// Publicar evento (esto sí se hace en código)
 await this.eventBus.publish('pedido.creado', {
   pedido_id: pedido.id,
   cliente: pedido.cliente,
@@ -20,15 +30,14 @@ await this.eventBus.publish('pedido.creado', {
 }, {
   correlationId: context.correlationId
 });
-
-// Suscribirse a eventos
-await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
 ```
 
 **NO:**
 ```javascript
-// ❌ NUNCA hacer esto
-const http = require('http');
+// ❌ NUNCA suscribirse imperativamente (el loader lo hace desde module.json)
+await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
+
+// ❌ NUNCA hacer HTTP interno
 const response = await fetch('http://localhost:3339/modules/otro-modulo/datos');
 
 // ❌ NUNCA acceder directamente a otros módulos
@@ -229,8 +238,21 @@ console.log(respuesta.data);
 
 ## 📋 PATRONES DE IMPLEMENTACIÓN
 
-### Patrón 1: Suscripción en onLoad() (RECOMENDADO)
+### Patrón 1: Suscripción Declarativa en module.json (RECOMENDADO)
 
+**module.json:**
+```json
+{
+  "events": {
+    "subscribes": [
+      { "event": "pedido.creado", "handler": "onPedidoCreado" },
+      { "event": "cuenta.actualizada", "handler": "onCuentaActualizada" }
+    ]
+  }
+}
+```
+
+**index.js:**
 ```javascript
 class MiModulo {
   constructor() {
@@ -243,22 +265,11 @@ class MiModulo {
     this.eventBus = core.eventBus;
     this.logger = core.logger;
 
-    // Suscribirse a eventos
-    await this.eventBus.subscribe(
-      'pedido.creado',
-      this.onPedidoCreado.bind(this)
-    );
-
-    await this.eventBus.subscribe(
-      'cuenta.actualizada',
-      this.onCuentaActualizada.bind(this)
-    );
-
-    this.logger.info('modulo.suscripciones.registradas', {
-      eventos: ['pedido.creado', 'cuenta.actualizada']
-    });
+    // NO suscribirse aquí — el loader auto-wira desde module.json
+    this.logger.info('modulo.loaded', { module: this.name });
   }
 
+  // Handler auto-wired por el loader
   async onPedidoCreado(envelope) {
     try {
       const { pedido_id, total } = envelope.data;
@@ -654,9 +665,9 @@ await this.eventBus.publish('pedido.creado', pedido, {
 
 ---
 
-## 📝 DOCUMENTAR EN module.json
+## 📝 DECLARAR EN module.json (Auto-Wiring)
 
-**Obligatorio documentar eventos publicados y suscritos:**
+**Obligatorio declarar eventos publicados, suscritos (con handler), y UI handlers:**
 
 ```json
 {
@@ -670,13 +681,6 @@ await this.eventBus.publish('pedido.creado', pedido, {
         "description": "Cuando un nuevo pedido es creado",
         "schema": {
           "$ref": "./schemas/events.json#/definitions/pedido_creado"
-        }
-      },
-      {
-        "event": "pedido.actualizado",
-        "description": "Cuando un pedido es modificado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_actualizado"
         }
       }
     ],
@@ -693,9 +697,17 @@ await this.eventBus.publish('pedido.creado', pedido, {
         "handler": "onCobroCompletado"
       }
     ]
-  }
+  },
+
+  "ui_handlers": [
+    { "domain": "pedido", "action": "list", "handler": "handleUIList" },
+    { "domain": "pedido", "action": "create", "handler": "handleUICreate" }
+  ]
 }
 ```
+
+> **El loader lee estos campos y auto-conecta todo.** No escribas `eventBus.subscribe()` ni `uiHandler.register()` en tu código.
+> **Excepción:** Wildcards (`agent.*.completed`) y suscripciones dinámicas sí van imperativas en `onLoad()`.
 
 ---
 
@@ -785,18 +797,19 @@ Antes de considerar tus eventos correctos, verifica:
 
 ## ⚡ QUICK START
 
-```javascript
-// 1. En onLoad - suscribirse
-async onLoad(core) {
-  this.eventBus = core.eventBus;
-
-  await this.eventBus.subscribe(
-    'pedido.creado',
-    this.onPedidoCreado.bind(this)
-  );
+```json
+// 1. En module.json — declarar suscripciones (auto-wired)
+{
+  "events": {
+    "subscribes": [
+      { "event": "pedido.creado", "handler": "onPedidoCreado" }
+    ]
+  }
 }
+```
 
-// 2. Handler - con try-catch
+```javascript
+// 2. Handler en index.js — con try-catch
 async onPedidoCreado(envelope) {
   try {
     const { pedido_id } = envelope.data;
@@ -806,7 +819,7 @@ async onPedidoCreado(envelope) {
   }
 }
 
-// 3. Publicar - con correlationId
+// 3. Publicar — con correlationId (esto sí va en código)
 await this.eventBus.publish('pedido.actualizado', {
   pedido_id: pedido.id,
   updates: { estado: 'preparando' }

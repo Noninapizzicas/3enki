@@ -113,13 +113,21 @@
     ]
   },
 
+  "ui_handlers": [
+    { "domain": "conversation", "action": "send", "handler": "handleUISend" },
+    { "domain": "conversation", "action": "load", "handler": "handleUILoad" },
+    { "domain": "conversation", "action": "create", "handler": "handleUICreate" },
+    { "domain": "conversation", "action": "list", "handler": "handleUIList" },
+    { "domain": "conversation", "action": "get", "handler": "handleUIGet" },
+    { "domain": "conversation", "action": "update", "handler": "handleUIUpdate" },
+    { "domain": "conversation", "action": "delete", "handler": "handleUIDelete" },
+    { "domain": "conversation", "action": "toggleContext", "handler": "handleUIToggleContext" },
+    { "domain": "conversation", "action": "contextStats", "handler": "handleUIContextStats" }
+  ],
+
   "ui": {
     "zone": "chat",
-    "icon": "💬",
-    "handlers": {
-      "domain": "conversation",
-      "actions": ["send", "load", "create", "list", "get", "update", "delete", "toggleContext", "contextStats"]
-    }
+    "icon": "💬"
   },
 
   "dependencies": [

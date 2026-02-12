@@ -29,8 +29,8 @@ class AgentManagerModule {
     this.contextBuilder = null;
     this.pipelineExecutor = null;
 
-    // Subscriptions
-    this.unsubscribes = [];
+    // Wildcard subscriptions (managed manually; static subs are auto-wired)
+    this.wildcardUnsubscribes = [];
   }
 
   // ==========================================
@@ -57,8 +57,8 @@ class AgentManagerModule {
     this.contextBuilder = new ContextBuilder(this.logger);
     this.pipelineExecutor = new PipelineExecutor(this.config, this.logger, this.eventBus);
 
-    // Subscribe to events
-    await this.subscribeToEvents();
+    // Subscribe to wildcard events (static events are auto-wired via module.json)
+    await this.subscribeToWildcardEvents();
 
     this.logger.info('agent-manager.loaded', {
       version: this.version,
@@ -69,13 +69,13 @@ class AgentManagerModule {
   async onUnload() {
     this.logger.info('agent-manager.unloading');
 
-    // Unsubscribe all
-    for (const unsub of this.unsubscribes) {
+    // Unsubscribe wildcard events (static events are managed by the loader)
+    for (const unsub of this.wildcardUnsubscribes) {
       if (typeof unsub === 'function') {
         await unsub();
       }
     }
-    this.unsubscribes = [];
+    this.wildcardUnsubscribes = [];
 
     this.logger.info('agent-manager.unloaded');
   }
@@ -84,37 +84,49 @@ class AgentManagerModule {
   // Event Subscriptions
   // ==========================================
 
-  async subscribeToEvents() {
-    // Eventos de bot-manager
-    const botEvents = ['bot.file.stored', 'bot.message.received', 'bot.command.received'];
-
-    for (const event of botEvents) {
-      const unsub = await this.eventBus.subscribe(event, (e) => this.onBotEvent(event, e));
-      this.unsubscribes.push(unsub);
-    }
-
-    // Eventos de ai-agent-framework (para pipelines)
-    // Usamos patrón wildcard si el eventBus lo soporta, sino suscribimos genéricamente
+  async subscribeToWildcardEvents() {
+    // Wildcard subscriptions cannot be auto-wired from module.json — keep imperative
     const unsubCompleted = await this.eventBus.subscribe(
       'agent.*.completed',
       this.onAgentCompleted.bind(this)
     );
-    this.unsubscribes.push(unsubCompleted);
+    this.wildcardUnsubscribes.push(unsubCompleted);
 
     const unsubFailed = await this.eventBus.subscribe(
       'agent.*.failed',
       this.onAgentFailed.bind(this)
     );
-    this.unsubscribes.push(unsubFailed);
+    this.wildcardUnsubscribes.push(unsubFailed);
 
-    this.logger.info('agent-manager.subscribed', {
-      events: [...botEvents, 'agent.*.completed', 'agent.*.failed']
+    this.logger.info('agent-manager.wildcard-subscribed', {
+      events: ['agent.*.completed', 'agent.*.failed']
     });
   }
 
   // ==========================================
   // Event Handlers
   // ==========================================
+
+  /**
+   * Handler for bot.file.stored (auto-wired from module.json)
+   */
+  async onBotFileStored(event) {
+    return this.onBotEvent('bot.file.stored', event);
+  }
+
+  /**
+   * Handler for bot.message.received (auto-wired from module.json)
+   */
+  async onBotMessageReceived(event) {
+    return this.onBotEvent('bot.message.received', event);
+  }
+
+  /**
+   * Handler for bot.command.received (auto-wired from module.json)
+   */
+  async onBotCommandReceived(event) {
+    return this.onBotEvent('bot.command.received', event);
+  }
 
   /**
    * Maneja eventos de bot-manager (bot.file.stored, bot.message.received, etc.)

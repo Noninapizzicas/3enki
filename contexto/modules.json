@@ -33,8 +33,21 @@
     ],
     "events": {
       "publishes": ["event.name"],
-      "subscribes": ["event.name"]
+      "subscribes": [
+        {
+          "event": "event.name",
+          "handler": "methodName",
+          "description": "optional description"
+        }
+      ]
     },
+    "ui_handlers": [
+      {
+        "domain": "string (e.g., project, conversation)",
+        "action": "string (e.g., list, create, send)",
+        "handler": "string (method name on module class)"
+      }
+    ],
     "tools": [
       {
         "name": "string (module.action)",
@@ -58,7 +71,7 @@
         "uiHandler",
         "config"
       ],
-      "purpose": "Initialize module, register handlers"
+      "purpose": "Initialize module state. Event subscriptions and UI handlers are auto-wired by the loader from module.json — do NOT subscribe/register imperatively unless using wildcards or dynamic events."
     },
     "onUnload": {
       "signature": "async onUnload()",
@@ -66,9 +79,11 @@
     }
   },
   "ui_handler_registration": {
-    "in_onLoad": true,
-    "pattern": "context.uiHandler.register('domain', 'action', this.handler.bind(this))",
-    "handler_return": "{ status: number, data?: any, error?: string }"
+    "auto_wired": true,
+    "declarative_pattern": "Declare in module.json ui_handlers array: { domain, action, handler }",
+    "legacy_imperative_pattern": "context.uiHandler.register('domain', 'action', this.handler.bind(this)) — NO LONGER NEEDED",
+    "handler_return": "{ status: number, data?: any, error?: string }",
+    "note": "The loader reads ui_handlers from module.json and auto-wires them during module loading. Modules no longer need to call register/unregister manually."
   },
   "active_modules": [
     "admin-panel",

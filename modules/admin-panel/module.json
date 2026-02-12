@@ -72,8 +72,10 @@
       "admin.action"
     ],
     "subscribes": [
-      "plugin.loaded",
-      "ui.component.loaded"
+      {
+        "event": "plugin.loaded",
+        "handler": "onPluginLoaded"
+      }
     ]
   },
 

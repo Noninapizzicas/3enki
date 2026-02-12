@@ -136,8 +136,7 @@ class AIGatewayModule {
     // Initialize providers
     await this.initializeProviders();
 
-    // Subscribe to events
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired by the loader from module.json
 
     const availableProviders = await this.getAvailableProviderNames();
 
@@ -152,22 +151,8 @@ class AIGatewayModule {
     });
   }
 
-  /**
-   * Subscribe to event bus events
-   */
-  async subscribeToEvents() {
-    // Handler para solicitudes de AI desde otros módulos via eventos
-    // Escucha AMBOS eventos para compatibilidad
-    await this.eventBus.subscribe(EVENTS.AI.CHAT_REQUEST, this.onAIChatRequest.bind(this));
-    await this.eventBus.subscribe(EVENTS.AI.REQUEST, this.onAIRequestCreated.bind(this));
-
-    // Handler para respuestas de credential-manager
-    await this.eventBus.subscribe(EVENTS.CREDENTIAL.RESOLVE_RESPONSE, this.onCredentialResponse.bind(this));
-
-    this.logger.info('ai-gateway.events.subscribed', {
-      events: [EVENTS.AI.CHAT_REQUEST, EVENTS.AI.REQUEST, EVENTS.CREDENTIAL.RESOLVE_RESPONSE]
-    });
-  }
+  // Event Handlers: onAIChatRequest, onAIRequestCreated, onCredentialResponse
+  // are wired by the loader from module.json
 
   /**
    * Resolve credential from credential-manager via events

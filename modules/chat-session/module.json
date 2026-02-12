@@ -12,18 +12,41 @@
       "session.message.saved"
     ],
     "subscribes": [
-      "session.create.request",
-      "session.list.request",
-      "session.get.request",
-      "session.update.request",
-      "session.delete.request",
-      "session.messages.request",
-      "session.save.request",
-      "session.context.toggle.request",
-      "session.context.stats.request",
-      "session.context.load.request"
+      { "event": "db.query.response", "handler": "onDbQueryResponse" },
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "session.create.request", "handler": "onCreateRequest" },
+      { "event": "session.list.request", "handler": "onListRequest" },
+      { "event": "session.get.request", "handler": "onGetRequest" },
+      { "event": "session.update.request", "handler": "onUpdateRequest" },
+      { "event": "session.delete.request", "handler": "onDeleteRequest" },
+      { "event": "session.messages.request", "handler": "onMessagesRequest" },
+      { "event": "session.save.request", "handler": "onSaveRequest" },
+      { "event": "session.context.load.request", "handler": "onContextLoadRequest" },
+      { "event": "session.context.toggle.request", "handler": "onToggleContextRequest" },
+      { "event": "session.context.stats.request", "handler": "onContextStatsRequest" }
     ]
   },
+
+  "ui_handlers": [
+    { "domain": "conversation", "action": "load", "handler": "handleConversationLoad" },
+    { "domain": "conversation", "action": "create", "handler": "handleConversationCreate" },
+    { "domain": "conversation", "action": "list", "handler": "handleConversationList" },
+    { "domain": "conversation", "action": "get", "handler": "handleConversationGet" },
+    { "domain": "conversation", "action": "update", "handler": "handleConversationUpdate" },
+    { "domain": "conversation", "action": "delete", "handler": "handleConversationDelete" },
+    { "domain": "conversation", "action": "toggleContext", "handler": "handleConversationToggleContext" },
+    { "domain": "conversation", "action": "contextStats", "handler": "handleConversationContextStats" },
+    { "domain": "session", "action": "create", "handler": "handleUICreate" },
+    { "domain": "session", "action": "list", "handler": "handleUIList" },
+    { "domain": "session", "action": "get", "handler": "handleUIGet" },
+    { "domain": "session", "action": "update", "handler": "handleUIUpdate" },
+    { "domain": "session", "action": "delete", "handler": "handleUIDelete" },
+    { "domain": "session", "action": "messages", "handler": "handleUIMessages" },
+    { "domain": "session", "action": "save", "handler": "handleUISave" },
+    { "domain": "session", "action": "toggleContext", "handler": "handleUIToggleContext" },
+    { "domain": "session", "action": "contextStats", "handler": "handleUIContextStats" }
+  ],
 
   "apis": [
     {

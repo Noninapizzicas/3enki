@@ -1,4 +1,5 @@
 {
+  "id": "image-processor",
   "name": "image-processor",
   "description": "Agente con VISIÓN que analiza imágenes y decide cómo optimizarlas para OCR",
   "version": "2.0.0",

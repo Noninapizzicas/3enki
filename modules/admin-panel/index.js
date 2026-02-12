@@ -83,7 +83,7 @@ class AdminPanelModule {
       const response = await this.httpRequest('GET', '/modules/plugin-manager/plugins');
       this.cache.plugins = response.plugins || [];
     } catch (error) {
-      this.logger.warn({ error: error.message }, 'Failed to refresh plugins cache');
+      this.logger.warn('Failed to refresh plugins cache', { error: error.message });
       this.cache.plugins = [];
     }
   }
@@ -104,7 +104,7 @@ class AdminPanelModule {
         }
       ];
     } catch (error) {
-      this.logger.warn({ error: error.message }, 'Failed to refresh agents cache');
+      this.logger.warn('Failed to refresh agents cache', { error: error.message });
       this.cache.agents = [];
     }
   }
@@ -117,7 +117,7 @@ class AdminPanelModule {
       const response = await this.httpRequest('GET', '/modules/prompt-manager/prompts');
       this.cache.prompts = response.prompts || [];
     } catch (error) {
-      this.logger.warn({ error: error.message }, 'Failed to refresh prompts cache');
+      this.logger.warn('Failed to refresh prompts cache', { error: error.message });
       this.cache.prompts = [];
     }
   }
@@ -147,11 +147,11 @@ class AdminPanelModule {
             });
           }
         } catch (err) {
-          this.logger.warn({ module: moduleName, error: err.message }, 'Failed to load module metadata');
+          this.logger.warn('Failed to load module metadata', { module: moduleName, error: err.message });
         }
       }
     } catch (error) {
-      this.logger.warn({ error: error.message }, 'Failed to refresh modules cache');
+      this.logger.warn('Failed to refresh modules cache', { error: error.message });
       this.cache.modules = [];
     }
   }

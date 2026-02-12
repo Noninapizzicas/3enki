@@ -55,8 +55,7 @@ class MetricasModule {
     // Cargar métricas persistidas (si existen)
     await this.loadFromJSON();
 
-    // Suscribirse a eventos mediante patrones wildcard
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired by the loader from module.json
 
     // Inicializar gauges del sistema
     this.initializeSystemGauges();
@@ -113,24 +112,7 @@ class MetricasModule {
   }
 
   // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    // Suscribirse a patrones de eventos
-    await this.eventBus.subscribe('*.creado', this.onEntityCreated.bind(this));
-    await this.eventBus.subscribe('*.actualizado', this.onEntityUpdated.bind(this));
-    await this.eventBus.subscribe('*.eliminado', this.onEntityDeleted.bind(this));
-    await this.eventBus.subscribe('*.error', this.onError.bind(this));
-    await this.eventBus.subscribe('*.completado', this.onOperationCompleted.bind(this));
-
-    this.logger.info('metricas.suscripciones.registradas', {
-      patrones: ['*.creado', '*.actualizado', '*.eliminado', '*.error', '*.completado']
-    });
-  }
-
-  // ==========================================
-  // Event Handlers
+  // Event Handlers (wired by loader from module.json)
   // ==========================================
 
   async onEntityCreated(envelope) {

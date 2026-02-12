@@ -41,8 +41,7 @@ class CallingGenerator {
     this.activity?.action('module.loading', {});
     this.logger.info('modulo.loading', { module: this.name });
 
-    // Suscribirse a eventos
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired by the loader from module.json
 
     this.logger.info('modulo.loaded', { module: this.name });
   }
@@ -58,17 +57,8 @@ class CallingGenerator {
   }
 
   // ==========================================
-  // Event Subscriptions
+  // Event Handlers (wired by loader from module.json)
   // ==========================================
-
-  async subscribeToEvents() {
-    // REMOVED: plugin.loaded subscription (stateless - no auto-caching)
-    // await this.eventBus.subscribe('plugin.loaded', this.onPluginLoaded.bind(this));
-
-    await this.eventBus.subscribe('function.get.request', this.onGetFunctionRequest.bind(this));
-    await this.eventBus.subscribe('function.list.request', this.onListFunctionsRequest.bind(this));
-    await this.eventBus.subscribe('function.execute.request', this.onExecuteFunctionRequest.bind(this));
-  }
 
   async onPluginLoaded(event) {
     const { name, definition } = event.payload;

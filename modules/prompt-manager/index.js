@@ -52,17 +52,13 @@ class PromptManagerModule {
 
     this.activity?.action('module.loading', {});
 
-    // Subscribe to DB response events
-    await this.subscribeToEvents();
+    // Event subscriptions and UI handlers are auto-wired by the loader from module.json
 
     // Initialize schema in global DB
     await this.initializeSchema();
 
     // Load prompts and presets into cache
     await this.loadFromDatabase();
-
-    // Register UI Request/Response handlers (MQTT)
-    this.registerUIHandlers();
 
     this.logger.info('prompt-manager.loaded', {
       prompts_count: this.prompts.size,
@@ -78,16 +74,8 @@ class PromptManagerModule {
   }
 
   // ==========================================
-  // Event Subscriptions
+  // Event Handlers (wired by loader from module.json)
   // ==========================================
-
-  async subscribeToEvents() {
-    // Listen for DB query responses
-    await this.eventBus.subscribe(EVENTS.DB.QUERY_RESPONSE, this.onQueryResponse.bind(this));
-    await this.eventBus.subscribe(EVENTS.DB.SCHEMA_INIT_RESPONSE, this.onSchemaInitResponse.bind(this));
-
-    this.logger.info('prompt-manager.events.subscribed');
-  }
 
   onQueryResponse(event) {
     const { request_id, success, data, error } = event.data || event;
@@ -632,44 +620,8 @@ class PromptManagerModule {
   }
 
   // ==========================================
-  // UI Request/Response Handlers (MQTT)
+  // UI Request/Response Handlers (wired by loader from module.json)
   // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('prompt-manager.ui_handlers.no_handler');
-      return;
-    }
-
-    // Prompt CRUD
-    this.uiHandler.register('prompt', 'list', this.handleUIList.bind(this));
-    this.uiHandler.register('prompt', 'get', this.handleUIGet.bind(this));
-    this.uiHandler.register('prompt', 'create', this.handleUICreate.bind(this));
-    this.uiHandler.register('prompt', 'update', this.handleUIUpdate.bind(this));
-    this.uiHandler.register('prompt', 'delete', this.handleUIDelete.bind(this));
-    this.uiHandler.register('prompt', 'versions', this.handleUIVersions.bind(this));
-
-    // Presets
-    this.uiHandler.register('preset', 'list', this.handleUIPresetList.bind(this));
-    this.uiHandler.register('preset', 'get', this.handleUIPresetGet.bind(this));
-    this.uiHandler.register('preset', 'create', this.handleUIPresetCreate.bind(this));
-    this.uiHandler.register('preset', 'delete', this.handleUIPresetDelete.bind(this));
-    this.uiHandler.register('preset', 'apply', this.handleUIPresetApply.bind(this));
-
-    // Composer
-    this.uiHandler.register('composer', 'render', this.handleUIComposerRender.bind(this));
-
-    // Analytics
-    this.uiHandler.register('prompt', 'analytics', this.handleUIAnalytics.bind(this));
-
-    this.logger.info('prompt-manager.ui_handlers.registered', {
-      handlers: [
-        'prompt/list', 'prompt/get', 'prompt/create', 'prompt/update', 'prompt/delete', 'prompt/versions',
-        'preset/list', 'preset/get', 'preset/create', 'preset/delete', 'preset/apply',
-        'composer/render', 'prompt/analytics'
-      ]
-    });
-  }
 
   // --- Prompt UI Handlers ---
 

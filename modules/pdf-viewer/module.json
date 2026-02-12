@@ -89,10 +89,10 @@
 
   "events": {
     "subscribes": [
-      "pdf.view.request",
-      "pdf.extract.request",
-      "pdf.metadata.request",
-      "pdf.list.request"
+      { "event": "pdf.view.request", "handler": "handleViewRequest" },
+      { "event": "pdf.extract.request", "handler": "handleExtractRequest" },
+      { "event": "pdf.metadata.request", "handler": "handleMetadataRequest" },
+      { "event": "pdf.list.request", "handler": "handleListRequest" }
     ],
     "publishes": [
       "pdf.view.response",
@@ -102,6 +102,12 @@
       "pdf.error"
     ]
   },
+
+  "ui_handlers": [
+    { "domain": "pdf", "action": "view", "handler": "handleUIView" },
+    { "domain": "pdf", "action": "metadata", "handler": "handleUIMetadata" },
+    { "domain": "pdf", "action": "list", "handler": "handleUIListPdfs" }
+  ],
 
   "dependencies": {
     "modules": ["filesystem", "project-manager"]

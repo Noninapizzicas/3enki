@@ -44,82 +44,7 @@ class FilesystemModule {
     // Ensure base data directory exists
     await this.ensureDataDirectory();
 
-    // Subscribe to project activation events
-    const unsubActivated = await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
-    this.unsubscribes.push(unsubActivated);
-
-    const unsubDeactivated = await this.eventBus.subscribe('project.deactivated', this.onProjectDeactivated.bind(this));
-    this.unsubscribes.push(unsubDeactivated);
-
-    // Subscribe to request events (event-driven API for agents)
-    const unsubWriteReq = await this.eventBus.subscribe('fs.write.request', this.onWriteRequest.bind(this));
-    this.unsubscribes.push(unsubWriteReq);
-
-    const unsubCopyReq = await this.eventBus.subscribe('fs.copy.request', this.onCopyRequest.bind(this));
-    this.unsubscribes.push(unsubCopyReq);
-
-    const unsubReadReq = await this.eventBus.subscribe('fs.read.request', this.onReadRequest.bind(this));
-    this.unsubscribes.push(unsubReadReq);
-
-    const unsubDeleteReq = await this.eventBus.subscribe('fs.delete.request', this.onDeleteRequest.bind(this));
-    this.unsubscribes.push(unsubDeleteReq);
-
-    const unsubListReq = await this.eventBus.subscribe('fs.list.request', this.onListRequest.bind(this));
-    this.unsubscribes.push(unsubListReq);
-
-    const unsubMkdirReq = await this.eventBus.subscribe('fs.mkdir.request', this.onMkdirRequest.bind(this));
-    this.unsubscribes.push(unsubMkdirReq);
-
-    const unsubMoveReq = await this.eventBus.subscribe('fs.move.request', this.onMoveRequest.bind(this));
-    this.unsubscribes.push(unsubMoveReq);
-
-    const unsubRenameReq = await this.eventBus.subscribe('fs.rename.request', this.onMoveRequest.bind(this));
-    this.unsubscribes.push(unsubRenameReq);
-
-    const unsubExistsReq = await this.eventBus.subscribe('fs.exists.request', this.onExistsRequest.bind(this));
-    this.unsubscribes.push(unsubExistsReq);
-
-    const unsubInfoReq = await this.eventBus.subscribe('fs.info.request', this.onInfoRequest.bind(this));
-    this.unsubscribes.push(unsubInfoReq);
-
-    const unsubAppendReq = await this.eventBus.subscribe('fs.append.request', this.onAppendRequest.bind(this));
-    this.unsubscribes.push(unsubAppendReq);
-
-    const unsubSearchReq = await this.eventBus.subscribe('fs.search.request', this.onSearchRequest.bind(this));
-    this.unsubscribes.push(unsubSearchReq);
-
-    const unsubStatsReq = await this.eventBus.subscribe('fs.stats.request', this.onStatsRequest.bind(this));
-    this.unsubscribes.push(unsubStatsReq);
-
-    this.logger.info('filesystem.events.subscribed', {
-      events: [
-        'project.activated', 'project.deactivated',
-        'fs.read.request', 'fs.write.request', 'fs.copy.request', 'fs.delete.request',
-        'fs.list.request', 'fs.mkdir.request', 'fs.move.request', 'fs.rename.request',
-        'fs.exists.request', 'fs.info.request', 'fs.append.request', 'fs.search.request', 'fs.stats.request'
-      ]
-    });
-
-    // Register UI handlers
-    if (this.uiHandler) {
-      this.uiHandler.register('fs', 'list', this.handleList.bind(this));
-      this.uiHandler.register('fs', 'read', this.handleRead.bind(this));
-      this.uiHandler.register('fs', 'write', this.handleWrite.bind(this));
-      this.uiHandler.register('fs', 'delete', this.handleDelete.bind(this));
-      this.uiHandler.register('fs', 'mkdir', this.handleMkdir.bind(this));
-      this.uiHandler.register('fs', 'move', this.handleMove.bind(this));
-      this.uiHandler.register('fs', 'copy', this.handleCopy.bind(this));
-      this.uiHandler.register('fs', 'search', this.handleSearch.bind(this));
-      this.uiHandler.register('fs', 'info', this.handleInfo.bind(this));
-      this.uiHandler.register('fs', 'cleanup', this.handleCleanup.bind(this));
-      this.uiHandler.register('fs', 'stats', this.handleStats.bind(this));
-      this.uiHandler.register('fs', 'setWorkDir', this.handleSetWorkDir.bind(this));
-      this.uiHandler.register('fs', 'getWorkDir', this.handleGetWorkDir.bind(this));
-
-      this.logger.info('filesystem.handlers.registered', {
-        handlers: ['list', 'read', 'write', 'delete', 'mkdir', 'move', 'copy', 'search', 'info', 'cleanup', 'stats', 'setWorkDir', 'getWorkDir']
-      });
-    }
+    // Event subscriptions and UI handlers are auto-wired by the loader from module.json
 
     this.logger.info('filesystem.loaded', {
       basePath: this.basePath
@@ -127,12 +52,7 @@ class FilesystemModule {
   }
 
   async onUnload() {
-    // Cleanup subscriptions
-    for (const unsub of this.unsubscribes) {
-      if (typeof unsub === 'function') unsub();
-    }
-    this.unsubscribes = [];
-
+    // Event subscriptions and UI handlers are auto-cleaned by the loader
     this.logger.info('filesystem.unloaded');
   }
 

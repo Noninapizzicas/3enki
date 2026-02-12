@@ -205,21 +205,21 @@
       "fs.stats.response"
     ],
     "subscribes": [
-      "project.activated",
-      "project.deactivated",
-      "fs.read.request",
-      "fs.write.request",
-      "fs.copy.request",
-      "fs.delete.request",
-      "fs.list.request",
-      "fs.mkdir.request",
-      "fs.move.request",
-      "fs.rename.request",
-      "fs.exists.request",
-      "fs.info.request",
-      "fs.append.request",
-      "fs.search.request",
-      "fs.stats.request"
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "fs.read.request", "handler": "onReadRequest" },
+      { "event": "fs.write.request", "handler": "onWriteRequest" },
+      { "event": "fs.copy.request", "handler": "onCopyRequest" },
+      { "event": "fs.delete.request", "handler": "onDeleteRequest" },
+      { "event": "fs.list.request", "handler": "onListRequest" },
+      { "event": "fs.mkdir.request", "handler": "onMkdirRequest" },
+      { "event": "fs.move.request", "handler": "onMoveRequest" },
+      { "event": "fs.rename.request", "handler": "onMoveRequest" },
+      { "event": "fs.exists.request", "handler": "onExistsRequest" },
+      { "event": "fs.info.request", "handler": "onInfoRequest" },
+      { "event": "fs.append.request", "handler": "onAppendRequest" },
+      { "event": "fs.search.request", "handler": "onSearchRequest" },
+      { "event": "fs.stats.request", "handler": "onStatsRequest" }
     ]
   },
 

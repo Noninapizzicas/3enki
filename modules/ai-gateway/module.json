@@ -15,9 +15,18 @@
     "ai.completion.completed"
   ],
   "subscribes": [
-    "ai.chat.request",
-    "ai.request",
-    "credential.resolve.response"
+    {
+      "event": "ai.chat.request",
+      "handler": "onAIChatRequest"
+    },
+    {
+      "event": "ai.request",
+      "handler": "onAIRequestCreated"
+    },
+    {
+      "event": "credential.resolve.response",
+      "handler": "onCredentialResponse"
+    }
   ],
   "apis": [
     {

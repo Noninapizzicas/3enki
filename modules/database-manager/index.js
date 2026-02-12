@@ -82,8 +82,7 @@ class DatabaseManagerModule {
     // Create projects directory
     await this.ensureProjectsDirectory();
 
-    // Subscribe to events
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired by the loader from module.json
 
     // Update metrics
     // REMOVED (migrate-to-event-metrics): this.metrics.gauge('db.loaded.count', this.databases.size);
@@ -158,27 +157,7 @@ class DatabaseManagerModule {
   }
 
   // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe(
-      EVENTS.DB.QUERY_REQUEST,
-      this.onQueryRequest.bind(this)
-    );
-
-    await this.eventBus.subscribe(
-      EVENTS.DB.SCHEMA_INIT_REQUEST,
-      this.onSchemaInitRequest.bind(this)
-    );
-
-    this.logger.info('events.subscribed', {
-      events: [EVENTS.DB.QUERY_REQUEST, EVENTS.DB.SCHEMA_INIT_REQUEST]
-    });
-  }
-
-  // ==========================================
-  // Event Handlers (from other modules)
+  // Event Handlers (wired by loader from module.json)
   // ==========================================
 
   async onQueryRequest(event) {

@@ -61,10 +61,10 @@
 
   "events": {
     "subscribes": [
-      "editor.open.request",
-      "editor.save.request",
-      "editor.validate.request",
-      "editor.format.request"
+      { "event": "editor.open.request", "handler": "handleOpenRequest" },
+      { "event": "editor.save.request", "handler": "handleSaveRequest" },
+      { "event": "editor.validate.request", "handler": "handleValidateRequest" },
+      { "event": "editor.format.request", "handler": "handleFormatRequest" }
     ],
     "publishes": [
       "editor.open.response",
@@ -74,6 +74,13 @@
       "editor.error"
     ]
   },
+
+  "ui_handlers": [
+    { "domain": "editor", "action": "open", "handler": "handleUIOpen" },
+    { "domain": "editor", "action": "save", "handler": "handleUISave" },
+    { "domain": "editor", "action": "validate", "handler": "handleUIValidate" },
+    { "domain": "editor", "action": "format", "handler": "handleUIFormat" }
+  ],
 
   "dependencies": {
     "modules": ["file-browser", "project-manager"]

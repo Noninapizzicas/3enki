@@ -61,7 +61,8 @@ class CallingGenerator {
   // ==========================================
 
   async onPluginLoaded(event) {
-    const { name, definition } = event.payload;
+    const data = event.data || event.payload || event;
+    const { name, definition } = data;
 
     this.logger.info('plugin.loaded.received', {
       plugin_name: name,

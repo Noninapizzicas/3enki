@@ -541,6 +541,18 @@ class ModuleLoader {
         })
       : discovered;
 
+    // Sort by config.enabled order (if specified)
+    const enabledOrder = this.config.enabled || [];
+    if (enabledOrder.length > 0) {
+      toLoad.sort((a, b) => {
+        const indexA = enabledOrder.indexOf(a.name);
+        const indexB = enabledOrder.indexOf(b.name);
+        const orderA = indexA >= 0 ? indexA : enabledOrder.length;
+        const orderB = indexB >= 0 ? indexB : enabledOrder.length;
+        return orderA - orderB;
+      });
+    }
+
     if (this.logger) {
       this.logger.info('modules.loading.all', {
         count: toLoad.length,

@@ -464,6 +464,7 @@ class PluginManagerModule {
       // Publish event
       await this.eventBus.publish('plugin.loaded', {
         name: pluginName,
+        definition: pluginDef,
         version: pluginDef.metadata.version || '1.0.0',
         description: pluginDef.metadata.description || '',
         functions: functionNames,

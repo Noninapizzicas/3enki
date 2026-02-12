@@ -263,6 +263,19 @@ class AIAgentFrameworkModule {
           const agentData = JSON.parse(content);
 
           const agent = Agent.fromJSON(agentData);
+
+          // Skip duplicate agents (same name already loaded)
+          const existingByName = Array.from(this.agents.values()).find(a => a.name === agent.name);
+          if (existingByName) {
+            this.logger.warn('ai-agent-framework.agent.duplicate.skipped', {
+              name: agent.name,
+              existing_id: existingByName.id,
+              skipped_id: agent.id,
+              file
+            });
+            continue;
+          }
+
           await this.registerAgent(agent);
         } catch (error) {
           this.logger.error('ai-agent-framework.load-agent.failed', {

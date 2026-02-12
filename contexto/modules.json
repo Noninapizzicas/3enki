@@ -76,6 +76,20 @@
     "onUnload": {
       "signature": "async onUnload()",
       "purpose": "Cleanup resources"
+    },
+    "loader_wiring_order": {
+      "_updated": "2026-02-12",
+      "descripcion": "El orden de operaciones del loader al cargar un módulo",
+      "steps": [
+        "1. Instanciar módulo: new ModuleClass()",
+        "2. Cablear suscripciones de eventos (wireEventSubscriptions) — ANTES de onLoad",
+        "3. Ejecutar onLoad(context) — el módulo ya puede publicar requests y recibir responses",
+        "4. Registrar en ModuleRegistry",
+        "5. Registrar tools para AI",
+        "6. Cablear UI handlers (wireUIHandlers) — DESPUÉS de onLoad"
+      ],
+      "razon": "Las suscripciones se cablean ANTES de onLoad porque módulos como prompt-manager y project-manager publican requests a database-manager durante su inicialización y necesitan recibir las respuestas via sus handlers declarados en module.json",
+      "cleanup_on_failure": "Si onLoad lanza error, las suscripciones se limpian automáticamente"
     }
   },
   "ui_handler_registration": {
@@ -86,35 +100,29 @@
     "note": "The loader reads ui_handlers from module.json and auto-wires them during module loading. Modules no longer need to call register/unregister manually."
   },
   "active_modules": [
-    "admin-panel",
-    "agent-manager",
-    "ai-agent-framework",
+    "credential-manager",
+    "database-manager",
+    "log-manager",
+    "filesystem",
+    "plugin-manager",
+    "prompt-manager",
+    "prompt-composer",
+    "scheduler",
+    "project-manager",
+    "system-inspector",
     "ai-gateway",
-    "bot-manager",
+    "ai-agent-framework",
+    "agent-manager",
     "calling-generator",
+    "bot-manager",
     "chat-ai-bridge",
     "chat-session",
     "code-executor",
-    "conversation-manager",
-    "credential-manager",
-    "dashboard",
-    "database-manager",
-    "filesystem",
-    "flow-engine",
-    "log-manager",
-    "metricas",
-    "notas",
+    "admin-panel",
     "pdf-viewer",
-    "plugin-manager",
-    "project-manager",
-    "prompt-composer",
-    "prompt-manager",
-    "scheduler",
-    "scratch-designer",
-    "system-inspector",
     "telegram-service",
     "text-editor",
-    "ui-designer",
+    "pizzepos/cuentas",
     "pizzepos/cuentas-canales",
     "pizzepos/pedidos",
     "pizzepos/cobros",
@@ -125,13 +133,16 @@
     "pizzepos/ingredientes",
     "pizzepos/variaciones",
     "pizzepos/menu-generator",
-    "pizzepos/persistencia-comandero",
-    "pizzepos/cuentas"
+    "pizzepos/persistencia-comandero"
   ],
+  "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer"],
   "module_count": {
-    "core": 28,
+    "_updated": "2026-02-12",
+    "core": 22,
     "pizzepos": 12,
-    "total": 40
+    "total_discovered": 40,
+    "total_active": 34,
+    "disabled": 6
   },
   "module_categories": {
     "ai": {
@@ -510,6 +521,27 @@
         "ai-gateway": "Inline AI mode usa ai.chat.request/response",
         "ai-agent-framework": "Named agent mode usa agent.execute.request/response"
       }
+    }
+  },
+  "database_event_pattern": {
+    "_updated": "2026-02-12",
+    "descripcion": "Patrón request/response para consultas a database-manager via eventos",
+    "request_event": "db.query.request",
+    "response_event": "db.query.response",
+    "schema_init": {
+      "request": "db.schema.init.request",
+      "response": "db.schema.init.response"
+    },
+    "campos_requeridos": {
+      "project_id": "STRING obligatorio — identifica la base de datos. Usar 'system' para la DB del sistema, '_prompts' para prompts, o el UUID del proyecto",
+      "request_id": "UUID para correlacionar request/response",
+      "query": "SQL query",
+      "params": "Array de parámetros para prepared statement",
+      "read_only": "boolean — si false, auto-save después de ejecutar"
+    },
+    "errores_comunes": {
+      "database_vs_project_id": "NUNCA usar 'database' como campo — database-manager desestructura 'project_id'. Usar database causa project_id=undefined → path.join crash",
+      "timeout_sin_suscripcion": "Si el módulo publica request durante onLoad pero no tiene suscripción a response, la respuesta se pierde. Las suscripciones se cablean ANTES de onLoad (ver loader_wiring_order)"
     }
   },
   "integration_patterns": {

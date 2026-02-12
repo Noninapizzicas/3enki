@@ -32,11 +32,13 @@ A meta-core event-driven framework built on Node.js + MQTT (Aedes) + SvelteKit 2
 
 3. **Post-hoc streaming is a UX debt.** `simulateStreaming()` waits for full response then delivers progressively — cosmetic, not real streaming.
 
-4. **conversation-manager is a zombie module.** Facade eliminated but module still exists. Creates confusion.
+4. **~~conversation-manager is a zombie module.~~** Now disabled via config.modules.disabled.
 
 5. **Frontend-backend sync is fragile.** No automatic mechanism to keep frontend constants in sync with backend definitions.
 
 6. **Legacy Plop generators still present.** `chat-module` (outdated patterns) and `from-blueprint` (deprecated) can mislead developers.
+
+7. **ai-gateway inicialización lenta.** Cada proveedor LLM resuelve credenciales via request/response con 5s timeout. 6 proveedores × 2 intentos = ~60s de arranque solo para ai-gateway.
 
 ## Documentation Quality
 
@@ -80,6 +82,9 @@ The `contexto/` directory with 27 JSON files is unusually thorough. Issues:
 5. Cache active project via `project.activated`/`project.deactivated` events
 6. Naming: kebab-case (modules/handlers), dot.notation (events), slash/notation (MQTT topics)
 7. onUnload only cleans module-specific state (pending requests, timers, caches) — the loader handles unsubscribe/unregister automatically
+8. Logger API: `logger.info('event.name', { data })` — primer arg string, segundo objeto. **No** usar estilo pino `logger.info({obj}, 'msg')`
+9. Database queries: usar `project_id: 'system'` en los eventos db.query.request. **Nunca** `database: 'system'`
+10. Orden de carga: las suscripciones de eventos se cablean ANTES de onLoad(). Los módulos pueden publicar requests y recibir responses durante su inicialización
 
 ## Honest Summary
 

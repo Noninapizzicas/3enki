@@ -27,7 +27,7 @@ module.exports = {
         query,
         params,
         read_only: readOnly,
-        database: 'system',
+        project_id: 'system',
         correlation_id: correlationId
       }).catch(err => {
         clearTimeout(timeout);
@@ -62,7 +62,7 @@ module.exports = {
    */
   async loadExistingProjects() {
     const correlationId = crypto.randomUUID();
-    this.logger.info({ correlationId }, 'Loading existing projects from database');
+    this.logger.info('project-manager.db.loading', { correlationId });
 
     try {
       const projects = await this.queryDatabase(
@@ -99,10 +99,9 @@ module.exports = {
         }
       }
 
-      this.logger.info({ correlationId, count: projects.length, activeProjectId: this.activeProjectId },
-        'Projects loaded from database');
+      this.logger.info('project-manager.db.loaded', { correlationId, count: projects.length, activeProjectId: this.activeProjectId });
     } catch (error) {
-      this.logger.error({ correlationId, error: error.message }, 'Failed to load projects from database');
+      this.logger.error('project-manager.db.load.failed', { correlationId, error: error.message });
     }
   },
 
@@ -111,7 +110,7 @@ module.exports = {
    */
   async ensureSystemProject() {
     const correlationId = crypto.randomUUID();
-    this.logger.debug({ correlationId }, 'Ensuring system project exists');
+    this.logger.debug('project-manager.system.ensuring', { correlationId });
 
     // Check if system project already exists
     const existingSystem = Array.from(this.projects.values()).find(
@@ -119,7 +118,7 @@ module.exports = {
     );
 
     if (existingSystem) {
-      this.logger.debug({ correlationId, projectId: existingSystem.id }, 'System project already exists');
+      this.logger.debug('project-manager.system.exists', { correlationId, projectId: existingSystem.id });
       return existingSystem;
     }
 
@@ -137,7 +136,7 @@ module.exports = {
 
       // Check for name conflict
       if (await this.projectNameExists(SYSTEM_PROJECT_NAME, correlationId)) {
-        this.logger.debug({ correlationId }, 'System project name exists, skipping creation');
+        this.logger.debug('project-manager.system.name-exists', { correlationId });
         return;
       }
 
@@ -207,16 +206,16 @@ module.exports = {
       );
       project.system_id = systemId;
 
-      this.logger.info({ correlationId, projectId, basePath }, 'System project created successfully');
+      this.logger.info('project-manager.system.created', { correlationId, projectId, basePath });
 
       return project;
     } catch (error) {
       // If it's a duplicate name error, that's fine - project already exists
       if (error.code === 'PROJECT_NAME_EXISTS' || error.message?.includes('UNIQUE constraint')) {
-        this.logger.debug({ correlationId }, 'System project already exists (constraint)');
+        this.logger.debug('project-manager.system.exists-constraint', { correlationId });
         return;
       }
-      this.logger.error({ correlationId, error: error.message }, 'Failed to ensure system project');
+      this.logger.error('project-manager.system.ensure-failed', { correlationId, error: error.message });
     }
   },
 
@@ -240,14 +239,14 @@ module.exports = {
       );
       existingColumns = tableInfo.map(col => col.name);
     } catch (error) {
-      this.logger.warn({ correlationId, error: error.message }, 'Could not get table info, skipping migration');
+      this.logger.warn('project-manager.migration.table-info-failed', { correlationId, error: error.message });
       return;
     }
 
     for (const col of columnsToAdd) {
       // Skip if column already exists
       if (existingColumns.includes(col.name)) {
-        this.logger.debug({ correlationId, column: col.name }, 'Composition column already exists');
+        this.logger.debug('project-manager.migration.column-exists', { correlationId, column: col.name });
         continue;
       }
 
@@ -256,9 +255,9 @@ module.exports = {
           `ALTER TABLE projects ADD COLUMN ${col.name} ${col.type}`,
           [], false, correlationId
         );
-        this.logger.info({ correlationId, column: col.name }, 'Added composition column');
+        this.logger.info('project-manager.migration.column-added', { correlationId, column: col.name });
       } catch (error) {
-        this.logger.warn({ correlationId, column: col.name, error: error.message }, 'Failed to add composition column');
+        this.logger.warn('project-manager.migration.column-failed', { correlationId, column: col.name, error: error.message });
       }
     }
   },
@@ -268,7 +267,7 @@ module.exports = {
    * Creates: systems, project_links, project_dependencies, shared_context
    */
   async initializeCompositionTables(correlationId) {
-    this.logger.debug({ correlationId }, 'Initializing composition tables');
+    this.logger.debug('project-manager.composition.initializing', { correlationId });
 
     // Table: systems - Logical containers for related projects
     await this.queryDatabase(`
@@ -341,10 +340,10 @@ module.exports = {
         await this.queryDatabase(indexSql, [], false, correlationId);
       } catch (error) {
         // Index might already exist - not a problem
-        this.logger.debug({ correlationId, error: error.message }, 'Index creation skipped');
+        this.logger.debug('project-manager.composition.index-skipped', { correlationId, error: error.message });
       }
     }
 
-    this.logger.info({ correlationId }, 'Composition tables initialized');
+    this.logger.info('project-manager.composition.initialized', { correlationId });
   }
 };

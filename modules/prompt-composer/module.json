@@ -10,13 +10,22 @@
       "prompt.context.loaded"
     ],
     "subscribes": [
-      "prompt.compose.request",
-      "project.get.response",
-      "storage.info.response",
-      "prompt.get.response",
-      "prompt.list.response"
+      { "event": "prompt.compose.request", "handler": "onComposeRequest" },
+      { "event": "project.get.response", "handler": "onProjectGetResponse" },
+      { "event": "storage.info.response", "handler": "onStorageInfoResponse" },
+      { "event": "prompt.get.response", "handler": "onPromptManagerGetResponse" },
+      { "event": "prompt.list.response", "handler": "onPromptManagerListResponse" },
+      { "event": "context.full.response", "handler": "onInheritedContextResponse" },
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
     ]
   },
+
+  "ui_handlers": [
+    { "domain": "prompt", "action": "compose", "handler": "handleUICompose" },
+    { "domain": "prompt", "action": "templates", "handler": "handleUITemplates" },
+    { "domain": "prompt", "action": "context", "handler": "handleUIContext" }
+  ],
 
   "apis": [
     {

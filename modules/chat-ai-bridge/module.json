@@ -9,15 +9,25 @@
       "chat.send.response",
       "ai.chat.request",
       "session.save.request",
-      "prompt.compose.request"
+      "prompt.compose.request",
+      "session.context.load.request"
     ],
     "subscribes": [
-      "chat.send.request",
-      "ai.chat.response",
-      "session.save.response",
-      "prompt.compose.response"
+      { "event": "chat.send.request", "handler": "onChatSendRequest" },
+      { "event": "ai.chat.response", "handler": "onAIChatResponse" },
+      { "event": "session.save.response", "handler": "onSessionSaveResponse" },
+      { "event": "prompt.compose.response", "handler": "onPromptComposeResponse" },
+      { "event": "session.context.load.response", "handler": "onSessionContextResponse" },
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
     ]
   },
+
+  "ui_handlers": [
+    { "domain": "conversation", "action": "send", "handler": "handleConversationSend" },
+    { "domain": "chat-bridge", "action": "send", "handler": "handleUISend" },
+    { "domain": "chat-bridge", "action": "status", "handler": "handleUIStatus" }
+  ],
 
   "apis": [
     {

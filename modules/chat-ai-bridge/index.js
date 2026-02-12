@@ -39,9 +39,6 @@ class ChatAiBridgeModule {
     // Cached active project (updated via project.activated event)
     this.activeProjectId = null;
 
-    // Unsubscribe tracking for cleanup
-    this.unsubscribes = [];
-
     // Startup time for health check
     this.startTime = Date.now();
 
@@ -69,11 +66,8 @@ class ChatAiBridgeModule {
       version: this.version
     });
 
-    // Register UI handlers (MQTT request/response)
-    await this.registerUIHandlers();
-
-    // Subscribe to events
-    await this.subscribeToEvents();
+    // UI handlers and event subscriptions are auto-wired by the module loader
+    // from module.json (events.subscribes with handler fields, and ui_handlers)
 
     this.logger.info('chat-ai-bridge.loaded', {
       module: this.name
@@ -83,18 +77,8 @@ class ChatAiBridgeModule {
   async onUnload() {
     this.logger.info('chat-ai-bridge.unloading', { module: this.name });
 
-    // Unregister UI handlers
-    if (this.uiHandler) {
-      this.uiHandler.unregister('conversation', 'send');
-      this.uiHandler.unregister('chat-bridge', 'send');
-      this.uiHandler.unregister('chat-bridge', 'status');
-    }
-
-    // Unsubscribe all event handlers
-    for (const unsub of this.unsubscribes) {
-      await unsub();
-    }
-    this.unsubscribes = [];
+    // UI handler unregistration and event unsubscription are handled
+    // automatically by the module loader during unload.
 
     // Cleanup pending requests
     const pendingMaps = [
@@ -117,90 +101,8 @@ class ChatAiBridgeModule {
     this.logger.info('chat-ai-bridge.unloaded', { module: this.name });
   }
 
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  async registerUIHandlers() {
-    if (!this.uiHandler) return;
-
-    // Primary domain: conversation.send (replaces conversation-manager facade)
-    this.uiHandler.register('conversation', 'send', this.handleConversationSend.bind(this));
-
-    // Internal domain: chat-bridge (direct access)
-    this.uiHandler.register('chat-bridge', 'send', this.handleUISend.bind(this));
-    this.uiHandler.register('chat-bridge', 'status', this.handleUIStatus.bind(this));
-
-    this.logger.info('chat-ai-bridge.ui_handlers.registered', {
-      domains: { conversation: ['send'], 'chat-bridge': ['send', 'status'] }
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    // Main entry point: chat.send.request
-    const unsubChatSend = await this.eventBus.subscribe(
-      'chat.send.request',
-      this.onChatSendRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubChatSend);
-
-    // Response from ai-gateway
-    const unsubAI = await this.eventBus.subscribe(
-      EVENTS.AI.CHAT_RESPONSE,
-      this.onAIChatResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubAI);
-
-    // Response from chat-session (save)
-    const unsubSessionSave = await this.eventBus.subscribe(
-      'session.save.response',
-      this.onSessionSaveResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubSessionSave);
-
-    // Response from prompt-composer
-    const unsubPrompt = await this.eventBus.subscribe(
-      'prompt.compose.response',
-      this.onPromptComposeResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubPrompt);
-
-    // Response from session context load
-    const unsubContext = await this.eventBus.subscribe(
-      'session.context.load.response',
-      this.onSessionContextResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubContext);
-
-    // Project lifecycle: cache active project ID
-    const unsubProjectActivated = await this.eventBus.subscribe(
-      EVENTS.PROJECT.ACTIVATED,
-      this.onProjectActivated.bind(this)
-    );
-    this.unsubscribes.push(unsubProjectActivated);
-
-    const unsubProjectDeactivated = await this.eventBus.subscribe(
-      'project.deactivated',
-      this.onProjectDeactivated.bind(this)
-    );
-    this.unsubscribes.push(unsubProjectDeactivated);
-
-    this.logger.info('chat-ai-bridge.events.subscribed', {
-      events: [
-        'chat.send.request',
-        'ai.chat.response',
-        'session.save.response',
-        'prompt.compose.response',
-        'session.context.load.response',
-        'project.activated',
-        'project.deactivated'
-      ]
-    });
-  }
+  // UI handlers (conversation.send, chat-bridge.send, chat-bridge.status)
+  // and event subscriptions are auto-wired by the module loader from module.json.
 
   // ==========================================
   // Main Flow: Chat Send Request

@@ -1,7 +1,5 @@
 const crypto = require('crypto');
 
-const { EVENTS } = require('../../core/constants');
-
 /**
  * Conversation Manager Module (Facade)
  *
@@ -37,9 +35,6 @@ class ConversationManagerModule {
     this.REQUEST_TIMEOUT = 30000;
     this.CHAT_TIMEOUT = 180000; // 3 min for chat with tools
 
-    // Unsubscribe functions
-    this.unsubscribes = [];
-
     // Startup time for health check
     this.startTime = Date.now();
   }
@@ -56,12 +51,6 @@ class ConversationManagerModule {
       mode: 'facade'
     });
 
-    // Register UI handlers (maintain compatibility with 'conversation' domain)
-    await this.registerUIHandlers();
-
-    // Subscribe to response events from delegated modules
-    await this.subscribeToResponses();
-
     this.logger.info('conversation-manager.loaded', {
       module: this.name,
       note: 'Facade mode - delegating to chat-session, prompt-composer, chat-ai-bridge'
@@ -70,20 +59,6 @@ class ConversationManagerModule {
 
   async onUnload() {
     this.logger.info('conversation-manager.unloading', { module: this.name });
-
-    // Unregister UI handlers
-    if (this.uiHandler) {
-      const actions = ['send', 'load', 'create', 'list', 'get', 'update', 'delete', 'toggleContext', 'contextStats'];
-      for (const action of actions) {
-        this.uiHandler.unregister('conversation', action);
-      }
-    }
-
-    // Unsubscribe all
-    for (const unsub of this.unsubscribes) {
-      await unsub();
-    }
-    this.unsubscribes = [];
 
     // Clear pending requests
     for (const [, req] of this.pendingRequests) {
@@ -96,67 +71,8 @@ class ConversationManagerModule {
   }
 
   // ==========================================
-  // UI Handler Registration
+  // Event Handlers
   // ==========================================
-
-  async registerUIHandlers() {
-    if (!this.uiHandler) return;
-
-    // Register handlers for 'conversation' domain (legacy compatibility)
-    this.uiHandler.register('conversation', 'send', this.handleUISend.bind(this));
-    this.uiHandler.register('conversation', 'load', this.handleUILoad.bind(this));
-    this.uiHandler.register('conversation', 'create', this.handleUICreate.bind(this));
-    this.uiHandler.register('conversation', 'list', this.handleUIList.bind(this));
-    this.uiHandler.register('conversation', 'get', this.handleUIGet.bind(this));
-    this.uiHandler.register('conversation', 'update', this.handleUIUpdate.bind(this));
-    this.uiHandler.register('conversation', 'delete', this.handleUIDelete.bind(this));
-    this.uiHandler.register('conversation', 'toggleContext', this.handleUIToggleContext.bind(this));
-    this.uiHandler.register('conversation', 'contextStats', this.handleUIContextStats.bind(this));
-
-    this.logger.info('conversation-manager.ui_handlers.registered', {
-      domain: 'conversation',
-      actions: ['send', 'load', 'create', 'list', 'get', 'update', 'delete', 'toggleContext', 'contextStats'],
-      note: 'Facade handlers delegating to specialized modules'
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions (for responses)
-  // ==========================================
-
-  async subscribeToResponses() {
-    // Subscribe to chat.send.response (from chat-ai-bridge)
-    const unsubChat = await this.eventBus.subscribe('chat.send.response',
-      this.onDelegatedResponse.bind(this));
-    this.unsubscribes.push(unsubChat);
-
-    // Subscribe to session responses (from chat-session)
-    const sessionEvents = [
-      'session.create.response',
-      'session.list.response',
-      'session.get.response',
-      'session.update.response',
-      'session.delete.response',
-      'session.messages.response',
-      'session.context.load.response',
-      'session.context.toggle.response',
-      'session.context.stats.response'
-    ];
-
-    for (const event of sessionEvents) {
-      const unsub = await this.eventBus.subscribe(event, this.onDelegatedResponse.bind(this));
-      this.unsubscribes.push(unsub);
-    }
-
-    // Subscribe to project.active.response for getting active project
-    const unsubProject = await this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE,
-      this.onDelegatedResponse.bind(this));
-    this.unsubscribes.push(unsubProject);
-
-    this.logger.info('conversation-manager.events.subscribed', {
-      events: ['chat.send.response', ...sessionEvents, 'project.active.response']
-    });
-  }
 
   onDelegatedResponse(event) {
     const eventData = event.data || event;
@@ -197,7 +113,7 @@ class ConversationManagerModule {
 
   async getActiveProjectId(correlationId) {
     try {
-      const response = await this.sendRequest(EVENTS.PROJECT.ACTIVE_REQUEST, {
+      const response = await this.sendRequest('project.active.request', {
         correlation_id: correlationId
       }, 5000);
 

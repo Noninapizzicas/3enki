@@ -39,9 +39,6 @@ class ChatSessionModule {
     // Pending requests (for request/response pattern)
     this.pendingDbRequests = new Map();
 
-    // Unsubscribe functions for cleanup
-    this.unsubscribes = [];
-
     // Startup time for health check
     this.startTime = Date.now();
   }
@@ -56,39 +53,14 @@ class ChatSessionModule {
     this.uiHandler = context.uiHandler;
     this.config = context.config || {};
 
-    this.logger.info('chat-session.loading', {
+    this.logger.info('chat-session.loaded', {
       module: this.name,
       version: this.version
-    });
-
-    // Register UI handlers
-    await this.registerUIHandlers();
-
-    // Subscribe to events
-    await this.subscribeToEvents();
-
-    this.logger.info('chat-session.loaded', {
-      module: this.name
     });
   }
 
   async onUnload() {
     this.logger.info('chat-session.unloading', { module: this.name });
-
-    // Unregister UI handlers
-    if (this.uiHandler) {
-      const convActions = ['load', 'create', 'list', 'get', 'update', 'delete', 'toggleContext', 'contextStats'];
-      for (const action of convActions) this.uiHandler.unregister('conversation', action);
-
-      const sessionActions = ['create', 'list', 'get', 'update', 'delete', 'messages', 'save', 'toggleContext', 'contextStats'];
-      for (const action of sessionActions) this.uiHandler.unregister('session', action);
-    }
-
-    // Unsubscribe all event handlers
-    for (const unsub of this.unsubscribes) {
-      await unsub();
-    }
-    this.unsubscribes = [];
 
     // Clear pending requests
     for (const [, req] of this.pendingDbRequests.entries()) {
@@ -102,147 +74,6 @@ class ChatSessionModule {
     this.initializedProjects.clear();
 
     this.logger.info('chat-session.unloaded', { module: this.name });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  async registerUIHandlers() {
-    if (!this.uiHandler) return;
-
-    // Primary domain: conversation.* (replaces conversation-manager facade)
-    this.uiHandler.register('conversation', 'load', this.handleConversationLoad.bind(this));
-    this.uiHandler.register('conversation', 'create', this.handleConversationCreate.bind(this));
-    this.uiHandler.register('conversation', 'list', this.handleConversationList.bind(this));
-    this.uiHandler.register('conversation', 'get', this.handleConversationGet.bind(this));
-    this.uiHandler.register('conversation', 'update', this.handleConversationUpdate.bind(this));
-    this.uiHandler.register('conversation', 'delete', this.handleConversationDelete.bind(this));
-    this.uiHandler.register('conversation', 'toggleContext', this.handleConversationToggleContext.bind(this));
-    this.uiHandler.register('conversation', 'contextStats', this.handleConversationContextStats.bind(this));
-
-    // Internal domain: session.* (for inter-module communication)
-    this.uiHandler.register('session', 'create', this.handleUICreate.bind(this));
-    this.uiHandler.register('session', 'list', this.handleUIList.bind(this));
-    this.uiHandler.register('session', 'get', this.handleUIGet.bind(this));
-    this.uiHandler.register('session', 'update', this.handleUIUpdate.bind(this));
-    this.uiHandler.register('session', 'delete', this.handleUIDelete.bind(this));
-    this.uiHandler.register('session', 'messages', this.handleUIMessages.bind(this));
-    this.uiHandler.register('session', 'save', this.handleUISave.bind(this));
-    this.uiHandler.register('session', 'toggleContext', this.handleUIToggleContext.bind(this));
-    this.uiHandler.register('session', 'contextStats', this.handleUIContextStats.bind(this));
-
-    this.logger.info('chat-session.ui_handlers.registered', {
-      domains: {
-        conversation: ['load', 'create', 'list', 'get', 'update', 'delete', 'toggleContext', 'contextStats'],
-        session: ['create', 'list', 'get', 'update', 'delete', 'messages', 'save', 'toggleContext', 'contextStats']
-      }
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    // Subscribe to database responses
-    const unsubDb = await this.eventBus.subscribe(
-      'db.query.response',
-      this.onDbQueryResponse.bind(this)
-    );
-    this.unsubscribes.push(unsubDb);
-
-    // Subscribe to project lifecycle events
-    const unsubProjectActivated = await this.eventBus.subscribe(
-      EVENTS.PROJECT.ACTIVATED,
-      this.onProjectActivated.bind(this)
-    );
-    this.unsubscribes.push(unsubProjectActivated);
-
-    const unsubProjectDeactivated = await this.eventBus.subscribe(
-      'project.deactivated',
-      this.onProjectDeactivated.bind(this)
-    );
-    this.unsubscribes.push(unsubProjectDeactivated);
-
-    // Subscribe to session requests (from other modules like chat-ai-bridge)
-    const unsubCreate = await this.eventBus.subscribe(
-      'session.create.request',
-      this.onCreateRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubCreate);
-
-    const unsubList = await this.eventBus.subscribe(
-      'session.list.request',
-      this.onListRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubList);
-
-    const unsubGet = await this.eventBus.subscribe(
-      'session.get.request',
-      this.onGetRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubGet);
-
-    const unsubUpdate = await this.eventBus.subscribe(
-      'session.update.request',
-      this.onUpdateRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubUpdate);
-
-    const unsubDelete = await this.eventBus.subscribe(
-      'session.delete.request',
-      this.onDeleteRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubDelete);
-
-    const unsubMessages = await this.eventBus.subscribe(
-      'session.messages.request',
-      this.onMessagesRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubMessages);
-
-    const unsubSave = await this.eventBus.subscribe(
-      'session.save.request',
-      this.onSaveRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubSave);
-
-    const unsubContext = await this.eventBus.subscribe(
-      'session.context.load.request',
-      this.onContextLoadRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubContext);
-
-    const unsubToggle = await this.eventBus.subscribe(
-      'session.context.toggle.request',
-      this.onToggleContextRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubToggle);
-
-    const unsubStats = await this.eventBus.subscribe(
-      'session.context.stats.request',
-      this.onContextStatsRequest.bind(this)
-    );
-    this.unsubscribes.push(unsubStats);
-
-    this.logger.info('chat-session.events.subscribed', {
-      events: [
-        'db.query.response',
-        'project.activated',
-        'project.deactivated',
-        'session.create.request',
-        'session.list.request',
-        'session.get.request',
-        'session.update.request',
-        'session.delete.request',
-        'session.messages.request',
-        'session.save.request',
-        'session.context.load.request',
-        'session.context.toggle.request',
-        'session.context.stats.request'
-      ]
-    });
   }
 
   // ==========================================

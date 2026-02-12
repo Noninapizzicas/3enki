@@ -157,10 +157,19 @@
       "beneficio": "Elimina N+1 queries a project-manager"
     },
     "direct_ui_handlers": {
-      "descripcion": "Módulos registran handlers UI directamente sin facade intermediaria",
-      "patron": "context.uiHandler.register('domain', 'action', handler)",
-      "ejemplo": "chat-ai-bridge registra ('conversation', 'send', handleSend)",
-      "nota": "conversation-manager ya NO es facade, cada módulo registra sus propios handlers"
+      "descripcion": "Módulos declaran handlers UI en module.json, el loader los auto-wira",
+      "patron_declarativo": "module.json: ui_handlers: [{ domain, action, handler }]",
+      "patron_legacy": "context.uiHandler.register('domain', 'action', handler) — ya NO se usa",
+      "ejemplo": "chat-ai-bridge declara { domain: 'conversation', action: 'send', handler: 'handleUISend' } en module.json",
+      "nota": "conversation-manager ya NO es facade, cada módulo declara sus propios handlers"
+    },
+    "loader_auto_wiring": {
+      "descripcion": "El ModuleLoader lee module.json y auto-conecta subscribes (con handler) y ui_handlers sin código imperativo",
+      "subscribes": "events.subscribes: [{ event, handler }] → loader llama eventBus.subscribe(event, module[handler].bind(module))",
+      "ui_handlers": "ui_handlers: [{ domain, action, handler }] → loader llama uiHandler.register(domain, action, module[handler].bind(module))",
+      "cleanup": "El loader auto-unsubscribe y unregister en onUnload — módulos solo limpian estado propio",
+      "excepciones": ["Wildcard subscriptions (e.g., agent.*.completed) — mantener imperativo", "Dynamic/runtime subscriptions — mantener imperativo"],
+      "migrated_modules": "28/28 módulos core migrados (feb 2026)"
     },
     "project_scoped_operations": {
       "descripcion": "Operaciones scoped por proyecto via project_id",

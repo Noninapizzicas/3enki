@@ -8,26 +8,41 @@
 
 ## 🎯 PRINCIPIOS NO NEGOCIABLES
 
-### 1. ✅ 100% Event-Driven
+### 1. ✅ 100% Event-Driven + Declarativo
 
-**SÍ:**
+**SÍ (declarar en module.json — el loader auto-wira):**
+```json
+{
+  "events": {
+    "subscribes": [
+      { "event": "pedido.creado", "handler": "onPedidoCreado" }
+    ]
+  },
+  "ui_handlers": [
+    { "domain": "producto", "action": "create", "handler": "handleUICreate" }
+  ]
+}
+```
+
 ```javascript
-// Publicar evento
+// Publicar evento (esto sí se hace en código)
 await this.eventBus.publish('producto.creado', {
   producto_id: producto.id,
   nombre: producto.nombre
 }, {
   correlationId: context.correlationId
 });
-
-// Suscribirse a eventos
-await this.eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));
 ```
 
 **NO:**
 ```javascript
-// ❌ NUNCA hacer esto
-const http = require('http');
+// ❌ NUNCA suscribirse imperativamente (el loader lo hace)
+await this.eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));
+
+// ❌ NUNCA registrar UI handlers imperativamente
+this.uiHandler.register('producto', 'create', this.handleUICreate.bind(this));
+
+// ❌ NUNCA hacer HTTP interno
 const response = await fetch('http://localhost:3339/modules/otro');
 ```
 
@@ -130,6 +145,19 @@ modules/[NOMBRE_MODULO]/
       }
     ]
   },
+
+  "ui_handlers": [
+    {
+      "domain": "entidad",
+      "action": "list",
+      "handler": "handleUIListEntidades"
+    },
+    {
+      "domain": "entidad",
+      "action": "create",
+      "handler": "handleUICreateEntidad"
+    }
+  ],
 
   "apis": [
     {
@@ -287,23 +315,21 @@ class MiModulo {
 
     this.logger.info('modulo.loading', { module: this.name });
 
-    // Suscribirse a eventos
-    await this.subscribeToEvents();
+    // NO suscribirse aquí — el loader auto-wira desde module.json
+    // Solo inicializar estado del módulo
 
     this.logger.info('modulo.loaded', { module: this.name });
   }
 
   async onUnload() {
     this.logger.info('modulo.unloading', { module: this.name });
+    // NO hacer unsubscribe/unregister — el loader lo hace automáticamente
+    // Solo limpiar estado propio: timers, caches, pending requests
   }
 
   // ==========================================
-  // Event Subscriptions
+  // Event Handlers (auto-wired from module.json)
   // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe('otra.evento', this.onOtraEvento.bind(this));
-  }
 
   async onOtraEvento(event) {
     this.logger.info('otra.evento.received', {
@@ -555,7 +581,7 @@ return `<div><h1>${title}</h1></div>`;
 
 Antes de considerar tu módulo terminado, verifica:
 
-- [ ] **Comunicación:** SOLO via `eventBus.publish()` / `subscribe()`
+- [ ] **Comunicación:** SOLO via `eventBus.publish()` + subscribes declarados en `module.json`
 - [ ] **Sin HTTP interno:** NO usa `fetchInternal` o `http.request`
 - [ ] **Schemas:** Todos los eventos tienen JSON Schema
 - [ ] **Logging:** Todos los logs incluyen `correlationId`

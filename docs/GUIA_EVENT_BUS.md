@@ -122,36 +122,36 @@ file.scanned
 
 ## Suscribirse a Eventos
 
-### Sintaxis Básica
+### Método Recomendado: Declarativo en module.json (Auto-Wiring)
 
-```javascript
-this.eventBus.subscribe(topic, handlerFunction);
+Declara las suscripciones en `module.json` y el loader las conecta automáticamente:
+
+**module.json:**
+```json
+{
+  "events": {
+    "subscribes": [
+      { "event": "user.created", "handler": "handleUserCreated" },
+      { "event": "user.login", "handler": "handleUserLogin" }
+    ]
+  }
+}
 ```
 
-### Ejemplo: Suscribirse a Evento
-
+**index.js:**
 ```javascript
 class NotificationModule {
   async onLoad() {
-    // Suscribirse a eventos de usuarios
-    this.eventBus.subscribe('user.created', this.handleUserCreated.bind(this));
-    this.eventBus.subscribe('user.login', this.handleUserLogin.bind(this));
+    // NO suscribirse aquí — el loader auto-wira desde module.json
+    this.logger.info('notifications.loaded');
   }
 
+  // Estos handlers son invocados automáticamente por el loader
   async handleUserCreated(event) {
-    // event = {
-    //   topic: 'user.created',
-    //   payload: { userId, email, name, createdAt },
-    //   source: 'core-a',
-    //   timestamp: '2025-10-20T...'
-    // }
-
     this.logger.info('notification.user.created', {
       userId: event.payload.userId,
       email: event.payload.email
     });
-
-    // Enviar email de bienvenida
     await this.sendWelcomeEmail(event.payload.email);
   }
 
@@ -159,14 +159,18 @@ class NotificationModule {
     this.logger.info('notification.user.login', {
       userId: event.payload.userId
     });
-
-    // Enviar notificación push
-    await this.sendPushNotification(
-      event.payload.userId,
-      'Bienvenido de nuevo!'
-    );
+    await this.sendPushNotification(event.payload.userId, 'Bienvenido de nuevo!');
   }
 }
+```
+
+### Método Imperativo (Solo para Wildcards/Dinámicos)
+
+Solo usa `eventBus.subscribe()` directo para wildcards o suscripciones dinámicas:
+
+```javascript
+// Wildcard — NO se puede declarar en module.json
+this.eventBus.subscribe('agent.*.completed', this.onAgentCompleted.bind(this));
 ```
 
 ---
@@ -229,7 +233,11 @@ cd modules/notifications
   "apis": [],
   "events": {
     "publishes": ["notification.sent"],
-    "subscribes": ["todo.completed", "user.created", "user.login"]
+    "subscribes": [
+      { "event": "todo.completed", "handler": "onTodoCompleted" },
+      { "event": "user.created", "handler": "onUserCreated" },
+      { "event": "user.login", "handler": "onUserLogin" }
+    ]
   }
 }
 ```
@@ -249,11 +257,7 @@ class NotificationsModule {
 
   async onLoad() {
     this.logger.info('notifications.module.loaded');
-
-    // Suscribirse a eventos
-    this.eventBus.subscribe('todo.completed', this.onTodoCompleted.bind(this));
-    this.eventBus.subscribe('user.created', this.onUserCreated.bind(this));
-    this.eventBus.subscribe('user.login', this.onUserLogin.bind(this));
+    // Suscripciones auto-wired desde module.json — nada que hacer aquí
   }
 
   /**

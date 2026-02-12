@@ -16,7 +16,7 @@ A meta-core event-driven framework built on Node.js + MQTT (Aedes) + SvelteKit 2
 
 2. **Clean credential isolation.** The 4-level cascade (CUSTOM > CLIENT > PROJECT > GLOBAL) with automatic injection via provider-loader keeps providers "dumb" and credential logic centralized.
 
-3. **Module auto-discovery.** Both backend (40 modules from `modules/`) and frontend (via `import.meta.glob` + `manifest.json`) self-register without manual wiring.
+3. **Module auto-discovery and auto-wiring.** Both backend (40 modules from `modules/`) and frontend (via `import.meta.glob` + `manifest.json`) self-register without manual wiring. The loader also auto-wires event subscriptions and UI handlers declared in `module.json` — modules no longer contain imperative subscribe/register/unregister boilerplate (28/28 core modules migrated).
 
 4. **Project-scoped operations.** Handlers in `data/projects/{id}/handlers/` automatically get `project_id` and corresponding credentials, making multi-tenancy implicit.
 
@@ -56,6 +56,7 @@ The `contexto/` directory with 27 JSON files is unusually thorough. Issues:
 | Media | Split project-manager monolith | Maintainability |
 | Media | Optimize listSystems N+1 queries | Performance |
 | Media | Refactor estructurar-deepseek | Consistency via ai-gateway |
+| ~~Media~~ | ~~Loader auto-wiring for subscribes + UI handlers~~ | **DONE** (28/28 modules, -700+ lines) |
 | Baja | Eliminate conversation-manager | Cleanup |
 | Baja | Native SSE streaming | Real-time UX |
 | Baja | OpenAI Responses API migration | Future-proofing |
@@ -75,9 +76,10 @@ The `contexto/` directory with 27 JSON files is unusually thorough. Issues:
 1. `const data = event.data || event` — envelope unwrapping in all handlers
 2. Never resolve credentials inside providers — receive `_credentials` injected
 3. `services.call('ai', 'chat')` for AI, **not** `'ai-gateway'`
-4. Register UI handlers directly — no facade intermediary
+4. Declare UI handlers and event subscribes in `module.json` — the loader auto-wires them. No imperative register/subscribe in onLoad (exception: wildcard or dynamic subscriptions)
 5. Cache active project via `project.activated`/`project.deactivated` events
 6. Naming: kebab-case (modules/handlers), dot.notation (events), slash/notation (MQTT topics)
+7. onUnload only cleans module-specific state (pending requests, timers, caches) — the loader handles unsubscribe/unregister automatically
 
 ## Honest Summary
 

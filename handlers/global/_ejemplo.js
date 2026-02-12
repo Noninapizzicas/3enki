@@ -1,12 +1,14 @@
 /**
- * Handler de Ejemplo
+ * Handler de Ejemplo (Acción)
  *
- * Este archivo muestra la estructura de un handler.
- * Renombrar y modificar según necesidad.
+ * Un handler es una ACCIÓN independiente: cuando pase X, haz Y.
+ * No pertenece a ningún módulo. El módulo dice, el handler hace.
  *
- * Ubicación determina credenciales:
- * - handlers/*.js → Usa credenciales GLOBAL
- * - data/projects/X/handlers/*.js → Usa credenciales PROJECT_X (fallback GLOBAL)
+ * Estructura centralizada:
+ * - handlers/global/*.js          → Acciones del sistema (credenciales GLOBAL)
+ * - handlers/projects/X/*.js      → Acciones del proyecto X (credenciales PROJECT_X)
+ *
+ * El HandlerLoader descubre, inyecta contexto y suscribe automáticamente.
  */
 
 module.exports = {

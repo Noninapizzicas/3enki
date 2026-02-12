@@ -1,12 +1,20 @@
 /**
  * Handler Loader
  *
- * Carga y gestiona handlers de eventos.
- * Soporta handlers globales y por proyecto.
+ * Carga y gestiona handlers de eventos (acciones).
+ * Soporta carga centralizada y legacy.
  *
- * Estructura:
- * - handlers/           → Handlers globales
+ * Estructura centralizada (preferida):
+ * - handlers/global/         → Acciones del sistema
+ * - handlers/projects/X/     → Acciones del proyecto X
+ *
+ * Estructura legacy (compatible):
+ * - handlers/                → Handlers globales (raíz)
  * - data/projects/X/handlers/ → Handlers del proyecto X
+ *
+ * Principio: un handler es una ACCIÓN independiente.
+ * No pertenece a ningún módulo. El módulo DICE (contrato),
+ * el handler HACE (acción).
  *
  * Context del handler:
  * - services: Llamar servicios (project_id inyectado automáticamente)
@@ -18,6 +26,9 @@
  *
  * @example
  * const loader = new HandlerLoader(eventBus, serviceExecutor, logger);
+ * // Carga centralizada (un solo sitio)
+ * loader.loadCentralized('./handlers');
+ * // O carga legacy
  * loader.loadGlobal();
  * loader.loadProject('mi-proyecto');
  */
@@ -167,6 +178,94 @@ class HandlerLoader {
   }
 
   /**
+   * Carga centralizada: un solo árbol con todo
+   *
+   * Estructura esperada:
+   *   basePath/
+   *   ├── global/           → Acciones del sistema (projectId = null)
+   *   └── projects/         → Acciones por proyecto
+   *       ├── pizzepos/
+   *       └── facturas-nonina/
+   *
+   * También carga handlers sueltos en la raíz de basePath (compatibilidad).
+   *
+   * @param {string} basePath - Path base (default: './handlers')
+   * @param {string} dataPath - Path a data/projects para config/store (default: './data/projects')
+   */
+  loadCentralized(basePath = './handlers', dataPath = './data/projects') {
+    if (!fs.existsSync(basePath)) {
+      this.logger?.warn('handlers.centralized.path-not-found', { basePath });
+      return;
+    }
+
+    // 1. Cargar handlers globales desde basePath/global/
+    const globalPath = path.join(basePath, 'global');
+    if (fs.existsSync(globalPath)) {
+      this.loadFrom(globalPath, null);
+    }
+
+    // 2. Cargar handlers sueltos en la raíz (compatibilidad con estructura anterior)
+    const rootFiles = this._getHandlerFiles(basePath);
+    if (rootFiles.length > 0) {
+      this.loadFrom(basePath, null);
+    }
+
+    // 3. Cargar handlers por proyecto desde basePath/projects/{projectId}/
+    const projectsPath = path.join(basePath, 'projects');
+    if (fs.existsSync(projectsPath)) {
+      const projectDirs = fs.readdirSync(projectsPath).filter(f => {
+        const fullPath = path.join(projectsPath, f);
+        return fs.statSync(fullPath).isDirectory() && !f.startsWith('.');
+      });
+
+      for (const projectId of projectDirs) {
+        const projectHandlersPath = path.join(projectsPath, projectId);
+        this.loadFrom(projectHandlersPath, projectId);
+      }
+    }
+
+    // 4. Cargar handlers legacy desde data/projects/{id}/handlers/ (compatibilidad)
+    if (fs.existsSync(dataPath)) {
+      const legacyProjects = fs.readdirSync(dataPath).filter(f => {
+        const fullPath = path.join(dataPath, f);
+        const handlersDir = path.join(fullPath, 'handlers');
+        return fs.statSync(fullPath).isDirectory() && fs.existsSync(handlersDir);
+      });
+
+      for (const projectId of legacyProjects) {
+        const legacyHandlersPath = path.join(dataPath, projectId, 'handlers');
+        this.loadFrom(legacyHandlersPath, projectId);
+      }
+    }
+
+    const stats = this.getStats();
+    this.logger?.info('handlers.centralized.loaded', {
+      total: stats.total,
+      global: stats.global,
+      projects: Object.keys(stats.byProject),
+      basePath
+    });
+  }
+
+  /**
+   * Obtiene archivos de handler válidos en un directorio (sin recursión)
+   *
+   * @param {string} dir
+   * @returns {string[]}
+   * @private
+   */
+  _getHandlerFiles(dir) {
+    if (!fs.existsSync(dir)) return [];
+
+    return fs.readdirSync(dir).filter(f =>
+      f.endsWith('.js') &&
+      !f.startsWith('_') &&
+      f !== 'index.js' &&
+      fs.statSync(path.join(dir, f)).isFile()
+    );
+  }
+
+  /**
    * Carga handlers globales desde handlers/
    *
    * @param {string} handlersPath - Path al directorio de handlers globales
@@ -296,6 +395,17 @@ class HandlerLoader {
       return;
     }
 
+    // Evitar duplicados (mismo nombre + mismo scope)
+    const key = `${projectId || 'global'}:${name}`;
+    if (this.handlers.has(key)) {
+      this.logger?.debug('handlers.duplicate.skipped', {
+        name,
+        projectId,
+        reason: 'Already registered in this scope'
+      });
+      return;
+    }
+
     // Verificar que handle es función
     if (typeof handle !== 'function') {
       this.logger?.warn('handlers.invalid', {
@@ -379,7 +489,6 @@ class HandlerLoader {
       }
     });
 
-    const key = `${projectId || 'global'}:${name}`;
     this.handlers.set(key, { handler, unsubscribe, projectId, store });
 
     this.logger?.debug('handler.registered', {

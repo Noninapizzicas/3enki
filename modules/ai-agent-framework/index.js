@@ -68,26 +68,9 @@ class AIAgentFrameworkModule {
     // Load agents from disk
     await this.loadAgentsFromDisk();
 
-    // Subscribe to agent.execute.request (from agent-manager)
-    await this.subscribeToExecuteRequest();
-
     this.logger.info('ai-agent-framework.loaded', {
       agents_count: this.agents.size,
       tools_count: this.toolManager.tools.size
-    });
-  }
-
-  /**
-   * Subscribe to agent.execute.request event
-   */
-  async subscribeToExecuteRequest() {
-    this.executeRequestUnsubscribe = await this.eventBus.subscribe(
-      'agent.execute.request',
-      this.onExecuteRequest.bind(this)
-    );
-
-    this.logger.info('ai-agent-framework.subscribed', {
-      event: 'agent.execute.request'
     });
   }
 

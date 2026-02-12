@@ -13,15 +13,6 @@ const BotRegistry = require('./services/bot-registry');
 const DownloadManager = require('./services/download-manager');
 const AutoResponder = require('./services/auto-responder');
 
-// Eventos de Telegram que contienen archivos
-const FILE_EVENTS = [
-  'telegram.document.received',
-  'telegram.photo.received',
-  'telegram.video.received',
-  'telegram.audio.received',
-  'telegram.voice.received'
-];
-
 class BotManagerModule {
   constructor() {
     this.name = 'bot-manager';
@@ -36,9 +27,6 @@ class BotManagerModule {
     this.registry = null;
     this.downloadManager = null;
     this.autoResponder = null;
-
-    // Subscriptions
-    this.unsubscribes = [];
   }
 
   // ==========================================
@@ -65,9 +53,6 @@ class BotManagerModule {
     this.downloadManager = new DownloadManager(this.config, this.logger, this.eventBus);
     this.autoResponder = new AutoResponder(this.config, this.logger, this.eventBus);
 
-    // Subscribe to events
-    await this.subscribeToEvents();
-
     this.logger.info('bot-manager.loaded', {
       version: this.version,
       bots_count: this.registry.getAll().length
@@ -77,52 +62,7 @@ class BotManagerModule {
   async onUnload() {
     this.logger.info('bot-manager.unloading');
 
-    // Unsubscribe all
-    for (const unsub of this.unsubscribes) {
-      if (typeof unsub === 'function') {
-        await unsub();
-      }
-    }
-    this.unsubscribes = [];
-
     this.logger.info('bot-manager.unloaded');
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    // Archivos (document, photo, video, audio, voice)
-    for (const event of FILE_EVENTS) {
-      const unsub = await this.eventBus.subscribe(event, this.onFileReceived.bind(this));
-      this.unsubscribes.push(unsub);
-    }
-
-    // Mensajes de texto
-    const unsubText = await this.eventBus.subscribe(
-      'telegram.text.received',
-      this.onTextReceived.bind(this)
-    );
-    this.unsubscribes.push(unsubText);
-
-    // Comandos
-    const unsubCommand = await this.eventBus.subscribe(
-      'telegram.command.received',
-      this.onCommandReceived.bind(this)
-    );
-    this.unsubscribes.push(unsubCommand);
-
-    // Credenciales (auto-registro de bots)
-    const unsubCredSaved = await this.eventBus.subscribe(
-      'credential.saved',
-      this.onCredentialSaved.bind(this)
-    );
-    this.unsubscribes.push(unsubCredSaved);
-
-    this.logger.info('bot-manager.subscribed', {
-      events: [...FILE_EVENTS, 'telegram.text.received', 'telegram.command.received', 'credential.saved']
-    });
   }
 
   // ==========================================

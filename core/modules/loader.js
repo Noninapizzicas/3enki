@@ -312,19 +312,33 @@ class ModuleLoader {
         throw new Error('Module must implement onLoad() method');
       }
 
+      // Auto-wire event subscriptions BEFORE onLoad so modules can
+      // publish request events and receive responses during initialization
+      const eventUnsubs = this.wireEventSubscriptions(manifest, instance);
+
       // Ejecutar onLoad - pasamos el core context + moduleLoader
       const moduleContext = {
         ...this.core,
         moduleLoader: this  // Añadir referencia al loader para acceso a tools
       };
-      await instance.onLoad(moduleContext);
+
+      try {
+        await instance.onLoad(moduleContext);
+      } catch (loadError) {
+        // Clean up event subscriptions if onLoad fails
+        for (const unsub of eventUnsubs) {
+          if (typeof unsub === 'function') unsub();
+        }
+        throw loadError;
+      }
 
       // Guardar módulo cargado
       this.loadedModules.set(moduleName, {
         manifest,
         instance,
         path: modulePath,
-        loadedAt: Date.now()
+        loadedAt: Date.now(),
+        _eventUnsubs: eventUnsubs
       });
 
       // Registrar en ModuleRegistry si está disponible
@@ -347,16 +361,12 @@ class ModuleLoader {
         this.registerToolsForAI(moduleName, manifest.tools, instance);
       }
 
-      // Auto-wire event subscriptions from manifest
-      const eventUnsubs = this.wireEventSubscriptions(manifest, instance);
-
       // Auto-wire UI handlers from manifest
       const uiRegistrations = this.wireUIHandlers(manifest, instance);
 
-      // Store wiring data for automatic cleanup on unload
+      // Store UI wiring data for automatic cleanup on unload
       const moduleData = this.loadedModules.get(moduleName);
       if (moduleData) {
-        moduleData._eventUnsubs = eventUnsubs;
         moduleData._uiRegistrations = uiRegistrations;
       }
 

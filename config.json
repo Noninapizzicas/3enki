@@ -47,10 +47,10 @@
     "auto_load": true,
     "hot_reload": true,
     "enabled": [
+      "project-manager",
       "echo",
       "file-watcher",
       "security-p2p",
-      "scratch-designer",
       "system-inspector",
       "cuentas",
       "cuentas-canales",
@@ -62,9 +62,37 @@
       "categorias",
       "ingredientes",
       "variaciones",
-      "persistencia-comandero"
+      "persistencia-comandero",
+      "admin-panel",
+      "agent-manager",
+      "ai-agent-framework",
+      "ai-gateway",
+      "bot-manager",
+      "calling-generator",
+      "chat-ai-bridge",
+      "chat-session",
+      "code-executor",
+      "credential-manager",
+      "database-manager",
+      "filesystem",
+      "log-manager",
+      "pdf-viewer",
+      "pizzepos",
+      "plugin-manager",
+      "prompt-composer",
+      "prompt-manager",
+      "scheduler",
+      "telegram-service",
+      "text-editor"
     ],
-    "disabled": ["conversation-manager"]
+    "disabled": [
+      "conversation-manager",
+      "scratch-designer",
+      "ui-designer",
+      "dashboard",
+      "notas",
+      "metricas"
+    ]
   },
   "observability": {
     "logging": {

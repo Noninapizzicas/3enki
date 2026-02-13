@@ -1,45 +1,37 @@
 <script lang="ts">
   /**
-   * Pagina Menu Generator
+   * Redirect: /menu-generator → /[project_id]/menu-generator
    *
-   * Misma base que la pagina principal (chat, work-bar, system-bar).
-   * La work-bar muestra los modulos de zona work-bar (menu-generator).
-   * Los paneles flotantes se abren desde ahi.
-   *
-   * Page Context: inyecta contexto de página para que el chat sepa
-   * qué está haciendo el usuario (pipeline OCR, cartas generadas, etc.)
+   * Ruta legacy. Redirige al menu-generator del proyecto activo.
+   * Si no hay proyecto activo, vuelve al inicio.
    */
-  import { onMount, onDestroy } from 'svelte';
-  import { LazyShell } from '$lib/components/layout';
-  import { setPageContext, clearPageContext } from '$lib/stores/page-context';
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { activeProject } from '$lib/stores/workspace';
+  import { get } from 'svelte/store';
 
   onMount(() => {
-    setPageContext({
-      route: '/menu-generator',
-      title: 'Menu Generator',
-      description: 'Pipeline de creación de cartas de restaurante: PDF→Imagen→OCR→Generar carta estructurada con IA.',
-      instructions: `El usuario está en el pipeline de generación de cartas. Puede usar los paneles de la barra lateral o pedirte las cosas por el chat.
-
-Cuando el usuario dice "genera con eso", "usa el texto que acabo de escanear" o similar, usa el valor de ocrText del estado.
-Cuando menciona "la carta", "esa carta" o similar, se refiere a la activeCarta del estado (si existe).
-
-Tools disponibles para esta página:
-- menu.generate: genera carta desde texto
-- menu.list_cartas: lista cartas generadas
-- menu.get_carta: obtiene carta por ID
-- menu.update_prices: ajusta precios
-- menu.add_product / menu.remove_product: añadir/quitar productos
-- menu.add_category: añadir categoría
-- menu.update_product: actualizar producto
-- menu.search_products: buscar productos
-- menu.stats: estadísticas de carta`,
-      state: {}
-    });
-  });
-
-  onDestroy(() => {
-    clearPageContext();
+    const project = get(activeProject);
+    if (project?.id) {
+      goto(`/${project.id}/menu-generator`, { replaceState: true });
+    } else {
+      goto('/', { replaceState: true });
+    }
   });
 </script>
 
-<LazyShell />
+<div class="redirect-screen">
+  <p>Redirigiendo...</p>
+</div>
+
+<style>
+  .redirect-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #0a0a0a;
+    color: #888;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+</style>

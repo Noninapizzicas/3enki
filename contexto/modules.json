@@ -58,7 +58,8 @@
     ],
     "ui": {
       "zone": "work-bar|chat-config|chat-tools",
-      "icon": "emoji"
+      "icon": "emoji",
+      "routes": "string[] — rutas donde este módulo es visible en work-bar. Ej: ['/menu-generator']. routeMatches() en lazy-registry soporta project-scoped: /peppone/menu-generator matchea /menu-generator."
     }
   },
   "lifecycle_hooks": {

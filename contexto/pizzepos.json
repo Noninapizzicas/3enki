@@ -1,10 +1,20 @@
 {
-  "_VERSION": "3.1.0",
+  "_VERSION": "3.2.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-02-07",
+  "_UPDATED": "2026-02-13",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
+    "3.2.0": {
+      "fecha": "2026-02-13",
+      "cambios": [
+        "rutas project-scoped: /[project_id]/menu-generator en vez de /menu-generator plano",
+        "rutas project-scoped: /[project_id]/comandero ya existía, documentado junto a menu-generator",
+        "redirect legacy: /menu-generator redirige a /${activeProject}/menu-generator",
+        "routeMatches() en lazy-registry: manifests siguen con /menu-generator, matching stripea project prefix",
+        "page-context incluye projectId en state para que tools sepan a qué proyecto aplica"
+      ]
+    },
     "3.1.0": {
       "fecha": "2026-02-07",
       "cambios": [
@@ -204,11 +214,15 @@
       "frontend": {
         "arquitectura": "5 micro-módulos en work-bar + store compartido + page context acoplado al chat.",
         "store_compartido": "frontend/src/lib/stores/menu-generator.ts — generate, list, get, health, subscriptions. Actualiza pageContext on carta.generada.",
-        "pagina": "frontend/src/routes/menu-generator/+page.svelte — monta LazyShell + inicializa Page Context",
+        "pagina": {
+          "project_scoped": "frontend/src/routes/[project_id]/menu-generator/+page.svelte — ruta principal, monta LazyShell + Page Context con projectId",
+          "legacy_redirect": "frontend/src/routes/menu-generator/+page.svelte — redirect a /${activeProject.id}/menu-generator",
+          "url_ejemplo": "/peppone/menu-generator, /la-pizzeria/menu-generator"
+        },
         "page_context": {
-          "descripcion": "La página inyecta contexto al chat para que el LLM sepa qué está haciendo el usuario",
+          "descripcion": "La página inyecta contexto al chat para que el LLM sepa qué está haciendo el usuario y en qué proyecto",
           "store": "frontend/src/lib/stores/page-context.ts",
-          "inicializacion": "+page.svelte → setPageContext({ route, title, description, instructions, state: {} })",
+          "inicializacion": "+page.svelte → setPageContext({ route: '/menu-generator', title, description, instructions, state: { projectId } })",
           "actualizaciones_desde_paneles": {
             "Pdf2ImgPanel": "→ updatePageStateBatch({ renderedImage, pipelineStep: 'pdf_rendered' })",
             "PreparePanel": "→ updatePageStateBatch({ preparedImage, pipelineStep: 'image_prepared' })",
@@ -263,7 +277,7 @@
           "index.ts": "Solo re-exports del store por compatibilidad"
         },
         "todos_paneles_en": "panels.ts — obligatorio registrar cada panel con lazy loader",
-        "route_filtering": "Todos los micro-módulos tienen routes: ['/menu-generator'] — solo visibles en esa ruta",
+        "route_filtering": "Todos los micro-módulos tienen routes: ['/menu-generator'] en manifest. routeMatches() en lazy-registry stripea el prefijo [project_id] al comparar, así /peppone/menu-generator matchea /menu-generator. Manifests NO cambian.",
         "mqtt_requests": [
           "mqttRequest('pdfjs', 'render', { filePath, page, scale })",
           "mqttRequest('sharp', 'prepare-ocr', { input, grayscale, normalize, sharpen, threshold })",
@@ -653,15 +667,23 @@
     },
 
     "rutas": {
-      "/comandero": {
-        "archivo": "frontend/src/routes/comandero/+page.svelte",
+      "/[project_id]/comandero": {
+        "archivo": "frontend/src/routes/[project_id]/comandero/+page.svelte",
         "componente": "CuentasScreen",
-        "descripcion": "Pantalla principal de cuentas activas"
+        "descripcion": "Pantalla principal de cuentas activas",
+        "ejemplo": "/peppone/comandero"
       },
-      "/comandero/[cuenta_id]": {
-        "archivo": "frontend/src/routes/comandero/[cuenta_id]/+page.svelte",
+      "/[project_id]/comandero/[cuenta_id]": {
+        "archivo": "frontend/src/routes/[project_id]/comandero/[cuenta_id]/+page.svelte",
         "componente": "ComanderoScreen",
-        "descripcion": "Pantalla de pedido para cuenta específica"
+        "descripcion": "Pantalla de pedido para cuenta específica",
+        "ejemplo": "/peppone/comandero/mesa_3"
+      },
+      "/[project_id]/menu-generator": {
+        "archivo": "frontend/src/routes/[project_id]/menu-generator/+page.svelte",
+        "componente": "LazyShell + PageContext",
+        "descripcion": "Pipeline de cartas: PDF→OCR→Generar + chat contextual",
+        "ejemplo": "/peppone/menu-generator"
       }
     },
 

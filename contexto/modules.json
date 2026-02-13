@@ -316,24 +316,35 @@
     },
     "prompt-composer": {
       "version": "1.1.0",
-      "description": "Composición de system prompts con contexto heredado de proyectos",
+      "description": "Composición de system prompts con contexto heredado de proyectos + contexto de página",
       "features": [
         "Composición de system prompts con templates",
         "Sustitución de variables {{variable}}",
-        "Contexto heredado automático de proyectos relacionados"
+        "Contexto heredado automático de proyectos relacionados",
+        "Contexto de página (Page Context) — inyecta estado de la UI actual en el system prompt"
       ],
-      "inherited_context_sections": [
-        "## System Context - sistema al que pertenece el proyecto",
-        "## Dependencies - proyectos de los que depende",
-        "## Related Projects - proyectos relacionados",
-        "## Inherited Knowledge - summaries de conversaciones importadas"
+      "system_prompt_sections_order": [
+        "Base prompt (template o default)",
+        "## Project Context - nombre, descripción, storage",
+        "## System Context - sistema al que pertenece",
+        "## Dependencies / ## Related Projects / ## Inherited Knowledge",
+        "## Page Context - qué página, estado vivo, instrucciones (NEW v4)",
+        "## Capabilities - tools agrupados por prefijo"
       ],
+      "page_context": {
+        "descripcion": "Sección inyectada cuando el frontend envía pageContext. El LLM sabe en qué página está el usuario y qué datos hay.",
+        "method": "buildPageContextSection(pageContext) — renderiza título, descripción, instrucciones y estado. Trunca >4000 chars.",
+        "flujo": "chat.ts snapshot → chat-ai-bridge → prompt.compose.request.page_context → buildPageContextSection()",
+        "cada_pagina_define": "{ route, title, description, instructions?, state: {} }",
+        "patron_reutilizable": "Cualquier página usa setPageContext() en onMount, clearPageContext() en onDestroy. Sin tocar backend."
+      },
       "events": {
         "publishes": ["prompt.compose.response", "context.full.request"],
         "subscribes": ["prompt.compose.request", "context.full.response"]
       },
       "usage": {
-        "with_inherited_context": "eventBus.publish('prompt.compose.request', { project_id, include_inherited_context: true })"
+        "with_inherited_context": "eventBus.publish('prompt.compose.request', { project_id, include_inherited_context: true })",
+        "with_page_context": "eventBus.publish('prompt.compose.request', { project_id, page_context: { route, title, description, instructions, state } })"
       }
     },
     "chat-session": {
@@ -368,7 +379,8 @@
         "Coordinar flujo: session → prompt → ai-gateway",
         "Agentic loop con tools (post-hoc streaming)",
         "Cache de proyecto activo (event-driven)",
-        "Flow state tracking con stages"
+        "Flow state tracking con stages",
+        "Transportar page_context del frontend al prompt-composer (NO lo interpreta)"
       ],
       "events": {
         "publishes": ["chat.send.response", "ai.chat.request", "session.save.request", "prompt.compose.request"],
@@ -549,13 +561,15 @@
         "conversation.load|create|list|get|update|delete|toggleContext|contextStats": "chat-session (UI handlers directos)"
       },
       "send_flow": [
-        "1. Frontend: mqttRequest('conversation', 'send', { conversationId, content })",
-        "2. UIRequestHandler → chat-ai-bridge.handleConversationSend()",
+        "1. Frontend: mqttRequest('conversation', 'send', { conversationId, content, pageContext? })",
+        "1b. chat.ts captura getPageContextSnapshot() del page-context store y lo añade al payload",
+        "2. UIRequestHandler → chat-ai-bridge.handleConversationSend({ content, pageContext })",
         "3. chat-ai-bridge usa proyecto activo CACHEADO (fast path, sin RPC)",
         "4. chat-ai-bridge crea conversación si no existe (session.create.request → chat-session)",
         "5. chat-ai-bridge guarda mensaje usuario (session.save.request → chat-session)",
-        "6. chat-ai-bridge compone prompt (prompt.compose.request → prompt-composer)",
-        "7. chat-ai-bridge llama AI (ai.chat.request → ai-gateway, con agentic loop)",
+        "6. chat-ai-bridge compone prompt (prompt.compose.request → prompt-composer) — incluye page_context si existe",
+        "6b. prompt-composer.buildPageContextSection() renderiza ## Page Context con título, instrucciones y estado vivo",
+        "7. chat-ai-bridge llama AI (ai.chat.request → ai-gateway, con agentic loop). LLM ve el estado de la página.",
         "8. chat-ai-bridge guarda respuesta + safety-net MQTT QoS 1",
         "9. UIRequestHandler devuelve resultado al frontend"
       ]

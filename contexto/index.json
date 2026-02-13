@@ -34,7 +34,7 @@
     "name": "event-core",
     "version": "1.5.0",
     "description": "Meta-Core Event-Driven Framework",
-    "last_context_update": "2026-02-11",
+    "last_context_update": "2026-02-13",
     "module_count": { "core": 28, "pizzepos": 12, "total": 40 }
   },
 
@@ -166,6 +166,8 @@
       "proyecto": "data/projects/{id}/handlers/*.js → credenciales PROJECT_{id}"
     },
     "recent_patterns": {
+      "page_context": "Patrón reutilizable: página + chat contextual. UI y LLM comparten estado via page-context.ts. Ver system.json",
+      "tools_first_modules": "Módulos exponen tools[] para agentic loop del chat (ej: menu-generator 10 tools)",
       "loader_auto_wiring": "Subscribes y UI handlers declarados en module.json, auto-wired por el loader — sin código imperativo en onLoad/onUnload (28/28 módulos migrados)",
       "project_lifecycle_caching": "Módulos cachean proyecto activo via project.activated/deactivated",
       "direct_ui_handlers": "Sin facade - handlers UI declarados en module.json ui_handlers array",

@@ -165,13 +165,28 @@
     },
 
     "menu-generator": {
-      "version": "3.0.0",
-      "estado": "implementado — backend + frontend completos",
-      "descripcion": "Genera cartas estructuradas desde texto o imágenes usando IA. SOLO genera, no almacena ni gestiona.",
+      "version": "4.0.0",
+      "estado": "implementado — backend tools + frontend + page context acoplado al chat",
+      "descripcion": "Asistente de cartas de restaurante. Genera, consulta y modifica cartas via 10 tools para el agentic loop del chat + 5 paneles UI. Dos caminos (chat conversacional o paneles manuales) con contexto compartido.",
       "backend": {
         "ubicacion": "modules/pizzepos/menu-generator/index.js",
         "ui_domain": "menu",
         "uiHandlers": ["generate", "list", "get", "health"],
+        "tools": {
+          "descripcion": "10 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
+          "lista": [
+            { "name": "menu.generate", "handler": "toolGenerate", "desc": "Genera carta estructurada desde texto (OCR, lista, JSON)" },
+            { "name": "menu.list_cartas", "handler": "toolListCartas", "desc": "Lista cartas generadas con resumen" },
+            { "name": "menu.get_carta", "handler": "toolGetCarta", "desc": "Obtiene carta completa por ID" },
+            { "name": "menu.update_prices", "handler": "toolUpdatePrices", "desc": "Ajusta precios: % global, por categoría, o individuales" },
+            { "name": "menu.add_product", "handler": "toolAddProduct", "desc": "Añade producto a carta existente" },
+            { "name": "menu.remove_product", "handler": "toolRemoveProduct", "desc": "Elimina producto de carta" },
+            { "name": "menu.add_category", "handler": "toolAddCategory", "desc": "Añade categoría nueva a carta" },
+            { "name": "menu.update_product", "handler": "toolUpdateProduct", "desc": "Actualiza nombre/precio/ingredientes/categoría" },
+            { "name": "menu.search_products", "handler": "toolSearchProducts", "desc": "Busca productos por nombre o ingrediente" },
+            { "name": "menu.stats", "handler": "toolStats", "desc": "Estadísticas: total, por categoría, precio medio, rango" }
+          ]
+        },
         "eventos_publica": ["carta.generada", "menu.error"],
         "eventos_suscribe": ["ai.chat.response"],
         "flujo": "texto/OCR/JSON crudo → ai.chat.request → AI estructura → parseAndStructure → carta.generada",
@@ -187,47 +202,61 @@
         }
       },
       "frontend": {
-        "arquitectura": "5 micro-módulos en work-bar + store compartido. Cada módulo = 1 botón + 1 panel flotante.",
-        "store_compartido": "frontend/src/lib/stores/menu-generator.ts — generate, list, get, health, subscriptions",
-        "pagina": "frontend/src/routes/menu-generator/+page.svelte",
+        "arquitectura": "5 micro-módulos en work-bar + store compartido + page context acoplado al chat.",
+        "store_compartido": "frontend/src/lib/stores/menu-generator.ts — generate, list, get, health, subscriptions. Actualiza pageContext on carta.generada.",
+        "pagina": "frontend/src/routes/menu-generator/+page.svelte — monta LazyShell + inicializa Page Context",
+        "page_context": {
+          "descripcion": "La página inyecta contexto al chat para que el LLM sepa qué está haciendo el usuario",
+          "store": "frontend/src/lib/stores/page-context.ts",
+          "inicializacion": "+page.svelte → setPageContext({ route, title, description, instructions, state: {} })",
+          "actualizaciones_desde_paneles": {
+            "Pdf2ImgPanel": "→ updatePageStateBatch({ renderedImage, pipelineStep: 'pdf_rendered' })",
+            "PreparePanel": "→ updatePageStateBatch({ preparedImage, pipelineStep: 'image_prepared' })",
+            "OcrPanel": "→ updatePageStateBatch({ ocrText, ocrBackend, ocrConfidence, ocrImagePath, pipelineStep: 'ocr_done' })",
+            "GeneratePanel": "→ updatePageState('pipelineStep', 'generating')",
+            "CartasPanel": "→ updatePageStateBatch({ activeCarta, pipelineStep: 'viewing_carta' })",
+            "store_evento": "→ on carta.generada: updatePageStateBatch({ activeCarta, activeCartaNombre, activeCartaProductos, pipelineStep: 'carta_generada' })"
+          },
+          "instrucciones_llm": "El LLM recibe instrucciones para interpretar 'usa el texto que acabo de escanear' como ocrText, 'la carta' como activeCarta, etc."
+        },
         "micro_modulos": {
           "menu-pdf2img": {
             "ubicacion": "modules/menu-pdf2img/",
             "panel": "Pdf2ImgPanel.svelte (sm)",
-            "funcion": "Convierte PDF a imagen via mqttRequest('pdfjs', 'render')",
+            "funcion": "Convierte PDF a imagen via mqttRequest('pdfjs', 'render'). Actualiza pageContext con renderedImage.",
             "icon": "📄",
             "order": 1
           },
           "menu-prepare": {
             "ubicacion": "modules/menu-prepare/",
             "panel": "PreparePanel.svelte (sm)",
-            "funcion": "Prepara imagen para OCR via mqttRequest('sharp', 'prepare-ocr'). Opciones: grayscale, normalize, sharpen, threshold.",
+            "funcion": "Prepara imagen para OCR via mqttRequest('sharp', 'prepare-ocr'). Actualiza pageContext con preparedImage.",
             "icon": "🖼️",
             "order": 2
           },
           "menu-ocr": {
             "ubicacion": "modules/menu-ocr/",
             "panel": "OcrPanel.svelte (md)",
-            "funcion": "Extrae texto de imagen. Backend principal: Google Vision (DOCUMENT_TEXT_DETECTION, TEXT_DETECTION, HANDWRITING). Fallbacks: tesseract, scribe-ocr, document-processor.",
+            "funcion": "Extrae texto de imagen. Backend principal: Google Vision. Actualiza pageContext con ocrText, ocrBackend, ocrConfidence.",
             "icon": "🔍",
             "order": 3
           },
           "menu-generate": {
             "ubicacion": "modules/menu-generate/",
             "panel": "GeneratePanel.svelte (md)",
-            "funcion": "Envía texto a AI para estructurar carta. Usa store compartido: generateMenu().",
+            "funcion": "Envía texto a AI para estructurar carta. Usa store compartido: generateMenu(). Actualiza pageContext pipelineStep.",
             "icon": "✨",
             "order": 4
           },
           "menu-cartas": {
             "ubicacion": "modules/menu-cartas/",
             "panel": "CartasPanel.svelte (lg)",
-            "funcion": "Lista cartas generadas + vista detalle (categorías, productos, ingredientes). Usa store compartido.",
+            "funcion": "Lista cartas generadas + vista detalle. Actualiza pageContext con activeCarta al ver detalle.",
             "icon": "📋",
             "order": 5
           }
         },
-        "pipeline_completo": "PDF→IMG → Preparar → OCR → Generar (AI) → Ver Cartas. El chat con prompt especializado permite refinar resultados.",
+        "pipeline_completo": "PDF→IMG → Preparar → OCR → Generar (AI) → Ver Cartas. El chat con contexto de página permite operar con los mismos datos desde conversación.",
         "modulo_antiguo_archivado": {
           "MenuGeneratorPanel.svelte": "893 líneas, 3 tabs — conservado como referencia",
           "manifest.json.archived": "Renombrado para que auto-discovery no lo cargue",
@@ -248,8 +277,21 @@
         ],
         "subscriptions_realtime": ["carta.generada", "menu.error"]
       },
+      "dos_caminos_un_contexto": {
+        "descripcion": "UI panels y chat conversacional comparten estado via Page Context. Dos caminos para llegar al mismo sitio.",
+        "camino_ui": "Usuario opera paneles manualmente: PDF→IMG→OCR→Generate. Cada paso escribe al pageContext.",
+        "camino_chat": "Usuario dice 'escanea esta imagen' o 'genera la carta con eso'. LLM lee pageContext y usa tools.",
+        "camino_mixto": "Usuario hace OCR desde panel, luego dice al chat 'genera la carta con ese texto'. LLM lee ocrText del pageContext y llama menu.generate.",
+        "patron_reutilizable": "Ver system.json → patrones_recientes.page_context"
+      },
       "separacion_responsabilidades": {
-        "menu-generator": "SOLO genera carta estructurada desde input. Emite carta.generada y listo.",
+        "menu-generator_backend": "Genera carta + expone 10 tools para operar sobre cartas. Emite carta.generada.",
+        "menu-generator_frontend_paneles": "UI manual del pipeline. Escriben al pageContext cuando completan un paso.",
+        "menu-generator_frontend_store": "Estado compartido entre paneles. Escucha carta.generada y actualiza pageContext.",
+        "page-context_store": "Framework genérico — NO es de menu-generator. Cualquier página lo usa.",
+        "prompt-composer": "Renderiza pageContext como sección ## Page Context del system prompt. NO sabe de menu-generator.",
+        "chat-ai-bridge": "Transporta pageContext de frontend a prompt-composer. NO lo interpreta.",
+        "chat.ts": "Captura snapshot del pageContext al enviar mensaje. NO sabe qué página es.",
         "carta-manager_legacy": "lib/carta-manager.js — referencia. Su lógica pertenece a futuros módulos de catálogo/operación.",
         "handlers_proyecto_legacy": {
           "carta-chat.js": "Pendiente de refactorizar.",
@@ -257,11 +299,14 @@
         }
       },
       "decisiones_tomadas": [
+        "v4.0.0: de UI handlers-only a tools-first — el LLM puede operar sobre cartas desde el chat",
+        "10 tools cubren CRUD completo: generate, list, get, update_prices, add/remove product, add category, update product, search, stats",
+        "Page Context: patrón genérico para acoplar UI y chat sin que ninguno dependa del otro",
+        "Cada módulo tiene UNA responsabilidad: backend genera, paneles escriben estado, chat lee estado, prompt-composer renderiza",
         "Precios multi-tamaño (Individual/Mediana/Familiar): se manejan como variaciones, NO en el generador",
         "CartaManager separado: su lógica CRUD/reglas/alérgenos NO pertenece al generador",
-        "menu-generator-v2 monolito (2913 líneas) archivado en otros-modulos/",
+        "menu-generator-v2 monolito (2913 líneas) y v3 archivados en _archived/",
         "Panel monolítico (893 líneas, 3 tabs) reemplazado por 5 micro-módulos independientes en work-bar",
-        "Cada micro-módulo = 1 manifest.json + 1 index.ts + 1 Panel.svelte — patrón estándar del sistema",
         "Store compartido: los módulos menu-generate y menu-cartas comparten stores/menu-generator.ts",
         "Route filtering: campo routes en manifest.json filtra qué módulos aparecen en cada ruta"
       ]

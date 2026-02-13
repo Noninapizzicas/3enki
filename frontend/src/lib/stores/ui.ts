@@ -10,25 +10,25 @@
 
 import { writable, derived } from 'svelte/store';
 import {
-  activePanel as registryActivePanel,
-  openPanel as registryOpenPanel,
-  closePanel as registryClosePanel
-} from '$lib/ui-core/registry';
+  activePanel as lazyActivePanel,
+  openPanel as lazyOpenPanel,
+  closePanel as lazyClosePanel
+} from '$lib/ui-core/lazy-registry';
 import { saveUI, getState } from './persistence';
 import { generateUUID } from '$lib/utils';
 
 // ============================================================================
-// PANEL ACTIVO (delegado al registry para consistencia)
+// PANEL ACTIVO (delegado al lazy-registry — fuente única de verdad)
 // ============================================================================
 
-export const activePanel = registryActivePanel;
+export const activePanel = lazyActivePanel;
 
 export function openPanel(panelId: string): void {
-  registryOpenPanel(panelId);
+  lazyOpenPanel(panelId);
 }
 
 export function closePanel(): void {
-  registryClosePanel();
+  lazyClosePanel();
 }
 
 export const isPanelOpen = derived(activePanel, ($panel) => $panel !== null);

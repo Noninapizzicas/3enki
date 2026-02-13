@@ -35,17 +35,15 @@ export {
   unregister,
   unregisterZone,
   getModule,
-  openPanel,
-  closePanel,
-  getPanelComponent,
-  getPanelConfig,
+  getPanelComponent as registryGetPanelComponent,
+  getPanelConfig as registryGetPanelConfig,
   updateAppState,
   getAppState,
   workBarModules,
   chatConfigModules,
   chatToolsModules,
   systemBarModules,
-  activePanel,
+  activePanel as registryActivePanel,
   appState,
   modules
 } from './registry';
@@ -67,7 +65,13 @@ export {
   systemBarDefinitions,
   moduleLoadState,
   loadedModules,
-  activeModule
+  activeModule,
+  // Panel API unificada: siempre usa lazy-registry
+  openPanel,
+  closePanel,
+  activePanel,
+  getPanelComponent,
+  getPanelConfig
 } from './lazy-registry';
 
 // MQTT Request/Response

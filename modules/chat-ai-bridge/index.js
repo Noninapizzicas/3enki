@@ -121,6 +121,7 @@ class ChatAiBridgeModule {
       user_id,
       attachments,
       use_tools,
+      page_context,
       correlation_id
     } = data;
 
@@ -142,6 +143,7 @@ class ChatAiBridgeModule {
       user_id,
       attachments: attachments || [],
       use_tools: use_tools !== false,
+      page_context: page_context || null,
       correlation_id,
       startTime: Date.now(),
       stage: 'init',
@@ -327,7 +329,7 @@ class ChatAiBridgeModule {
    * Step 3: Compose system prompt via prompt-composer
    */
   async composePrompt(flowState, context) {
-    const { flowId, conversation_id, use_tools, correlation_id } = flowState;
+    const { flowId, conversation_id, use_tools, page_context, correlation_id } = flowState;
     const requestId = crypto.randomUUID();
     const timeout = this.config.requestTimeout || 10000;
 
@@ -351,6 +353,7 @@ class ChatAiBridgeModule {
       conversation: context.conversation,
       project_id: context.conversation?.project_id,
       include_tools: use_tools,
+      page_context: page_context || null,
       correlation_id
     });
 
@@ -737,7 +740,7 @@ class ChatAiBridgeModule {
    * Frontend calls: mqttRequest('conversation', 'send', { conversationId, content, attachments })
    */
   async handleConversationSend(data, request) {
-    const { conversationId, content, attachments } = data;
+    const { conversationId, content, attachments, pageContext } = data;
     const correlationId = request?.correlationId || crypto.randomUUID();
 
     this.logger.info('chat-ai-bridge.handleConversationSend', { correlationId, conversationId });
@@ -810,6 +813,7 @@ class ChatAiBridgeModule {
         content,
         attachments: attachments || [],
         use_tools: true,
+        page_context: pageContext || null,
         correlation_id: correlationId
       });
 

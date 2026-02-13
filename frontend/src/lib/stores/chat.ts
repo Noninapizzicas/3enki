@@ -16,6 +16,7 @@ import { attachments, clearAttachments } from './attachments';
 import { activeProjectId } from './projects';
 import { notifyError } from './ui';
 import { generateUUID } from '$lib/utils';
+import { getPageContextSnapshot } from './page-context';
 
 // ============================================================================
 // STORES
@@ -97,6 +98,9 @@ export async function sendMessage(content: string): Promise<void> {
 
   // Enviar via mqttRequest (patrón ui/request/conversation/send)
   try {
+    // Capturar contexto de página (si hay) para inyectar en el system prompt
+    const currentPageContext = getPageContextSnapshot();
+
     const response = await mqttRequest<{
       conversationId: string;
       user_message: Message;
@@ -110,7 +114,8 @@ export async function sendMessage(content: string): Promise<void> {
         type: a.type,
         path: a.path,
         name: a.name
-      }))
+      })),
+      pageContext: currentPageContext || undefined
     }, { timeout: 180000 }); // 180s para respuestas de IA con herramientas
 
     // Añadir mensaje del asistente si existe (está en response.data)

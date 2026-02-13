@@ -14,6 +14,7 @@
     generateMenu,
     clearError
   } from '$lib/stores/menu-generator';
+  import { updatePageState } from '$lib/stores/page-context';
 
   export let panelId: string = '';
 
@@ -38,6 +39,7 @@
 
     const success = await generateMenu(texto.trim(), nombre.trim() || undefined, provider);
     if (success) {
+      updatePageState('pipelineStep', 'generating');
       texto = '';
       nombre = '';
       provider = 'auto';

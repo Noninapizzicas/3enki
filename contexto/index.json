@@ -166,12 +166,13 @@
       "proyecto": "data/projects/{id}/handlers/*.js → credenciales PROJECT_{id}"
     },
     "recent_patterns": {
-      "page_context": "Patrón reutilizable: página + chat contextual. UI y LLM comparten estado via page-context.ts. Ver system.json",
+      "project_scoped_routes": "Páginas van bajo /[project_id]/pagina (ej: /peppone/menu-generator). Layout padre valida proyecto. Rutas legacy redirigen. routeMatches() stripea prefix para matching de manifests. Ver system.json",
+      "page_context": "Patrón reutilizable: página + chat contextual. UI y LLM comparten estado via page-context.ts. Incluye projectId. Ver system.json",
       "tools_first_modules": "Módulos exponen tools[] para agentic loop del chat (ej: menu-generator 10 tools)",
       "loader_auto_wiring": "Subscribes y UI handlers declarados en module.json, auto-wired por el loader — sin código imperativo en onLoad/onUnload (28/28 módulos migrados)",
       "project_lifecycle_caching": "Módulos cachean proyecto activo via project.activated/deactivated",
       "direct_ui_handlers": "Sin facade - handlers UI declarados en module.json ui_handlers array",
-      "project_scoped": "Operaciones scoped por project_id (chat-session, scheduler)"
+      "project_scoped": "Operaciones scoped por project_id (chat-session, scheduler, routes)"
     }
   }
 }

@@ -11,6 +11,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { publish, subscribe as mqttSubscribe, isConnected } from './mqtt';
 import type { UIModule, UIZone, ModuleContext, AppState } from './types';
+import { getPanel, loadPanelComponent } from '$lib/modules/panels';
 
 // ============================================================================
 // TIPOS PARA LAZY LOADING
@@ -333,6 +334,7 @@ export function setActiveModule(moduleId: string | null): void {
 export async function getPanelComponent(panelId: string) {
   const definitions = get(definitionsStore);
 
+  // 1. Buscar en módulos del lazy-registry (work-bar modules)
   for (const [id, def] of definitions) {
     const loaded = get(loadedStore).get(id);
 
@@ -353,17 +355,25 @@ export async function getPanelComponent(panelId: string) {
     }
   }
 
-  return null;
+  // 2. Fallback: buscar en panels.ts (chat-config, system-bar, chat-tools)
+  return loadPanelComponent(panelId);
 }
 
 export function getPanelConfig(panelId: string) {
   const loaded = get(loadedStore);
 
+  // 1. Buscar en módulos cargados del lazy-registry
   for (const [, l] of loaded) {
     if (l.module) {
       const panel = l.module.manifest.panels?.find(p => p.id === panelId);
       if (panel) return panel;
     }
+  }
+
+  // 2. Fallback: buscar en panels.ts (chat-config, system-bar, chat-tools)
+  const panelDef = getPanel(panelId);
+  if (panelDef) {
+    return { id: panelDef.id, title: panelDef.title, size: panelDef.size, position: panelDef.position };
   }
 
   return null;

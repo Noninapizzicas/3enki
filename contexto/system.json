@@ -191,8 +191,9 @@
           "truncamiento": "Valores >4000 chars se truncan. Objetos se serializan como JSON."
         },
         "+page.svelte": {
-          "cambio": "onMount → setPageContext({ route, title, description, instructions, state: {} }). onDestroy → clearPageContext().",
-          "responsabilidad": "Definir QUÉ contexto tiene esta página y QUÉ instrucciones necesita el LLM."
+          "cambio": "onMount → setPageContext({ route, title, description, instructions, state: { projectId } }). onDestroy → clearPageContext().",
+          "ubicacion": "routes/[project_id]/menu-generator/+page.svelte (project-scoped). La ruta legacy /menu-generator redirige al proyecto activo.",
+          "responsabilidad": "Definir QUÉ contexto tiene esta página y QUÉ instrucciones necesita el LLM. Incluye projectId del URL param."
         },
         "paneles/componentes": {
           "cambio": "Cada panel llama updatePageState() cuando completa un paso.",
@@ -209,7 +210,7 @@
         "7. LLM recibe system prompt con contexto de página → usa tools informadamente",
         "8. onDestroy → clearPageContext()"
       ],
-      "primera_implementacion": "menu-generator (10 tools + 5 paneles + page context)",
+      "primera_implementacion": "menu-generator (10 tools + 5 paneles + page context) en /[project_id]/menu-generator",
       "proximas_implementaciones": ["comandero", "cocina", "facturación"],
       "para_nueva_pagina": [
         "1. setPageContext() en +page.svelte con route, title, description, instructions",
@@ -249,6 +250,38 @@
     "project_scoped_operations": {
       "descripcion": "Operaciones scoped por proyecto via project_id",
       "modulos": ["chat-session (esquema SQLite por proyecto)", "scheduler (jobs con project_id)", "project-manager (composición 5 fases)"]
+    },
+    "project_scoped_routes": {
+      "_updated": "2026-02-13",
+      "descripcion": "Las páginas de verticales van bajo /[project_id]/ en vez de planas. La URL es explícita sobre qué proyecto opera.",
+      "patron": "/[project_id]/pagina — ej: /peppone/menu-generator, /la-pizzeria/comandero",
+      "layout_padre": "routes/[project_id]/+layout.svelte — valida proyecto, carga datos, setContext('project', store) para hijos",
+      "redirect_legacy": "Rutas planas (/menu-generator) redirigen a /${activeProject.id}/menu-generator automáticamente",
+      "route_matching_modulos": {
+        "problema": "Manifests de módulos declaran routes: ['/menu-generator'] pero URL real es /peppone/menu-generator",
+        "solucion": "routeMatches() en lazy-registry.ts stripea el primer segmento (project_id) y compara con el manifest",
+        "codigo": "const withoutProject = '/' + currentRoute.split('/').slice(2).join('/'); return manifestRoutes.some(r => currentRoute.startsWith(r) || withoutProject.startsWith(r));",
+        "beneficio": "Manifests NO cambian — siguen declarando /menu-generator. El matching lo resuelve."
+      },
+      "rutas_actuales": {
+        "project_scoped": [
+          "/[project_id]/comandero — pantalla de cuentas",
+          "/[project_id]/comandero/[cuenta_id] — pedido de cuenta",
+          "/[project_id]/menu-generator — pipeline de cartas"
+        ],
+        "globales": [
+          "/ — home (LazyShell)",
+          "/chat — chat standalone",
+          "/facturas — gestión de facturas"
+        ]
+      },
+      "para_nueva_pagina": [
+        "1. Crear routes/[project_id]/mi-pagina/+page.svelte",
+        "2. getContext('project') para acceder al proyecto del layout padre",
+        "3. setPageContext() con route: '/mi-pagina' (sin prefijo de proyecto)",
+        "4. Manifests de módulos: routes: ['/mi-pagina'] — routeMatches() lo resuelve",
+        "5. Opcional: redirect en routes/mi-pagina/+page.svelte para URLs legacy"
+      ]
     }
   }
 }

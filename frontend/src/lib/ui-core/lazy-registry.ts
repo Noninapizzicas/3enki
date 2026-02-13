@@ -396,10 +396,23 @@ export function setCurrentRoute(route: string): void {
   currentRouteStore.set(route);
 }
 
+/**
+ * Comprueba si la ruta actual matchea con alguna ruta declarada en el manifest.
+ * Soporta rutas planas (/menu-generator) y project-scoped (/peppone/menu-generator).
+ * Para project-scoped: strip del primer segmento (project_id) y compara.
+ */
+function routeMatches(currentRoute: string, manifestRoutes: string[]): boolean {
+  // Ruta sin el prefijo de proyecto: /peppone/menu-generator → /menu-generator
+  const segments = currentRoute.split('/');
+  const withoutProject = segments.length > 2 ? '/' + segments.slice(2).join('/') : currentRoute;
+
+  return manifestRoutes.some(r => currentRoute.startsWith(r) || withoutProject.startsWith(r));
+}
+
 function filterDefinitionsByZone(defs: Map<string, LazyModuleDefinition>, zone: UIZone, currentRoute?: string) {
   return [...defs.values()]
     .filter(d => d.zone === zone)
-    .filter(d => !d.routes || !currentRoute || d.routes.some(r => currentRoute.startsWith(r)))
+    .filter(d => !d.routes || !currentRoute || routeMatches(currentRoute, d.routes))
     .sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
 }
 

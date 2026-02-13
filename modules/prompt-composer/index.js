@@ -185,6 +185,7 @@ Fecha actual: {{date}}`,
       include_tools,
       include_storage,
       include_inherited_context, // Phase 5: include context from related projects
+      page_context, // Page Context: route-aware context from frontend
       tools,
       correlation_id
     } = data;
@@ -242,12 +243,13 @@ Fecha actual: {{date}}`,
         effectiveTools = this.moduleLoader.getToolsForAI();
       }
 
-      // Compose the prompt (with inherited context if available)
+      // Compose the prompt (with inherited context and page context if available)
       const composedPrompt = this.composeSystemPrompt(
         { system_prompt: effectiveBasePrompt },
         projectContext,
         effectiveTools,
-        inheritedContext // Phase 5
+        inheritedContext, // Phase 5
+        page_context || null // Page Context
       );
 
       // Publish response
@@ -685,9 +687,10 @@ Fecha actual: {{date}}`,
    * @param {Object} projectContext - Project context from loadProjectContext
    * @param {Array} tools - Formatted tools array (optional)
    * @param {Object} inheritedContext - Inherited context from related projects (optional, Phase 5)
+   * @param {Object} pageContext - Page context from frontend (optional) { route, title, description, instructions, state }
    * @returns {string} Composed system prompt
    */
-  composeSystemPrompt(conversation, projectContext, tools, inheritedContext = null) {
+  composeSystemPrompt(conversation, projectContext, tools, inheritedContext = null, pageContext = null) {
     // Start with conversation's system prompt or default
     let basePrompt = conversation?.system_prompt ||
       this.config.defaultSystemPrompt ||
@@ -742,6 +745,14 @@ Fecha actual: {{date}}`,
       const inheritedSection = this.buildInheritedContextSection(inheritedContext);
       if (inheritedSection) {
         sections.push(inheritedSection);
+      }
+    }
+
+    // Add page context section if available (route-aware context from frontend)
+    if (pageContext && pageContext.route) {
+      const pageSection = this.buildPageContextSection(pageContext);
+      if (pageSection) {
+        sections.push(pageSection);
       }
     }
 
@@ -844,6 +855,68 @@ Fecha actual: {{date}}`,
     if (!hasContent) return null;
 
     return lines.join('\n').trim();
+  }
+
+  /**
+   * Build the page context section for system prompt.
+   * Renders what the user is doing on the current page so the LLM has awareness.
+   *
+   * @param {Object} pageContext - { route, title, description, instructions?, state? }
+   * @returns {string|null} Formatted section or null if empty
+   */
+  buildPageContextSection(pageContext) {
+    if (!pageContext || !pageContext.route) return null;
+
+    const lines = [];
+
+    lines.push('## Page Context');
+    lines.push(`The user is on **${pageContext.title || pageContext.route}** (${pageContext.route}).`);
+
+    if (pageContext.description) {
+      lines.push(`${pageContext.description}`);
+    }
+
+    // Page-specific instructions for the LLM
+    if (pageContext.instructions) {
+      lines.push('');
+      lines.push(pageContext.instructions);
+    }
+
+    // Render state — the live data from panels/components
+    if (pageContext.state && Object.keys(pageContext.state).length > 0) {
+      lines.push('');
+      lines.push('### Current State');
+
+      for (const [key, value] of Object.entries(pageContext.state)) {
+        if (value === null || value === undefined) continue;
+
+        // Truncate long values (e.g., OCR text) to avoid blowing up context
+        const MAX_VALUE_LENGTH = 4000;
+        let display;
+        if (typeof value === 'string' && value.length > MAX_VALUE_LENGTH) {
+          display = value.substring(0, MAX_VALUE_LENGTH) + `\n... [truncated, ${value.length} chars total]`;
+        } else if (typeof value === 'object') {
+          const json = JSON.stringify(value, null, 2);
+          display = json.length > MAX_VALUE_LENGTH
+            ? json.substring(0, MAX_VALUE_LENGTH) + '\n... [truncated]'
+            : json;
+        } else {
+          display = String(value);
+        }
+
+        // Multi-line values get a block format
+        if (typeof display === 'string' && display.includes('\n')) {
+          lines.push(`- **${key}**:`);
+          lines.push('```');
+          lines.push(display);
+          lines.push('```');
+        } else {
+          lines.push(`- **${key}**: ${display}`);
+        }
+      }
+    }
+
+    return lines.join('\n');
   }
 
   /**

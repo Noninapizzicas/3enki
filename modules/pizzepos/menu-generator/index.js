@@ -1,30 +1,28 @@
 /**
- * Módulo Menu Generator v3.0.0
- * Genera cartas estructuradas desde texto o imágenes usando IA.
+ * Menu Generator v4.0.0
  *
- * Responsabilidad ÚNICA: generar. No almacena, no gestiona, no resuelve.
+ * Asistente de cartas de restaurante — expone tools para el agentic loop del chat.
+ * El usuario habla por el chat, el LLM usa estas herramientas para operar sobre cartas.
  *
- * Flujo:
- *   input (texto/foto/PDF) → AI extracción → carta estructurada → evento carta.generada
+ * Tools:
+ *   menu.generate        — Genera carta estructurada desde texto (OCR, lista, JSON)
+ *   menu.list_cartas     — Lista cartas generadas
+ *   menu.get_carta       — Obtiene carta completa por ID
+ *   menu.update_prices   — Ajusta precios (%, por categoría, individuales)
+ *   menu.add_product     — Añade producto a carta
+ *   menu.remove_product  — Elimina producto de carta
+ *   menu.add_category    — Añade categoría a carta
+ *   menu.update_product  — Actualiza datos de producto
+ *   menu.search_products — Busca productos por nombre/ingrediente
+ *   menu.stats           — Estadísticas de carta
  *
- * Inputs aceptados:
- *   - texto: texto de carta, salida OCR, JSON crudo, lista de productos
- *   - (futuro: imagen via AI vision)
+ * Flujo de generación:
+ *   texto → ai.chat.request → AI estructura → parseAndStructure → carta.generada
  *
- * Output:
- *   Evento 'carta.generada' con formato carta-output.json
- *   {
- *     meta: { id, nombre, generado_desde, created_at },
- *     categorias: [{ id, nombre, orden }],
- *     productos: [{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji }] }]
- *   }
+ * Output: schemas/carta-output.json
  */
 
 const crypto = require('crypto');
-
-// ==========================================
-// Prompt de extracción
-// ==========================================
 
 const PROMPT_EXTRACCION = `Eres un experto en digitalización de cartas de restaurante.
 
@@ -64,174 +62,52 @@ REGLAS OBLIGATORIAS:
 9. Si no hay categorías claras, crea una categoría "general"
 10. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
 
-// ==========================================
-// Módulo
-// ==========================================
-
 class MenuGeneratorModule {
   constructor() {
     this.name = 'menu-generator';
-    this.version = '3.0.0';
-
-    // Dependencias (inyectadas en onLoad)
+    this.version = '4.0.0';
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
-    this.uiHandler = null;
 
-    // Estado temporal
-    this.pending = new Map();  // correlationId -> { id, nombre, estado, created_at }
-    this.cartas = new Map();   // carta_id -> carta generada
+    this.pendingAI = new Map();
+    this.cartas = new Map();
   }
 
   // ==========================================
   // Lifecycle
   // ==========================================
 
-  async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
-    this.eventBus = core.eventBus;
-    this.uiHandler = core.uiHandler;
+  async onLoad(context) {
+    this.eventBus = context.eventBus;
+    this.logger = context.logger;
+    this.metrics = context.metrics;
 
     await this.eventBus.subscribe('ai.chat.response', this.onAIChatResponse.bind(this));
-
-    this.registerUIHandlers();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
-    if (this.uiHandler) {
-      ['generate', 'list', 'get', 'health'].forEach(action => {
-        this.uiHandler.unregister('menu', action);
-      });
-    }
-
-    this.pending.clear();
+    this.pendingAI.clear();
     this.cartas.clear();
-
     this.logger.info('module.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // UI Handlers
+  // UI Handlers (frontend micro-módulos)
   // ==========================================
 
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('menu-generator.no_uiHandler');
-      return;
-    }
-
-    this.uiHandler.register('menu', 'generate', this.handleGenerate.bind(this));
-    this.uiHandler.register('menu', 'list', this.handleList.bind(this));
-    this.uiHandler.register('menu', 'get', this.handleGet.bind(this));
-    this.uiHandler.register('menu', 'health', this.handleHealth.bind(this));
-
-    this.logger.info('menu-generator.ui_handlers.registered', {
-      handlers: ['generate', 'list', 'get', 'health']
-    });
-  }
-
-  /**
-   * Genera una carta estructurada desde texto.
-   *
-   * @param {object} data
-   * @param {string} data.texto - Contenido de la carta (texto, OCR, JSON crudo)
-   * @param {string} [data.nombre] - Nombre para la carta generada
-   * @param {string} [data.provider] - Provider AI (auto|deepseek|anthropic|openai)
-   */
   async handleGenerate(data) {
-    const { texto, nombre, provider } = data;
-
-    if (!texto || texto.trim().length < 10) {
-      return {
-        status: 400,
-        error: 'Se requiere "texto" con el contenido de la carta (mínimo 10 caracteres)'
-      };
-    }
-
-    const cartaId = `carta_${Date.now().toString(36)}`;
-    const correlationId = crypto.randomUUID();
-
-    this.pending.set(correlationId, {
-      id: cartaId,
-      nombre: nombre || 'Carta sin nombre',
-      estado: 'generando',
-      created_at: new Date().toISOString()
-    });
-
-    await this.eventBus.publish('ai.chat.request', {
-      request_id: correlationId,
-      messages: [
-        { role: 'system', content: PROMPT_EXTRACCION },
-        { role: 'user', content: texto }
-      ],
-      provider: provider || 'auto',
-      temperature: 0.1,
-      max_tokens: 8000
-    }, {
-      correlationId
-    });
-
-    this.metrics?.increment('menu.generate.requested');
-
-    this.logger.info('menu.generate.requested', {
-      carta_id: cartaId,
-      correlation_id: correlationId,
-      texto_length: texto.length
-    });
-
-    return {
-      status: 202,
-      data: {
-        carta_id: cartaId,
-        correlation_id: correlationId,
-        estado: 'generando',
-        message: 'Carta en proceso de generación'
-      }
-    };
+    return this.toolGenerate(data);
   }
 
-  async handleList() {
-    const cartas = Array.from(this.cartas.values())
-      .sort((a, b) => new Date(b.meta.created_at) - new Date(a.meta.created_at));
-
-    const pendientes = Array.from(this.pending.values());
-
-    return {
-      status: 200,
-      data: {
-        cartas: [
-          ...pendientes.map(p => ({
-            id: p.id,
-            nombre: p.nombre,
-            estado: p.estado,
-            productos: 0,
-            categorias: 0,
-            created_at: p.created_at
-          })),
-          ...cartas.map(c => ({
-            id: c.meta.id,
-            nombre: c.meta.nombre,
-            estado: 'generado',
-            productos: c.productos.length,
-            categorias: c.categorias.length,
-            created_at: c.meta.created_at
-          }))
-        ],
-        total: cartas.length + pendientes.length
-      }
-    };
+  async handleListCartas() {
+    return this.toolListCartas({});
   }
 
-  async handleGet(data) {
-    const carta = this.cartas.get(data.id);
-    if (!carta) {
-      return { status: 404, error: 'Carta no encontrada' };
-    }
-    return { status: 200, data: carta };
+  async handleGetCarta(data) {
+    return this.toolGetCarta({ carta_id: data.id });
   }
 
   async handleHealth() {
@@ -241,8 +117,269 @@ class MenuGeneratorModule {
         status: 'healthy',
         module: this.name,
         version: this.version,
-        generando: this.pending.size,
+        generando: this.pendingAI.size,
         generadas: this.cartas.size
+      }
+    };
+  }
+
+  // ==========================================
+  // Tools — expuestos al LLM via agentic loop
+  // ==========================================
+
+  async toolGenerate({ texto, nombre }) {
+    if (!texto || texto.trim().length < 10) {
+      return { status: 400, error: 'Se requiere "texto" con el contenido de la carta (mínimo 10 caracteres)' };
+    }
+
+    const cartaId = `carta_${Date.now().toString(36)}`;
+    const requestId = crypto.randomUUID();
+
+    this.pendingAI.set(requestId, {
+      id: cartaId,
+      nombre: nombre || 'Carta sin nombre',
+      created_at: new Date().toISOString()
+    });
+
+    await this.eventBus.publish('ai.chat.request', {
+      request_id: requestId,
+      messages: [
+        { role: 'system', content: PROMPT_EXTRACCION },
+        { role: 'user', content: texto }
+      ],
+      provider: 'auto',
+      temperature: 0.1,
+      max_tokens: 8000,
+      stream: false,
+      tools: false
+    }, { correlationId: requestId });
+
+    this.metrics?.increment('menu.generate.requested');
+    this.logger.info('menu.generate.requested', { carta_id: cartaId, texto_length: texto.length });
+
+    return {
+      status: 202,
+      data: {
+        carta_id: cartaId,
+        estado: 'generando',
+        message: 'Carta en proceso de generación. Usa menu.get_carta con este ID para ver el resultado.'
+      }
+    };
+  }
+
+  async toolListCartas() {
+    const cartas = Array.from(this.cartas.values())
+      .sort((a, b) => new Date(b.meta.created_at) - new Date(a.meta.created_at));
+
+    const pendientes = Array.from(this.pendingAI.values());
+
+    const lista = [
+      ...pendientes.map(p => ({
+        id: p.id, nombre: p.nombre, estado: 'generando',
+        productos: 0, categorias: 0, created_at: p.created_at
+      })),
+      ...cartas.map(c => ({
+        id: c.meta.id, nombre: c.meta.nombre, estado: 'generado',
+        productos: c.productos.length, categorias: c.categorias.length,
+        created_at: c.meta.created_at
+      }))
+    ];
+
+    return { status: 200, data: { cartas: lista, total: lista.length } };
+  }
+
+  async toolGetCarta({ carta_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+
+    const carta = this.cartas.get(carta_id);
+    if (!carta) {
+      const pending = Array.from(this.pendingAI.values()).find(p => p.id === carta_id);
+      if (pending) {
+        return { status: 200, data: { id: carta_id, estado: 'generando', message: 'La carta aún se está generando' } };
+      }
+      return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    }
+
+    return { status: 200, data: carta };
+  }
+
+  async toolUpdatePrices({ carta_id, porcentaje, categoria, precios }) {
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    if (!porcentaje && !precios) {
+      return { status: 400, error: 'Se requiere "porcentaje" o "precios" (objeto {producto_id: nuevo_precio})' };
+    }
+
+    const cambios = [];
+
+    if (precios && typeof precios === 'object') {
+      for (const [prodId, nuevoPrecio] of Object.entries(precios)) {
+        const prod = carta.productos.find(p => p.id === prodId);
+        if (prod) {
+          const anterior = prod.precio;
+          prod.precio = Number(nuevoPrecio);
+          cambios.push({ id: prodId, nombre: prod.nombre, anterior, nuevo: prod.precio });
+        }
+      }
+    }
+
+    if (typeof porcentaje === 'number') {
+      const factor = 1 + porcentaje / 100;
+      for (const prod of carta.productos) {
+        if (categoria && prod.categoria !== categoria) continue;
+        if (precios && precios[prod.id] !== undefined) continue;
+
+        const anterior = prod.precio;
+        prod.precio = Math.round(prod.precio * factor * 100) / 100;
+        cambios.push({ id: prod.id, nombre: prod.nombre, anterior, nuevo: prod.precio });
+      }
+    }
+
+    this.metrics?.increment('menu.prices.updated');
+
+    await this.eventBus.publish('carta.generada', carta);
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        productos_actualizados: cambios.length,
+        cambios
+      }
+    };
+  }
+
+  async toolAddProduct({ carta_id, nombre, categoria, precio, ingredientes }) {
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const cat = carta.categorias.find(c => c.id === categoria);
+    if (!cat) {
+      return { status: 400, error: `Categoría "${categoria}" no existe en la carta. Categorías: ${carta.categorias.map(c => c.id).join(', ')}` };
+    }
+
+    const prodId = `${this.slugify(categoria)}_${this.slugify(nombre)}`;
+
+    if (carta.productos.find(p => p.id === prodId)) {
+      return { status: 409, error: `Ya existe un producto con ID "${prodId}"` };
+    }
+
+    const producto = {
+      id: prodId,
+      nombre,
+      categoria,
+      precio: Number(precio),
+      ingredientes: this.normalizeIngredientes(ingredientes || [])
+    };
+
+    carta.productos.push(producto);
+    this.metrics?.increment('menu.product.added');
+
+    await this.eventBus.publish('carta.generada', carta);
+
+    return { status: 201, data: producto };
+  }
+
+  async toolRemoveProduct({ carta_id, producto_id }) {
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const idx = carta.productos.findIndex(p => p.id === producto_id);
+    if (idx === -1) return { status: 404, error: `Producto "${producto_id}" no encontrado en la carta` };
+
+    const removed = carta.productos.splice(idx, 1)[0];
+    this.metrics?.increment('menu.product.removed');
+
+    await this.eventBus.publish('carta.generada', carta);
+
+    return { status: 200, data: { removed: removed.nombre, productos_restantes: carta.productos.length } };
+  }
+
+  async toolAddCategory({ carta_id, nombre }) {
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const catId = this.slugify(nombre);
+    if (carta.categorias.find(c => c.id === catId)) {
+      return { status: 409, error: `Ya existe categoría "${catId}"` };
+    }
+
+    const maxOrden = carta.categorias.reduce((max, c) => Math.max(max, c.orden), 0);
+    const categoria = { id: catId, nombre, orden: maxOrden + 1 };
+    carta.categorias.push(categoria);
+
+    return { status: 201, data: categoria };
+  }
+
+  async toolUpdateProduct({ carta_id, producto_id, nombre, precio, categoria, ingredientes }) {
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const prod = carta.productos.find(p => p.id === producto_id);
+    if (!prod) return { status: 404, error: `Producto "${producto_id}" no encontrado` };
+
+    if (nombre !== undefined) prod.nombre = nombre;
+    if (precio !== undefined) prod.precio = Number(precio);
+    if (categoria !== undefined) {
+      if (!carta.categorias.find(c => c.id === categoria)) {
+        return { status: 400, error: `Categoría "${categoria}" no existe` };
+      }
+      prod.categoria = categoria;
+    }
+    if (ingredientes !== undefined) {
+      prod.ingredientes = this.normalizeIngredientes(ingredientes);
+    }
+
+    await this.eventBus.publish('carta.generada', carta);
+
+    return { status: 200, data: prod };
+  }
+
+  async toolSearchProducts({ carta_id, query }) {
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    if (!query) return { status: 400, error: 'Se requiere "query"' };
+
+    const q = query.toLowerCase();
+    const results = carta.productos.filter(p =>
+      p.nombre.toLowerCase().includes(q) ||
+      p.ingredientes.some(i => i.nombre.toLowerCase().includes(q))
+    );
+
+    return {
+      status: 200,
+      data: {
+        query,
+        resultados: results.length,
+        productos: results
+      }
+    };
+  }
+
+  async toolStats({ carta_id }) {
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const precios = carta.productos.map(p => p.precio).filter(p => p > 0);
+    const porCategoria = {};
+    for (const p of carta.productos) {
+      porCategoria[p.categoria] = (porCategoria[p.categoria] || 0) + 1;
+    }
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        nombre: carta.meta.nombre,
+        total_productos: carta.productos.length,
+        total_categorias: carta.categorias.length,
+        total_ingredientes: carta.productos.reduce((sum, p) => sum + p.ingredientes.length, 0),
+        precio_min: precios.length > 0 ? Math.min(...precios) : 0,
+        precio_max: precios.length > 0 ? Math.max(...precios) : 0,
+        precio_medio: precios.length > 0 ? Math.round(precios.reduce((a, b) => a + b, 0) / precios.length * 100) / 100 : 0,
+        por_categoria: porCategoria
       }
     };
   }
@@ -258,22 +395,15 @@ class MenuGeneratorModule {
       eventData?.correlation_id ||
       eventData?.request_id;
 
-    // Solo procesar si es una respuesta para nosotros
-    const pendingData = this.pending.get(correlationId);
+    const pendingData = this.pendingAI.get(correlationId);
     if (!pendingData) return;
 
-    this.pending.delete(correlationId);
-
+    this.pendingAI.delete(correlationId);
     const { id: cartaId, nombre } = pendingData;
 
-    // Error de AI
     if (!eventData.success && eventData.error) {
-      this.logger.error('menu.generate.ai_error', {
-        carta_id: cartaId,
-        error: eventData.error
-      });
+      this.logger.error('menu.generate.ai_error', { carta_id: cartaId, error: eventData.error });
       this.metrics?.increment('menu.generate.errors');
-
       await this.eventBus.publish('menu.error', {
         carta_id: cartaId,
         error_type: 'ai_processing_failed',
@@ -282,7 +412,6 @@ class MenuGeneratorModule {
       return;
     }
 
-    // Parsear respuesta
     try {
       const content = eventData.content || eventData.text || '';
       const carta = this.parseAndStructure(cartaId, nombre, content);
@@ -297,14 +426,9 @@ class MenuGeneratorModule {
         productos: carta.productos.length,
         categorias: carta.categorias.length
       });
-
     } catch (err) {
-      this.logger.error('menu.generate.parse_error', {
-        carta_id: cartaId,
-        error: err.message
-      });
+      this.logger.error('menu.generate.parse_error', { carta_id: cartaId, error: err.message });
       this.metrics?.increment('menu.generate.errors');
-
       await this.eventBus.publish('menu.error', {
         carta_id: cartaId,
         error_type: 'parse_failed',
@@ -314,17 +438,12 @@ class MenuGeneratorModule {
   }
 
   // ==========================================
-  // Parsing y estructuración
+  // Parsing
   // ==========================================
 
-  /**
-   * Parsea la respuesta de AI y estructura en formato carta estándar.
-   */
   parseAndStructure(cartaId, nombre, aiContent) {
     const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('La IA no devolvió un JSON válido');
-    }
+    if (!jsonMatch) throw new Error('La IA no devolvió un JSON válido');
 
     const raw = JSON.parse(jsonMatch[0]);
 
@@ -342,9 +461,7 @@ class MenuGeneratorModule {
       ingredientes: this.normalizeIngredientes(p.ingredientes || [])
     }));
 
-    if (productos.length === 0) {
-      throw new Error('La IA no extrajo ningún producto');
-    }
+    if (productos.length === 0) throw new Error('La IA no extrajo ningún producto');
 
     return {
       meta: {
@@ -358,36 +475,23 @@ class MenuGeneratorModule {
     };
   }
 
-  /**
-   * Normaliza ingredientes a formato estándar [{nombre, emoji}].
-   * Maneja: array de objetos, array de strings, string CSV con emojis.
-   */
   normalizeIngredientes(ingredientes) {
     if (typeof ingredientes === 'string') {
-      return ingredientes
-        .split(',')
+      return ingredientes.split(',')
         .map(s => this.parseIngredienteString(s.trim()))
         .filter(i => i.nombre.length > 0);
     }
 
     if (Array.isArray(ingredientes)) {
       return ingredientes.map(ing => {
-        if (typeof ing === 'string') {
-          return this.parseIngredienteString(ing);
-        }
-        return {
-          nombre: ing.nombre || ing.name || '',
-          emoji: ing.emoji || ''
-        };
+        if (typeof ing === 'string') return this.parseIngredienteString(ing);
+        return { nombre: ing.nombre || ing.name || '', emoji: ing.emoji || '' };
       }).filter(i => i.nombre.length > 0);
     }
 
     return [];
   }
 
-  /**
-   * Extrae nombre y emoji de un string como "Tomate 🍅"
-   */
   parseIngredienteString(str) {
     const emojiRegex = /([\p{Emoji_Presentation}\p{Extended_Pictographic}])/u;
     const match = str.match(emojiRegex);
@@ -396,15 +500,13 @@ class MenuGeneratorModule {
   }
 
   // ==========================================
-  // Utilidades
+  // Utils
   // ==========================================
 
   slugify(text) {
     if (!text) return 'sin_nombre';
-    return text
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+    return text.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
       || 'sin_nombre';

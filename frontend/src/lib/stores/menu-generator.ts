@@ -14,6 +14,7 @@ import {
   MqttTimeoutError,
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
+import { updatePageStateBatch } from '$lib/stores/page-context';
 
 // =============================================================================
 // TYPES
@@ -278,6 +279,14 @@ export function initMenuGeneratorSubscriptions(): () => void {
 
       if (cartaId) {
         console.log('[MenuGenerator] Carta generada:', cartaId);
+
+        // Actualizar page context para que el chat sepa de la carta
+        updatePageStateBatch({
+          activeCarta: cartaId,
+          activeCartaNombre: data.meta?.nombre || '',
+          activeCartaProductos: data.productos?.length || 0,
+          pipelineStep: 'carta_generada'
+        });
 
         // Actualizar en la lista local
         menuGeneratorStore.update(s => ({

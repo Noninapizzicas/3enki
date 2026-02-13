@@ -1,0 +1,190 @@
+{
+  "name": "menu-generator",
+  "version": "3.0.0",
+  "description": "Genera cartas estructuradas desde texto o imágenes usando IA. Solo genera, no almacena ni gestiona.",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": ["carta.generada", "menu.error"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "ai.chat.request",
+        "description": "Solicitud a AI para estructurar texto de carta en JSON"
+      },
+      {
+        "event": "carta.generada",
+        "description": "Carta generada con categorías, productos e ingredientes estructurados",
+        "schema": {
+          "$ref": "./schemas/carta-output.json"
+        }
+      },
+      {
+        "event": "menu.error",
+        "description": "Error en generación de carta"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "ai.chat.response",
+        "description": "Respuesta de AI con carta estructurada",
+        "handler": "onAIChatResponse"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/generate",
+      "handler": "handleGenerate",
+      "description": "Generar carta desde texto (OCR, JSON crudo, lista de productos)",
+      "request": {
+        "texto": "string (requerido) - Contenido de la carta",
+        "nombre": "string (opcional) - Nombre para la carta",
+        "provider": "string (opcional) - auto|deepseek|anthropic|openai"
+      },
+      "response": {
+        "carta_id": "string",
+        "correlation_id": "string",
+        "estado": "generando"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/list",
+      "handler": "handleList",
+      "description": "Listar cartas generadas (en memoria)"
+    },
+    {
+      "method": "GET",
+      "path": "/get/:id",
+      "handler": "handleGet",
+      "description": "Obtener carta generada por ID"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealth",
+      "description": "Estado del módulo"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "menu.generate.requested",
+        "menu.generate.completed",
+        "menu.generate.errors"
+      ]
+    }
+  },
+
+  "ui": {
+    "enabled": true,
+    "version": "3.0",
+    "title": "Menu Generator",
+    "icon": "📋",
+    "description": "Genera cartas desde texto usando IA",
+
+    "views": {
+      "main": {
+        "type": "dashboard",
+        "permissions": ["gerente", "admin"],
+
+        "sections": [
+          {
+            "id": "stats",
+            "widget": "stat-card",
+            "config": {
+              "items": [
+                { "label": "Generando", "value": "@data.health.generando", "icon": "⏳", "color": "warning" },
+                { "label": "Generadas", "value": "@data.health.generadas", "icon": "✅", "color": "success" }
+              ]
+            }
+          },
+          {
+            "id": "generate_form",
+            "widget": "form",
+            "config": {
+              "title": "Generar Carta",
+              "endpoint": "menu/generate",
+              "fields": [
+                {
+                  "name": "texto",
+                  "label": "Contenido de la carta",
+                  "type": "textarea",
+                  "required": true,
+                  "placeholder": "Pega aquí el texto de la carta, resultado OCR, o JSON crudo...",
+                  "rows": 10
+                },
+                {
+                  "name": "nombre",
+                  "label": "Nombre de la carta",
+                  "type": "text",
+                  "required": false,
+                  "placeholder": "Carta Pizzicas"
+                },
+                {
+                  "name": "provider",
+                  "label": "Provider AI",
+                  "type": "select",
+                  "required": false,
+                  "options": [
+                    { "value": "auto", "label": "Automático (recomendado)" },
+                    { "value": "deepseek", "label": "DeepSeek" },
+                    { "value": "anthropic", "label": "Anthropic (Claude)" },
+                    { "value": "openai", "label": "OpenAI (GPT)" }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": "cartas_list",
+            "widget": "table-advanced",
+            "config": {
+              "title": "Cartas Generadas",
+              "dataSource": "@data.list.cartas",
+              "columns": [
+                { "key": "nombre", "label": "Nombre", "type": "text" },
+                {
+                  "key": "estado",
+                  "label": "Estado",
+                  "type": "badge",
+                  "badgeColors": { "generando": "warning", "generado": "success" }
+                },
+                { "key": "productos", "label": "Productos", "type": "number" },
+                { "key": "categorias", "label": "Categorías", "type": "number" },
+                { "key": "created_at", "label": "Creado", "type": "datetime" }
+              ],
+              "actions": [
+                {
+                  "label": "Ver",
+                  "icon": "👁️",
+                  "action": "view",
+                  "endpoint": "menu/get",
+                  "showWhen": "estado === 'generado'"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+
+    "mqtt": {
+      "enabled": true,
+      "topics": ["carta.generada", "menu.error"],
+      "auto_refresh": true
+    }
+  }
+}

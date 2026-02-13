@@ -91,11 +91,11 @@ find_available_port() {
             echo $port
             return 0
         fi
-        log_warn "Puerto $port ocupado, probando siguiente..."
+        log_warn "Puerto $port ocupado, probando siguiente..." >&2
         port=$((port + 1))
     done
 
-    log_error "No se encontró puerto disponible después de $max_attempts intentos"
+    log_error "No se encontró puerto disponible después de $max_attempts intentos" >&2
     return 1
 }
 

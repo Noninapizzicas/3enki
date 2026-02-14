@@ -242,6 +242,23 @@ class BaseProvider {
     };
 
     const req = httpModule.request(options, (res) => {
+      // Reject non-2xx responses immediately instead of parsing as SSE
+      if (res.statusCode >= 400) {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          let message;
+          try {
+            const parsed = JSON.parse(body);
+            message = parsed.error?.message || parsed.message || body;
+          } catch (_) {
+            message = body;
+          }
+          onError(new Error(`HTTP ${res.statusCode}: ${message}`));
+        });
+        return;
+      }
+
       res.on('data', (chunk) => {
         onChunk(chunk);
       });
@@ -270,29 +287,34 @@ class BaseProvider {
    * Retry with exponential backoff
    */
   async withRetry(fn, retryConfig) {
-    const { max_attempts, initial_delay_ms, max_delay_ms, backoff_multiplier } = retryConfig;
-    let attempt = 0;
-    let delay = initial_delay_ms;
+    const config = retryConfig || {};
+    const maxAttempts = config.max_attempts || 1;
+    const initialDelay = config.initial_delay_ms || 1000;
+    const maxDelay = config.max_delay_ms || 10000;
+    const multiplier = config.backoff_multiplier || 2;
 
-    while (attempt < max_attempts) {
+    let attempt = 0;
+    let delay = initialDelay;
+
+    while (attempt < maxAttempts) {
       try {
         return await fn();
       } catch (error) {
         attempt++;
 
-        if (attempt >= max_attempts) {
+        if (attempt >= maxAttempts) {
           throw error;
         }
 
         this.logger.warn(`${this.name}.retry`, {
           attempt,
-          max_attempts,
+          max_attempts: maxAttempts,
           delay,
           error: error.message
         });
 
         await this.sleep(delay);
-        delay = Math.min(delay * backoff_multiplier, max_delay_ms);
+        delay = Math.min(delay * multiplier, maxDelay);
       }
     }
   }

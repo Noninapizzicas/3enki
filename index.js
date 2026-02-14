@@ -167,7 +167,7 @@ async function main() {
 
     core.logger = new Logger({
       level: config.observability.logging.level,
-      outputs: config.observability.logging.outputs
+      coreId: config.core.id
     });
 
     core.tracer = new Tracer({

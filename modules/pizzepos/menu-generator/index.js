@@ -23,6 +23,33 @@
  */
 
 const crypto = require('crypto');
+const path = require('path');
+
+// Lazy-loaded service providers (local, no external deps)
+let sharpProvider = null;
+let pdfjsProvider = null;
+let googleVisionProvider = null;
+
+function getSharpProvider() {
+  if (!sharpProvider) {
+    sharpProvider = require(path.resolve(__dirname, '../../../services/providers/local/sharp'));
+  }
+  return sharpProvider;
+}
+
+function getPdfjsProvider() {
+  if (!pdfjsProvider) {
+    pdfjsProvider = require(path.resolve(__dirname, '../../../services/providers/local/pdfjs'));
+  }
+  return pdfjsProvider;
+}
+
+function getGoogleVisionProvider() {
+  if (!googleVisionProvider) {
+    googleVisionProvider = require(path.resolve(__dirname, '../../../services/providers/local/google-vision'));
+  }
+  return googleVisionProvider;
+}
 
 const PROMPT_EXTRACCION = `Eres un experto en digitalización de cartas de restaurante.
 
@@ -127,6 +154,46 @@ class MenuGeneratorModule {
       generando: this.pendingAI.size,
       generadas: this.cartas.size
     };
+  }
+
+  // ==========================================
+  // Pipeline Handlers — bridge frontend panels to local service providers
+  // ==========================================
+
+  async handleSharpPrepareOcr(data) {
+    const provider = getSharpProvider();
+    const result = await provider['prepare-ocr']({
+      image: data.image,
+      options: data.options || {},
+      output: data.output
+    });
+    return result;
+  }
+
+  async handlePdfjsInfo(data) {
+    const provider = getPdfjsProvider();
+    const result = await provider.info({ pdf: data.pdf });
+    return result;
+  }
+
+  async handlePdfjsRender(data) {
+    const provider = getPdfjsProvider();
+    const result = await provider.render({
+      pdf: data.pdf,
+      page: data.page || 1,
+      scale: data.scale || 2.0
+    });
+    return result;
+  }
+
+  async handleGoogleVisionExtract(data) {
+    const provider = getGoogleVisionProvider();
+    const result = await provider.extract({
+      image: data.image,
+      hint: data.hint || 'TEXT_DETECTION',
+      languageHints: data.languageHints || []
+    });
+    return result;
   }
 
   // ==========================================

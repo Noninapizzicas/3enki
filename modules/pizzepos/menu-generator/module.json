@@ -28,7 +28,11 @@
     { "domain": "menu", "action": "generate", "handler": "handleGenerate" },
     { "domain": "menu", "action": "list", "handler": "handleListCartas" },
     { "domain": "menu", "action": "get", "handler": "handleGetCarta" },
-    { "domain": "menu", "action": "health", "handler": "handleHealth" }
+    { "domain": "menu", "action": "health", "handler": "handleHealth" },
+    { "domain": "sharp", "action": "prepare-ocr", "handler": "handleSharpPrepareOcr" },
+    { "domain": "pdfjs", "action": "info", "handler": "handlePdfjsInfo" },
+    { "domain": "pdfjs", "action": "render", "handler": "handlePdfjsRender" },
+    { "domain": "google-vision", "action": "extract", "handler": "handleGoogleVisionExtract" }
   ],
 
   "tools": [

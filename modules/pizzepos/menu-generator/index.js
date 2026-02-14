@@ -99,27 +99,33 @@ class MenuGeneratorModule {
   // ==========================================
 
   async handleGenerate(data) {
-    return this.toolGenerate(data);
+    const result = await this.toolGenerate(data);
+    if (result.error) {
+      throw { status: result.status || 400, code: 'GENERATE_ERROR', message: result.error };
+    }
+    return result.data;
   }
 
   async handleListCartas() {
-    return this.toolListCartas({});
+    const result = await this.toolListCartas({});
+    return result.data;
   }
 
   async handleGetCarta(data) {
-    return this.toolGetCarta({ carta_id: data.id });
+    const result = await this.toolGetCarta({ carta_id: data.id });
+    if (result.error) {
+      throw { status: result.status || 404, code: 'NOT_FOUND', message: result.error };
+    }
+    return result.data;
   }
 
   async handleHealth() {
     return {
-      status: 200,
-      data: {
-        status: 'healthy',
-        module: this.name,
-        version: this.version,
-        generando: this.pendingAI.size,
-        generadas: this.cartas.size
-      }
+      status: 'healthy',
+      module: this.name,
+      version: this.version,
+      generando: this.pendingAI.size,
+      generadas: this.cartas.size
     };
   }
 

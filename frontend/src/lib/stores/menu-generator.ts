@@ -89,9 +89,8 @@ interface ListResponse {
   total: number;
 }
 
-interface GetResponse {
-  carta: Carta;
-}
+// getCarta returns the carta object directly as response.data
+type GetResponse = Carta;
 
 interface HealthResponse {
   status: string;
@@ -200,15 +199,18 @@ export async function getCarta(id: string): Promise<Carta | null> {
   try {
     const response = await mqttRequest<GetResponse>('menu', 'get', { id });
 
+    // response.data IS the carta object (meta, categorias, productos)
+    const carta = response.data as Carta;
+
     menuGeneratorStore.update(s => ({
       ...s,
-      selectedCarta: response.data.carta,
+      selectedCarta: carta,
       selectedId: id,
       loading: false,
       activeTab: 'detalle'
     }));
 
-    return response.data.carta;
+    return carta;
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     menuGeneratorStore.update(s => ({ ...s, loading: false, error: errorMessage }));

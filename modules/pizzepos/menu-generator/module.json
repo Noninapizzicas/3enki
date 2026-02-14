@@ -21,7 +21,10 @@
         "description": "Error en operación sobre carta"
       }
     ],
-    "subscribes": []
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+    ]
   },
 
   "ui_handlers": [

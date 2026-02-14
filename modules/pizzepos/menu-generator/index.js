@@ -99,6 +99,9 @@ class MenuGeneratorModule {
 
     this.pendingAI = new Map();
     this.cartas = new Map();
+
+    // Project context for resolving relative file paths
+    this.activeProjectPath = null;
   }
 
   // ==========================================
@@ -118,7 +121,50 @@ class MenuGeneratorModule {
   async onUnload() {
     this.pendingAI.clear();
     this.cartas.clear();
+    this.activeProjectPath = null;
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  async onProjectActivated(event) {
+    const data = event.data || event;
+    const { project_id, base_path, metadata } = data;
+
+    if (metadata?.is_system === true) {
+      this.activeProjectPath = process.cwd();
+    } else if (base_path) {
+      this.activeProjectPath = path.join(base_path, 'storage');
+    }
+
+    this.logger.info('menu-generator.project.activated', {
+      project_id,
+      activeProjectPath: this.activeProjectPath
+    });
+  }
+
+  async onProjectDeactivated() {
+    this.activeProjectPath = null;
+  }
+
+  /**
+   * Resolve a project-relative path (e.g. "/0.png") to an absolute filesystem path.
+   * Paths that are already absolute and exist, or base64/data URIs, are returned as-is.
+   */
+  resolveFilePath(userPath) {
+    if (!userPath || typeof userPath !== 'string') return userPath;
+
+    // Data URIs and base64 pass through
+    if (userPath.startsWith('data:')) return userPath;
+    const base64Prefixes = ['/9j/', 'iVBORw', 'R0lGOD', 'UklGR', 'Qk', 'SUkq', 'TU0A'];
+    if (base64Prefixes.some(p => userPath.startsWith(p))) return userPath;
+
+    // If we have a project path, resolve relative to it
+    if (this.activeProjectPath) {
+      const normalized = path.normalize(userPath).replace(/^\/+/, '');
+      return path.resolve(this.activeProjectPath, normalized);
+    }
+
+    // Fallback: return as-is
+    return userPath;
   }
 
   // ==========================================
@@ -163,23 +209,23 @@ class MenuGeneratorModule {
   async handleSharpPrepareOcr(data) {
     const provider = getSharpProvider();
     const result = await provider['prepare-ocr']({
-      image: data.image,
+      image: this.resolveFilePath(data.image),
       options: data.options || {},
-      output: data.output
+      output: data.output ? this.resolveFilePath(data.output) : undefined
     });
     return result;
   }
 
   async handlePdfjsInfo(data) {
     const provider = getPdfjsProvider();
-    const result = await provider.info({ pdf: data.pdf });
+    const result = await provider.info({ pdf: this.resolveFilePath(data.pdf) });
     return result;
   }
 
   async handlePdfjsRender(data) {
     const provider = getPdfjsProvider();
     const result = await provider.render({
-      pdf: data.pdf,
+      pdf: this.resolveFilePath(data.pdf),
       page: data.page || 1,
       scale: data.scale || 2.0
     });
@@ -189,7 +235,7 @@ class MenuGeneratorModule {
   async handleGoogleVisionExtract(data) {
     const provider = getGoogleVisionProvider();
     const result = await provider.extract({
-      image: data.image,
+      image: this.resolveFilePath(data.image),
       hint: data.hint || 'TEXT_DETECTION',
       languageHints: data.languageHints || []
     });

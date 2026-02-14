@@ -236,14 +236,40 @@ class ChatAiBridgeModule {
         flowId,
         stage: flowState.stage,
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
+        hasPartialContent: !!(flowState.accumulatedContent)
       });
+
+      // Save partial streaming content if the AI started responding before failing.
+      // The user already saw these chunks via MQTT, so persist them to avoid ghost messages.
+      let assistantMessage = null;
+      if (flowState.accumulatedContent && flowState.accumulatedContent.length > 0) {
+        try {
+          assistantMessage = await this.saveAssistantMessage(flowState, {
+            content: flowState.accumulatedContent,
+            tokens: 0,
+            cost: 0,
+            metadata: { partial: true, error: error.message }
+          });
+          this.logger.info('chat-ai-bridge.partial_content.saved', {
+            flowId,
+            contentLength: flowState.accumulatedContent.length
+          });
+        } catch (saveError) {
+          this.logger.warn('chat-ai-bridge.partial_content.save_failed', {
+            flowId,
+            error: saveError.message
+          });
+        }
+      }
 
       await this.eventBus.publish('chat.send.response', {
         request_id: flowId,
         success: false,
         error: error.message,
         stage: flowState.stage,
+        assistant_message: assistantMessage,
+        partial_content: !!(flowState.accumulatedContent),
         correlation_id
       });
 
@@ -436,6 +462,8 @@ class ChatAiBridgeModule {
     const timeout = use_tools ? toolTimeout : baseTimeout;
 
     // Streaming: accumulate chunks and forward to frontend via MQTT
+    // Store on flowState so partial content is recoverable on error
+    flowState.accumulatedContent = '';
     let accumulatedContent = '';
     let chunkUnsub = null;
     const streamingMsgId = crypto.randomUUID();
@@ -467,6 +495,7 @@ class ChatAiBridgeModule {
 
         // Accumulate delta
         accumulatedContent += chunkData.delta || '';
+        flowState.accumulatedContent = accumulatedContent;
 
         // Forward to frontend via MQTT
         mqttClient.publish(`conversation/${conversation_id}/message`, JSON.stringify({

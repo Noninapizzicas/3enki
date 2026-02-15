@@ -219,7 +219,8 @@ class MenuGeneratorModule {
   }
 
   /**
-   * Save base64 image to the project's pipeline directory.
+   * Save base64 image to the project's preprocesadas/ directory.
+   * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
    * Returns { absolutePath, relativePath } where relativePath is for the frontend FilePicker.
    */
   async savePipelineFile(base64Data, prefix, ext = '.png') {
@@ -227,7 +228,7 @@ class MenuGeneratorModule {
       throw new Error('No active project — cannot save pipeline file');
     }
 
-    const dir = path.join(this.activeProjectPath, 'pipeline');
+    const dir = path.join(this.activeProjectPath, 'preprocesadas');
     await fs.mkdir(dir, { recursive: true });
 
     const filename = `${prefix}_${Date.now().toString(36)}${ext}`;
@@ -235,8 +236,8 @@ class MenuGeneratorModule {
     const buffer = Buffer.from(base64Data, 'base64');
     await fs.writeFile(absolutePath, buffer);
 
-    // Return project-relative path for the frontend (e.g. "/pipeline/rendered_abc.png")
-    const relativePath = '/pipeline/' + filename;
+    // Return project-relative path for the frontend (e.g. "/preprocesadas/rendered_abc.png")
+    const relativePath = '/preprocesadas/' + filename;
     return { absolutePath, relativePath };
   }
 

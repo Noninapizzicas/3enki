@@ -35,7 +35,10 @@
     { "domain": "sharp", "action": "prepare-ocr", "handler": "handleSharpPrepareOcr" },
     { "domain": "pdfjs", "action": "info", "handler": "handlePdfjsInfo" },
     { "domain": "pdfjs", "action": "render", "handler": "handlePdfjsRender" },
-    { "domain": "google-vision", "action": "extract", "handler": "handleGoogleVisionExtract" }
+    { "domain": "google-vision", "action": "extract", "handler": "handleGoogleVisionExtract" },
+    { "domain": "tesseract", "action": "extract", "handler": "handleTesseractExtract" },
+    { "domain": "scribe-ocr", "action": "extract", "handler": "handleScribeOcrExtract" },
+    { "domain": "document-processor", "action": "process", "handler": "handleDocumentProcessorProcess" }
   ],
 
   "tools": [

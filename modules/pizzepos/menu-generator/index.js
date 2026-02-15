@@ -24,11 +24,15 @@
 
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs').promises;
 
 // Lazy-loaded service providers (local, no external deps)
 let sharpProvider = null;
 let pdfjsProvider = null;
 let googleVisionProvider = null;
+let tesseractProvider = null;
+let scribeOcrProvider = null;
+let documentProcessorProvider = null;
 
 function getSharpProvider() {
   if (!sharpProvider) {
@@ -49,6 +53,27 @@ function getGoogleVisionProvider() {
     googleVisionProvider = require(path.resolve(__dirname, '../../../services/providers/local/google-vision'));
   }
   return googleVisionProvider;
+}
+
+function getTesseractProvider() {
+  if (!tesseractProvider) {
+    tesseractProvider = require(path.resolve(__dirname, '../../../services/providers/local/tesseract'));
+  }
+  return tesseractProvider;
+}
+
+function getScribeOcrProvider() {
+  if (!scribeOcrProvider) {
+    scribeOcrProvider = require(path.resolve(__dirname, '../../../services/providers/local/scribe-ocr'));
+  }
+  return scribeOcrProvider;
+}
+
+function getDocumentProcessorProvider() {
+  if (!documentProcessorProvider) {
+    documentProcessorProvider = require(path.resolve(__dirname, '../../../services/providers/local/document-processor'));
+  }
+  return documentProcessorProvider;
 }
 
 const PROMPT_EXTRACCION = `Eres un experto en digitalización de cartas de restaurante.
@@ -139,10 +164,81 @@ class MenuGeneratorModule {
       project_id,
       activeProjectPath: this.activeProjectPath
     });
+
+    // Load persisted cartas from disk
+    await this.loadCartasFromDisk();
   }
 
   async onProjectDeactivated() {
     this.activeProjectPath = null;
+    this.cartas.clear();
+  }
+
+  // ==========================================
+  // Carta Persistence
+  // ==========================================
+
+  get cartasDir() {
+    return this.activeProjectPath ? path.join(this.activeProjectPath, 'cartas') : null;
+  }
+
+  async saveCartaToDisk(carta) {
+    if (!this.cartasDir) return;
+    try {
+      await fs.mkdir(this.cartasDir, { recursive: true });
+      const filePath = path.join(this.cartasDir, `${carta.meta.id}.json`);
+      await fs.writeFile(filePath, JSON.stringify(carta, null, 2), 'utf-8');
+    } catch (err) {
+      this.logger.warn('menu-generator.carta.save_failed', { carta_id: carta.meta?.id, error: err.message });
+    }
+  }
+
+  async loadCartasFromDisk() {
+    if (!this.cartasDir) return;
+    try {
+      await fs.mkdir(this.cartasDir, { recursive: true });
+      const files = await fs.readdir(this.cartasDir);
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+      for (const file of jsonFiles) {
+        try {
+          const content = await fs.readFile(path.join(this.cartasDir, file), 'utf-8');
+          const carta = JSON.parse(content);
+          if (carta.meta?.id) {
+            this.cartas.set(carta.meta.id, carta);
+          }
+        } catch (err) {
+          this.logger.warn('menu-generator.carta.load_failed', { file, error: err.message });
+        }
+      }
+
+      this.logger.info('menu-generator.cartas.loaded', { count: this.cartas.size });
+    } catch (err) {
+      this.logger.warn('menu-generator.cartas.dir_error', { error: err.message });
+    }
+  }
+
+  /**
+   * Save base64 image to the project's preprocesadas/ directory.
+   * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
+   * Returns { absolutePath, relativePath } where relativePath is for the frontend FilePicker.
+   */
+  async savePipelineFile(base64Data, prefix, ext = '.png') {
+    if (!this.activeProjectPath) {
+      throw new Error('No active project — cannot save pipeline file');
+    }
+
+    const dir = path.join(this.activeProjectPath, 'preprocesadas');
+    await fs.mkdir(dir, { recursive: true });
+
+    const filename = `${prefix}_${Date.now().toString(36)}${ext}`;
+    const absolutePath = path.join(dir, filename);
+    const buffer = Buffer.from(base64Data, 'base64');
+    await fs.writeFile(absolutePath, buffer);
+
+    // Return project-relative path for the frontend (e.g. "/preprocesadas/rendered_abc.png")
+    const relativePath = '/preprocesadas/' + filename;
+    return { absolutePath, relativePath };
   }
 
   /**
@@ -208,18 +304,29 @@ class MenuGeneratorModule {
 
   async handleSharpPrepareOcr(data) {
     const provider = getSharpProvider();
+    // Call without output to get base64
     const result = await provider['prepare-ocr']({
       image: this.resolveFilePath(data.image),
-      options: data.options || {},
-      output: data.output ? this.resolveFilePath(data.output) : undefined
+      options: data.options || {}
     });
+
+    // Save to disk so the next panel (OCR) can reference the file
+    if (result.success && result.image && this.activeProjectPath) {
+      try {
+        const { relativePath } = await this.savePipelineFile(result.image, 'prepared');
+        result.path = relativePath;
+      } catch (err) {
+        this.logger.warn('menu-generator.pipeline.save_failed', { step: 'prepare', error: err.message });
+      }
+    }
+
     return result;
   }
 
   async handlePdfjsInfo(data) {
     const provider = getPdfjsProvider();
     const result = await provider.info({ pdf: this.resolveFilePath(data.pdf) });
-    return result;
+    return result.data || result;
   }
 
   async handlePdfjsRender(data) {
@@ -229,17 +336,58 @@ class MenuGeneratorModule {
       page: data.page || 1,
       scale: data.scale || 2.0
     });
-    return result;
+
+    const renderData = result.data || result;
+
+    // Save rendered image to disk so PreparePanel can reference it
+    if (renderData.image && this.activeProjectPath) {
+      try {
+        const page = data.page || 1;
+        const { relativePath } = await this.savePipelineFile(renderData.image, `page${page}`);
+        renderData.path = relativePath;
+      } catch (err) {
+        this.logger.warn('menu-generator.pipeline.save_failed', { step: 'render', error: err.message });
+      }
+    }
+
+    return renderData;
   }
 
   async handleGoogleVisionExtract(data) {
     const provider = getGoogleVisionProvider();
     const result = await provider.extract({
       image: this.resolveFilePath(data.image),
-      hint: data.hint || 'TEXT_DETECTION',
+      hint: data.hint || 'DOCUMENT_TEXT_DETECTION',
       languageHints: data.languageHints || []
     });
     return result;
+  }
+
+  async handleTesseractExtract(data) {
+    const provider = getTesseractProvider();
+    const result = await provider.extract({
+      image: this.resolveFilePath(data.image),
+      language: data.language || 'eng'
+    });
+    return result.data || result;
+  }
+
+  async handleScribeOcrExtract(data) {
+    const provider = getScribeOcrProvider();
+    const result = await provider.extract({
+      input: this.resolveFilePath(data.input || data.image),
+      lang: data.lang || data.language || 'eng'
+    });
+    return result.data || result;
+  }
+
+  async handleDocumentProcessorProcess(data) {
+    const provider = getDocumentProcessorProvider();
+    const result = await provider.process({
+      document: this.resolveFilePath(data.document || data.image),
+      language: data.language || 'es'
+    });
+    return result.data || result;
   }
 
   // ==========================================
@@ -356,6 +504,7 @@ class MenuGeneratorModule {
     }
 
     this.metrics?.increment('menu.prices.updated');
+    await this.saveCartaToDisk(carta);
 
     await this.eventBus.publish('carta.generada', carta);
 
@@ -394,6 +543,7 @@ class MenuGeneratorModule {
 
     carta.productos.push(producto);
     this.metrics?.increment('menu.product.added');
+    await this.saveCartaToDisk(carta);
 
     await this.eventBus.publish('carta.generada', carta);
 
@@ -409,6 +559,7 @@ class MenuGeneratorModule {
 
     const removed = carta.productos.splice(idx, 1)[0];
     this.metrics?.increment('menu.product.removed');
+    await this.saveCartaToDisk(carta);
 
     await this.eventBus.publish('carta.generada', carta);
 
@@ -450,6 +601,7 @@ class MenuGeneratorModule {
       prod.ingredientes = this.normalizeIngredientes(ingredientes);
     }
 
+    await this.saveCartaToDisk(carta);
     await this.eventBus.publish('carta.generada', carta);
 
     return { status: 200, data: prod };
@@ -536,6 +688,7 @@ class MenuGeneratorModule {
       const carta = this.parseAndStructure(cartaId, nombre, content);
 
       this.cartas.set(cartaId, carta);
+      await this.saveCartaToDisk(carta);
       this.metrics?.increment('menu.generate.completed');
 
       await this.eventBus.publish('carta.generada', carta, { correlationId });

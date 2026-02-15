@@ -246,6 +246,28 @@ class MenuGeneratorModule {
   }
 
   /**
+   * Save OCR text result to the project's ocr/ directory.
+   * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
+   * Returns the relative path for reference.
+   */
+  async saveOcrResult(text, sourceLabel) {
+    if (!this.activeProjectPath || !text) return null;
+    try {
+      const dir = path.join(this.activeProjectPath, 'ocr');
+      await fs.mkdir(dir, { recursive: true });
+
+      const filename = `${sourceLabel || 'ocr'}_${Date.now().toString(36)}.txt`;
+      const absolutePath = path.join(dir, filename);
+      await fs.writeFile(absolutePath, text, 'utf-8');
+
+      return '/ocr/' + filename;
+    } catch (err) {
+      this.logger.warn('menu-generator.ocr.save_failed', { error: err.message });
+      return null;
+    }
+  }
+
+  /**
    * Resolve a project-relative path (e.g. "/0.png") to an absolute filesystem path.
    * Paths that are already absolute and exist, or base64/data URIs, are returned as-is.
    */
@@ -364,6 +386,11 @@ class MenuGeneratorModule {
       hint: data.hint || 'DOCUMENT_TEXT_DETECTION',
       languageHints: data.languageHints || []
     });
+
+    const text = result.text || result.data?.text;
+    if (text) {
+      result.ocr_path = await this.saveOcrResult(text, 'gvision');
+    }
     return result;
   }
 
@@ -373,7 +400,13 @@ class MenuGeneratorModule {
       image: this.resolveFilePath(data.image),
       language: data.language || 'eng'
     });
-    return result.data || result;
+    const out = result.data || result;
+
+    const text = out.text;
+    if (text) {
+      out.ocr_path = await this.saveOcrResult(text, 'tesseract');
+    }
+    return out;
   }
 
   async handleScribeOcrExtract(data) {
@@ -382,7 +415,13 @@ class MenuGeneratorModule {
       input: this.resolveFilePath(data.input || data.image),
       lang: data.lang || data.language || 'eng'
     });
-    return result.data || result;
+    const out = result.data || result;
+
+    const text = out.text;
+    if (text) {
+      out.ocr_path = await this.saveOcrResult(text, 'scribe');
+    }
+    return out;
   }
 
   async handleDocumentProcessorProcess(data) {
@@ -391,7 +430,13 @@ class MenuGeneratorModule {
       document: this.resolveFilePath(data.document || data.image),
       language: data.language || 'es'
     });
-    return result.data || result;
+    const out = result.data || result;
+
+    const text = out.text;
+    if (text) {
+      out.ocr_path = await this.saveOcrResult(text, 'docproc');
+    }
+    return out;
   }
 
   // ==========================================

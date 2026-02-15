@@ -125,7 +125,8 @@ class MenuGeneratorModule {
     this.pendingAI = new Map();
     this.cartas = new Map();
 
-    // Project context for resolving relative file paths
+    // Project context
+    this.activeProjectId = null;
     this.activeProjectPath = null;
   }
 
@@ -154,6 +155,8 @@ class MenuGeneratorModule {
     const data = event.data || event;
     const { project_id, base_path, metadata } = data;
 
+    this.activeProjectId = project_id;
+
     if (metadata?.is_system === true) {
       this.activeProjectPath = process.cwd();
     } else if (base_path) {
@@ -170,6 +173,7 @@ class MenuGeneratorModule {
   }
 
   async onProjectDeactivated() {
+    this.activeProjectId = null;
     this.activeProjectPath = null;
     this.cartas.clear();
   }
@@ -239,6 +243,28 @@ class MenuGeneratorModule {
     // Return project-relative path for the frontend (e.g. "/preprocesadas/rendered_abc.png")
     const relativePath = '/preprocesadas/' + filename;
     return { absolutePath, relativePath };
+  }
+
+  /**
+   * Save OCR text result to the project's ocr/ directory.
+   * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
+   * Returns the relative path for reference.
+   */
+  async saveOcrResult(text, sourceLabel) {
+    if (!this.activeProjectPath || !text) return null;
+    try {
+      const dir = path.join(this.activeProjectPath, 'ocr');
+      await fs.mkdir(dir, { recursive: true });
+
+      const filename = `${sourceLabel || 'ocr'}_${Date.now().toString(36)}.txt`;
+      const absolutePath = path.join(dir, filename);
+      await fs.writeFile(absolutePath, text, 'utf-8');
+
+      return '/ocr/' + filename;
+    } catch (err) {
+      this.logger.warn('menu-generator.ocr.save_failed', { error: err.message });
+      return null;
+    }
   }
 
   /**
@@ -360,6 +386,11 @@ class MenuGeneratorModule {
       hint: data.hint || 'DOCUMENT_TEXT_DETECTION',
       languageHints: data.languageHints || []
     });
+
+    const text = result.text || result.data?.text;
+    if (text) {
+      result.ocr_path = await this.saveOcrResult(text, 'gvision');
+    }
     return result;
   }
 
@@ -369,7 +400,13 @@ class MenuGeneratorModule {
       image: this.resolveFilePath(data.image),
       language: data.language || 'eng'
     });
-    return result.data || result;
+    const out = result.data || result;
+
+    const text = out.text;
+    if (text) {
+      out.ocr_path = await this.saveOcrResult(text, 'tesseract');
+    }
+    return out;
   }
 
   async handleScribeOcrExtract(data) {
@@ -378,7 +415,13 @@ class MenuGeneratorModule {
       input: this.resolveFilePath(data.input || data.image),
       lang: data.lang || data.language || 'eng'
     });
-    return result.data || result;
+    const out = result.data || result;
+
+    const text = out.text;
+    if (text) {
+      out.ocr_path = await this.saveOcrResult(text, 'scribe');
+    }
+    return out;
   }
 
   async handleDocumentProcessorProcess(data) {
@@ -387,7 +430,13 @@ class MenuGeneratorModule {
       document: this.resolveFilePath(data.document || data.image),
       language: data.language || 'es'
     });
-    return result.data || result;
+    const out = result.data || result;
+
+    const text = out.text;
+    if (text) {
+      out.ocr_path = await this.saveOcrResult(text, 'docproc');
+    }
+    return out;
   }
 
   // ==========================================
@@ -769,6 +818,118 @@ class MenuGeneratorModule {
     const match = str.match(emojiRegex);
     const nombre = str.replace(emojiRegex, '').trim();
     return { nombre, emoji: match ? match[1] : '' };
+  }
+
+  // ==========================================
+  // Export to POS — bridge carta → menu.generado/menu.validado
+  // ==========================================
+
+  /**
+   * Transform a carta into the menu.generado event format expected by
+   * productos, categorias, and ingredientes modules.
+   */
+  transformCartaToPOS(carta, projectId) {
+    // Build deduplicated ingredientes_catalogo from all products
+    const ingredientesMap = new Map();
+    for (const prod of carta.productos) {
+      for (const ing of (prod.ingredientes || [])) {
+        const id = `ing_${this.slugify(ing.nombre)}`;
+        if (!ingredientesMap.has(id)) {
+          ingredientesMap.set(id, {
+            id,
+            nombre: ing.nombre,
+            emoji: ing.emoji || '',
+            tipo: 'otro',
+            es_alergeno: false,
+            precio_extra: 0
+          });
+        }
+      }
+    }
+
+    // Transform productos: ingredientes → ingredientes_base with IDs
+    const productos = carta.productos.map(p => ({
+      id: p.id,
+      nombre: p.nombre,
+      categoria: p.categoria,
+      precio: p.precio,
+      ingredientes_base: (p.ingredientes || []).map(ing => ({
+        id: `ing_${this.slugify(ing.nombre)}`,
+        nombre: ing.nombre,
+        emoji: ing.emoji || ''
+      })),
+      activo: true
+    }));
+
+    return {
+      menu_id: carta.meta.id,
+      project_id: projectId,
+      productos,
+      categorias: carta.categorias,
+      ingredientes_catalogo: Array.from(ingredientesMap.values())
+    };
+  }
+
+  async toolExportToPOS({ carta_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const projectId = this.activeProjectId;
+    if (!projectId) {
+      return { status: 400, error: 'No hay proyecto activo. Activa un proyecto antes de exportar.' };
+    }
+
+    const correlationId = crypto.randomUUID();
+    const payload = this.transformCartaToPOS(carta, projectId);
+
+    this.logger.info('menu.export_to_pos.start', {
+      carta_id,
+      project_id: projectId,
+      productos: payload.productos.length,
+      categorias: payload.categorias.length,
+      ingredientes: payload.ingredientes_catalogo.length,
+      correlation_id: correlationId
+    });
+
+    // 1) menu.generado → categorias sync + ingredientes sync + productos draft
+    await this.eventBus.publish('menu.generado', payload, { correlationId });
+
+    // 2) menu.validado (sin correcciones) → productos sync catalogo
+    await this.eventBus.publish('menu.validado', {
+      menu_id: carta.meta.id,
+      correcciones: []
+    }, { correlationId });
+
+    this.logger.info('menu.export_to_pos.completed', {
+      carta_id,
+      project_id: projectId,
+      correlation_id: correlationId
+    });
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        project_id: projectId,
+        exportado: {
+          productos: payload.productos.length,
+          categorias: payload.categorias.length,
+          ingredientes: payload.ingredientes_catalogo.length
+        },
+        eventos_publicados: ['menu.generado', 'menu.validado'],
+        message: `Carta "${carta.meta.nombre}" exportada al POS. ${payload.productos.length} productos, ${payload.categorias.length} categorías, ${payload.ingredientes_catalogo.length} ingredientes sincronizados.`
+      }
+    };
+  }
+
+  async handleExport(data) {
+    const result = await this.toolExportToPOS({ carta_id: data.carta_id || data.id });
+    if (result.error) {
+      throw { status: result.status || 400, code: 'EXPORT_ERROR', message: result.error };
+    }
+    return result.data;
   }
 
   // ==========================================

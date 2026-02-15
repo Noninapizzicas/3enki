@@ -7,7 +7,9 @@
   "dependencies": [],
 
   "directories": [
-    "storage/cartas"
+    "storage/cartas",
+    "storage/preprocesadas",
+    "storage/ocr"
   ],
 
   "config": {

@@ -143,19 +143,21 @@
     },
 
     "productos": {
-      "version": "2.1.0",
-      "descripcion": "Catálogo de productos — CRUD, sincronización desde menú AI, cache de precios",
+      "version": "2.2.0",
+      "descripcion": "Catálogo de productos — CRUD, sincronización desde menú AI, cache de precios. Multi-tenant (Map por proyecto).",
       "ui_domain": "productos",
       "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "sync_menu", "validar_menu", "ingredientes", "health", "metrics"],
-      "eventos_publica": ["producto.creado", "producto.actualizado", "catalogo.actualizado"],
-      "eventos_suscribe": ["carta.generada"]
+      "eventos_publica": ["producto.creado", "producto.actualizado", "producto.eliminado", "catalogo.actualizado"],
+      "eventos_suscribe": ["menu.generado", "menu.validado"],
+      "flujo_sync": "menu.generado → guarda draft en menusPendientes → menu.validado → syncCatalogo() → producto.creado/actualizado"
     },
 
     "categorias": {
       "version": "2.0.0",
       "descripcion": "Catálogo de categorías con soporte de reordenación",
       "ui_domain": "categorias",
-      "uiHandlers": ["crear", "actualizar", "get", "list", "eliminar", "reorder", "health"]
+      "uiHandlers": ["crear", "actualizar", "get", "list", "eliminar", "reorder", "health"],
+      "eventos_suscribe": ["menu.generado"]
     },
 
     "ingredientes": {
@@ -163,7 +165,7 @@
       "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos",
       "ui_domain": "ingredientes",
       "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "health"],
-      "eventos_suscribe": ["carta.generada", "producto.creado"]
+      "eventos_suscribe": ["menu.generado", "producto.creado"]
     },
 
     "variaciones": {
@@ -181,9 +183,10 @@
       "backend": {
         "ubicacion": "modules/pizzepos/menu-generator/index.js",
         "ui_domain": "menu",
-        "uiHandlers": ["generate", "list", "get", "health"],
+        "uiHandlers": ["generate", "list", "get", "health", "export"],
+        "pipeline_uiHandlers": ["sharp.prepare-ocr", "pdfjs.info", "pdfjs.render", "google-vision.extract", "tesseract.extract", "scribe-ocr.extract", "document-processor.process"],
         "tools": {
-          "descripcion": "10 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
+          "descripcion": "11 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
           "lista": [
             { "name": "menu.generate", "handler": "toolGenerate", "desc": "Genera carta estructurada desde texto (OCR, lista, JSON)" },
             { "name": "menu.list_cartas", "handler": "toolListCartas", "desc": "Lista cartas generadas con resumen" },
@@ -194,12 +197,23 @@
             { "name": "menu.add_category", "handler": "toolAddCategory", "desc": "Añade categoría nueva a carta" },
             { "name": "menu.update_product", "handler": "toolUpdateProduct", "desc": "Actualiza nombre/precio/ingredientes/categoría" },
             { "name": "menu.search_products", "handler": "toolSearchProducts", "desc": "Busca productos por nombre o ingrediente" },
-            { "name": "menu.stats", "handler": "toolStats", "desc": "Estadísticas: total, por categoría, precio medio, rango" }
+            { "name": "menu.stats", "handler": "toolStats", "desc": "Estadísticas: total, por categoría, precio medio, rango" },
+            { "name": "menu.export_to_pos", "handler": "toolExportToPOS", "desc": "Exporta carta al POS: publica menu.generado + menu.validado" }
           ]
         },
-        "eventos_publica": ["carta.generada", "menu.error"],
-        "eventos_suscribe": ["ai.chat.response"],
-        "flujo": "texto/OCR/JSON crudo → ai.chat.request → AI estructura → parseAndStructure → carta.generada",
+        "eventos_publica": ["carta.generada", "menu.generado", "menu.validado", "menu.error"],
+        "eventos_suscribe": ["ai.chat.response", "project.activated", "project.deactivated"],
+        "flujo_generacion": "texto/OCR/JSON crudo → ai.chat.request → AI estructura → parseAndStructure → carta.generada",
+        "flujo_exportacion": "carta → transformCartaToPOS → menu.generado (categorias+ingredientes sync) → menu.validado (productos sync catalogo)",
+        "storage": {
+          "descripcion": "Archivos del pipeline y cartas, project-scoped en data/projects/{slug}/storage/",
+          "directorios": {
+            "cartas/": "Cartas estructuradas JSON (carta_{id}.json)",
+            "preprocesadas/": "Renders PDF + imágenes preparadas con Sharp",
+            "ocr/": "Textos OCR extraídos (.txt) por cualquier motor"
+          },
+          "blueprint": "blueprints/project-types/pizzepos.json precrea estos directorios"
+        },
         "output_schema": "schemas/carta-output.json",
         "output_formato": {
           "meta": "{ id, nombre, generado_desde, created_at }",
@@ -287,7 +301,8 @@
           "mqttRequest('menu', 'generate', { texto, nombre, provider })",
           "mqttRequest('menu', 'list')",
           "mqttRequest('menu', 'get', { id })",
-          "mqttRequest('menu', 'health')"
+          "mqttRequest('menu', 'health')",
+          "mqttRequest('menu', 'export', { carta_id })"
         ],
         "subscriptions_realtime": ["carta.generada", "menu.error"]
       },

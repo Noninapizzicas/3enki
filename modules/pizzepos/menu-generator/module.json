@@ -6,7 +6,7 @@
   "main": "index.js",
 
   "provides": {
-    "events": ["carta.generada", "menu.error"]
+    "events": ["carta.generada", "menu.generado", "menu.validado", "menu.error"]
   },
 
   "events": {
@@ -15,6 +15,14 @@
         "event": "carta.generada",
         "description": "Carta generada o actualizada con categorías, productos e ingredientes",
         "schema": { "$ref": "./schemas/carta-output.json" }
+      },
+      {
+        "event": "menu.generado",
+        "description": "Carta exportada al POS — sincroniza categorias, ingredientes y productos (draft)"
+      },
+      {
+        "event": "menu.validado",
+        "description": "Carta validada — productos sync catalogo"
       },
       {
         "event": "menu.error",
@@ -38,7 +46,8 @@
     { "domain": "google-vision", "action": "extract", "handler": "handleGoogleVisionExtract" },
     { "domain": "tesseract", "action": "extract", "handler": "handleTesseractExtract" },
     { "domain": "scribe-ocr", "action": "extract", "handler": "handleScribeOcrExtract" },
-    { "domain": "document-processor", "action": "process", "handler": "handleDocumentProcessorProcess" }
+    { "domain": "document-processor", "action": "process", "handler": "handleDocumentProcessorProcess" },
+    { "domain": "menu", "action": "export", "handler": "handleExport" }
   ],
 
   "tools": [
@@ -261,6 +270,21 @@
           "carta_id": {
             "type": "string",
             "description": "ID de la carta"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "menu.export_to_pos",
+      "description": "Exporta una carta al sistema POS (pizzepos). Sincroniza categorías, ingredientes y productos via eventos menu.generado + menu.validado. Requiere proyecto activo.",
+      "handler": "toolExportToPOS",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta a exportar al POS"
           }
         },
         "required": ["carta_id"]

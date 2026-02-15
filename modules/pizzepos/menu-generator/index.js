@@ -125,7 +125,8 @@ class MenuGeneratorModule {
     this.pendingAI = new Map();
     this.cartas = new Map();
 
-    // Project context for resolving relative file paths
+    // Project context
+    this.activeProjectId = null;
     this.activeProjectPath = null;
   }
 
@@ -154,6 +155,8 @@ class MenuGeneratorModule {
     const data = event.data || event;
     const { project_id, base_path, metadata } = data;
 
+    this.activeProjectId = project_id;
+
     if (metadata?.is_system === true) {
       this.activeProjectPath = process.cwd();
     } else if (base_path) {
@@ -170,6 +173,7 @@ class MenuGeneratorModule {
   }
 
   async onProjectDeactivated() {
+    this.activeProjectId = null;
     this.activeProjectPath = null;
     this.cartas.clear();
   }
@@ -769,6 +773,118 @@ class MenuGeneratorModule {
     const match = str.match(emojiRegex);
     const nombre = str.replace(emojiRegex, '').trim();
     return { nombre, emoji: match ? match[1] : '' };
+  }
+
+  // ==========================================
+  // Export to POS — bridge carta → menu.generado/menu.validado
+  // ==========================================
+
+  /**
+   * Transform a carta into the menu.generado event format expected by
+   * productos, categorias, and ingredientes modules.
+   */
+  transformCartaToPOS(carta, projectId) {
+    // Build deduplicated ingredientes_catalogo from all products
+    const ingredientesMap = new Map();
+    for (const prod of carta.productos) {
+      for (const ing of (prod.ingredientes || [])) {
+        const id = `ing_${this.slugify(ing.nombre)}`;
+        if (!ingredientesMap.has(id)) {
+          ingredientesMap.set(id, {
+            id,
+            nombre: ing.nombre,
+            emoji: ing.emoji || '',
+            tipo: 'otro',
+            es_alergeno: false,
+            precio_extra: 0
+          });
+        }
+      }
+    }
+
+    // Transform productos: ingredientes → ingredientes_base with IDs
+    const productos = carta.productos.map(p => ({
+      id: p.id,
+      nombre: p.nombre,
+      categoria: p.categoria,
+      precio: p.precio,
+      ingredientes_base: (p.ingredientes || []).map(ing => ({
+        id: `ing_${this.slugify(ing.nombre)}`,
+        nombre: ing.nombre,
+        emoji: ing.emoji || ''
+      })),
+      activo: true
+    }));
+
+    return {
+      menu_id: carta.meta.id,
+      project_id: projectId,
+      productos,
+      categorias: carta.categorias,
+      ingredientes_catalogo: Array.from(ingredientesMap.values())
+    };
+  }
+
+  async toolExportToPOS({ carta_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+
+    const carta = this.cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const projectId = this.activeProjectId;
+    if (!projectId) {
+      return { status: 400, error: 'No hay proyecto activo. Activa un proyecto antes de exportar.' };
+    }
+
+    const correlationId = crypto.randomUUID();
+    const payload = this.transformCartaToPOS(carta, projectId);
+
+    this.logger.info('menu.export_to_pos.start', {
+      carta_id,
+      project_id: projectId,
+      productos: payload.productos.length,
+      categorias: payload.categorias.length,
+      ingredientes: payload.ingredientes_catalogo.length,
+      correlation_id: correlationId
+    });
+
+    // 1) menu.generado → categorias sync + ingredientes sync + productos draft
+    await this.eventBus.publish('menu.generado', payload, { correlationId });
+
+    // 2) menu.validado (sin correcciones) → productos sync catalogo
+    await this.eventBus.publish('menu.validado', {
+      menu_id: carta.meta.id,
+      correcciones: []
+    }, { correlationId });
+
+    this.logger.info('menu.export_to_pos.completed', {
+      carta_id,
+      project_id: projectId,
+      correlation_id: correlationId
+    });
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        project_id: projectId,
+        exportado: {
+          productos: payload.productos.length,
+          categorias: payload.categorias.length,
+          ingredientes: payload.ingredientes_catalogo.length
+        },
+        eventos_publicados: ['menu.generado', 'menu.validado'],
+        message: `Carta "${carta.meta.nombre}" exportada al POS. ${payload.productos.length} productos, ${payload.categorias.length} categorías, ${payload.ingredientes_catalogo.length} ingredientes sincronizados.`
+      }
+    };
+  }
+
+  async handleExport(data) {
+    const result = await this.toolExportToPOS({ carta_id: data.carta_id || data.id });
+    if (result.error) {
+      throw { status: result.status || 400, code: 'EXPORT_ERROR', message: result.error };
+    }
+    return result.data;
   }
 
   // ==========================================

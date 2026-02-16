@@ -85,3 +85,7 @@ services/providers/local/tesseract/tessdata/*.traineddata
 # Generated project databases
 data/projects/_prompts/
 data/projects/system/
+
+# Business-specific projects (not part of installation)
+data/projects/pizzepos/
+data/projects/facturas-nonina/

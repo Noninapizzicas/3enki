@@ -50,6 +50,16 @@
         "event": "menu.validado",
         "description": "Menú validado - aplicar al catálogo activo",
         "handler": "onMenuValidado"
+      },
+      {
+        "event": "project.activated",
+        "description": "Cache base_path del proyecto para resolver rutas de cartas",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.get.response",
+        "description": "Respuesta con datos del proyecto (para resolver base_path)",
+        "handler": "onProjectGetResponse"
       }
     ]
   },

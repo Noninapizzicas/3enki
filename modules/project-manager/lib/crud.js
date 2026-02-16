@@ -15,7 +15,7 @@ module.exports = {
     const projectId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    this.logger.info({ correlationId, projectId, name }, 'Creating project');
+    this.logger.info('project.creating', { correlationId, projectId, name });
 
     try {
       // Check if project name already exists
@@ -76,11 +76,11 @@ module.exports = {
         created_at: now
       });
 
-      this.logger.info({ correlationId, projectId, name }, 'Project created successfully');
+      this.logger.info('project.created', { correlationId, projectId, name });
 
       return project;
     } catch (error) {
-      this.logger.error({ correlationId, projectId, name, error: error.message }, 'Failed to create project');
+      this.logger.error('project.create.failed', { correlationId, projectId, name, error: error.message });
       throw error;
     }
   },
@@ -89,7 +89,7 @@ module.exports = {
    * Update project
    */
   async updateProject(projectId, updates, correlationId) {
-    this.logger.info({ correlationId, projectId, updates }, 'Updating project');
+    this.logger.info('project.updating', { correlationId, projectId, updates });
 
     const project = this.projects.get(projectId);
     if (!project) {
@@ -123,7 +123,7 @@ module.exports = {
     }
 
     if (queryParts.length === 0) {
-      this.logger.warn({ correlationId, projectId }, 'No fields to update');
+      this.logger.warn('project.update.no-fields', { correlationId, projectId });
       return project;
     }
 
@@ -148,11 +148,11 @@ module.exports = {
         updated_at: now
       });
 
-      this.logger.info({ correlationId, projectId }, 'Project updated successfully');
+      this.logger.info('project.updated', { correlationId, projectId });
 
       return project;
     } catch (error) {
-      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to update project');
+      this.logger.error('project.update.failed', { correlationId, projectId, error: error.message });
       throw error;
     }
   },
@@ -161,7 +161,7 @@ module.exports = {
    * Delete project
    */
   async deleteProject(projectId, correlationId, options = {}) {
-    this.logger.info({ correlationId, projectId }, 'Deleting project');
+    this.logger.info('project.deleting', { correlationId, projectId });
 
     const project = this.projects.get(projectId);
     if (!project) {
@@ -204,11 +204,11 @@ module.exports = {
         deleted_at: new Date().toISOString()
       });
 
-      this.logger.info({ correlationId, projectId }, 'Project deleted successfully');
+      this.logger.info('project.deleted', { correlationId, projectId });
 
       return { success: true, id: projectId };
     } catch (error) {
-      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to delete project');
+      this.logger.error('project.delete.failed', { correlationId, projectId, error: error.message });
       throw error;
     }
   },
@@ -217,7 +217,7 @@ module.exports = {
    * Activate project
    */
   async activateProject(projectId, correlationId) {
-    this.logger.info({ correlationId, projectId }, 'Activating project');
+    this.logger.info('project.activating', { correlationId, projectId });
 
     const project = this.projects.get(projectId);
     if (!project) {
@@ -226,7 +226,7 @@ module.exports = {
 
     // Si ya está activo, solo re-emitir el evento
     if (this.activeProjectId === projectId) {
-      this.logger.info({ correlationId, projectId }, 'Project already active, re-emitting event');
+      this.logger.info('project.already-active', { correlationId, projectId });
 
       await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
         project_id: projectId,
@@ -285,11 +285,11 @@ module.exports = {
         activated_at: new Date().toISOString()
       });
 
-      this.logger.info({ correlationId, projectId }, 'Project activated successfully');
+      this.logger.info('project.activated', { correlationId, projectId });
 
       return project;
     } catch (error) {
-      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to activate project');
+      this.logger.error('project.activate.failed', { correlationId, projectId, error: error.message });
       throw error;
     }
   },

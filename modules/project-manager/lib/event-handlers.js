@@ -14,8 +14,7 @@ module.exports = {
   async onGetProjectRequest(event) {
     const eventData = event.data || event;
     const { request_id, project_id, correlation_id } = eventData;
-    this.logger.debug({ correlationId: correlation_id, requestId: request_id, projectId: project_id },
-      'Received project.get.request');
+    this.logger.debug('project.get.request.received', { correlationId: correlation_id, requestId: request_id, projectId: project_id });
 
     const project = this.getProject(project_id);
 
@@ -33,8 +32,7 @@ module.exports = {
   async onListProjectsRequest(event) {
     const eventData = event.data || event;
     const { request_id, correlation_id } = eventData;
-    this.logger.debug({ correlationId: correlation_id, requestId: request_id },
-      'Received project.list.request');
+    this.logger.debug('project.list.request.received', { correlationId: correlation_id, requestId: request_id });
 
     const projects = this.listProjects();
 
@@ -53,8 +51,7 @@ module.exports = {
   async onGetActiveProjectRequest(event) {
     const eventData = event.data || event;
     const { request_id, correlation_id } = eventData;
-    this.logger.debug({ correlationId: correlation_id, requestId: request_id },
-      'Received project.active.request');
+    this.logger.debug('project.active.request.received', { correlationId: correlation_id, requestId: request_id });
 
     await this.eventBus.publish('project.active.response', {
       request_id,
@@ -70,8 +67,7 @@ module.exports = {
     const eventData = event.data || event;
     const { request_id, project_id, correlation_id } = eventData;
 
-    this.logger.debug({ correlationId: correlation_id, requestId: request_id, projectId: project_id },
-      'Received context.full.request');
+    this.logger.debug('context.full.request.received', { correlationId: correlation_id, requestId: request_id, projectId: project_id });
 
     try {
       const fullContext = await this.getFullProjectContext(project_id, correlation_id || crypto.randomUUID());
@@ -80,8 +76,7 @@ module.exports = {
         request_id, success: true, context: fullContext, correlation_id
       });
     } catch (error) {
-      this.logger.warn({ correlationId: correlation_id, error: error.message },
-        'Failed to get full project context');
+      this.logger.warn('context.full.request.failed', { correlationId: correlation_id, error: error.message });
 
       await this.eventBus.publish('context.full.response', {
         request_id, success: false, context: null, error: error.message, correlation_id
@@ -95,7 +90,7 @@ module.exports = {
    * Handle project/state/request - UI solicita estado
    */
   async onProjectStateRequest(event) {
-    this.logger.debug('MQTT: project/state/request received');
+    this.logger.debug('mqtt.project.state.request');
     await this.publishUIState();
   },
 
@@ -107,10 +102,10 @@ module.exports = {
     const { name, description, color, icon, workspaceType } = eventData;
     const correlationId = crypto.randomUUID();
 
-    this.logger.info({ correlationId, name }, 'MQTT: project/create');
+    this.logger.info('mqtt.project.create', { correlationId, name });
 
     if (!name || name.trim().length === 0) {
-      this.logger.warn({ correlationId }, 'MQTT: project/create - name required');
+      this.logger.warn('mqtt.project.create.name-required', { correlationId });
       return;
     }
 
@@ -122,7 +117,7 @@ module.exports = {
       );
       await this.publishUIState();
     } catch (error) {
-      this.logger.error({ correlationId, error: error.message }, 'MQTT: project/create failed');
+      this.logger.error('mqtt.project.create.failed', { correlationId, error: error.message });
     }
   },
 
@@ -134,10 +129,10 @@ module.exports = {
     const { id, name, description, color, icon, workspaceType } = eventData;
     const correlationId = crypto.randomUUID();
 
-    this.logger.info({ correlationId, id }, 'MQTT: project/update');
+    this.logger.info('mqtt.project.update', { correlationId, id });
 
     if (!id) {
-      this.logger.warn({ correlationId }, 'MQTT: project/update - id required');
+      this.logger.warn('mqtt.project.update.id-required', { correlationId });
       return;
     }
 
@@ -158,7 +153,7 @@ module.exports = {
       await this.updateProject(id, updates, correlationId);
       await this.publishUIState();
     } catch (error) {
-      this.logger.error({ correlationId, id, error: error.message }, 'MQTT: project/update failed');
+      this.logger.error('mqtt.project.update.failed', { correlationId, id, error: error.message });
     }
   },
 
@@ -170,10 +165,10 @@ module.exports = {
     const { id } = eventData;
     const correlationId = crypto.randomUUID();
 
-    this.logger.info({ correlationId, id }, 'MQTT: project/delete');
+    this.logger.info('mqtt.project.delete', { correlationId, id });
 
     if (!id) {
-      this.logger.warn({ correlationId }, 'MQTT: project/delete - id required');
+      this.logger.warn('mqtt.project.delete.id-required', { correlationId });
       return;
     }
 
@@ -181,7 +176,7 @@ module.exports = {
       await this.deleteProject(id, correlationId);
       await this.publishUIState();
     } catch (error) {
-      this.logger.error({ correlationId, id, error: error.message }, 'MQTT: project/delete failed');
+      this.logger.error('mqtt.project.delete.failed', { correlationId, id, error: error.message });
     }
   },
 
@@ -193,10 +188,10 @@ module.exports = {
     const { id } = eventData;
     const correlationId = crypto.randomUUID();
 
-    this.logger.info({ correlationId, id }, 'MQTT: project/activate');
+    this.logger.info('mqtt.project.activate', { correlationId, id });
 
     if (!id) {
-      this.logger.warn({ correlationId }, 'MQTT: project/activate - id required');
+      this.logger.warn('mqtt.project.activate.id-required', { correlationId });
       return;
     }
 
@@ -204,7 +199,7 @@ module.exports = {
       await this.activateProject(id, correlationId);
       await this.publishUIState();
     } catch (error) {
-      this.logger.error({ correlationId, id, error: error.message }, 'MQTT: project/activate failed');
+      this.logger.error('mqtt.project.activate.failed', { correlationId, id, error: error.message });
     }
   }
 };

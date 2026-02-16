@@ -88,6 +88,7 @@ class ProjectManagerModule {
 
     // ==================== Initialization ====================
 
+    await this.initializeSystemSchema();
     await this.loadExistingProjects();
     await this.ensureSystemProject();
 
@@ -95,7 +96,7 @@ class ProjectManagerModule {
   }
 
   async onUnload() {
-    this.logger.info({ correlationId: 'system' }, 'Project Manager module unloading');
+    this.logger.info('project-manager.unloading', { correlationId: 'system' });
 
     // Clear pending DB requests (module-specific state)
     for (const [requestId, pending] of this.pendingDbRequests.entries()) {
@@ -104,7 +105,7 @@ class ProjectManagerModule {
     }
     this.pendingDbRequests.clear();
 
-    this.logger.info({ correlationId: 'system' }, 'Project Manager module unloaded');
+    this.logger.info('project-manager.unloaded', { correlationId: 'system' });
   }
 }
 

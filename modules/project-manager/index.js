@@ -1107,6 +1107,26 @@ class ProjectManagerModule {
     return { updated: true, ...config };
   }
 
+  async handleUIGetUnassigned() {
+    const allProjectIds = Array.from(this.projects.keys());
+    try {
+      const unassignedIds = await this.requestComposition('entity.unassigned', { entity_ids: allProjectIds });
+      const projects = (unassignedIds || []).map(id => {
+        const project = this.projects.get(id);
+        return project
+          ? { id, name: project.name, description: project.description }
+          : { id };
+      });
+      return { projects, count: projects.length };
+    } catch (err) {
+      // Fallback: use local cache to find projects without system_id
+      const projects = Array.from(this.projects.values())
+        .filter(p => !p.system_id)
+        .map(p => ({ id: p.id, name: p.name, description: p.description }));
+      return { projects, count: projects.length };
+    }
+  }
+
   async handleUISetLastConversation(data) {
     const { id, conversationId } = data;
     if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };

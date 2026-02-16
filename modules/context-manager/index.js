@@ -234,6 +234,32 @@ class ContextManagerModule {
     }));
   }
 
+  // ==================== Entity Name Resolution ====================
+
+  /**
+   * Resolve entity IDs to names/descriptions by querying the projects table.
+   * Returns Map<entityId, { name, description }>.
+   */
+  async resolveEntityNames(entityIds, correlationId) {
+    if (!entityIds || entityIds.length === 0) return new Map();
+    const unique = [...new Set(entityIds)];
+    const placeholders = unique.map(() => '?').join(',');
+    try {
+      const rows = await this.queryDatabase(
+        `SELECT id, name, description FROM projects WHERE id IN (${placeholders})`,
+        unique, true, correlationId
+      );
+      const map = new Map();
+      for (const row of rows) {
+        map.set(row.id, { name: row.name, description: row.description });
+      }
+      return map;
+    } catch (err) {
+      this.logger.warn('context-manager.resolve-names.failed', { error: err.message });
+      return new Map();
+    }
+  }
+
   // ==================== Context Discovery ====================
 
   async getAvailableContextSources(entityId, correlationId) {
@@ -247,14 +273,26 @@ class ContextManagerModule {
     const alreadyImported = await this.getSharedContext(entityId, correlationId);
     const importedMap = new Map(alreadyImported.map(s => [s.fromEntityId, s]));
 
+    // Collect all entity IDs that need name resolution
+    const idsToResolve = new Set();
+    for (const rel of (related || [])) idsToResolve.add(rel.id);
+    for (const dep of (deps || [])) idsToResolve.add(dep.dependsOnId);
+    if (systemInfo?.members) {
+      for (const m of systemInfo.members) {
+        if (m.entityId !== entityId) idsToResolve.add(m.entityId);
+      }
+    }
+    const names = await this.resolveEntityNames([...idsToResolve], correlationId);
+
     const sourceMap = new Map();
 
     // Sources from links
     for (const rel of (related || [])) {
       if (!sourceMap.has(rel.id)) {
+        const info = names.get(rel.id) || {};
         sourceMap.set(rel.id, {
-          id: rel.id, source: 'link',
-          linkType: rel.links?.[0]?.linkType,
+          id: rel.id, name: info.name, description: info.description,
+          source: 'link', linkType: rel.links?.[0]?.linkType,
           hasImportedContext: importedMap.has(rel.id)
         });
       }
@@ -263,9 +301,10 @@ class ContextManagerModule {
     // Sources from dependencies
     for (const dep of (deps || [])) {
       if (!sourceMap.has(dep.dependsOnId)) {
+        const info = names.get(dep.dependsOnId) || {};
         sourceMap.set(dep.dependsOnId, {
-          id: dep.dependsOnId, source: 'dependency',
-          dependencyType: dep.dependencyType,
+          id: dep.dependsOnId, name: info.name, description: info.description,
+          source: 'dependency', dependencyType: dep.dependencyType,
           hasImportedContext: importedMap.has(dep.dependsOnId)
         });
       }
@@ -275,9 +314,10 @@ class ContextManagerModule {
     if (systemInfo && systemInfo.members) {
       for (const member of systemInfo.members) {
         if (member.entityId !== entityId && !sourceMap.has(member.entityId)) {
+          const info = names.get(member.entityId) || {};
           sourceMap.set(member.entityId, {
-            id: member.entityId, source: 'system',
-            role: member.role, systemName: systemInfo.name,
+            id: member.entityId, name: info.name, description: info.description,
+            source: 'system', role: member.role, systemName: systemInfo.name,
             hasImportedContext: importedMap.has(member.entityId)
           });
         }
@@ -303,6 +343,18 @@ class ContextManagerModule {
       this.requestComposition('entity.system', { entity_id: entityId }).catch(() => null)
     ]);
 
+    // Collect all entity IDs that need name resolution
+    const idsToResolve = new Set([entityId]);
+    if (systemInfo?.members) {
+      for (const m of systemInfo.members) idsToResolve.add(m.entityId);
+    }
+    for (const d of (deps || [])) idsToResolve.add(d.dependsOnId);
+    for (const r of (related || [])) idsToResolve.add(r.id);
+    for (const s of sharedContext) idsToResolve.add(s.fromEntityId);
+    const names = await this.resolveEntityNames([...idsToResolve], correlationId);
+
+    const entityInfo = names.get(entityId) || {};
+
     let systemSection = null;
     if (systemInfo) {
       systemSection = {
@@ -312,26 +364,37 @@ class ContextManagerModule {
         role: systemInfo.entityRole,
         siblingProjects: (systemInfo.members || [])
           .filter(m => m.entityId !== entityId)
-          .map(m => ({ id: m.entityId, role: m.role }))
+          .map(m => {
+            const info = names.get(m.entityId) || {};
+            return { id: m.entityId, name: info.name || m.entityId, role: m.role };
+          })
       };
     }
 
     return {
-      project: { id: entityId },
+      project: { id: entityId, name: entityInfo.name, description: entityInfo.description },
       system: systemSection,
-      dependencies: (deps || []).map(d => ({
-        projectId: d.dependsOnId,
-        type: d.dependencyType,
-        description: d.description
-      })),
-      relatedProjects: (related || []).map(r => ({
-        id: r.id, links: r.links
-      })),
-      sharedContext: sharedContext.map(s => ({
-        fromProject: s.fromEntityId,
-        conversationId: s.conversationId,
-        reason: s.reason
-      })),
+      dependencies: (deps || []).map(d => {
+        const info = names.get(d.dependsOnId) || {};
+        return {
+          projectId: d.dependsOnId,
+          projectName: info.name || d.dependsOnId,
+          type: d.dependencyType,
+          description: d.description
+        };
+      }),
+      relatedProjects: (related || []).map(r => {
+        const info = names.get(r.id) || {};
+        return { id: r.id, name: info.name || r.id, links: r.links };
+      }),
+      sharedContext: sharedContext.map(s => {
+        const info = names.get(s.fromEntityId) || {};
+        return {
+          fromProject: info.name || s.fromEntityId,
+          conversationId: s.conversationId,
+          reason: s.reason
+        };
+      }),
       inheritedContextCount: sharedContext.length
     };
   }

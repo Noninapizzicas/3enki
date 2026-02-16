@@ -47,7 +47,6 @@
     { "domain": "system", "action": "delete", "handler": "handleUISystemDelete" },
     { "domain": "system", "action": "addProject", "handler": "handleUISystemAddEntity" },
     { "domain": "system", "action": "removeProject", "handler": "handleUISystemRemoveEntity" },
-    { "domain": "system", "action": "getUnassigned", "handler": "handleUISystemGetUnassigned" },
     { "domain": "project", "action": "link", "handler": "handleUILink" },
     { "domain": "project", "action": "unlink", "handler": "handleUIUnlink" },
     { "domain": "project", "action": "getLinks", "handler": "handleUIGetLinks" },

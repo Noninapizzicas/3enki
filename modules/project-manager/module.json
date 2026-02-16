@@ -54,6 +54,7 @@
     { "domain": "project", "action": "delete", "handler": "handleUIDelete" },
     { "domain": "project", "action": "activate", "handler": "handleUIActivate" },
     { "domain": "project", "action": "deactivate", "handler": "handleUIDeactivate" },
+    { "domain": "system", "action": "getUnassigned", "handler": "handleUIGetUnassigned" },
     { "domain": "project", "action": "add-features", "handler": "handleUIAddFeatures" },
     { "domain": "project", "action": "list-features", "handler": "handleUIListFeatures" },
     { "domain": "project", "action": "saveSession", "handler": "handleUISaveSession" },

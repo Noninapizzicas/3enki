@@ -58,6 +58,46 @@ module.exports = {
   },
 
   /**
+   * Initialize the system database schema (projects table + composition tables)
+   * Must be called before any queries against the system database
+   */
+  async initializeSystemSchema() {
+    const correlationId = crypto.randomUUID();
+    this.logger.info('project-manager.schema.initializing', { correlationId });
+
+    try {
+      // Create the projects table
+      await this.queryDatabase(`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          is_active INTEGER DEFAULT 0,
+          metadata TEXT,
+          last_conversation_id TEXT,
+          provider TEXT,
+          model TEXT,
+          prompt_id TEXT,
+          base_path TEXT,
+          session_state TEXT,
+          system_id TEXT,
+          system_role TEXT,
+          parent_project_id TEXT
+        )
+      `, [], false, correlationId);
+
+      // Create composition tables
+      await this.initializeCompositionTables(correlationId);
+
+      this.logger.info('project-manager.schema.initialized', { correlationId });
+    } catch (error) {
+      this.logger.error('project-manager.schema.failed', { correlationId, error: error.message });
+    }
+  },
+
+  /**
    * Load existing projects from database on startup
    */
   async loadExistingProjects() {

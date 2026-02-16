@@ -15,15 +15,15 @@ module.exports = {
     const slug = this.slugify(name);
     const basePath = path.join(this.projectsBasePath, slug);
 
-    this.logger.debug({ correlationId, projectId, basePath }, 'Creating project directories');
+    this.logger.debug('project.directories.creating', { correlationId, projectId, basePath });
 
     try {
       await fs.promises.mkdir(path.join(basePath, 'db'), { recursive: true });
       await fs.promises.mkdir(path.join(basePath, 'storage'), { recursive: true });
-      this.logger.debug({ correlationId, projectId }, 'Project directories created');
+      this.logger.debug('project.directories.created', { correlationId, projectId });
       return basePath;
     } catch (error) {
-      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to create project directories');
+      this.logger.error('project.directories.create.failed', { correlationId, projectId, error: error.message });
       throw error;
     }
   },
@@ -32,13 +32,13 @@ module.exports = {
    * Delete project directories
    */
   async deleteProjectDirectories(basePath, correlationId) {
-    this.logger.debug({ correlationId, basePath }, 'Deleting project directories');
+    this.logger.debug('project.directories.deleting', { correlationId, basePath });
 
     try {
       await fs.promises.rm(basePath, { recursive: true, force: true });
-      this.logger.debug({ correlationId, basePath }, 'Project directories deleted');
+      this.logger.debug('project.directories.deleted', { correlationId, basePath });
     } catch (error) {
-      this.logger.warn({ correlationId, basePath, error: error.message }, 'Failed to delete project directories (non-fatal)');
+      this.logger.warn('project.directories.delete.failed', { correlationId, basePath, error: error.message });
     }
   },
 
@@ -63,7 +63,7 @@ module.exports = {
    * since the project can be used immediately with default schema
    */
   async initializeProjectSchema(projectId, correlationId) {
-    this.logger.debug({ correlationId, projectId }, 'Initializing project database schema');
+    this.logger.debug('project.schema.initializing', { correlationId, projectId });
 
     try {
       await this.eventBus.publish('db.schema.init.request', {
@@ -71,9 +71,9 @@ module.exports = {
         schema: this.config.defaultSchema,
         correlation_id: correlationId
       });
-      this.logger.debug({ correlationId, projectId }, 'Project schema initialization requested');
+      this.logger.debug('project.schema.init.requested', { correlationId, projectId });
     } catch (err) {
-      this.logger.warn({ correlationId, projectId, error: err.message }, 'Schema init request failed (non-fatal)');
+      this.logger.warn('project.schema.init.failed', { correlationId, projectId, error: err.message });
     }
   },
 
@@ -82,7 +82,7 @@ module.exports = {
    * Copies handlers, creates config, and sets up directory structure
    */
   async initializeFromBlueprint(basePath, slug, projectDef, correlationId) {
-    this.logger.info({ correlationId, slug }, 'Initializing project from blueprint');
+    this.logger.info('project.blueprint.initializing', { correlationId, slug });
 
     // 1. Create directories
     const dirs = projectDef.directories || ['config', 'handlers'];
@@ -119,9 +119,9 @@ module.exports = {
           }
         }
 
-        this.logger.info({ correlationId, source: projectDef.copyHandlersFrom, copied }, 'Handlers copied');
+        this.logger.info('project.blueprint.handlers.copied', { correlationId, source: projectDef.copyHandlersFrom, copied });
       } catch (error) {
-        this.logger.warn({ correlationId, source: projectDef.copyHandlersFrom, error: error.message }, 'Could not copy handlers');
+        this.logger.warn('project.blueprint.handlers.copy.failed', { correlationId, source: projectDef.copyHandlersFrom, error: error.message });
       }
     }
 
@@ -134,6 +134,6 @@ module.exports = {
       }
     }
 
-    this.logger.info({ correlationId, slug }, 'Project initialized from blueprint');
+    this.logger.info('project.blueprint.initialized', { correlationId, slug });
   }
 };

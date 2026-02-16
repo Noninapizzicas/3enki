@@ -10,6 +10,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 
 class ProductosModule {
   constructor() {
@@ -29,8 +30,9 @@ class ProductosModule {
     this.ingredientesPerProject = new Map(); // project_id -> Map<ingrediente_id, ingrediente>
     this.menusPendientes = new Map(); // menu_id -> { project_id, productos_draft }
 
-    // Ruta base para proyectos
-    this.projectsDir = './data/projects';
+    // Rutas de storage por proyecto (project_id -> base_path/storage)
+    this.projectPaths = new Map();
+    this.pendingProjectRequests = new Map();
   }
 
   // Helpers para obtener/crear maps por proyecto
@@ -66,8 +68,6 @@ class ProductosModule {
     this.uiHandler = core.uiHandler;
     this.config = core.config || {};
 
-    this.projectsDir = this.config.projects_dir || './data/projects';
-
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
     await this.subscribeToEvents();
@@ -94,6 +94,12 @@ class ProductosModule {
     this.categoriasPerProject.clear();
     this.ingredientesPerProject.clear();
     this.menusPendientes.clear();
+    this.projectPaths.clear();
+    for (const [, pending] of this.pendingProjectRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Module unloading'));
+    }
+    this.pendingProjectRequests.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -133,10 +139,72 @@ class ProductosModule {
   async subscribeToEvents() {
     await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
     await this.eventBus.subscribe('menu.validado', this.onMenuValidado.bind(this));
+    await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
+    await this.eventBus.subscribe('project.get.response', this.onProjectGetResponse.bind(this));
 
     this.logger.info('productos.events.subscribed', {
-      events: ['menu.generado', 'menu.validado']
+      events: ['menu.generado', 'menu.validado', 'project.activated', 'project.get.response']
     });
+  }
+
+  // ==========================================
+  // Project Path Resolution
+  // ==========================================
+
+  async onProjectActivated(event) {
+    const data = event.data || event;
+    const { project_id, base_path } = data;
+    if (project_id && base_path) {
+      this.projectPaths.set(project_id, path.join(base_path, 'storage'));
+    }
+  }
+
+  async onProjectGetResponse(event) {
+    const { request_id, success, project } = event.data || event;
+    const pending = this.pendingProjectRequests.get(request_id);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingProjectRequests.delete(request_id);
+    if (success && project) {
+      if (project.base_path) {
+        this.projectPaths.set(project.id, path.join(project.base_path, 'storage'));
+      }
+      pending.resolve(project);
+    } else {
+      pending.reject(new Error('Project not found'));
+    }
+  }
+
+  /**
+   * Resolve the storage path for a project.
+   * Uses cached path from project.activated, or requests from project-manager.
+   */
+  async resolveStoragePath(projectId) {
+    if (this.projectPaths.has(projectId)) {
+      return this.projectPaths.get(projectId);
+    }
+
+    // Request project info from project-manager
+    const requestId = crypto.randomUUID();
+
+    const project = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingProjectRequests.delete(requestId);
+        reject(new Error(`Project path resolve timeout: ${projectId}`));
+      }, 5000);
+
+      this.pendingProjectRequests.set(requestId, { resolve, reject, timeout });
+
+      this.eventBus.publish('project.get.request', {
+        request_id: requestId, project_id: projectId
+      }).catch(err => {
+        clearTimeout(timeout);
+        this.pendingProjectRequests.delete(requestId);
+        reject(err);
+      });
+    });
+
+    return this.projectPaths.get(projectId) || path.join(project.base_path, 'storage');
   }
 
   // ==========================================
@@ -773,10 +841,16 @@ class ProductosModule {
 
   /**
    * Carga carta desde el sistema de archivos del proyecto
-   * Estructura esperada: data/projects/{project_id}/storage/cartas/
+   * Resuelve base_path via project-manager (no asume UUID como directorio)
    */
   async loadCartaFromProject(project_id) {
-    const storagePath = path.join(this.projectsDir, project_id, 'storage');
+    let storagePath;
+    try {
+      storagePath = await this.resolveStoragePath(project_id);
+    } catch (err) {
+      this.logger.warn('productos.resolve_path.failed', { project_id, error: err.message });
+      return { productos: 0, categorias: 0, ingredientes: 0 };
+    }
     const cartasDir = path.join(storagePath, 'cartas');
     const ingredientesPath = path.join(storagePath, 'ingredientes.json');
 

@@ -29,7 +29,7 @@
   ],
 
   "module_load_order": {
-    "_updated": "2026-02-12",
+    "_updated": "2026-02-16",
     "descripcion": "El orden de carga se controla con config.modules.enabled. Módulos se cargan secuencialmente en ese orden. Módulos no listados se cargan al final en orden de descubrimiento.",
     "tiers": {
       "tier_1_infra": ["credential-manager", "database-manager", "log-manager", "filesystem"],
@@ -45,14 +45,14 @@
 
   "directories": {
     "core": "Core framework code (EventBus, ServiceExecutor, HandlerLoader, etc)",
-    "modules": "Loadable modules (28 core + 12 pizzepos = 40 total)",
+    "modules": "Loadable modules (28 core [22 active + 6 disabled] + 12 pizzepos = 40 total, 34 active)",
     "handlers": "Global event handlers (JavaScript directo)",
     "frontend": "SvelteKit 2 + Svelte 5 + TypeScript app",
     "data": "Runtime data (projects, logs, scheduler, etc)",
     "data/projects/{id}": "Datos de un proyecto específico (handlers, storage, config, handler-store)",
     "data/scheduler": "Jobs del scheduler (jobs.json)",
     "services/providers": "Service providers (local.*, google.*, etc)",
-    "contexto": "AI context files (26 archivos JSON)",
+    "contexto": "AI context files (28 archivos: 27 JSON + 1 MD)",
     "docs": "Human documentation (35+ archivos)",
     "prompts": "AI prompts and tutorials (15 especializados)",
     "plugins": "JSON-based plugins (github, slack, weather, http-utils)",
@@ -166,7 +166,7 @@
   },
 
   "patrones_recientes": {
-    "_updated": "2026-02-13",
+    "_updated": "2026-02-16",
     "page_context": {
       "descripcion": "Patrón reutilizable: página especializada + chat con contexto de lo que pasa en esa página. Dos caminos (UI manual, chat conversacional) comparten estado.",
       "motivacion": "Cada vertical (menu-generator, comandero, cocina, facturación) tendrá su página con paneles y chat contextual. El LLM sabe qué página es, qué ha hecho el usuario, y qué datos hay disponibles.",
@@ -252,7 +252,7 @@
       "modulos": ["chat-session (esquema SQLite por proyecto)", "scheduler (jobs con project_id)", "project-manager (composición 5 fases)"]
     },
     "project_scoped_routes": {
-      "_updated": "2026-02-13",
+      "_updated": "2026-02-16",
       "descripcion": "Las páginas de verticales van bajo /[project_id]/ en vez de planas. La URL es explícita sobre qué proyecto opera.",
       "patron": "/[project_id]/pagina — ej: /peppone/menu-generator, /la-pizzeria/comandero",
       "layout_padre": "routes/[project_id]/+layout.svelte — valida proyecto, carga datos, setContext('project', store) para hijos",

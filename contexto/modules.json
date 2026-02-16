@@ -79,7 +79,7 @@
       "purpose": "Cleanup resources"
     },
     "loader_wiring_order": {
-      "_updated": "2026-02-12",
+      "_updated": "2026-02-16",
       "descripcion": "El orden de operaciones del loader al cargar un módulo",
       "steps": [
         "1. Instanciar módulo: new ModuleClass()",
@@ -138,8 +138,10 @@
   ],
   "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer"],
   "module_count": {
-    "_updated": "2026-02-12",
-    "core": 22,
+    "_updated": "2026-02-16",
+    "core": 28,
+    "core_active": 22,
+    "core_disabled": 6,
     "pizzepos": 12,
     "total_discovered": 40,
     "total_active": 34,
@@ -176,7 +178,8 @@
     },
     "system": {
       "description": "Módulos del sistema",
-      "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas", "scheduler", "flow-engine"]
+      "modules": ["log-manager", "system-inspector", "plugin-manager", "metricas", "scheduler"],
+      "nota": "flow-engine NO es un módulo — vive en core/flow/ como componente del core"
     },
     "pizzepos": {
       "description": "Vertical POS pizzería — 12 módulos en modules/pizzepos/. Ver contexto/pizzepos.json para documentación completa",
@@ -287,6 +290,7 @@
     "project-manager": {
       "version": "2.0.0",
       "description": "Gestión de proyectos con composición progresiva (links, dependencias, sistemas, contexto compartido)",
+      "estructura": "Split en 12 archivos: index.js (128 líneas) + lib/ (db, crud, features, composition, systems, context, session, ui-handlers, http-handlers, event-handlers, directories, helpers = 2985 líneas)",
       "features": {
         "core": "CRUD de proyectos, activación, sesiones, AI config",
         "composition": {
@@ -537,7 +541,7 @@
     }
   },
   "database_event_pattern": {
-    "_updated": "2026-02-12",
+    "_updated": "2026-02-16",
     "descripcion": "Patrón request/response para consultas a database-manager via eventos",
     "request_event": "db.query.request",
     "response_event": "db.query.response",

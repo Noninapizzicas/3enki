@@ -1,6 +1,6 @@
 /**
- * Módulo Categorias v2.0
- * Catálogo de categorías - Actualizado desde menús generados por IA
+ * Módulo Categorias v2.1
+ * Catálogo de categorías - Multi-tenant por proyecto
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  *
  * Emite: categoria.creada, categoria.actualizada, categoria.orden_actualizado
@@ -10,7 +10,7 @@
 class CategoriasModule {
   constructor() {
     this.name = 'categorias';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -18,8 +18,16 @@ class CategoriasModule {
     this.metrics = null;
     this.uiHandler = null;
 
-    // Estado en memoria
-    this.categorias = new Map(); // categoria_id -> categoria
+    // Estado en memoria - por proyecto
+    this.categoriasPerProject = new Map(); // project_id -> Map<categoria_id, categoria>
+  }
+
+  // Helpers para obtener/crear maps por proyecto
+  getCategorias(projectId) {
+    if (!this.categoriasPerProject.has(projectId)) {
+      this.categoriasPerProject.set(projectId, new Map());
+    }
+    return this.categoriasPerProject.get(projectId);
   }
 
   // ==========================================
@@ -50,7 +58,7 @@ class CategoriasModule {
       }
     }
 
-    this.categorias.clear();
+    this.categoriasPerProject.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -97,38 +105,48 @@ class CategoriasModule {
   async onMenuGenerado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { categorias } = eventData;
+    const { project_id, categorias } = eventData;
 
     if (!categorias || categorias.length === 0) {
       return;
     }
 
+    if (!project_id) {
+      this.logger.warn('categorias.menu_generado.no_project_id', {
+        categorias_count: categorias.length,
+        correlation_id: correlationId
+      });
+      return;
+    }
+
     this.logger.info('menu.generado.received', {
+      project_id,
       categorias_count: categorias.length,
       correlation_id: correlationId
     });
 
+    const categoriasMap = this.getCategorias(project_id);
     let nuevas = 0;
     let actualizadas = 0;
 
     for (const cat of categorias) {
-      const existente = this.categorias.get(cat.id);
+      const existente = categoriasMap.get(cat.id);
 
       if (!existente) {
         const categoria = {
           id: cat.id,
           nombre: cat.nombre,
           emoji: cat.emoji || '📋',
-          orden: cat.orden !== undefined ? cat.orden : this.categorias.size,
+          orden: cat.orden !== undefined ? cat.orden : categoriasMap.size,
           activa: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
 
-        this.categorias.set(cat.id, categoria);
+        categoriasMap.set(cat.id, categoria);
         nuevas++;
 
-        this.metrics.increment('categoria.creada.total');
+        this.metrics?.increment('categoria.creada.total');
         await this.publishCategoriaCreada(categoria, correlationId);
 
       } else {
@@ -144,7 +162,7 @@ class CategoriasModule {
 
         if (Object.keys(cambios).length > 0) {
           existente.updated_at = new Date().toISOString();
-          this.categorias.set(cat.id, existente);
+          categoriasMap.set(cat.id, existente);
           actualizadas++;
 
           await this.publishCategoriaActualizada(cat.id, cambios, correlationId);
@@ -152,14 +170,15 @@ class CategoriasModule {
       }
     }
 
-    this.metrics.counters['categoria.total.count'] = this.categorias.size;
-    this.metrics.counters['categoria.activas.count'] =
-      Array.from(this.categorias.values()).filter(c => c.activa).length;
+    this.metrics?.gauge('categoria.total.count', categoriasMap.size);
+    this.metrics?.gauge('categoria.activas.count',
+      Array.from(categoriasMap.values()).filter(c => c.activa).length);
 
     this.logger.info('categorias.sincronizadas', {
+      project_id,
       nuevas,
       actualizadas,
-      total: this.categorias.size,
+      total: categoriasMap.size,
       correlation_id: correlationId
     });
   }
@@ -168,20 +187,31 @@ class CategoriasModule {
   // UI Handlers (MQTT Request/Response)
   // ==========================================
 
-  async handleListCategorias() {
-    const categorias = Array.from(this.categorias.values())
+  async handleListCategorias(data) {
+    const { project_id } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    const categorias = Array.from(this.getCategorias(project_id).values())
       .filter(c => c.activa)
       .sort((a, b) => a.orden - b.orden);
 
     return {
       status: 200,
-      data: { categorias, total: categorias.length }
+      data: { project_id, categorias, total: categorias.length }
     };
   }
 
   async handleGetCategoria(data) {
-    const { id } = data;
-    const categoria = this.categorias.get(id);
+    const { project_id, id } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    const categoria = this.getCategorias(project_id).get(id);
 
     if (!categoria) {
       return { status: 404, error: 'Categoría no encontrada' };
@@ -191,15 +221,20 @@ class CategoriasModule {
   }
 
   async handleCreateCategoria(data) {
-    const { nombre, emoji, descripcion, color } = data;
+    const { project_id, nombre, emoji, descripcion, color } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
 
     if (!nombre) {
       return { status: 400, error: 'nombre requerido' };
     }
 
+    const categoriasMap = this.getCategorias(project_id);
     const categoria_id = `cat_${this.slugify(nombre)}`;
 
-    if (this.categorias.has(categoria_id)) {
+    if (categoriasMap.has(categoria_id)) {
       return { status: 409, error: 'Categoría ya existe' };
     }
 
@@ -207,7 +242,7 @@ class CategoriasModule {
       id: categoria_id,
       nombre,
       emoji: emoji || '📋',
-      orden: this.categorias.size,
+      orden: categoriasMap.size,
       activa: true,
       descripcion,
       color,
@@ -215,12 +250,13 @@ class CategoriasModule {
       updated_at: new Date().toISOString()
     };
 
-    this.categorias.set(categoria_id, categoria);
+    categoriasMap.set(categoria_id, categoria);
 
-    this.metrics.increment('categoria.creada.total');
+    this.metrics?.increment('categoria.creada.total');
     await this.publishCategoriaCreada(categoria);
 
     this.logger.info('categoria.creada', {
+      project_id,
       categoria_id,
       nombre
     });
@@ -229,9 +265,14 @@ class CategoriasModule {
   }
 
   async handleUpdateCategoria(data) {
-    const { id, ...updates } = data;
+    const { project_id, id, ...updates } = data || {};
 
-    const categoria = this.categorias.get(id);
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
+
+    const categoriasMap = this.getCategorias(project_id);
+    const categoria = categoriasMap.get(id);
     if (!categoria) {
       return { status: 404, error: 'Categoría no encontrada' };
     }
@@ -245,12 +286,13 @@ class CategoriasModule {
     });
 
     categoria.updated_at = new Date().toISOString();
-    this.categorias.set(id, categoria);
+    categoriasMap.set(id, categoria);
 
-    this.metrics.increment('categoria.actualizada.total');
+    this.metrics?.increment('categoria.actualizada.total');
     await this.publishCategoriaActualizada(id, cambios);
 
     this.logger.info('categoria.actualizada', {
+      project_id,
       categoria_id: id,
       cambios_count: Object.keys(cambios).length
     });
@@ -259,20 +301,25 @@ class CategoriasModule {
   }
 
   async handleReorderCategorias(data) {
-    const { orden } = data;
+    const { project_id, orden } = data || {};
+
+    if (!project_id) {
+      return { status: 400, error: 'project_id es requerido' };
+    }
 
     if (!orden || !Array.isArray(orden)) {
       return { status: 400, error: 'orden array requerido' };
     }
 
+    const categoriasMap = this.getCategorias(project_id);
     const nuevo_orden = [];
 
     orden.forEach((item, idx) => {
-      const categoria = this.categorias.get(item.categoria_id);
+      const categoria = categoriasMap.get(item.categoria_id);
       if (categoria) {
         categoria.orden = idx;
         categoria.updated_at = new Date().toISOString();
-        this.categorias.set(item.categoria_id, categoria);
+        categoriasMap.set(item.categoria_id, categoria);
 
         nuevo_orden.push({
           categoria_id: item.categoria_id,
@@ -284,6 +331,7 @@ class CategoriasModule {
     await this.publishOrdenActualizado(nuevo_orden);
 
     this.logger.info('categorias.reordenadas', {
+      project_id,
       count: nuevo_orden.length
     });
 
@@ -294,6 +342,14 @@ class CategoriasModule {
   }
 
   async handleHealthCheck() {
+    let totalCategorias = 0;
+    let totalActivas = 0;
+
+    for (const [, categorias] of this.categoriasPerProject) {
+      totalCategorias += categorias.size;
+      totalActivas += Array.from(categorias.values()).filter(c => c.activa).length;
+    }
+
     return {
       status: 200,
       data: {
@@ -301,24 +357,33 @@ class CategoriasModule {
         module: this.name,
         version: this.version,
         catalogo: {
-          total: this.categorias.size,
-          activas: Array.from(this.categorias.values()).filter(c => c.activa).length
+          proyectos: this.categoriasPerProject.size,
+          total: totalCategorias,
+          activas: totalActivas
         }
       }
     };
   }
 
   async handleGetMetrics() {
+    let totalCategorias = 0;
+    let totalActivas = 0;
+
+    for (const [, categorias] of this.categoriasPerProject) {
+      totalCategorias += categorias.size;
+      totalActivas += Array.from(categorias.values()).filter(c => c.activa).length;
+    }
+
     return {
       status: 200,
       data: {
         counters: {
-          'categoria.creada.total': this.metrics.getCounter('categoria.creada.total') || 0,
-          'categoria.actualizada.total': this.metrics.getCounter('categoria.actualizada.total') || 0
+          'categoria.creada.total': this.metrics?.getCounter('categoria.creada.total') || 0,
+          'categoria.actualizada.total': this.metrics?.getCounter('categoria.actualizada.total') || 0
         },
         gauges: {
-          'categoria.total.count': this.categorias.size,
-          'categoria.activas.count': Array.from(this.categorias.values()).filter(c => c.activa).length
+          'categoria.total.count': totalCategorias,
+          'categoria.activas.count': totalActivas
         }
       }
     };

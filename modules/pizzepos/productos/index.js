@@ -1,8 +1,9 @@
 /**
- * Módulo Productos v2.2
+ * Módulo Productos v2.3
  * Catálogo de productos - Actualizado desde menús generados por IA
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  * Multi-tenant: cada proyecto tiene su propio catálogo
+ * Persiste cambios a disco en cartas JSON
  *
  * Emite: producto.creado, producto.actualizado, producto.eliminado, catalogo.actualizado
  * Consume: menu.generado, menu.validado
@@ -15,7 +16,7 @@ const crypto = require('crypto');
 class ProductosModule {
   constructor() {
     this.name = 'productos';
-    this.version = '2.2.0';
+    this.version = '2.3.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -223,8 +224,14 @@ class ProductosModule {
   async onMenuGenerado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { menu_id, project_id, productos, categorias, ingredientes_catalogo } = eventData;
+    const { menu_id, project_id, productos, categorias, ingredientes_catalogo, source } = eventData;
     const start_time = Date.now();
+
+    // Skip events from disk_load (we already loaded products directly)
+    if (source === 'disk_load') {
+      this.logger.debug('menu.generado.skipped_disk_load', { project_id, menu_id });
+      return;
+    }
 
     this.logger.info('menu.generado.received', {
       menu_id,
@@ -318,6 +325,9 @@ class ProductosModule {
       this.metrics?.gauge?.('producto.activos.count', this.getProductos(project_id).size);
 
       await this.publishCatalogoActualizado(project_id, menu_id, stats, Date.now() - start_time, correlationId);
+
+      // Persist updated catalog to disk
+      await this.persistCatalog(project_id);
 
       this.logger.info('catalogo.sincronizado', {
         menu_id,
@@ -534,6 +544,9 @@ class ProductosModule {
 
     await this.publishProductoActualizado(project_id, id, cambios);
 
+    // Persist to disk
+    await this.persistCatalog(project_id);
+
     this.logger.info('producto.actualizado', {
       project_id,
       producto_id: id,
@@ -562,6 +575,9 @@ class ProductosModule {
     this.metrics?.gauge?.('producto.activos.count', productosMap.size);
 
     await this.publishProductoEliminado(project_id, id, 'manual');
+
+    // Persist to disk
+    await this.persistCatalog(project_id);
 
     this.logger.info('producto.eliminado', { project_id, producto_id: id });
 
@@ -778,6 +794,54 @@ class ProductosModule {
   // ==========================================
   // Helper Methods
   // ==========================================
+
+  /**
+   * Persiste el catálogo actual a disco como carta JSON.
+   * Guarda productos y categorías en {storagePath}/cartas/catalogo_activo.json
+   */
+  async persistCatalog(project_id) {
+    let storagePath;
+    try {
+      storagePath = await this.resolveStoragePath(project_id);
+    } catch (err) {
+      this.logger.warn('productos.persist.path_failed', { project_id, error: err.message });
+      return;
+    }
+
+    const cartasDir = path.join(storagePath, 'cartas');
+    const catalogPath = path.join(cartasDir, 'catalogo_activo.json');
+
+    try {
+      await fs.mkdir(cartasDir, { recursive: true });
+
+      const productosMap = this.getProductos(project_id);
+      const categoriasMap = this.getCategorias(project_id);
+
+      const catalog = {
+        meta: {
+          id: 'catalogo_activo',
+          nombre: 'Catálogo Activo',
+          updated_at: new Date().toISOString()
+        },
+        categorias: Array.from(categoriasMap.values()),
+        productos: Array.from(productosMap.values())
+      };
+
+      await fs.writeFile(catalogPath, JSON.stringify(catalog, null, 2), 'utf-8');
+
+      this.logger.info('productos.persisted', {
+        project_id,
+        productos: catalog.productos.length,
+        categorias: catalog.categorias.length,
+        path: catalogPath
+      });
+    } catch (err) {
+      this.logger.error('productos.persist.failed', {
+        project_id,
+        error: err.message
+      });
+    }
+  }
 
   async syncCatalogo(project_id, menu_id, productos, categorias, correlation_id) {
     const stats = {

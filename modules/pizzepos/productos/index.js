@@ -157,6 +157,14 @@ class ProductosModule {
     const { project_id, base_path } = data;
     if (project_id && base_path) {
       this.projectPaths.set(project_id, path.join(base_path, 'storage', this.storageSection));
+
+      // Auto-load cartas from disk so productos/categorias are available immediately
+      try {
+        const result = await this.loadCartaFromProject(project_id);
+        this.logger.info('productos.auto_loaded', { project_id, ...result });
+      } catch (err) {
+        this.logger.warn('productos.auto_load.failed', { project_id, error: err.message });
+      }
     }
   }
 
@@ -922,6 +930,18 @@ class ProductosModule {
         categorias: result.categorias,
         ingredientes: result.ingredientes
       });
+
+      // Emit menu.generado so categorias module gets populated from disk data
+      if (result.categorias > 0 || result.productos > 0) {
+        const allCategorias = Array.from(this.getCategorias(project_id).values());
+        const allProductos = Array.from(this.getProductos(project_id).values());
+        await this.eventBus.publish('menu.generado', {
+          project_id,
+          categorias: allCategorias,
+          productos: allProductos,
+          source: 'disk_load'
+        });
+      }
 
       return result;
     } catch (error) {

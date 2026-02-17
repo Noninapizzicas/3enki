@@ -70,7 +70,8 @@ class PersistenciaComanderoModule {
 
     await this.crearDirectorios();
     await this.cargarDatosActuales();
-    await this.suscribirEventos();
+    // Event subscriptions are auto-wired from module.json by the loader.
+    // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
     this.iniciarRotacionDiaria();
 

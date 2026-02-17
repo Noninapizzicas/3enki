@@ -31,7 +31,8 @@
     ],
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "ai.chat.response", "handler": "onAIChatResponse" }
     ]
   },
 

@@ -50,11 +50,6 @@
         "event": "pedido.completado",
         "description": "Pedido completado - permitir cobro",
         "handler": "onPedidoCompletado"
-      },
-      {
-        "event": "cuenta.creada",
-        "description": "Cuenta creada - preparar para cobros",
-        "handler": "onCuentaCreada"
       }
     ]
   },

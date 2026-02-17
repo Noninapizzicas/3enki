@@ -42,7 +42,8 @@ class CategoriasModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired from module.json by the loader.
+    // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
@@ -83,18 +84,6 @@ class CategoriasModule {
 
     this.logger.info('categorias.ui_handlers.registered', {
       handlers: ['list', 'get', 'create', 'update', 'reorder', 'health', 'metrics']
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
-
-    this.logger.info('categorias.events.subscribed', {
-      events: ['menu.generado']
     });
   }
 

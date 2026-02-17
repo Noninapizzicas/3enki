@@ -49,8 +49,8 @@
       },
       {
         "event": "cuenta.creada",
-        "description": "Guardar evento de cuenta creada",
-        "handler": "onEvento"
+        "description": "Guardar evento de cuenta creada y registrar cuenta activa",
+        "handler": "onCuentaCreada"
       },
       {
         "event": "cuenta.cerrada",
@@ -63,8 +63,8 @@
         "handler": "onEvento"
       },
       {
-        "event": "cobro.completado",
-        "description": "Guardar evento de cobro completado",
+        "event": "cobro.procesado",
+        "description": "Guardar evento de cobro procesado",
         "handler": "onEvento"
       },
       {
@@ -74,12 +74,27 @@
       },
       {
         "event": "pedido.creado",
-        "description": "Guardar evento de pedido",
+        "description": "Guardar evento de pedido creado",
+        "handler": "onPedidoCreado"
+      },
+      {
+        "event": "pedido.enviado_cocina",
+        "description": "Guardar evento de pedido enviado a cocina",
+        "handler": "onEvento"
+      },
+      {
+        "event": "pedido.completado",
+        "description": "Guardar evento de pedido completado",
         "handler": "onEvento"
       },
       {
         "event": "mesa.abierta",
-        "description": "Guardar evento de mesa",
+        "description": "Guardar evento de mesa abierta",
+        "handler": "onEvento"
+      },
+      {
+        "event": "mesa.cerrada",
+        "description": "Guardar evento de mesa cerrada",
         "handler": "onEvento"
       },
       {

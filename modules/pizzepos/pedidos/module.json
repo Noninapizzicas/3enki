@@ -84,6 +84,21 @@
         "event": "cuenta.creada",
         "description": "Cuenta creada - vincular pedido si necesario",
         "handler": "onCuentaCreada"
+      },
+      {
+        "event": "catalogo.actualizado",
+        "description": "Catálogo actualizado - sync caché de productos",
+        "handler": "onCatalogoActualizado"
+      },
+      {
+        "event": "producto.creado",
+        "description": "Producto creado - actualizar caché",
+        "handler": "onProductoActualizado"
+      },
+      {
+        "event": "producto.actualizado",
+        "description": "Producto actualizado - actualizar caché",
+        "handler": "onProductoActualizado"
       }
     ]
   },

@@ -31,8 +31,6 @@
     dependencies: string[];
     installed: boolean;
     handlersAvailable: boolean;
-    subProjectId: string | null;
-    subProjectName: string | null;
   }
 
   // Props
@@ -239,9 +237,7 @@
               <span class="feature-info">
                 <span class="feature-name">{feat.label}</span>
                 <span class="feature-desc">
-                  {#if feat.installed && feat.subProjectName}
-                    {feat.subProjectName}
-                  {:else if feat.installed}
+                  {#if feat.installed}
                     Instalado
                   {:else}
                     {feat.description}

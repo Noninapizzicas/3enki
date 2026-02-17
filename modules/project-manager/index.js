@@ -330,17 +330,30 @@ class ProjectManagerModule {
     }
   }
 
-  async initializeFromBlueprint(basePath, slug, projectDef) {
-    const dirs = projectDef.directories || ['config', 'handlers'];
+  async initializeFromBlueprint(basePath, featureId, projectDef) {
+    const dirs = projectDef.directories || [];
     for (const dir of dirs) {
-      await fs.promises.mkdir(path.join(basePath, dir), { recursive: true });
+      // Prefix storage paths with feature namespace: storage/X -> storage/{featureId}/X
+      const namespacedDir = dir.startsWith('storage/')
+        ? dir.replace('storage/', `storage/${featureId}/`)
+        : dir;
+      await fs.promises.mkdir(path.join(basePath, namespacedDir), { recursive: true });
     }
 
+    // Merge config into project's existing config
     if (projectDef.config && Object.keys(projectDef.config).length > 0) {
-      const configStr = JSON.stringify(projectDef.config, null, 2).replace(/\{\{slug\}\}/g, slug);
       const configDir = path.join(basePath, 'config');
       await fs.promises.mkdir(configDir, { recursive: true });
-      await fs.promises.writeFile(path.join(configDir, 'config.json'), configStr, 'utf-8');
+      const configPath = path.join(configDir, 'config.json');
+
+      let existingConfig = {};
+      try {
+        existingConfig = JSON.parse(await fs.promises.readFile(configPath, 'utf-8'));
+      } catch (_) { /* no existing config */ }
+
+      const newConfig = JSON.parse(JSON.stringify(projectDef.config).replace(/\{\{slug\}\}/g, featureId));
+      const mergedConfig = { ...existingConfig, ...newConfig };
+      await fs.promises.writeFile(configPath, JSON.stringify(mergedConfig, null, 2), 'utf-8');
     }
 
     if (projectDef.copyHandlersFrom) {
@@ -362,7 +375,11 @@ class ProjectManagerModule {
 
     if (projectDef.initialFiles) {
       for (const [filePath, content] of Object.entries(projectDef.initialFiles)) {
-        const fullPath = path.join(basePath, filePath);
+        // Prefix storage paths: storage/X.json -> storage/{featureId}/X.json
+        const namespacedPath = filePath.startsWith('storage/')
+          ? filePath.replace('storage/', `storage/${featureId}/`)
+          : filePath;
+        const fullPath = path.join(basePath, namespacedPath);
         await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.promises.writeFile(fullPath, JSON.stringify(content, null, 2), 'utf-8');
       }
@@ -585,28 +602,10 @@ class ProjectManagerModule {
     const { projectId } = data || {};
 
     let installedFeatures = [];
-    let systemProjects = [];
     if (projectId) {
       const project = this.getProject(projectId);
       if (project) {
         installedFeatures = project.metadata?.features || [];
-        if (project.system_id) {
-          try {
-            const system = await this.requestComposition('system.get', { system_id: project.system_id });
-            if (system && system.members) {
-              systemProjects = system.members
-                .filter(m => m.entityId !== projectId)
-                .map(m => {
-                  const fullProject = this.getProject(m.entityId);
-                  return {
-                    id: m.entityId, name: fullProject?.name, role: m.role,
-                    features: fullProject?.metadata?.features || []
-                  };
-                })
-                .filter(p => p.name);
-            }
-          } catch (_) {}
-        }
       }
     }
 
@@ -626,25 +625,21 @@ class ProjectManagerModule {
             try { await fs.promises.access(sourcePath); } catch { handlersAvailable = false; }
           }
 
-          const subProject = systemProjects.find(p => p.features.includes(featureId));
-
           features.push({
             id: featureId, label: content.label || featureId,
             icon: content.icon || '', description: content.description || '',
             dependencies: content.dependencies || [],
             installed: installedFeatures.includes(featureId),
-            handlersAvailable,
-            subProjectId: subProject?.id || null,
-            subProjectName: subProject?.name || null
+            handlersAvailable
           });
         } catch (err) {
           this.logger.warn({ file, error: err.message }, 'Invalid blueprint file');
         }
       }
 
-      return { features, projectId: projectId || null, systemProjects };
+      return { features, projectId: projectId || null };
     } catch (err) {
-      return { features: [], projectId: projectId || null, systemProjects: [] };
+      return { features: [], projectId: projectId || null };
     }
   }
 
@@ -696,95 +691,44 @@ class ProjectManagerModule {
       };
     }
 
-    // Auto-create system via composition-manager if needed
-    let systemId = project.system_id;
-    if (!systemId) {
-      try {
-        const system = await this.requestComposition('system.create', {
-          name: project.name, description: `Sistema de ${project.name}`,
-          metadata: { rootProjectId: id }
-        });
-        systemId = system.id;
-        await this.requestComposition('entity.join', {
-          system_id: systemId, entity_id: id, role: 'root'
-        });
-        await this.queryDatabase(
-          'UPDATE projects SET system_id = ? WHERE id = ?',
-          [systemId, id], false, correlationId
-        );
-        project.system_id = systemId;
-      } catch (err) {
-        this.logger.error('project-manager.features.system-create-failed', { error: err.message });
-        throw { status: 500, code: 'SYSTEM_CREATE_FAILED', message: err.message };
-      }
-    }
-
-    // Create sub-projects per feature
+    // Install features as sections inside the root project
+    const basePath = project.base_path;
     const applied = [];
-    const createdProjects = [];
     const warnings = [];
 
     for (const [featureId, blueprint] of blueprints) {
       try {
-        const subName = `${blueprint.label} ${project.name}`;
-        const subProject = await this.createProject(subName, blueprint.description || '', {
-          color: project.metadata?.color || 'blue',
-          icon: blueprint.icon || '📁',
-          workspaceType: featureId,
-          features: [featureId],
-          parentProjectId: id
-        }, correlationId);
-
-        const subBasePath = subProject.base_path;
-        await fs.promises.mkdir(path.join(subBasePath, 'config'), { recursive: true });
-        await fs.promises.mkdir(path.join(subBasePath, 'handlers'), { recursive: true });
-        await this.initializeFromBlueprint(subBasePath, this.slugify(subName), blueprint);
-
-        // Wire into composition via events
-        await this.requestComposition('entity.join', {
-          system_id: systemId, entity_id: subProject.id, role: featureId
-        });
-
-        try {
-          await this.requestComposition('link', {
-            source_id: id, target_id: subProject.id,
-            link_type: 'related_to', reason: `Módulo ${blueprint.label}`
-          });
-        } catch (err) {
-          this.logger.warn({ featureId, error: err.message }, 'Link already exists or failed');
-        }
-
-        for (const dep of (blueprint.dependencies || [])) {
-          const depProject = [...this.projects.values()].find(
-            p => p.system_id === systemId && p.metadata?.features?.includes(dep) && p.id !== subProject.id
-          );
-          if (depProject) {
-            try {
-              await this.requestComposition('dep.add', {
-                entity_id: subProject.id, depends_on_id: depProject.id,
-                dependency_type: 'data', description: `${featureId} depende de ${dep}`
-              });
-            } catch (err) {
-              this.logger.warn({ error: err.message }, 'Dependency already exists');
-            }
-          }
-        }
-
+        await this.initializeFromBlueprint(basePath, featureId, blueprint);
         applied.push(featureId);
-        createdProjects.push({ id: subProject.id, name: subName, feature: featureId, systemId, role: featureId });
+        this.logger.info('project-manager.feature.installed', {
+          projectId: id, featureId, basePath
+        });
       } catch (err) {
-        this.logger.error({ featureId, error: err.message }, 'Feature apply failed');
+        this.logger.error({ featureId, error: err.message }, 'Feature install failed');
         warnings.push({ featureId, warning: `Error: ${err.message}` });
       }
     }
 
+    // Update project metadata with installed features
     const updatedFeatures = [...new Set([...existingFeatures, ...applied])];
     await this.updateProject(id, {
-      metadata: { ...(project.metadata || {}), features: updatedFeatures, systemId }
+      metadata: { ...(project.metadata || {}), features: updatedFeatures }
     }, correlationId);
 
+    // Reload handlers for the project (new handlers may have been copied)
+    if (applied.length > 0) {
+      try {
+        const handlerLoader = this.core?.handlerLoader;
+        if (handlerLoader) {
+          handlerLoader.reloadProject(this.slugify(project.name));
+        }
+      } catch (err) {
+        this.logger.warn('project-manager.handlers.reload.failed', { error: err.message });
+      }
+    }
+
     return {
-      applied, createdProjects, systemId,
+      applied, projectId: id,
       skipped: selectedFeatures.filter(f => existingFeatures.includes(f)),
       warnings: warnings.length > 0 ? warnings : undefined,
       loadErrors: loadErrors.length > 0 ? loadErrors : undefined

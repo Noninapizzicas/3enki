@@ -90,6 +90,33 @@ class Metrics {
   }
 
   /**
+   * Sets a gauge value (point-in-time measurement)
+   *
+   * @param {string} name - Gauge name
+   * @param {number} value - Current value
+   *
+   * @example
+   * metrics.gauge('active.connections', 42);
+   * metrics.gauge('producto.activos.count', products.size);
+   */
+  gauge(name, value) {
+    this.counters[name] = value;
+  }
+
+  /**
+   * Records a timing observation (alias for observe)
+   *
+   * @param {string} name - Timing name
+   * @param {number} durationMs - Duration in milliseconds
+   *
+   * @example
+   * metrics.timing('catalogo.sync.duration', Date.now() - start);
+   */
+  timing(name, durationMs) {
+    this.observe(name, durationMs);
+  }
+
+  /**
    * Resetea un counter a 0
    *
    * @param {string} name - Nombre del counter

@@ -259,8 +259,6 @@ export interface FeatureInfo {
   dependencies: string[];
   installed: boolean;
   handlersAvailable: boolean;
-  subProjectId: string | null;
-  subProjectName: string | null;
 }
 
 export async function listFeatures(projectId?: string): Promise<FeatureInfo[]> {
@@ -282,7 +280,7 @@ export async function addFeatures(projectId: string, features: string[]): Promis
   projectsStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    await mqttRequest<{ applied: string[]; createdProjects: unknown[] }>('project', 'add-features', {
+    await mqttRequest<{ applied: string[]; projectId: string }>('project', 'add-features', {
       id: projectId,
       features
     });

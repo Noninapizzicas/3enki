@@ -127,7 +127,8 @@ class MenuGeneratorModule {
 
     // Project context
     this.activeProjectId = null;
-    this.activeProjectPath = null;
+    this.activeProjectPath = null;   // storage/pizzepos/ (feature section)
+    this.projectStorageRoot = null;  // storage/ (for resolving FilePicker paths)
   }
 
   // ==========================================
@@ -148,6 +149,7 @@ class MenuGeneratorModule {
     this.pendingAI.clear();
     this.cartas.clear();
     this.activeProjectPath = null;
+    this.projectStorageRoot = null;
     this.logger.info('module.unloaded', { module: this.name });
   }
 
@@ -159,8 +161,10 @@ class MenuGeneratorModule {
 
     if (metadata?.is_system === true) {
       this.activeProjectPath = process.cwd();
+      this.projectStorageRoot = process.cwd();
     } else if (base_path) {
       this.activeProjectPath = path.join(base_path, 'storage', 'pizzepos');
+      this.projectStorageRoot = path.join(base_path, 'storage');
     }
 
     this.logger.info('menu-generator.project.activated', {
@@ -175,6 +179,7 @@ class MenuGeneratorModule {
   async onProjectDeactivated() {
     this.activeProjectId = null;
     this.activeProjectPath = null;
+    this.projectStorageRoot = null;
     this.cartas.clear();
   }
 
@@ -240,8 +245,8 @@ class MenuGeneratorModule {
     const buffer = Buffer.from(base64Data, 'base64');
     await fs.writeFile(absolutePath, buffer);
 
-    // Return project-relative path for the frontend (e.g. "/preprocesadas/rendered_abc.png")
-    const relativePath = '/preprocesadas/' + filename;
+    // Return path relative to storage root for the frontend (e.g. "/pizzepos/preprocesadas/rendered_abc.png")
+    const relativePath = '/' + path.relative(this.projectStorageRoot || this.activeProjectPath, absolutePath).replace(/\\/g, '/');
     return { absolutePath, relativePath };
   }
 
@@ -260,7 +265,7 @@ class MenuGeneratorModule {
       const absolutePath = path.join(dir, filename);
       await fs.writeFile(absolutePath, text, 'utf-8');
 
-      return '/ocr/' + filename;
+      return '/' + path.relative(this.projectStorageRoot || this.activeProjectPath, absolutePath).replace(/\\/g, '/');
     } catch (err) {
       this.logger.warn('menu-generator.ocr.save_failed', { error: err.message });
       return null;
@@ -268,7 +273,8 @@ class MenuGeneratorModule {
   }
 
   /**
-   * Resolve a project-relative path (e.g. "/0.png") to an absolute filesystem path.
+   * Resolve a project-relative path (e.g. "/pizzepos/0.png") to an absolute filesystem path.
+   * Uses projectStorageRoot (storage/) since FilePicker paths are relative to the storage root.
    * Paths that are already absolute and exist, or base64/data URIs, are returned as-is.
    */
   resolveFilePath(userPath) {
@@ -279,10 +285,12 @@ class MenuGeneratorModule {
     const base64Prefixes = ['/9j/', 'iVBORw', 'R0lGOD', 'UklGR', 'Qk', 'SUkq', 'TU0A'];
     if (base64Prefixes.some(p => userPath.startsWith(p))) return userPath;
 
-    // If we have a project path, resolve relative to it
-    if (this.activeProjectPath) {
+    // Resolve relative to project storage root (not feature section)
+    // FilePicker paths come from filesystem module which navigates from storage/
+    const root = this.projectStorageRoot || this.activeProjectPath;
+    if (root) {
       const normalized = path.normalize(userPath).replace(/^\/+/, '');
-      return path.resolve(this.activeProjectPath, normalized);
+      return path.resolve(root, normalized);
     }
 
     // Fallback: return as-is

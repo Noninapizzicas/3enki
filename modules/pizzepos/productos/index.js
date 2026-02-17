@@ -30,7 +30,8 @@ class ProductosModule {
     this.ingredientesPerProject = new Map(); // project_id -> Map<ingrediente_id, ingrediente>
     this.menusPendientes = new Map(); // menu_id -> { project_id, productos_draft }
 
-    // Rutas de storage por proyecto (project_id -> base_path/storage)
+    // Rutas de storage por proyecto (project_id -> base_path/storage/pizzepos)
+    this.storageSection = 'pizzepos';
     this.projectPaths = new Map();
     this.pendingProjectRequests = new Map();
   }
@@ -155,7 +156,7 @@ class ProductosModule {
     const data = event.data || event;
     const { project_id, base_path } = data;
     if (project_id && base_path) {
-      this.projectPaths.set(project_id, path.join(base_path, 'storage'));
+      this.projectPaths.set(project_id, path.join(base_path, 'storage', this.storageSection));
     }
   }
 
@@ -167,7 +168,7 @@ class ProductosModule {
     this.pendingProjectRequests.delete(request_id);
     if (success && project) {
       if (project.base_path) {
-        this.projectPaths.set(project.id, path.join(project.base_path, 'storage'));
+        this.projectPaths.set(project.id, path.join(project.base_path, 'storage', this.storageSection));
       }
       pending.resolve(project);
     } else {
@@ -204,7 +205,7 @@ class ProductosModule {
       });
     });
 
-    return this.projectPaths.get(projectId) || path.join(project.base_path, 'storage');
+    return this.projectPaths.get(projectId) || path.join(project.base_path, 'storage', this.storageSection);
   }
 
   // ==========================================

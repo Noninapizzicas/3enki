@@ -160,7 +160,7 @@ class MenuGeneratorModule {
     if (metadata?.is_system === true) {
       this.activeProjectPath = process.cwd();
     } else if (base_path) {
-      this.activeProjectPath = path.join(base_path, 'storage');
+      this.activeProjectPath = path.join(base_path, 'storage', 'pizzepos');
     }
 
     this.logger.info('menu-generator.project.activated', {

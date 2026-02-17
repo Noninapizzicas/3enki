@@ -72,7 +72,8 @@ class ProductosModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired from module.json by the loader.
+    // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
@@ -131,21 +132,6 @@ class ProductosModule {
 
     this.logger.info('productos.ui_handlers.registered', {
       handlers: ['list', 'get', 'search', 'update', 'delete', 'categorias', 'ingredientes', 'pizzas', 'stats', 'health', 'metrics', 'load_carta']
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
-    await this.eventBus.subscribe('menu.validado', this.onMenuValidado.bind(this));
-    await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
-    await this.eventBus.subscribe('project.get.response', this.onProjectGetResponse.bind(this));
-
-    this.logger.info('productos.events.subscribed', {
-      events: ['menu.generado', 'menu.validado', 'project.activated', 'project.get.response']
     });
   }
 

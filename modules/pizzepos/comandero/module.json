@@ -31,6 +31,26 @@
       {
         "event": "cuenta.actualizada",
         "handler": "onCuentaActualizada"
+      },
+      {
+        "event": "caja.cerrada",
+        "handler": "onCajaCerrada"
+      },
+      {
+        "event": "dia.iniciado",
+        "handler": "onDiaIniciado"
+      },
+      {
+        "event": "catalogo.actualizado",
+        "handler": "onCatalogoActualizado"
+      },
+      {
+        "event": "producto.creado",
+        "handler": "onProductoActualizado"
+      },
+      {
+        "event": "producto.actualizado",
+        "handler": "onProductoActualizado"
       }
     ]
   },

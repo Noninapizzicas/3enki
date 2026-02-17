@@ -59,7 +59,7 @@ class CobrosModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
 
     this.logger.info('module.loaded', {

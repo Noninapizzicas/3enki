@@ -40,7 +40,8 @@ class CuentasModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    await this.subscribeToEvents();
+    // Event subscriptions are auto-wired from module.json by the loader.
+    // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
     this.startMetricsReporting();
 
@@ -95,20 +96,6 @@ class CuentasModule {
 
     this.logger.info('cuentas.ui_handlers.registered', {
       handlers: ['list', 'get', 'create', 'delete', 'stats', 'health']
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe('pedido.item_agregado', this.onPedidoItemAgregado.bind(this));
-    await this.eventBus.subscribe('pedido.item_eliminado', this.onPedidoItemEliminado.bind(this));
-    await this.eventBus.subscribe('cobro.procesado', this.onCobroProcesado.bind(this));
-
-    this.logger.info('cuentas.events.subscribed', {
-      events: ['pedido.item_agregado', 'pedido.item_eliminado', 'cobro.procesado']
     });
   }
 

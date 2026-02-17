@@ -140,7 +140,8 @@ class MenuGeneratorModule {
     this.logger = context.logger;
     this.metrics = context.metrics;
 
-    await this.eventBus.subscribe('ai.chat.response', this.onAIChatResponse.bind(this));
+    // Event subscriptions are auto-wired from module.json by the loader.
+    // Do NOT subscribe manually here to avoid duplicate handlers.
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }

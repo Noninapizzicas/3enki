@@ -152,10 +152,9 @@ class CategoriasModule {
       }
     }
 
-    this.metrics.gauge('categoria.total.count', this.categorias.size);
-    this.metrics.gauge('categoria.activas.count',
-      Array.from(this.categorias.values()).filter(c => c.activa).length
-    );
+    this.metrics.counters['categoria.total.count'] = this.categorias.size;
+    this.metrics.counters['categoria.activas.count'] =
+      Array.from(this.categorias.values()).filter(c => c.activa).length;
 
     this.logger.info('categorias.sincronizadas', {
       nuevas,

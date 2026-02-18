@@ -139,7 +139,7 @@ class BaseProvider {
       return {
         allowed: false,
         reason: 'REQUEST_RATE_LIMIT_EXCEEDED',
-        retry_after_ms: (1 - elapsedMinutes) * 60000
+        retry_after_ms: Math.max(1000, (1 - elapsedMinutes) * 60000)
       };
     }
 
@@ -147,11 +147,38 @@ class BaseProvider {
       return {
         allowed: false,
         reason: 'TOKEN_RATE_LIMIT_EXCEEDED',
-        retry_after_ms: (1 - elapsedMinutes) * 60000
+        retry_after_ms: Math.max(1000, (1 - elapsedMinutes) * 60000)
       };
     }
 
     return { allowed: true };
+  }
+
+  /**
+   * Check rate limit with automatic wait and retry.
+   * Instead of failing immediately, waits for the rate limit window to reset
+   * and retries up to maxWaitAttempts times.
+   */
+  async checkRateLimitWithWait(estimatedTokens, maxWaitAttempts = 2) {
+    for (let attempt = 0; attempt <= maxWaitAttempts; attempt++) {
+      const check = this.checkRateLimit(estimatedTokens);
+      if (check.allowed) return check;
+
+      // Last attempt — don't wait, just fail
+      if (attempt === maxWaitAttempts) {
+        return check;
+      }
+
+      const waitMs = Math.min(check.retry_after_ms, 30000); // Cap at 30s
+      this.logger.info(`${this.name}.rate_limit.waiting`, {
+        reason: check.reason,
+        waitMs,
+        attempt: attempt + 1,
+        maxAttempts: maxWaitAttempts
+      });
+
+      await this.sleep(waitMs);
+    }
   }
 
   /**

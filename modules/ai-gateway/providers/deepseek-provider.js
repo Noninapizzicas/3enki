@@ -109,8 +109,8 @@ class DeepSeekProvider extends BaseProvider {
     const messagesText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ');
     const estimatedTokens = this.countTokens(messagesText) + (hasImages ? 1000 : 0);
 
-    // Check rate limit
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
+    // Check rate limit — wait and retry instead of failing immediately
+    const rateLimitCheck = await this.checkRateLimitWithWait(estimatedTokens);
     if (!rateLimitCheck.allowed) {
       throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
     }
@@ -266,8 +266,8 @@ class DeepSeekProvider extends BaseProvider {
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
 
-    // Check rate limit
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
+    // Check rate limit — wait and retry instead of failing immediately
+    const rateLimitCheck = await this.checkRateLimitWithWait(estimatedTokens);
     if (!rateLimitCheck.allowed) {
       throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
     }

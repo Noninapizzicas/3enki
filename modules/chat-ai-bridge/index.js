@@ -388,6 +388,10 @@ class ChatAiBridgeModule {
 
   /**
    * Build messages array for AI request
+   *
+   * Context budget: maxContextTokens (default 24000 ≈ ~96k chars)
+   * When history exceeds budget, oldest messages are dropped and a brief
+   * summary is injected so the AI knows earlier context existed.
    */
   buildAIMessages(systemPrompt, context, userContent) {
     const messages = [];
@@ -399,7 +403,7 @@ class ChatAiBridgeModule {
 
     // Conversation history (from context)
     // Estimate tokens to avoid exceeding provider limits
-    const maxContextTokens = this.config.maxContextTokens || 12000;
+    const maxContextTokens = this.config.maxContextTokens || 24000;
     let estimatedTokens = this.estimateTokens(systemPrompt || '');
 
     if (context.messages && context.messages.length > 0) {
@@ -423,6 +427,12 @@ class ChatAiBridgeModule {
           remaining: historyMessages.length - startIdx,
           estimatedTokens: totalHistoryTokens + estimatedTokens
         });
+
+        // Inject a brief summary so the AI knows earlier messages existed
+        const droppedMessages = historyMessages.slice(0, startIdx);
+        const summary = this.summarizeDroppedMessages(droppedMessages);
+        messages.push({ role: 'system', content: summary });
+        estimatedTokens += this.estimateTokens(summary);
       }
 
       for (let i = startIdx; i < historyMessages.length; i++) {
@@ -438,6 +448,30 @@ class ChatAiBridgeModule {
     }
 
     return messages;
+  }
+
+  /**
+   * Build a compact summary of dropped messages so the AI retains
+   * awareness of earlier conversation topics without full token cost.
+   */
+  summarizeDroppedMessages(droppedMessages) {
+    const topics = [];
+    for (const msg of droppedMessages) {
+      if (msg.role === 'user' && msg.content) {
+        // Take the first 120 chars of each user message as a topic hint
+        const snippet = msg.content.length > 120
+          ? msg.content.slice(0, 120) + '...'
+          : msg.content;
+        topics.push(snippet);
+      }
+    }
+
+    if (topics.length === 0) {
+      return `[Contexto previo: se omitieron ${droppedMessages.length} mensajes anteriores de esta conversación por límite de contexto.]`;
+    }
+
+    const topicList = topics.slice(-5).map((t, i) => `${i + 1}. ${t}`).join('\n');
+    return `[Contexto previo: se omitieron ${droppedMessages.length} mensajes. Temas tratados anteriormente:\n${topicList}\nContinúa la conversación con el contexto reciente que sigue.]`;
   }
 
   /**

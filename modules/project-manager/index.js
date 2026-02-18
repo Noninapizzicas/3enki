@@ -27,7 +27,7 @@ class ProjectManagerModule {
 
     // State
     this.projects = new Map();
-    this.activeProjectId = null;
+    this.activeProjectIds = new Set();
     this.pendingDbRequests = new Map();
     this.pendingCompositionRequests = new Map();
     this.projectsBasePath = path.join(process.cwd(), 'data', 'projects');
@@ -191,9 +191,9 @@ class ProjectManagerModule {
           parent_project_id: row.parent_project_id || null
         };
         this.projects.set(project.id, project);
-        if (project.is_active) this.activeProjectId = project.id;
+        if (project.is_active) this.activeProjectIds.add(project.id);
       }
-      this.logger.info('project-manager.db.loaded', { count: projects.length, activeProjectId: this.activeProjectId });
+      this.logger.info('project-manager.db.loaded', { count: projects.length, activeProjectIds: [...this.activeProjectIds] });
     } catch (error) {
       this.logger.error('project-manager.db.load.failed', { error: error.message });
     }
@@ -292,7 +292,7 @@ class ProjectManagerModule {
   async publishUIState() {
     const projects = this.listProjects().map(p => this.toUIFormat(p));
     await this.eventBus.emit('project/state', {
-      projects, activeProjectId: this.activeProjectId, count: projects.length
+      projects, activeProjectIds: [...this.activeProjectIds], count: projects.length
     });
   }
 
@@ -490,29 +490,12 @@ class ProjectManagerModule {
     const project = this.projects.get(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
 
-    if (this.activeProjectId === projectId) {
-      await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
-        project_id: projectId, name: project.name, base_path: project.base_path,
-        metadata: project.metadata || {}, activated_at: new Date().toISOString()
-      });
-      return project;
+    if (!this.activeProjectIds.has(projectId)) {
+      await this.queryDatabase('UPDATE projects SET is_active = 1 WHERE id = ?', [projectId], false, correlationId);
+      project.is_active = true;
+      this.projects.set(projectId, project);
+      this.activeProjectIds.add(projectId);
     }
-
-    await this.queryDatabase('UPDATE projects SET is_active = 0', [], false, correlationId);
-    await this.queryDatabase('UPDATE projects SET is_active = 1 WHERE id = ?', [projectId], false, correlationId);
-
-    const previousActiveId = this.activeProjectId;
-    if (previousActiveId) {
-      const prev = this.projects.get(previousActiveId);
-      if (prev) { prev.is_active = false; this.projects.set(previousActiveId, prev); }
-      await this.eventBus.publish('project.deactivated', {
-        project_id: previousActiveId, name: prev?.name, deactivated_at: new Date().toISOString()
-      });
-    }
-
-    project.is_active = true;
-    this.projects.set(projectId, project);
-    this.activeProjectId = projectId;
 
     await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
       project_id: projectId, name: project.name, base_path: project.base_path,
@@ -524,7 +507,8 @@ class ProjectManagerModule {
 
   getProject(projectId) { return this.projects.get(projectId); }
   listProjects() { return Array.from(this.projects.values()); }
-  getActiveProjectId() { return this.activeProjectId; }
+  getActiveProjectIds() { return [...this.activeProjectIds]; }
+  getActiveProjectId() { return this.activeProjectIds.size > 0 ? [...this.activeProjectIds][0] : null; }
 
   // ==================== Session ====================
 
@@ -751,14 +735,14 @@ class ProjectManagerModule {
     const projects = this.listProjects();
     await this.eventBus.publish(EVENTS.PROJECT.LIST_RESPONSE, {
       request_id, success: true, projects, count: projects.length,
-      active_project_id: this.activeProjectId
+      active_project_ids: [...this.activeProjectIds]
     });
   }
 
   async onGetActiveProjectRequest(event) {
     const { request_id } = event.data || event;
     await this.eventBus.publish('project.active.response', {
-      request_id, success: true, active_project_id: this.activeProjectId
+      request_id, success: true, active_project_ids: [...this.activeProjectIds]
     });
   }
 
@@ -838,7 +822,7 @@ class ProjectManagerModule {
 
   async handleListProjects() {
     const projects = this.listProjects();
-    return { status: 200, data: { success: true, projects, count: projects.length, active_project_id: this.activeProjectId } };
+    return { status: 200, data: { success: true, projects, count: projects.length, active_project_ids: [...this.activeProjectIds] } };
   }
 
   async handleGetProject(req) {
@@ -882,8 +866,9 @@ class ProjectManagerModule {
   }
 
   async handleGetActiveProject() {
-    if (!this.activeProjectId) return { status: 404, data: { success: false, error: 'No active project' } };
-    return { status: 200, data: { success: true, project: this.getProject(this.activeProjectId) } };
+    if (this.activeProjectIds.size === 0) return { status: 404, data: { success: false, error: 'No active projects' } };
+    const projects = [...this.activeProjectIds].map(id => this.getProject(id)).filter(Boolean);
+    return { status: 200, data: { success: true, projects, active_project_ids: [...this.activeProjectIds] } };
   }
 
   async handleSaveSession(req, context) {
@@ -932,19 +917,20 @@ class ProjectManagerModule {
   }
 
   async handleHealthCheck() {
-    return { status: 200, data: { status: 'healthy', module: 'project-manager', projects_count: this.projects.size, active_project: this.activeProjectId, uptime: process.uptime() } };
+    return { status: 200, data: { status: 'healthy', module: 'project-manager', projects_count: this.projects.size, active_projects: [...this.activeProjectIds], uptime: process.uptime() } };
   }
 
   async handleGetMetrics() {
-    return { status: 200, data: { module: 'project-manager', metrics: { total_projects: this.projects.size, active_project_id: this.activeProjectId, pending_db_requests: this.pendingDbRequests.size } } };
+    return { status: 200, data: { module: 'project-manager', metrics: { total_projects: this.projects.size, active_project_ids: [...this.activeProjectIds], pending_db_requests: this.pendingDbRequests.size } } };
   }
 
   // ==================== UI Handlers ====================
 
   async handleUIList() {
     const projects = this.listProjects().map(p => this.toUIFormat(p));
-    return { projects, activeProjectId: this.activeProjectId, count: projects.length };
+    return { projects, activeProjectIds: [...this.activeProjectIds], count: projects.length };
   }
+
 
   async handleUIGet(data) {
     const { id } = data;
@@ -1008,24 +994,24 @@ class ProjectManagerModule {
     if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
     if (!this.getProject(id)) throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
     await this.activateProject(id, crypto.randomUUID());
-    return { activated: true, activeProjectId: id };
+    return { activated: true, activeProjectIds: [...this.activeProjectIds] };
   }
 
-  async handleUIDeactivate() {
-    if (!this.activeProjectId) return { deactivated: true, activeProjectId: null };
+  async handleUIDeactivate(data) {
+    const { id } = data || {};
+    if (!id || !this.activeProjectIds.has(id)) return { deactivated: false, error: 'Project not active' };
 
-    const previousId = this.activeProjectId;
-    const prevProject = this.projects.get(previousId);
+    const project = this.projects.get(id);
 
-    await this.queryDatabase('UPDATE projects SET is_active = 0 WHERE id = ?', [previousId], false, crypto.randomUUID());
-    if (prevProject) { prevProject.is_active = false; this.projects.set(previousId, prevProject); }
-    this.activeProjectId = null;
+    await this.queryDatabase('UPDATE projects SET is_active = 0 WHERE id = ?', [id], false, crypto.randomUUID());
+    if (project) { project.is_active = false; this.projects.set(id, project); }
+    this.activeProjectIds.delete(id);
 
     await this.eventBus.publish('project.deactivated', {
-      project_id: previousId, name: prevProject?.name, deactivated_at: new Date().toISOString()
+      project_id: id, name: project?.name, deactivated_at: new Date().toISOString()
     });
     await this.publishUIState();
-    return { deactivated: true, activeProjectId: null };
+    return { deactivated: true, activeProjectIds: [...this.activeProjectIds] };
   }
 
   async handleUISaveSession(data) {

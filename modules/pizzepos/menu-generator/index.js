@@ -123,12 +123,11 @@ class MenuGeneratorModule {
     this.metrics = null;
 
     this.pendingAI = new Map();
-    this.cartas = new Map();
 
-    // Project context
-    this.activeProjectId = null;
-    this.activeProjectPath = null;   // storage/pizzepos/ (feature section)
-    this.projectStorageRoot = null;  // storage/ (for resolving FilePicker paths)
+    // Multi-tenant: project_id → Map<carta_id, carta>
+    this.cartasPerProject = new Map();
+    // project_id → { featurePath, storagePath }
+    this.projectPaths = new Map();
   }
 
   // ==========================================
@@ -148,83 +147,93 @@ class MenuGeneratorModule {
 
   async onUnload() {
     this.pendingAI.clear();
-    this.cartas.clear();
-    this.activeProjectPath = null;
-    this.projectStorageRoot = null;
+    this.cartasPerProject.clear();
+    this.projectPaths.clear();
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // Helpers for per-project access
+  getCartas(projectId) {
+    if (!this.cartasPerProject.has(projectId)) {
+      this.cartasPerProject.set(projectId, new Map());
+    }
+    return this.cartasPerProject.get(projectId);
+  }
+
+  getPaths(projectId) {
+    return this.projectPaths.get(projectId);
   }
 
   async onProjectActivated(event) {
     const data = event.data || event;
     const { project_id, base_path, metadata } = data;
 
-    this.activeProjectId = project_id;
-
-    if (metadata?.is_system === true) {
-      this.activeProjectPath = process.cwd();
-      this.projectStorageRoot = process.cwd();
-    } else if (base_path) {
-      this.activeProjectPath = path.join(base_path, 'storage', 'pizzepos');
-      this.projectStorageRoot = path.join(base_path, 'storage');
+    const resolvedBase = (metadata?.is_system === true) ? process.cwd() : base_path;
+    if (resolvedBase) {
+      this.projectPaths.set(project_id, {
+        featurePath: path.join(resolvedBase, 'storage', 'pizzepos'),
+        storagePath: path.join(resolvedBase, 'storage')
+      });
     }
 
     this.logger.info('menu-generator.project.activated', {
       project_id,
-      activeProjectPath: this.activeProjectPath
+      paths: this.projectPaths.get(project_id)
     });
 
     // Load persisted cartas from disk
-    await this.loadCartasFromDisk();
+    await this.loadCartasFromDisk(project_id);
   }
 
-  async onProjectDeactivated() {
-    this.activeProjectId = null;
-    this.activeProjectPath = null;
-    this.projectStorageRoot = null;
-    this.cartas.clear();
+  async onProjectDeactivated(event) {
+    // No-op: keep data in memory for multi-tenant access
   }
 
   // ==========================================
   // Carta Persistence
   // ==========================================
 
-  get cartasDir() {
-    return this.activeProjectPath ? path.join(this.activeProjectPath, 'cartas') : null;
+  cartasDirFor(projectId) {
+    const paths = this.getPaths(projectId);
+    return paths ? path.join(paths.featurePath, 'cartas') : null;
   }
 
-  async saveCartaToDisk(carta) {
-    if (!this.cartasDir) return;
+  async saveCartaToDisk(carta, projectId) {
+    const dir = this.cartasDirFor(projectId);
+    if (!dir) return;
     try {
-      await fs.mkdir(this.cartasDir, { recursive: true });
-      const filePath = path.join(this.cartasDir, `${carta.meta.id}.json`);
+      await fs.mkdir(dir, { recursive: true });
+      const filePath = path.join(dir, `${carta.meta.id}.json`);
       await fs.writeFile(filePath, JSON.stringify(carta, null, 2), 'utf-8');
     } catch (err) {
-      this.logger.warn('menu-generator.carta.save_failed', { carta_id: carta.meta?.id, error: err.message });
+      this.logger.warn('menu-generator.carta.save_failed', { carta_id: carta.meta?.id, project_id: projectId, error: err.message });
     }
   }
 
-  async loadCartasFromDisk() {
-    if (!this.cartasDir) return;
+  async loadCartasFromDisk(projectId) {
+    const dir = this.cartasDirFor(projectId);
+    if (!dir) return;
     try {
-      await fs.mkdir(this.cartasDir, { recursive: true });
-      const files = await fs.readdir(this.cartasDir);
+      await fs.mkdir(dir, { recursive: true });
+      const files = await fs.readdir(dir);
       const jsonFiles = files.filter(f => f.endsWith('.json'));
+      const cartas = this.getCartas(projectId);
 
       for (const file of jsonFiles) {
         try {
-          const content = await fs.readFile(path.join(this.cartasDir, file), 'utf-8');
+          const content = await fs.readFile(path.join(dir, file), 'utf-8');
           const carta = JSON.parse(content);
           if (carta.meta?.id) {
-            this.cartas.set(carta.meta.id, carta);
+            cartas.set(carta.meta.id, carta);
           }
         } catch (err) {
-          this.logger.warn('menu-generator.carta.load_failed', { file, error: err.message });
+          this.logger.warn('menu-generator.carta.load_failed', { file, project_id: projectId, error: err.message });
         }
       }
 
-      this.logger.info('menu-generator.cartas.loaded', { count: this.cartas.size });
+      this.logger.info('menu-generator.cartas.loaded', { project_id: projectId, count: cartas.size });
     } catch (err) {
-      this.logger.warn('menu-generator.cartas.dir_error', { error: err.message });
+      this.logger.warn('menu-generator.cartas.dir_error', { project_id: projectId, error: err.message });
     }
   }
 
@@ -233,12 +242,13 @@ class MenuGeneratorModule {
    * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
    * Returns { absolutePath, relativePath } where relativePath is for the frontend FilePicker.
    */
-  async savePipelineFile(base64Data, prefix, ext = '.png') {
-    if (!this.activeProjectPath) {
-      throw new Error('No active project — cannot save pipeline file');
+  async savePipelineFile(base64Data, prefix, projectId, ext = '.png') {
+    const paths = this.getPaths(projectId);
+    if (!paths) {
+      throw new Error(`No paths for project ${projectId} — cannot save pipeline file`);
     }
 
-    const dir = path.join(this.activeProjectPath, 'preprocesadas');
+    const dir = path.join(paths.featurePath, 'preprocesadas');
     await fs.mkdir(dir, { recursive: true });
 
     const filename = `${prefix}_${Date.now().toString(36)}${ext}`;
@@ -246,8 +256,7 @@ class MenuGeneratorModule {
     const buffer = Buffer.from(base64Data, 'base64');
     await fs.writeFile(absolutePath, buffer);
 
-    // Return path relative to storage root for the frontend (e.g. "/pizzepos/preprocesadas/rendered_abc.png")
-    const relativePath = '/' + path.relative(this.projectStorageRoot || this.activeProjectPath, absolutePath).replace(/\\/g, '/');
+    const relativePath = '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
     return { absolutePath, relativePath };
   }
 
@@ -256,29 +265,30 @@ class MenuGeneratorModule {
    * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
    * Returns the relative path for reference.
    */
-  async saveOcrResult(text, sourceLabel) {
-    if (!this.activeProjectPath || !text) return null;
+  async saveOcrResult(text, sourceLabel, projectId) {
+    const paths = this.getPaths(projectId);
+    if (!paths || !text) return null;
     try {
-      const dir = path.join(this.activeProjectPath, 'ocr');
+      const dir = path.join(paths.featurePath, 'ocr');
       await fs.mkdir(dir, { recursive: true });
 
       const filename = `${sourceLabel || 'ocr'}_${Date.now().toString(36)}.txt`;
       const absolutePath = path.join(dir, filename);
       await fs.writeFile(absolutePath, text, 'utf-8');
 
-      return '/' + path.relative(this.projectStorageRoot || this.activeProjectPath, absolutePath).replace(/\\/g, '/');
+      return '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
     } catch (err) {
-      this.logger.warn('menu-generator.ocr.save_failed', { error: err.message });
+      this.logger.warn('menu-generator.ocr.save_failed', { project_id: projectId, error: err.message });
       return null;
     }
   }
 
   /**
    * Resolve a project-relative path (e.g. "/pizzepos/0.png") to an absolute filesystem path.
-   * Uses projectStorageRoot (storage/) since FilePicker paths are relative to the storage root.
+   * Uses project storagePath since FilePicker paths are relative to the storage root.
    * Paths that are already absolute and exist, or base64/data URIs, are returned as-is.
    */
-  resolveFilePath(userPath) {
+  resolveFilePath(userPath, projectId) {
     if (!userPath || typeof userPath !== 'string') return userPath;
 
     // Data URIs and base64 pass through
@@ -286,9 +296,8 @@ class MenuGeneratorModule {
     const base64Prefixes = ['/9j/', 'iVBORw', 'R0lGOD', 'UklGR', 'Qk', 'SUkq', 'TU0A'];
     if (base64Prefixes.some(p => userPath.startsWith(p))) return userPath;
 
-    // Resolve relative to project storage root (not feature section)
-    // FilePicker paths come from filesystem module which navigates from storage/
-    const root = this.projectStorageRoot || this.activeProjectPath;
+    const paths = projectId ? this.getPaths(projectId) : null;
+    const root = paths?.storagePath || paths?.featurePath;
     if (root) {
       const normalized = path.normalize(userPath).replace(/^\/+/, '');
       return path.resolve(root, normalized);
@@ -310,13 +319,13 @@ class MenuGeneratorModule {
     return result.data;
   }
 
-  async handleListCartas() {
-    const result = await this.toolListCartas({});
+  async handleListCartas(data) {
+    const result = await this.toolListCartas({ project_id: data?.project_id });
     return result.data;
   }
 
   async handleGetCarta(data) {
-    const result = await this.toolGetCarta({ carta_id: data.id });
+    const result = await this.toolGetCarta({ carta_id: data.id, project_id: data.project_id });
     if (result.error) {
       throw { status: result.status || 404, code: 'NOT_FOUND', message: result.error };
     }
@@ -324,12 +333,15 @@ class MenuGeneratorModule {
   }
 
   async handleHealth() {
+    let totalCartas = 0;
+    for (const cartas of this.cartasPerProject.values()) totalCartas += cartas.size;
     return {
       status: 'healthy',
       module: this.name,
       version: this.version,
       generando: this.pendingAI.size,
-      generadas: this.cartas.size
+      generadas: totalCartas,
+      proyectos: this.cartasPerProject.size
     };
   }
 
@@ -338,20 +350,19 @@ class MenuGeneratorModule {
   // ==========================================
 
   async handleSharpPrepareOcr(data) {
+    const { project_id } = data;
     const provider = getSharpProvider();
-    // Call without output to get base64
     const result = await provider['prepare-ocr']({
-      image: this.resolveFilePath(data.image),
+      image: this.resolveFilePath(data.image, project_id),
       options: data.options || {}
     });
 
-    // Save to disk so the next panel (OCR) can reference the file
-    if (result.success && result.image && this.activeProjectPath) {
+    if (result.success && result.image && this.getPaths(project_id)) {
       try {
-        const { relativePath } = await this.savePipelineFile(result.image, 'prepared');
+        const { relativePath } = await this.savePipelineFile(result.image, 'prepared', project_id);
         result.path = relativePath;
       } catch (err) {
-        this.logger.warn('menu-generator.pipeline.save_failed', { step: 'prepare', error: err.message });
+        this.logger.warn('menu-generator.pipeline.save_failed', { step: 'prepare', project_id, error: err.message });
       }
     }
 
@@ -359,29 +370,30 @@ class MenuGeneratorModule {
   }
 
   async handlePdfjsInfo(data) {
+    const { project_id } = data;
     const provider = getPdfjsProvider();
-    const result = await provider.info({ pdf: this.resolveFilePath(data.pdf) });
+    const result = await provider.info({ pdf: this.resolveFilePath(data.pdf, project_id) });
     return result.data || result;
   }
 
   async handlePdfjsRender(data) {
+    const { project_id } = data;
     const provider = getPdfjsProvider();
     const result = await provider.render({
-      pdf: this.resolveFilePath(data.pdf),
+      pdf: this.resolveFilePath(data.pdf, project_id),
       page: data.page || 1,
       scale: data.scale || 2.0
     });
 
     const renderData = result.data || result;
 
-    // Save rendered image to disk so PreparePanel can reference it
-    if (renderData.image && this.activeProjectPath) {
+    if (renderData.image && this.getPaths(project_id)) {
       try {
         const page = data.page || 1;
-        const { relativePath } = await this.savePipelineFile(renderData.image, `page${page}`);
+        const { relativePath } = await this.savePipelineFile(renderData.image, `page${page}`, project_id);
         renderData.path = relativePath;
       } catch (err) {
-        this.logger.warn('menu-generator.pipeline.save_failed', { step: 'render', error: err.message });
+        this.logger.warn('menu-generator.pipeline.save_failed', { step: 'render', project_id, error: err.message });
       }
     }
 
@@ -389,61 +401,65 @@ class MenuGeneratorModule {
   }
 
   async handleGoogleVisionExtract(data) {
+    const { project_id } = data;
     const provider = getGoogleVisionProvider();
     const result = await provider.extract({
-      image: this.resolveFilePath(data.image),
+      image: this.resolveFilePath(data.image, project_id),
       hint: data.hint || 'DOCUMENT_TEXT_DETECTION',
       languageHints: data.languageHints || []
     });
 
     const text = result.text || result.data?.text;
     if (text) {
-      result.ocr_path = await this.saveOcrResult(text, 'gvision');
+      result.ocr_path = await this.saveOcrResult(text, 'gvision', project_id);
     }
     return result;
   }
 
   async handleTesseractExtract(data) {
+    const { project_id } = data;
     const provider = getTesseractProvider();
     const result = await provider.extract({
-      image: this.resolveFilePath(data.image),
+      image: this.resolveFilePath(data.image, project_id),
       language: data.language || 'eng'
     });
     const out = result.data || result;
 
     const text = out.text;
     if (text) {
-      out.ocr_path = await this.saveOcrResult(text, 'tesseract');
+      out.ocr_path = await this.saveOcrResult(text, 'tesseract', project_id);
     }
     return out;
   }
 
   async handleScribeOcrExtract(data) {
+    const { project_id } = data;
     const provider = getScribeOcrProvider();
     const result = await provider.extract({
-      input: this.resolveFilePath(data.input || data.image),
+      input: this.resolveFilePath(data.input || data.image, project_id),
       lang: data.lang || data.language || 'eng'
     });
     const out = result.data || result;
 
     const text = out.text;
     if (text) {
-      out.ocr_path = await this.saveOcrResult(text, 'scribe');
+      out.ocr_path = await this.saveOcrResult(text, 'scribe', project_id);
     }
     return out;
   }
 
   async handleDocumentProcessorProcess(data) {
+    const { project_id } = data;
     const provider = getDocumentProcessorProvider();
     const result = await provider.process({
-      document: this.resolveFilePath(data.document || data.image),
+      document: this.resolveFilePath(data.document || data.image, project_id),
       language: data.language || 'es'
     });
     const out = result.data || result;
 
     const text = out.text;
     if (text) {
-      out.ocr_path = await this.saveOcrResult(text, 'docproc');
+      out.ocr_path = await this.saveOcrResult(text, 'docproc', project_id);
     }
     return out;
   }
@@ -452,9 +468,12 @@ class MenuGeneratorModule {
   // Tools — expuestos al LLM via agentic loop
   // ==========================================
 
-  async toolGenerate({ texto, nombre }) {
+  async toolGenerate({ texto, nombre, project_id }) {
     if (!texto || texto.trim().length < 10) {
       return { status: 400, error: 'Se requiere "texto" con el contenido de la carta (mínimo 10 caracteres)' };
+    }
+    if (!project_id) {
+      return { status: 400, error: 'Se requiere "project_id"' };
     }
 
     const cartaId = `carta_${Date.now().toString(36)}`;
@@ -462,6 +481,7 @@ class MenuGeneratorModule {
 
     this.pendingAI.set(requestId, {
       id: cartaId,
+      project_id,
       nombre: nombre || 'Carta sin nombre',
       created_at: new Date().toISOString()
     });
@@ -480,7 +500,7 @@ class MenuGeneratorModule {
     }, { correlationId: requestId });
 
     this.metrics?.increment('menu.generate.requested');
-    this.logger.info('menu.generate.requested', { carta_id: cartaId, texto_length: texto.length });
+    this.logger.info('menu.generate.requested', { carta_id: cartaId, project_id, texto_length: texto.length });
 
     return {
       status: 202,
@@ -492,11 +512,14 @@ class MenuGeneratorModule {
     };
   }
 
-  async toolListCartas() {
-    const cartas = Array.from(this.cartas.values())
+  async toolListCartas({ project_id }) {
+    if (!project_id) return { status: 400, error: 'Se requiere "project_id"' };
+
+    const cartas = Array.from(this.getCartas(project_id).values())
       .sort((a, b) => new Date(b.meta.created_at) - new Date(a.meta.created_at));
 
-    const pendientes = Array.from(this.pendingAI.values());
+    const pendientes = Array.from(this.pendingAI.values())
+      .filter(p => p.project_id === project_id);
 
     const lista = [
       ...pendientes.map(p => ({
@@ -513,12 +536,13 @@ class MenuGeneratorModule {
     return { status: 200, data: { cartas: lista, total: lista.length } };
   }
 
-  async toolGetCarta({ carta_id }) {
+  async toolGetCarta({ carta_id, project_id }) {
     if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
 
-    const carta = this.cartas.get(carta_id);
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) {
-      const pending = Array.from(this.pendingAI.values()).find(p => p.id === carta_id);
+      const pending = Array.from(this.pendingAI.values()).find(p => p.id === carta_id && p.project_id === project_id);
       if (pending) {
         return { status: 200, data: { id: carta_id, estado: 'generando', message: 'La carta aún se está generando' } };
       }
@@ -528,8 +552,9 @@ class MenuGeneratorModule {
     return { status: 200, data: carta };
   }
 
-  async toolUpdatePrices({ carta_id, porcentaje, categoria, precios }) {
-    const carta = this.cartas.get(carta_id);
+  async toolUpdatePrices({ carta_id, project_id, porcentaje, categoria, precios }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
     if (!porcentaje && !precios) {
@@ -562,7 +587,7 @@ class MenuGeneratorModule {
     }
 
     this.metrics?.increment('menu.prices.updated');
-    await this.saveCartaToDisk(carta);
+    await this.saveCartaToDisk(carta, project_id);
 
     await this.eventBus.publish('carta.generada', carta);
 
@@ -576,8 +601,9 @@ class MenuGeneratorModule {
     };
   }
 
-  async toolAddProduct({ carta_id, nombre, categoria, precio, ingredientes }) {
-    const carta = this.cartas.get(carta_id);
+  async toolAddProduct({ carta_id, project_id, nombre, categoria, precio, ingredientes }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
     const cat = carta.categorias.find(c => c.id === categoria);
@@ -601,15 +627,16 @@ class MenuGeneratorModule {
 
     carta.productos.push(producto);
     this.metrics?.increment('menu.product.added');
-    await this.saveCartaToDisk(carta);
+    await this.saveCartaToDisk(carta, project_id);
 
     await this.eventBus.publish('carta.generada', carta);
 
     return { status: 201, data: producto };
   }
 
-  async toolRemoveProduct({ carta_id, producto_id }) {
-    const carta = this.cartas.get(carta_id);
+  async toolRemoveProduct({ carta_id, project_id, producto_id }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
     const idx = carta.productos.findIndex(p => p.id === producto_id);
@@ -617,15 +644,16 @@ class MenuGeneratorModule {
 
     const removed = carta.productos.splice(idx, 1)[0];
     this.metrics?.increment('menu.product.removed');
-    await this.saveCartaToDisk(carta);
+    await this.saveCartaToDisk(carta, project_id);
 
     await this.eventBus.publish('carta.generada', carta);
 
     return { status: 200, data: { removed: removed.nombre, productos_restantes: carta.productos.length } };
   }
 
-  async toolAddCategory({ carta_id, nombre }) {
-    const carta = this.cartas.get(carta_id);
+  async toolAddCategory({ carta_id, project_id, nombre }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
     const catId = this.slugify(nombre);
@@ -640,8 +668,9 @@ class MenuGeneratorModule {
     return { status: 201, data: categoria };
   }
 
-  async toolUpdateProduct({ carta_id, producto_id, nombre, precio, categoria, ingredientes }) {
-    const carta = this.cartas.get(carta_id);
+  async toolUpdateProduct({ carta_id, project_id, producto_id, nombre, precio, categoria, ingredientes }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
     const prod = carta.productos.find(p => p.id === producto_id);
@@ -659,14 +688,15 @@ class MenuGeneratorModule {
       prod.ingredientes = this.normalizeIngredientes(ingredientes);
     }
 
-    await this.saveCartaToDisk(carta);
+    await this.saveCartaToDisk(carta, project_id);
     await this.eventBus.publish('carta.generada', carta);
 
     return { status: 200, data: prod };
   }
 
-  async toolSearchProducts({ carta_id, query }) {
-    const carta = this.cartas.get(carta_id);
+  async toolSearchProducts({ carta_id, project_id, query }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
     if (!query) return { status: 400, error: 'Se requiere "query"' };
@@ -687,8 +717,9 @@ class MenuGeneratorModule {
     };
   }
 
-  async toolStats({ carta_id }) {
-    const carta = this.cartas.get(carta_id);
+  async toolStats({ carta_id, project_id }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
     const precios = carta.productos.map(p => p.precio).filter(p => p > 0);
@@ -728,13 +759,14 @@ class MenuGeneratorModule {
     if (!pendingData) return;
 
     this.pendingAI.delete(correlationId);
-    const { id: cartaId, nombre } = pendingData;
+    const { id: cartaId, nombre, project_id } = pendingData;
 
     if (!eventData.success && eventData.error) {
-      this.logger.error('menu.generate.ai_error', { carta_id: cartaId, error: eventData.error });
+      this.logger.error('menu.generate.ai_error', { carta_id: cartaId, project_id, error: eventData.error });
       this.metrics?.increment('menu.generate.errors');
       await this.eventBus.publish('menu.error', {
         carta_id: cartaId,
+        project_id,
         error_type: 'ai_processing_failed',
         message: eventData.error
       }, { correlationId });
@@ -745,22 +777,24 @@ class MenuGeneratorModule {
       const content = eventData.content || eventData.text || '';
       const carta = this.parseAndStructure(cartaId, nombre, content);
 
-      this.cartas.set(cartaId, carta);
-      await this.saveCartaToDisk(carta);
+      this.getCartas(project_id).set(cartaId, carta);
+      await this.saveCartaToDisk(carta, project_id);
       this.metrics?.increment('menu.generate.completed');
 
       await this.eventBus.publish('carta.generada', carta, { correlationId });
 
       this.logger.info('menu.generate.completed', {
         carta_id: cartaId,
+        project_id,
         productos: carta.productos.length,
         categorias: carta.categorias.length
       });
     } catch (err) {
-      this.logger.error('menu.generate.parse_error', { carta_id: cartaId, error: err.message });
+      this.logger.error('menu.generate.parse_error', { carta_id: cartaId, project_id, error: err.message });
       this.metrics?.increment('menu.generate.errors');
       await this.eventBus.publish('menu.error', {
         carta_id: cartaId,
+        project_id,
         error_type: 'parse_failed',
         message: err.message
       }, { correlationId });
@@ -879,23 +913,19 @@ class MenuGeneratorModule {
     };
   }
 
-  async toolExportToPOS({ carta_id }) {
+  async toolExportToPOS({ carta_id, project_id }) {
     if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
 
-    const carta = this.cartas.get(carta_id);
+    const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
-    const projectId = this.activeProjectId;
-    if (!projectId) {
-      return { status: 400, error: 'No hay proyecto activo. Activa un proyecto antes de exportar.' };
-    }
-
     const correlationId = crypto.randomUUID();
-    const payload = this.transformCartaToPOS(carta, projectId);
+    const payload = this.transformCartaToPOS(carta, project_id);
 
     this.logger.info('menu.export_to_pos.start', {
       carta_id,
-      project_id: projectId,
+      project_id,
       productos: payload.productos.length,
       categorias: payload.categorias.length,
       ingredientes: payload.ingredientes_catalogo.length,
@@ -913,7 +943,7 @@ class MenuGeneratorModule {
 
     this.logger.info('menu.export_to_pos.completed', {
       carta_id,
-      project_id: projectId,
+      project_id,
       correlation_id: correlationId
     });
 
@@ -921,7 +951,7 @@ class MenuGeneratorModule {
       status: 200,
       data: {
         carta_id,
-        project_id: projectId,
+        project_id,
         exportado: {
           productos: payload.productos.length,
           categorias: payload.categorias.length,
@@ -934,7 +964,7 @@ class MenuGeneratorModule {
   }
 
   async handleExport(data) {
-    const result = await this.toolExportToPOS({ carta_id: data.carta_id || data.id });
+    const result = await this.toolExportToPOS({ carta_id: data.carta_id || data.id, project_id: data.project_id });
     if (result.error) {
       throw { status: result.status || 400, code: 'EXPORT_ERROR', message: result.error };
     }

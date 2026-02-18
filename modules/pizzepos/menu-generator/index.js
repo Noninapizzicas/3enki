@@ -160,12 +160,10 @@ class MenuGeneratorModule {
 
     this.activeProjectId = project_id;
 
-    if (metadata?.is_system === true) {
-      this.activeProjectPath = process.cwd();
-      this.projectStorageRoot = process.cwd();
-    } else if (base_path) {
-      this.activeProjectPath = path.join(base_path, 'storage', 'pizzepos');
-      this.projectStorageRoot = path.join(base_path, 'storage');
+    const resolvedBase = (metadata?.is_system === true) ? process.cwd() : base_path;
+    if (resolvedBase) {
+      this.activeProjectPath = path.join(resolvedBase, 'storage', 'pizzepos');
+      this.projectStorageRoot = path.join(resolvedBase, 'storage');
     }
 
     this.logger.info('menu-generator.project.activated', {

@@ -99,8 +99,11 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
       mqttRequest('categorias', 'list', { project_id })
     ]);
 
-    const pedido = pedidoRes?.pedido || { cuenta_id, items: [], notas: '', total: 0 };
-    const categorias = categoriasRes?.categorias || [];
+    // res.data contains the actual payload from the backend
+    const pedidoData = pedidoRes?.data;
+    const categoriasData = categoriasRes?.data;
+    const pedido = pedidoData?.pedido || pedidoData?.data?.pedido || { cuenta_id, items: [], notas: '', total: 0 };
+    const categorias = categoriasData?.categorias || categoriasData?.data?.categorias || [];
 
     // Si hay categorías, cargar productos de la primera
     let productos: Producto[] = [];
@@ -109,7 +112,8 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
     if (categorias.length > 0) {
       categoriaActiva = categorias[0].id;
       const productosRes = await mqttRequest('productos', 'list', { project_id, categoria_id: categoriaActiva });
-      productos = productosRes?.productos || [];
+      const prodData = productosRes?.data as any;
+      productos = prodData?.productos || prodData?.data?.productos || [];
     }
 
     comanderoStore.update(s => ({
@@ -136,9 +140,10 @@ export async function selectCategoria(categoria_id: string): Promise<void> {
 
   try {
     const res = await mqttRequest('productos', 'list', { project_id: state.project_id, categoria_id });
+    const resData = res?.data as any;
     comanderoStore.update(s => ({
       ...s,
-      productos: res?.productos || [],
+      productos: resData?.productos || resData?.data?.productos || [],
       loading: false
     }));
   } catch (err: any) {
@@ -170,8 +175,10 @@ export async function addItem(
       notas
     });
 
-    if (res?.pedido) {
-      comanderoStore.update(s => ({ ...s, pedido: res.pedido }));
+    const addData = res?.data as any;
+    const updatedPedido = addData?.pedido || addData?.data?.pedido;
+    if (updatedPedido) {
+      comanderoStore.update(s => ({ ...s, pedido: updatedPedido }));
     }
 
     return { success: true };
@@ -192,8 +199,10 @@ export async function removeItem(item_id: string): Promise<{ success: boolean; e
       item_id
     });
 
-    if (res?.pedido) {
-      comanderoStore.update(s => ({ ...s, pedido: res.pedido }));
+    const removeData = res?.data as any;
+    const removedPedido = removeData?.pedido || removeData?.data?.pedido;
+    if (removedPedido) {
+      comanderoStore.update(s => ({ ...s, pedido: removedPedido }));
     }
 
     return { success: true };
@@ -218,8 +227,10 @@ export async function updateItem(
       ...updates
     });
 
-    if (res?.pedido) {
-      comanderoStore.update(s => ({ ...s, pedido: res.pedido }));
+    const updateData = res?.data as any;
+    const updatedPedidoItem = updateData?.pedido || updateData?.data?.pedido;
+    if (updatedPedidoItem) {
+      comanderoStore.update(s => ({ ...s, pedido: updatedPedidoItem }));
     }
 
     return { success: true };

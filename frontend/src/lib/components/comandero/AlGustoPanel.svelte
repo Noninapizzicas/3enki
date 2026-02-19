@@ -94,8 +94,10 @@
     try {
       const res = await mqttRequest('ingredientes', 'list', {});
 
-      if (res?.status === 200 && res?.data?.ingredientes) {
-        const ingredientes: Ingrediente[] = res.data.ingredientes
+      // Handle both unwrapped and legacy double-wrapped responses
+      const ingData = res?.data?.ingredientes ? res.data : res?.data?.data;
+      if (res?.status === 200 && ingData?.ingredientes) {
+        const ingredientes: Ingrediente[] = ingData.ingredientes
           .filter((i: any) => i.disponible !== false);
 
         // Agrupar por tipo

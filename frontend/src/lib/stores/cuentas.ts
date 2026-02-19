@@ -114,12 +114,10 @@ export async function createCuenta(projectId: string, tipo: TipoCuenta, nombre?:
     });
     console.log('[Cuentas] createCuenta response:', res);
 
-    // La respuesta viene en res.data directamente
-    if (res.status === 201 || res.status === 200) {
-      return res.data || null;
-    }
-    console.error('[Cuentas] createCuenta failed status:', res.status);
-    return null;
+    // res.data is the cuenta object directly (unwrapped by UIRequestHandler)
+    // Handle both unwrapped (cuenta) and legacy double-wrapped ({ status, data: cuenta })
+    const cuenta = (res.data as any)?.id ? res.data : (res.data as any)?.data || res.data;
+    return cuenta || null;
   } catch (err: any) {
     console.error('[Cuentas] createCuenta error:', err);
     cuentasStore.update(s => ({ ...s, error: err.message || 'Error al crear cuenta' }));
@@ -136,9 +134,12 @@ export async function listCuentas(projectId: string, tipo?: TipoCuenta, estado?:
       tipo: tipo || undefined,
       estado: estado || undefined
     });
+    // Handle both unwrapped { cuentas } and legacy double-wrapped { data: { cuentas } }
+    const data = res.data;
+    const cuentasList = data?.cuentas || data?.data?.cuentas || [];
     cuentasStore.update(s => ({
       ...s,
-      cuentas: res.data?.cuentas || [],
+      cuentas: cuentasList,
       loading: false
     }));
   } catch (err: any) {
@@ -153,7 +154,9 @@ export async function listCuentas(projectId: string, tipo?: TipoCuenta, estado?:
 export async function getCuenta(projectId: string, id: string): Promise<Cuenta | null> {
   try {
     const res = await mqttRequest<any>('cuenta', 'get', { project_id: projectId, id });
-    return res.data || null;
+    // Handle both unwrapped (cuenta) and legacy double-wrapped ({ data: cuenta })
+    const cuenta = (res.data as any)?.id ? res.data : (res.data as any)?.data || res.data;
+    return cuenta || null;
   } catch {
     return null;
   }
@@ -172,7 +175,7 @@ export async function deleteCuenta(projectId: string, id: string): Promise<boole
 export async function getStats(projectId: string): Promise<any> {
   try {
     const res = await mqttRequest<any>('cuenta', 'stats', { project_id: projectId });
-    return res.data || null;
+    return res.data?.data || res.data || null;
   } catch {
     return null;
   }
@@ -195,8 +198,10 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
       tipo: tipo || undefined
     });
 
-    if (res?.status === 200 && res?.data?.cuentas) {
-      const cuentasPersistencia = res.data.cuentas;
+    // Handle both unwrapped { cuentas } and legacy double-wrapped { data: { cuentas } }
+    const pData = res?.data?.cuentas ? res.data : res?.data?.data;
+    if (res?.status === 200 && pData?.cuentas) {
+      const cuentasPersistencia = pData.cuentas;
 
       // Convertir formato persistencia → formato store
       const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => ({
@@ -247,8 +252,10 @@ export async function getCuentaFromPersistencia(projectId: string, cuenta_id: st
   try {
     const res = await mqttRequest<any>('persistencia', 'cuentas_activas', { project_id: projectId });
 
-    if (res?.status === 200 && res?.data?.cuentas) {
-      const cuenta = res.data.cuentas.find((c: any) => c.cuenta_id === cuenta_id);
+    // Handle both unwrapped { cuentas } and legacy double-wrapped { data: { cuentas } }
+    const pData2 = res?.data?.cuentas ? res.data : res?.data?.data;
+    if (res?.status === 200 && pData2?.cuentas) {
+      const cuenta = pData2.cuentas.find((c: any) => c.cuenta_id === cuenta_id);
       return cuenta || null;
     }
     return null;

@@ -248,8 +248,37 @@ class UIRequestHandler {
       const result = await handler(data || {}, request);
       const duration = Date.now() - startTime;
 
+      // Unwrap handler results that use { status, data/error } format
+      // Many handlers return { status: 201, data: ... } or { status: 404, error: '...' }
+      // We need to unwrap these to avoid double-wrapping in the response
+      let responseStatus = STATUS.OK;
+      let responseData = result;
+
+      if (result && typeof result === 'object' && typeof result.status === 'number') {
+        responseStatus = result.status;
+
+        // Handler returned error via { status: 4xx/5xx, error: '...' }
+        if (result.error && responseStatus >= 400) {
+          const errMsg = typeof result.error === 'string' ? result.error : (result.error.message || 'Unknown error');
+          const errCode = typeof result.error === 'string' ? 'HANDLER_ERROR' : (result.error.code || 'HANDLER_ERROR');
+          await this._sendError(request_id, responseStatus, errCode, errMsg);
+
+          if (this.logger) {
+            this.logger.debug('ui.request.handler_error', {
+              request_id, domain, action, status: responseStatus, duration_ms: duration
+            });
+          }
+          return;
+        }
+
+        // Handler returned { status, data } — unwrap the data
+        if ('data' in result) {
+          responseData = result.data;
+        }
+      }
+
       // Send success response
-      await this._sendSuccess(request_id, STATUS.OK, result);
+      await this._sendSuccess(request_id, responseStatus, responseData);
 
       // Metrics
       if (this.metrics) {

@@ -32,9 +32,9 @@
 
   "project": {
     "name": "event-core",
-    "version": "1.5.0",
+    "version": "0.5.0",
     "description": "Meta-Core Event-Driven Framework",
-    "last_context_update": "2026-02-13",
+    "last_context_update": "2026-02-16",
     "module_count": { "core": 28, "pizzepos": 12, "total": 40 }
   },
 
@@ -138,6 +138,41 @@
       "file": "facturas.json",
       "purpose": "Pipeline de facturas: OCR + IA + CSV fiscal con handlers /go*",
       "when": "Trabajar con facturas, OCR, PDF, CSV fiscal, asesoria española, pipeline batch"
+    },
+    {
+      "file": "SYSTEM-ANALYSIS.md",
+      "purpose": "Análisis honesto del sistema: fortalezas, debilidades, stats, patrones clave",
+      "when": "Evaluación general del sistema, onboarding, auditoría"
+    },
+    {
+      "file": "providers.json",
+      "purpose": "Patrones y reglas de providers: local vs external, eventos, credenciales",
+      "when": "Crear o modificar providers, entender credential injection"
+    },
+    {
+      "file": "skills.json",
+      "purpose": "Sistema de generación de servicios locales (local.skills)",
+      "when": "Crear nuevos providers automáticamente, listar skills existentes"
+    },
+    {
+      "file": "document-processor.json",
+      "purpose": "Procesamiento de documentos: parsing, extracción, conversión de formatos",
+      "when": "Trabajar con PDFs, OCR, extracción de texto"
+    },
+    {
+      "file": "ai-gateway.json",
+      "purpose": "Gateway unificado para 6 LLM providers con tool calling y streaming",
+      "when": "Configurar providers AI, tool calling, modelos, streaming"
+    },
+    {
+      "file": "mejoras-pendientes.json",
+      "purpose": "Lista de mejoras pendientes, implementadas y descartadas",
+      "when": "Consultar estado de refactorizaciones, planificar próximos pasos"
+    },
+    {
+      "file": "blueprints-features.json",
+      "purpose": "Sistema de blueprints para scaffolding de módulos y features",
+      "when": "Crear módulos desde blueprints, sistema de features"
     }
   ],
 

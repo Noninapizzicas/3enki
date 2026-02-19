@@ -37,9 +37,19 @@
   let unsubConnected: (() => void) | null = null;
 
   onMount(() => {
+    // Render immediately with defaults — don't block on MQTT
+    projectStore.set({
+      id: project_id,
+      name: project_id,
+      isPizzepos: true,
+      loading: false,
+      error: null
+    });
+
+    // Try to load real project data (non-blocking)
     loadProject();
 
-    // Si MQTT no estaba listo y loadProject falló, reintentar cuando conecte
+    // If MQTT wasn't ready, retry when it connects
     unsubConnected = connected.subscribe((isConnected) => {
       if (isConnected && !loaded && project_id) {
         loadProject();
@@ -54,16 +64,7 @@
   async function loadProject() {
     if (!project_id) return;
 
-    projectStore.set({
-      id: project_id,
-      name: project_id,
-      isPizzepos: false,
-      loading: true,
-      error: null
-    });
-
     try {
-      // Verificar si el proyecto existe y tiene carta
       const res = await mqttRequest<any>('project', 'get', { id: project_id });
 
       if (res.status === 404) {
@@ -77,8 +78,6 @@
       }
 
       const project = res.data;
-
-      // Verificar si tiene carta (es pizzepos)
       const hasCarta = project?.has_carta || project?.carta_activa;
 
       projectStore.set({
@@ -92,21 +91,14 @@
       loaded = true;
 
     } catch (err: any) {
-      // Si es error de MQTT no conectado, no loguear como error — se reintentará
       if (err instanceof MqttNotConnectedError) {
         console.log('[ProjectLayout] MQTT not ready yet, will retry when connected');
+        // Page is already rendered with defaults — no spinner
         return;
       }
 
       console.error('[ProjectLayout] Error loading project:', err);
-      // Si falla por otra razón, asumir que es válido (para desarrollo)
-      projectStore.set({
-        id: project_id,
-        name: project_id,
-        isPizzepos: true, // Asumir pizzepos en desarrollo
-        loading: false,
-        error: null
-      });
+      // Keep defaults (already rendered), just mark as loaded
       loaded = true;
     }
   }

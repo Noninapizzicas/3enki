@@ -10,7 +10,7 @@
   import { setContext } from 'svelte';
   import { writable } from 'svelte/store';
   import { goto } from '$app/navigation';
-  import { mqttRequest, MqttNotConnectedError } from '$lib/ui-core/mqtt-request';
+  import { mqttRequest, MqttNotConnectedError, MqttRequestError } from '$lib/ui-core/mqtt-request';
   import { connected } from '$lib/ui-core/mqtt';
 
   // Store del proyecto actual
@@ -66,17 +66,6 @@
 
     try {
       const res = await mqttRequest<any>('project', 'get', { id: project_id });
-
-      if (res.status === 404) {
-        projectStore.update(p => ({
-          ...p,
-          loading: false,
-          error: 'Proyecto no encontrado'
-        }));
-        loaded = true;
-        return;
-      }
-
       const project = res.data;
       const hasCarta = project?.has_carta || project?.carta_activa;
 
@@ -93,12 +82,16 @@
     } catch (err: any) {
       if (err instanceof MqttNotConnectedError) {
         console.log('[ProjectLayout] MQTT not ready yet, will retry when connected');
-        // Page is already rendered with defaults — no spinner
         return;
       }
 
-      console.error('[ProjectLayout] Error loading project:', err);
-      // Keep defaults (already rendered), just mark as loaded
+      // Project not found or other backend error — use defaults, don't block
+      if (err instanceof MqttRequestError) {
+        console.log(`[ProjectLayout] Backend: ${err.message} — using defaults for "${project_id}"`);
+      } else {
+        console.warn('[ProjectLayout] Error loading project:', err.message);
+      }
+
       loaded = true;
     }
   }

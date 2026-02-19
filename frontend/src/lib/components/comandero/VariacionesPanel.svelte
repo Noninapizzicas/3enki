@@ -19,6 +19,7 @@
   };
 
   export let visible: boolean = true;
+  export let projectId: string = '';
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -101,33 +102,36 @@
 
     try {
       // Cargar en paralelo: config variaciones + catálogo ingredientes
+      // Ingredientes base del producto (available immediately)
+      ingredientesBase = producto.ingredientes || [];
+      const baseIds = new Set(ingredientesBase.map(i => i.id));
+
+      // Cargar en paralelo: config variaciones + catálogo ingredientes
       const [varRes, ingRes] = await Promise.all([
         mqttRequest('variaciones', 'get', { producto_id: producto.id }),
-        mqttRequest('ingredientes', 'list', {})
+        mqttRequest('productos', 'ingredientes', { project_id: projectId })
       ]);
 
       // Config variaciones
-      if (varRes?.data) {
-        permiteQuitar = varRes.data.permite_quitar || [];
-        permiteAnadir = varRes.data.permite_anadir !== false; // default true
-        maxExtras = varRes.data.max_ingredientes_extra || 10;
+      const varData = varRes?.data;
+      if (varData && varData.permite_quitar) {
+        permiteQuitar = varData.permite_quitar || [];
+        permiteAnadir = varData.permite_anadir !== false; // default true
+        maxExtras = varData.max_ingredientes_extra || 10;
       } else {
         // Si no hay config, permitir todo por defecto
         permiteAnadir = true;
         maxExtras = 10;
       }
 
-      // Ingredientes base del producto
-      ingredientesBase = producto.ingredientes || [];
-      const baseIds = new Set(ingredientesBase.map(i => i.id));
-
       // Si no tenemos permiteQuitar, asumir que todos los base se pueden quitar
       if (permiteQuitar.length === 0 && ingredientesBase.length > 0) {
         permiteQuitar = ingredientesBase.map(i => i.id);
       }
 
-      // Catálogo: filtrar ingredientes que no están en el producto
-      const todosIngredientes = ingRes?.data?.ingredientes || [];
+      // Catálogo: handle both unwrapped and legacy responses
+      const ingData = ingRes?.data?.ingredientes ? ingRes.data : ingRes?.data?.data;
+      const todosIngredientes = ingData?.ingredientes || [];
       ingredientesDisponibles = todosIngredientes
         .filter((ing: any) => !baseIds.has(ing.id))
         .filter((ing: any) => ing.disponible !== false)

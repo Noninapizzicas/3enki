@@ -86,6 +86,21 @@ export const categoriaActiva = derived(comanderoStore, $s => $s.categoriaActiva)
 export const comanderoLoading = derived(comanderoStore, $s => $s.loading);
 export const comanderoError = derived(comanderoStore, $s => $s.error);
 
+// Helpers
+
+/** Enrich products loaded from backend: derive tiene_variaciones, normalize ingredientes */
+function enrichProductos(rawProductos: any[]): Producto[] {
+  return rawProductos.map((p: any) => {
+    // Normalize: backend uses ingredientes_base, frontend expects ingredientes
+    const ingredientes = p.ingredientes || p.ingredientes_base || [];
+    return {
+      ...p,
+      ingredientes,
+      tiene_variaciones: p.tiene_variaciones ?? (ingredientes.length > 0)
+    };
+  });
+}
+
 // Actions
 
 /** Inicializa el comandero para una cuenta */
@@ -93,17 +108,27 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
   comanderoStore.update(s => ({ ...s, project_id, cuenta_id, loading: true, error: null }));
 
   try {
-    // Cargar pedido, categorías y productos en paralelo
+    // Cargar pedido y categorías en paralelo
+    // Use productos/categorias (has disk persistence) instead of categorias/list (in-memory only)
     const [pedidoRes, categoriasRes] = await Promise.all([
       mqttRequest('pedido', 'get', { project_id, cuenta_id }),
-      mqttRequest('categorias', 'list', { project_id })
+      mqttRequest('productos', 'categorias', { project_id })
     ]);
 
     // res.data contains the actual payload from the backend
     const pedidoData = pedidoRes?.data;
     const categoriasData = categoriasRes?.data;
     const pedido = pedidoData?.pedido || pedidoData?.data?.pedido || { cuenta_id, items: [], notas: '', total: 0 };
-    const categorias = categoriasData?.categorias || categoriasData?.data?.categorias || [];
+    const rawCategorias = categoriasData?.categorias || categoriasData?.data?.categorias || [];
+
+    // Map backend fields: emoji → icon for CategoriaBtn
+    const categorias: Categoria[] = rawCategorias.map((c: any) => ({
+      id: c.id,
+      nombre: c.nombre,
+      orden: c.orden ?? 0,
+      color: c.color,
+      icon: c.icon || c.emoji || '📋'
+    }));
 
     // Si hay categorías, cargar productos de la primera
     let productos: Producto[] = [];
@@ -113,7 +138,8 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
       categoriaActiva = categorias[0].id;
       const productosRes = await mqttRequest('productos', 'list', { project_id, categoria_id: categoriaActiva });
       const prodData = productosRes?.data as any;
-      productos = prodData?.productos || prodData?.data?.productos || [];
+      const rawProductos = prodData?.productos || prodData?.data?.productos || [];
+      productos = enrichProductos(rawProductos);
     }
 
     comanderoStore.update(s => ({
@@ -141,9 +167,10 @@ export async function selectCategoria(categoria_id: string): Promise<void> {
   try {
     const res = await mqttRequest('productos', 'list', { project_id: state.project_id, categoria_id });
     const resData = res?.data as any;
+    const rawProductos = resData?.productos || resData?.data?.productos || [];
     comanderoStore.update(s => ({
       ...s,
-      productos: resData?.productos || resData?.data?.productos || [],
+      productos: enrichProductos(rawProductos),
       loading: false
     }));
   } catch (err: any) {
@@ -160,10 +187,14 @@ export async function addItem(
   producto_id: string,
   cantidad: number = 1,
   variaciones: any[] = [],
-  notas: string = ''
+  metadata: string | Record<string, any> = ''
 ): Promise<{ success: boolean; error?: string }> {
   const state = get(comanderoStore);
   if (!state.cuenta_id) return { success: false, error: 'No hay cuenta activa' };
+
+  // Support both string notas and object metadata (for mitad_mitad, al_gusto, etc.)
+  const notas = typeof metadata === 'string' ? metadata : '';
+  const extra = typeof metadata === 'object' ? metadata : {};
 
   try {
     const res = await mqttRequest('pedido', 'add_item', {
@@ -172,7 +203,8 @@ export async function addItem(
       producto_id,
       cantidad,
       variaciones,
-      notas
+      notas,
+      ...extra
     });
 
     const addData = res?.data as any;

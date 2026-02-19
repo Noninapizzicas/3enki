@@ -342,6 +342,7 @@
     <VariacionesPanel
       producto={productoVariaciones}
       visible={showVariaciones}
+      {projectId}
       on:close={handleVariacionesClose}
       on:confirm={handleVariacionesConfirm}
     />

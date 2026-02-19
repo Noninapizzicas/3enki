@@ -12,6 +12,7 @@
   import { goto } from '$app/navigation';
   import { mqttRequest, MqttNotConnectedError, MqttRequestError } from '$lib/ui-core/mqtt-request';
   import { connected } from '$lib/ui-core/mqtt';
+  import { activeProjectId } from '$lib/stores/projects';
 
   // Store del proyecto actual
   const projectStore = writable<{
@@ -31,7 +32,9 @@
   // Pasar contexto a hijos
   setContext('project', projectStore);
 
-  $: project_id = $page.params.project_id;
+  // URL param puede ser alias corto (ej: "a"); activeProjectId tiene el UUID real
+  $: urlParam = $page.params.project_id;
+  $: project_id = $activeProjectId || urlParam;
 
   let loaded = false;
   let unsubConnected: (() => void) | null = null;

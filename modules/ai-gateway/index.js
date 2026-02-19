@@ -1430,7 +1430,15 @@ class AIGatewayModule {
           correlation_id: context.correlationId
         });
 
-        const result = await this.moduleLoader.executeTool(name, args);
+        // Inject context fields (project_id, conversation_id) into tool args
+        // so multi-tenant tools receive them automatically
+        const enrichedArgs = {
+          ...args,
+          ...(context.projectId && !args.project_id ? { project_id: context.projectId } : {}),
+          ...(context.conversationId && !args.conversation_id ? { conversation_id: context.conversationId } : {})
+        };
+
+        const result = await this.moduleLoader.executeTool(name, enrichedArgs);
 
         results.push({
           tool_call_id: id,

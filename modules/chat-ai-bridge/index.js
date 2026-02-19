@@ -566,6 +566,7 @@ class ChatAiBridgeModule {
       max_tool_iterations: this.config.maxToolIterations || 10,
       provider: 'auto',
       stream: canStream,
+      project_id: this.activeProjectId || null,
       correlation_id
     });
 

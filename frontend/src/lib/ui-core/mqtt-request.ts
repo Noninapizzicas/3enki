@@ -213,11 +213,10 @@ export async function mqttRequest<T = unknown>(
   const timeout = options.timeout ?? DEFAULT_TIMEOUT;
   const requestId = generateRequestId();
 
-  // Verificar conexión
+  // Verificar conexión — esperar hasta 8s (la librería MQTT pesa ~2MB)
   const currentStatus = get(status);
   if (currentStatus !== 'connected') {
-    // Esperar conexión hasta 3 segundos
-    await waitForConnection(3000);
+    await waitForConnection(8000);
   }
 
   return new Promise<UIResponse<T>>((resolve, reject) => {
@@ -282,17 +281,29 @@ export async function mqttRequest<T = unknown>(
 }
 
 /**
- * Espera a que MQTT esté conectado
+ * Espera a que MQTT esté conectado.
+ * Usa suscripción al store para reaccionar inmediatamente cuando conecte,
+ * en vez de polling cada 100ms.
  */
 async function waitForConnection(timeoutMs: number): Promise<void> {
-  const startTime = Date.now();
+  // Ya conectado — salir rápido
+  if (isConnected()) return;
 
-  while (Date.now() - startTime < timeoutMs) {
-    if (isConnected()) return;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unsub();
+      reject(new MqttNotConnectedError());
+    }, timeoutMs);
 
-  throw new MqttNotConnectedError();
+    const unsub = status.subscribe((s) => {
+      if (s === 'connected') {
+        clearTimeout(timer);
+        // Unsubscribe en el siguiente tick para evitar errores de Svelte
+        setTimeout(() => unsub(), 0);
+        resolve();
+      }
+    });
+  });
 }
 
 /**

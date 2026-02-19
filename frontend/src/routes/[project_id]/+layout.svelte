@@ -6,11 +6,12 @@
    * Pasa el contexto del proyecto a todos los hijos.
    */
   import { page } from '$app/stores';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { setContext } from 'svelte';
   import { writable } from 'svelte/store';
   import { goto } from '$app/navigation';
-  import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { mqttRequest, MqttNotConnectedError } from '$lib/ui-core/mqtt-request';
+  import { connected } from '$lib/ui-core/mqtt';
 
   // Store del proyecto actual
   const projectStore = writable<{
@@ -32,8 +33,22 @@
 
   $: project_id = $page.params.project_id;
 
+  let loaded = false;
+  let unsubConnected: (() => void) | null = null;
+
   onMount(() => {
     loadProject();
+
+    // Si MQTT no estaba listo y loadProject falló, reintentar cuando conecte
+    unsubConnected = connected.subscribe((isConnected) => {
+      if (isConnected && !loaded && project_id) {
+        loadProject();
+      }
+    });
+  });
+
+  onDestroy(() => {
+    if (unsubConnected) unsubConnected();
   });
 
   async function loadProject() {
@@ -57,6 +72,7 @@
           loading: false,
           error: 'Proyecto no encontrado'
         }));
+        loaded = true;
         return;
       }
 
@@ -73,9 +89,17 @@
         error: null
       });
 
+      loaded = true;
+
     } catch (err: any) {
+      // Si es error de MQTT no conectado, no loguear como error — se reintentará
+      if (err instanceof MqttNotConnectedError) {
+        console.log('[ProjectLayout] MQTT not ready yet, will retry when connected');
+        return;
+      }
+
       console.error('[ProjectLayout] Error loading project:', err);
-      // Si falla, asumir que es válido (para desarrollo)
+      // Si falla por otra razón, asumir que es válido (para desarrollo)
       projectStore.set({
         id: project_id,
         name: project_id,
@@ -83,6 +107,7 @@
         loading: false,
         error: null
       });
+      loaded = true;
     }
   }
 </script>

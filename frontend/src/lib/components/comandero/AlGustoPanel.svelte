@@ -14,6 +14,7 @@
 
   export let visible: boolean = true;
   export let precioBase: number = 8.00; // Precio base pizza al gusto
+  export let projectId: string = '';
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -92,7 +93,7 @@
     error = null;
 
     try {
-      const res = await mqttRequest('ingredientes', 'list', {});
+      const res = await mqttRequest('productos', 'ingredientes', { project_id: projectId });
 
       // Handle both unwrapped and legacy double-wrapped responses
       const ingData = res?.data?.ingredientes ? res.data : res?.data?.data;

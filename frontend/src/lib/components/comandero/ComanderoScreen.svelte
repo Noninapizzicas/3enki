@@ -342,6 +342,7 @@
     <VariacionesPanel
       producto={productoVariaciones}
       visible={showVariaciones}
+      {projectId}
       on:close={handleVariacionesClose}
       on:confirm={handleVariacionesConfirm}
     />
@@ -363,6 +364,7 @@
   {#if showMitadMitad}
     <MitadMitadPanel
       visible={showMitadMitad}
+      {projectId}
       on:close={handleMitadMitadClose}
       on:confirm={handleMitadMitadConfirm}
     />
@@ -372,6 +374,7 @@
   {#if showAlGusto}
     <AlGustoPanel
       visible={showAlGusto}
+      {projectId}
       on:close={handleAlGustoClose}
       on:confirm={handleAlGustoConfirm}
     />

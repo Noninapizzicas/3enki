@@ -13,6 +13,7 @@
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
 
   export let visible: boolean = true;
+  export let projectId: string = '';
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -67,10 +68,12 @@
     error = null;
 
     try {
-      const res = await mqttRequest('productos', 'pizzas', {});
+      const res = await mqttRequest('productos', 'pizzas', { project_id: projectId });
 
-      if (res?.status === 200 && res?.data?.pizzas) {
-        pizzas = res.data.pizzas;
+      // Handle both unwrapped and legacy double-wrapped responses
+      const pizzaData = res?.data?.pizzas ? res.data : res?.data?.data;
+      if (res?.status === 200 && pizzaData?.pizzas) {
+        pizzas = pizzaData.pizzas;
       } else {
         error = res?.error || 'Error al cargar pizzas';
       }

@@ -124,14 +124,8 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
   comanderoStore.update(s => ({ ...s, project_id, cuenta_id, loading: true, error: null }));
 
   try {
-    // UNA sola llamada para toda la carta. No depende de project_id correcto.
-    // El backend busca el primer proyecto con datos si el project_id falla.
-    const [cartaRes, pedidoRes] = await Promise.all([
-      mqttRequest('productos', 'carta_completa', { project_id }),
-      mqttRequest('pedido', 'get', { project_id, cuenta_id })
-    ]);
-
-    // Carta completa: categorias + productos + ingredientes
+    // 1) Carta primero — no depende de project_id correcto
+    const cartaRes = await mqttRequest('productos', 'carta_completa', { project_id });
     const cartaData = cartaRes?.data as any;
     const realProjectId = cartaData?.project_id || project_id;
 
@@ -139,7 +133,6 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
     const rawProductos = cartaData?.productos || [];
     const rawIngredientes = cartaData?.ingredientes || [];
 
-    // Map categorias: emoji → icon
     const categorias: Categoria[] = rawCategorias.map((c: any) => ({
       id: c.id,
       nombre: c.nombre,
@@ -148,14 +141,20 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
       icon: c.icon || c.emoji || ''
     }));
 
-    // Enrich all products
     const todosProductos: Producto[] = rawProductos.map(enrichProducto);
 
-    // Pedido
-    const pedidoData = pedidoRes?.data as any;
-    const pedido = pedidoData?.pedido || pedidoData?.data?.pedido || { cuenta_id, items: [], notas: '', total: 0 };
+    // 2) Pedido — ahora con el project_id REAL del backend
+    //    Si falla, no pasa nada: arrancamos con pedido vacío
+    let pedido: Pedido = { cuenta_id, items: [], notas: '', total: 0, created_at: '', updated_at: '' };
+    try {
+      const pedidoRes = await mqttRequest('pedido', 'get', { project_id: realProjectId, cuenta_id });
+      const pedidoData = pedidoRes?.data as any;
+      pedido = pedidoData?.pedido || pedidoData?.data?.pedido || pedido;
+    } catch (pedidoErr: any) {
+      console.warn('[Comandero] Pedido no encontrado, usando vacío:', pedidoErr?.message);
+    }
 
-    // Select first category and filter products locally
+    // 3) Seleccionar primera categoría y filtrar localmente
     let categoriaActiva: string | null = null;
     let productos: Producto[] = [];
 
@@ -163,7 +162,6 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
       categoriaActiva = categorias[0].id;
       productos = filterByCategoria(todosProductos, categoriaActiva);
     } else {
-      // No categories: show all products
       productos = todosProductos;
     }
 

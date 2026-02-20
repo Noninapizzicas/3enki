@@ -124,22 +124,36 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
   comanderoStore.update(s => ({ ...s, project_id, cuenta_id, loading: true, error: null }));
 
   try {
-    // UNA sola llamada para toda la carta. No depende de project_id correcto.
-    // El backend busca el primer proyecto con datos si el project_id falla.
-    const [cartaRes, pedidoRes] = await Promise.all([
-      mqttRequest('productos', 'carta_completa', { project_id }),
-      mqttRequest('pedido', 'get', { project_id, cuenta_id })
-    ]);
+    let rawCategorias: any[] = [];
+    let rawProductos: any[] = [];
+    let rawIngredientes: any[] = [];
 
-    // Carta completa: categorias + productos + ingredientes
-    const cartaData = cartaRes?.data as any;
-    const realProjectId = cartaData?.project_id || project_id;
+    // Intentar carta_completa (un solo call, óptimo)
+    // Si falla (ej: backend sin reiniciar), fallback a calls individuales
+    try {
+      const cartaRes = await mqttRequest('productos', 'carta_completa', { project_id });
+      const cartaData = cartaRes?.data as any;
+      rawCategorias = cartaData?.categorias || [];
+      rawProductos = cartaData?.productos || [];
+      rawIngredientes = cartaData?.ingredientes || [];
+      console.log('[Comandero] carta_completa OK');
+    } catch {
+      console.warn('[Comandero] carta_completa no disponible, usando calls individuales');
+      // Fallback: categorias + productos por separado
+      const [catRes, prodRes] = await Promise.all([
+        mqttRequest('productos', 'categorias', { project_id }),
+        mqttRequest('productos', 'list', { project_id })
+      ]);
+      rawCategorias = (catRes?.data as any)?.categorias || [];
+      rawProductos = (prodRes?.data as any)?.productos || [];
 
-    const rawCategorias = cartaData?.categorias || [];
-    const rawProductos = cartaData?.productos || [];
-    const rawIngredientes = cartaData?.ingredientes || [];
+      // Intentar ingredientes también
+      try {
+        const ingRes = await mqttRequest('productos', 'ingredientes', { project_id });
+        rawIngredientes = (ingRes?.data as any)?.ingredientes || [];
+      } catch { /* sin ingredientes, no pasa nada */ }
+    }
 
-    // Map categorias: emoji → icon
     const categorias: Categoria[] = rawCategorias.map((c: any) => ({
       id: c.id,
       nombre: c.nombre,
@@ -148,14 +162,19 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
       icon: c.icon || c.emoji || ''
     }));
 
-    // Enrich all products
     const todosProductos: Producto[] = rawProductos.map(enrichProducto);
 
-    // Pedido
-    const pedidoData = pedidoRes?.data as any;
-    const pedido = pedidoData?.pedido || pedidoData?.data?.pedido || { cuenta_id, items: [], notas: '', total: 0 };
+    // Pedido — si falla, pedido vacío (no explota)
+    let pedido: Pedido = { cuenta_id, items: [], notas: '', total: 0, created_at: '', updated_at: '' };
+    try {
+      const pedidoRes = await mqttRequest('pedido', 'get', { project_id, cuenta_id });
+      const pedidoData = pedidoRes?.data as any;
+      pedido = pedidoData?.pedido || pedidoData?.data?.pedido || pedido;
+    } catch {
+      console.warn('[Comandero] Pedido no encontrado, usando vacío');
+    }
 
-    // Select first category and filter products locally
+    // Seleccionar primera categoría y filtrar localmente
     let categoriaActiva: string | null = null;
     let productos: Producto[] = [];
 
@@ -163,13 +182,12 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
       categoriaActiva = categorias[0].id;
       productos = filterByCategoria(todosProductos, categoriaActiva);
     } else {
-      // No categories: show all products
       productos = todosProductos;
     }
 
     comanderoStore.update(s => ({
       ...s,
-      project_id: realProjectId,
+      project_id,
       pedido,
       categorias,
       todosProductos,
@@ -180,7 +198,6 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
     }));
 
     console.log('[Comandero] Carta cargada:', {
-      project_id: realProjectId,
       categorias: categorias.length,
       productos: todosProductos.length,
       ingredientes: rawIngredientes.length

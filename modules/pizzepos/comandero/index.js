@@ -298,10 +298,22 @@ class ComanderoModule {
       return { status: 400, error: 'No hay items en el pedido para enviar' };
     }
 
+    const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+
     this.metrics.increment('pedido.enviado.total');
+
+    // pedido.creado — puente con persistencia y futuro módulo pedidos (gestión cocina)
+    await this.eventBus.publish('pedido.creado', {
+      cuenta_id,
+      pedido_id,
+      items: pedido.items,
+      total: pedido.total,
+      created_at: new Date().toISOString()
+    });
 
     await this.eventBus.publish('pedido.enviado_cocina', {
       cuenta_id,
+      pedido_id,
       items: pedido.items,
       total: pedido.total,
       notas_generales: pedido.notas,
@@ -309,13 +321,14 @@ class ComanderoModule {
     });
 
     this.logger.info('comandero.enviado_cocina', {
-      cuenta_id, items_count: pedido.items.length, total: pedido.total
+      cuenta_id, pedido_id, items_count: pedido.items.length, total: pedido.total
     });
 
     return {
       status: 200,
       data: {
         cuenta_id,
+        pedido_id,
         items_count: pedido.items.length,
         total: pedido.total
       }

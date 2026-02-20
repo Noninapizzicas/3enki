@@ -59,6 +59,28 @@ class ProductosModule {
     return this.ingredientesPerProject.get(projectId);
   }
 
+  /**
+   * Resuelve un project_id al proyecto activo con datos.
+   * Si el project_id dado tiene productos cargados, lo usa.
+   * Si no, busca el primer proyecto que sí tenga datos.
+   * Esto permite que el frontend envíe aliases ("a") sin romper nada.
+   */
+  resolveToActiveProject(projectId) {
+    // Si este proyecto ya tiene datos, usarlo
+    if (this.productosPerProject.has(projectId) && this.productosPerProject.get(projectId).size > 0) {
+      return projectId;
+    }
+    // Buscar el primer proyecto con productos cargados
+    for (const [pid, prods] of this.productosPerProject) {
+      if (prods.size > 0) {
+        this.logger.debug('productos.resolve_fallback', { requested: projectId, resolved: pid });
+        return pid;
+      }
+    }
+    // No hay datos en ningún proyecto, devolver el original
+    return projectId;
+  }
+
   // ==========================================
   // Lifecycle
   // ==========================================
@@ -342,11 +364,13 @@ class ProductosModule {
 
   async handleListProductos(data) {
     const start_time = Date.now();
-    const { project_id, categoria, categoria_id, activo } = data || {};
+    const { project_id: raw_pid, categoria, categoria_id, activo } = data || {};
 
-    if (!project_id) {
+    if (!raw_pid) {
       return { status: 400, error: 'project_id es requerido' };
     }
+
+    const project_id = this.resolveToActiveProject(raw_pid);
 
     // Intentar cargar desde archivo si no hay productos en memoria
     const productosMap = this.getProductos(project_id);
@@ -385,12 +409,13 @@ class ProductosModule {
   }
 
   async handleGetProducto(data) {
-    const { project_id, id } = data || {};
+    const { project_id: raw_pid, id } = data || {};
 
-    if (!project_id) {
+    if (!raw_pid) {
       return { status: 400, error: 'project_id es requerido' };
     }
 
+    const project_id = this.resolveToActiveProject(raw_pid);
     const producto = this.getProductos(project_id).get(id);
 
     if (!producto) {
@@ -402,9 +427,9 @@ class ProductosModule {
 
   async handleSearchProductos(data) {
     const start_time = Date.now();
-    const { project_id, q } = data || {};
+    const { project_id: raw_pid, q } = data || {};
 
-    if (!project_id) {
+    if (!raw_pid) {
       return { status: 400, error: 'project_id es requerido' };
     }
 
@@ -412,6 +437,7 @@ class ProductosModule {
       return { status: 400, error: 'Parámetro "q" requerido' };
     }
 
+    const project_id = this.resolveToActiveProject(raw_pid);
     const searchTerm = q.toLowerCase();
     const resultados = Array.from(this.getProductos(project_id).values())
       .filter(p =>
@@ -429,11 +455,13 @@ class ProductosModule {
   }
 
   async handleListCategorias(data) {
-    const { project_id } = data || {};
+    const { project_id: raw_pid } = data || {};
 
-    if (!project_id) {
+    if (!raw_pid) {
       return { status: 400, error: 'project_id es requerido' };
     }
+
+    const project_id = this.resolveToActiveProject(raw_pid);
 
     // Intentar cargar desde archivo si no hay categorías en memoria
     const categoriasMap = this.getCategorias(project_id);
@@ -457,12 +485,13 @@ class ProductosModule {
   }
 
   async handleListIngredientes(data) {
-    const { project_id, tipo } = data || {};
+    const { project_id: raw_pid, tipo } = data || {};
 
-    if (!project_id) {
+    if (!raw_pid) {
       return { status: 400, error: 'project_id es requerido' };
     }
 
+    const project_id = this.resolveToActiveProject(raw_pid);
     let ingredientes = Array.from(this.getIngredientes(project_id).values())
       .filter(i => i.activo !== false);
 
@@ -484,12 +513,13 @@ class ProductosModule {
   }
 
   async handleListPizzas(data) {
-    const { project_id } = data || {};
+    const { project_id: raw_pid } = data || {};
 
-    if (!project_id) {
+    if (!raw_pid) {
       return { status: 400, error: 'project_id es requerido' };
     }
 
+    const project_id = this.resolveToActiveProject(raw_pid);
     const pizzas = Array.from(this.getProductos(project_id).values())
       .filter(p =>
         p.activo !== false &&

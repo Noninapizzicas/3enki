@@ -80,6 +80,12 @@
       "description": "Eliminar item del pedido"
     },
     {
+      "method": "PUT",
+      "path": "/pedido/:cuenta_id/items/:item_id",
+      "handler": "handleUpdateItem",
+      "description": "Actualizar cantidad o notas de un item"
+    },
+    {
       "method": "POST",
       "path": "/pedido/:cuenta_id/enviar",
       "handler": "handleEnviarCocina",

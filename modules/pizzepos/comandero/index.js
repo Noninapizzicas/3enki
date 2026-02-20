@@ -48,7 +48,7 @@ class ComanderoModule {
     this.logger.info('module.unloading', { module: this.name });
 
     if (this.uiHandler) {
-      const actions = ['get', 'add-item', 'remove-item', 'send-kitchen', 'health'];
+      const actions = ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health'];
       for (const action of actions) {
         this.uiHandler.unregister('comandero', action);
       }
@@ -73,11 +73,12 @@ class ComanderoModule {
     this.uiHandler.register('comandero', 'get', this.handleGetPedido.bind(this));
     this.uiHandler.register('comandero', 'add-item', this.handleAddItem.bind(this));
     this.uiHandler.register('comandero', 'remove-item', this.handleRemoveItem.bind(this));
+    this.uiHandler.register('comandero', 'update-item', this.handleUpdateItem.bind(this));
     this.uiHandler.register('comandero', 'send-kitchen', this.handleEnviarCocina.bind(this));
     this.uiHandler.register('comandero', 'health', this.handleHealthCheck.bind(this));
 
     this.logger.info('comandero.ui_handlers.registered', {
-      handlers: ['get', 'add-item', 'remove-item', 'send-kitchen', 'health']
+      handlers: ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health']
     });
   }
 
@@ -285,6 +286,56 @@ class ComanderoModule {
     return {
       status: 200,
       data: {
+        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
+      }
+    };
+  }
+
+  async handleUpdateItem(data) {
+    const { cuenta_id, item_id, cantidad, notas } = data;
+
+    const pedido = this.pedidos.get(cuenta_id);
+    if (!pedido) {
+      return { status: 404, error: 'Pedido no encontrado' };
+    }
+
+    const item = pedido.items.find(i => i.id === item_id);
+    if (!item) {
+      return { status: 404, error: 'Item no encontrado en pedido' };
+    }
+
+    if (cantidad !== undefined) {
+      if (cantidad <= 0) {
+        // cantidad 0 o negativa → eliminar item
+        const idx = pedido.items.indexOf(item);
+        pedido.items.splice(idx, 1);
+        pedido.total = this.calcularTotal(pedido.items);
+
+        await this.eventBus.publish('pedido.item_eliminado', {
+          cuenta_id, item_id, producto_id: item.producto_id, precio_total: item.subtotal
+        });
+
+        return {
+          status: 200,
+          data: { pedido: { cuenta_id, items: pedido.items, total: pedido.total } }
+        };
+      }
+      item.cantidad = cantidad;
+      item.subtotal = item.precio * cantidad;
+    }
+
+    if (notas !== undefined) {
+      item.notas = notas;
+    }
+
+    pedido.total = this.calcularTotal(pedido.items);
+
+    this.logger.info('comandero.item.actualizado', { cuenta_id, item_id, cantidad, notas });
+
+    return {
+      status: 200,
+      data: {
+        item,
         pedido: { cuenta_id, items: pedido.items, total: pedido.total }
       }
     };

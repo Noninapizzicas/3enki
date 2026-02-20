@@ -167,7 +167,7 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
     // Pedido — si falla, pedido vacío (no explota)
     let pedido: Pedido = { cuenta_id, items: [], notas: '', total: 0, created_at: '', updated_at: '' };
     try {
-      const pedidoRes = await mqttRequest('pedido', 'get', { project_id, cuenta_id });
+      const pedidoRes = await mqttRequest('comandero', 'get', { project_id, cuenta_id });
       const pedidoData = pedidoRes?.data as any;
       pedido = pedidoData?.pedido || pedidoData?.data?.pedido || pedido;
     } catch {
@@ -235,7 +235,7 @@ export async function addItem(
   const extra = typeof metadata === 'object' ? metadata : {};
 
   try {
-    const res = await mqttRequest('pedido', 'add_item', {
+    const res = await mqttRequest('comandero', 'add-item', {
       project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       producto_id,
@@ -263,7 +263,7 @@ export async function removeItem(item_id: string): Promise<{ success: boolean; e
   if (!state.cuenta_id) return { success: false, error: 'No hay cuenta activa' };
 
   try {
-    const res = await mqttRequest('pedido', 'remove_item', {
+    const res = await mqttRequest('comandero', 'remove-item', {
       project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       item_id
@@ -290,7 +290,7 @@ export async function updateItem(
   if (!state.cuenta_id) return { success: false, error: 'No hay cuenta activa' };
 
   try {
-    const res = await mqttRequest('pedido', 'update_item', {
+    const res = await mqttRequest('comandero', 'update-item', {
       project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       item_id,
@@ -316,7 +316,7 @@ export async function enviarCocina(): Promise<{ success: boolean; error?: string
   if (!state.pedido?.items?.length) return { success: false, error: 'No hay items en el pedido' };
 
   try {
-    await mqttRequest('pedido', 'enviar_cocina', { project_id: state.project_id, cuenta_id: state.cuenta_id });
+    await mqttRequest('comandero', 'send-kitchen', { project_id: state.project_id, cuenta_id: state.cuenta_id });
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Error al enviar a cocina' };

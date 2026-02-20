@@ -3,23 +3,20 @@
    * Página Comandero — Pantalla de cuentas activas
    *
    * Scoped por proyecto: /{project_id}/comandero
-   * Standalone: sin LazyShell, sin AppShell, sin chat.
+   *
+   * NOTA: URL param puede ser alias corto. Para datos usamos activeProjectId (UUID real).
    */
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { getContext } from 'svelte';
+  import { activeProjectId } from '$lib/stores/projects';
   import { CuentasScreen } from '$lib/components/comandero';
 
-  // Obtener contexto del proyecto
-  const projectStore = getContext<any>('project');
-
-  $: project_id = $page.params.project_id;
+  $: urlProjectId = $page.params.project_id;
+  $: projectId = $activeProjectId || urlProjectId;
 
   function handleNavigate(path: string) {
-    // Las rutas internas ya vienen con formato /comandero/xxx
-    // Hay que añadir el project_id al inicio
     if (path.startsWith('/comandero')) {
-      goto(`/${project_id}${path}`);
+      goto(`/${urlProjectId}${path}`);
     } else {
       goto(path);
     }
@@ -27,7 +24,7 @@
 </script>
 
 <svelte:head>
-  <title>Comandero - {$projectStore?.name || project_id}</title>
+  <title>Comandero</title>
 </svelte:head>
 
-<CuentasScreen onNavigate={handleNavigate} projectId={project_id} />
+<CuentasScreen onNavigate={handleNavigate} {projectId} />

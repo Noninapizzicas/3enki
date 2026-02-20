@@ -129,9 +129,10 @@ class ProductosModule {
     this.uiHandler.register('productos', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('productos', 'metrics', this.handleGetMetrics.bind(this));
     this.uiHandler.register('productos', 'load_carta', this.handleLoadCarta.bind(this));
+    this.uiHandler.register('productos', 'carta_completa', this.handleCartaCompleta.bind(this));
 
     this.logger.info('productos.ui_handlers.registered', {
-      handlers: ['list', 'get', 'search', 'update', 'delete', 'categorias', 'ingredientes', 'pizzas', 'stats', 'health', 'metrics', 'load_carta']
+      handlers: ['list', 'get', 'search', 'update', 'delete', 'categorias', 'ingredientes', 'pizzas', 'stats', 'health', 'metrics', 'load_carta', 'carta_completa']
     });
   }
 
@@ -722,6 +723,62 @@ class ProductosModule {
       });
       return { status: 500, error: error.message };
     }
+  }
+
+  /**
+   * Devuelve la carta COMPLETA (categorías + productos + ingredientes) de golpe.
+   * NO requiere project_id — busca el primer proyecto que tenga datos cargados.
+   * Si se pasa project_id, lo usa; si no, usa el primero disponible.
+   * Pensado para que el comandero cargue todo de un solo golpe.
+   */
+  async handleCartaCompleta(data) {
+    let projectId = data?.project_id;
+
+    // Si no hay project_id o no tiene datos, buscar el primer proyecto con datos
+    if (!projectId || !this.productosPerProject.has(projectId) || this.productosPerProject.get(projectId).size === 0) {
+      for (const [pid, prods] of this.productosPerProject) {
+        if (prods.size > 0) {
+          projectId = pid;
+          break;
+        }
+      }
+    }
+
+    if (!projectId) {
+      return { status: 404, error: 'No hay carta cargada en ningún proyecto' };
+    }
+
+    const categoriasMap = this.categoriasPerProject.get(projectId) || new Map();
+    const productosMap = this.productosPerProject.get(projectId) || new Map();
+    const ingredientesMap = this.ingredientesPerProject.get(projectId) || new Map();
+
+    const categorias = Array.from(categoriasMap.values())
+      .filter(c => c.activa !== false)
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
+
+    const productos = Array.from(productosMap.values())
+      .filter(p => p.activo !== false)
+      .map(p => ({
+        ...p,
+        tiene_variaciones: (p.ingredientes && p.ingredientes.length > 0) ||
+                           (p.ingredientes_base && p.ingredientes_base.length > 0)
+      }));
+
+    const ingredientes = Array.from(ingredientesMap.values())
+      .filter(i => i.activo !== false);
+
+    return {
+      status: 200,
+      data: {
+        project_id: projectId,
+        categorias,
+        productos,
+        ingredientes,
+        total_categorias: categorias.length,
+        total_productos: productos.length,
+        total_ingredientes: ingredientes.length
+      }
+    };
   }
 
   // ==========================================

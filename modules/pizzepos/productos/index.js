@@ -818,6 +818,7 @@ class ProductosModule {
   async publishProductoCreado(project_id, producto, correlation_id) {
     await this.eventBus.publish('producto.creado', {
       project_id,
+      id: producto.id,
       producto_id: producto.id,
       nombre: producto.nombre,
       emoji: producto.emoji,
@@ -833,9 +834,13 @@ class ProductosModule {
   }
 
   async publishProductoActualizado(project_id, producto_id, cambios, correlation_id) {
+    const producto = this.getProductos(project_id).get(producto_id);
     await this.eventBus.publish('producto.actualizado', {
       project_id,
+      id: producto_id,
       producto_id,
+      nombre: producto?.nombre || producto_id,
+      precio: producto?.precio,
       cambios,
       updated_at: new Date().toISOString()
     }, {
@@ -854,11 +859,16 @@ class ProductosModule {
   }
 
   async publishCatalogoActualizado(project_id, menu_id, estadisticas, sync_duration, correlation_id) {
+    const productos = Array.from(this.getProductos(project_id).values())
+      .filter(p => p.activo !== false)
+      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio }));
+
     await this.eventBus.publish('catalogo.actualizado', {
       project_id,
       menu_id,
       estadisticas,
-      sync_duration
+      sync_duration,
+      productos
     }, {
       correlationId: correlation_id
     });

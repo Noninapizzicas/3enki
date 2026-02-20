@@ -1,10 +1,21 @@
 {
-  "_VERSION": "3.2.0",
+  "_VERSION": "3.3.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-02-13",
+  "_UPDATED": "2026-02-20",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
+    "3.3.0": {
+      "fecha": "2026-02-20",
+      "cambios": [
+        "FIX: productos — catalogo.actualizado ahora incluye array productos[] para que comandero pueda sincronizar cache",
+        "FIX: productos — producto.creado y producto.actualizado incluyen campo id (además de producto_id) + nombre + precio",
+        "FIX: comandero — publica pedido.creado al enviar a cocina (puente con persistencia y futuro módulo pedidos/cocina)",
+        "FIX: persistencia-comandero — añadidas suscripciones: pedido.item_agregado, pedido.item_eliminado, catalogo.actualizado",
+        "FIX: persistencia-comandero — writeLock booleano reemplazado por cola de escritura (_enqueueWrite) para no perder writes",
+        "DOC: separación de responsabilidades comandero/pedidos: comandero CREA pedidos, pedidos (futuro) gestiona ciclo de vida en cocina"
+      ]
+    },
     "3.2.0": {
       "fecha": "2026-02-13",
       "cambios": [
@@ -44,14 +55,20 @@
       "ejemplo": "modules/pizzepos/ no tiene module.json → escanea modules/pizzepos/pedidos/, modules/pizzepos/cobros/, etc."
     },
     "flujo_principal": [
-      "1. comandero (camarero) → crea pedido en canal",
-      "2. cuentas-canales → registra cuenta según canal (mesa/telefono/llevar/glovo/whatsapp)",
-      "3. pedidos → gestiona ciclo de vida del pedido (ítems, variaciones, estado)",
-      "4. cocina → recibe pedido, gestiona preparación por estaciones",
-      "5. cobros → procesa pago (efectivo/tarjeta/mixto)",
-      "6. cuentas-canales → cierra cuenta automáticamente tras cobro",
-      "7. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
+      "1. cuentas-canales → registra cuenta según canal (mesa/telefono/llevar/glovo/whatsapp) → cuenta.creada",
+      "2. comandero (camarero) → añade items al buffer → pedido.item_agregado",
+      "3. comandero → enviar cocina → pedido.creado + pedido.enviado_cocina",
+      "4. pedidos (FUTURO) → gestiona ciclo de vida en cocina (estados, tiempos, preparación por estaciones)",
+      "5. cocina → recibe pedido, gestiona preparación por estaciones",
+      "6. cobros → procesa pago (efectivo/tarjeta/mixto) → cobro.procesado",
+      "7. cuentas-canales → cierra cuenta automáticamente tras cobro → cuenta.cerrada",
+      "8. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
     ],
+    "separacion_comandero_pedidos": {
+      "principio": "El comandero CREA pedidos (interfaz del camarero). El módulo pedidos GESTIONA su ciclo de vida (cocina, estados, tiempos). Son complementarios, no redundantes.",
+      "evento_puente": "pedido.creado — publicado por comandero al confirmar envío a cocina. Persistencia lo graba, pedidos (futuro) lo recoge para gestionar estados.",
+      "estado_actual": "comandero implementado y operativo. pedidos existe como estructura pero su rol principal (gestión cocina) es futuro."
+    },
     "evento_critico": {
       "nombre": "cobro.procesado",
       "flujo": "cobros publica → cuentas-canales detecta canal por prefijo de cuenta_id → cierra cuenta automáticamente",
@@ -105,12 +122,13 @@
 
     "pedidos": {
       "version": "2.0.0",
-      "descripcion": "Gestión del ciclo de vida de pedidos — ítems, variaciones, estados, totales",
+      "descripcion": "Gestión del ciclo de vida de pedidos en cocina — estados, tiempos, preparación, orden",
+      "rol_futuro": "Recibe pedido.creado (publicado por comandero) y gestiona: estados (borrador→confirmado→en_cocina→completado→cancelado), tiempos de preparación, orden de preparación por estaciones",
       "ui_domain": "pedidos",
       "uiHandlers": ["crear", "get", "agregar_item", "eliminar_item", "aplicar_variacion", "confirmar", "cancelar", "activos", "health", "metrics", "por_cuenta"],
-      "eventos_publica": ["pedido.creado", "pedido.item_agregado", "pedido.confirmado", "pedido.cancelado"],
-      "eventos_suscribe": ["cocina.pedido_listo"],
-      "nota": "productosCache se mantiene sincronizado via catalogo.actualizado para resolver precios"
+      "eventos_publica": ["pedido.confirmado", "pedido.cancelado"],
+      "eventos_suscribe": ["pedido.creado", "cocina.pedido_listo"],
+      "nota": "El módulo pedidos NO crea pedidos en el flujo normal — los recibe del comandero via pedido.creado. Su valor es la gestión del ciclo de vida en cocina."
     },
 
     "cobros": {
@@ -134,22 +152,29 @@
     },
 
     "comandero": {
-      "version": "2.0.0",
-      "descripcion": "Interfaz del camarero — puerta de entrada para tomar pedidos desde mesa",
+      "version": "2.1.0",
+      "descripcion": "Interfaz del camarero — puerta de entrada para tomar pedidos. Buffer por cuenta, add/remove items, enviar cocina.",
       "ui_domain": "comandero",
-      "uiHandlers": ["nuevo_pedido", "agregar_item", "ver_mesa", "mis_mesas", "health"],
-      "eventos_publica": ["comandero.pedido_enviado"],
-      "nota": "NO es legacy — es la interfaz principal del camarero para interactuar con mesas y pedidos"
+      "uiHandlers": ["get", "add-item", "remove-item", "send-kitchen", "health"],
+      "eventos_publica": ["pedido.creado", "pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina"],
+      "eventos_suscribe": ["cuenta.actualizada", "caja.cerrada", "dia.iniciado", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
+      "productosCache": "Se sincroniza via catalogo.actualizado (array completo) y producto.creado/actualizado (individual). Resuelve nombre/precio al añadir items.",
+      "nota": "Es la interfaz principal del camarero. Publica pedido.creado al enviar a cocina — es el puente con persistencia y el futuro módulo pedidos (gestión cocina)."
     },
 
     "productos": {
-      "version": "2.2.0",
+      "version": "2.3.0",
       "descripcion": "Catálogo de productos — CRUD, sincronización desde menú AI, cache de precios. Multi-tenant (Map por proyecto).",
       "ui_domain": "productos",
-      "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "sync_menu", "validar_menu", "ingredientes", "health", "metrics"],
+      "uiHandlers": ["list", "get", "search", "update", "delete", "categorias", "ingredientes", "pizzas", "stats", "health", "metrics", "load_carta", "carta_completa"],
       "eventos_publica": ["producto.creado", "producto.actualizado", "producto.eliminado", "catalogo.actualizado"],
-      "eventos_suscribe": ["menu.generado", "menu.validado"],
-      "flujo_sync": "menu.generado → guarda draft en menusPendientes → menu.validado → syncCatalogo() → producto.creado/actualizado"
+      "eventos_suscribe": ["menu.generado", "menu.validado", "project.activated", "project.get.response"],
+      "flujo_sync": "menu.generado → guarda draft en menusPendientes → menu.validado → syncCatalogo() → producto.creado/actualizado → catalogo.actualizado",
+      "payloads_evento": {
+        "catalogo.actualizado": "Incluye productos[] (array con {id, nombre, precio}) para que consumidores sincronicen cache de golpe",
+        "producto.creado": "Incluye id + producto_id (ambos), nombre, precio, categoria, ingredientes_base, alergenos",
+        "producto.actualizado": "Incluye id + producto_id (ambos), nombre, precio actual, cambios"
+      }
     },
 
     "categorias": {
@@ -342,12 +367,12 @@
     },
 
     "persistencia-comandero": {
-      "version": "2.0.0",
+      "version": "2.1.0",
       "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas. FUENTE DE VERDAD para cuentas activas.",
       "ui_domain": "persistencia",
       "uiHandlers": ["cuentas_activas", "eventos", "eventos_fecha", "ventas", "ventas_fecha", "cuadre", "cuadre_fecha", "cierre", "iniciar_dia", "backup", "health", "metrics"],
-      "eventos_suscribe": ["cuenta.creada", "cuenta.cerrada", "pedido.creado", "pedido.confirmado", "cobro.procesado", "cocina.pedido_listo"],
-      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día"],
+      "eventos_suscribe": ["boton.pulsado", "ui.accion", "cuenta.creada", "cuenta.cerrada", "cobro.iniciado", "cobro.procesado", "cobro.reembolsado", "pedido.creado", "pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina", "pedido.completado", "catalogo.actualizado", "mesa.abierta", "mesa.cerrada", "telefono.pedido_creado", "llevar.ticket_creado"],
+      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día", "Cola de escritura (_enqueueWrite) — serializa writes sin perder eventos"],
       "arquitectura_event_sourcing": {
         "patron": "Event Sourcing — estado reconstruido desde stream de eventos",
         "cache_principal": "cuentasActivasCache — Map en memoria con todas las cuentas abiertas",
@@ -412,12 +437,18 @@
   "mapa_eventos": {
     "descripcion": "Flujo de eventos entre módulos — quién publica qué y quién consume",
     "flujo_pedido_completo": {
-      "1_crear_cuenta": "cuentas-canales publica cuenta.creada",
-      "2_crear_pedido": "pedidos publica pedido.creado → cuentas-canales (mesa) actualiza total",
-      "3_confirmar_pedido": "pedidos publica pedido.confirmado → cocina recibe pedido",
+      "1_crear_cuenta": "cuentas-canales publica cuenta.creada → persistencia registra cuenta activa",
+      "2_añadir_items": "comandero publica pedido.item_agregado / pedido.item_eliminado → persistencia graba eventos",
+      "3_enviar_cocina": "comandero publica pedido.creado (snapshot completo: items+total) + pedido.enviado_cocina → persistencia asocia pedido a cuenta → cocina recibe",
       "4_cocina_prepara": "cocina publica cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican",
-      "5_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo",
-      "6_persistencia": "persistencia-comandero graba todos los eventos anteriores"
+      "5_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo → cuenta.cerrada",
+      "6_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json"
+    },
+    "flujo_catalogo": {
+      "1_generar": "menu-generator publica menu.generado → productos guarda draft",
+      "2_validar": "menu-generator publica menu.validado → productos syncCatalogo()",
+      "3_notificar": "productos publica catalogo.actualizado (con array productos[]) → comandero sincroniza productosCache de golpe",
+      "4_individual": "productos publica producto.creado/actualizado (con id, nombre, precio) → comandero actualiza cache individual"
     }
   },
 

@@ -6,6 +6,7 @@
 
   "provides": {
     "events": [
+      "pedido.creado",
       "pedido.item_agregado",
       "pedido.item_eliminado",
       "pedido.enviado_cocina"
@@ -14,6 +15,10 @@
 
   "events": {
     "publishes": [
+      {
+        "event": "pedido.creado",
+        "description": "Pedido confirmado por el camarero — puente con persistencia y futuro módulo pedidos (cocina)"
+      },
       {
         "event": "pedido.item_agregado",
         "description": "Item añadido al pedido"

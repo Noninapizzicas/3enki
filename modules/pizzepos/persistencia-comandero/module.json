@@ -106,6 +106,21 @@
         "event": "llevar.ticket_creado",
         "description": "Guardar evento de ticket",
         "handler": "onEvento"
+      },
+      {
+        "event": "pedido.item_agregado",
+        "description": "Guardar evento de item agregado al pedido",
+        "handler": "onEvento"
+      },
+      {
+        "event": "pedido.item_eliminado",
+        "description": "Guardar evento de item eliminado del pedido",
+        "handler": "onEvento"
+      },
+      {
+        "event": "catalogo.actualizado",
+        "description": "Guardar evento de catálogo actualizado",
+        "handler": "onEvento"
       }
     ]
   },

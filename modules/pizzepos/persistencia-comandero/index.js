@@ -42,8 +42,8 @@ class PersistenciaComanderoModule {
       errores_escritura: 0
     };
 
-    // Lock para escrituras
-    this.writeLock = false;
+    // Cola de escrituras (evita perder writes por lock booleano)
+    this._writeQueue = Promise.resolve();
     this._rotacionInterval = null;
   }
 
@@ -363,12 +363,17 @@ class PersistenciaComanderoModule {
   // File Operations
   // ==========================================
 
+  _enqueueWrite(label, fn) {
+    this._writeQueue = this._writeQueue.then(fn).catch(error => {
+      this.internalMetrics.errores_escritura++;
+      this.metrics.increment('persistencia.errores.total');
+      this.logger.error(`persistencia.${label}.error`, { error: error.message });
+    });
+    return this._writeQueue;
+  }
+
   async guardarEventos() {
-    if (this.writeLock) return;
-
-    try {
-      this.writeLock = true;
-
+    return this._enqueueWrite('guardar_eventos', async () => {
       const archivo = path.join(this.currentDir, 'eventos.json');
       const data = {
         fecha: this.fechaActual,
@@ -376,74 +381,39 @@ class PersistenciaComanderoModule {
         total_eventos: this.eventosCache.length,
         ultima_actualizacion: new Date().toISOString()
       };
-
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
-
-    } catch (error) {
-      this.internalMetrics.errores_escritura++;
-      this.metrics.increment('persistencia.errores.total');
-      this.logger.error('persistencia.guardar_eventos.error', { error: error.message });
-    } finally {
-      this.writeLock = false;
-    }
+    });
   }
 
   async guardarVentas() {
-    if (this.writeLock) return;
-
-    try {
-      this.writeLock = true;
-
+    return this._enqueueWrite('guardar_ventas', async () => {
       const archivo = path.join(this.currentDir, 'ventas.json');
       const resumen = this.calcularResumenDia();
-
       const data = {
         fecha: this.fechaActual,
         ventas: this.ventasCache,
         resumen_dia: resumen,
         ultima_actualizacion: new Date().toISOString()
       };
-
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
-
-    } catch (error) {
-      this.internalMetrics.errores_escritura++;
-      this.metrics.increment('persistencia.errores.total');
-      this.logger.error('persistencia.guardar_ventas.error', { error: error.message });
-    } finally {
-      this.writeLock = false;
-    }
+    });
   }
 
   async guardarCuentasActivas() {
-    if (this.writeLock) return;
-
-    try {
-      this.writeLock = true;
-
+    return this._enqueueWrite('guardar_cuentas', async () => {
       const archivo = path.join(this.currentDir, 'cuentas_activas.json');
-
       const cuentasObj = {};
       for (const [cuenta_id, cuenta] of this.cuentasActivasCache.entries()) {
         cuentasObj[cuenta_id] = cuenta;
       }
-
       const data = {
         fecha: this.fechaActual,
         cuentas: cuentasObj,
         total_cuentas: this.cuentasActivasCache.size,
         ultima_actualizacion: new Date().toISOString()
       };
-
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
-
-    } catch (error) {
-      this.internalMetrics.errores_escritura++;
-      this.metrics.increment('persistencia.errores.total');
-      this.logger.error('persistencia.guardar_cuentas.error', { error: error.message });
-    } finally {
-      this.writeLock = false;
-    }
+    });
   }
 
   async cargarDatosActuales() {

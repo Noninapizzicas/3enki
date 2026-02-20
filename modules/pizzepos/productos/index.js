@@ -172,6 +172,19 @@ class ProductosModule {
       try {
         const result = await this.loadCartaFromProject(project_id);
         this.logger.info('productos.auto_loaded', { project_id, ...result });
+
+        // Emitir catalogo.actualizado para que comandero (y otros) llenen su cache
+        if (result.productos > 0) {
+          const productos = Array.from(this.getProductos(project_id).values())
+            .filter(p => p.activo !== false)
+            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio }));
+
+          await this.eventBus.publish('catalogo.actualizado', {
+            project_id,
+            productos,
+            source: 'disk_load'
+          });
+        }
       } catch (err) {
         this.logger.warn('productos.auto_load.failed', { project_id, error: err.message });
       }

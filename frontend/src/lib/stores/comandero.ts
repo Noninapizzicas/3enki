@@ -234,11 +234,16 @@ export async function addItem(
   const notas = typeof metadata === 'string' ? metadata : '';
   const extra = typeof metadata === 'object' ? metadata : {};
 
+  // Resolver nombre/precio desde todosProductos (ya cargados en memoria)
+  const producto = state.todosProductos.find(p => p.id === producto_id);
+
   try {
     const res = await mqttRequest('comandero', 'add-item', {
       project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       producto_id,
+      nombre: producto?.nombre,
+      precio: producto?.precio,
       cantidad,
       variaciones,
       notas,

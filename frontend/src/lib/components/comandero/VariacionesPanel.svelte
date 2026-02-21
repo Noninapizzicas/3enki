@@ -15,6 +15,7 @@
     id: string;
     nombre: string;
     precio: number;
+    ingredientes_base?: { id: string; nombre: string; emoji?: string }[];
     ingredientes?: { id: string; nombre: string; emoji?: string }[];
   };
 
@@ -101,14 +102,15 @@
     error = null;
 
     try {
-      // Cargar en paralelo: config variaciones + catálogo ingredientes
       // Ingredientes base del producto (available immediately)
-      ingredientesBase = producto.ingredientes || [];
+      // Prioridad: ingredientes_base (con IDs, normalizado) > ingredientes (raw)
+      ingredientesBase = producto.ingredientes_base || producto.ingredientes || [];
       const baseIds = new Set(ingredientesBase.map(i => i.id));
 
-      // Cargar en paralelo: config variaciones + catálogo ingredientes
+      // Config variaciones: soft-fail (404 = sin config explícita, usar defaults)
+      // Catálogo ingredientes: siempre necesario
       const [varRes, ingRes] = await Promise.all([
-        mqttRequest('variaciones', 'get', { producto_id: producto.id }),
+        mqttRequest('variaciones', 'get', { producto_id: producto.id }).catch(() => null),
         mqttRequest('productos', 'ingredientes', { project_id: projectId })
       ]);
 

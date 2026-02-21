@@ -1065,10 +1065,11 @@ class ProductosModule {
             }
           }
 
-          // Cargar productos de la carta
+          // Cargar productos de la carta (normalizar RAW → POS si falta ingredientes_base)
           if (carta.productos) {
             const productosMap = this.getProductos(project_id);
             for (const prod of carta.productos) {
+              this.normalizeProductoPOS(prod);
               productosMap.set(prod.id, {
                 ...prod,
                 activo: true,
@@ -1082,6 +1083,26 @@ class ProductosModule {
       } catch (e) {
         // No hay directorio de cartas
         this.logger.debug('productos.no_cartas_dir', { project_id, path: cartasDir });
+      }
+
+      // Construir catálogo de ingredientes deduplicado desde ingredientes_base
+      if (result.productos > 0) {
+        const ingCount = this.buildIngredientesCatalogo(project_id);
+        result.ingredientes = Math.max(result.ingredientes, ingCount);
+
+        // Persistir ingredientes para próximo reinicio
+        try {
+          const ingredientesMap = this.getIngredientes(project_id);
+          const ingredientesData = {
+            ingredientes: Array.from(ingredientesMap.values()),
+            updated_at: new Date().toISOString()
+          };
+          const storagePath = await this.resolveStoragePath(project_id);
+          const ingPath = path.join(storagePath, 'ingredientes.json');
+          await fs.writeFile(ingPath, JSON.stringify(ingredientesData, null, 2), 'utf-8');
+        } catch (e) {
+          this.logger.debug('productos.ingredientes_persist.skipped', { project_id, error: e.message });
+        }
       }
 
       this.logger.info('productos.carta_loaded', {
@@ -1111,6 +1132,64 @@ class ProductosModule {
       });
       throw error;
     }
+  }
+
+  /**
+   * Slugify — misma lógica que menu-generator para generar IDs deterministas
+   */
+  slugify(text) {
+    if (!text) return 'sin_nombre';
+    return text.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      || 'sin_nombre';
+  }
+
+  /**
+   * Normaliza un producto RAW de carta (ingredientes sin ID)
+   * al formato POS (ingredientes_base con IDs).
+   * Si ya tiene ingredientes_base, no toca nada.
+   */
+  normalizeProductoPOS(prod) {
+    if (prod.ingredientes_base) return prod;
+    if (!prod.ingredientes || prod.ingredientes.length === 0) return prod;
+
+    prod.ingredientes_base = prod.ingredientes.map(ing => ({
+      id: ing.id || `ing_${this.slugify(ing.nombre)}`,
+      nombre: ing.nombre,
+      emoji: ing.emoji || ''
+    }));
+
+    return prod;
+  }
+
+  /**
+   * Construye catálogo global de ingredientes deduplicado
+   * a partir de todos los productos cargados de un proyecto.
+   */
+  buildIngredientesCatalogo(projectId) {
+    const ingredientesMap = this.getIngredientes(projectId);
+    const productosMap = this.getProductos(projectId);
+
+    for (const prod of productosMap.values()) {
+      const base = prod.ingredientes_base || [];
+      for (const ing of base) {
+        if (ing.id && !ingredientesMap.has(ing.id)) {
+          ingredientesMap.set(ing.id, {
+            id: ing.id,
+            nombre: ing.nombre,
+            emoji: ing.emoji || '',
+            tipo: 'otro',
+            es_alergeno: false,
+            precio_extra: 0,
+            activo: true
+          });
+        }
+      }
+    }
+
+    return ingredientesMap.size;
   }
 
   applyCorrections(productos, correcciones) {

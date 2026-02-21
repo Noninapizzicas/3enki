@@ -20,9 +20,14 @@
   }
 </script>
 
-<div class="pedido-item">
+<div class="pedido-item" class:mitad-mitad={item.tipo === 'mitad_mitad'} class:al-gusto={item.tipo === 'al_gusto'}>
   <div class="item-info">
     <span class="cantidad">{item.cantidad}x</span>
+    {#if item.tipo === 'mitad_mitad'}
+      <span class="tipo-badge mitad">½</span>
+    {:else if item.tipo === 'al_gusto'}
+      <span class="tipo-badge gusto">AG</span>
+    {/if}
     <span class="nombre">{item.nombre}</span>
     {#if item.variaciones?.length}
       <span class="variaciones">({item.variaciones.length} var.)</span>
@@ -90,6 +95,35 @@
     font-size: 0.65rem;
     color: #666;
     flex-shrink: 0;
+  }
+
+  .tipo-badge {
+    font-size: 0.6rem;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .tipo-badge.mitad {
+    background: rgba(139, 92, 246, 0.25);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.4);
+  }
+
+  .tipo-badge.gusto {
+    background: rgba(236, 72, 153, 0.25);
+    color: #f472b6;
+    border: 1px solid rgba(236, 72, 153, 0.4);
+  }
+
+  .pedido-item.mitad-mitad {
+    border-color: rgba(139, 92, 246, 0.3);
+  }
+
+  .pedido-item.al-gusto {
+    border-color: rgba(236, 72, 153, 0.3);
   }
 
   .item-actions {

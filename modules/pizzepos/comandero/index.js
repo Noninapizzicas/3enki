@@ -189,7 +189,8 @@ class ComanderoModule {
   }
 
   async handleAddItem(data) {
-    const { cuenta_id, producto_id, nombre, precio, cantidad, variaciones, notas } = data;
+    const { cuenta_id, producto_id, nombre, precio, cantidad, variaciones, notas,
+            tipo, pizza_izquierda, pizza_derecha, ingredientes: metaIngredientes } = data;
 
     if (!cuenta_id) {
       return { status: 400, error: 'cuenta_id es requerido' };
@@ -228,12 +229,26 @@ class ComanderoModule {
       created_at: new Date().toISOString()
     };
 
+    // Metadata especial: mitad_mitad, al_gusto, etc.
+    if (tipo) {
+      item.tipo = tipo;
+    }
+    if (pizza_izquierda) {
+      item.pizza_izquierda = pizza_izquierda;
+    }
+    if (pizza_derecha) {
+      item.pizza_derecha = pizza_derecha;
+    }
+    if (metaIngredientes) {
+      item.ingredientes = metaIngredientes;
+    }
+
     pedido.items.push(item);
     pedido.total = this.calcularTotal(pedido.items);
 
     this.metrics.increment('pedido.item_agregado.total');
 
-    await this.eventBus.publish('pedido.item_agregado', {
+    const eventPayload = {
       cuenta_id,
       item_id,
       producto_id,
@@ -241,7 +256,12 @@ class ComanderoModule {
       precio_unitario: itemPrecio,
       precio_total: item.subtotal,
       cantidad: itemCantidad
-    });
+    };
+    if (tipo) eventPayload.tipo = tipo;
+    if (pizza_izquierda) eventPayload.pizza_izquierda = pizza_izquierda;
+    if (pizza_derecha) eventPayload.pizza_derecha = pizza_derecha;
+
+    await this.eventBus.publish('pedido.item_agregado', eventPayload);
 
     this.logger.info('comandero.item.agregado', {
       cuenta_id, item_id, producto_id, precio: itemPrecio, cantidad: itemCantidad

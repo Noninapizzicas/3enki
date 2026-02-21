@@ -20,6 +20,10 @@ export interface PedidoItem {
   notas: string;
   subtotal: number;
   created_at: string;
+  tipo?: string;
+  pizza_izquierda?: { id: string; nombre: string };
+  pizza_derecha?: { id: string; nombre: string };
+  ingredientes?: any[];
 }
 
 export interface Pedido {

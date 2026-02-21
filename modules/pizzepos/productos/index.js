@@ -1047,6 +1047,7 @@ class ProductosModule {
       }
 
       // Cargar cartas
+      let precioExtraDefault = 1.50;
       try {
         const files = await fs.readdir(cartasDir);
         const jsonFiles = files.filter(f => f.endsWith('.json'));
@@ -1055,6 +1056,11 @@ class ProductosModule {
           const cartaPath = path.join(cartasDir, file);
           const cartaData = await fs.readFile(cartaPath, 'utf8');
           const carta = JSON.parse(cartaData);
+
+          // Leer precio_extra_default de la carta si existe
+          if (carta.meta?.precio_extra_default != null) {
+            precioExtraDefault = carta.meta.precio_extra_default;
+          }
 
           // Cargar categorías de la carta
           if (carta.categorias) {
@@ -1087,7 +1093,7 @@ class ProductosModule {
 
       // Construir catálogo de ingredientes deduplicado desde ingredientes_base
       if (result.productos > 0) {
-        const ingCount = this.buildIngredientesCatalogo(project_id);
+        const ingCount = this.buildIngredientesCatalogo(project_id, precioExtraDefault);
         result.ingredientes = Math.max(result.ingredientes, ingCount);
 
         // Persistir ingredientes para próximo reinicio
@@ -1149,17 +1155,23 @@ class ProductosModule {
   /**
    * Normaliza un producto RAW de carta (ingredientes sin ID)
    * al formato POS (ingredientes_base con IDs).
+   * Conserva tipo y precio_extra si vienen del menu-generator.
    * Si ya tiene ingredientes_base, no toca nada.
    */
   normalizeProductoPOS(prod) {
     if (prod.ingredientes_base) return prod;
     if (!prod.ingredientes || prod.ingredientes.length === 0) return prod;
 
-    prod.ingredientes_base = prod.ingredientes.map(ing => ({
-      id: ing.id || `ing_${this.slugify(ing.nombre)}`,
-      nombre: ing.nombre,
-      emoji: ing.emoji || ''
-    }));
+    prod.ingredientes_base = prod.ingredientes.map(ing => {
+      const result = {
+        id: ing.id || `ing_${this.slugify(ing.nombre)}`,
+        nombre: ing.nombre,
+        emoji: ing.emoji || ''
+      };
+      if (ing.tipo) result.tipo = ing.tipo;
+      if (ing.precio_extra != null) result.precio_extra = ing.precio_extra;
+      return result;
+    });
 
     return prod;
   }
@@ -1167,22 +1179,26 @@ class ProductosModule {
   /**
    * Construye catálogo global de ingredientes deduplicado
    * a partir de todos los productos cargados de un proyecto.
+   * Usa tipo/precio_extra del ingrediente si existen (del menu-generator),
+   * o aplica clasificación por nombre y precio estimado como fallback.
    */
-  buildIngredientesCatalogo(projectId) {
+  buildIngredientesCatalogo(projectId, precioExtraDefault) {
     const ingredientesMap = this.getIngredientes(projectId);
     const productosMap = this.getProductos(projectId);
+    const defaultPrice = precioExtraDefault ?? 1.50;
 
     for (const prod of productosMap.values()) {
       const base = prod.ingredientes_base || [];
       for (const ing of base) {
         if (ing.id && !ingredientesMap.has(ing.id)) {
+          const tipo = ing.tipo || this.clasificarIngrediente(ing.nombre);
           ingredientesMap.set(ing.id, {
             id: ing.id,
             nombre: ing.nombre,
             emoji: ing.emoji || '',
-            tipo: 'otro',
+            tipo,
             es_alergeno: false,
-            precio_extra: 0,
+            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, defaultPrice),
             activo: true
           });
         }
@@ -1190,6 +1206,30 @@ class ProductosModule {
     }
 
     return ingredientesMap.size;
+  }
+
+  /**
+   * Clasifica un ingrediente por nombre (fallback para cartas sin tipo).
+   * Misma lógica que menu-generator para consistencia.
+   */
+  clasificarIngrediente(nombre) {
+    if (!nombre) return 'otro';
+    const n = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (/mozzarella|queso|mezcla de quesos|parmesano|gorgonzola|cheddar|emmental|brie|gouda|provolone|roquefort/.test(n)) return 'queso';
+    if (/bacon|pollo|ternera|carne|york|jamon|pepperoni|peperoni|salchich|chorizo|lomo|cerdo|pavo|salami|anchoa/.test(n)) return 'carne';
+    if (/gambas|langostino|atun|salmon|marisco|pulpo|calamar|mejillon|surimi/.test(n)) return 'marisco';
+    if (/salsa|nata|pesto|carbonara|ketchup|mayonesa|alioli|mostaza/.test(n)) return 'salsa';
+    if (/tomate|cebolla|pimiento|champi[nñ]on|seta|aceituna|oliva|alcachofa|esparrago|espinaca|rucula|albahaca|oregano|ajo|maiz|pi[nñ]a|jalape[nñ]o|pepino|lechuga|zanahoria|berenjena|calabacin/.test(n)) return 'verdura';
+    if (/masa|harina|levadura/.test(n)) return 'masa';
+    return 'otro';
+  }
+
+  /**
+   * Precio extra estimado por tipo de ingrediente (fallback).
+   */
+  precioExtraPorTipo(tipo, precioDefault) {
+    const precios = { carne: 2.00, marisco: 2.50, queso: 1.50, verdura: 1.00, salsa: 0.75, masa: 0.50, otro: precioDefault };
+    return precios[tipo] ?? precioDefault;
   }
 
   applyCorrections(productos, correcciones) {

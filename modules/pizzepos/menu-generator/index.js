@@ -76,7 +76,7 @@ function getDocumentProcessorProvider() {
   return documentProcessorProvider;
 }
 
-const PROMPT_EXTRACCION = `Eres un experto en digitalización de cartas de restaurante.
+const PROMPT_EXTRACCION = `Eres un experto en digitalización de cartas de restaurante para sistemas POS.
 
 Se te proporciona el contenido de una carta/menú de restaurante.
 Puede ser texto OCR, una lista de productos, datos JSON crudos, o cualquier formato.
@@ -85,6 +85,7 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
 
 {
   "nombre_carta": "Nombre del restaurante o carta detectado",
+  "precio_extra_default": 1.50,
   "categorias": [
     { "id": "categoria_slug", "nombre": "Nombre Original", "orden": 1 }
   ],
@@ -95,8 +96,8 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
       "categoria": "categoria_slug",
       "precio": 11.50,
       "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅" },
-        { "nombre": "Mozzarella", "emoji": "🧀" }
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura", "precio_extra": 1.00 },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso", "precio_extra": 1.50 }
       ]
     }
   ]
@@ -106,13 +107,18 @@ REGLAS OBLIGATORIAS:
 1. IDs en snake_case sin acentos ni caracteres especiales
 2. ID de producto: {id_categoria}_{nombre_producto_slug} (ej: "pizzicas_country")
 3. ID de categoría: nombre en snake_case (ej: "pizzicas", "entrantes")
-4. Precios SIEMPRE como números (11.50, no "11.50"). Si no hay precio visible, pon 0
-5. Ingredientes SIEMPRE como array de objetos {nombre, emoji}, NUNCA un string plano
-6. Cada ingrediente con el emoji más representativo
-7. Mantén los nombres originales de productos tal cual aparecen
-8. Agrupa productos en categorías tal como aparecen en la carta
-9. Si no hay categorías claras, crea una categoría "general"
-10. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
+4. Precios de producto SIEMPRE como números (11.50, no "11.50"). Si no hay precio visible, pon 0
+5. Ingredientes SIEMPRE como array de objetos, NUNCA un string plano
+6. Cada ingrediente DEBE incluir los 4 campos:
+   - "nombre": nombre del ingrediente tal cual
+   - "emoji": el emoji más representativo
+   - "tipo": clasificación obligatoria, uno de: "queso", "carne", "verdura", "salsa", "masa", "marisco", "otro"
+   - "precio_extra": precio en euros si se añade como extra a otro producto (número, ej: 1.50). Estima según tipo: carnes/mariscos ~2.00, quesos ~1.50, verduras ~1.00, salsas ~0.75
+7. "precio_extra_default": precio extra genérico para la carta (número, ej: 1.50). Se usa como fallback
+8. Mantén los nombres originales de productos tal cual aparecen
+9. Agrupa productos en categorías tal como aparecen en la carta
+10. Si no hay categorías claras, crea una categoría "general"
+11. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
 
 class MenuGeneratorModule {
   constructor() {
@@ -832,6 +838,7 @@ class MenuGeneratorModule {
         id: cartaId,
         nombre: raw.nombre_carta || nombre,
         generado_desde: 'texto',
+        precio_extra_default: typeof raw.precio_extra_default === 'number' ? raw.precio_extra_default : 1.50,
         created_at: new Date().toISOString()
       },
       categorias,
@@ -849,7 +856,10 @@ class MenuGeneratorModule {
     if (Array.isArray(ingredientes)) {
       return ingredientes.map(ing => {
         if (typeof ing === 'string') return this.parseIngredienteString(ing);
-        return { nombre: ing.nombre || ing.name || '', emoji: ing.emoji || '' };
+        const result = { nombre: ing.nombre || ing.name || '', emoji: ing.emoji || '' };
+        if (ing.tipo) result.tipo = ing.tipo;
+        if (ing.precio_extra != null) result.precio_extra = ing.precio_extra;
+        return result;
       }).filter(i => i.nombre.length > 0);
     }
 
@@ -872,19 +882,22 @@ class MenuGeneratorModule {
    * productos, categorias, and ingredientes modules.
    */
   transformCartaToPOS(carta, projectId) {
+    const precioDefault = carta.meta?.precio_extra_default ?? 1.50;
+
     // Build deduplicated ingredientes_catalogo from all products
     const ingredientesMap = new Map();
     for (const prod of carta.productos) {
       for (const ing of (prod.ingredientes || [])) {
         const id = `ing_${this.slugify(ing.nombre)}`;
         if (!ingredientesMap.has(id)) {
+          const tipo = ing.tipo || this.clasificarIngrediente(ing.nombre);
           ingredientesMap.set(id, {
             id,
             nombre: ing.nombre,
             emoji: ing.emoji || '',
-            tipo: 'otro',
+            tipo,
             es_alergeno: false,
-            precio_extra: 0
+            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, precioDefault)
           });
         }
       }
@@ -982,6 +995,47 @@ class MenuGeneratorModule {
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
       || 'sin_nombre';
+  }
+
+  /**
+   * Clasifica un ingrediente por nombre cuando la IA no proporcionó tipo.
+   * Fallback para cartas existentes sin datos enriquecidos.
+   */
+  clasificarIngrediente(nombre) {
+    if (!nombre) return 'otro';
+    const n = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    // Quesos
+    if (/mozzarella|queso|mezcla de quesos|parmesano|gorgonzola|cheddar|emmental|brie|gouda|provolone|roquefort/.test(n)) return 'queso';
+    // Carnes
+    if (/bacon|pollo|ternera|carne|york|jamon|pepperoni|peperoni|salchich|chorizo|lomo|cerdo|pavo|salami|anchoa/.test(n)) return 'carne';
+    // Mariscos
+    if (/gambas|langostino|atun|salmon|marisco|pulpo|calamar|mejillon|surimi/.test(n)) return 'marisco';
+    // Salsas
+    if (/salsa|nata|pesto|carbonara|boloñesa|bolognesa|ketchup|mayonesa|alioli|mostaza/.test(n)) return 'salsa';
+    // Verduras (amplio)
+    if (/tomate|cebolla|pimiento|champiñon|champinon|seta|aceituna|oliva|alcachofa|esparrago|espinaca|rucula|albahaca|oregano|ajo|maiz|pina|piña|jalapeño|jalapeno|pepino|lechuga|zanahoria|berenjena|calabacin/.test(n)) return 'verdura';
+    // Masas
+    if (/masa|harina|levadura/.test(n)) return 'masa';
+
+    return 'otro';
+  }
+
+  /**
+   * Devuelve un precio extra estimado según el tipo de ingrediente.
+   * Usado como fallback cuando ni la IA ni la carta especifican precio.
+   */
+  precioExtraPorTipo(tipo, precioDefault) {
+    const precios = {
+      carne: 2.00,
+      marisco: 2.50,
+      queso: 1.50,
+      verdura: 1.00,
+      salsa: 0.75,
+      masa: 0.50,
+      otro: precioDefault
+    };
+    return precios[tipo] ?? precioDefault;
   }
 }
 

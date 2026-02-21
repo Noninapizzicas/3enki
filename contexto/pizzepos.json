@@ -1,10 +1,23 @@
 {
-  "_VERSION": "3.3.0",
+  "_VERSION": "3.4.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-02-20",
+  "_UPDATED": "2026-02-21",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
+    "3.4.0": {
+      "fecha": "2026-02-21",
+      "cambios": [
+        "FEAT: menu-generator — prompt mejorado pide tipo, precio_extra y precio_extra_default por ingrediente a la IA",
+        "FEAT: menu-generator — normalizeIngredientes() conserva tipo y precio_extra del output de la IA",
+        "FEAT: menu-generator — transformCartaToPOS() usa datos de IA + fallback clasificarIngrediente() por nombre + precioExtraPorTipo()",
+        "FEAT: menu-generator — parseAndStructure() guarda precio_extra_default en carta.meta",
+        "FEAT: productos — buildIngredientesCatalogo() usa tipo/precio_extra de ingredientes enriquecidos, con fallback de clasificación",
+        "FEAT: productos — normalizeProductoPOS() conserva tipo y precio_extra de ingredientes si vienen del menu-generator",
+        "FEAT: productos — clasificarIngrediente() y precioExtraPorTipo() — misma lógica que menu-generator para consistencia",
+        "PRINCIPIO: todo dato sale completo desde menu-generator. productos aplica fallback solo para cartas legacy sin enriquecer"
+      ]
+    },
     "3.3.0": {
       "fecha": "2026-02-20",
       "cambios": [
@@ -241,9 +254,20 @@
         },
         "output_schema": "schemas/carta-output.json",
         "output_formato": {
-          "meta": "{ id, nombre, generado_desde, created_at }",
+          "meta": "{ id, nombre, generado_desde, precio_extra_default, created_at }",
           "categorias": "[{ id, nombre, orden }]",
-          "productos": "[{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji }] }]"
+          "productos": "[{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji, tipo, precio_extra }] }]"
+        },
+        "ingredientes_enriquecidos": {
+          "descripcion": "El prompt pide a la IA tipo y precio_extra por ingrediente. transformCartaToPOS() aplica fallback si faltan.",
+          "campos_ingrediente": {
+            "nombre": "Nombre original (obligatorio)",
+            "emoji": "Emoji representativo (obligatorio)",
+            "tipo": "Clasificación: queso|carne|verdura|salsa|masa|marisco|otro (IA lo da, fallback por nombre)",
+            "precio_extra": "Precio en € si se añade como extra (IA estima, fallback por tipo: carne 2€, queso 1.50€, verdura 1€, salsa 0.75€)"
+          },
+          "precio_extra_default": "En carta.meta — fallback global por carta (default 1.50€)",
+          "fallback_clasificacion": "clasificarIngrediente(nombre) — regex sobre nombres comunes de pizzería. Mismo código en menu-generator y productos."
         },
         "tests": {
           "test-generate.js": "40/40 — datos reales Pizzicas (30 productos, 2 categorías)",
@@ -445,10 +469,11 @@
       "6_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json"
     },
     "flujo_catalogo": {
-      "1_generar": "menu-generator publica menu.generado → productos guarda draft",
+      "1_generar": "menu-generator publica menu.generado (con ingredientes_catalogo enriquecidos: tipo, precio_extra) → productos guarda draft",
       "2_validar": "menu-generator publica menu.validado → productos syncCatalogo()",
       "3_notificar": "productos publica catalogo.actualizado (con array productos[]) → comandero sincroniza productosCache de golpe",
-      "4_individual": "productos publica producto.creado/actualizado (con id, nombre, precio) → comandero actualiza cache individual"
+      "4_individual": "productos publica producto.creado/actualizado (con id, nombre, precio) → comandero actualiza cache individual",
+      "5_ingredientes": "productos.buildIngredientesCatalogo() crea catálogo global con tipo/precio_extra (de IA o fallback por nombre) → frontend consulta via productos/ingredientes"
     }
   },
 
@@ -616,13 +641,14 @@
           }
         },
         "mqtt_handlers": [
-          "mqttRequest('pedido', 'get', { cuenta_id })",
-          "mqttRequest('pedido', 'add_item', { cuenta_id, producto_id, cantidad, variaciones?, notas? })",
-          "mqttRequest('pedido', 'remove_item', { cuenta_id, item_id })",
-          "mqttRequest('pedido', 'update_item', { cuenta_id, item_id, cantidad?, notas? })",
-          "mqttRequest('pedido', 'enviar_cocina', { cuenta_id })",
-          "mqttRequest('categorias', 'list')",
-          "mqttRequest('productos', 'list', { categoria_id })"
+          "mqttRequest('comandero', 'get', { project_id, cuenta_id })",
+          "mqttRequest('comandero', 'add-item', { project_id, cuenta_id, producto_id, nombre, precio, cantidad, variaciones?, notas? })",
+          "mqttRequest('comandero', 'remove-item', { project_id, cuenta_id, item_id })",
+          "mqttRequest('comandero', 'update-item', { project_id, cuenta_id, item_id, cantidad?, notas? })",
+          "mqttRequest('comandero', 'send-kitchen', { project_id, cuenta_id })",
+          "mqttRequest('productos', 'carta_completa', { project_id })",
+          "mqttRequest('productos', 'ingredientes', { project_id })",
+          "mqttRequest('variaciones', 'get', { producto_id }) — soft-fail con .catch(() => null)"
         ]
       }
     },

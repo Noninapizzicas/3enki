@@ -45,9 +45,9 @@
       "ingredientes": [
         { "nombre": "Tomate" },
         { "nombre": "Queso" },
-        { "nombre": "Carne" },
+        { "nombre": "Carne de ternera" },
         { "nombre": "Bacon" },
-        { "nombre": "Peperoni" },
+        { "nombre": "Pepperoni" },
         { "nombre": "Salsa Vitorino" }
       ]
     },
@@ -60,7 +60,7 @@
         { "nombre": "Tomate" },
         { "nombre": "Mozzarella" },
         { "nombre": "Cebolla" },
-        { "nombre": "Ternera" },
+        { "nombre": "Carne de ternera" },
         { "nombre": "Mezcla de quesos" },
         { "nombre": "Piña" },
         { "nombre": "Salsa Vitorino" }
@@ -74,7 +74,7 @@
       "ingredientes": [
         { "nombre": "Tomate" },
         { "nombre": "Mozzarella" },
-        { "nombre": "York" },
+        { "nombre": "Jamón York" },
         { "nombre": "Bacon" }
       ]
     },
@@ -86,7 +86,7 @@
       "ingredientes": [
         { "nombre": "Tomate" },
         { "nombre": "Queso" },
-        { "nombre": "Peperoni" },
+        { "nombre": "Pepperoni" },
         { "nombre": "Bacon" },
         { "nombre": "Champiñones" }
       ]
@@ -100,7 +100,7 @@
         { "nombre": "Tomate" },
         { "nombre": "Mozzarella" },
         { "nombre": "Atún" },
-        { "nombre": "Champiñón" },
+        { "nombre": "Champiñones" },
         { "nombre": "Pimiento verde" }
       ]
     },
@@ -165,7 +165,7 @@
         { "nombre": "Tomate seco" },
         { "nombre": "Mozzarella" },
         { "nombre": "Cebolla" },
-        { "nombre": "Champiñón" },
+        { "nombre": "Champiñones" },
         { "nombre": "Salsa de ajo asado y trufa" },
         { "nombre": "Anchoas" }
       ]
@@ -206,7 +206,7 @@
         { "nombre": "Tomate" },
         { "nombre": "Mozzarella" },
         { "nombre": "Cebolla" },
-        { "nombre": "Champiñón" },
+        { "nombre": "Champiñones" },
         { "nombre": "Calabacín" },
         { "nombre": "Espárragos" },
         { "nombre": "Pimiento verde" }
@@ -222,7 +222,7 @@
         { "nombre": "Nata" },
         { "nombre": "Pimienta" },
         { "nombre": "Queso azul" },
-        { "nombre": "York" },
+        { "nombre": "Jamón York" },
         { "nombre": "Mezcla de quesos" }
       ]
     },
@@ -234,7 +234,7 @@
       "ingredientes": [
         { "nombre": "Tomate" },
         { "nombre": "Queso" },
-        { "nombre": "Peperoni" },
+        { "nombre": "Pepperoni" },
         { "nombre": "Nata" },
         { "nombre": "Maíz" },
         { "nombre": "Pimiento verde" }
@@ -307,7 +307,7 @@
       "ingredientes": [
         { "nombre": "Tomate" },
         { "nombre": "Mozzarella" },
-        { "nombre": "York" },
+        { "nombre": "Jamón York" },
         { "nombre": "Piña" }
       ]
     },
@@ -319,7 +319,7 @@
       "ingredientes": [
         { "nombre": "Tomate" },
         { "nombre": "Mozzarella" },
-        { "nombre": "York" },
+        { "nombre": "Jamón York" },
         { "nombre": "Pepperoni" }
       ]
     },
@@ -331,7 +331,7 @@
       "ingredientes": [
         { "nombre": "Tomate" },
         { "nombre": "Mozzarella" },
-        { "nombre": "York" },
+        { "nombre": "Jamón York" },
         { "nombre": "Huevo" }
       ]
     },

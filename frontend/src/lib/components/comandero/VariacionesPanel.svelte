@@ -58,14 +58,14 @@
   let quitarSeleccionados: Set<string> = new Set();
   let anadirSeleccionados: Map<string, number> = new Map(); // id -> cantidad
 
-  // Precio calculado
+  // Precio calculado — pasar dependencias explícitas para reactividad Svelte
   $: precioBase = producto.precio;
-  $: precioExtras = calcularPrecioExtras();
+  $: precioExtras = calcPrecioExtras(anadirSeleccionados);
   $: precioTotal = precioBase + precioExtras;
 
-  function calcularPrecioExtras(): number {
+  function calcPrecioExtras(seleccionados: Map<string, number>): number {
     let total = 0;
-    anadirSeleccionados.forEach((cantidad, id) => {
+    seleccionados.forEach((cantidad, id) => {
       const ing = ingredientesDisponibles.find(i => i.id === id);
       if (ing) {
         total += (ing.precio_extra || 0) * cantidad;

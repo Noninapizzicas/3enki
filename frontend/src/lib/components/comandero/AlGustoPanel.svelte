@@ -61,28 +61,28 @@
     otro: { emoji: '📦', label: 'Otro', orden: 9 }
   };
 
-  // Cálculos
-  $: precioIngredientes = calcularPrecioIngredientes();
+  // Cálculos — pasar dependencias explícitas para reactividad Svelte
+  $: precioIngredientes = calcPrecioIngredientes(seleccionados);
   $: precioTotal = precioBase + precioIngredientes;
-  $: nombreCompuesto = generarNombre();
+  $: nombreCompuesto = calcNombre(seleccionados);
   $: cantidadSeleccionados = seleccionados.size;
 
-  function calcularPrecioIngredientes(): number {
+  function calcPrecioIngredientes(sel: Map<string, Ingrediente>): number {
     let total = 0;
-    seleccionados.forEach(ing => {
+    sel.forEach(ing => {
       total += ing.precio_extra || 0;
     });
     return total;
   }
 
-  function generarNombre(): string {
-    if (seleccionados.size === 0) return 'Pizza Al Gusto';
+  function calcNombre(sel: Map<string, Ingrediente>): string {
+    if (sel.size === 0) return 'Pizza Al Gusto';
 
-    const nombres = Array.from(seleccionados.values())
+    const nombres = Array.from(sel.values())
       .slice(0, 3)
       .map(i => i.nombre);
 
-    if (seleccionados.size > 3) {
+    if (sel.size > 3) {
       return `Pizza: ${nombres.join(', ')}...`;
     }
     return `Pizza: ${nombres.join(', ')}`;

@@ -239,13 +239,14 @@ export async function addItem(
 
   try {
     const precioFinal = (extra.precio_override != null) ? extra.precio_override : producto?.precio;
-    const { precio_override: _, ...extraRest } = extra;
+    const nombreFinal = extra.nombre_override || producto?.nombre;
+    const { precio_override: _p, nombre_override: _n, ...extraRest } = extra;
 
     const res = await mqttRequest('comandero', 'add-item', {
       project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       producto_id,
-      nombre: producto?.nombre,
+      nombre: nombreFinal,
       precio: precioFinal,
       cantidad,
       variaciones,
@@ -324,7 +325,14 @@ export async function enviarCocina(): Promise<{ success: boolean; error?: string
   if (!state.pedido?.items?.length) return { success: false, error: 'No hay items en el pedido' };
 
   try {
-    await mqttRequest('comandero', 'send-kitchen', { project_id: state.project_id, cuenta_id: state.cuenta_id });
+    const res = await mqttRequest('comandero', 'send-kitchen', { project_id: state.project_id, cuenta_id: state.cuenta_id });
+
+    const sendData = res?.data as any;
+    const updatedPedido = sendData?.pedido || sendData?.data?.pedido;
+    if (updatedPedido) {
+      comanderoStore.update(s => ({ ...s, pedido: updatedPedido }));
+    }
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Error al enviar a cocina' };

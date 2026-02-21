@@ -1,10 +1,19 @@
 {
-  "_VERSION": "3.4.0",
+  "_VERSION": "3.5.0",
   "_CREATED": "2026-02-03",
   "_UPDATED": "2026-02-21",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
+    "3.5.0": {
+      "fecha": "2026-02-21",
+      "cambios": [
+        "FIX: comandero — enviar cocina solo envía items NO enviados, marca enviados con flag enviado+enviado_at+pedido_id. Evita duplicados en cocina.",
+        "FIX: comandero — enviarCocina devuelve pedido actualizado para que frontend refleje estado enviado",
+        "FIX: frontend — addItem() respeta nombre_override y precio_override de metadata (MitadMitad, AlGusto, Variaciones)",
+        "FIX: frontend — enviarCocina() actualiza store con pedido de la respuesta del backend"
+      ]
+    },
     "3.4.0": {
       "fecha": "2026-02-21",
       "cambios": [
@@ -165,13 +174,22 @@
     },
 
     "comandero": {
-      "version": "2.1.0",
+      "version": "2.2.0",
       "descripcion": "Interfaz del camarero — puerta de entrada para tomar pedidos. Buffer por cuenta, add/remove items, enviar cocina.",
       "ui_domain": "comandero",
-      "uiHandlers": ["get", "add-item", "remove-item", "send-kitchen", "health"],
+      "uiHandlers": ["get", "add-item", "remove-item", "update-item", "send-kitchen", "health"],
       "eventos_publica": ["pedido.creado", "pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina"],
       "eventos_suscribe": ["cuenta.actualizada", "caja.cerrada", "dia.iniciado", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
       "productosCache": "Se sincroniza via catalogo.actualizado (array completo) y producto.creado/actualizado (individual). Resuelve nombre/precio al añadir items.",
+      "enviar_cocina": {
+        "comportamiento": "Solo envía items con enviado=false. Marca items enviados con flag enviado+enviado_at+pedido_id. Devuelve pedido completo al frontend.",
+        "flujo": "filtrar items no enviados → generar pedido_id → marcar items → publicar pedido.creado + pedido.enviado_cocina (solo items nuevos) → devolver pedido actualizado",
+        "segunda_ronda": "El camarero puede añadir más items después de enviar. Al enviar de nuevo, solo van los nuevos."
+      },
+      "addItem_overrides": {
+        "nombre_override": "MitadMitad y AlGusto envían nombre compuesto (ej: '½ Country / ½ R&B'). addItem() lo usa como nombre del item.",
+        "precio_override": "Variaciones, MitadMitad y AlGusto envían precio calculado. addItem() lo usa en vez del precio base."
+      },
       "nota": "Es la interfaz principal del camarero. Publica pedido.creado al enviar a cocina — es el puente con persistencia y el futuro módulo pedidos (gestión cocina)."
     },
 

@@ -349,7 +349,23 @@ class ComanderoModule {
       return { status: 400, error: 'No hay items en el pedido para enviar' };
     }
 
+    // Solo enviar items que no se hayan enviado aún
+    const itemsParaEnviar = pedido.items.filter(i => !i.enviado);
+    if (itemsParaEnviar.length === 0) {
+      return { status: 400, error: 'Todos los items ya fueron enviados a cocina' };
+    }
+
     const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    const ahora = new Date().toISOString();
+
+    // Marcar items como enviados
+    for (const item of itemsParaEnviar) {
+      item.enviado = true;
+      item.enviado_at = ahora;
+      item.pedido_id = pedido_id;
+    }
+
+    const totalEnviado = this.calcularTotal(itemsParaEnviar);
 
     this.metrics.increment('pedido.enviado.total');
 
@@ -357,22 +373,22 @@ class ComanderoModule {
     await this.eventBus.publish('pedido.creado', {
       cuenta_id,
       pedido_id,
-      items: pedido.items,
-      total: pedido.total,
-      created_at: new Date().toISOString()
+      items: itemsParaEnviar,
+      total: totalEnviado,
+      created_at: ahora
     });
 
     await this.eventBus.publish('pedido.enviado_cocina', {
       cuenta_id,
       pedido_id,
-      items: pedido.items,
-      total: pedido.total,
+      items: itemsParaEnviar,
+      total: totalEnviado,
       notas_generales: pedido.notas,
-      enviado_at: new Date().toISOString()
+      enviado_at: ahora
     });
 
     this.logger.info('comandero.enviado_cocina', {
-      cuenta_id, pedido_id, items_count: pedido.items.length, total: pedido.total
+      cuenta_id, pedido_id, items_enviados: itemsParaEnviar.length, total_enviado: totalEnviado
     });
 
     return {
@@ -380,8 +396,9 @@ class ComanderoModule {
       data: {
         cuenta_id,
         pedido_id,
-        items_count: pedido.items.length,
-        total: pedido.total
+        items_enviados: itemsParaEnviar.length,
+        total_enviado: totalEnviado,
+        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
       }
     };
   }

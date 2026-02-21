@@ -124,13 +124,13 @@
     ingredientes_anadir: { ingrediente_id: string; cantidad: number }[];
     precio_total: number;
   }>) {
-    const { producto_id, ingredientes_quitar, ingredientes_anadir } = e.detail;
+    const { producto_id, ingredientes_quitar, ingredientes_anadir, precio_total } = e.detail;
 
-    // Añadir item con variaciones
+    // Añadir item con variaciones y precio ajustado
     addItem(producto_id, 1, [
       ...ingredientes_quitar.map(id => ({ tipo: 'quitar', ingrediente_id: id })),
       ...ingredientes_anadir.map(item => ({ tipo: 'anadir', ...item }))
-    ]);
+    ], { precio_override: precio_total });
 
     // Cerrar panel
     showVariaciones = false;

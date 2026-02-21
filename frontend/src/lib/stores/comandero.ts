@@ -238,16 +238,19 @@ export async function addItem(
   const producto = state.todosProductos.find(p => p.id === producto_id);
 
   try {
+    const precioFinal = (extra.precio_override != null) ? extra.precio_override : producto?.precio;
+    const { precio_override: _, ...extraRest } = extra;
+
     const res = await mqttRequest('comandero', 'add-item', {
       project_id: state.project_id,
       cuenta_id: state.cuenta_id,
       producto_id,
       nombre: producto?.nombre,
-      precio: producto?.precio,
+      precio: precioFinal,
       cantidad,
       variaciones,
       notas,
-      ...extra
+      ...extraRest
     });
 
     const addData = res?.data as any;

@@ -533,6 +533,13 @@ class ProductosModule {
     }
 
     const project_id = this.resolveToActiveProject(raw_pid);
+
+    // Cargar desde archivo si no hay productos en memoria
+    const productosMap = this.getProductos(project_id);
+    if (productosMap.size === 0) {
+      await this.loadCartaFromProject(project_id);
+    }
+
     const pizzas = Array.from(this.getProductos(project_id).values())
       .filter(p =>
         p.activo !== false && (
@@ -542,6 +549,11 @@ class ProductosModule {
         )
       )
       .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    this.logger.debug('productos.pizzas.list', {
+      project_id, raw_pid, total: pizzas.length,
+      all_products: this.getProductos(project_id).size
+    });
 
     return {
       status: 200,

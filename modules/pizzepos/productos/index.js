@@ -543,8 +543,8 @@ class ProductosModule {
     const pizzas = Array.from(this.getProductos(project_id).values())
       .filter(p =>
         p.activo !== false && (
-          (p.categoria && p.categoria.toLowerCase().includes('pizza')) ||
-          (p.categoria_id && p.categoria_id.toLowerCase().includes('pizza')) ||
+          (p.categoria && p.categoria.toLowerCase().startsWith('pizz')) ||
+          (p.categoria_id && p.categoria_id.toLowerCase().startsWith('pizz')) ||
           p.tipo === 'pizza'
         )
       )

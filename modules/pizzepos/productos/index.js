@@ -535,8 +535,11 @@ class ProductosModule {
     const project_id = this.resolveToActiveProject(raw_pid);
     const pizzas = Array.from(this.getProductos(project_id).values())
       .filter(p =>
-        p.activo !== false &&
-        (p.categoria === 'Pizzas' || p.categoria === 'pizzas' || p.tipo === 'pizza')
+        p.activo !== false && (
+          (p.categoria && p.categoria.toLowerCase().includes('pizza')) ||
+          (p.categoria_id && p.categoria_id.toLowerCase().includes('pizza')) ||
+          p.tipo === 'pizza'
+        )
       )
       .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
 

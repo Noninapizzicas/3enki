@@ -32,6 +32,7 @@
 
   import TipoButton from './TipoButton.svelte';
   import CuentaCard from './CuentaCard.svelte';
+  import MesaPicker from './MesaPicker.svelte';
 
   // Props
   export let onNavigate: ((path: string) => void) | null = null;
@@ -40,6 +41,7 @@
   let cleanupSubs: (() => void) | null = null;
   let clock = '';
   let clockInterval: ReturnType<typeof setInterval>;
+  let showMesaPicker = false;
 
   // Clock
   function updateClock() {
@@ -65,6 +67,21 @@
     if (onNavigate) {
       onNavigate(`/comandero/${e.detail.cuenta_id}?view=cuenta`);
     }
+  }
+
+  function handleSelectMesa() {
+    showMesaPicker = true;
+  }
+
+  function handleMesaSelected(e: CustomEvent<{ cuenta_id: string; numero_mesa: number }>) {
+    showMesaPicker = false;
+    if (onNavigate) {
+      onNavigate(`/comandero/${e.detail.cuenta_id}`);
+    }
+  }
+
+  function handleMesaPickerClose() {
+    showMesaPicker = false;
   }
 
   const tipos: TipoCuenta[] = ['local', 'delivery', 'llevar'];
@@ -108,7 +125,7 @@
     <!-- Sidebar: type buttons (right on desktop, top on mobile) -->
     <aside class="sidebar">
       {#each tipos as tipo}
-        <TipoButton {tipo} {projectId} on:created={handleCreated} />
+        <TipoButton {tipo} {projectId} on:created={handleCreated} on:select-mesa={handleSelectMesa} />
       {/each}
     </aside>
 
@@ -138,6 +155,10 @@
       {/if}
     </main>
   </div>
+
+  {#if showMesaPicker}
+    <MesaPicker {projectId} on:selected={handleMesaSelected} on:close={handleMesaPickerClose} />
+  {/if}
 </div>
 
 <style>

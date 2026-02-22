@@ -6,30 +6,25 @@
 
   "provides": {
     "events": [
-      "pedido.creado",
-      "pedido.item_agregado",
-      "pedido.item_eliminado",
-      "pedido.enviado_cocina"
+      "comandero.item_agregado",
+      "comandero.item_eliminado",
+      "comandero.enviar_cocina"
     ]
   },
 
   "events": {
     "publishes": [
       {
-        "event": "pedido.creado",
-        "description": "Pedido confirmado por el camarero — puente con persistencia y futuro módulo pedidos (cocina)"
+        "event": "comandero.item_agregado",
+        "description": "Item añadido al buffer del comandero"
       },
       {
-        "event": "pedido.item_agregado",
-        "description": "Item añadido al pedido"
+        "event": "comandero.item_eliminado",
+        "description": "Item eliminado del buffer del comandero"
       },
       {
-        "event": "pedido.item_eliminado",
-        "description": "Item eliminado del pedido"
-      },
-      {
-        "event": "pedido.enviado_cocina",
-        "description": "Pedido enviado a cocina"
+        "event": "comandero.enviar_cocina",
+        "description": "Comandero solicita enviar pedido a cocina — Pedidos recoge y crea pedido formal"
       }
     ],
     "subscribes": [
@@ -240,7 +235,7 @@
               "component": "pedido-list-editable",
               "config": {
                 "endpoint": "/modules/comandero/pedido/{cuenta_id}",
-                "mqtt_topics": ["pedido.item_agregado", "pedido.item_eliminado", "pedido.item_actualizado"],
+                "mqtt_topics": ["comandero.item_agregado", "comandero.item_eliminado", "pedido.item_actualizado"],
                 "item_component": "pedido-item-editable",
                 "actions_per_item": [
                   {
@@ -376,9 +371,9 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "pedido.item_agregado.total",
-        "pedido.item_eliminado.total",
-        "pedido.enviado.total"
+        "comandero.item_agregado.total",
+        "comandero.item_eliminado.total",
+        "comandero.enviado.total"
       ]
     }
   }

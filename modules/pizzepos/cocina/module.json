@@ -32,13 +32,8 @@
     "subscribes": [
       {
         "event": "pedido.enviado_cocina",
-        "description": "Nuevo pedido enviado a cocina",
+        "description": "Pedido formal enviado a cocina (desde módulo Pedidos)",
         "handler": "onPedidoEnviadoCocina"
-      },
-      {
-        "event": "pedido.item_agregado",
-        "description": "Item agregado a pedido activo en cocina",
-        "handler": "onItemAgregado"
       },
       {
         "event": "pedido.cancelado",

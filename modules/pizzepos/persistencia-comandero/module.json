@@ -108,13 +108,18 @@
         "handler": "onEvento"
       },
       {
-        "event": "pedido.item_agregado",
-        "description": "Guardar evento de item agregado al pedido",
+        "event": "comandero.item_agregado",
+        "description": "Guardar evento de item agregado al buffer del comandero",
         "handler": "onEvento"
       },
       {
-        "event": "pedido.item_eliminado",
-        "description": "Guardar evento de item eliminado del pedido",
+        "event": "comandero.item_eliminado",
+        "description": "Guardar evento de item eliminado del buffer del comandero",
+        "handler": "onEvento"
+      },
+      {
+        "event": "comandero.enviar_cocina",
+        "description": "Guardar evento de comandero solicitando envío a cocina",
         "handler": "onEvento"
       },
       {

@@ -84,10 +84,10 @@ class VariacionesModule {
 
   async subscribeToEvents() {
     await this.eventBus.subscribe('producto.creado', this.onProductoCreado.bind(this));
-    await this.eventBus.subscribe('pedido.item_agregado', this.onPedidoItemAgregado.bind(this));
+    await this.eventBus.subscribe('comandero.item_agregado', this.onComanderoItemAgregado.bind(this));
 
     this.logger.info('variaciones.events.subscribed', {
-      events: ['producto.creado', 'pedido.item_agregado']
+      events: ['producto.creado', 'comandero.item_agregado']
     });
   }
 
@@ -140,7 +140,7 @@ class VariacionesModule {
     });
   }
 
-  async onPedidoItemAgregado(event) {
+  async onComanderoItemAgregado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
     const { producto_id, variaciones } = eventData;
@@ -149,7 +149,7 @@ class VariacionesModule {
       return;
     }
 
-    this.logger.info('pedido.item_agregado.received', {
+    this.logger.info('comandero.item_agregado.received', {
       producto_id,
       tiene_variaciones: true,
       correlation_id: correlationId

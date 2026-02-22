@@ -71,6 +71,11 @@
     ],
     "subscribes": [
       {
+        "event": "comandero.enviar_cocina",
+        "description": "Bridge: Comandero solicita enviar a cocina → crear pedido formal y publicar pedido.enviado_cocina",
+        "handler": "onComanderoEnviarCocina"
+      },
+      {
         "event": "variacion.validada",
         "description": "Variación validada - confirmar precio del item",
         "handler": "onVariacionValidada"

@@ -125,11 +125,10 @@ class CocinaModule {
 
   async subscribeToEvents() {
     await this.eventBus.subscribe('pedido.enviado_cocina', this.onPedidoEnviadoCocina.bind(this));
-    await this.eventBus.subscribe('pedido.item_agregado', this.onItemAgregado.bind(this));
     await this.eventBus.subscribe('pedido.cancelado', this.onPedidoCancelado.bind(this));
 
     this.logger.info('cocina.events.subscribed', {
-      events: ['pedido.enviado_cocina', 'pedido.item_agregado', 'pedido.cancelado']
+      events: ['pedido.enviado_cocina', 'pedido.cancelado']
     });
   }
 
@@ -153,15 +152,23 @@ class CocinaModule {
       pedido_id,
       numero_mesa,
       cuenta_id,
-      items: (items || []).map(item => ({
-        item_id: item.item_id,
-        producto_id: item.producto_id,
-        nombre: item.nombre,
-        cantidad: item.cantidad,
-        variaciones: item.variaciones || {},
-        notas: item.notas || '',
-        estado: 'pendiente'
-      })),
+      items: (items || []).map(item => {
+        const cocinaItem = {
+          item_id: item.item_id,
+          producto_id: item.producto_id,
+          nombre: item.nombre,
+          cantidad: item.cantidad,
+          variaciones: item.variaciones || {},
+          notas: item.notas || '',
+          estado: 'pendiente'
+        };
+        // Metadata especial: mitad-mitad, al gusto, etc.
+        if (item.tipo) cocinaItem.tipo = item.tipo;
+        if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
+        if (item.pizza_derecha) cocinaItem.pizza_derecha = item.pizza_derecha;
+        if (item.ingredientes) cocinaItem.ingredientes = item.ingredientes;
+        return cocinaItem;
+      }),
       estado: 'activo',
       notas_generales: notas_generales || '',
       recibido_at: new Date().toISOString()
@@ -171,31 +178,6 @@ class CocinaModule {
     this.internalMetrics.pedidos_recibidos++;
 
     this.broadcastSSE({ type: 'nuevo_pedido', data: pedidoCocina });
-  }
-
-  async onItemAgregado(event) {
-    const data = event?.data || event?.payload || event;
-    const { pedido_id, item_id, producto_id, nombre, cantidad, variaciones, notas } = data;
-
-    const pedidoCocina = this.pedidosActivos.get(pedido_id);
-    if (!pedidoCocina) return;
-
-    pedidoCocina.items.push({
-      item_id,
-      producto_id,
-      nombre,
-      cantidad,
-      variaciones: variaciones || {},
-      notas: notas || '',
-      estado: 'pendiente'
-    });
-
-    this.broadcastSSE({
-      type: 'item_agregado',
-      data: { pedido_id, item_id, nombre, cantidad }
-    });
-
-    this.logger.info('cocina.item.agregado', { pedido_id, item_id });
   }
 
   async onPedidoCancelado(event) {

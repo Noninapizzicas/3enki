@@ -352,7 +352,7 @@ export function resetComandero(): void {
 export function initComanderoSubscriptions(projectId: string): () => void {
   const unsubs: (() => void)[] = [];
 
-  unsubs.push(mqttSubscribe('pedido.item_agregado', (event: any) => {
+  unsubs.push(mqttSubscribe('comandero.item_agregado', (event: any) => {
     const data = event?.data || event?.payload || event;
     const currentState = get(comanderoStore);
     if (data?.cuenta_id === currentState.cuenta_id && data?.pedido) {
@@ -360,7 +360,7 @@ export function initComanderoSubscriptions(projectId: string): () => void {
     }
   }));
 
-  unsubs.push(mqttSubscribe('pedido.item_eliminado', (event: any) => {
+  unsubs.push(mqttSubscribe('comandero.item_eliminado', (event: any) => {
     const data = event?.data || event?.payload || event;
     const currentState = get(comanderoStore);
     if (data?.cuenta_id === currentState.cuenta_id && data?.pedido) {

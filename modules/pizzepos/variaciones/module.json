@@ -33,9 +33,9 @@
         "handler": "onProductoCreado"
       },
       {
-        "event": "pedido.item_agregado",
-        "description": "Item agregado a pedido - validar variaciones",
-        "handler": "onPedidoItemAgregado"
+        "event": "comandero.item_agregado",
+        "description": "Item agregado al buffer del comandero - validar variaciones",
+        "handler": "onComanderoItemAgregado"
       }
     ]
   },

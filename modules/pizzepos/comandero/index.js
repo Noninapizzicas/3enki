@@ -246,7 +246,7 @@ class ComanderoModule {
     pedido.items.push(item);
     pedido.total = this.calcularTotal(pedido.items);
 
-    this.metrics.increment('pedido.item_agregado.total');
+    this.metrics.increment('comandero.item_agregado.total');
 
     const eventPayload = {
       cuenta_id,
@@ -261,7 +261,7 @@ class ComanderoModule {
     if (pizza_izquierda) eventPayload.pizza_izquierda = pizza_izquierda;
     if (pizza_derecha) eventPayload.pizza_derecha = pizza_derecha;
 
-    await this.eventBus.publish('pedido.item_agregado', eventPayload);
+    await this.eventBus.publish('comandero.item_agregado', eventPayload);
 
     this.logger.info('comandero.item.agregado', {
       cuenta_id, item_id, producto_id, precio: itemPrecio, cantidad: itemCantidad
@@ -292,9 +292,9 @@ class ComanderoModule {
     const removedItem = pedido.items.splice(itemIndex, 1)[0];
     pedido.total = this.calcularTotal(pedido.items);
 
-    this.metrics.increment('pedido.item_eliminado.total');
+    this.metrics.increment('comandero.item_eliminado.total');
 
-    await this.eventBus.publish('pedido.item_eliminado', {
+    await this.eventBus.publish('comandero.item_eliminado', {
       cuenta_id,
       item_id,
       producto_id: removedItem.producto_id,
@@ -331,7 +331,7 @@ class ComanderoModule {
         pedido.items.splice(idx, 1);
         pedido.total = this.calcularTotal(pedido.items);
 
-        await this.eventBus.publish('pedido.item_eliminado', {
+        await this.eventBus.publish('comandero.item_eliminado', {
           cuenta_id, item_id, producto_id: item.producto_id, precio_total: item.subtotal
         });
 
@@ -387,24 +387,16 @@ class ComanderoModule {
 
     const totalEnviado = this.calcularTotal(itemsParaEnviar);
 
-    this.metrics.increment('pedido.enviado.total');
+    this.metrics.increment('comandero.enviado.total');
 
-    // pedido.creado — puente con persistencia y futuro módulo pedidos (gestión cocina)
-    await this.eventBus.publish('pedido.creado', {
-      cuenta_id,
-      pedido_id,
-      items: itemsParaEnviar,
-      total: totalEnviado,
-      created_at: ahora
-    });
-
-    await this.eventBus.publish('pedido.enviado_cocina', {
+    // comandero.enviar_cocina → Pedidos recoge, crea pedido formal, envía a cocina
+    await this.eventBus.publish('comandero.enviar_cocina', {
       cuenta_id,
       pedido_id,
       items: itemsParaEnviar,
       total: totalEnviado,
       notas_generales: pedido.notas,
-      enviado_at: ahora
+      created_at: ahora
     });
 
     this.logger.info('comandero.enviado_cocina', {

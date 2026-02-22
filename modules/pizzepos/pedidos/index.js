@@ -155,6 +155,91 @@ class PedidosModule {
     }
   }
 
+  // ==========================================
+  // Bridge: Comandero → Pedidos
+  // ==========================================
+
+  async onComanderoEnviarCocina(event) {
+    const data = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at } = data;
+
+    if (!cuenta_id || !items || items.length === 0) {
+      this.logger.warn('pedidos.bridge.datos_incompletos', { cuenta_id, correlation_id: correlationId });
+      return;
+    }
+
+    this.logger.info('pedidos.bridge.recibido', {
+      cuenta_id,
+      items_count: items.length,
+      total,
+      correlation_id: correlationId
+    });
+
+    try {
+      const pedido_id = comandero_pedido_id || require('crypto').randomUUID();
+
+      const pedido = {
+        id: pedido_id,
+        cuenta_id,
+        items: items.map(item => ({
+          item_id: item.id || item.item_id || require('crypto').randomUUID(),
+          producto_id: item.producto_id,
+          nombre: item.nombre,
+          cantidad: item.cantidad || 1,
+          precio_unitario: item.precio || 0,
+          precio_total: item.subtotal || (item.precio || 0) * (item.cantidad || 1),
+          variaciones: item.variaciones || null,
+          notas: item.notas || null,
+          estado: 'en_cocina',
+          // Metadata especial: mitad-mitad, al gusto, etc.
+          ...(item.tipo && { tipo: item.tipo }),
+          ...(item.pizza_izquierda && { pizza_izquierda: item.pizza_izquierda }),
+          ...(item.pizza_derecha && { pizza_derecha: item.pizza_derecha }),
+          ...(item.ingredientes && { ingredientes: item.ingredientes }),
+          created_at: item.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })),
+        estado: 'en_cocina',
+        subtotal: total || 0,
+        total: total || 0,
+        notas_generales: notas_generales || null,
+        created_at: created_at || new Date().toISOString(),
+        enviado_cocina_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Registrar pedido formal
+      this.pedidos.set(pedido_id, pedido);
+
+      if (!this.pedidosPorCuenta.has(cuenta_id)) {
+        this.pedidosPorCuenta.set(cuenta_id, new Set());
+      }
+      this.pedidosPorCuenta.get(cuenta_id).add(pedido_id);
+
+      // Métricas
+      this.metrics.increment('pedido.creado.total');
+      this.metrics.increment('pedido.enviado_cocina.total');
+      this.metrics.gauge('pedido.activos.count', this.pedidos.size);
+
+      // Publicar eventos formales que el resto del sistema escucha
+      await this.publishPedidoCreado(pedido);
+      await this.publishEnviadoCocina(pedido);
+
+      this.logger.info('pedidos.bridge.pedido_formal_creado', {
+        pedido_id,
+        cuenta_id,
+        items_count: pedido.items.length,
+        total: pedido.total,
+        correlation_id: correlationId
+      });
+
+    } catch (error) {
+      this.metrics.increment('pedido.errors.total', 1, { operation: 'bridge_enviar_cocina' });
+      this.logger.error('pedidos.bridge.error', { error: error.message, correlation_id: correlationId });
+    }
+  }
+
   async onCatalogoActualizado(event) {
     const data = event?.data || event?.payload || event;
     const productos = data?.productos || [];
@@ -623,14 +708,22 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       numero_mesa: pedido.numero_mesa,
-      items: pedido.items.map(item => ({
-        item_id: item.item_id,
-        producto_id: item.producto_id,
-        nombre: item.nombre,
-        cantidad: item.cantidad,
-        variaciones: item.variaciones,
-        notas: item.notas
-      })),
+      items: pedido.items.map(item => {
+        const mapped = {
+          item_id: item.item_id,
+          producto_id: item.producto_id,
+          nombre: item.nombre,
+          cantidad: item.cantidad,
+          variaciones: item.variaciones,
+          notas: item.notas
+        };
+        // Incluir metadata especial para cocina
+        if (item.tipo) mapped.tipo = item.tipo;
+        if (item.pizza_izquierda) mapped.pizza_izquierda = item.pizza_izquierda;
+        if (item.pizza_derecha) mapped.pizza_derecha = item.pizza_derecha;
+        if (item.ingredientes) mapped.ingredientes = item.ingredientes;
+        return mapped;
+      }),
       items_count: pedido.items.length,
       notas_generales: pedido.notas_generales,
       enviado_at: pedido.enviado_cocina_at

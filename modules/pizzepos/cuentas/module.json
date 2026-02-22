@@ -50,14 +50,14 @@
     ],
     "subscribes": [
       {
-        "event": "pedido.item_agregado",
-        "description": "Item agregado al pedido, actualizar totales",
-        "handler": "onPedidoItemAgregado"
+        "event": "comandero.item_agregado",
+        "description": "Item agregado al buffer del comandero, actualizar totales",
+        "handler": "onComanderoItemAgregado"
       },
       {
-        "event": "pedido.item_eliminado",
-        "description": "Item eliminado del pedido, actualizar totales",
-        "handler": "onPedidoItemEliminado"
+        "event": "comandero.item_eliminado",
+        "description": "Item eliminado del buffer del comandero, actualizar totales",
+        "handler": "onComanderoItemEliminado"
       },
       {
         "event": "cobro.procesado",

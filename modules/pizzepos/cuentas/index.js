@@ -103,11 +103,11 @@ class CuentasModule {
   // Event Handlers
   // ==========================================
 
-  async onPedidoItemAgregado(event) {
+  async onComanderoItemAgregado(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, precio_total } = data;
 
-    this.logger.info('pedido.item_agregado.received', {
+    this.logger.info('comandero.item_agregado.received', {
       cuenta_id,
       correlation_id: event?.metadata?.correlationId
     });
@@ -128,7 +128,7 @@ class CuentasModule {
     });
   }
 
-  async onPedidoItemEliminado(event) {
+  async onComanderoItemEliminado(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, precio_total } = data;
 

@@ -3,12 +3,15 @@
    * TipoButton — Botón lateral para crear nueva cuenta
    *
    * Un toque: crea cuenta del tipo + abre comandero
+   *   - local → mesa strategy (cuentas-canales): auto-nombre "Mesa 1", "Mesa 2"...
+   *   - delivery/llevar → cuentas simple (por ahora)
+   *
    * Colores identificativos por tipo
    * Scoped por proyecto
    */
   import { createEventDispatcher } from 'svelte';
   import type { TipoCuenta } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta, createMesa } from '$lib/stores/cuentas';
   import { status as mqttStatus } from '$lib/ui-core';
 
   export let tipo: TipoCuenta;
@@ -16,7 +19,6 @@
 
   const dispatch = createEventDispatcher<{
     created: { cuenta_id: string; tipo: TipoCuenta };
-    'select-mesa': void;
   }>();
 
   let creating = false;
@@ -32,25 +34,25 @@
       return;
     }
 
-    // Tipo local → abrir selector de mesas
-    if (tipo === 'local') {
-      dispatch('select-mesa');
-      return;
-    }
-
-    // Otros tipos → crear cuenta directamente
     creating = true;
     error = '';
 
     try {
-      console.log('[TipoButton] Creating cuenta tipo:', tipo, 'project:', projectId);
-      const cuenta = await createCuenta(projectId, tipo);
+      let cuenta_id: string | null = null;
 
-      if (cuenta) {
-        console.log('[TipoButton] Cuenta created:', cuenta.id);
-        dispatch('created', { cuenta_id: cuenta.id, tipo: cuenta.tipo });
+      if (tipo === 'local') {
+        // Mesa → usa cuentas-canales mesa strategy (auto-nombre)
+        cuenta_id = await createMesa(projectId);
       } else {
-        console.error('[TipoButton] createCuenta returned null');
+        // Delivery/llevar → cuentas simple (por ahora)
+        const cuenta = await createCuenta(projectId, tipo);
+        cuenta_id = cuenta?.id || null;
+      }
+
+      if (cuenta_id) {
+        console.log('[TipoButton] Created:', tipo, cuenta_id);
+        dispatch('created', { cuenta_id, tipo });
+      } else {
         error = 'Error';
         setTimeout(() => error = '', 2000);
       }
@@ -77,7 +79,7 @@
   disabled={creating}
   title="Nueva cuenta {label}"
 >
-  <span class="icon">{error ? '⚠' : icon}</span>
+  <span class="icon">{error ? '\u26A0' : icon}</span>
   <span class="label">{error || label}</span>
 </button>
 

@@ -118,10 +118,10 @@
 
   "strategies": {
     "mesa": {
-      "description": "Servicio en mesa — zonas, capacidad, camareros",
+      "description": "Servicio en mesa — mesas dinámicas, nombre libre, métricas de tiempo",
       "prefijo": "mesa_",
       "ui_domain": "mesa",
-      "actions": ["abrir", "cerrar", "asignar_camarero", "get", "disponibles", "ocupadas", "list", "health", "metrics"]
+      "actions": ["abrir", "cerrar", "asignar_camarero", "get", "activas", "list", "health", "metrics"]
     },
     "telefono": {
       "description": "Pedidos telefónicos — caller ID, CRM, WhatsApp notification",

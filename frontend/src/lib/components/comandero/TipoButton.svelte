@@ -16,6 +16,7 @@
 
   const dispatch = createEventDispatcher<{
     created: { cuenta_id: string; tipo: TipoCuenta };
+    'select-mesa': void;
   }>();
 
   let creating = false;
@@ -31,6 +32,13 @@
       return;
     }
 
+    // Tipo local → abrir selector de mesas
+    if (tipo === 'local') {
+      dispatch('select-mesa');
+      return;
+    }
+
+    // Otros tipos → crear cuenta directamente
     creating = true;
     error = '';
 

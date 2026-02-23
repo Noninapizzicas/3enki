@@ -80,9 +80,7 @@
       "pdf-viewer",
       "pizzepos",
       "telegram-service",
-      "text-editor",
-      "security-p2p",
-      "staff-manager"
+      "text-editor"
     ],
     "disabled": [
       "conversation-manager",
@@ -90,7 +88,9 @@
       "ui-designer",
       "dashboard",
       "notas",
-      "metricas"
+      "metricas",
+      "security-p2p",
+      "staff-manager"
     ]
   },
   "observability": {

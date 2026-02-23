@@ -145,7 +145,7 @@ class CuentasCanalesModule {
   async onCobroProcesado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { cuenta_id } = eventData;
+    const { cuenta_id, project_id } = eventData;
 
     if (!cuenta_id) return;
 
@@ -153,7 +153,7 @@ class CuentasCanalesModule {
     if (!strategy) return;
 
     try {
-      await strategy.onCobroProcesado(cuenta_id, correlationId);
+      await strategy.onCobroProcesado(cuenta_id, correlationId, project_id);
 
       this.logger.info('canales.cuenta_cerrada_tras_cobro', {
         correlation_id: correlationId,
@@ -238,6 +238,7 @@ class CuentasCanalesModule {
       cuenta_id: data.cuenta_id,
       tipo: data.tipo,
       origen: `cuentas-canales:${data.tipo}`,
+      project_id: data.project_id,
       total: data.total || 0,
       metadata: data.metadata || {}
     }, { correlationId });
@@ -247,6 +248,7 @@ class CuentasCanalesModule {
     await this.eventBus.publish('cuenta.cerrada', {
       cuenta_id: data.cuenta_id,
       tipo: data.tipo,
+      project_id: data.project_id,
       total: data.total || 0,
       metadata: data.metadata || {}
     }, { correlationId });

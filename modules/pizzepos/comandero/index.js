@@ -362,7 +362,7 @@ class ComanderoModule {
   }
 
   async handleEnviarCocina(data) {
-    const { cuenta_id } = data;
+    const { cuenta_id, project_id } = data;
 
     const pedido = this.pedidos.get(cuenta_id);
     if (!pedido || pedido.items.length === 0) {
@@ -393,6 +393,7 @@ class ComanderoModule {
     await this.eventBus.publish('comandero.enviar_cocina', {
       cuenta_id,
       pedido_id,
+      project_id,
       items: itemsParaEnviar,
       total: totalEnviado,
       notas_generales: pedido.notas,

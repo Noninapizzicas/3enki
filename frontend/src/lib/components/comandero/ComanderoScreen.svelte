@@ -33,6 +33,7 @@
     initComanderoSubscriptions,
     type Producto
   } from '$lib/stores/comandero';
+  import { renameMesa } from '$lib/stores/cuentas';
 
   import BotonEspecial from './BotonEspecial.svelte';
   import CategoriaBtn from './CategoriaBtn.svelte';
@@ -57,6 +58,65 @@
   export let onOpenPanel: ((panel: string, data?: any) => void) | null = null;
 
   let cleanupSubs: (() => void) | null = null;
+
+  // Nombre editable de la mesa
+  const isMesa = cuenta_id.startsWith('mesa_');
+  let cuentaNombre = isMesa ? 'Mesa...' : cuenta_id.split('_')[0] || 'Cuenta';
+  let editingName = false;
+  let nameInput = '';
+  let nameInputEl: HTMLInputElement;
+
+  // Voice recognition
+  let listening = false;
+  let speechSupported = false;
+
+  function startEditName() {
+    nameInput = cuentaNombre;
+    editingName = true;
+    setTimeout(() => nameInputEl?.focus(), 50);
+  }
+
+  async function saveName() {
+    editingName = false;
+    const trimmed = nameInput.trim();
+    if (!trimmed || trimmed === cuentaNombre) return;
+
+    if (isMesa) {
+      const ok = await renameMesa(projectId, cuenta_id, trimmed);
+      if (ok) cuentaNombre = trimmed;
+    }
+  }
+
+  function handleNameKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') saveName();
+    if (e.key === 'Escape') { editingName = false; }
+  }
+
+  function startVoice() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+
+    const recognition = new SR();
+    recognition.lang = 'es-ES';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    listening = true;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      nameInput = transcript;
+      editingName = true;
+      listening = false;
+      // Auto-guardar tras voz
+      setTimeout(() => saveName(), 300);
+    };
+
+    recognition.onerror = () => { listening = false; };
+    recognition.onend = () => { listening = false; };
+
+    recognition.start();
+  }
 
   // Estado del panel de variaciones
   let showVariaciones = false;
@@ -242,9 +302,27 @@
   }
 
   onMount(() => {
-    connect().then(() => {
+    // Detectar soporte de voz
+    speechSupported = !!(
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    );
+
+    connect().then(async () => {
       initComandero(projectId, cuenta_id);
       cleanupSubs = initComanderoSubscriptions(projectId);
+
+      // Cargar nombre real de la mesa
+      if (isMesa) {
+        try {
+          const { mqttRequest } = await import('$lib/ui-core/mqtt-request');
+          const res = await mqttRequest('mesa', 'get', {
+            project_id: projectId,
+            cuenta_id
+          });
+          const data = (res as any)?.data;
+          if (data?.nombre) cuentaNombre = data.nombre;
+        } catch { /* usa nombre por defecto */ }
+      }
     }).catch((err) => {
       console.error('[ComanderoScreen] MQTT connection failed', err);
     });
@@ -261,6 +339,45 @@
 </script>
 
 <div class="comandero-screen">
+  <!-- Header: nombre de cuenta editable -->
+  <header class="cuenta-header">
+    <button class="back-btn" on:click={() => onNavigate?.('/comandero')}>
+      &#8592;
+    </button>
+
+    {#if editingName}
+      <input
+        bind:this={nameInputEl}
+        bind:value={nameInput}
+        class="name-input"
+        on:blur={saveName}
+        on:keydown={handleNameKeydown}
+        placeholder="Nombre..."
+        maxlength="50"
+      />
+    {:else}
+      <button
+        class="name-display"
+        class:is-mesa={isMesa}
+        on:click={isMesa ? startEditName : undefined}
+        title={isMesa ? 'Tap para renombrar' : ''}
+      >
+        {cuentaNombre}
+      </button>
+    {/if}
+
+    {#if isMesa && speechSupported && !editingName}
+      <button
+        class="voice-btn"
+        class:listening
+        on:click={startVoice}
+        title="Renombrar por voz"
+      >
+        {listening ? '...' : '\uD83C\uDF99'}
+      </button>
+    {/if}
+  </header>
+
   <!-- Barra superior: botones especiales -->
   <header class="top-bar">
     {#each botonesEspeciales as btn}
@@ -391,6 +508,99 @@
     color: #e5e5e5;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Cuenta header */
+  .cuenta-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: #111;
+    border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
+  }
+
+  .back-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 1.2rem;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 6px;
+    line-height: 1;
+  }
+
+  .back-btn:active {
+    background: #222;
+  }
+
+  .name-display {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    cursor: default;
+    border-radius: 6px;
+    text-align: left;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .name-display.is-mesa {
+    cursor: pointer;
+    border: 1px dashed transparent;
+  }
+
+  .name-display.is-mesa:active {
+    background: #1a1a1a;
+    border-color: #333;
+  }
+
+  .name-input {
+    flex: 1;
+    background: #1a1a1a;
+    border: 1px solid #3b82f6;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    outline: none;
+    min-width: 0;
+  }
+
+  .voice-btn {
+    background: none;
+    border: 1px solid #333;
+    color: #888;
+    font-size: 1.1rem;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 8px;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .voice-btn:active {
+    background: #222;
+  }
+
+  .voice-btn.listening {
+    border-color: #ef4444;
+    color: #ef4444;
+    animation: pulse-voice 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse-voice {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 
   /* Top bar */

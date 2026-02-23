@@ -11,6 +11,7 @@
       "mesa.abierta",
       "mesa.camarero_asignado",
       "mesa.cerrada",
+      "mesa.renombrada",
       "telefono.llamada_detectada",
       "telefono.contacto_identificado",
       "telefono.pedido_creado",
@@ -120,7 +121,7 @@
       "description": "Servicio en mesa — mesas dinámicas, nombre libre, métricas de tiempo",
       "prefijo": "mesa_",
       "ui_domain": "mesa",
-      "actions": ["abrir", "cerrar", "asignar_camarero", "get", "activas", "list", "health", "metrics"]
+      "actions": ["abrir", "cerrar", "renombrar", "asignar_camarero", "get", "activas", "list", "health", "metrics"]
     },
     "telefono": {
       "description": "Pedidos telefónicos — caller ID, CRM, WhatsApp notification",

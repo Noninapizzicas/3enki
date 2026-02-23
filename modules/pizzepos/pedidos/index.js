@@ -162,7 +162,7 @@ class PedidosModule {
   async onComanderoEnviarCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at } = data;
+    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at, project_id } = data;
 
     if (!cuenta_id || !items || items.length === 0) {
       this.logger.warn('pedidos.bridge.datos_incompletos', { cuenta_id, correlation_id: correlationId });
@@ -186,6 +186,7 @@ class PedidosModule {
         id: pedido_id,
         cuenta_id,
         canal,
+        project_id: project_id || null,
         items: items.map(item => ({
           item_id: item.id || item.item_id || require('crypto').randomUUID(),
           producto_id: item.producto_id,
@@ -282,7 +283,7 @@ class PedidosModule {
     const start_time = Date.now();
 
     try {
-      const { cuenta_id, notas_generales } = data;
+      const { cuenta_id, project_id, notas_generales } = data;
 
       if (!cuenta_id) {
         return { status: 400, error: 'cuenta_id es requerido' };
@@ -295,6 +296,7 @@ class PedidosModule {
         id: pedido_id,
         cuenta_id,
         canal,
+        project_id: project_id || null,
         items: [],
         estado: 'borrador',
         subtotal: 0,
@@ -672,8 +674,10 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
+      project_id: pedido.project_id || null,
       estado: pedido.estado,
       total: pedido.total,
+      items: pedido.items || [],
       created_at: pedido.created_at
     });
   }

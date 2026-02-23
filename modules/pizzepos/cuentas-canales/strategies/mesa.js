@@ -77,8 +77,8 @@ class MesaStrategy {
     await eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));
   }
 
-  async onCobroProcesado(cuenta_id, correlationId) {
-    await this.cerrarMesa(cuenta_id, correlationId);
+  async onCobroProcesado(cuenta_id, correlationId, project_id) {
+    await this.cerrarMesa(cuenta_id, correlationId, project_id);
   }
 
   getHealth() {
@@ -141,7 +141,7 @@ class MesaStrategy {
 
   async handleAbrirMesa(data) {
     try {
-      const { nombre, comensales, camarero, notas } = data;
+      const { nombre, comensales, camarero, notas, project_id } = data;
 
       this.modulo.verificarReseoDiario();
 
@@ -180,13 +180,15 @@ class MesaStrategy {
         numero: mesa.numero,
         comensales: mesa.comensales,
         camarero: mesa.camarero,
-        hora_apertura: mesa.hora_apertura
+        hora_apertura: mesa.hora_apertura,
+        project_id
       });
 
       await this.modulo.publishCuentaCreada({
         cuenta_id: mesa.cuenta_id,
         tipo: 'mesa',
         total: mesa.total,
+        project_id,
         metadata: {
           nombre: mesa.nombre,
           numero: mesa.numero,
@@ -227,7 +229,8 @@ class MesaStrategy {
       await this.modulo.eventBus.publish('mesa.renombrada', {
         cuenta_id: mesa.cuenta_id,
         nombre: mesa.nombre,
-        nombre_anterior
+        nombre_anterior,
+        project_id: data.project_id
       });
 
       this.modulo.logger.info('mesa.renombrada', {
@@ -280,8 +283,8 @@ class MesaStrategy {
 
   async handleCerrarMesa(data) {
     try {
-      const { cuenta_id } = data;
-      await this.cerrarMesa(cuenta_id);
+      const { cuenta_id, project_id } = data;
+      await this.cerrarMesa(cuenta_id, null, project_id);
       return { status: 200, data: { message: 'Mesa cerrada correctamente' } };
     } catch (error) {
       this.modulo.logger.error('canal.mesa.cerrar.error', { error: error.message });
@@ -336,7 +339,7 @@ class MesaStrategy {
   // Business Logic
   // ==========================================
 
-  async cerrarMesa(cuenta_id, correlationId) {
+  async cerrarMesa(cuenta_id, correlationId, project_id) {
     const mesa = this.mesasActivas.get(cuenta_id);
     if (!mesa) {
       throw new Error('Mesa no encontrada o no está activa');
@@ -356,13 +359,15 @@ class MesaStrategy {
       total: mesa.total,
       tiempo_ocupada: mesa.tiempo_ocupada,
       pedidos_count: mesa.pedidos_count,
-      hora_cierre: mesa.hora_cierre
+      hora_cierre: mesa.hora_cierre,
+      project_id
     }, { correlationId });
 
     await this.modulo.publishCuentaCerrada({
       cuenta_id: mesa.cuenta_id,
       tipo: 'mesa',
       total: mesa.total,
+      project_id,
       metadata: {
         nombre: mesa.nombre,
         tiempo_ocupada: mesa.tiempo_ocupada,

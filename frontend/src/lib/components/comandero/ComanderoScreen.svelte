@@ -69,6 +69,7 @@
   // Voice recognition
   let listening = false;
   let speechSupported = false;
+  let voiceError = '';
 
   function startEditName() {
     nameInput = cuentaNombre;
@@ -92,30 +93,71 @@
     if (e.key === 'Escape') { editingName = false; }
   }
 
-  function startVoice() {
+  async function startVoice() {
+    voiceError = '';
+
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      voiceError = 'Voz no soportada';
+      setTimeout(() => voiceError = '', 3000);
+      return;
+    }
 
-    const recognition = new SR();
-    recognition.lang = 'es-ES';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    // Pedir permisos de micrófono explícitamente
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Liberamos el stream inmediatamente — solo necesitábamos el permiso
+      stream.getTracks().forEach(t => t.stop());
+    } catch (err: any) {
+      console.error('[Voice] Mic permission denied:', err);
+      voiceError = 'Sin micro';
+      setTimeout(() => voiceError = '', 3000);
+      return;
+    }
 
-    listening = true;
+    try {
+      const recognition = new SR();
+      recognition.lang = 'es-ES';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
 
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      nameInput = transcript;
-      editingName = true;
+      listening = true;
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript && transcript.trim()) {
+          nameInput = transcript.trim();
+          cuentaNombre = nameInput;
+          listening = false;
+          // Guardar directamente
+          renameMesa(projectId, cuenta_id, nameInput);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('[Voice] Error:', event.error);
+        listening = false;
+        if (event.error === 'not-allowed') {
+          voiceError = 'Sin permiso micro';
+        } else if (event.error === 'no-speech') {
+          voiceError = 'No te he oído';
+        } else if (event.error === 'network') {
+          voiceError = 'Sin conexión';
+        } else {
+          voiceError = 'Error de voz';
+        }
+        setTimeout(() => voiceError = '', 3000);
+      };
+
+      recognition.onend = () => { listening = false; };
+
+      recognition.start();
+    } catch (err: any) {
+      console.error('[Voice] Start failed:', err);
       listening = false;
-      // Auto-guardar tras voz
-      setTimeout(() => saveName(), 300);
-    };
-
-    recognition.onerror = () => { listening = false; };
-    recognition.onend = () => { listening = false; };
-
-    recognition.start();
+      voiceError = 'Error al iniciar';
+      setTimeout(() => voiceError = '', 3000);
+    }
   }
 
   // Estado del panel de variaciones
@@ -302,11 +344,6 @@
   }
 
   onMount(() => {
-    // Detectar soporte de voz
-    speechSupported = !!(
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    );
-
     connect().then(async () => {
       initComandero(projectId, cuenta_id);
       cleanupSubs = initComanderoSubscriptions(projectId);
@@ -366,14 +403,22 @@
       </button>
     {/if}
 
-    {#if isMesa && speechSupported && !editingName}
+    {#if isMesa && !editingName}
       <button
         class="voice-btn"
         class:listening
+        class:voice-error={!!voiceError}
         on:click={startVoice}
+        disabled={listening}
         title="Renombrar por voz"
       >
-        {listening ? '...' : '\uD83C\uDF99'}
+        {#if voiceError}
+          <span class="voice-error-text">{voiceError}</span>
+        {:else if listening}
+          <span class="voice-pulse">...</span>
+        {:else}
+          🎤
+        {/if}
       </button>
     {/if}
   </header>
@@ -586,16 +631,37 @@
     border-radius: 8px;
     flex-shrink: 0;
     transition: all 0.15s;
+    min-width: 40px;
+    text-align: center;
   }
 
-  .voice-btn:active {
+  .voice-btn:active:not(:disabled) {
     background: #222;
+  }
+
+  .voice-btn:disabled {
+    cursor: not-allowed;
   }
 
   .voice-btn.listening {
     border-color: #ef4444;
     color: #ef4444;
     animation: pulse-voice 1s ease-in-out infinite;
+  }
+
+  .voice-btn.voice-error {
+    border-color: #f59e0b;
+    color: #f59e0b;
+    animation: none;
+  }
+
+  .voice-error-text {
+    font-size: 0.6rem;
+    font-weight: 600;
+  }
+
+  .voice-pulse {
+    font-weight: 700;
   }
 
   @keyframes pulse-voice {

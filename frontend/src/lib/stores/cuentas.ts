@@ -279,6 +279,40 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
       }));
 
       console.log('[Cuentas] Loaded from persistencia:', cuentas.length, 'project:', projectId);
+
+      // Merge buffer totals: el buffer del comandero tiene items no enviados
+      // que no están en persistencia aún. Usamos el máximo entre buffer y persistencia.
+      try {
+        const bufRes = await mqttRequest<any>('comandero', 'buffers', {});
+        const bufData = bufRes?.data?.buffers || bufRes?.data?.data?.buffers || [];
+        if (bufData.length > 0) {
+          const bufferMap = new Map<string, { total: number; items_count: number }>();
+          for (const b of bufData) {
+            bufferMap.set(b.cuenta_id, { total: b.total, items_count: b.items_count });
+          }
+
+          cuentasStore.update(s => ({
+            ...s,
+            cuentas: s.cuentas.map(c => {
+              const buf = bufferMap.get(c.id);
+              if (!buf) return c;
+              // Buffer total incluye items enviados + no enviados = total real
+              // Persistencia total solo tiene pedidos formales (enviados)
+              // Usamos el mayor de los dos como total real
+              return {
+                ...c,
+                total: Math.max(c.total, buf.total),
+                items: Math.max(c.items, buf.items_count),
+                estado: (buf.items_count > 0 && c.estado === 'pendiente' ? 'con_pedido' : c.estado) as EstadoCuenta
+              };
+            })
+          }));
+          console.log('[Cuentas] Buffer totals merged for', bufData.length, 'cuentas');
+        }
+      } catch (bufErr) {
+        // No pasa nada si falla — persistencia sola es suficiente
+        console.warn('[Cuentas] Could not merge buffer totals:', bufErr);
+      }
     } else {
       // Si no hay cuentas o error, usar lista vacía
       cuentasStore.update(s => ({

@@ -537,6 +537,7 @@
   {#if showCobro}
     <CobroPanel
       {cuenta_id}
+      project_id={projectId}
       monto={$pedidoTotal}
       pedido_ids={$pedidoItems.map(i => i.id)}
       visible={showCobro}

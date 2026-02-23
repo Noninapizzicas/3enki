@@ -16,6 +16,7 @@
   export let monto: number;
   export let pedido_ids: string[] = [];
   export let visible: boolean = true;
+  export let project_id: string = '';
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -85,6 +86,7 @@
     try {
       const payload: any = {
         cuenta_id,
+        project_id: project_id || undefined,
         pedido_ids,
         monto,
         metodo_pago: metodoSeleccionado,

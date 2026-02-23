@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://pizzepos.com/schemas/mesa-events.json",
-  "title": "Mesa Events Schema",
-  "description": "Esquemas de eventos de mesas",
+  "title": "Mesa Events Schema v4.0",
+  "description": "Esquemas de eventos de mesas dinámicas",
 
   "definitions": {
     "mesa_abierta": {
@@ -12,15 +12,11 @@
         "event_type": {"const": "mesa.abierta"},
         "payload": {
           "type": "object",
-          "required": ["cuenta_id", "numero_mesa", "zona", "hora_apertura"],
+          "required": ["cuenta_id", "nombre", "numero", "hora_apertura"],
           "properties": {
             "cuenta_id": {"type": "string"},
-            "numero_mesa": {"type": "integer", "minimum": 1, "maximum": 100},
-            "zona": {
-              "type": "string",
-              "enum": ["terraza", "interior", "vip"]
-            },
-            "capacidad": {"type": "integer"},
+            "nombre": {"type": "string"},
+            "numero": {"type": "integer", "minimum": 1},
             "comensales": {"type": "integer"},
             "camarero": {"type": "string"},
             "hora_apertura": {"type": "string", "format": "date-time"}
@@ -37,10 +33,10 @@
         "event_type": {"const": "mesa.camarero_asignado"},
         "payload": {
           "type": "object",
-          "required": ["cuenta_id", "numero_mesa", "camarero"],
+          "required": ["cuenta_id", "nombre", "camarero"],
           "properties": {
             "cuenta_id": {"type": "string"},
-            "numero_mesa": {"type": "integer"},
+            "nombre": {"type": "string"},
             "camarero": {"type": "string"},
             "camarero_anterior": {"type": "string"}
           }
@@ -56,12 +52,13 @@
         "event_type": {"const": "mesa.cerrada"},
         "payload": {
           "type": "object",
-          "required": ["cuenta_id", "numero_mesa", "total", "tiempo_ocupada"],
+          "required": ["cuenta_id", "nombre", "total", "tiempo_ocupada"],
           "properties": {
             "cuenta_id": {"type": "string"},
-            "numero_mesa": {"type": "integer"},
+            "nombre": {"type": "string"},
             "total": {"type": "number"},
             "tiempo_ocupada": {"type": "integer"},
+            "pedidos_count": {"type": "integer"},
             "hora_cierre": {"type": "string", "format": "date-time"}
           }
         },
@@ -76,12 +73,10 @@
         "event_type": {"const": "cuenta.creada"},
         "payload": {
           "type": "object",
-          "required": ["cuenta_id", "tipo", "origen"],
+          "required": ["cuenta_id", "tipo"],
           "properties": {
             "cuenta_id": {"type": "string"},
             "tipo": {"const": "mesa"},
-            "origen": {"const": "cuentas-mesa"},
-            "numero_mesa": {"type": "integer"},
             "total": {"type": "number"},
             "metadata": {"type": "object"}
           }

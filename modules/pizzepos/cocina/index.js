@@ -139,19 +139,19 @@ class CocinaModule {
   async onPedidoEnviadoCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { pedido_id, items, numero_mesa, cuenta_id, notas_generales } = data;
+    const { pedido_id, items, cuenta_id, canal, notas_generales } = data;
 
     this.logger.info('cocina.pedido.recibido', {
       correlation_id: correlationId,
       pedido_id,
-      numero_mesa,
+      canal: canal || 'directo',
       items_count: items?.length || 0
     });
 
     const pedidoCocina = {
       pedido_id,
-      numero_mesa,
       cuenta_id,
+      canal: canal || null,
       items: (items || []).map(item => {
         const cocinaItem = {
           item_id: item.item_id,
@@ -258,7 +258,7 @@ class CocinaModule {
     itemEncontrado.preparado_at = new Date().toISOString();
     this.internalMetrics.items_preparados++;
 
-    await this.publishItemPreparado(pedidoEncontrado.pedido_id, itemEncontrado);
+    await this.publishItemPreparado(pedidoEncontrado, itemEncontrado);
 
     this.broadcastSSE({
       type: 'item_preparado',
@@ -378,13 +378,14 @@ class CocinaModule {
       type: 'pedido_listo',
       data: {
         pedido_id: pedido.pedido_id,
-        numero_mesa: pedido.numero_mesa,
+        canal: pedido.canal || null,
         tiempo_preparacion: tiempoPreparacion
       }
     });
 
     this.logger.info('cocina.pedido.listo', {
       pedido_id: pedido.pedido_id,
+      canal: pedido.canal || null,
       tiempo_preparacion: tiempoPreparacion
     });
   }
@@ -403,9 +404,11 @@ class CocinaModule {
   // Event Publishers
   // ==========================================
 
-  async publishItemPreparado(pedido_id, item) {
+  async publishItemPreparado(pedidoCocina, item) {
     await this.eventBus.publish('cocina.item_preparado', {
-      pedido_id,
+      pedido_id: pedidoCocina.pedido_id,
+      cuenta_id: pedidoCocina.cuenta_id,
+      canal: pedidoCocina.canal || null,
       item_id: item.item_id,
       producto_id: item.producto_id,
       nombre: item.nombre,
@@ -417,7 +420,8 @@ class CocinaModule {
   async publishPedidoListo(pedido) {
     await this.eventBus.publish('cocina.pedido_listo', {
       pedido_id: pedido.pedido_id,
-      numero_mesa: pedido.numero_mesa,
+      cuenta_id: pedido.cuenta_id,
+      canal: pedido.canal || null,
       items_count: pedido.items.length,
       tiempo_preparacion: pedido.tiempo_preparacion,
       listo_at: pedido.listo_at

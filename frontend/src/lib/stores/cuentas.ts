@@ -185,19 +185,12 @@ export async function getStats(projectId: string): Promise<any> {
 // MESA — Canal principal (cuentas-canales strategy)
 // =============================================================================
 
-export interface MesaDisponible {
-  numero_mesa: number;
-  zona: string;
-  capacidad: number;
-}
-
 export interface MesaActiva {
   cuenta_id: string;
-  numero_mesa: number;
-  zona: string;
-  capacidad: number;
-  comensales: number;
-  camarero: string;
+  nombre: string;
+  numero: number;
+  comensales: number | null;
+  camarero: string | null;
   estado: string;
   total: number;
   hora_apertura: string;
@@ -205,28 +198,15 @@ export interface MesaActiva {
 }
 
 /**
- * Obtiene mesas disponibles (no ocupadas) agrupadas por zona
- */
-export async function getAvailableMesas(projectId: string): Promise<MesaDisponible[]> {
-  try {
-    const res = await mqttRequest<any>('mesa', 'disponibles', { project_id: projectId });
-    const data = res?.data?.mesas_disponibles ? res.data : res?.data?.data;
-    return data?.mesas_disponibles || [];
-  } catch (err: any) {
-    console.error('[Cuentas] getAvailableMesas error:', err);
-    return [];
-  }
-}
-
-/**
  * Abre una mesa via cuentas-canales → mesa strategy
- * Devuelve el cuenta_id generado (ej: mesa_5_20260222_001)
+ * Nombre libre: "Mesa 1", "Mesa de Manolo", etc. Si no se pasa, auto-numera.
+ * Devuelve el cuenta_id generado (ej: mesa_1_20260222_001)
  */
-export async function createMesa(projectId: string, numero_mesa: number, comensales?: number): Promise<string | null> {
+export async function createMesa(projectId: string, nombre?: string, comensales?: number): Promise<string | null> {
   try {
     const res = await mqttRequest<any>('mesa', 'abrir', {
       project_id: projectId,
-      numero_mesa,
+      nombre: nombre || undefined,
       comensales: comensales || undefined
     });
     const data = res?.data?.cuenta_id ? res.data : res?.data?.data;

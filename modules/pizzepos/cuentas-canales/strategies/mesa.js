@@ -1,27 +1,31 @@
 /**
  * Strategy: Mesa
- * Gestión de mesas del restaurante - apertura, zonas, camareros, cierre
+ * Canal de servicio en mesa — mesas dinámicas creadas en tiempo de ejecución
  *
- * Prefijo cuenta_id: mesa_{numero}_{YYYYMMDD}_{seq}
+ * NO hay mesas predefinidas. Cada mesa se crea al vuelo con nombre libre:
+ *   "Mesa 1", "Mesa 15", "Mesa de Manolo", lo que sea.
+ *
+ * Prefijo cuenta_id: mesa_{seq}_{YYYYMMDD}_{subseq}
  * Dominio uiHandler: 'mesa'
  * Eventos propios: mesa.abierta, mesa.cerrada, mesa.camarero_asignado
- * Consume: pedido.creado
+ * Consume: pedido.creado (actualiza total de la mesa)
+ *
+ * Métricas: tiempo ocupada, tiempo preparación, ingresos por mesa, por camarero
  */
 
 class MesaStrategy {
   constructor() {
     this.tipo = 'mesa';
     this.prefijo = 'mesa_';
-    this.version = '3.0.0';
+    this.version = '4.0.0';
 
+    // Mesas activas: cuenta_id -> mesa data
     this.mesasActivas = new Map();
 
-    this.configuracionMesas = {
-      terraza: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-      interior: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
-      vip: [21, 22, 23, 24, 25]
-    };
+    // Contador diario para auto-nombre: "Mesa 1", "Mesa 2"...
+    this.contadorDiario = 0;
 
+    // Métricas internas
     this.internalMetrics = {
       mesas_abiertas: 0,
       mesas_cerradas: 0,
@@ -32,7 +36,7 @@ class MesaStrategy {
     this.modulo = null;
     this._uiActions = [
       'abrir', 'cerrar', 'asignar_camarero', 'get',
-      'disponibles', 'ocupadas', 'list', 'health', 'metrics'
+      'activas', 'list', 'health', 'metrics'
     ];
   }
 
@@ -43,10 +47,6 @@ class MesaStrategy {
   async init(modulo) {
     this.modulo = modulo;
 
-    if (modulo.config.mesas) {
-      this.configuracionMesas = modulo.config.mesas;
-    }
-
     modulo.safeAddSchema(require('../schemas/mesa.json'));
     modulo.safeAddSchema(require('../schemas/mesa-events.json'));
   }
@@ -56,8 +56,7 @@ class MesaStrategy {
     uiHandler.register('mesa', 'cerrar', this.handleCerrarMesa.bind(this));
     uiHandler.register('mesa', 'asignar_camarero', this.handleAsignarCamarero.bind(this));
     uiHandler.register('mesa', 'get', this.handleGetMesa.bind(this));
-    uiHandler.register('mesa', 'disponibles', this.handleGetDisponibles.bind(this));
-    uiHandler.register('mesa', 'ocupadas', this.handleGetOcupadas.bind(this));
+    uiHandler.register('mesa', 'activas', this.handleGetActivas.bind(this));
     uiHandler.register('mesa', 'list', this.handleListAll.bind(this));
     uiHandler.register('mesa', 'health', this.handleHealthCheck.bind(this));
     uiHandler.register('mesa', 'metrics', this.handleGetMetrics.bind(this));
@@ -78,14 +77,12 @@ class MesaStrategy {
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
-    const numeroMesa = parseInt(cuenta_id.split('_')[1]);
-    await this.cerrarMesa(numeroMesa, correlationId);
+    await this.cerrarMesa(cuenta_id, correlationId);
   }
 
   getHealth() {
     return {
-      mesas_activas: this.mesasActivas.size,
-      mesas_total: Object.values(this.configuracionMesas).flat().length
+      mesas_activas: this.mesasActivas.size
     };
   }
 
@@ -103,6 +100,7 @@ class MesaStrategy {
 
   cleanup() {
     this.mesasActivas.clear();
+    this.contadorDiario = 0;
   }
 
   // ==========================================
@@ -116,23 +114,22 @@ class MesaStrategy {
 
     if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
 
-    const numeroMesa = parseInt(cuenta_id.split('_')[1]);
-    const mesa = this.mesasActivas.get(numeroMesa);
-
+    const mesa = this.mesasActivas.get(cuenta_id);
     if (!mesa) {
       this.modulo.logger.warn('canal.mesa.pedido.mesa_no_activa', {
         correlation_id: correlationId,
-        cuenta_id,
-        numero_mesa: numeroMesa
+        cuenta_id
       });
       return;
     }
 
     mesa.total += total || 0;
+    mesa.pedidos_count = (mesa.pedidos_count || 0) + 1;
 
     this.modulo.logger.info('canal.mesa.pedido.agregado', {
       correlation_id: correlationId,
-      numero_mesa: numeroMesa,
+      cuenta_id,
+      nombre: mesa.nombre,
       total_nuevo: mesa.total
     });
   }
@@ -143,53 +140,43 @@ class MesaStrategy {
 
   async handleAbrirMesa(data) {
     try {
-      const validate = this.modulo.ajv.getSchema(
-        'https://pizzepos.com/schemas/mesa.json#/definitions/abrir_mesa_request'
-      );
-      if (validate && !validate(data)) {
-        return { status: 400, error: 'Request inválido', details: validate.errors };
-      }
-
-      const { numero_mesa, comensales, camarero, notas } = data;
-
-      const zona = this.getZonaMesa(numero_mesa);
-      if (!zona) {
-        return { status: 404, error: `Mesa ${numero_mesa} no existe en la configuración` };
-      }
-
-      if (this.mesasActivas.has(numero_mesa)) {
-        return { status: 409, error: `Mesa ${numero_mesa} ya está ocupada` };
-      }
+      const { nombre, comensales, camarero, notas } = data;
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('mesa', numero_mesa);
+      // Auto-incrementar contador diario
+      this.contadorDiario++;
+      const numero = this.contadorDiario;
+
+      // Nombre libre: lo que pase el usuario, o auto "Mesa N"
+      const nombre_mesa = nombre || `Mesa ${numero}`;
+
+      // Generar cuenta_id con prefijo
+      const secuencial = this.modulo.getNextSecuencial('mesa', numero);
       const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `mesa_${numero_mesa}_${fecha}_${secuencial.toString().padStart(3, '0')}`;
-      const capacidad = this.getCapacidadMesa(numero_mesa, zona);
+      const cuenta_id = `mesa_${numero}_${fecha}_${secuencial.toString().padStart(3, '0')}`;
 
       const mesa = {
         cuenta_id,
-        numero_mesa,
-        zona,
-        capacidad,
-        comensales: comensales || capacidad,
-        camarero: camarero || 'Sin asignar',
+        nombre: nombre_mesa,
+        numero,
+        comensales: comensales || null,
+        camarero: camarero || null,
         estado: 'ocupada',
         total: 0,
+        pedidos_count: 0,
         hora_apertura: new Date().toISOString(),
-        pedidos: [],
         notas: notas || ''
       };
 
-      this.mesasActivas.set(numero_mesa, mesa);
+      this.mesasActivas.set(cuenta_id, mesa);
       this.internalMetrics.mesas_abiertas++;
 
+      // Publicar eventos
       await this.modulo.eventBus.publish('mesa.abierta', {
         cuenta_id: mesa.cuenta_id,
-        numero_mesa: mesa.numero_mesa,
-        zona: mesa.zona,
-        capacidad: mesa.capacidad,
+        nombre: mesa.nombre,
+        numero: mesa.numero,
         comensales: mesa.comensales,
         camarero: mesa.camarero,
         hora_apertura: mesa.hora_apertura
@@ -200,17 +187,16 @@ class MesaStrategy {
         tipo: 'mesa',
         total: mesa.total,
         metadata: {
-          zona: mesa.zona,
+          nombre: mesa.nombre,
+          numero: mesa.numero,
           camarero: mesa.camarero,
-          comensales: mesa.comensales,
-          numero_mesa: mesa.numero_mesa
+          comensales: mesa.comensales
         }
       });
 
       this.modulo.logger.info('mesa.abierta', {
         cuenta_id,
-        numero_mesa,
-        zona
+        nombre: nombre_mesa
       });
 
       return { status: 201, data: mesa };
@@ -223,17 +209,9 @@ class MesaStrategy {
 
   async handleAsignarCamarero(data) {
     try {
-      const validate = this.modulo.ajv.getSchema(
-        'https://pizzepos.com/schemas/mesa.json#/definitions/asignar_camarero_request'
-      );
-      if (validate && !validate(data)) {
-        return { status: 400, error: 'Request inválido', details: validate.errors };
-      }
-
       const { cuenta_id, camarero } = data;
-      const numeroMesa = parseInt(cuenta_id.split('_')[1]);
-      const mesa = this.mesasActivas.get(numeroMesa);
 
+      const mesa = this.mesasActivas.get(cuenta_id);
       if (!mesa) {
         return { status: 404, error: 'Mesa no encontrada o no está activa' };
       }
@@ -244,13 +222,14 @@ class MesaStrategy {
 
       await this.modulo.eventBus.publish('mesa.camarero_asignado', {
         cuenta_id: mesa.cuenta_id,
-        numero_mesa: mesa.numero_mesa,
+        nombre: mesa.nombre,
         camarero: mesa.camarero,
         camarero_anterior
       });
 
       this.modulo.logger.info('mesa.camarero_asignado', {
-        numero_mesa: numeroMesa,
+        cuenta_id,
+        nombre: mesa.nombre,
         camarero
       });
 
@@ -265,9 +244,8 @@ class MesaStrategy {
   async handleCerrarMesa(data) {
     try {
       const { cuenta_id } = data;
-      const numeroMesa = parseInt(cuenta_id.split('_')[1]);
-      await this.cerrarMesa(numeroMesa);
-      return { status: 200, data: { message: `Mesa ${numeroMesa} cerrada correctamente` } };
+      await this.cerrarMesa(cuenta_id);
+      return { status: 200, data: { message: 'Mesa cerrada correctamente' } };
     } catch (error) {
       this.modulo.logger.error('canal.mesa.cerrar.error', { error: error.message });
       return { status: 500, error: error.message };
@@ -275,11 +253,11 @@ class MesaStrategy {
   }
 
   async handleGetMesa(data) {
-    const { numero } = data;
-    const mesa = this.mesasActivas.get(parseInt(numero));
+    const { cuenta_id } = data;
+    const mesa = this.mesasActivas.get(cuenta_id);
 
     if (!mesa) {
-      return { status: 404, error: `Mesa ${numero} no encontrada o no está activa` };
+      return { status: 404, error: 'Mesa no encontrada o no está activa' };
     }
 
     return {
@@ -291,73 +269,22 @@ class MesaStrategy {
     };
   }
 
-  async handleGetDisponibles(data) {
-    const { zona } = data || {};
-    const mesasConfig = zona
-      ? (this.configuracionMesas[zona] || [])
-      : Object.values(this.configuracionMesas).flat();
-
-    const disponibles = mesasConfig.filter(num => !this.mesasActivas.has(num));
-
-    return {
-      status: 200,
-      data: {
-        mesas_disponibles: disponibles.map(num => ({
-          numero_mesa: num,
-          zona: this.getZonaMesa(num),
-          capacidad: this.getCapacidadMesa(num, this.getZonaMesa(num))
-        })),
-        total: disponibles.length
-      }
-    };
-  }
-
-  async handleGetOcupadas(data) {
-    const { zona, camarero } = data || {};
-    let ocupadas = Array.from(this.mesasActivas.values());
-
-    if (zona) ocupadas = ocupadas.filter(m => m.zona === zona);
-    if (camarero) ocupadas = ocupadas.filter(m => m.camarero === camarero);
-
-    ocupadas = ocupadas.map(m => ({
+  async handleGetActivas() {
+    const activas = Array.from(this.mesasActivas.values()).map(m => ({
       ...m,
       tiempo_ocupada: this.modulo.calcularTiempoMinutos(m.hora_apertura)
     }));
 
+    activas.sort((a, b) => new Date(a.hora_apertura) - new Date(b.hora_apertura));
+
     return {
       status: 200,
-      data: { mesas_ocupadas: ocupadas, total: ocupadas.length }
+      data: { mesas: activas, total: activas.length }
     };
   }
 
   async handleListAll() {
-    const todasMesas = Object.values(this.configuracionMesas).flat();
-
-    const mesas = todasMesas.map(num => {
-      const mesa = this.mesasActivas.get(num);
-      if (mesa) {
-        return {
-          ...mesa,
-          tiempo_ocupada: this.modulo.calcularTiempoMinutos(mesa.hora_apertura)
-        };
-      }
-      return {
-        numero_mesa: num,
-        zona: this.getZonaMesa(num),
-        capacidad: this.getCapacidadMesa(num, this.getZonaMesa(num)),
-        estado: 'disponible'
-      };
-    });
-
-    return {
-      status: 200,
-      data: {
-        mesas,
-        total: mesas.length,
-        disponibles: mesas.filter(m => m.estado === 'disponible').length,
-        ocupadas: mesas.filter(m => m.estado === 'ocupada').length
-      }
-    };
+    return this.handleGetActivas();
   }
 
   async handleHealthCheck() {
@@ -372,10 +299,10 @@ class MesaStrategy {
   // Business Logic
   // ==========================================
 
-  async cerrarMesa(numeroMesa, correlationId) {
-    const mesa = this.mesasActivas.get(numeroMesa);
+  async cerrarMesa(cuenta_id, correlationId) {
+    const mesa = this.mesasActivas.get(cuenta_id);
     if (!mesa) {
-      throw new Error(`Mesa ${numeroMesa} no encontrada o no está activa`);
+      throw new Error('Mesa no encontrada o no está activa');
     }
 
     mesa.hora_cierre = new Date().toISOString();
@@ -388,9 +315,10 @@ class MesaStrategy {
 
     await this.modulo.eventBus.publish('mesa.cerrada', {
       cuenta_id: mesa.cuenta_id,
-      numero_mesa: mesa.numero_mesa,
+      nombre: mesa.nombre,
       total: mesa.total,
       tiempo_ocupada: mesa.tiempo_ocupada,
+      pedidos_count: mesa.pedidos_count,
       hora_cierre: mesa.hora_cierre
     }, { correlationId });
 
@@ -399,36 +327,21 @@ class MesaStrategy {
       tipo: 'mesa',
       total: mesa.total,
       metadata: {
+        nombre: mesa.nombre,
         tiempo_ocupada: mesa.tiempo_ocupada,
-        numero_mesa: mesa.numero_mesa
+        pedidos_count: mesa.pedidos_count
       }
     }, correlationId);
 
-    this.mesasActivas.delete(numeroMesa);
+    this.mesasActivas.delete(cuenta_id);
 
     this.modulo.logger.info('mesa.cerrada', {
       correlation_id: correlationId,
-      numero_mesa: numeroMesa,
+      cuenta_id,
+      nombre: mesa.nombre,
       tiempo_ocupada: mesa.tiempo_ocupada,
       total: mesa.total
     });
-  }
-
-  // ==========================================
-  // Helpers propios de Mesa
-  // ==========================================
-
-  getZonaMesa(numeroMesa) {
-    for (const [zona, mesas] of Object.entries(this.configuracionMesas)) {
-      if (mesas.includes(numeroMesa)) return zona;
-    }
-    return null;
-  }
-
-  getCapacidadMesa(numeroMesa) {
-    if (numeroMesa <= 10) return 2;
-    if (numeroMesa <= 20) return 4;
-    return 6;
   }
 }
 

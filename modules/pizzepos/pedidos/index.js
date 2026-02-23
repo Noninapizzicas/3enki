@@ -179,9 +179,13 @@ class PedidosModule {
     try {
       const pedido_id = comandero_pedido_id || require('crypto').randomUUID();
 
+      // Detectar canal por prefijo del cuenta_id
+      const canal = this.detectarCanal(cuenta_id);
+
       const pedido = {
         id: pedido_id,
         cuenta_id,
+        canal,
         items: items.map(item => ({
           item_id: item.id || item.item_id || require('crypto').randomUUID(),
           producto_id: item.producto_id,
@@ -666,8 +670,9 @@ class PedidosModule {
     await this.eventBus.publish('pedido.creado', {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
-      numero_mesa: pedido.numero_mesa,
+      canal: pedido.canal || null,
       estado: pedido.estado,
+      total: pedido.total,
       created_at: pedido.created_at
     });
   }
@@ -707,7 +712,7 @@ class PedidosModule {
     await this.eventBus.publish('pedido.enviado_cocina', {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
-      numero_mesa: pedido.numero_mesa,
+      canal: pedido.canal || null,
       items: pedido.items.map(item => {
         const mapped = {
           item_id: item.item_id,
@@ -756,6 +761,21 @@ class PedidosModule {
 
   calcularSubtotal(pedido) {
     return pedido.items.reduce((sum, item) => sum + item.precio_total, 0);
+  }
+
+  /**
+   * Detecta el canal de venta por el prefijo del cuenta_id
+   * mesa_ → mesa, tel_ → telefono, llevar_ → llevar, glovo_ → glovo, wa_ → whatsapp
+   * Sin prefijo conocido → genérico (cuenta simple)
+   */
+  detectarCanal(cuenta_id) {
+    if (!cuenta_id) return null;
+    if (cuenta_id.startsWith('mesa_')) return 'mesa';
+    if (cuenta_id.startsWith('tel_')) return 'telefono';
+    if (cuenta_id.startsWith('llevar_')) return 'llevar';
+    if (cuenta_id.startsWith('glovo_')) return 'glovo';
+    if (cuenta_id.startsWith('wa_')) return 'whatsapp';
+    return null;
   }
 }
 

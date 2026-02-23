@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-02-11",
+  "_updated": "2026-02-16",
   "mejoras": [
     {
       "id": "refactor-ai-gateway",
@@ -200,16 +200,11 @@
       "id": "split-project-manager",
       "titulo": "Separar project-manager en módulos internos",
       "prioridad": "media",
-      "estado": "pendiente",
+      "estado": "implementado",
       "fecha_propuesta": "2026-02-09",
-      "descripcion": "index.js tiene 3731 líneas con 5 fases + CRUD + HTTP + UI + Events en un solo archivo. Separar en: core.js, composition.js, systems.js, context.js, handlers/",
-      "beneficios": [
-        "Mantenibilidad: archivos <500 líneas",
-        "Testing: tests unitarios por fase",
-        "Colaboración: cambios localizados sin conflictos"
-      ],
-      "archivos_afectados": ["modules/project-manager/index.js"],
-      "cuando_implementar": "Cuando se necesite modificar una fase específica y el monolito sea un obstáculo"
+      "fecha_implementacion": "2026-02-16",
+      "descripcion": "index.js tenía 3731 líneas. Ahora split en 12 archivos: index.js (128 líneas) + lib/ (db, crud, features, composition, systems, context, session, ui-handlers, http-handlers, event-handlers, directories, helpers = 2985 líneas)",
+      "resultado": "index.js = 128 líneas, 12 archivos en lib/, cada uno <500 líneas"
     },
     {
       "id": "optimizar-listSystems-n1",

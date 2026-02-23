@@ -122,7 +122,7 @@ class CuentasModule {
     cuenta.total += precio_total || 0;
     cuenta.updated_at = new Date().toISOString();
 
-    await this.publishCuentaActualizada(cuenta_id, {
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
       items: cuenta.items,
       total: cuenta.total
     });
@@ -139,7 +139,7 @@ class CuentasModule {
     cuenta.total = Math.max(0, cuenta.total - (precio_total || 0));
     cuenta.updated_at = new Date().toISOString();
 
-    await this.publishCuentaActualizada(cuenta_id, {
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
       items: cuenta.items,
       total: cuenta.total
     });

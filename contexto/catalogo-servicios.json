@@ -1,15 +1,19 @@
 {
   "_VERSION": "1.1.0",
   "_CREATED": "2026-01-17",
-  "_UPDATED": "2026-02-11",
+  "_UPDATED": "2026-02-16",
   "_DESCRIPTION": "Catálogo completo de servicios, módulos, utilidades y acciones del sistema Event-Core",
 
   "resumen": {
-    "total_modulos": "42 (30 core + 12 pizzepos)",
-    "total_providers": 32,
-    "total_apis": "200+",
-    "total_eventos": "250+ publicados, 120+ suscritos",
-    "total_tools_ai": "110+",
+    "total_modulos": "40 (28 core + 12 pizzepos)",
+    "total_active": 34,
+    "total_disabled": 6,
+    "total_providers": 34,
+    "total_provider_functions": 119,
+    "total_apis": 282,
+    "total_eventos": "201 publicados, 159 suscritos",
+    "total_tools_modulos": 61,
+    "total_ui_handlers": 110,
     "verticales": ["pizzepos (POS pizzería, 12 módulos, 5 canales de venta)"]
   },
 

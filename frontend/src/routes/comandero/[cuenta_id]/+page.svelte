@@ -12,6 +12,7 @@
   import { ComanderoScreen } from '$lib/components/comandero';
 
   $: cuenta_id = $page.params.cuenta_id;
+  $: initialView = $page.url.searchParams.get('view') || undefined;
   $: projectId = $activeProjectId || '';
 
   function handleNavigate(path: string) {
@@ -30,6 +31,7 @@
 <ComanderoScreen
   {cuenta_id}
   {projectId}
+  {initialView}
   onNavigate={handleNavigate}
   onOpenPanel={handleOpenPanel}
 />

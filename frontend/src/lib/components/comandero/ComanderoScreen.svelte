@@ -57,6 +57,9 @@
   /** Callback para abrir flotante */
   export let onOpenPanel: ((panel: string, data?: any) => void) | null = null;
 
+  /** Vista inicial: 'cuenta' abre panel de cobro al cargar */
+  export let initialView: string | undefined = undefined;
+
   let cleanupSubs: (() => void) | null = null;
   let contentEl: HTMLElement;
   let pedidoSectionEl: HTMLElement;
@@ -350,7 +353,7 @@
 
   onMount(() => {
     connect().then(async () => {
-      initComandero(projectId, cuenta_id);
+      await initComandero(projectId, cuenta_id);
       cleanupSubs = initComanderoSubscriptions(projectId);
 
       // Cargar nombre real de la mesa
@@ -364,6 +367,11 @@
           const data = (res as any)?.data;
           if (data?.nombre) cuentaNombre = data.nombre;
         } catch { /* usa nombre por defecto */ }
+      }
+
+      // Auto-abrir cobro si se navega con ?view=cuenta
+      if (initialView === 'cuenta') {
+        showCobro = true;
       }
     }).catch((err) => {
       console.error('[ComanderoScreen] MQTT connection failed', err);

@@ -282,18 +282,19 @@ class PedidosModule {
     const start_time = Date.now();
 
     try {
-      const { cuenta_id, numero_mesa, notas_generales } = data;
+      const { cuenta_id, notas_generales } = data;
 
       if (!cuenta_id) {
         return { status: 400, error: 'cuenta_id es requerido' };
       }
 
       const pedido_id = crypto.randomUUID();
+      const canal = this.detectarCanal(cuenta_id);
 
       const pedido = {
         id: pedido_id,
         cuenta_id,
-        numero_mesa: numero_mesa || null,
+        canal,
         items: [],
         estado: 'borrador',
         subtotal: 0,

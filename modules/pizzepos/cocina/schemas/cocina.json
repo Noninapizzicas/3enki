@@ -34,8 +34,8 @@
       "required": ["pedido_id", "items", "estado", "recibido_at"],
       "properties": {
         "pedido_id": {"type": "string"},
-        "numero_mesa": {"type": "integer"},
         "cuenta_id": {"type": "string"},
+        "canal": {"type": "string", "enum": ["mesa", "telefono", "llevar", "glovo", "whatsapp"], "description": "Canal de venta detectado por prefijo del cuenta_id"},
         "items": {
           "type": "array",
           "items": {"$ref": "#/definitions/item_cocina"}

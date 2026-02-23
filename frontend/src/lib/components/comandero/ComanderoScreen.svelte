@@ -68,7 +68,6 @@
 
   // Voice recognition
   let listening = false;
-  let speechSupported = false;
   let voiceError = '';
 
   function startEditName() {

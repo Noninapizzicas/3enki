@@ -98,6 +98,11 @@
         "handler": "onEvento"
       },
       {
+        "event": "mesa.renombrada",
+        "description": "Actualizar nombre de mesa en cuentas activas",
+        "handler": "onMesaRenombrada"
+      },
+      {
         "event": "telefono.pedido_creado",
         "description": "Guardar evento de pedido telefónico",
         "handler": "onEvento"

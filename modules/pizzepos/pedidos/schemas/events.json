@@ -32,7 +32,7 @@
               "properties": {
                 "pedido_id": {"type": "string"},
                 "cuenta_id": {"type": "string"},
-                "numero_mesa": {"type": "integer"},
+                "canal": {"type": "string", "enum": ["mesa", "telefono", "llevar", "glovo", "whatsapp"]},
                 "estado": {"type": "string"},
                 "created_at": {"type": "string", "format": "date-time"}
               },
@@ -124,7 +124,7 @@
               "properties": {
                 "pedido_id": {"type": "string"},
                 "cuenta_id": {"type": "string"},
-                "numero_mesa": {"type": "integer"},
+                "canal": {"type": "string", "enum": ["mesa", "telefono", "llevar", "glovo", "whatsapp"]},
                 "items": {
                   "type": "array",
                   "items": {

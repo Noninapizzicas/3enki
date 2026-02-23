@@ -89,10 +89,10 @@
           "type": "string",
           "pattern": "^cuenta_[a-z0-9]+$"
         },
-        "numero_mesa": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Número de mesa (si es cuenta local)"
+        "canal": {
+          "type": "string",
+          "enum": ["mesa", "telefono", "llevar", "glovo", "whatsapp"],
+          "description": "Canal de venta detectado por prefijo del cuenta_id"
         },
         "items": {
           "type": "array",
@@ -147,10 +147,6 @@
         "cuenta_id": {
           "type": "string",
           "pattern": "^cuenta_[a-z0-9]+$"
-        },
-        "numero_mesa": {
-          "type": "integer",
-          "minimum": 1
         },
         "notas_generales": {
           "type": "string"

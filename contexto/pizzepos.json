@@ -111,7 +111,7 @@
       "patron": "Composición con Strategy — 1 módulo base + 5 strategies independientes",
       "estructura": {
         "index.js": "Módulo base: lifecycle, cobro.procesado routing por prefijo, reseteo diario, contadores, tracking tiempos, publishers cuenta.creada/cerrada",
-        "strategies/mesa.js": "Servicio en mesa — zonas (terraza/interior/vip), capacidad, asignación de camareros",
+        "strategies/mesa.js": "Servicio en mesa — mesas dinámicas, nombre libre, métricas de tiempo, camareros",
         "strategies/telefono.js": "Pedidos telefónicos — caller ID, CRM contactos, notificación WhatsApp",
         "strategies/llevar.js": "Pedidos para llevar — tickets numerados, display SSE, 2 fases (listo → entregado)",
         "strategies/glovo.js": "Delivery externo Glovo — aceptar/rechazar, notificar rider, mapeo order_id externo",

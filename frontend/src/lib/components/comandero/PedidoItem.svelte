@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * PedidoItem — Item en la lista del pedido
-   * Muestra: nombre, cantidad, precio, subtotal
-   * Acciones: +, -, borrar
+   * PedidoItem — Item completo en la lista del pedido
+   * Muestra: cantidad, nombre, tipo, variaciones detalladas,
+   *          mitad/mitad (ambas pizzas), al gusto (ingredientes),
+   *          notas, precio unitario y subtotal
    */
   import { createEventDispatcher } from 'svelte';
   import type { PedidoItem as PedidoItemType } from '$lib/stores/comandero';
@@ -16,94 +17,142 @@
   }>();
 
   function formatPrecio(precio: number): string {
-    return precio.toFixed(2) + ' €';
+    return precio.toFixed(2) + ' \u20AC';
   }
+
+  // Extraer variaciones legibles
+  $: variacionesTexto = (item.variaciones || []).map((v: any) => {
+    if (v.tipo === 'quitar') return `sin ${v.nombre || v.ingrediente_id}`;
+    if (v.tipo === 'anadir') return `+ ${v.nombre || v.ingrediente_id}`;
+    return v.nombre || v.ingrediente_id || '';
+  }).filter(Boolean);
+
+  $: tieneDetalle = variacionesTexto.length > 0
+    || item.notas
+    || item.tipo === 'mitad_mitad'
+    || item.tipo === 'al_gusto';
 </script>
 
-<div class="pedido-item" class:mitad-mitad={item.tipo === 'mitad_mitad'} class:al-gusto={item.tipo === 'al_gusto'}>
-  <div class="item-info">
-    <span class="cantidad">{item.cantidad}x</span>
-    {#if item.tipo === 'mitad_mitad'}
-      <span class="tipo-badge mitad">½</span>
-    {:else if item.tipo === 'al_gusto'}
-      <span class="tipo-badge gusto">AG</span>
-    {/if}
-    <span class="nombre">{item.nombre}</span>
-    {#if item.variaciones?.length}
-      <span class="variaciones">({item.variaciones.length} var.)</span>
-    {/if}
+<div
+  class="pedido-item"
+  class:mitad-mitad={item.tipo === 'mitad_mitad'}
+  class:al-gusto={item.tipo === 'al_gusto'}
+>
+  <!-- Fila principal: cantidad + nombre + acciones + precio -->
+  <div class="row-main">
+    <div class="item-left">
+      <span class="cantidad">{item.cantidad}x</span>
+      {#if item.tipo === 'mitad_mitad'}
+        <span class="tipo-badge mitad">MITAD</span>
+      {:else if item.tipo === 'al_gusto'}
+        <span class="tipo-badge gusto">AL GUSTO</span>
+      {/if}
+      <span class="nombre">{item.nombre}</span>
+    </div>
+
+    <div class="item-right">
+      <div class="item-actions">
+        <button
+          class="qty-btn"
+          on:click={() => dispatch('decrement', { item_id: item.id })}
+          disabled={item.cantidad <= 1}
+        >-</button>
+        <button
+          class="qty-btn"
+          on:click={() => dispatch('increment', { item_id: item.id })}
+        >+</button>
+        <button
+          class="delete-btn"
+          on:click={() => dispatch('remove', { item_id: item.id })}
+        >x</button>
+      </div>
+      <span class="item-subtotal">{formatPrecio(item.subtotal)}</span>
+    </div>
   </div>
 
-  <div class="item-actions">
-    <button
-      class="qty-btn"
-      on:click={() => dispatch('decrement', { item_id: item.id })}
-      disabled={item.cantidad <= 1}
-    >−</button>
-    <button
-      class="qty-btn"
-      on:click={() => dispatch('increment', { item_id: item.id })}
-    >+</button>
-    <button
-      class="delete-btn"
-      on:click={() => dispatch('remove', { item_id: item.id })}
-    >✕</button>
-  </div>
+  <!-- Detalle: variaciones, mitad/mitad, al gusto, notas -->
+  {#if tieneDetalle}
+    <div class="row-detail">
+      {#if item.tipo === 'mitad_mitad' && item.pizza_izquierda && item.pizza_derecha}
+        <span class="detail-line mitad-detail">
+          {item.pizza_izquierda.nombre} | {item.pizza_derecha.nombre}
+        </span>
+      {/if}
 
-  <div class="item-subtotal">
-    {formatPrecio(item.subtotal)}
-  </div>
+      {#if item.tipo === 'al_gusto' && item.ingredientes?.length}
+        <span class="detail-line ingredientes-detail">
+          {item.ingredientes.map((i: any) => i.nombre).join(', ')}
+        </span>
+      {/if}
+
+      {#if variacionesTexto.length > 0}
+        {#each variacionesTexto as v}
+          <span class="detail-line variacion-detail">{v}</span>
+        {/each}
+      {/if}
+
+      {#if item.notas}
+        <span class="detail-line notas-detail">Nota: {item.notas}</span>
+      {/if}
+
+      {#if item.cantidad > 1}
+        <span class="detail-line precio-unit">c/u {formatPrecio(item.precio)}</span>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
   .pedido-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
     padding: 8px 10px;
     background: #161616;
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1px solid #222;
+    gap: 4px;
   }
 
-  .item-info {
-    flex: 1;
+  .row-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .item-left {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex: 1;
     min-width: 0;
-    overflow: hidden;
   }
 
   .cantidad {
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-size: 0.9rem;
+    font-weight: 800;
     color: #6366f1;
     flex-shrink: 0;
   }
 
   .nombre {
-    font-size: 0.8rem;
-    font-weight: 500;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: #e5e5e5;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .variaciones {
-    font-size: 0.65rem;
-    color: #666;
-    flex-shrink: 0;
-  }
-
   .tipo-badge {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     font-weight: 800;
-    padding: 1px 4px;
+    padding: 2px 4px;
     border-radius: 3px;
     flex-shrink: 0;
     line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
 
   .tipo-badge.mitad {
@@ -126,10 +175,16 @@
     border-color: rgba(236, 72, 153, 0.3);
   }
 
+  .item-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   .item-actions {
     display: flex;
-    gap: 4px;
-    flex-shrink: 0;
+    gap: 3px;
   }
 
   .qty-btn, .delete-btn {
@@ -171,11 +226,46 @@
   }
 
   .item-subtotal {
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-size: 0.9rem;
+    font-weight: 800;
     color: #fff;
     font-variant-numeric: tabular-nums;
-    min-width: 60px;
+    min-width: 55px;
     text-align: right;
+  }
+
+  /* Detalle */
+  .row-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+    padding-left: 30px;
+  }
+
+  .detail-line {
+    font-size: 0.7rem;
+    line-height: 1.3;
+  }
+
+  .mitad-detail {
+    color: #a78bfa;
+    font-weight: 600;
+  }
+
+  .ingredientes-detail {
+    color: #f472b6;
+  }
+
+  .variacion-detail {
+    color: #f59e0b;
+  }
+
+  .notas-detail {
+    color: #60a5fa;
+    font-style: italic;
+  }
+
+  .precio-unit {
+    color: #555;
   }
 </style>

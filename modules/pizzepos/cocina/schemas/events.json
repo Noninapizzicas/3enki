@@ -36,7 +36,8 @@
           "required": ["pedido_id", "items_count", "listo_at"],
           "properties": {
             "pedido_id": {"type": "string"},
-            "numero_mesa": {"type": "integer"},
+            "cuenta_id": {"type": "string"},
+            "canal": {"type": "string", "enum": ["mesa", "telefono", "llevar", "glovo", "whatsapp"]},
             "items_count": {"type": "integer"},
             "tiempo_preparacion": {"type": "number"},
             "listo_at": {"type": "string", "format": "date-time"}

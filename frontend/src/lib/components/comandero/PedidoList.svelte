@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * PedidoList — Lista de items del pedido actual
-   * Anclada abajo, scroll hacia arriba
+   * Debajo del grid de productos, scroll natural
    */
   import { createEventDispatcher } from 'svelte';
   import type { PedidoItem as PedidoItemType } from '$lib/stores/comandero';
@@ -51,7 +51,6 @@
     flex-direction: column;
     background: #111;
     border-top: 1px solid #2a2a2a;
-    max-height: 35vh;
     min-height: 80px;
   }
 
@@ -74,13 +73,10 @@
   }
 
   .items-scroll {
-    flex: 1;
     display: flex;
-    flex-direction: column-reverse; /* items nuevos abajo, scroll hacia arriba */
+    flex-direction: column;
     gap: 6px;
     padding: 8px 10px;
-    overflow-y: auto;
-    overflow-x: hidden;
   }
 
   .total-bar {

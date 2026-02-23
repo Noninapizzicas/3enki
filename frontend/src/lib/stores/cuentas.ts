@@ -218,6 +218,24 @@ export async function createMesa(projectId: string, nombre?: string, comensales?
   }
 }
 
+/**
+ * Renombra una mesa activa
+ * Nombre libre: "Mesa de Manolo", "Terraza 3", lo que sea
+ */
+export async function renameMesa(projectId: string, cuenta_id: string, nombre: string): Promise<boolean> {
+  try {
+    const res = await mqttRequest<any>('mesa', 'renombrar', {
+      project_id: projectId,
+      cuenta_id,
+      nombre
+    });
+    return res?.status === 200;
+  } catch (err: any) {
+    console.error('[Cuentas] renameMesa error:', err);
+    return false;
+  }
+}
+
 // =============================================================================
 // PERSISTENCIA — Fuente de verdad para cuentas activas
 // =============================================================================
@@ -406,6 +424,23 @@ export function initCuentasSubscriptions(projectId: string): () => void {
       const data = event?.data || event?.payload || event;
       if (data?.project_id && data.project_id !== projectId) return;
       loadCuentasFromPersistencia(projectId);
+    })
+  );
+
+  // mesa.renombrada → actualizar nombre en store
+  cleanups.push(
+    mqttSubscribe('mesa.renombrada', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c =>
+          c.id === data.cuenta_id
+            ? { ...c, nombre: data.nombre, updated_at: new Date().toISOString() }
+            : c
+        )
+      }));
     })
   );
 

@@ -35,7 +35,7 @@ class MesaStrategy {
 
     this.modulo = null;
     this._uiActions = [
-      'abrir', 'cerrar', 'asignar_camarero', 'get',
+      'abrir', 'cerrar', 'renombrar', 'asignar_camarero', 'get',
       'activas', 'list', 'health', 'metrics'
     ];
   }
@@ -54,6 +54,7 @@ class MesaStrategy {
   registerUIHandlers(uiHandler) {
     uiHandler.register('mesa', 'abrir', this.handleAbrirMesa.bind(this));
     uiHandler.register('mesa', 'cerrar', this.handleCerrarMesa.bind(this));
+    uiHandler.register('mesa', 'renombrar', this.handleRenombrarMesa.bind(this));
     uiHandler.register('mesa', 'asignar_camarero', this.handleAsignarCamarero.bind(this));
     uiHandler.register('mesa', 'get', this.handleGetMesa.bind(this));
     uiHandler.register('mesa', 'activas', this.handleGetActivas.bind(this));
@@ -204,6 +205,42 @@ class MesaStrategy {
     } catch (error) {
       this.modulo.logger.error('canal.mesa.abrir.error', { error: error.message });
       return { status: 500, error: 'Error interno abriendo mesa' };
+    }
+  }
+
+  async handleRenombrarMesa(data) {
+    try {
+      const { cuenta_id, nombre } = data;
+
+      if (!nombre || nombre.trim().length === 0) {
+        return { status: 400, error: 'nombre es requerido' };
+      }
+
+      const mesa = this.mesasActivas.get(cuenta_id);
+      if (!mesa) {
+        return { status: 404, error: 'Mesa no encontrada o no está activa' };
+      }
+
+      const nombre_anterior = mesa.nombre;
+      mesa.nombre = nombre.trim();
+
+      await this.modulo.eventBus.publish('mesa.renombrada', {
+        cuenta_id: mesa.cuenta_id,
+        nombre: mesa.nombre,
+        nombre_anterior
+      });
+
+      this.modulo.logger.info('mesa.renombrada', {
+        cuenta_id,
+        nombre: mesa.nombre,
+        nombre_anterior
+      });
+
+      return { status: 200, data: mesa };
+
+    } catch (error) {
+      this.modulo.logger.error('canal.mesa.renombrar.error', { error: error.message });
+      return { status: 500, error: 'Error interno renombrando mesa' };
     }
   }
 

@@ -23,56 +23,38 @@ const EVENTS = {
     ACTION: 'admin.action',
   },
 
-  // === AGENT ===
-  AGENT: {
-    *_COMPLETED: 'agent.*.completed',
-    *_FAILED: 'agent.*.failed',
-    EXECUTE_REQUEST: 'agent.execute.request',
-  },
-
   // === AI ===
   AI: {
     CHAT_REQUEST: 'ai.chat.request',
     CHAT_RESPONSE: 'ai.chat.response',
+    CHAT_CHUNK: 'ai.chat.chunk',
+    COMPLETION_COMPLETED: 'ai.completion.completed',
+    REQUEST: 'ai.request',
   },
 
-  // === BOT ===
-  BOT: {
-    COMMAND_RECEIVED: 'bot.command.received',
-    DISABLED: 'bot.disabled',
-    ENABLED: 'bot.enabled',
-    FILE_STORED: 'bot.file.stored',
-    MESSAGE_RECEIVED: 'bot.message.received',
-    REGISTERED: 'bot.registered',
-    UNREGISTERED: 'bot.unregistered',
+  // === CONVERSATION ===
+  CONVERSATION: {
+    CONTEXT_LOADED: 'conversation.context.loaded',
+    CREATED: 'conversation.created',
+    DELETED: 'conversation.deleted',
+    GET_REQUEST: 'conversation.get.request',
+    GET_RESPONSE: 'conversation.get.response',
+    LIST_REQUEST: 'conversation.list.request',
+    LIST_RESPONSE: 'conversation.list.response',
+    SEND_REQUEST: 'conversation.send.request',
+    SEND_RESPONSE: 'conversation.send.response',
+    UPDATED: 'conversation.updated',
   },
 
-  // === CHAT ===
-  CHAT: {
-    SEND_REQUEST: 'chat.send.request',
-    SEND_RESPONSE: 'chat.send.response',
-  },
-
-  // === COMPOSITION ===
-  COMPOSITION: {
-    REQUEST: 'composition.request',
-    RESPONSE: 'composition.response',
-  },
-
-  // === CONTEXT ===
-  CONTEXT: {
-    FULL_REQUEST: 'context.full.request',
-    FULL_RESPONSE: 'context.full.response',
-    IMPORTED: 'context.imported',
-    REMOVED: 'context.removed',
-    REQUEST: 'context.request',
-    RESPONSE: 'context.response',
+  // === CONVERSATIONS ===
+  CONVERSATIONS: {
+    LIST: 'conversations.list',
   },
 
   // === CORE ===
   CORE: {
-    +_ERRORS_#: 'core/+/errors/#',
-    +_EVENTS_#: 'core/+/events/#',
+    ERRORS_PATTERN: 'core/+/errors/#',
+    EVENTS_PATTERN: 'core/+/events/#',
   },
 
   // === CREDENTIAL ===
@@ -80,7 +62,6 @@ const EVENTS = {
     CREATE: 'credential/create',
     DELETE: 'credential/delete',
     DELETED: 'credential.deleted',
-    OAUTH_RESOLVE_REQUEST: 'credential.oauth.resolve.request',
     RESOLVED: 'credential.resolved',
     RESOLVE_FAILED: 'credential.resolve.failed',
     RESOLVE_REQUEST: 'credential.resolve.request',
@@ -117,49 +98,20 @@ const EVENTS = {
     VALIDATE_RESPONSE: 'editor.validate.response',
   },
 
-  // === ENTITY ===
-  ENTITY: {
-    DEPENDENCY_ADDED: 'entity.dependency.added',
-    DEPENDENCY_REMOVED: 'entity.dependency.removed',
-    JOINED_SYSTEM: 'entity.joined_system',
-    LEFT_SYSTEM: 'entity.left_system',
-    LINKED: 'entity.linked',
-    UNLINKED: 'entity.unlinked',
-  },
-
   // === FS ===
   FS: {
-    APPEND_REQUEST: 'fs.append.request',
-    APPEND_RESPONSE: 'fs.append.response',
-    COPY_REQUEST: 'fs.copy.request',
-    COPY_RESPONSE: 'fs.copy.response',
-    DELETE_REQUEST: 'fs.delete.request',
-    DELETE_RESPONSE: 'fs.delete.response',
     DIRECTORY_CREATED: 'fs.directory.created',
-    EXISTS_REQUEST: 'fs.exists.request',
-    EXISTS_RESPONSE: 'fs.exists.response',
     FILE_CREATED: 'fs.file.created',
     FILE_DELETED: 'fs.file.deleted',
     FILE_UPDATED: 'fs.file.updated',
-    INFO_REQUEST: 'fs.info.request',
-    INFO_RESPONSE: 'fs.info.response',
-    LIST_REQUEST: 'fs.list.request',
-    LIST_RESPONSE: 'fs.list.response',
-    MKDIR_REQUEST: 'fs.mkdir.request',
-    MKDIR_RESPONSE: 'fs.mkdir.response',
-    MOVE_REQUEST: 'fs.move.request',
-    MOVE_RESPONSE: 'fs.move.response',
-    READ_REQUEST: 'fs.read.request',
-    READ_RESPONSE: 'fs.read.response',
-    RENAME_REQUEST: 'fs.rename.request',
-    RENAME_RESPONSE: 'fs.rename.response',
-    SEARCH_REQUEST: 'fs.search.request',
-    SEARCH_RESPONSE: 'fs.search.response',
-    STATS_REQUEST: 'fs.stats.request',
-    STATS_RESPONSE: 'fs.stats.response',
     WORKDIR_CHANGED: 'fs.workdir.changed',
+    // Request events (agents can ask for actions)
     WRITE_REQUEST: 'fs.write.request',
     WRITE_RESPONSE: 'fs.write.response',
+    COPY_REQUEST: 'fs.copy.request',
+    COPY_RESPONSE: 'fs.copy.response',
+    READ_REQUEST: 'fs.read.request',
+    READ_RESPONSE: 'fs.read.response',
   },
 
   // === FUNCTION ===
@@ -174,6 +126,32 @@ const EVENTS = {
     GET_RESPONSE: 'function.get.response',
     LIST_REQUEST: 'function.list.request',
     LIST_RESPONSE: 'function.list.response',
+  },
+
+  // === MENU ===
+  MENU: {
+    ERROR: 'menu.error',
+    GENERADO: 'menu.generado',
+    OBTENER_ULTIMO: 'menu.obtener_ultimo',
+    VALIDADO: 'menu.validado',
+  },
+
+  // === MENU_GENERATOR ===
+  MENU_GENERATOR: {
+    CONVERSATION_CREATED: 'menu-generator.conversation.created',
+    MENU_CREATED: 'menu-generator.menu.created',
+    MENU_EXPORTED: 'menu-generator.menu.exported',
+    MENU_EXPORTED_POS: 'menu-generator.menu.exported_pos',
+    MESSAGE_RECEIVED: 'menu-generator.message.received',
+    MESSAGE_SENT: 'menu-generator.message.sent',
+  },
+
+  // === MESSAGE ===
+  MESSAGE: {
+    LIST_REQUEST: 'message.list.request',
+    LIST_RESPONSE: 'message.list.response',
+    RECEIVED: 'message.received',
+    SENT: 'message.sent',
   },
 
   // === METRICAS ===
@@ -194,6 +172,13 @@ const EVENTS = {
     OBTENER: 'nota.obtener',
   },
 
+  // === OCR ===
+  OCR: {
+    EXTRACT_COMPLETED: 'ocr.extract.completed',
+    EXTRACT_FAILED: 'ocr.extract.failed',
+    EXTRACT_REQUEST: 'ocr.extract.request',
+  },
+
   // === PDF ===
   PDF: {
     ERROR: 'pdf.error',
@@ -207,14 +192,6 @@ const EVENTS = {
     VIEW_RESPONSE: 'pdf.view.response',
   },
 
-  // === PIPELINE ===
-  PIPELINE: {
-    COMPLETED: 'pipeline.completed',
-    FAILED: 'pipeline.failed',
-    STARTED: 'pipeline.started',
-    STEP_COMPLETED: 'pipeline.step.completed',
-  },
-
   // === PLUGIN ===
   PLUGIN: {
     ERROR: 'plugin.error',
@@ -225,6 +202,14 @@ const EVENTS = {
     LOADED: 'plugin.loaded',
     RELOADED: 'plugin.reloaded',
     UNLOADED: 'plugin.unloaded',
+  },
+
+  // === POS ===
+  POS: {
+    CATEGORIAS_IMPORT: 'pos.categorias.import',
+    INGREDIENTES_IMPORT: 'pos.ingredientes.import',
+    PRODUCTOS_IMPORT: 'pos.productos.import',
+    VARIACIONES_IMPORT: 'pos.variaciones.import',
   },
 
   // === PROJECT ===
@@ -248,65 +233,12 @@ const EVENTS = {
     UPDATED: 'project.updated',
   },
 
-  // === PROMPT ===
-  PROMPT: {
-    COMPOSE_REQUEST: 'prompt.compose.request',
-    COMPOSE_RESPONSE: 'prompt.compose.response',
-    CONTEXT_LOADED: 'prompt.context.loaded',
-    GET_RESPONSE: 'prompt.get.response',
-    LIST_RESPONSE: 'prompt.list.response',
-  },
-
-  // === SCHEDULER ===
-  SCHEDULER: {
-    JOBS_LIST: 'scheduler.jobs.list',
-    JOB_COMPLETED: 'scheduler.job.completed',
-    JOB_CREATED: 'scheduler.job.created',
-    JOB_DELETED: 'scheduler.job.deleted',
-    JOB_DISABLED: 'scheduler.job.disabled',
-    JOB_ENABLED: 'scheduler.job.enabled',
-    JOB_FAILED: 'scheduler.job.failed',
-    JOB_GET: 'scheduler.job.get',
-    JOB_TRIGGERED: 'scheduler.job.triggered',
-    JOB_UPDATED: 'scheduler.job.updated',
-    TRIGGERS_TYPES: 'scheduler.triggers.types',
-    TRIGGER_CHECK: 'scheduler.trigger.check',
-  },
-
   // === SCRATCH ===
   SCRATCH: {
     DESIGN_CREATED: 'scratch.design.created',
     DESIGN_DELETED: 'scratch.design.deleted',
     DESIGN_EXPORTED: 'scratch.design.exported',
     DESIGN_UPDATED: 'scratch.design.updated',
-  },
-
-  // === SESSION ===
-  SESSION: {
-    CONTEXT_LOAD_REQUEST: 'session.context.load.request',
-    CONTEXT_LOAD_RESPONSE: 'session.context.load.response',
-    CONTEXT_STATS_REQUEST: 'session.context.stats.request',
-    CONTEXT_STATS_RESPONSE: 'session.context.stats.response',
-    CONTEXT_TOGGLE_REQUEST: 'session.context.toggle.request',
-    CONTEXT_TOGGLE_RESPONSE: 'session.context.toggle.response',
-    CREATED: 'session.created',
-    CREATE_REQUEST: 'session.create.request',
-    CREATE_RESPONSE: 'session.create.response',
-    DELETED: 'session.deleted',
-    DELETE_REQUEST: 'session.delete.request',
-    DELETE_RESPONSE: 'session.delete.response',
-    GET_REQUEST: 'session.get.request',
-    GET_RESPONSE: 'session.get.response',
-    LIST_REQUEST: 'session.list.request',
-    LIST_RESPONSE: 'session.list.response',
-    MESSAGES_REQUEST: 'session.messages.request',
-    MESSAGES_RESPONSE: 'session.messages.response',
-    MESSAGE_SAVED: 'session.message.saved',
-    SAVE_REQUEST: 'session.save.request',
-    SAVE_RESPONSE: 'session.save.response',
-    UPDATED: 'session.updated',
-    UPDATE_REQUEST: 'session.update.request',
-    UPDATE_RESPONSE: 'session.update.response',
   },
 
   // === SHELL ===
@@ -325,16 +257,12 @@ const EVENTS = {
 
   // === SYSTEM ===
   SYSTEM: {
-    CREATED: 'system.created',
-    DELETED: 'system.deleted',
     ERRORS: 'system.errors',
     STATUS: 'system.status',
-    UPDATED: 'system.updated',
   },
 
   // === TELEGRAM ===
   TELEGRAM: {
-    ANSWER_CALLBACK_REQUEST: 'telegram.answer_callback.request',
     AUDIO_RECEIVED: 'telegram.audio.received',
     BOT_ERROR: 'telegram.bot.error',
     BOT_STARTED: 'telegram.bot.started',
@@ -342,26 +270,58 @@ const EVENTS = {
     CALLBACK_RECEIVED: 'telegram.callback.received',
     COMMAND_RECEIVED: 'telegram.command.received',
     CONTACT_RECEIVED: 'telegram.contact.received',
-    DELETE_MESSAGE_REQUEST: 'telegram.delete_message.request',
     DOCUMENT_RECEIVED: 'telegram.document.received',
-    EDIT_MESSAGE_REQUEST: 'telegram.edit_message.request',
-    GET_CHAT_REQUEST: 'telegram.get_chat.request',
-    GET_FILE_REQUEST: 'telegram.get_file.request',
-    LIST_BOTS_REQUEST: 'telegram.list_bots.request',
     LOCATION_RECEIVED: 'telegram.location.received',
     MESSAGE_SENT: 'telegram.message.sent',
     PHOTO_RECEIVED: 'telegram.photo.received',
     QUEUE_OVERFLOW: 'telegram.queue.overflow',
-    SEND_DOCUMENT_REQUEST: 'telegram.send_document.request',
     SEND_FAILED: 'telegram.send.failed',
-    SEND_LOCATION_REQUEST: 'telegram.send_location.request',
-    SEND_MESSAGE_REQUEST: 'telegram.send_message.request',
-    SEND_PHOTO_REQUEST: 'telegram.send_photo.request',
-    SEND_VIDEO_REQUEST: 'telegram.send_video.request',
-    SET_COMMANDS_REQUEST: 'telegram.set_commands.request',
     TEXT_RECEIVED: 'telegram.text.received',
     VIDEO_RECEIVED: 'telegram.video.received',
     VOICE_RECEIVED: 'telegram.voice.received',
+    // Request events (agents can ask for actions)
+    SEND_MESSAGE_REQUEST: 'telegram.send_message.request',
+    SEND_MESSAGE_RESPONSE: 'telegram.send_message.response',
+    GET_FILE_REQUEST: 'telegram.get_file.request',
+    GET_FILE_RESPONSE: 'telegram.get_file.response',
+    SEND_PHOTO_REQUEST: 'telegram.send_photo.request',
+    SEND_PHOTO_RESPONSE: 'telegram.send_photo.response',
+    SEND_DOCUMENT_REQUEST: 'telegram.send_document.request',
+    SEND_DOCUMENT_RESPONSE: 'telegram.send_document.response',
+    SEND_VIDEO_REQUEST: 'telegram.send_video.request',
+    SEND_VIDEO_RESPONSE: 'telegram.send_video.response',
+    SEND_LOCATION_REQUEST: 'telegram.send_location.request',
+    SEND_LOCATION_RESPONSE: 'telegram.send_location.response',
+    EDIT_MESSAGE_REQUEST: 'telegram.edit_message.request',
+    EDIT_MESSAGE_RESPONSE: 'telegram.edit_message.response',
+    DELETE_MESSAGE_REQUEST: 'telegram.delete_message.request',
+    DELETE_MESSAGE_RESPONSE: 'telegram.delete_message.response',
+    ANSWER_CALLBACK_REQUEST: 'telegram.answer_callback.request',
+    ANSWER_CALLBACK_RESPONSE: 'telegram.answer_callback.response',
+    GET_CHAT_REQUEST: 'telegram.get_chat.request',
+    GET_CHAT_RESPONSE: 'telegram.get_chat.response',
+    SET_COMMANDS_REQUEST: 'telegram.set_commands.request',
+    SET_COMMANDS_RESPONSE: 'telegram.set_commands.response',
+    LIST_BOTS_REQUEST: 'telegram.list_bots.request',
+    LIST_BOTS_RESPONSE: 'telegram.list_bots.response',
+  },
+
+  // === TEMPLATES ===
+  TEMPLATES: {
+    LIST: 'templates.list',
+  },
+
+  // === TOOL ===
+  TOOL: {
+    CALL_REQUEST: 'tool.call.request',
+    CALL_RESPONSE: 'tool.call.response',
+    LIST_REQUEST: 'tool.list.request',
+    LIST_RESPONSE: 'tool.list.response',
+  },
+
+  // === UI ===
+  UI: {
+    COMPONENT_LOADED: 'ui.component.loaded',
   },
 
   // === UI_DESIGNER ===
@@ -445,20 +405,21 @@ const API_ROUTES = {
     GET_METRICS: '/modules/calling-generator/metrics',
   },
 
-  CHAT: {
-    BASE: '/modules/chat-ai-bridge',
-    SEND_MESSAGE: '/modules/chat-ai-bridge/send',
-    GET_STATUS: '/modules/chat-ai-bridge/status',
-    HEALTH_CHECK: '/modules/chat-session/health',
-    CREATE_CONVERSATION: '/modules/chat-session/conversations',
-    LIST_CONVERSATIONS: '/modules/chat-session/conversations',
-    GET_CONVERSATION: '/modules/chat-session/conversations/:id',
-    UPDATE_CONVERSATION: '/modules/chat-session/conversations/:id',
-    DELETE_CONVERSATION: '/modules/chat-session/conversations/:id',
-    GET_MESSAGES: '/modules/chat-session/conversations/:id/messages',
-    SAVE_MESSAGE: '/modules/chat-session/conversations/:id/messages',
-    GET_CONTEXT_STATS: '/modules/chat-session/conversations/:id/context',
-    TOGGLE_CONTEXT: '/modules/chat-session/messages/:id/toggle-context',
+  CONVERSATION: {
+    BASE: '/modules/conversation-manager',
+    CREATE_CONVERSATION: '/modules/conversation-manager/conversations',
+    LIST_CONVERSATIONS: '/modules/conversation-manager/conversations',
+    GET_CONVERSATION: '/modules/conversation-manager/conversations/:id',
+    UPDATE_CONVERSATION: '/modules/conversation-manager/conversations/:id',
+    DELETE_CONVERSATION: '/modules/conversation-manager/conversations/:id',
+    SEND_MESSAGE: '/modules/conversation-manager/conversations/:id/messages',
+    GET_MESSAGES: '/modules/conversation-manager/conversations/:id/messages',
+    GET_CONTEXT: '/modules/conversation-manager/conversations/:id/context',
+    U_I_STATE: '/modules/conversation-manager/ui/state',
+    TOGGLE_CONTEXT: '/modules/conversation-manager/messages/:id/context',
+    CONTEXT_STATS: '/modules/conversation-manager/conversations/:id/context-stats',
+    HEALTH_CHECK: '/modules/conversation-manager/health',
+    GET_METRICS: '/modules/conversation-manager/metrics',
   },
 
   CREDENTIAL: {
@@ -472,7 +433,6 @@ const API_ROUTES = {
     TEST_CREDENTIAL: '/modules/credential-manager/ui/test',
     HEALTH_CHECK: '/modules/credential-manager/health',
     GET_METRICS: '/modules/credential-manager/metrics',
-    O_AUTH_CALLBACK: '/modules/credential-manager/oauth/callback',
   },
 
   DATABASE: {
@@ -500,6 +460,29 @@ const API_ROUTES = {
     GET_LOGS: '/modules/log-manager/logs',
     ADD_LOG: '/modules/log-manager/logs',
     GET_STATS: '/modules/log-manager/stats',
+  },
+
+  MENU: {
+    BASE: '/modules/menu-generator',
+    UPLOAD_MENU: '/modules/menu-generator/upload',
+    LIST_MENUS: '/modules/menu-generator/menus',
+    GET_MENU: '/modules/menu-generator/menus/:id',
+    VALIDATE_MENU: '/modules/menu-generator/menus/:id/validate',
+    EXPORT_MENU: '/modules/menu-generator/menus/:id/export',
+    EXPORT_P_O_S: '/modules/menu-generator/menus/:id/export-pos',
+    APPLY_TO_P_O_S: '/modules/menu-generator/menus/:id/apply-pos',
+    LIST_CONVERSATIONS: '/modules/menu-generator/conversations',
+    CREATE_CONVERSATION: '/modules/menu-generator/conversations',
+    GET_CONVERSATION: '/modules/menu-generator/conversations/:id',
+    DELETE_CONVERSATION: '/modules/menu-generator/conversations/:id',
+    GET_MESSAGES: '/modules/menu-generator/conversations/:id/messages',
+    SEND_MESSAGE: '/modules/menu-generator/conversations/:id/messages',
+    STREAM: '/modules/menu-generator/stream',
+    GET_TEMPLATES: '/modules/menu-generator/templates',
+    GET_TEMPLATE: '/modules/menu-generator/templates/:id',
+    GET_HISTORY: '/modules/menu-generator/history',
+    HEALTH_CHECK: '/modules/menu-generator/health',
+    GET_METRICS: '/modules/menu-generator/metrics',
   },
 
   METRICAS: {
@@ -560,11 +543,7 @@ const API_ROUTES = {
   },
 
   PROMPT: {
-    BASE: '/modules/prompt-composer',
-    COMPOSE_PROMPT: '/modules/prompt-composer/compose',
-    LIST_TEMPLATES: '/modules/prompt-composer/templates',
-    GET_CONTEXT: '/modules/prompt-composer/context/:projectId',
-    HEALTH_CHECK: '/modules/prompt-manager/health',
+    BASE: '/modules/prompt-manager',
     GET_U_I_STATE: '/modules/prompt-manager/ui/state',
     CREATE_PROMPT: '/modules/prompt-manager/prompts',
     LIST_PROMPTS: '/modules/prompt-manager/prompts',
@@ -578,23 +557,8 @@ const API_ROUTES = {
     GET_PRESET: '/modules/prompt-manager/presets/:id',
     DELETE_PRESET: '/modules/prompt-manager/presets/:id',
     GET_ANALYTICS: '/modules/prompt-manager/analytics',
+    HEALTH_CHECK: '/modules/prompt-manager/health',
     GET_METRICS: '/modules/prompt-manager/metrics',
-  },
-
-  SCHEDULER: {
-    BASE: '/modules/scheduler',
-    HEALTH_CHECK: '/modules/scheduler/health',
-    LIST_JOBS: '/modules/scheduler/jobs',
-    GET_JOB: '/modules/scheduler/jobs/:jobId',
-    CREATE_JOB: '/modules/scheduler/jobs',
-    UPDATE_JOB: '/modules/scheduler/jobs/:jobId',
-    DELETE_JOB: '/modules/scheduler/jobs/:jobId',
-    ENABLE_JOB: '/modules/scheduler/jobs/:jobId/enable',
-    DISABLE_JOB: '/modules/scheduler/jobs/:jobId/disable',
-    TRIGGER_JOB: '/modules/scheduler/jobs/:jobId/trigger',
-    GET_TRIGGER_TYPES: '/modules/scheduler/triggers/types',
-    LIST_EXECUTIONS: '/modules/scheduler/executions',
-    GET_STATS: '/modules/scheduler/stats',
   },
 
   SCRATCH: {
@@ -670,14 +634,7 @@ const MODULES = {
     version: '1.0.0',
     events: {
       publishes: ['admin.action'],
-      subscribes: ['plugin.loaded'],
-    },
-  },
-  'agent-manager': {
-    version: '1.0.0',
-    events: {
-      publishes: ['agent.execute.request', 'pipeline.started', 'pipeline.step.completed', 'pipeline.completed', 'pipeline.failed'],
-      subscribes: ['bot.file.stored', 'bot.message.received', 'bot.command.received', 'agent.*.completed', 'agent.*.failed'],
+      subscribes: ['plugin.loaded', 'ui.component.loaded'],
     },
   },
   'ai-agent-framework': {
@@ -694,32 +651,11 @@ const MODULES = {
       subscribes: [],
     },
   },
-  'bot-manager': {
-    version: '1.0.0',
-    events: {
-      publishes: ['bot.file.stored', 'bot.message.received', 'bot.command.received', 'bot.registered', 'bot.unregistered', 'bot.enabled', 'bot.disabled'],
-      subscribes: ['telegram.document.received', 'telegram.photo.received', 'telegram.video.received', 'telegram.audio.received', 'telegram.voice.received', 'telegram.text.received', 'telegram.command.received', 'credential.saved'],
-    },
-  },
   'calling-generator': {
     version: '2.0.0',
     events: {
       publishes: ['function.generated', 'function.executed', 'function.failed', 'function.generation.error', 'function.get.response', 'function.list.response', 'function.execute.response'],
       subscribes: ['plugin.loaded', 'function.get.request', 'function.list.request', 'function.execute.request'],
-    },
-  },
-  'chat-ai-bridge': {
-    version: '1.0.0',
-    events: {
-      publishes: ['chat.send.response', 'ai.chat.request', 'session.save.request', 'prompt.compose.request', 'session.context.load.request'],
-      subscribes: ['chat.send.request', 'ai.chat.response', 'session.save.response', 'prompt.compose.response', 'session.context.load.response', 'project.activated', 'project.deactivated'],
-    },
-  },
-  'chat-session': {
-    version: '1.0.0',
-    events: {
-      publishes: ['session.created', 'session.updated', 'session.deleted', 'session.message.saved'],
-      subscribes: ['db.query.response', 'project.activated', 'project.deactivated', 'session.create.request', 'session.list.request', 'session.get.request', 'session.update.request', 'session.delete.request', 'session.messages.request', 'session.save.request', 'session.context.load.request', 'session.context.toggle.request', 'session.context.stats.request'],
     },
   },
   'code-executor': {
@@ -729,32 +665,18 @@ const MODULES = {
       subscribes: ['shell.exec.request'],
     },
   },
-  'composition-manager': {
-    version: '1.0.0',
-    events: {
-      publishes: ['composition.response', 'system.created', 'system.updated', 'system.deleted', 'entity.joined_system', 'entity.left_system', 'entity.linked', 'entity.unlinked', 'entity.dependency.added', 'entity.dependency.removed'],
-      subscribes: ['composition.request', 'db.query.response'],
-    },
-  },
-  'context-manager': {
-    version: '1.0.0',
-    events: {
-      publishes: ['context.response', 'context.imported', 'context.removed', 'context.full.response'],
-      subscribes: ['context.request', 'context.full.request', 'db.query.response', 'composition.response'],
-    },
-  },
   'conversation-manager': {
-    version: '2.1.0',
+    version: '1.0.0',
     events: {
-      publishes: ['chat.send.request', 'session.create.request', 'session.list.request', 'session.get.request', 'session.update.request', 'session.delete.request', 'session.messages.request', 'session.context.load.request', 'session.context.toggle.request', 'session.context.stats.request', 'project.active.request'],
-      subscribes: ['chat.send.response', 'session.create.response', 'session.list.response', 'session.get.response', 'session.update.response', 'session.delete.response', 'session.messages.response', 'session.context.load.response', 'session.context.toggle.response', 'session.context.stats.response', 'project.active.response'],
+      publishes: ['ai.chat.request', 'conversation.created', 'conversation.updated', 'conversation.deleted', 'message.sent', 'message.received', 'conversation.context.loaded', 'conversation.get.response', 'conversation.list.response', 'message.list.response', 'conversation.send.response', 'tool.list.request', 'tool.call.request'],
+      subscribes: ['conversation.get.request', 'conversation.list.request', 'message.list.request', 'conversation.send.request', 'db.query.response', 'ai.chat.response', 'project.get.response', 'storage.info.response', 'tool.list.response', 'tool.call.response'],
     },
   },
   'credential-manager': {
     version: '2.0.0',
     events: {
       publishes: ['credential.saved', 'credential.updated', 'credential.deleted', 'credential.resolved', 'credential.resolve.failed', 'credential.resolve.response', 'credential/state'],
-      subscribes: ['credential.resolve.request', 'credential/state/request', 'credential/create', 'credential/update', 'credential/delete', 'credential.oauth.resolve.request'],
+      subscribes: ['credential.resolve.request', 'credential/state/request', 'credential/create', 'credential/update', 'credential/delete'],
     },
   },
   'dashboard': {
@@ -774,8 +696,8 @@ const MODULES = {
   'filesystem': {
     version: '1.0.0',
     events: {
-      publishes: ['fs.file.created', 'fs.file.updated', 'fs.file.deleted', 'fs.directory.created', 'fs.workdir.changed', 'fs.read.response', 'fs.write.response', 'fs.copy.response', 'fs.delete.response', 'fs.list.response', 'fs.mkdir.response', 'fs.move.response', 'fs.rename.response', 'fs.exists.response', 'fs.info.response', 'fs.append.response', 'fs.search.response', 'fs.stats.response'],
-      subscribes: ['project.activated', 'project.deactivated', 'fs.read.request', 'fs.write.request', 'fs.copy.request', 'fs.delete.request', 'fs.list.request', 'fs.mkdir.request', 'fs.move.request', 'fs.rename.request', 'fs.exists.request', 'fs.info.request', 'fs.append.request', 'fs.search.request', 'fs.stats.request'],
+      publishes: ['fs.file.created', 'fs.file.updated', 'fs.file.deleted', 'fs.directory.created', 'fs.workdir.changed'],
+      subscribes: ['project.activated', 'project.deactivated'],
     },
   },
   'log-manager': {
@@ -783,6 +705,13 @@ const MODULES = {
     events: {
       publishes: [],
       subscribes: [],
+    },
+  },
+  'menu-generator': {
+    version: '2.0.0',
+    events: {
+      publishes: ['ai.request', 'menu.generado', 'menu.validado', 'menu.error', 'menu-generator.conversation.created', 'menu-generator.message.sent', 'menu-generator.message.received', 'menu-generator.menu.created', 'menu-generator.menu.exported', 'menu-generator.menu.exported_pos', 'pos.categorias.import', 'pos.ingredientes.import', 'pos.productos.import', 'pos.variaciones.import'],
+      subscribes: ['ai.completion.completed', 'menu.obtener_ultimo', 'conversations.list', 'templates.list'],
     },
   },
   'metricas': {
@@ -814,17 +743,10 @@ const MODULES = {
     },
   },
   'project-manager': {
-    version: '3.0.0',
+    version: '2.0.0',
     events: {
       publishes: ['project.created', 'project.updated', 'project.deleted', 'project.activated', 'project.deactivated', 'project.get.response', 'project.list.response', 'project.active.response', 'project/state'],
-      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response', 'composition.response', 'project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate'],
-    },
-  },
-  'prompt-composer': {
-    version: '1.1.0',
-    events: {
-      publishes: ['prompt.compose.response', 'prompt.context.loaded'],
-      subscribes: ['prompt.compose.request', 'project.get.response', 'storage.info.response', 'prompt.get.response', 'prompt.list.response', 'context.full.response', 'project.activated', 'project.deactivated'],
+      subscribes: ['project.get.request', 'project.list.request', 'project.active.request', 'db.query.response', 'project/state/request', 'project/create', 'project/update', 'project/delete', 'project/activate'],
     },
   },
   'prompt-manager': {
@@ -832,13 +754,6 @@ const MODULES = {
     events: {
       publishes: [],
       subscribes: [],
-    },
-  },
-  'scheduler': {
-    version: '1.0.0',
-    events: {
-      publishes: ['scheduler.job.created', 'scheduler.job.updated', 'scheduler.job.deleted', 'scheduler.job.enabled', 'scheduler.job.disabled', 'scheduler.job.triggered', 'scheduler.job.completed', 'scheduler.job.failed'],
-      subscribes: ['scheduler.trigger.check', 'project.activated', 'scheduler.jobs.list', 'scheduler.job.get', 'scheduler.triggers.types'],
     },
   },
   'scratch-designer': {
@@ -859,7 +774,7 @@ const MODULES = {
     version: '3.0.0',
     events: {
       publishes: ['telegram.text.received', 'telegram.photo.received', 'telegram.document.received', 'telegram.video.received', 'telegram.audio.received', 'telegram.voice.received', 'telegram.location.received', 'telegram.contact.received', 'telegram.command.received', 'telegram.callback.received', 'telegram.message.sent', 'telegram.send.failed', 'telegram.bot.started', 'telegram.bot.stopped', 'telegram.bot.error', 'telegram.queue.overflow'],
-      subscribes: ['credential.saved', 'credential.deleted', 'telegram.send_message.request', 'telegram.get_file.request', 'telegram.send_photo.request', 'telegram.send_document.request', 'telegram.send_video.request', 'telegram.send_location.request', 'telegram.edit_message.request', 'telegram.delete_message.request', 'telegram.answer_callback.request', 'telegram.get_chat.request', 'telegram.set_commands.request', 'telegram.list_bots.request'],
+      subscribes: ['credential.saved', 'credential.deleted'],
     },
   },
   'text-editor': {

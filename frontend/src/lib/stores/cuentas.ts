@@ -262,7 +262,7 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
       const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => ({
         id: cp.cuenta_id,
         tipo: TIPO_MAP[cp.tipo] || 'local',
-        nombre: cp.datos_especificos?.nombre || cp.origen || `${cp.tipo} ${cp.cuenta_id.slice(-4)}`,
+        nombre: cp.datos_especificos?.nombre || cp.datos_especificos?.cliente_nombre || cp.datos_especificos?.numero_ticket || TIPO_LABELS[TIPO_MAP[cp.tipo] || 'local'] || cp.tipo,
         estado: mapEstadoPersistencia(cp),
         hora: formatHora(cp.created_at),
         items: countItems(cp.pedidos),
@@ -459,6 +459,38 @@ export function initCuentasSubscriptions(projectId: string): () => void {
       const data = event?.data || event?.payload || event;
       if (data?.project_id && data.project_id !== projectId) return;
       loadCuentasFromPersistencia(projectId);
+    })
+  );
+
+  // comandero.item_agregado → actualizar card en vivo (antes de enviar cocina)
+  cleanups.push(
+    mqttSubscribe('comandero.item_agregado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c =>
+          c.id === data.cuenta_id
+            ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: (data.pedido_items > 0 ? 'con_pedido' : c.estado) as EstadoCuenta }
+            : c
+        )
+      }));
+    })
+  );
+
+  // comandero.item_eliminado → actualizar card en vivo
+  cleanups.push(
+    mqttSubscribe('comandero.item_eliminado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c =>
+          c.id === data.cuenta_id
+            ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta }
+            : c
+        )
+      }));
     })
   );
 

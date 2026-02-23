@@ -58,6 +58,12 @@
   export let onOpenPanel: ((panel: string, data?: any) => void) | null = null;
 
   let cleanupSubs: (() => void) | null = null;
+  let contentEl: HTMLElement;
+  let pedidoSectionEl: HTMLElement;
+
+  function scrollToPedido() {
+    pedidoSectionEl?.scrollIntoView({ behavior: 'smooth' });
+  }
 
   // Nombre editable de la mesa
   const isMesa = cuenta_id.startsWith('mesa_');
@@ -464,8 +470,8 @@
       </div>
     </aside>
 
-    <!-- Área principal: grid + pedido -->
-    <main class="content">
+    <!-- Área principal: grid + pedido en scroll continuo -->
+    <main class="content" bind:this={contentEl}>
       <!-- Grid de productos -->
       <div class="productos-area">
         {#if $comanderoLoading && $productos.length === 0}
@@ -487,15 +493,25 @@
         {/if}
       </div>
 
-      <!-- Lista pedido (anclada abajo) -->
-      <PedidoList
-        items={$pedidoItems}
-        total={$pedidoTotal}
-        on:increment={handleItemIncrement}
-        on:decrement={handleItemDecrement}
-        on:remove={handleItemRemove}
-      />
+      <!-- Lista pedido (debajo de productos, dentro del scroll) -->
+      <div class="pedido-section" bind:this={pedidoSectionEl}>
+        <PedidoList
+          items={$pedidoItems}
+          total={$pedidoTotal}
+          on:increment={handleItemIncrement}
+          on:decrement={handleItemDecrement}
+          on:remove={handleItemRemove}
+        />
+      </div>
     </main>
+
+    <!-- Botón flotante: ir al pedido -->
+    {#if $pedidoItems.length > 0}
+      <button class="fab-pedido" on:click={scrollToPedido}>
+        <span class="fab-count">{$pedidoItems.reduce((s, i) => s + i.cantidad, 0)}</span>
+        <span class="fab-total">{$pedidoTotal.toFixed(2)}{'\u20AC'}</span>
+      </button>
+    {/if}
   </div>
 
   <!-- Panel flotante: Variaciones -->
@@ -723,21 +739,20 @@
     flex-shrink: 0;
   }
 
-  /* Content */
+  /* Content — scroll continuo: productos + pedido */
   .content {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
   }
 
   .productos-area {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
     padding: 10px;
-    min-height: 0;
+    flex-shrink: 0;
   }
 
   .productos-grid {
@@ -751,9 +766,54 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100%;
+    min-height: 200px;
     color: #555;
     font-size: 0.85rem;
+  }
+
+  .pedido-section {
+    flex-shrink: 0;
+    padding-top: 4px;
+  }
+
+  /* FAB flotante — ir al pedido */
+  .fab-pedido {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+    z-index: 50;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+
+  .fab-pedido:active {
+    transform: scale(0.9);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  }
+
+  .fab-count {
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .fab-total {
+    font-size: 0.55rem;
+    font-weight: 600;
+    opacity: 0.85;
+    line-height: 1;
   }
 
   /* Mobile */

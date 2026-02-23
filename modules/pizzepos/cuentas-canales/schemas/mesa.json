@@ -1,50 +1,40 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://pizzepos.com/schemas/mesa.json",
-  "title": "Mesa Schema",
-  "description": "Esquemas de datos para cuentas de mesa",
+  "title": "Mesa Schema v4.0",
+  "description": "Esquemas de datos para mesas dinámicas — creadas en tiempo de ejecución",
 
   "definitions": {
-    "zona": {
-      "type": "string",
-      "enum": ["terraza", "interior", "vip"],
-      "description": "Zona de la mesa"
-    },
-
     "estado_mesa": {
       "type": "string",
-      "enum": ["disponible", "ocupada", "reservada", "cerrada"],
+      "enum": ["ocupada", "cerrada"],
       "description": "Estado de la mesa"
     },
 
     "mesa": {
       "type": "object",
-      "required": ["cuenta_id", "numero_mesa", "zona", "estado", "total", "hora_apertura"],
+      "required": ["cuenta_id", "nombre", "numero", "estado", "total", "hora_apertura"],
       "properties": {
         "cuenta_id": {
           "type": "string",
           "pattern": "^mesa_\\d+_\\d{8}_\\d{3}$",
           "description": "ID único: mesa_{numero}_{YYYYMMDD}_{secuencial}"
         },
-        "numero_mesa": {
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Nombre libre: Mesa 1, Mesa de Manolo, etc."
+        },
+        "numero": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 100,
-          "description": "Número de mesa"
-        },
-        "zona": {
-          "$ref": "#/definitions/zona"
-        },
-        "capacidad": {
-          "type": "integer",
-          "enum": [2, 4, 6, 8],
-          "description": "Capacidad de la mesa"
+          "description": "Secuencial diario auto-generado"
         },
         "comensales": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 8,
-          "description": "Número real de comensales"
+          "description": "Número de comensales (opcional)"
         },
         "camarero": {
           "type": "string",
@@ -61,6 +51,11 @@
           "multipleOf": 0.01,
           "description": "Total acumulado en euros"
         },
+        "pedidos_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Número de pedidos en esta mesa"
+        },
         "hora_apertura": {
           "type": "string",
           "format": "date-time",
@@ -76,11 +71,6 @@
           "minimum": 0,
           "description": "Minutos que ha estado ocupada"
         },
-        "pedidos": {
-          "type": "array",
-          "items": {"type": "string"},
-          "description": "IDs de pedidos asociados"
-        },
         "notas": {
           "type": "string",
           "maxLength": 500,
@@ -91,17 +81,15 @@
 
     "abrir_mesa_request": {
       "type": "object",
-      "required": ["numero_mesa"],
       "properties": {
-        "numero_mesa": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100
+        "nombre": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Nombre libre (opcional, auto: Mesa N)"
         },
         "comensales": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 8
+          "minimum": 1
         },
         "camarero": {
           "type": "string",

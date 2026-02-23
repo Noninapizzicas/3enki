@@ -176,6 +176,7 @@ class PersistenciaComanderoModule {
     // Eventos específicos de canales
     await this.eventBus.subscribe('mesa.abierta', this.onEvento.bind(this));
     await this.eventBus.subscribe('mesa.cerrada', this.onEvento.bind(this));
+    await this.eventBus.subscribe('mesa.renombrada', this.onMesaRenombrada.bind(this));
     await this.eventBus.subscribe('telefono.pedido_creado', this.onEvento.bind(this));
     await this.eventBus.subscribe('llevar.ticket_creado', this.onEvento.bind(this));
 
@@ -357,6 +358,26 @@ class PersistenciaComanderoModule {
       cuenta_id,
       nuevo_total: cuenta.total
     });
+  }
+
+  async onMesaRenombrada(event) {
+    const eventData = event?.data || event?.payload || event;
+
+    await this.onEvento(event);
+
+    const { cuenta_id, nombre } = eventData;
+    if (!cuenta_id || !nombre) return;
+
+    const cuenta = this.cuentasActivasCache.get(cuenta_id);
+    if (!cuenta) return;
+
+    if (!cuenta.datos_especificos) cuenta.datos_especificos = {};
+    cuenta.datos_especificos.nombre = nombre;
+    cuenta.updated_at = new Date().toISOString();
+
+    await this.guardarCuentasActivas();
+
+    this.logger.info('persistencia.mesa_renombrada', { cuenta_id, nombre });
   }
 
   // ==========================================

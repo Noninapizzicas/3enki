@@ -255,7 +255,9 @@ class ComanderoModule {
       nombre: itemNombre,
       precio_unitario: itemPrecio,
       precio_total: item.subtotal,
-      cantidad: itemCantidad
+      cantidad: itemCantidad,
+      pedido_total: pedido.total,
+      pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
     };
     if (tipo) eventPayload.tipo = tipo;
     if (pizza_izquierda) eventPayload.pizza_izquierda = pizza_izquierda;
@@ -298,7 +300,9 @@ class ComanderoModule {
       cuenta_id,
       item_id,
       producto_id: removedItem.producto_id,
-      precio_total: removedItem.subtotal
+      precio_total: removedItem.subtotal,
+      pedido_total: pedido.total,
+      pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
     });
 
     this.logger.info('comandero.item.eliminado', { cuenta_id, item_id });
@@ -332,7 +336,9 @@ class ComanderoModule {
         pedido.total = this.calcularTotal(pedido.items);
 
         await this.eventBus.publish('comandero.item_eliminado', {
-          cuenta_id, item_id, producto_id: item.producto_id, precio_total: item.subtotal
+          cuenta_id, item_id, producto_id: item.producto_id, precio_total: item.subtotal,
+          pedido_total: pedido.total,
+          pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
         });
 
         return {

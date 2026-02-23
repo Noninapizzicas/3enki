@@ -173,7 +173,15 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
     try {
       const pedidoRes = await mqttRequest('comandero', 'get', { project_id, cuenta_id });
       const pedidoData = pedidoRes?.data as any;
-      pedido = pedidoData?.pedido || pedidoData?.data?.pedido || pedido;
+      // Backend devuelve { cuenta_id, items, notas, total } flat en data
+      // También soportar { pedido: {...} } o { data: { pedido: {...} } } por compatibilidad
+      if (pedidoData?.pedido) {
+        pedido = pedidoData.pedido;
+      } else if (pedidoData?.data?.pedido) {
+        pedido = pedidoData.data.pedido;
+      } else if (pedidoData?.items) {
+        pedido = { cuenta_id, items: pedidoData.items, notas: pedidoData.notas || '', total: pedidoData.total || 0, created_at: pedidoData.created_at || '', updated_at: pedidoData.updated_at || '' };
+      }
     } catch {
       console.warn('[Comandero] Pedido no encontrado, usando vacío');
     }

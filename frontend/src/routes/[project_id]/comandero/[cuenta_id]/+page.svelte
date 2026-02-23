@@ -16,6 +16,7 @@
   // URL param — puede ser alias corto, se usa para rutas
   $: urlProjectId = $page.params.project_id;
   $: cuenta_id = $page.params.cuenta_id;
+  $: initialView = $page.url.searchParams.get('view') || undefined;
 
   // Para datos, usar el UUID real del store global
   $: projectId = $activeProjectId || urlProjectId;
@@ -40,6 +41,7 @@
 <ComanderoScreen
   {cuenta_id}
   {projectId}
+  {initialView}
   onNavigate={handleNavigate}
   onOpenPanel={handleOpenPanel}
 />

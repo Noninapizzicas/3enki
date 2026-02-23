@@ -53,10 +53,13 @@ class StaffManagerModule {
 
     const SQL = await initSqlJs();
 
+    const maxShiftHours = core.config?.staff?.maxShiftHours ?? 16;
+
     this.registry = new EmployeeRegistry({ dataPath: this.dataPath, logger: this.logger });
     this.sessions = new SessionManager({
       dataPath:       this.dataPath,
       logger:         this.logger,
+      maxShiftHours,
       onSessionEvent: this._emitSessionEvent.bind(this)
     });
 
@@ -216,6 +219,26 @@ class StaffManagerModule {
     return { status: 200, data: { session } };
   }
 
+  /**
+   * Lista sesiones que llevan abiertas más de maxShiftHours horas.
+   * El manager puede revisarlas y cerrarlas manualmente o dejar que el monitor
+   * las cierre automáticamente en la próxima comprobación (cada 15 min).
+   */
+  async handleStaleSessions() {
+    const stale = this.sessions.listStaleSessions().map(s => ({
+      ...s,
+      employee: this.registry.getEmployee(s.employee_id)
+    }));
+    return {
+      status: 200,
+      data: {
+        max_shift_hours: this.sessions.maxShiftHours,
+        stale_count:     stale.length,
+        sessions:        stale
+      }
+    };
+  }
+
   // ==========================================
   // Handlers — NFC
   // ==========================================
@@ -343,7 +366,7 @@ class StaffManagerModule {
       'employee.create', 'employee.list', 'employee.get',
       'employee.update', 'employee.delete',
       'session.tap_in', 'session.tap_out',
-      'session.active', 'session.history', 'session.manager_close',
+      'session.active', 'session.history', 'session.stale', 'session.manager_close',
       'nfc.employee_card', 'nfc.core_tag', 'nfc.parse'
     ];
   }
@@ -359,6 +382,7 @@ class StaffManagerModule {
     uiHandler.register(this.name, 'session.tap_out',        this.handleTapOut.bind(this));
     uiHandler.register(this.name, 'session.active',         this.handleActiveSessions.bind(this));
     uiHandler.register(this.name, 'session.history',        this.handleSessionHistory.bind(this));
+    uiHandler.register(this.name, 'session.stale',          this.handleStaleSessions.bind(this));
     uiHandler.register(this.name, 'session.manager_close',  this.handleManagerClose.bind(this));
     uiHandler.register(this.name, 'nfc.employee_card',      this.handleNFCEmployeeCard.bind(this));
     uiHandler.register(this.name, 'nfc.core_tag',           this.handleNFCCoreTag.bind(this));

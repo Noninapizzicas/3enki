@@ -6,7 +6,10 @@
  *
  * Casos edge manejados:
  *   - Tap doble entrada: retorna sesión activa sin crear duplicado
- *   - Olvido de tap_out: cierre automático a medianoche (close_reason: "auto_midnight")
+ *   - Olvido de tap_out: cierre por timeout de duración (close_reason: "auto_timeout")
+ *     El umbral es configurable con maxShiftHours (defecto: 16 h).
+ *     Funciona para cualquier tipo de turno — diurno, nocturno, rotativo.
+ *     El monitor corre cada 15 minutos; no depende del reloj de calendario.
  *   - Cierre manual por manager: close_reason: "manager"
  *
  * Almacena en SQLite separado (data/staff/staff_sessions.db).
@@ -17,26 +20,32 @@ const path   = require('path');
 const crypto = require('crypto');
 
 const CLOSE_REASONS = {
-  MANUAL:         'manual',
-  AUTO_MIDNIGHT:  'auto_midnight',
-  MANAGER:        'manager'
+  MANUAL:        'manual',
+  AUTO_TIMEOUT:  'auto_timeout',  // sesión excedió maxShiftHours
+  MANAGER:       'manager'
 };
+
+// Intervalo de comprobación de sesiones huérfanas
+const STALE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutos
 
 class SessionManager {
   /**
-   * @param {object} opts
-   * @param {string}   opts.dataPath        - Directorio para staff_sessions.db
-   * @param {object}   [opts.logger]        - Logger del core
-   * @param {Function} [opts.onSessionEvent] - Callback(type, data) para eventos
+   * @param {object}   opts
+   * @param {string}   opts.dataPath          - Directorio para staff_sessions.db
+   * @param {object}   [opts.logger]          - Logger del core
+   * @param {Function} [opts.onSessionEvent]  - Callback(type, data) para eventos
+   * @param {number}   [opts.maxShiftHours=16] - Horas máximas de turno antes del cierre automático.
+   *                                             Ponlo a 0 para deshabilitar el cierre automático.
    */
-  constructor({ dataPath, logger, onSessionEvent }) {
-    this.dataPath        = dataPath;
-    this.logger          = logger;
-    this.onSessionEvent  = onSessionEvent || (() => {});
-    this.db              = null;
-    this.SQL             = null;
-    this._saveTimer      = null;
-    this._midnightTimer  = null;
+  constructor({ dataPath, logger, onSessionEvent, maxShiftHours = 16 }) {
+    this.dataPath       = dataPath;
+    this.logger         = logger;
+    this.onSessionEvent = onSessionEvent || (() => {});
+    this.maxShiftHours  = maxShiftHours;
+    this.db             = null;
+    this.SQL            = null;
+    this._saveTimer     = null;
+    this._staleTimer    = null;
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -45,12 +54,14 @@ class SessionManager {
     this.SQL = SQL;
     await this._loadOrCreate();
     this._startAutoSave();
-    this._scheduleMidnightClose();
+    if (this.maxShiftHours > 0) {
+      this._startStaleMonitor();
+    }
   }
 
   async close() {
-    if (this._saveTimer)     clearInterval(this._saveTimer);
-    if (this._midnightTimer) clearTimeout(this._midnightTimer);
+    if (this._saveTimer)  clearInterval(this._saveTimer);
+    if (this._staleTimer) clearInterval(this._staleTimer);
     await this._persist();
     if (this.db) this.db.close();
   }
@@ -202,11 +213,35 @@ class SessionManager {
   }
 
   /**
-   * Cierra todas las sesiones abiertas (usada a medianoche y por manager).
+   * Sesiones abiertas que superan maxShiftHours (candidatas a cierre automático).
+   * Útil para alertas al manager antes de que se produzca el cierre.
+   * @returns {object[]}
+   */
+  listStaleSessions() {
+    if (this.maxShiftHours <= 0) return [];
+    const cutoff = new Date(Date.now() - this.maxShiftHours * 3600 * 1000).toISOString();
+    const stmt   = this.db.prepare(
+      `SELECT * FROM shift_sessions
+        WHERE tap_out_at IS NULL AND tap_in_at <= ?
+        ORDER BY tap_in_at`
+    );
+    stmt.bind([cutoff]);
+    const rows = [];
+    while (stmt.step()) {
+      const row      = stmt.getAsObject();
+      row.open_hours = Math.round((Date.now() - new Date(row.tap_in_at)) / 3600000 * 10) / 10;
+      rows.push(row);
+    }
+    stmt.free();
+    return rows;
+  }
+
+  /**
+   * Cierra todas las sesiones abiertas. Usado por el manager para fin de jornada global.
    * @param {string} [reason]
    * @returns {object[]} Sesiones que fueron cerradas
    */
-  closeAllActive(reason = CLOSE_REASONS.AUTO_MIDNIGHT) {
+  closeAllActive(reason = CLOSE_REASONS.MANAGER) {
     const active = this.listActiveSessions();
     if (active.length === 0) return [];
 
@@ -216,7 +251,7 @@ class SessionManager {
       [now, reason]
     );
 
-    this.logger?.info('staff.session.auto_closed', { count: active.length, reason });
+    this.logger?.info('staff.session.all_closed', { count: active.length, reason });
     active.forEach(s => this.onSessionEvent('auto_closed', { ...s, close_reason: reason }));
     return active;
   }
@@ -247,20 +282,43 @@ class SessionManager {
     return Math.round((new Date(end) - new Date(start)) / 60000);
   }
 
-  _scheduleMidnightClose() {
-    const now      = new Date();
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 500); // siguiente día 00:00:00.5
-    const delay = midnight - now;
+  /**
+   * Comprueba cada STALE_CHECK_INTERVAL_MS si hay sesiones abiertas más tiempo
+   * que maxShiftHours y las cierra con close_reason: "auto_timeout".
+   *
+   * Por qué no medianoche: los turnos nocturnos, rotativos o que se extienden
+   * pasadas las 00:00 se romperían con un corte de calendario. Un umbral de
+   * duración es agnóstico a la hora del día.
+   */
+  _startStaleMonitor() {
+    this._staleTimer = setInterval(async () => {
+      const stale = this.listStaleSessions();
+      if (stale.length === 0) return;
 
-    this._midnightTimer = setTimeout(async () => {
-      this.closeAllActive(CLOSE_REASONS.AUTO_MIDNIGHT);
+      const now = new Date().toISOString();
+      for (const session of stale) {
+        this.db.run(
+          `UPDATE shift_sessions SET tap_out_at = ?, close_reason = ? WHERE id = ?`,
+          [now, CLOSE_REASONS.AUTO_TIMEOUT, session.id]
+        );
+        this.logger?.warn('staff.session.auto_timeout', {
+          session_id:  session.id,
+          employee_id: session.employee_id,
+          open_hours:  session.open_hours,
+          max_hours:   this.maxShiftHours
+        });
+        this.onSessionEvent('auto_timeout', {
+          ...this.getSession(session.id),
+          open_hours: session.open_hours
+        });
+      }
+
       await this._persist();
-      this._scheduleMidnightClose(); // re-programar para la próxima medianoche
-    }, delay);
+    }, STALE_CHECK_INTERVAL_MS);
 
-    this.logger?.debug('staff.midnight_close.scheduled', {
-      in_minutes: Math.round(delay / 60000)
+    this.logger?.debug('staff.stale_monitor.started', {
+      max_shift_hours:    this.maxShiftHours,
+      check_interval_min: STALE_CHECK_INTERVAL_MS / 60000
     });
   }
 

@@ -67,6 +67,12 @@
         "description": "Histórico de jornadas. Query: employee_id | date (YYYY-MM-DD, default hoy)"
       },
       {
+        "name": "sessionStale",
+        "method": "GET",
+        "path": "/session/stale",
+        "description": "Sesiones abiertas más de maxShiftHours horas (candidatas a revisión)"
+      },
+      {
         "name": "sessionManagerClose",
         "method": "POST",
         "path": "/session/manager-close",
@@ -104,8 +110,8 @@
         "description": "Empleado finaliza jornada (tap out)"
       },
       {
-        "event": "staff.session.auto_closed",
-        "description": "Jornada cerrada automáticamente a medianoche"
+        "event": "staff.session.auto_timeout",
+        "description": "Jornada cerrada por superar maxShiftHours sin tap_out (válido para turnos nocturnos y rotativos)"
       },
       {
         "event": "staff.session.manager_close",
@@ -116,7 +122,8 @@
   },
 
   "config": {
-    "dataPath": "./data/staff"
+    "dataPath": "./data/staff",
+    "maxShiftHours": 16
   },
 
   "observability": {

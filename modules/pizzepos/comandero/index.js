@@ -48,7 +48,7 @@ class ComanderoModule {
     this.logger.info('module.unloading', { module: this.name });
 
     if (this.uiHandler) {
-      const actions = ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health'];
+      const actions = ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health', 'buffers'];
       for (const action of actions) {
         this.uiHandler.unregister('comandero', action);
       }
@@ -76,9 +76,10 @@ class ComanderoModule {
     this.uiHandler.register('comandero', 'update-item', this.handleUpdateItem.bind(this));
     this.uiHandler.register('comandero', 'send-kitchen', this.handleEnviarCocina.bind(this));
     this.uiHandler.register('comandero', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('comandero', 'buffers', this.handleListBuffers.bind(this));
 
     this.logger.info('comandero.ui_handlers.registered', {
-      handlers: ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health']
+      handlers: ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health', 'buffers']
     });
   }
 
@@ -419,6 +420,22 @@ class ComanderoModule {
         total_enviado: totalEnviado,
         pedido: { cuenta_id, items: pedido.items, total: pedido.total }
       }
+    };
+  }
+
+  async handleListBuffers() {
+    const buffers = [];
+    for (const [cuenta_id, pedido] of this.pedidos.entries()) {
+      buffers.push({
+        cuenta_id,
+        total: pedido.total,
+        items_count: pedido.items.reduce((s, i) => s + i.cantidad, 0)
+      });
+    }
+
+    return {
+      status: 200,
+      data: { buffers }
     };
   }
 

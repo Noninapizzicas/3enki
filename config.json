@@ -80,7 +80,9 @@
       "pdf-viewer",
       "pizzepos",
       "telegram-service",
-      "text-editor"
+      "text-editor",
+      "security-p2p",
+      "staff-manager"
     ],
     "disabled": [
       "conversation-manager",

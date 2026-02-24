@@ -1,14 +1,18 @@
 /**
- * Módulo Impresión v1.0
+ * Módulo Impresión v1.1
  * Impresión de comandas de cocina: items, variaciones, ingredientes, mesa, hora
  * Sin precios — solo info relevante para cocina
- * Formato ESC/POS para impresoras térmicas 80mm
+ * Formato ESC/POS para impresora térmica Bluetooth (58mm NETUM / 80mm)
+ *
+ * Transporte: Bluetooth vía rfcomm, comando shell, o TCP
+ * Entorno principal: Termux en Android
  */
 
 const crypto = require('crypto');
+const TransporteBluetooth = require('./transporte');
 
 // ==========================================
-// ESC/POS constants (impresora térmica 80mm)
+// ESC/POS constants
 // ==========================================
 const ESC = '\x1B';
 const GS  = '\x1D';
@@ -29,20 +33,45 @@ const CMD = {
   UNDERLINE_ON:   `${ESC}-\x01`,
   UNDERLINE_OFF:  `${ESC}-\x00`
 };
-const LINE_WIDTH = 42; // caracteres por línea en 80mm
-const SEPARATOR = '-'.repeat(LINE_WIDTH);
-const DOUBLE_SEP = '='.repeat(LINE_WIDTH);
+
+// Anchos por tipo de impresora
+const ANCHOS = {
+  '58mm': 32,
+  '80mm': 42
+};
 
 class ImpresionModule {
   constructor() {
     this.name = 'impresion';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
     this.uiHandler = null;
+
+    // Transporte Bluetooth
+    this.transporte = null;
+
+    // Config (defaults para NETUM 58mm en Termux)
+    this.config = {
+      ancho: '58mm',
+      transporte: {
+        modo: 'dispositivo',
+        mac: null,
+        dispositivo: '/dev/rfcomm0',
+        rfcomm_canal: 1,
+        comando: null,
+        tcp_host: '127.0.0.1',
+        tcp_puerto: 9100
+      }
+    };
+
+    // Ancho de línea calculado
+    this.lineWidth = ANCHOS['58mm'];
+    this.separator = '';
+    this.doubleSep = '';
 
     // Historial de comandas (últimas 100)
     this.historial = [];
@@ -52,7 +81,8 @@ class ImpresionModule {
     this.internalMetrics = {
       comandas_generadas: 0,
       reimpresiones: 0,
-      errores: 0
+      errores: 0,
+      errores_transporte: 0
     };
   }
 
@@ -68,16 +98,53 @@ class ImpresionModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
+    // Merge config del módulo si existe
+    if (core.config?.impresion) {
+      this.config = { ...this.config, ...core.config.impresion };
+      if (core.config.impresion.transporte) {
+        this.config.transporte = { ...this.config.transporte, ...core.config.impresion.transporte };
+      }
+    }
+
+    // Calcular ancho de línea
+    this.lineWidth = ANCHOS[this.config.ancho] || 32;
+    this.separator = '-'.repeat(this.lineWidth);
+    this.doubleSep = '='.repeat(this.lineWidth);
+
+    // Inicializar transporte Bluetooth
+    this.transporte = new TransporteBluetooth(this.config.transporte, this.logger);
+
+    try {
+      await this.transporte.conectar();
+      this.logger.info('impresion.transporte.conectado', this.transporte.getEstado());
+    } catch (error) {
+      // No falla el módulo — permite arrancar sin impresora y conectar después
+      this.logger.warn('impresion.transporte.no_disponible', {
+        error: error.message,
+        nota: 'Módulo arrancado sin impresora. Usa POST /conectar para reintentar.'
+      });
+    }
+
     this.registerUIHandlers();
 
-    this.logger.info('module.loaded', { module: this.name, version: this.version });
+    this.logger.info('module.loaded', {
+      module: this.name,
+      version: this.version,
+      ancho: this.config.ancho,
+      chars: this.lineWidth,
+      transporte: this.transporte.getEstado()
+    });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
+    if (this.transporte) {
+      await this.transporte.desconectar();
+    }
+
     if (this.uiHandler) {
-      for (const action of ['ticket', 'historial', 'health', 'metrics']) {
+      for (const action of ['ticket', 'conectar', 'estado', 'historial', 'health', 'metrics']) {
         this.uiHandler.unregister('impresion', action);
       }
     }
@@ -97,12 +164,14 @@ class ImpresionModule {
     }
 
     this.uiHandler.register('impresion', 'ticket', this.handleImprimirComanda.bind(this));
+    this.uiHandler.register('impresion', 'conectar', this.handleConectar.bind(this));
+    this.uiHandler.register('impresion', 'estado', this.handleGetEstado.bind(this));
     this.uiHandler.register('impresion', 'historial', this.handleGetHistorial.bind(this));
     this.uiHandler.register('impresion', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('impresion', 'metrics', this.handleGetMetrics.bind(this));
 
     this.logger.info('impresion.ui_handlers.registered', {
-      handlers: ['ticket', 'historial', 'health', 'metrics']
+      handlers: ['ticket', 'conectar', 'estado', 'historial', 'health', 'metrics']
     });
   }
 
@@ -159,7 +228,7 @@ class ImpresionModule {
       await this.eventBus.publish('impresion.error', {
         error: error.message,
         pedido_id,
-        fase: 'formato'
+        fase: error.message.includes('transporte') ? 'envio' : 'formato'
       });
 
       this.logger.error('impresion.comanda.error', {
@@ -176,8 +245,8 @@ class ImpresionModule {
 
   /**
    * POST /modules/impresion/ticket
-   * Reimprimir comanda manualmente (llamado desde comandero)
-   * Body: { cuenta_id, pedido_id?, items?, canal?, notas_generales? }
+   * Reimprimir comanda manualmente
+   * Body: { cuenta_id, pedido_id?, items, canal?, notas_generales? }
    */
   async handleImprimirComanda(data) {
     const { cuenta_id, pedido_id, items, canal, notas_generales } = data;
@@ -227,6 +296,53 @@ class ImpresionModule {
     }
   }
 
+  /**
+   * POST /modules/impresion/conectar
+   * (Re)conectar impresora Bluetooth
+   * Body: { mac?, modo?, dispositivo?, tcp_host?, tcp_puerto?, comando? }
+   */
+  async handleConectar(data) {
+    // Actualizar config si se pasan parámetros nuevos
+    if (data && Object.keys(data).length > 0) {
+      const campos = ['mac', 'modo', 'dispositivo', 'rfcomm_canal', 'comando', 'tcp_host', 'tcp_puerto'];
+      for (const campo of campos) {
+        if (data[campo] !== undefined) {
+          this.config.transporte[campo] = data[campo];
+        }
+      }
+      // Recrear transporte con nueva config
+      if (this.transporte) {
+        await this.transporte.desconectar();
+      }
+      this.transporte = new TransporteBluetooth(this.config.transporte, this.logger);
+    }
+
+    try {
+      await this.transporte.conectar();
+      return { status: 200, data: this.transporte.getEstado() };
+    } catch (error) {
+      return { status: 500, error: error.message, data: this.transporte.getEstado() };
+    }
+  }
+
+  /**
+   * GET /modules/impresion/estado
+   * Estado actual del transporte e impresora
+   */
+  async handleGetEstado() {
+    return {
+      status: 200,
+      data: {
+        modulo: { name: this.name, version: this.version },
+        impresora: {
+          ancho: this.config.ancho,
+          chars_linea: this.lineWidth
+        },
+        transporte: this.transporte ? this.transporte.getEstado() : { estado: 'no_inicializado' }
+      }
+    };
+  }
+
   async handleGetHistorial(data) {
     const limit = parseInt(data?.limit) || 20;
     return {
@@ -236,12 +352,14 @@ class ImpresionModule {
   }
 
   async handleHealthCheck() {
+    const transporteEstado = this.transporte ? this.transporte.getEstado() : null;
     return {
       status: 200,
       data: {
-        status: 'healthy',
+        status: transporteEstado?.estado === 'conectado' ? 'healthy' : 'degraded',
         module: this.name,
-        version: this.version
+        version: this.version,
+        transporte: transporteEstado
       }
     };
   }
@@ -251,7 +369,8 @@ class ImpresionModule {
       status: 200,
       data: {
         ...this.internalMetrics,
-        historial_size: this.historial.length
+        historial_size: this.historial.length,
+        transporte_estado: this.transporte ? this.transporte.estado : 'n/a'
       }
     };
   }
@@ -262,6 +381,7 @@ class ImpresionModule {
 
   /**
    * Genera el texto ESC/POS para una comanda de cocina.
+   * Adapta al ancho configurado (58mm=32 chars, 80mm=42 chars).
    * Sin precios — solo items, variaciones, ingredientes, mesa, hora.
    */
   formatearComanda({ pedido_id, cuenta_id, canal, items, notas_generales, reimpresion }) {
@@ -278,7 +398,7 @@ class ImpresionModule {
 
     // -- Referencia mesa/pedido y hora
     lineas.push(CMD.FONT_NORMAL);
-    lineas.push(DOUBLE_SEP);
+    lineas.push(this.doubleSep);
 
     const refMesa = this.extraerRefMesa(cuenta_id, canal);
     if (refMesa) {
@@ -295,21 +415,21 @@ class ImpresionModule {
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 
-    lineas.push(`Hora: ${hora}  Fecha: ${fecha}`);
-    lineas.push(`Pedido: ${pedido_id || '-'}`);
+    // En 58mm optimizamos espacio
+    if (this.lineWidth <= 32) {
+      lineas.push(`${hora} ${fecha}  #${pedido_id || '-'}`);
+    } else {
+      lineas.push(`Hora: ${hora}  Fecha: ${fecha}`);
+      lineas.push(`Pedido: ${pedido_id || '-'}`);
+    }
     if (canal) lineas.push(`Canal: ${canal}`);
 
-    lineas.push(DOUBLE_SEP);
+    lineas.push(this.doubleSep);
 
     // -- Items
-    lineas.push(CMD.BOLD_ON);
-    lineas.push('ITEMS:');
-    lineas.push(CMD.BOLD_OFF);
-    lineas.push(SEPARATOR);
-
     for (const item of items) {
       this.formatearItem(lineas, item);
-      lineas.push(SEPARATOR);
+      lineas.push(this.separator);
     }
 
     // -- Notas generales
@@ -317,8 +437,8 @@ class ImpresionModule {
       lineas.push(CMD.BOLD_ON);
       lineas.push('NOTAS:');
       lineas.push(CMD.BOLD_OFF);
-      lineas.push(notas_generales);
-      lineas.push(SEPARATOR);
+      lineas.push(this.truncar(notas_generales));
+      lineas.push(this.separator);
     }
 
     // -- Footer
@@ -335,35 +455,30 @@ class ImpresionModule {
   }
 
   /**
-   * Formatea un item individual de la comanda.
-   * Soporta: item normal, mitad-mitad, al gusto, con variaciones.
+   * Formatea un item individual.
+   * En 58mm: más compacto, abreviaciones.
    */
   formatearItem(lineas, item) {
-    // Cantidad + Nombre (bold, doble)
     const qty = item.cantidad > 1 ? `${item.cantidad}x ` : '';
     lineas.push(CMD.BOLD_ON);
-    lineas.push(`${qty}${item.nombre}`);
+    lineas.push(this.truncar(`${qty}${item.nombre}`));
     lineas.push(CMD.BOLD_OFF);
 
-    // Tipo especial: mitad-mitad
+    // Mitad-mitad
     if (item.tipo === 'mitad-mitad' || item.pizza_izquierda || item.pizza_derecha) {
       if (item.pizza_izquierda) {
-        lineas.push(`  IZQ: ${item.pizza_izquierda}`);
+        lineas.push(this.truncar(` IZQ: ${item.pizza_izquierda}`));
       }
       if (item.pizza_derecha) {
-        lineas.push(`  DER: ${item.pizza_derecha}`);
+        lineas.push(this.truncar(` DER: ${item.pizza_derecha}`));
       }
     }
 
-    // Ingredientes (al gusto)
+    // Ingredientes
     if (item.ingredientes && item.ingredientes.length > 0) {
-      lineas.push('  Ingredientes:');
       for (const ing of item.ingredientes) {
-        if (typeof ing === 'string') {
-          lineas.push(`    + ${ing}`);
-        } else if (ing.nombre) {
-          lineas.push(`    + ${ing.nombre}`);
-        }
+        const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
+        lineas.push(this.truncar(` + ${nombre}`));
       }
     }
 
@@ -374,25 +489,24 @@ class ImpresionModule {
       if (v.ingredientes_quitar && v.ingredientes_quitar.length > 0) {
         lineas.push(CMD.BOLD_ON);
         for (const ing of v.ingredientes_quitar) {
-          lineas.push(`  SIN ${ing.toUpperCase()}`);
+          lineas.push(this.truncar(` SIN ${ing.toUpperCase()}`));
         }
         lineas.push(CMD.BOLD_OFF);
       }
 
       if (v.ingredientes_anadir && v.ingredientes_anadir.length > 0) {
         for (const ing of v.ingredientes_anadir) {
-          const nombre = typeof ing === 'string' ? ing : ing.nombre || ing;
-          lineas.push(`  CON ${nombre}`);
+          const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
+          lineas.push(this.truncar(` CON ${nombre}`));
         }
       }
 
-      // Otras variaciones genéricas (tamaño, masa, etc.)
       for (const [key, val] of Object.entries(v)) {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
-          lineas.push(`  ${key.toUpperCase()}`);
+          lineas.push(` ${key.toUpperCase()}`);
         } else if (val && val !== false) {
-          lineas.push(`  ${key}: ${val}`);
+          lineas.push(this.truncar(` ${key}: ${val}`));
         }
       }
     }
@@ -400,19 +514,17 @@ class ImpresionModule {
     // Notas del item
     if (item.notas) {
       lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(`  >> ${item.notas}`);
+      lineas.push(this.truncar(` >> ${item.notas}`));
       lineas.push(CMD.UNDERLINE_OFF);
     }
   }
 
   /**
    * Extrae referencia de mesa del cuenta_id o canal.
-   * Convención: cuenta_id con prefijo indica canal (ej: "mesa_5", "glovo_123")
    */
   extraerRefMesa(cuenta_id, canal) {
     if (!cuenta_id) return null;
 
-    // Prefijos conocidos → extraer número
     const prefijos = {
       mesa: 'MESA',
       telefono: 'TEL',
@@ -428,7 +540,6 @@ class ImpresionModule {
       }
     }
 
-    // Si hay canal explícito
     if (canal && prefijos[canal]) {
       return `${prefijos[canal]} - ${cuenta_id}`;
     }
@@ -441,25 +552,44 @@ class ImpresionModule {
   // ==========================================
 
   /**
-   * Envía el contenido formateado a la impresora.
-   * Publicamos via eventBus para que el bridge hardware lo gestione.
-   * En entornos sin impresora física, se loguea el contenido.
+   * Envía ESC/POS a la impresora vía transporte Bluetooth.
+   * Si el transporte no está conectado, intenta reconectar una vez.
+   * También publica impresion.raw al eventBus (para monitoreo/logging).
    */
   async enviarImpresora(contenido) {
-    // Publicar al bus para que el bridge de hardware lo envíe
-    // El bridge escucha 'impresion.raw' y lo enruta a la impresora física
+    // Publicar al bus para monitoreo
     await this.eventBus.publish('impresion.raw', {
       tipo: 'comanda',
       contenido,
       timestamp: new Date().toISOString()
     });
 
-    this.logger.debug('impresion.enviada', { bytes: contenido.length });
+    // Enviar por transporte Bluetooth
+    if (this.transporte) {
+      try {
+        if (this.transporte.estado !== 'conectado') {
+          this.logger.info('impresion.transporte.reconectando');
+          await this.transporte.conectar();
+        }
+        await this.transporte.enviar(contenido);
+      } catch (error) {
+        this.internalMetrics.errores_transporte++;
+        this.logger.error('impresion.transporte.envio_fallido', { error: error.message });
+        throw new Error(`transporte: ${error.message}`);
+      }
+    } else {
+      this.logger.warn('impresion.sin_transporte', { bytes: contenido.length });
+    }
   }
 
   // ==========================================
   // Utilidades
   // ==========================================
+
+  /** Trunca texto al ancho de línea */
+  truncar(texto) {
+    return texto.length > this.lineWidth ? texto.slice(0, this.lineWidth - 1) + '…' : texto;
+  }
 
   guardarHistorial(registro) {
     this.historial.unshift(registro);

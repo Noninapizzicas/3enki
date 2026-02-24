@@ -1,13 +1,14 @@
 {
   "name": "impresion",
-  "version": "1.0.0",
-  "description": "Impresión de comandas de cocina - items, variaciones, ingredientes, mesa, hora",
+  "version": "1.1.0",
+  "description": "Comandas de cocina vía impresora térmica Bluetooth (58mm NETUM / 80mm). Sin precios.",
   "author": "Pizzepos Team",
 
   "provides": {
     "events": [
       "impresion.comanda_generada",
-      "impresion.error"
+      "impresion.error",
+      "impresion.raw"
     ]
   },
 
@@ -26,6 +27,10 @@
         "schema": {
           "$ref": "./schemas/events.json#/definitions/impresion_error"
         }
+      },
+      {
+        "event": "impresion.raw",
+        "description": "Datos ESC/POS raw enviados a impresora (para monitoreo)"
       }
     ],
     "subscribes": [
@@ -43,6 +48,18 @@
       "path": "/ticket",
       "handler": "handleImprimirComanda",
       "description": "Reimprimir comanda manualmente"
+    },
+    {
+      "method": "POST",
+      "path": "/conectar",
+      "handler": "handleConectar",
+      "description": "(Re)conectar impresora Bluetooth. Body: { mac?, modo?, dispositivo? }"
+    },
+    {
+      "method": "GET",
+      "path": "/estado",
+      "handler": "handleGetEstado",
+      "description": "Estado actual de impresora y transporte"
     },
     {
       "method": "GET",
@@ -64,6 +81,19 @@
     }
   ],
 
+  "config": {
+    "ancho": "58mm",
+    "transporte": {
+      "modo": "dispositivo",
+      "mac": null,
+      "dispositivo": "/dev/rfcomm0",
+      "rfcomm_canal": 1,
+      "comando": null,
+      "tcp_host": "127.0.0.1",
+      "tcp_puerto": 9100
+    }
+  },
+
   "observability": {
     "logging": {
       "level": "info",
@@ -75,7 +105,8 @@
       "counters": [
         "impresion.comanda.total",
         "impresion.reimpresion.total",
-        "impresion.error.total"
+        "impresion.error.total",
+        "impresion.transporte.error.total"
       ],
       "gauges": [
         "impresion.cola.count"

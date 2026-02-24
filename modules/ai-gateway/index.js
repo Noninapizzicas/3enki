@@ -665,6 +665,8 @@ class AIGatewayModule {
       // Agentic loop - execute tools and continue conversation
       let result;
       let iteration = 0;
+      let consecutiveToolErrors = 0;
+      const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
 
       while (iteration < maxIterations) {
         iteration++;
@@ -735,6 +737,54 @@ class AIGatewayModule {
           });
           result.pending_confirmation = pendingConfirmation;
           break;
+        }
+
+        // Track consecutive tool errors to break infinite retry loops
+        // (e.g. DeepSeek repeatedly sending truncated JSON that always fails)
+        const allFailed = toolResults.length > 0 && toolResults.every(r => r.status === 'error');
+        if (allFailed) {
+          consecutiveToolErrors++;
+          this.logger.warn('ai-gateway.tools.consecutive_errors', {
+            iteration,
+            consecutive: consecutiveToolErrors,
+            max: MAX_CONSECUTIVE_TOOL_ERRORS,
+            tools: toolResults.map(r => r.name)
+          });
+
+          if (consecutiveToolErrors >= MAX_CONSECUTIVE_TOOL_ERRORS) {
+            this.logger.error('ai-gateway.tools.error_loop_broken', {
+              iterations: iteration,
+              consecutive_errors: consecutiveToolErrors,
+              last_errors: toolResults.map(r => ({ name: r.name, error: r.error }))
+            });
+
+            // Inject a system hint so the LLM can give a human-readable error
+            messages.push({
+              role: 'assistant',
+              content: result.content || null,
+              tool_calls: result._raw_tool_calls || result.tool_calls
+            });
+            const errorToolMessages = this.formatToolResultsForProvider(
+              toolResults.map(r => ({
+                ...r,
+                result: `Error after ${consecutiveToolErrors} retries: ${r.error}. ` +
+                  'Do NOT retry. Tell the user what went wrong and suggest a simpler request.'
+              })),
+              providerName
+            );
+            messages.push(...errorToolMessages);
+
+            // One last call so the LLM can compose a final user-facing message
+            if (iteration < maxIterations) {
+              const finalOpts = { ...chatOptions, tools: null }; // strip tools to force text
+              result = await this.chatWithRetry(provider, messages, finalOpts);
+              totalTokens += result.usage?.total_tokens || 0;
+              totalCost += result.cost || 0;
+            }
+            break;
+          }
+        } else {
+          consecutiveToolErrors = 0;
         }
 
         // Add assistant message with tool calls to conversation
@@ -1536,8 +1586,11 @@ class AIGatewayModule {
 
   /**
    * Safely parse JSON arguments from tool calls
+   * Handles truncated JSON from providers that exceed token limits
+   * by attempting partial field recovery before giving up.
+   *
    * @param {string|object} args - Arguments to parse
-   * @returns {object} Parsed arguments or empty object on error
+   * @returns {object} Parsed arguments or recovered fields
    */
   safeParseArguments(args) {
     if (typeof args !== 'string') return args || {};
@@ -1546,10 +1599,76 @@ class AIGatewayModule {
     } catch (e) {
       this.logger?.warn('ai-gateway.tool-args-parse-error', {
         error: e.message,
-        truncated: args.substring(0, 100)
+        args_length: args.length,
+        truncated: args.substring(0, 200)
       });
+
+      // Attempt partial recovery: extract top-level string fields from truncated JSON
+      // This handles the common case where DeepSeek truncates a long "content" value
+      const recovered = this._recoverFieldsFromTruncatedJSON(args);
+      if (recovered && Object.keys(recovered).length > 0) {
+        this.logger?.info('ai-gateway.tool-args-partial-recovery', {
+          recovered_fields: Object.keys(recovered),
+          original_length: args.length
+        });
+        recovered._partial_recovery = true;
+        return recovered;
+      }
+
       return { _parse_error: e.message, _raw: args };
     }
+  }
+
+  /**
+   * Attempt to recover key-value pairs from truncated JSON
+   * Extracts complete "key":"value" pairs that appear before the truncation point.
+   * For the last (truncated) string value, captures what's available.
+   *
+   * @param {string} raw - Truncated JSON string
+   * @returns {object|null} Recovered fields or null
+   */
+  _recoverFieldsFromTruncatedJSON(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+
+    const result = {};
+
+    // Match complete "key": "value" pairs (handles escaped quotes inside values)
+    const completeFieldRegex = /"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+    let match;
+    let lastIndex = 0;
+
+    while ((match = completeFieldRegex.exec(raw)) !== null) {
+      result[match[1]] = match[2].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+      lastIndex = completeFieldRegex.lastIndex;
+    }
+
+    // Try to recover the last truncated string field
+    // Pattern: after the last complete pair, look for "key": "value... (unterminated)
+    const remainder = raw.slice(lastIndex);
+    const truncatedMatch = remainder.match(/"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)/);
+    if (truncatedMatch) {
+      const key = truncatedMatch[1];
+      let value = truncatedMatch[2].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+      // Mark truncated content so consumers know it's incomplete
+      if (value.length > 0) {
+        result[key] = value;
+        result._truncated_field = key;
+      }
+    }
+
+    // Also try to recover non-string fields: "key": number/boolean/null
+    const nonStringRegex = /"([^"]+)"\s*:\s*(true|false|null|\d+(?:\.\d+)?)\s*[,}]/g;
+    while ((match = nonStringRegex.exec(raw)) !== null) {
+      if (!(match[1] in result)) {
+        try {
+          result[match[1]] = JSON.parse(match[2]);
+        } catch {
+          result[match[1]] = match[2];
+        }
+      }
+    }
+
+    return Object.keys(result).filter(k => !k.startsWith('_')).length > 0 ? result : null;
   }
 
   /**

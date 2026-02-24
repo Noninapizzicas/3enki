@@ -116,27 +116,27 @@
   "tools": [
     {
       "name": "pdf.create",
-      "description": "Crea un archivo PDF desde texto o contenido estructurado. Soporta título, cuerpo de texto, orientación y formato de página.",
+      "description": "Crea un archivo PDF desde texto plano. IMPORTANTE: usa texto plano corto (máx 3000 caracteres). NO envíes HTML largo ni contenido extenso — el JSON se truncará y fallará. Si el contenido es largo, resúmelo antes de llamar a esta tool. Usa el campo 'title' para el encabezado.",
       "handler": "handleToolCreate",
       "parameters": {
         "type": "object",
         "properties": {
           "filename": {
             "type": "string",
-            "description": "Nombre del archivo PDF de salida (ej: 'informe.pdf')"
+            "description": "Nombre del archivo PDF (ej: 'informe.pdf'). Requerido."
           },
           "content": {
             "type": "string",
-            "description": "Contenido del PDF (texto, o cuerpo del documento)"
+            "description": "Texto plano del documento. Máximo 3000 caracteres. NO usar HTML largo."
           },
           "title": {
             "type": "string",
-            "description": "Título opcional que aparece centrado al inicio del PDF"
+            "description": "Título centrado al inicio del PDF (opcional)"
           },
           "type": {
             "type": "string",
-            "enum": ["from_text", "from_html"],
-            "description": "Tipo de contenido: from_text (por defecto) o from_html"
+            "enum": ["from_text"],
+            "description": "Siempre 'from_text'. No usar from_html."
           },
           "orientation": {
             "type": "string",
@@ -150,7 +150,7 @@
           },
           "project_id": {
             "type": "string",
-            "description": "ID del proyecto (opcional, para contexto)"
+            "description": "ID del proyecto (opcional)"
           }
         },
         "required": ["filename", "content"]

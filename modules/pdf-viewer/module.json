@@ -115,6 +115,48 @@
 
   "tools": [
     {
+      "name": "pdf.create",
+      "description": "Crea un archivo PDF desde texto o contenido estructurado. Soporta título, cuerpo de texto, orientación y formato de página.",
+      "handler": "handleToolCreate",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Nombre del archivo PDF de salida (ej: 'informe.pdf')"
+          },
+          "content": {
+            "type": "string",
+            "description": "Contenido del PDF (texto, o cuerpo del documento)"
+          },
+          "title": {
+            "type": "string",
+            "description": "Título opcional que aparece centrado al inicio del PDF"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["from_text", "from_html"],
+            "description": "Tipo de contenido: from_text (por defecto) o from_html"
+          },
+          "orientation": {
+            "type": "string",
+            "enum": ["portrait", "landscape"],
+            "description": "Orientación: portrait (por defecto) o landscape"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["A4", "letter", "legal"],
+            "description": "Formato de página: A4 (por defecto), letter o legal"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto (opcional, para contexto)"
+          }
+        },
+        "required": ["filename", "content"]
+      }
+    },
+    {
       "name": "pdf.list",
       "description": "Lista todos los archivos PDF en un proyecto.",
       "handler": "handleToolList",

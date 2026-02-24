@@ -617,6 +617,206 @@ class PdfViewerModule {
   // ==========================================
 
   /**
+   * pdf.create - Create a PDF from text or structured content
+   * Delegates to local.pdf provider via eventBus, falls back to direct PDFKit
+   */
+  async handleToolCreate(args) {
+    const {
+      project_id,
+      filename,
+      title,
+      content,
+      type = 'from_text',
+      orientation = 'portrait',
+      format = 'A4',
+      margin = 50
+    } = args || {};
+
+    if (!filename) {
+      return { status: 400, data: { error: 'filename is required' } };
+    }
+    if (!content) {
+      return { status: 400, data: { error: 'content is required (text or structured object with title/body)' } };
+    }
+
+    // Sanitize filename
+    const safeName = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+
+    this.logger.info('tool.pdf.create.start', {
+      project_id,
+      filename: safeName,
+      type,
+      content_length: typeof content === 'string' ? content.length : JSON.stringify(content).length
+    });
+
+    try {
+      // Try via provider event first (preferred: keeps consistency)
+      const result = await this.createViaProvider({
+        type,
+        content: title ? { title, body: content } : content,
+        filename: safeName,
+        options: { orientation, format, margin }
+      });
+
+      if (result) {
+        this.logger.info('tool.pdf.create.success', {
+          filename: safeName,
+          path: result.path,
+          size: result.size,
+          method: 'provider'
+        });
+
+        return {
+          status: 200,
+          data: {
+            success: true,
+            filename: safeName,
+            path: result.path,
+            size: result.size,
+            method: 'provider'
+          }
+        };
+      }
+
+      // Fallback: create directly with PDFKit
+      return await this.createDirectPdf({
+        type, content, title, filename: safeName,
+        orientation, format, margin, project_id
+      });
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error('tool.pdf.create.error', { filename: safeName, error: errorMsg });
+
+      return {
+        status: 500,
+        data: { success: false, filename: safeName, error: errorMsg }
+      };
+    }
+  }
+
+  /**
+   * Create PDF via local.pdf provider (event bus)
+   * Returns null if provider unavailable
+   */
+  async createViaProvider(payload) {
+    if (!this.eventBus) return null;
+
+    return new Promise((resolve) => {
+      const requestId = `pdf_create_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const timeout = setTimeout(() => {
+        resolve(null); // fallback to direct
+      }, 8000);
+
+      const handler = (event) => {
+        const data = event.data || event;
+        if (data.request_id !== requestId) return;
+        clearTimeout(timeout);
+        if (data.success && data.data) {
+          resolve(data.data);
+        } else {
+          resolve(null);
+        }
+      };
+
+      this.eventBus.subscribe('local.pdf.create.response', handler)
+        .then(unsub => {
+          this.eventBus.publish('local.pdf.create.request', {
+            request_id: requestId,
+            ...payload
+          }).catch(() => {
+            clearTimeout(timeout);
+            unsub();
+            resolve(null);
+          });
+          setTimeout(() => unsub(), 9000);
+        })
+        .catch(() => resolve(null));
+    });
+  }
+
+  /**
+   * Direct PDFKit fallback when provider is not available
+   */
+  async createDirectPdf({ type, content, title, filename, orientation, format, margin }) {
+    let PDFDocument;
+    try {
+      PDFDocument = require('pdfkit');
+    } catch {
+      return {
+        status: 500,
+        data: { success: false, error: 'pdfkit not installed. Run: npm install pdfkit' }
+      };
+    }
+
+    const outputDir = path.join(process.cwd(), 'data', 'generated', 'pdf');
+    await fs.mkdir(outputDir, { recursive: true });
+    const outputPath = path.join(outputDir, filename);
+
+    const doc = new PDFDocument({
+      size: format,
+      layout: orientation,
+      margin
+    });
+
+    const fsSync = require('fs');
+    const writeStream = fsSync.createWriteStream(outputPath);
+    doc.pipe(writeStream);
+
+    if (type === 'from_text') {
+      if (title) {
+        doc.fontSize(18).text(title, { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).text(typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+      } else if (typeof content === 'string') {
+        doc.fontSize(12).text(content);
+      } else if (content && typeof content === 'object') {
+        if (content.title) {
+          doc.fontSize(18).text(content.title, { align: 'center' });
+          doc.moveDown();
+        }
+        doc.fontSize(12).text(content.body || JSON.stringify(content, null, 2));
+      }
+    } else if (type === 'from_html') {
+      const plainText = (typeof content === 'string' ? content : '').replace(/<[^>]*>/g, '');
+      if (title) {
+        doc.fontSize(18).text(title, { align: 'center' });
+        doc.moveDown();
+      }
+      doc.fontSize(12).text(plainText);
+    } else {
+      doc.fontSize(12).text(typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+    }
+
+    doc.end();
+
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
+
+    const stats = await fs.stat(outputPath);
+
+    this.logger.info('tool.pdf.create.success', {
+      filename,
+      path: outputPath,
+      size: stats.size,
+      method: 'direct'
+    });
+
+    return {
+      status: 200,
+      data: {
+        success: true,
+        filename,
+        path: outputPath,
+        size: stats.size,
+        sizeFormatted: this.formatBytes(stats.size),
+        method: 'direct'
+      }
+    };
+  }
+
+  /**
    * pdf.list - List all PDFs in a project
    */
   async handleToolList(args) {

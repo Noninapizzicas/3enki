@@ -1,0 +1,85 @@
+{
+  "name": "impresion",
+  "version": "1.0.0",
+  "description": "Impresión de comandas de cocina - items, variaciones, ingredientes, mesa, hora",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": [
+      "impresion.comanda_generada",
+      "impresion.error"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "impresion.comanda_generada",
+        "description": "Comanda formateada y enviada a impresora",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/impresion_comanda_generada"
+        }
+      },
+      {
+        "event": "impresion.error",
+        "description": "Error al generar o enviar comanda",
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/impresion_error"
+        }
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "pedido.enviado_cocina",
+        "description": "Generar e imprimir comanda cuando pedido se envía a cocina",
+        "handler": "onPedidoEnviadoCocina"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/ticket",
+      "handler": "handleImprimirComanda",
+      "description": "Reimprimir comanda manualmente"
+    },
+    {
+      "method": "GET",
+      "path": "/historial",
+      "handler": "handleGetHistorial",
+      "description": "Historial de comandas impresas"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "impresion.comanda.total",
+        "impresion.reimpresion.total",
+        "impresion.error.total"
+      ],
+      "gauges": [
+        "impresion.cola.count"
+      ]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "impresion",
   "version": "1.1.0",
-  "description": "Comandas de cocina vía impresora térmica Bluetooth (58mm NETUM / 80mm). Sin precios.",
+  "description": "Comandas de cocina via impresora termica Bluetooth (58mm NETUM / 80mm). Sin precios.",
   "author": "Pizzepos Team",
 
   "provides": {
@@ -36,11 +36,20 @@
     "subscribes": [
       {
         "event": "pedido.enviado_cocina",
-        "description": "Generar e imprimir comanda cuando pedido se envía a cocina",
+        "description": "Generar e imprimir comanda cuando pedido se envia a cocina",
         "handler": "onPedidoEnviadoCocina"
       }
     ]
   },
+
+  "ui_handlers": [
+    { "domain": "impresion", "action": "ticket", "handler": "handleImprimirComanda" },
+    { "domain": "impresion", "action": "conectar", "handler": "handleConectar" },
+    { "domain": "impresion", "action": "estado", "handler": "handleGetEstado" },
+    { "domain": "impresion", "action": "historial", "handler": "handleGetHistorial" },
+    { "domain": "impresion", "action": "health", "handler": "handleHealthCheck" },
+    { "domain": "impresion", "action": "metrics", "handler": "handleGetMetrics" }
+  ],
 
   "apis": [
     {
@@ -77,9 +86,80 @@
       "method": "GET",
       "path": "/metrics",
       "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
+      "description": "Metricas del modulo"
     }
   ],
+
+  "ui": {
+    "enabled": true,
+    "title": "Impresora",
+    "icon": "🖨️",
+    "description": "Comandas de cocina e impresora Bluetooth",
+    "access_level": "camarero",
+    "components": ["printer-status", "comanda-form", "historial-list", "config-panel"],
+    "views": {
+      "main": {
+        "type": "dashboard",
+        "layout": "fullwidth",
+        "title": "Impresora - Comandas",
+
+        "header": {
+          "show": true,
+          "component": "printer-status",
+          "config": {
+            "endpoint": "/modules/impresion/estado",
+            "reconnect_endpoint": "/modules/impresion/conectar",
+            "poll_interval": 15000
+          }
+        },
+
+        "content": {
+          "type": "tabs",
+          "tabs": [
+            {
+              "id": "reimprimir",
+              "label": "Reimprimir",
+              "component": "comanda-form",
+              "config": {
+                "endpoint": "/modules/impresion/ticket",
+                "method": "POST",
+                "canales": ["mesa", "telefono", "llevar", "glovo"],
+                "fields": {
+                  "cuenta_id": { "required": true, "placeholder": "mesa_5, tel_123..." },
+                  "pedido_id": { "required": false },
+                  "items": { "dynamic": true, "min": 1 },
+                  "notas_generales": { "required": false }
+                }
+              }
+            },
+            {
+              "id": "historial",
+              "label": "Historial",
+              "component": "historial-list",
+              "config": {
+                "endpoint": "/modules/impresion/historial",
+                "limit": 30,
+                "mqtt_topics": ["impresion.comanda_generada"],
+                "refresh_on_event": true
+              }
+            },
+            {
+              "id": "config",
+              "label": "Config",
+              "component": "config-panel",
+              "config": {
+                "estado_endpoint": "/modules/impresion/estado",
+                "conectar_endpoint": "/modules/impresion/conectar",
+                "metrics_endpoint": "/modules/impresion/metrics",
+                "modos": ["dispositivo", "tcp", "comando"],
+                "anchos": ["58mm", "80mm"]
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
 
   "config": {
     "ancho": "58mm",

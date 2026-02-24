@@ -125,7 +125,7 @@ class ImpresionModule {
       });
     }
 
-    this.registerUIHandlers();
+    // ui_handlers se registran declarativamente desde module.json (auto-wire del loader)
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -143,36 +143,8 @@ class ImpresionModule {
       await this.transporte.desconectar();
     }
 
-    if (this.uiHandler) {
-      for (const action of ['ticket', 'conectar', 'estado', 'historial', 'health', 'metrics']) {
-        this.uiHandler.unregister('impresion', action);
-      }
-    }
-
     this.historial = [];
     this.logger.info('module.unloaded', { module: this.name });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('impresion.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('impresion', 'ticket', this.handleImprimirComanda.bind(this));
-    this.uiHandler.register('impresion', 'conectar', this.handleConectar.bind(this));
-    this.uiHandler.register('impresion', 'estado', this.handleGetEstado.bind(this));
-    this.uiHandler.register('impresion', 'historial', this.handleGetHistorial.bind(this));
-    this.uiHandler.register('impresion', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('impresion', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.logger.info('impresion.ui_handlers.registered', {
-      handlers: ['ticket', 'conectar', 'estado', 'historial', 'health', 'metrics']
-    });
   }
 
   // ==========================================

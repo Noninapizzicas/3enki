@@ -88,7 +88,9 @@
       "ui-designer",
       "dashboard",
       "notas",
-      "metricas"
+      "metricas",
+      "security-p2p",
+      "staff-manager"
     ]
   },
   "observability": {

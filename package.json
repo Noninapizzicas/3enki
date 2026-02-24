@@ -42,6 +42,7 @@
     "pdf-parse": "^1.1.1",
     "pdf-to-png-converter": "^3.11.0",
     "pdfjs-dist": "^5.4.530",
+    "pdfkit": "^0.17.2",
     "scribe.js-ocr": "^0.9.3",
     "sharp": "^0.34.5",
     "sql.js": "^1.13.0",

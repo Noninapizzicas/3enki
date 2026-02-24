@@ -87,6 +87,24 @@
       "path": "/metrics",
       "handler": "handleGetMetrics",
       "description": "Metricas del modulo"
+    },
+    {
+      "method": "GET",
+      "path": "/ui",
+      "handler": "handleServeUI",
+      "description": "UI de impresion (index.html)"
+    },
+    {
+      "method": "GET",
+      "path": "/ui/css/:file",
+      "handler": "handleServeUI",
+      "description": "CSS de la UI"
+    },
+    {
+      "method": "GET",
+      "path": "/ui/js/:file",
+      "handler": "handleServeUI",
+      "description": "JS de la UI"
     }
   ],
 

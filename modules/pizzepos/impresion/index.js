@@ -402,8 +402,8 @@ class ImpresionModule {
 
     return {
       status: 200,
-      headers: { 'Content-Type': contentType },
-      raw: content
+      body: content,
+      headers: { 'Content-Type': contentType }
     };
   }
 

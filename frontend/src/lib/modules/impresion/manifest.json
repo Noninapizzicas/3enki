@@ -1,0 +1,28 @@
+{
+  "id": "impresion",
+  "name": "Impresora",
+  "description": "Comandas de cocina e impresora Bluetooth",
+  "version": "2.0.0",
+  "zone": "work-bar",
+  "order": 10,
+  "icon": "🖨️",
+  "label": "Impresora",
+  "panel": {
+    "component": "ImpresionPanel",
+    "zones": ["work-bar", "system-bar"],
+    "defaultZone": "work-bar",
+    "width": 400,
+    "minWidth": 340,
+    "maxWidth": 520
+  },
+  "triggers": {
+    "events": [
+      "impresion.comanda_generada",
+      "impresion.error",
+      "impresion.raw"
+    ]
+  },
+  "permissions": {
+    "mqtt": ["impresion/*"]
+  }
+}

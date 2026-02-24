@@ -9,22 +9,7 @@
  */
 
 const crypto = require('crypto');
-const path = require('path');
-const fs = require('fs');
 const TransporteBluetooth = require('./transporte');
-
-// Directorio de archivos estáticos (public/)
-const PUBLIC_DIR = path.join(__dirname, 'public');
-
-// MIME types para servir archivos estáticos
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml'
-};
 
 // ==========================================
 // ESC/POS constants
@@ -359,51 +344,6 @@ class ImpresionModule {
         historial_size: this.historial.length,
         transporte_estado: this.transporte ? this.transporte.estado : 'n/a'
       }
-    };
-  }
-
-  /**
-   * GET /modules/impresion/ui, /ui/css/:file, /ui/js/:file
-   * Sirve archivos estáticos de public/ (HTML, CSS, JS)
-   * Ruta principal: /modules/impresion/ui → index.html
-   */
-  async handleServeUI(data, request) {
-    // Extraer sub-ruta del path completo del request
-    const requestPath = request?.path || request?.url || '';
-    const uiPrefix = '/modules/impresion/ui';
-    let subpath = '';
-
-    if (requestPath.includes(uiPrefix)) {
-      subpath = requestPath.split(uiPrefix)[1] || '';
-    } else if (request?.params?.file) {
-      // Reconstruir desde params (css/:file o js/:file)
-      const dir = requestPath.includes('/css/') ? 'css' : 'js';
-      subpath = `/${dir}/${request.params.file}`;
-    }
-
-    subpath = subpath.replace(/^\/+/, '');
-    const filePath = subpath
-      ? path.join(PUBLIC_DIR, subpath)
-      : path.join(PUBLIC_DIR, 'index.html');
-
-    // Prevenir path traversal
-    const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(PUBLIC_DIR)) {
-      return { status: 403, error: 'Forbidden' };
-    }
-
-    if (!fs.existsSync(resolved)) {
-      return { status: 404, error: 'Not found' };
-    }
-
-    const ext = path.extname(resolved);
-    const contentType = MIME[ext] || 'application/octet-stream';
-    const content = fs.readFileSync(resolved, ext === '.png' ? null : 'utf8');
-
-    return {
-      status: 200,
-      body: content,
-      headers: { 'Content-Type': contentType }
     };
   }
 

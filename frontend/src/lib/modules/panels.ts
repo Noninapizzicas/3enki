@@ -131,6 +131,18 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/menu-cartas/CartasPanel.svelte')
   },
 
+  // === WORK BAR — Impresion (comandas de cocina) ===
+  'impresion-panel': {
+    id: 'impresion-panel',
+    title: 'Impresora',
+    icon: '🖨️',
+    size: 'md',
+    position: 'top',
+    zone: 'work-bar',
+    order: 10,
+    loader: () => import('$lib/modules/impresion/ImpresionPanel.svelte')
+  },
+
   // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',

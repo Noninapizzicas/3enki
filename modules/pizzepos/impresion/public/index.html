@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Impresora - Comandas</title>
+    <link rel="stylesheet" href="/modules/impresion/css/impresion.css">
+</head>
+<body>
+    <div class="container">
+
+        <!-- Header con estado de impresora -->
+        <header class="header">
+            <div class="header-content">
+                <h1>Comandas</h1>
+                <div class="printer-status" id="printer-status" onclick="app.reconectar()">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span class="status-text" id="status-text">...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="reimprimir" onclick="app.switchTab('reimprimir')">Reimprimir</button>
+            <button class="tab" data-tab="historial" onclick="app.switchTab('historial')">Historial</button>
+            <button class="tab" data-tab="config" onclick="app.switchTab('config')">Config</button>
+        </nav>
+
+        <!-- Tab: Reimprimir comanda -->
+        <section class="tab-content active" id="tab-reimprimir">
+            <div class="card">
+                <h2>Reimprimir Comanda</h2>
+
+                <div class="form-group">
+                    <label>Mesa / Referencia</label>
+                    <input type="text" id="inp-cuenta" placeholder="mesa_5, tel_123..." class="input">
+                </div>
+
+                <div class="form-group">
+                    <label>Pedido ID <span class="optional">(opcional)</span></label>
+                    <input type="text" id="inp-pedido" placeholder="pedido_1234" class="input">
+                </div>
+
+                <div class="form-group">
+                    <label>Canal</label>
+                    <div class="canal-chips">
+                        <button class="chip active" data-canal="mesa" onclick="app.selectCanal('mesa')">Mesa</button>
+                        <button class="chip" data-canal="telefono" onclick="app.selectCanal('telefono')">Tel</button>
+                        <button class="chip" data-canal="llevar" onclick="app.selectCanal('llevar')">Llevar</button>
+                        <button class="chip" data-canal="glovo" onclick="app.selectCanal('glovo')">Glovo</button>
+                    </div>
+                </div>
+
+                <!-- Items -->
+                <div class="form-group">
+                    <div class="items-header">
+                        <label>Items</label>
+                        <button class="btn-small btn-add" onclick="app.addItem()">+ Item</button>
+                    </div>
+                    <div id="items-list">
+                        <!-- Items dinámicos -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Notas generales <span class="optional">(opcional)</span></label>
+                    <textarea id="inp-notas" placeholder="Notas para cocina..." class="input" rows="2"></textarea>
+                </div>
+
+                <button class="btn-primary btn-print" onclick="app.reimprimir()">
+                    Imprimir Comanda
+                </button>
+                <div id="print-result" class="result-msg"></div>
+            </div>
+        </section>
+
+        <!-- Tab: Historial -->
+        <section class="tab-content" id="tab-historial">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Historial</h2>
+                    <button class="btn-small" onclick="app.refreshHistorial()">Actualizar</button>
+                </div>
+                <div id="historial-list" class="historial-list">
+                    <div class="empty-state">Cargando...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab: Config -->
+        <section class="tab-content" id="tab-config">
+            <div class="card">
+                <h2>Configuracion Impresora</h2>
+
+                <div class="form-group">
+                    <label>Modo de conexion</label>
+                    <div class="canal-chips">
+                        <button class="chip modo-chip active" data-modo="dispositivo" onclick="app.selectModo('dispositivo')">rfcomm</button>
+                        <button class="chip modo-chip" data-modo="tcp" onclick="app.selectModo('tcp')">TCP</button>
+                        <button class="chip modo-chip" data-modo="comando" onclick="app.selectModo('comando')">Comando</button>
+                    </div>
+                </div>
+
+                <!-- Config rfcomm -->
+                <div id="config-dispositivo" class="modo-config">
+                    <div class="form-group">
+                        <label>MAC Bluetooth</label>
+                        <input type="text" id="cfg-mac" placeholder="AA:BB:CC:DD:EE:FF" class="input mono">
+                    </div>
+                    <div class="form-group">
+                        <label>Dispositivo</label>
+                        <input type="text" id="cfg-dispositivo" value="/dev/rfcomm0" class="input mono">
+                    </div>
+                    <div class="form-group">
+                        <label>Canal RFCOMM</label>
+                        <input type="number" id="cfg-rfcomm-canal" value="1" min="1" max="30" class="input">
+                    </div>
+                </div>
+
+                <!-- Config TCP -->
+                <div id="config-tcp" class="modo-config" style="display:none">
+                    <div class="form-group">
+                        <label>Host</label>
+                        <input type="text" id="cfg-tcp-host" value="127.0.0.1" class="input mono">
+                    </div>
+                    <div class="form-group">
+                        <label>Puerto</label>
+                        <input type="number" id="cfg-tcp-puerto" value="9100" class="input">
+                    </div>
+                </div>
+
+                <!-- Config Comando -->
+                <div id="config-comando" class="modo-config" style="display:none">
+                    <div class="form-group">
+                        <label>Comando shell</label>
+                        <input type="text" id="cfg-comando" placeholder="cat > /dev/rfcomm0" class="input mono">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Ancho de papel</label>
+                    <div class="canal-chips">
+                        <button class="chip ancho-chip active" data-ancho="58mm" onclick="app.selectAncho('58mm')">58mm (32 chars)</button>
+                        <button class="chip ancho-chip" data-ancho="80mm" onclick="app.selectAncho('80mm')">80mm (42 chars)</button>
+                    </div>
+                </div>
+
+                <button class="btn-primary" onclick="app.guardarConfig()">
+                    Conectar Impresora
+                </button>
+                <div id="config-result" class="result-msg"></div>
+
+                <!-- Estado detallado -->
+                <div class="estado-detalle" id="estado-detalle">
+                    <h3>Estado Actual</h3>
+                    <div id="estado-info" class="estado-info">
+                        <div class="estado-row"><span>Estado</span><span id="det-estado">-</span></div>
+                        <div class="estado-row"><span>Modo</span><span id="det-modo">-</span></div>
+                        <div class="estado-row"><span>MAC</span><span id="det-mac">-</span></div>
+                        <div class="estado-row"><span>Dispositivo</span><span id="det-disp">-</span></div>
+                        <div class="estado-row"><span>Comandas</span><span id="det-total">-</span></div>
+                        <div class="estado-row"><span>Errores</span><span id="det-errores">-</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="/modules/impresion/js/impresion.js"></script>
+</body>
+</html>

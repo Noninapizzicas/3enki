@@ -1,6 +1,6 @@
 # System Analysis: event-core v1.5.0
 
-**Date:** 2026-02-20
+**Date:** 2026-02-25
 **Scope:** All 28 files in `contexto/` (27 JSON + this analysis)
 **Approach:** Honest, methodical, analytical — full read of every file
 
@@ -86,13 +86,14 @@ The following have been completed since the system was first documented:
 | agent-manager | Agent selection, context building, pipeline orchestration |
 | ai-agent-framework | Agent execution with ToolManager, agentic loop |
 
-### PizzePOS Vertical (12 modules)
+### PizzePOS Vertical (13 modules)
 | Module | Pattern |
 |--------|---------|
+| cuentas | Base account CRUD + state management |
 | cuentas-canales | Strategy pattern: 5 channels (mesa/telefono/llevar/glovo/whatsapp) |
 | pedidos | Order management with line items |
 | cobros | Payment processing with channel routing |
-| cocina | Kitchen display with ticket system |
+| cocina | Kitchen display — real-time tracking item by item |
 | comandero | POS interface (14 Svelte components) |
 | productos | Product catalog from carta/ |
 | categorias | Category management |
@@ -100,7 +101,7 @@ The following have been completed since the system was first documented:
 | variaciones | Product variations |
 | menu-generator | v4.0.0: 11 AI tools, 5 micro-module panels |
 | persistencia-comandero | Event sourcing + nightly compaction |
-| cocina (display) | Kitchen screen |
+| impresion | ESC/POS thermal printer — kitchen tickets via Bluetooth |
 
 ### Invoice Pipeline (handler-based)
 - `procesar-facturas.js`: 8-step batch pipeline
@@ -127,6 +128,7 @@ The `contexto/` directory with 28 files is unusually thorough for a project this
 
 | Priority | Item | Impact |
 |----------|------|--------|
+| Alta | **Pantallas cocina ESP32-P4** | **Digital kitchen display — backend ready, needs frontend (see pantallas-cocina.json)** |
 | Alta | OCR.space provider | Better OCR for real photos (25k free/month) |
 | Alta | Anthropic prompt caching | 90% cost + 85% latency reduction |
 | Media | Anthropic extended thinking | Better complex analysis (adaptive mode) |
@@ -142,15 +144,17 @@ The `contexto/` directory with 28 files is unusually thorough for a project this
 
 ## System Stats
 
-- **40 modules** (28 core + 12 pizzepos)
-- **32+ service providers** (local and external)
-- **6 LLM providers** (DeepSeek, Anthropic, OpenAI, Groq, Gemini, Ollama)
+- **43 modules** (30 core + 13 pizzepos) — 34 enabled, 6 disabled
+- **44 local service providers** (~198 functions)
+- **7 LLM providers** (DeepSeek, Anthropic, OpenAI, Groq, Gemini, Ollama + base)
 - **6 OCR backends** (Document AI, Vision, Anthropic Vision, OpenAI Vision, Tesseract, Scribe)
-- **250+ events**, **200+ APIs**, **110+ AI tools**
-- **32 UI handlers** in project-manager alone
+- **250+ events**, **250+ APIs**, **90+ AI tools**
+- **14 UI handlers** in project-manager
 - **10 Plop generators** (8 active, 1 needs-update, 1 deprecated)
 - **5 PM composition phases** fully implemented
-- **28 context documentation files**
+- **29 context documentation files**
+- **18 frontend stores**, **12 UI modules**, **39 Svelte components**, **11 routes**
+- **4 active handlers** (2 global + 2 project), **37 archived handlers**
 
 ## Key Patterns (Mandatory)
 

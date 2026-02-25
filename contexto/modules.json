@@ -110,6 +110,8 @@
     "prompt-composer",
     "scheduler",
     "project-manager",
+    "composition-manager",
+    "context-manager",
     "system-inspector",
     "ai-gateway",
     "ai-agent-framework",
@@ -134,17 +136,18 @@
     "pizzepos/ingredientes",
     "pizzepos/variaciones",
     "pizzepos/menu-generator",
-    "pizzepos/persistencia-comandero"
+    "pizzepos/persistencia-comandero",
+    "pizzepos/impresion"
   ],
   "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer"],
   "module_count": {
-    "_updated": "2026-02-16",
-    "core": 28,
-    "core_active": 22,
+    "_updated": "2026-02-25",
+    "core": 30,
+    "core_active": 24,
     "core_disabled": 6,
-    "pizzepos": 12,
-    "total_discovered": 40,
-    "total_active": 34,
+    "pizzepos": 13,
+    "total_discovered": 43,
+    "total_active": 37,
     "disabled": 6
   },
   "module_categories": {
@@ -158,7 +161,7 @@
     },
     "project": {
       "description": "Módulos de gestión de proyectos y composición (5 fases)",
-      "modules": ["project-manager"]
+      "modules": ["project-manager", "composition-manager", "context-manager"]
     },
     "bots": {
       "description": "Módulos de bots y comunicación externa",
@@ -185,10 +188,10 @@
       "description": "Vertical POS pizzería — 12 módulos en modules/pizzepos/. Ver contexto/pizzepos.json para documentación completa",
       "location": "modules/pizzepos/",
       "modules": [
-        "cuentas-canales (5 canales: mesa, telefono, llevar, glovo, whatsapp)",
+        "cuentas", "cuentas-canales (5 canales: mesa, telefono, llevar, glovo, whatsapp)",
         "pedidos", "cobros", "cocina", "comandero",
         "productos", "categorias", "ingredientes", "variaciones",
-        "menu-generator", "persistencia-comandero", "cuentas"
+        "menu-generator", "persistencia-comandero", "impresion"
       ]
     }
   },

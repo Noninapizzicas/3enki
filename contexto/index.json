@@ -34,8 +34,8 @@
     "name": "event-core",
     "version": "0.5.0",
     "description": "Meta-Core Event-Driven Framework",
-    "last_context_update": "2026-02-16",
-    "module_count": { "core": 28, "pizzepos": 12, "total": 40 }
+    "last_context_update": "2026-02-25",
+    "module_count": { "core": 30, "pizzepos": 13, "total": 43 }
   },
 
   "context_files": [
@@ -163,6 +163,11 @@
       "file": "ai-gateway.json",
       "purpose": "Gateway unificado para 6 LLM providers con tool calling y streaming",
       "when": "Configurar providers AI, tool calling, modelos, streaming"
+    },
+    {
+      "file": "pantallas-cocina.json",
+      "purpose": "Plan completo: pantallas digitales de cocina con ESP32-P4 — hardware, UX, fases, integración",
+      "when": "Implementar pantallas de cocina, display de pedidos, ESP32-P4, frontend cocina"
     },
     {
       "file": "mejoras-pendientes.json",

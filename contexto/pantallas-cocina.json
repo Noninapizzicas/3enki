@@ -1,0 +1,421 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-02-25",
+  "_UPDATED": "2026-02-25",
+  "_DESCRIPTION": "Plan completo: Pantallas de cocina en ESP32-P4 — display digital de pedidos en tiempo real",
+
+  "resumen": {
+    "que_es": "Sistema de pantallas digitales para cocina usando ESP32-P4 con display 10.1\" (800x1280). Cada pantalla muestra pedidos en tiempo real, permite marcar items como preparados, y se sincroniza via MQTT con el resto del sistema PizzePOS.",
+    "hardware": {
+      "producto": "Waveshare ESP32-P4-NANO (o ESP32-P4-EV)",
+      "pantalla": "10.1\" IPS, 800x1280",
+      "conectividad": "WiFi 6 + Bluetooth 5",
+      "procesador": "ESP32-P4 dual-core 400MHz, 32MB PSRAM",
+      "precio_estimado": "~40-60€ por unidad"
+    },
+    "enfoque": "WebView — la pantalla carga una URL de SvelteKit. Un solo codebase web sirve para ESP32, tablets Android, navegadores desktop. El ESP32 es simplemente un kiosko.",
+    "estado_actual": {
+      "backend_cocina": "COMPLETO — módulo cocina v2.0 con handlers, eventos, SSE, métricas",
+      "frontend_cocina": "NO EXISTE — necesita crearse (ruta, componentes, store)",
+      "impresion": "COMPLETO — módulo impresión genera comandas ESC/POS automáticamente en pedido.enviado_cocina",
+      "relacion": "La pantalla digital COMPLEMENTA la impresora. La comanda impresa es para el cocinero en la estación, la pantalla es la vista general de la cola."
+    }
+  },
+
+  "arquitectura": {
+    "principio": "El ESP32-P4 es un navegador embebido. No hay firmware custom, no hay protocolo especial. Carga http://server:5173/peppone/cocina y funciona.",
+    "stack": {
+      "backend": "módulo cocina existente (modules/pizzepos/cocina/) — ya tiene todo lo necesario",
+      "frontend": "SvelteKit route nueva: /[project_id]/cocina — standalone como /comandero",
+      "comunicacion": "MQTT WebSocket (port 9001) — misma conexión que el resto del sistema",
+      "hardware": "ESP32-P4 con WebView (LVGL browser o ESP-IDF WebView component)"
+    },
+
+    "flujo_datos": {
+      "1_pedido_creado": "Camarero en comandero → 'Enviar cocina' → pedido.enviado_cocina",
+      "2_cocina_recibe": "Módulo cocina recibe evento → crea pedidoCocina en memoria → broadcastSSE",
+      "3_pantalla_actualiza": "Frontend cocina suscrito a MQTT → recibe nuevo pedido → renderiza en pantalla",
+      "4_cocinero_marca": "Cocinero toca item en pantalla → mqttRequest('cocina', 'prepare-item') → item marcado listo",
+      "5_auto_completa": "Si todos items listos → pedido se mueve a historial → cocina.pedido_listo → canales notifican"
+    },
+
+    "multi_pantalla": {
+      "concepto": "Cada pantalla puede filtrar por estación, canal, o mostrar todo. La URL define el modo.",
+      "urls_ejemplo": {
+        "todo": "/peppone/cocina — muestra todos los pedidos",
+        "estacion": "/peppone/cocina?estacion=pizzas — solo pedidos que contienen pizzas",
+        "canal": "/peppone/cocina?canal=llevar — solo pedidos para llevar",
+        "color": "/peppone/cocina?color=rojo — tema de color personalizado",
+        "readonly": "/peppone/cocina?modo=display — solo visualización, sin controles táctiles"
+      },
+      "configuracion_esp32": "La URL se configura una vez en el firmware/settings del ESP32. Cada dispositivo apunta a su URL."
+    }
+  },
+
+  "analisis_existente": {
+    "modulo_cocina_backend": {
+      "archivo": "modules/pizzepos/cocina/index.js",
+      "version": "2.0.0",
+      "estado": "COMPLETO — no necesita cambios para fase 1",
+      "capacidades": {
+        "estado_en_memoria": "Map<pedido_id, pedidoCocina> con items, estados, tiempos",
+        "eventos_escucha": ["pedido.enviado_cocina", "pedido.cancelado"],
+        "eventos_publica": ["cocina.item_preparado", "cocina.pedido_listo"],
+        "ui_handlers": {
+          "list-active": "Lista pedidos activos ordenados por hora de llegada",
+          "get": "Detalle de un pedido",
+          "history": "Historial de pedidos completados (últimos 50)",
+          "prepare-item": "Marcar item individual como listo → auto-completa si todos listos",
+          "mark-ready": "Marcar pedido completo como listo (fuerza todos items)",
+          "stream": "Estado inicial para conexión SSE",
+          "health": "Health check",
+          "metrics": "Métricas (recibidos, preparados, listos, tiempo promedio)"
+        },
+        "sse_broadcast": "broadcastSSE() envía a todos los clientes: nuevo_pedido, item_preparado, pedido_listo, pedido_cancelado"
+      },
+      "mejoras_futuras": {
+        "estaciones": "Clasificar items por estación (pizzas, fritos, ensaladas) — fase 2",
+        "prioridades": "Ordenar por antigüedad + tipo de canal (delivery primero) — fase 2",
+        "sonido": "Evento especial para alertas sonoras en pantalla — fase 2"
+      }
+    },
+
+    "modulo_impresion": {
+      "archivo": "modules/pizzepos/impresion/index.js",
+      "relacion": "COMPLEMENTARIO — impresión genera ticket físico, pantalla muestra cola digital",
+      "mismo_trigger": "Ambos escuchan pedido.enviado_cocina",
+      "diferencia": "Impresión = snapshot estático del pedido. Pantalla = estado vivo con interacción."
+    },
+
+    "patron_comandero": {
+      "descripcion": "El comandero es el precedente directo de cómo hacer pantallas standalone en el sistema",
+      "ruta": "/[project_id]/comandero",
+      "layout": "standalone — NO usa LazyShell ni AppShell. Página autónoma con conexión MQTT propia.",
+      "componentes": "14 componentes en frontend/src/lib/components/comandero/",
+      "stores": "cuentas.ts + comandero.ts — stores específicos con suscripciones MQTT",
+      "patrón_a_seguir": "La pantalla de cocina sigue EXACTAMENTE el mismo patrón"
+    }
+  },
+
+  "plan_implementacion": {
+    "fase_1": {
+      "nombre": "Frontend cocina — pantalla web funcional",
+      "prioridad": "ALTA",
+      "esfuerzo": "2-3 sesiones de trabajo",
+      "resultado": "Pantalla web que muestra pedidos en tiempo real y permite marcar items como listos",
+      "prerequisitos": "NINGUNO — el backend ya está completo",
+
+      "archivos_a_crear": {
+        "ruta_page": {
+          "archivo": "frontend/src/routes/[project_id]/cocina/+page.svelte",
+          "descripcion": "Página principal — monta CocinaScreen con projectId",
+          "patron": "Igual que /[project_id]/comandero/+page.svelte"
+        },
+        "ruta_legacy": {
+          "archivo": "frontend/src/routes/cocina/+page.svelte",
+          "descripcion": "Redirect legacy a /${activeProject}/cocina",
+          "patron": "Igual que /comandero/+page.svelte"
+        },
+        "componentes": {
+          "directorio": "frontend/src/lib/components/cocina/",
+          "archivos": {
+            "CocinaScreen.svelte": {
+              "descripcion": "Pantalla principal — header + grid de pedidos + métricas",
+              "layout": "Fullscreen, sin sidebar. Grid de tarjetas de pedido.",
+              "responsivo": "1 col (mobile) → 2 cols (tablet) → 3 cols (desktop/10.1\")",
+              "features": ["Reloj en header", "Contador pedidos/items pendientes", "Tiempo promedio", "Auto-scroll a nuevos pedidos"]
+            },
+            "PedidoCard.svelte": {
+              "descripcion": "Tarjeta de pedido — muestra items con estado de preparación",
+              "layout": "Card con header (ref mesa/canal, hora, tiempo transcurrido) + lista de items",
+              "interaccion": "Tap en item = marcar como listo. Tap en header = marcar todo el pedido.",
+              "colores": {
+                "pendiente": "Fondo neutro oscuro",
+                "parcial": "Borde amarillo (algunos items listos)",
+                "listo": "Fondo verde + animación de salida (2 segundos y desaparece)"
+              },
+              "tiempo": "Timer vivo mostrando minutos:segundos desde que llegó"
+            },
+            "ItemLine.svelte": {
+              "descripcion": "Línea de item dentro de PedidoCard",
+              "info": "nombre, cantidad, variaciones (SIN/CON), notas",
+              "estados": {
+                "pendiente": "Texto normal, fondo transparente",
+                "listo": "Tachado + fondo verde sutil + checkmark"
+              },
+              "interaccion": "Tap = toggle pendiente→listo via mqttRequest('cocina', 'prepare-item')"
+            },
+            "CocinaHeader.svelte": {
+              "descripcion": "Header fijo — info del sistema + controles",
+              "contenido": ["Nombre estación (o 'COCINA')", "Reloj HH:MM:SS", "Pedidos activos", "Items pendientes", "Tiempo medio", "Estado conexión MQTT"]
+            },
+            "index.ts": {
+              "descripcion": "Barrel exports de todos los componentes"
+            }
+          }
+        },
+        "store": {
+          "archivo": "frontend/src/lib/stores/cocina.ts",
+          "descripcion": "Store reactivo para la pantalla de cocina",
+          "stores": {
+            "pedidosActivos": "writable<PedidoCocina[]> — lista de pedidos activos",
+            "metricas": "writable<CocinaMetrics> — pedidos recibidos, items preparados, tiempo medio",
+            "filtro": "writable<CocinaFiltro> — estación, canal (para multi-pantalla)",
+            "conexionOk": "writable<boolean> — estado conexión MQTT"
+          },
+          "funciones": {
+            "initCocina": "Conecta MQTT + carga pedidos activos + suscripciones eventos",
+            "loadPedidosActivos": "mqttRequest('cocina', 'list-active') → actualiza store",
+            "prepararItem": "mqttRequest('cocina', 'prepare-item', { item_id }) → actualiza store local",
+            "marcarListo": "mqttRequest('cocina', 'mark-ready', { pedido_id }) → actualiza store local",
+            "loadMetrics": "mqttRequest('cocina', 'metrics') → actualiza métricas",
+            "cleanupCocina": "Desuscribe MQTT + limpia stores"
+          },
+          "subscriptions_mqtt": {
+            "pedido.enviado_cocina": "Nuevo pedido → añadir a pedidosActivos + sonido de alerta",
+            "cocina.item_preparado": "Item marcado listo (puede venir de OTRA pantalla) → actualizar item en store",
+            "cocina.pedido_listo": "Pedido completo → animación de salida → remover de activos",
+            "pedido.cancelado": "Pedido cancelado → remover inmediatamente"
+          },
+          "optimistic_updates": "Al tocar un item, se marca listo en el store INMEDIATAMENTE (optimistic) + se envía request al backend. Si falla, se revierte."
+        }
+      },
+
+      "ux_design": {
+        "filosofia": "Pantalla de producción. Cero fricción. Un toque = un item listo. Sin login, sin menús, sin configuración en pantalla.",
+        "principios": [
+          "Texto GRANDE — legible a 2 metros (cocina ruidosa, manos ocupadas)",
+          "Contraste ALTO — fondo oscuro, texto claro, colores de estado intensos",
+          "Touch targets GRANDES — mínimo 60px (dedos con harina)",
+          "Feedback INMEDIATO — cambio visual al tocar, sin esperar respuesta del server",
+          "Sonido en nuevo pedido — beep audible cuando llega pedido nuevo",
+          "Auto-limpieza — pedidos listos desaparecen solos tras 3 segundos",
+          "Sin scroll si posible — diseñar para que quepan 4-6 pedidos en pantalla"
+        ],
+        "paleta_colores": {
+          "fondo": "#0f172a (slate-900)",
+          "tarjeta_pendiente": "#1e293b (slate-800) con borde #334155 (slate-700)",
+          "tarjeta_parcial": "#1e293b con borde #eab308 (yellow-500)",
+          "tarjeta_lista": "#166534 (green-800) → fade out 3s",
+          "texto_principal": "#f8fafc (slate-50)",
+          "texto_secundario": "#94a3b8 (slate-400)",
+          "acento_tiempo": "#ef4444 (red-500) cuando >10 min",
+          "acento_nuevo": "#3b82f6 (blue-500) flash en nuevo pedido"
+        },
+        "tipografia": {
+          "nombre_item": "1.5rem bold (24px)",
+          "cantidad": "2rem bold (32px) — la cantidad es lo más importante",
+          "variaciones": "1.1rem (18px) — SIN QUESO, CON ANCHOAS",
+          "ref_mesa": "2rem bold (32px) — MESA 3, LLEVAR #12",
+          "tiempo": "1.2rem mono (19px) — 05:32"
+        },
+        "layout_800x1280": {
+          "nota": "El ESP32-P4 tiene 800x1280 en portrait. Ideal para lista vertical de pedidos.",
+          "header": "80px fijo arriba — estación + reloj + contadores",
+          "grid": "Resto de pantalla — 1 columna de tarjetas de pedido, scroll vertical si necesario",
+          "alternativa_landscape": "Si se monta horizontal (1280x800): 2 columnas de pedidos"
+        }
+      },
+
+      "mqtt_handlers_usados": [
+        "mqttRequest('cocina', 'list-active') — carga inicial",
+        "mqttRequest('cocina', 'prepare-item', { item_id }) — marcar item listo",
+        "mqttRequest('cocina', 'mark-ready', { pedido_id }) — marcar pedido completo",
+        "mqttRequest('cocina', 'metrics') — métricas para header",
+        "mqttRequest('cocina', 'health') — health check"
+      ],
+
+      "eventos_suscritos_frontend": [
+        "pedido.enviado_cocina — nuevo pedido llega (push en tiempo real)",
+        "cocina.item_preparado — item preparado (sync multi-pantalla)",
+        "cocina.pedido_listo — pedido completo (remover de pantalla)",
+        "pedido.cancelado — pedido cancelado (remover inmediato)"
+      ]
+    },
+
+    "fase_2": {
+      "nombre": "Estaciones y filtrado",
+      "prioridad": "MEDIA",
+      "esfuerzo": "1-2 sesiones",
+      "resultado": "Cada pantalla puede filtrar por estación (pizzas, fritos, etc.) y canal",
+      "requiere": "Fase 1 completa",
+
+      "cambios_backend": {
+        "cocina_module": {
+          "nuevo_campo_item": "estacion — clasificación automática según producto/categoría",
+          "clasificacion": "Se determina por la categoría del producto: Pizzas→pizzas, Fritos→fritos, Ensaladas→fríos, etc.",
+          "nuevo_handler": "mqttRequest('cocina', 'list-active', { estacion?, canal? }) — filtrado server-side",
+          "configuracion": "Map de categoría→estación configurable por proyecto"
+        }
+      },
+
+      "cambios_frontend": {
+        "url_params": "?estacion=pizzas&canal=llevar → cocina store filtra",
+        "header": "Muestra nombre de estación activa en lugar de 'COCINA'",
+        "filtrado_local": "Además del filtro server-side, filtro reactivo en el store para respuesta instantánea"
+      },
+
+      "ejemplo_config": {
+        "estaciones": {
+          "pizzas": { "categorias": ["Pizzas", "Calzones"], "color": "#ef4444" },
+          "fritos": { "categorias": ["Fritos", "Entrantes"], "color": "#f59e0b" },
+          "frios": { "categorias": ["Ensaladas", "Postres"], "color": "#3b82f6" },
+          "bebidas": { "categorias": ["Bebidas", "Vinos"], "color": "#22c55e" }
+        }
+      }
+    },
+
+    "fase_3": {
+      "nombre": "ESP32-P4 firmware kiosko",
+      "prioridad": "MEDIA",
+      "esfuerzo": "1-2 sesiones",
+      "resultado": "Firmware ESP32-P4 que arranca, conecta WiFi, y abre WebView a la URL configurada",
+      "requiere": "Fase 1 completa + hardware ESP32-P4 disponible",
+
+      "firmware": {
+        "framework": "ESP-IDF con componente esp_browser o LVGL + WebView",
+        "funcionalidad": [
+          "Conectar WiFi (SSID/password en NVS flash)",
+          "Abrir WebView fullscreen a URL configurada",
+          "Watchdog: si WebView crashea, reinicia",
+          "OTA updates: actualizar firmware por WiFi",
+          "Botón físico (si existe): recargar página / cambiar URL"
+        ],
+        "configuracion_inicial": {
+          "metodo": "Portal captive al primer arranque — conectar WiFi + configurar URL del server",
+          "almacenamiento": "NVS flash — persiste entre reinicios",
+          "campos": {
+            "wifi_ssid": "Nombre de la red WiFi",
+            "wifi_password": "Password WiFi",
+            "server_url": "http://192.168.1.X:5173/peppone/cocina?estacion=pizzas",
+            "brightness": "Brillo de pantalla (0-100)",
+            "orientation": "portrait | landscape"
+          }
+        }
+      },
+
+      "alternativa_barata": {
+        "descripcion": "Si el ESP32-P4 no está disponible o es caro, una tablet Android de 40€ con Chrome en modo kiosco hace lo mismo",
+        "comando_kiosko": "adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main -d 'http://server:5173/peppone/cocina' --activity-clear-task",
+        "ventaja_esp32": "Sin Android, sin updates forzadas, sin notificaciones, arranque en 2s, consume menos"
+      }
+    },
+
+    "fase_4": {
+      "nombre": "Alertas, sonidos y métricas avanzadas",
+      "prioridad": "BAJA",
+      "esfuerzo": "1 sesión",
+      "resultado": "Alertas sonoras, pedidos urgentes, dashboard de rendimiento",
+      "requiere": "Fase 1 completa",
+
+      "features": {
+        "sonido_nuevo_pedido": "Web Audio API — beep al recibir pedido.enviado_cocina",
+        "alerta_tiempo": "Si pedido lleva >10 min → tarjeta parpadea rojo + sonido diferente",
+        "prioridad_canal": "Delivery/llevar con badge urgente (el cliente espera fuera)",
+        "dashboard_metricas": "Vista alternativa (/cocina?modo=metricas): gráficos de rendimiento, tiempos por estación, pedidos/hora",
+        "recall": "Botón para 'recall' pedido completado (error del cocinero) → lo devuelve a activos"
+      }
+    }
+  },
+
+  "integracion_sistema": {
+    "eventos_involucrados": {
+      "entrada": {
+        "pedido.enviado_cocina": "Publicado por comandero → cocina recibe → pantalla muestra",
+        "pedido.cancelado": "Publicado por pedidos → cocina elimina → pantalla remueve"
+      },
+      "salida": {
+        "cocina.item_preparado": "Pantalla marca item → cocina publica → persistencia graba",
+        "cocina.pedido_listo": "Todos items listos → cocina publica → canales notifican → persistencia graba"
+      },
+      "cadena_completa": "comandero → pedido.enviado_cocina → [cocina recibe + impresión imprime + pantalla muestra] → cocinero marca listo → cocina.pedido_listo → cuentas-canales notifica"
+    },
+
+    "modulos_afectados": {
+      "cocina": "Ya existente, sin cambios en fase 1",
+      "impresion": "Ya existente, sin cambios. Complementa la pantalla.",
+      "comandero": "Ya existente, sin cambios. Es quien envía pedidos.",
+      "cuentas-canales": "Ya existente, sin cambios. Recibe cocina.pedido_listo.",
+      "persistencia-comandero": "Ya existente, sin cambios. Graba todos los eventos."
+    },
+
+    "no_hay_nuevos_modulos_backend": "El módulo cocina ya tiene TODO el backend necesario. Solo se necesita frontend.",
+
+    "patron_reutilizado": {
+      "standalone_screen": "Mismo patrón que /comandero — página autónoma, conexión MQTT propia, sin LazyShell",
+      "mqtt_subscriptions": "Mismo patrón que cuentas.ts — store con initSubscriptions + cleanup",
+      "optimistic_updates": "Mismo patrón que comandero.ts — actualizar store local antes de confirmar server",
+      "project_scoped": "Ruta bajo /[project_id]/cocina — mismo patrón que comandero y menu-generator"
+    }
+  },
+
+  "configuracion_hardware": {
+    "esp32_p4_nano": {
+      "specs": {
+        "cpu": "ESP32-P4, dual-core RISC-V, 400MHz",
+        "ram": "32MB PSRAM",
+        "flash": "16MB",
+        "display": "10.1\" IPS LCD, 800x1280",
+        "touch": "Capacitive touch panel",
+        "wifi": "WiFi 6 (802.11ax)",
+        "bluetooth": "Bluetooth 5 (LE)",
+        "usb": "USB-C (power + data)",
+        "expansion": "GPIO, I2C, SPI, UART"
+      },
+      "montaje": {
+        "opcion_1": "Soporte de pared con tornillos — pantalla a la altura de los ojos del cocinero",
+        "opcion_2": "Soporte de mesa tipo tablet stand — inclinado ~60°",
+        "opcion_3": "Brazo articulado tipo monitor — flexible, ajustable"
+      },
+      "alimentacion": "USB-C 5V 2A — un cargador de móvil sirve"
+    },
+
+    "red": {
+      "requisito": "WiFi en la cocina con alcance hasta la pantalla",
+      "latencia_aceptable": "<500ms para que el optimistic update sea creíble",
+      "fallback_offline": "Si pierde WiFi, la pantalla muestra último estado conocido + indicador offline. Al reconectar, recarga automáticamente."
+    }
+  },
+
+  "decisiones_tomadas": [
+    "WebView sobre firmware nativo — un codebase, funciona en ESP32, tablet, PC. Sin mantener firmware + web por separado.",
+    "Pantalla COMPLEMENTA impresora — no la reemplaza. El ticket impreso es personal del cocinero, la pantalla es la cola general.",
+    "Módulo cocina backend YA ESTÁ COMPLETO — no hacemos cambios en fase 1. Solo frontend.",
+    "Mismo patrón que comandero — standalone screen, project-scoped, MQTT directo. No inventamos nada nuevo.",
+    "Optimistic updates — la pantalla responde al toque inmediatamente, sin esperar al server. Cero fricción.",
+    "URL params para multi-pantalla — no hay sistema de 'claiming' ni configuración en backend. Cada pantalla es una URL.",
+    "Sin autenticación — pantallas de cocina no necesitan login. Es red local, uso operativo."
+  ],
+
+  "riesgos": [
+    {
+      "riesgo": "ESP32-P4 WebView limitado",
+      "probabilidad": "media",
+      "mitigacion": "Si el WebView del ESP32 no soporta WebSocket MQTT, usar SSE fallback (ya existe handler 'stream'). O usar tablet Android como plan B.",
+      "plan_b": "Tablet Android de 40€ con Chrome en modo kiosco"
+    },
+    {
+      "riesgo": "WiFi inestable en cocina (humedad, interferencias)",
+      "probabilidad": "media",
+      "mitigacion": "Auto-reconnect MQTT (ya implementado en mqtt.ts). Pantalla muestra indicador offline. Al reconectar, recarga estado completo."
+    },
+    {
+      "riesgo": "Touch panel no responde bien con dedos mojados/harina",
+      "probabilidad": "alta",
+      "mitigacion": "Touch targets de mínimo 60px. Alternativa: marcar pedido COMPLETO con un solo toque en el header (skip item-by-item)."
+    }
+  ],
+
+  "metricas_exito": {
+    "fase_1": [
+      "Pantalla muestra pedidos en <1 segundo tras pedido.enviado_cocina",
+      "Marcar item como listo responde visualmente en <100ms (optimistic)",
+      "Pantalla funciona sin recargar durante un turno completo (8h)",
+      "Legible a 2 metros de distancia"
+    ],
+    "fase_2": [
+      "Múltiples pantallas filtran correctamente por estación",
+      "Marcar item en una pantalla se refleja en las otras en <2 segundos"
+    ]
+  }
+}

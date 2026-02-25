@@ -1,7 +1,23 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-02-16",
+  "_updated": "2026-02-25",
   "mejoras": [
+    {
+      "id": "pantallas-cocina",
+      "titulo": "Pantallas digitales de cocina con ESP32-P4 (800x1280)",
+      "prioridad": "alta",
+      "estado": "planificado",
+      "fecha_propuesta": "2026-02-25",
+      "descripcion": "Display digital de pedidos en tiempo real para cocina. ESP32-P4 con pantalla 10.1 pulgadas como WebView cargando SvelteKit. Backend cocina ya completo — solo falta frontend (ruta /[project_id]/cocina, componentes, store). Complementa impresora termica.",
+      "plan_detallado": "contexto/pantallas-cocina.json",
+      "fases": {
+        "fase_1": "Frontend cocina — pantalla web funcional con MQTT en tiempo real (ALTA)",
+        "fase_2": "Estaciones y filtrado multi-pantalla via URL params (MEDIA)",
+        "fase_3": "Firmware ESP32-P4 kiosko — WebView fullscreen (MEDIA)",
+        "fase_4": "Alertas sonoras, tiempos, metricas avanzadas (BAJA)"
+      },
+      "cuando_implementar": "Proxima sesion de trabajo — backend listo, solo falta frontend"
+    },
     {
       "id": "refactor-ai-gateway",
       "titulo": "Refactorizar estructurar-deepseek para usar ai-gateway",

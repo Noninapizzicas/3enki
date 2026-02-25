@@ -1,7 +1,7 @@
 {
-  "_VERSION": "3.5.0",
+  "_VERSION": "3.6.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-02-21",
+  "_UPDATED": "2026-02-25",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
@@ -62,9 +62,9 @@
   },
 
   "resumen": {
-    "que_es": "Sistema de punto de venta (POS) para pizzerías con 5 canales de venta, gestión de cocina, catálogo de productos y persistencia de ventas",
+    "que_es": "Sistema de punto de venta (POS) para pizzerías con 5 canales de venta, gestión de cocina, catálogo de productos, impresión de comandas y persistencia de ventas",
     "ubicacion": "modules/pizzepos/",
-    "total_modulos": 12,
+    "total_modulos": 13,
     "total_uiHandlers": "95+",
     "total_eventos": "40+ publicados, 20+ suscritos",
     "patron_principal": "Event sourcing — todos los eventos se graban y se reconstruyen ventas desde el stream"
@@ -165,12 +165,13 @@
 
     "cocina": {
       "version": "2.0.0",
-      "descripcion": "Gestión de cocina — recepción de pedidos, estaciones de trabajo, tiempos de preparación",
+      "descripcion": "Display de cocina en tiempo real con tracking item a item — recepción de pedidos, preparación, métricas de tiempos",
       "ui_domain": "cocina",
-      "uiHandlers": ["pendientes", "iniciar", "completar", "get", "estaciones", "reasignar", "health", "metrics"],
-      "eventos_publica": ["cocina.pedido_recibido", "cocina.pedido_iniciado", "cocina.pedido_listo"],
-      "eventos_suscribe": ["pedido.confirmado"],
-      "nota": "cocina.pedido_listo dispara auto-notificación en canales telefono/llevar/glovo/whatsapp"
+      "uiHandlers": ["list-active", "get", "history", "prepare-item", "mark-ready", "stream", "health", "metrics"],
+      "eventos_publica": ["cocina.item_preparado", "cocina.pedido_listo"],
+      "eventos_suscribe": ["pedido.enviado_cocina", "pedido.cancelado"],
+      "estado_frontend": "PLANIFICADO — ver contexto/pantallas-cocina.json para plan completo de pantalla digital con ESP32-P4",
+      "nota": "cocina.pedido_listo dispara auto-notificación en canales telefono/llevar/glovo/whatsapp. Complementa módulo impresión (comanda física)."
     },
 
     "comandero": {
@@ -442,6 +443,31 @@
         "respuesta": "{ cuentas: [...] } — array de cuentas activas del cache",
         "integracion": "cuentas.ts usa loadCuentasFromPersistencia() para obtener estado real"
       }
+    },
+
+    "impresion": {
+      "version": "1.1.0",
+      "descripcion": "Impresión de comandas de cocina via impresora térmica Bluetooth (58mm NETUM / 80mm). Sin precios — solo info relevante para cocina. Formato ESC/POS.",
+      "ui_domain": "impresion",
+      "uiHandlers": ["ticket", "conectar", "estado", "historial", "health", "metrics"],
+      "eventos_publica": ["impresion.comanda_generada", "impresion.error", "impresion.raw"],
+      "eventos_suscribe": ["pedido.enviado_cocina"],
+      "transporte": {
+        "modos": ["dispositivo (/dev/rfcomm0)", "rfcomm (MAC + canal)", "comando (shell)", "TCP (host:puerto)"],
+        "entorno": "Termux en Android con Bluetooth",
+        "auto_reconnect": "Si desconectado al imprimir, intenta reconectar una vez"
+      },
+      "formateador": {
+        "anchos": { "58mm": 32, "80mm": 42 },
+        "secciones": ["Header COMANDA", "Ref mesa/canal", "Hora/Fecha", "Items con variaciones", "Notas", "Footer", "Corte parcial"],
+        "items_formatea": ["cantidad + nombre", "mitad-mitad (IZQ/DER)", "ingredientes (+)", "variaciones (SIN/CON)", "notas (>> texto)"]
+      },
+      "frontend": {
+        "store": "frontend/src/lib/stores/impresion.ts",
+        "ui_module": "frontend/src/lib/modules/impresion/ — work-bar, routes: ['/comandero']",
+        "panel": "ImpresionPanel.svelte — conectar, estado, historial, reimprimir"
+      },
+      "relacion_cocina": "COMPLEMENTARIO — impresión genera ticket físico (snapshot), pantalla cocina muestra cola digital (estado vivo). Ambos escuchan pedido.enviado_cocina."
     }
   },
 
@@ -768,6 +794,13 @@
         "componente": "ComanderoScreen",
         "descripcion": "Pantalla de pedido para cuenta específica",
         "ejemplo": "/peppone/comandero/mesa_3"
+      },
+      "/[project_id]/cocina": {
+        "archivo": "frontend/src/routes/[project_id]/cocina/+page.svelte (PLANIFICADO)",
+        "componente": "CocinaScreen",
+        "descripcion": "Display de cocina — pedidos en tiempo real, marcar items listos. Para ESP32-P4 o tablet.",
+        "ejemplo": "/peppone/cocina, /peppone/cocina?estacion=pizzas",
+        "estado": "PLANIFICADO — ver contexto/pantallas-cocina.json"
       },
       "/[project_id]/menu-generator": {
         "archivo": "frontend/src/routes/[project_id]/menu-generator/+page.svelte",

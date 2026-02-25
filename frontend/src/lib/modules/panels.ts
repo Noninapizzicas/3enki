@@ -141,6 +141,19 @@ export const panels: Record<string, PanelDef> = {
     zone: 'chat-tools',
     order: 1,
     loader: () => import('$lib/modules/files/FilesPanel.svelte')
+  },
+
+  // === PANELES PROGRAMÁTICOS (showInBar: false — solo vía openPanel()) ===
+  'html-preview': {
+    id: 'html-preview',
+    title: 'Vista previa',
+    icon: '📄',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 99,
+    showInBar: false,
+    loader: () => import('$lib/modules/html-preview/HtmlPreviewPanel.svelte')
   }
 };
 

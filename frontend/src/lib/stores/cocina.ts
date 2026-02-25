@@ -19,6 +19,21 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 
 export type EstadoItem = 'pendiente' | 'preparando' | 'listo';
 
+export interface PizzaHalf {
+  nombre: string;
+  emoji?: string;
+  precio?: number;
+  ingredientes_base?: string[];
+}
+
+export interface IngredienteAlGusto {
+  id?: string;
+  nombre: string;
+  emoji?: string;
+  precio_extra?: number;
+  tipo?: string;
+}
+
 export interface ItemCocina {
   item_id: string;
   producto_id: string;
@@ -26,14 +41,14 @@ export interface ItemCocina {
   cantidad: number;
   variaciones?: {
     ingredientes_quitar?: string[];
-    ingredientes_anadir?: Array<{ nombre: string; precio_extra?: number }>;
+    ingredientes_anadir?: Array<string | { nombre: string; precio_extra?: number; cantidad?: number }>;
   };
   notas?: string;
   estado: EstadoItem;
-  tipo?: string;
-  pizza_izquierda?: string;
-  pizza_derecha?: string;
-  ingredientes?: any[];
+  tipo?: 'mitad_mitad' | 'al_gusto' | string;
+  pizza_izquierda?: string | PizzaHalf;
+  pizza_derecha?: string | PizzaHalf;
+  ingredientes?: Array<string | IngredienteAlGusto>;
   preparando_at?: string;
   preparado_at?: string;
 }
@@ -227,24 +242,56 @@ export async function marcarListo(pedidoId: string): Promise<boolean> {
 }
 
 // =============================================================================
-// SOUND
+// SOUND — Campana de cocina (triple ding ascendente, audible en ambiente ruidoso)
 // =============================================================================
 
 let audioCtx: AudioContext | null = null;
 
+/**
+ * Desbloquea AudioContext (requiere gesto de usuario en navegadores modernos).
+ * Llamar una vez en el primer click/tap de la pantalla.
+ */
+export function resumeAudioContext() {
+  try {
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch {
+    // Audio not available
+  }
+}
+
+function bellTone(startTime: number, freq: number, vol: number, dur: number) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.frequency.value = freq;
+  osc.type = 'triangle';
+  gain.gain.setValueAtTime(vol, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
+  osc.start(startTime);
+  osc.stop(startTime + dur);
+}
+
 function playNewOrderSound() {
   try {
     if (!audioCtx) audioCtx = new AudioContext();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.frequency.value = 880;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-    osc.start(audioCtx.currentTime);
-    osc.stop(audioCtx.currentTime + 0.3);
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const t = audioCtx.currentTime;
+
+    // Ding 1 — fundamental + overtone
+    bellTone(t, 1200, 0.5, 0.35);
+    bellTone(t, 2400, 0.2, 0.25);
+
+    // Ding 2 — más alto (150ms después)
+    bellTone(t + 0.15, 1500, 0.5, 0.35);
+    bellTone(t + 0.15, 3000, 0.2, 0.25);
+
+    // Ding 3 — aún más alto (300ms después)
+    bellTone(t + 0.30, 1800, 0.45, 0.4);
+    bellTone(t + 0.30, 3600, 0.15, 0.3);
   } catch {
     // Audio not available
   }

@@ -213,7 +213,8 @@ export type { Conversation, Message, ConversationSection, ConversationsState, Co
 export {
   htmlPreviewStore,
   showHtmlPreview,
-  initHtmlPreviewSubscriptions
+  initHtmlPreviewSubscriptions,
+  registerHtmlPreviewTopic
 } from './html-preview';
 export type { HtmlPreviewState } from './html-preview';
 

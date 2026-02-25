@@ -214,23 +214,31 @@ class CartaImpresionModule {
     this.metrics?.increment('carta.render.completed');
     this.logger.info('carta.render.completed', { carta_id, plantilla_id, project_id, path: relativePath });
 
+    const cartaNombre = carta.meta?.nombre || 'Carta';
+    const filename = `${cartaNombre}_${plantilla_id}.html`.replace(/[^a-z0-9._-]/gi, '_');
+
     await this.eventBus.publish('carta.html.generada', {
       carta_id,
       plantilla_id,
       project_id,
-      html_path: relativePath
+      html_path: relativePath,
+      // HTML completo incluido para que el frontend pueda mostrar preview inline
+      // sin necesidad de leer el fichero desde disco
+      html,
+      title: cartaNombre,
+      filename
     });
 
     return {
       status: 200,
       data: {
         carta_id,
-        carta_nombre: carta.meta?.nombre,
+        carta_nombre: cartaNombre,
         plantilla_id,
         html_path: relativePath,
         productos: carta.productos?.length || 0,
         categorias: carta.categorias?.length || 0,
-        message: `HTML generado en ${relativePath}. Ábrelo en el navegador y usa Ctrl+P para imprimir o guardar como PDF.`
+        message: `Carta "${cartaNombre}" renderizada. El preview se ha abierto en pantalla — usa el botón Imprimir para exportar a PDF.`
       }
     };
   }

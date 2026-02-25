@@ -209,6 +209,14 @@ export {
 } from './conversations';
 export type { Conversation, Message, ConversationSection, ConversationsState, ContextStats } from './conversations';
 
+// HTML Preview Store
+export {
+  htmlPreviewStore,
+  showHtmlPreview,
+  initHtmlPreviewSubscriptions
+} from './html-preview';
+export type { HtmlPreviewState } from './html-preview';
+
 // Facturas Store (MQTT-based)
 export {
   facturasStore,

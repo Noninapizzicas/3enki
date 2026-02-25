@@ -1,15 +1,29 @@
 /**
- * Módulo Cuentas v2.1
+ * Módulo Cuentas v2.2
  * Gestión de cuentas 100% Event-Driven
+ * Ciclo de vida completo: pendiente → con_pedido → en_preparacion → listo → para_cobrar → cobrado
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
 const crypto = require('crypto');
 
+// Transiciones válidas de estado
+const TRANSICIONES_VALIDAS = {
+  pendiente: ['con_pedido'],
+  con_pedido: ['en_preparacion', 'con_pedido'], // con_pedido→con_pedido: más items sin enviar
+  en_preparacion: ['listo', 'en_preparacion'],   // en_preparacion→en_preparacion: nuevo envío parcial
+  listo: ['para_cobrar', 'en_preparacion'],       // puede volver a en_preparacion si piden más
+  para_cobrar: ['cobrado'],
+  cobrado: []
+};
+
+// Tiempo (ms) antes de activar alerta en estado pendiente
+const ALERTA_PENDIENTE_MS = 30 * 60 * 1000; // 30 minutos
+
 class CuentasModule {
   constructor() {
     this.name = 'cuentas';
-    this.version = '2.1.0';
+    this.version = '2.2.0';
 
     // Estado en memoria
     this.cuentas = new Map(); // cuenta_id -> cuenta
@@ -20,6 +34,7 @@ class CuentasModule {
     // Timers activos (para cleanup en onUnload)
     this._metricsInterval = null;
     this._pendingTimeouts = new Set();
+    this._alertaTimers = new Map(); // cuenta_id -> timeout
 
     // Dependencias (inyectadas en onLoad)
     this.logger = null;
@@ -63,9 +78,15 @@ class CuentasModule {
     }
     this._pendingTimeouts.clear();
 
+    // Limpiar timers de alerta
+    for (const timeout of this._alertaTimers.values()) {
+      clearTimeout(timeout);
+    }
+    this._alertaTimers.clear();
+
     // Desregistrar UI handlers
     if (this.uiHandler) {
-      const actions = ['list', 'get', 'create', 'delete', 'stats', 'health'];
+      const actions = ['list', 'get', 'create', 'delete', 'stats', 'health', 'metrics'];
       for (const action of actions) {
         this.uiHandler.unregister('cuenta', action);
       }
@@ -93,16 +114,107 @@ class CuentasModule {
     this.uiHandler.register('cuenta', 'delete', this.handleDeleteCuenta.bind(this));
     this.uiHandler.register('cuenta', 'stats', this.handleGetStats.bind(this));
     this.uiHandler.register('cuenta', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('cuenta', 'metrics', this.handleGetMetrics.bind(this));
 
     this.logger.info('cuentas.ui_handlers.registered', {
-      handlers: ['list', 'get', 'create', 'delete', 'stats', 'health']
+      handlers: ['list', 'get', 'create', 'delete', 'stats', 'health', 'metrics']
     });
+  }
+
+  // ==========================================
+  // State Machine
+  // ==========================================
+
+  /**
+   * Transiciona el estado de una cuenta si la transición es válida.
+   * Publica cuenta.estado_cambiado y cuenta.actualizada.
+   * Retorna true si la transición se ejecutó.
+   */
+  async transicionarEstado(cuenta_id, estado_nuevo) {
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return false;
+
+    const estado_anterior = cuenta.estado;
+
+    // No hacer nada si ya está en ese estado (excepto re-entradas válidas)
+    if (estado_anterior === estado_nuevo && !TRANSICIONES_VALIDAS[estado_anterior]?.includes(estado_nuevo)) {
+      return false;
+    }
+
+    // Validar transición
+    const transiciones = TRANSICIONES_VALIDAS[estado_anterior];
+    if (!transiciones || !transiciones.includes(estado_nuevo)) {
+      this.logger.warn('cuenta.transicion_invalida', {
+        cuenta_id, estado_anterior, estado_nuevo
+      });
+      return false;
+    }
+
+    cuenta.estado = estado_nuevo;
+    cuenta.updated_at = new Date().toISOString();
+
+    // Gestionar timer de alerta según el nuevo estado
+    this.gestionarAlerta(cuenta_id, estado_nuevo);
+
+    this.logger.info('cuenta.estado_cambiado', {
+      cuenta_id, estado_anterior, estado_nuevo
+    });
+
+    this.metrics?.increment?.('cuenta.transicion.total');
+
+    await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, estado_nuevo);
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      estado: estado_nuevo
+    });
+
+    return true;
+  }
+
+  /**
+   * Gestiona el timer de alerta visual.
+   * Se activa en 'pendiente' tras ALERTA_PENDIENTE_MS sin actividad.
+   * Se cancela cuando la cuenta progresa a otro estado.
+   */
+  gestionarAlerta(cuenta_id, estado) {
+    // Cancelar timer anterior si existe
+    const timerAnterior = this._alertaTimers.get(cuenta_id);
+    if (timerAnterior) {
+      clearTimeout(timerAnterior);
+      this._alertaTimers.delete(cuenta_id);
+    }
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+
+    // Desactivar alerta si la cuenta progresa
+    if (estado !== 'pendiente' && cuenta.alerta) {
+      cuenta.alerta = false;
+      this.publishCuentaActualizada(cuenta.project_id, cuenta_id, { alerta: false });
+    }
+
+    // Activar timer solo en estado pendiente
+    if (estado === 'pendiente') {
+      const timer = setTimeout(() => {
+        this._alertaTimers.delete(cuenta_id);
+        const c = this.cuentas.get(cuenta_id);
+        if (c && c.estado === 'pendiente') {
+          c.alerta = true;
+          c.updated_at = new Date().toISOString();
+          this.logger.warn('cuenta.alerta.activada', { cuenta_id });
+          this.publishCuentaActualizada(c.project_id, cuenta_id, { alerta: true });
+        }
+      }, ALERTA_PENDIENTE_MS);
+      this._alertaTimers.set(cuenta_id, timer);
+    }
   }
 
   // ==========================================
   // Event Handlers
   // ==========================================
 
+  /**
+   * comandero.item_agregado → pendiente→con_pedido (primer item) o actualizar totales
+   */
   async onComanderoItemAgregado(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, precio_total } = data;
@@ -122,12 +234,20 @@ class CuentasModule {
     cuenta.total += precio_total || 0;
     cuenta.updated_at = new Date().toISOString();
 
-    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
-      items: cuenta.items,
-      total: cuenta.total
-    });
+    // Transicionar a con_pedido si es el primer item
+    if (cuenta.estado === 'pendiente') {
+      await this.transicionarEstado(cuenta_id, 'con_pedido');
+    } else {
+      await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+        items: cuenta.items,
+        total: cuenta.total
+      });
+    }
   }
 
+  /**
+   * comandero.item_eliminado → actualizar totales, volver a pendiente si items=0
+   */
   async onComanderoItemEliminado(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, precio_total } = data;
@@ -139,12 +259,82 @@ class CuentasModule {
     cuenta.total = Math.max(0, cuenta.total - (precio_total || 0));
     cuenta.updated_at = new Date().toISOString();
 
+    // Si se quedó sin items y estaba en con_pedido, volver a pendiente
+    if (cuenta.items === 0 && cuenta.estado === 'con_pedido') {
+      cuenta.estado = 'pendiente';
+      this.gestionarAlerta(cuenta_id, 'pendiente');
+      await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, 'con_pedido', 'pendiente');
+    }
+
     await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
       items: cuenta.items,
       total: cuenta.total
     });
   }
 
+  /**
+   * comandero.enviar_cocina → con_pedido→en_preparacion (o listo→en_preparacion si piden más)
+   */
+  async onComanderoEnviarCocina(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+
+    this.logger.info('comandero.enviar_cocina.received', {
+      cuenta_id,
+      correlation_id: event?.metadata?.correlationId
+    });
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+
+    if (cuenta.estado === 'con_pedido' || cuenta.estado === 'listo') {
+      await this.transicionarEstado(cuenta_id, 'en_preparacion');
+    }
+  }
+
+  /**
+   * cocina.pedido_listo → en_preparacion→listo
+   */
+  async onCocinaPedidoListo(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+
+    this.logger.info('cocina.pedido_listo.received', {
+      cuenta_id,
+      correlation_id: event?.metadata?.correlationId
+    });
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+
+    if (cuenta.estado === 'en_preparacion') {
+      await this.transicionarEstado(cuenta_id, 'listo');
+    }
+  }
+
+  /**
+   * cobro.iniciado → listo→para_cobrar
+   */
+  async onCobroIniciado(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+
+    this.logger.info('cobro.iniciado.received', {
+      cuenta_id,
+      correlation_id: event?.metadata?.correlationId
+    });
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+
+    if (cuenta.estado === 'listo') {
+      await this.transicionarEstado(cuenta_id, 'para_cobrar');
+    }
+  }
+
+  /**
+   * cobro.procesado → para_cobrar→cobrado + auto-eliminación a los 5 min
+   */
   async onCobroProcesado(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id } = data;
@@ -157,8 +347,14 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
+    const estado_anterior = cuenta.estado;
     cuenta.estado = 'cobrado';
     cuenta.updated_at = new Date().toISOString();
+
+    // Cancelar alerta si existía
+    this.gestionarAlerta(cuenta_id, 'cobrado');
+
+    await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'cobrado');
 
     // Eliminar cuenta después de 5 minutos (con referencia para cleanup)
     const project_id = cuenta.project_id;
@@ -207,6 +403,9 @@ class CuentasModule {
       };
 
       this.cuentas.set(cuenta_id, cuenta);
+
+      // Iniciar timer de alerta para cuentas pendientes
+      this.gestionarAlerta(cuenta_id, 'pendiente');
 
       // Métricas (con verificación de existencia)
       this.metrics?.increment?.('cuenta.creada.total');
@@ -284,6 +483,13 @@ class CuentasModule {
 
     this.cuentas.delete(id);
 
+    // Limpiar timer de alerta si existía
+    const alertaTimer = this._alertaTimers.get(id);
+    if (alertaTimer) {
+      clearTimeout(alertaTimer);
+      this._alertaTimers.delete(id);
+    }
+
     this.metrics?.increment?.('cuenta.eliminada.total');
     this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
 
@@ -318,7 +524,33 @@ class CuentasModule {
         timestamp: new Date().toISOString(),
         version: this.version,
         cuentas_activas: this.cuentas.size,
-        pending_timeouts: this._pendingTimeouts.size
+        pending_timeouts: this._pendingTimeouts.size,
+        alerta_timers: this._alertaTimers.size
+      }
+    };
+  }
+
+  async handleGetMetrics() {
+    const por_estado = {};
+    const por_tipo = { local: 0, delivery: 0, llevar: 0 };
+    let alertas_activas = 0;
+
+    for (const cuenta of this.cuentas.values()) {
+      por_estado[cuenta.estado] = (por_estado[cuenta.estado] || 0) + 1;
+      if (por_tipo[cuenta.tipo] !== undefined) por_tipo[cuenta.tipo]++;
+      if (cuenta.alerta) alertas_activas++;
+    }
+
+    return {
+      status: 200,
+      data: {
+        cuentas_activas: this.cuentas.size,
+        por_estado,
+        por_tipo,
+        alertas_activas,
+        pending_timeouts: this._pendingTimeouts.size,
+        alerta_timers: this._alertaTimers.size,
+        timestamp: new Date().toISOString()
       }
     };
   }
@@ -344,6 +576,16 @@ class CuentasModule {
       cuenta_id,
       cambios,
       updated_at: new Date().toISOString()
+    });
+  }
+
+  async publishEstadoCambiado(project_id, cuenta_id, estado_anterior, estado_nuevo) {
+    await this.eventBus.publish('cuenta.estado_cambiado', {
+      project_id,
+      cuenta_id,
+      estado_anterior,
+      estado_nuevo,
+      changed_at: new Date().toISOString()
     });
   }
 
@@ -375,19 +617,30 @@ class CuentasModule {
 
   startMetricsReporting() {
     this._metricsInterval = setInterval(() => {
-      // Verificar que metrics.gauge existe antes de llamarlo
       if (!this.metrics?.gauge) return;
 
       this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
 
       const por_tipo = { local: 0, delivery: 0, llevar: 0 };
+      const por_estado = { pendiente: 0, con_pedido: 0, en_preparacion: 0, listo: 0, para_cobrar: 0, cobrado: 0 };
+      let alertas = 0;
+
       for (const cuenta of this.cuentas.values()) {
         if (por_tipo[cuenta.tipo] !== undefined) por_tipo[cuenta.tipo]++;
+        if (por_estado[cuenta.estado] !== undefined) por_estado[cuenta.estado]++;
+        if (cuenta.alerta) alertas++;
       }
 
       this.metrics.gauge('cuenta.por_tipo.local', por_tipo.local);
       this.metrics.gauge('cuenta.por_tipo.delivery', por_tipo.delivery);
       this.metrics.gauge('cuenta.por_tipo.llevar', por_tipo.llevar);
+      this.metrics.gauge('cuenta.por_estado.pendiente', por_estado.pendiente);
+      this.metrics.gauge('cuenta.por_estado.con_pedido', por_estado.con_pedido);
+      this.metrics.gauge('cuenta.por_estado.en_preparacion', por_estado.en_preparacion);
+      this.metrics.gauge('cuenta.por_estado.listo', por_estado.listo);
+      this.metrics.gauge('cuenta.por_estado.para_cobrar', por_estado.para_cobrar);
+      this.metrics.gauge('cuenta.por_estado.cobrado', por_estado.cobrado);
+      this.metrics.gauge('cuenta.alertas.count', alertas);
     }, 10000);
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "cuentas",
-  "version": "2.1.0",
-  "description": "Gestión de cuentas (mesas, delivery, para llevar) - 100% Event-Driven",
+  "version": "2.2.0",
+  "description": "Gestión de cuentas con ciclo de vida completo - 100% Event-Driven",
   "author": "Pizzepos Team",
 
   "provides": {
@@ -60,8 +60,23 @@
         "handler": "onComanderoItemEliminado"
       },
       {
+        "event": "comandero.enviar_cocina",
+        "description": "Envío a cocina, transicionar a en_preparacion",
+        "handler": "onComanderoEnviarCocina"
+      },
+      {
+        "event": "cocina.pedido_listo",
+        "description": "Pedido listo en cocina, transicionar a listo",
+        "handler": "onCocinaPedidoListo"
+      },
+      {
+        "event": "cobro.iniciado",
+        "description": "Cobro iniciado, transicionar a para_cobrar",
+        "handler": "onCobroIniciado"
+      },
+      {
         "event": "cobro.procesado",
-        "description": "Cobro procesado, cerrar cuenta",
+        "description": "Cobro procesado, transicionar a cobrado y auto-eliminar",
         "handler": "onCobroProcesado"
       }
     ]
@@ -227,13 +242,21 @@
       "counters": [
         "cuenta.creada.total",
         "cuenta.eliminada.total",
+        "cuenta.transicion.total",
         "cuenta.errors.total"
       ],
       "gauges": [
         "cuenta.activas.count",
         "cuenta.por_tipo.local",
         "cuenta.por_tipo.delivery",
-        "cuenta.por_tipo.llevar"
+        "cuenta.por_tipo.llevar",
+        "cuenta.por_estado.pendiente",
+        "cuenta.por_estado.con_pedido",
+        "cuenta.por_estado.en_preparacion",
+        "cuenta.por_estado.listo",
+        "cuenta.por_estado.para_cobrar",
+        "cuenta.por_estado.cobrado",
+        "cuenta.alertas.count"
       ],
       "timings": [
         "cuenta.create.duration",

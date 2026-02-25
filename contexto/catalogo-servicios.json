@@ -405,7 +405,7 @@
         "uiHandlers": 12,
         "caracteristicas": ["Rotación diaria", "Archivado", "Backup", "Cuadre de caja", "Cierre del día"]
       },
-      "cuentas": { "version": "2.1.0", "descripcion": "Módulo base de cuentas (agregación)", "uiHandlers": 6 }
+      "cuentas": { "version": "2.2.0", "descripcion": "Módulo base de cuentas — ciclo de vida completo (pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado)", "uiHandlers": 7, "eventos_suscribe": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina", "cocina.pedido_listo", "cobro.iniciado", "cobro.procesado"], "eventos_publica": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"] }
     }
   },
 

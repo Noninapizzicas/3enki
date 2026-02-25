@@ -379,9 +379,10 @@
         "uiHandlers": 8
       },
       "cocina": {
-        "version": "2.0.0",
-        "descripcion": "Gestión de cocina — estaciones, preparación, tiempos",
-        "eventos_publica": ["cocina.pedido_recibido", "cocina.pedido_iniciado", "cocina.pedido_listo"],
+        "version": "2.1.0",
+        "descripcion": "Display de cocina en tiempo real — items pendiente→preparando→listo, SSE broadcast, métricas core",
+        "eventos_publica": ["cocina.item_preparado", "cocina.pedido_listo"],
+        "eventos_suscribe": ["pedido.enviado_cocina", "pedido.cancelado"],
         "uiHandlers": 8
       },
       "comandero": {

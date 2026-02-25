@@ -31,6 +31,7 @@
     enviarCocina,
     resetComandero,
     initComanderoSubscriptions,
+    ingredientes as ingredientesStore,
     type Producto
   } from '$lib/stores/comandero';
   import { renameMesa } from '$lib/stores/cuentas';
@@ -597,6 +598,7 @@
       producto={productoVariaciones}
       visible={showVariaciones}
       {projectId}
+      catalogoIngredientes={$ingredientesStore}
       on:close={handleVariacionesClose}
       on:confirm={handleVariacionesConfirm}
     />

@@ -53,15 +53,11 @@ export function showHtmlPreview(opts: { html: string; title: string; filename?: 
 // SUSCRIPCIONES MQTT
 // =============================================================================
 
-/**
- * Inicializar suscripciones MQTT para el panel de preview HTML.
- *
- * Escucha el evento del event bus: carta.html.generada
- * Topic MQTT: core/*/events/carta/html/generada
- *
- * El payload es un EventEnvelope con campo `data`:
- * { carta_id, plantilla_id, project_id, html_path, html, title, filename }
- */
+// Inicializar suscripciones MQTT para el panel de preview HTML.
+// Escucha el evento del event bus: carta.html.generada
+// Topic MQTT: core/[asterisk]/events/carta/html/generada
+// El payload es un EventEnvelope con campo `data`:
+// { carta_id, plantilla_id, project_id, html_path, html, title, filename }
 export function initHtmlPreviewSubscriptions(): () => void {
   const unsubs: Array<() => void> = [];
 

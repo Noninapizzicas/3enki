@@ -27,7 +27,8 @@
     confirm: {
       producto_id: string;
       ingredientes_quitar: string[];
-      ingredientes_anadir: { ingrediente_id: string; cantidad: number }[];
+      ingredientes_anadir: { nombre: string; cantidad: number; precio_extra?: number }[];
+      ingredientes_base: string[];
       precio_total: number;
     };
   }>();
@@ -163,16 +164,28 @@
   }
 
   function handleConfirm() {
-    const ingredientes_quitar = Array.from(quitarSeleccionados);
-    const ingredientes_anadir = Array.from(anadirSeleccionados.entries()).map(([id, cantidad]) => ({
-      ingrediente_id: id,
-      cantidad
-    }));
+    // Enviar NOMBRES (no IDs) — cocina necesita texto legible
+    const ingredientes_quitar = Array.from(quitarSeleccionados).map(id => {
+      const base = ingredientesBase.find(i => i.id === id);
+      return base?.nombre || id;
+    });
+    const ingredientes_anadir = Array.from(anadirSeleccionados.entries()).map(([id, cantidad]) => {
+      const ing = ingredientesDisponibles.find(i => i.id === id);
+      return {
+        nombre: ing?.nombre || id,
+        cantidad,
+        precio_extra: ing?.precio_extra || 0
+      };
+    });
+
+    // ingredientes_base del producto (para que cocina sepa qué lleva)
+    const ingredientes_base = ingredientesBase.map(i => i.nombre);
 
     dispatch('confirm', {
       producto_id: producto.id,
       ingredientes_quitar,
       ingredientes_anadir,
+      ingredientes_base,
       precio_total: precioTotal
     });
   }

@@ -197,11 +197,12 @@ class PedidosModule {
           variaciones: item.variaciones || null,
           notas: item.notas || null,
           estado: 'en_cocina',
-          // Metadata especial: mitad-mitad, al gusto, etc.
+          // Metadata especial: mitad-mitad, al gusto, ingredientes_base, etc.
           ...(item.tipo && { tipo: item.tipo }),
           ...(item.pizza_izquierda && { pizza_izquierda: item.pizza_izquierda }),
           ...(item.pizza_derecha && { pizza_derecha: item.pizza_derecha }),
           ...(item.ingredientes && { ingredientes: item.ingredientes }),
+          ...(item.ingredientes_base && { ingredientes_base: item.ingredientes_base }),
           created_at: item.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString()
         })),
@@ -732,6 +733,7 @@ class PedidosModule {
         if (item.pizza_izquierda) mapped.pizza_izquierda = item.pizza_izquierda;
         if (item.pizza_derecha) mapped.pizza_derecha = item.pizza_derecha;
         if (item.ingredientes) mapped.ingredientes = item.ingredientes;
+        if (item.ingredientes_base) mapped.ingredientes_base = item.ingredientes_base;
         return mapped;
       }),
       items_count: pedido.items.length,

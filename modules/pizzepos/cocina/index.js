@@ -130,11 +130,12 @@ class CocinaModule {
           notas: item.notas || '',
           estado: 'pendiente'
         };
-        // Metadata especial: mitad-mitad, al gusto, etc.
+        // Metadata especial: mitad-mitad, al gusto, ingredientes_base, etc.
         if (item.tipo) cocinaItem.tipo = item.tipo;
         if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
         if (item.pizza_derecha) cocinaItem.pizza_derecha = item.pizza_derecha;
         if (item.ingredientes) cocinaItem.ingredientes = item.ingredientes;
+        if (item.ingredientes_base) cocinaItem.ingredientes_base = item.ingredientes_base;
         return cocinaItem;
       }),
       estado: 'activo',

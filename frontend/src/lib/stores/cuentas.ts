@@ -434,18 +434,21 @@ export function initCuentasSubscriptions(projectId: string): () => void {
     })
   );
 
-  // cuenta.estado_cambiado → actualizar estado
+  // cuenta.estado_cambiado → actualizar estado (backend publica estado_nuevo)
   cleanups.push(
     mqttSubscribe('cuenta.estado_cambiado', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
       if (data.project_id && data.project_id !== projectId) return;
 
+      const nuevoEstado = data.estado_nuevo || data.estado;
+      if (!nuevoEstado) return;
+
       cuentasStore.update(s => ({
         ...s,
         cuentas: s.cuentas.map(c =>
           c.id === data.cuenta_id
-            ? { ...c, estado: data.estado, updated_at: new Date().toISOString() }
+            ? { ...c, estado: nuevoEstado as EstadoCuenta, alerta: false, updated_at: data.changed_at || new Date().toISOString() }
             : c
         )
       }));

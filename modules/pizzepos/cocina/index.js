@@ -1,31 +1,20 @@
 /**
- * Módulo Cocina v2.0
+ * Módulo Cocina v2.1
  * Display de cocina en tiempo real con tracking item a item
+ * Estados item: pendiente → preparando → listo
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
-
-const Ajv = require('ajv');
-const addFormats = require('ajv-formats');
-
-const cocinaSchema = require('./schemas/cocina.json');
-const eventsSchema = require('./schemas/events.json');
 
 class CocinaModule {
   constructor() {
     this.name = 'cocina';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
     this.uiHandler = null;
-
-    // Validación JSON Schema
-    this.ajv = new Ajv({ allErrors: true, useDefaults: true });
-    addFormats(this.ajv);
-    this.ajv.addSchema(cocinaSchema);
-    this.ajv.addSchema(eventsSchema);
 
     // Estado en memoria
     this.pedidosActivos = new Map(); // pedido_id -> pedido_cocina
@@ -35,15 +24,7 @@ class CocinaModule {
     // SSE clients
     this.sseClients = new Set();
 
-    // Métricas internas
-    this.internalMetrics = {
-      pedidos_recibidos: 0,
-      items_preparados: 0,
-      pedidos_listos: 0,
-      pedidos_cancelados: 0,
-      tiempo_promedio_preparacion: 0
-    };
-
+    // Rolling average tiempos preparación (últimos 100)
     this.tiemposPreparacion = [];
   }
 
@@ -120,20 +101,7 @@ class CocinaModule {
   }
 
   // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe('pedido.enviado_cocina', this.onPedidoEnviadoCocina.bind(this));
-    await this.eventBus.subscribe('pedido.cancelado', this.onPedidoCancelado.bind(this));
-
-    this.logger.info('cocina.events.subscribed', {
-      events: ['pedido.enviado_cocina', 'pedido.cancelado']
-    });
-  }
-
-  // ==========================================
-  // Event Handlers
+  // Event Handlers (auto-wired from module.json)
   // ==========================================
 
   async onPedidoEnviadoCocina(event) {
@@ -175,7 +143,9 @@ class CocinaModule {
     };
 
     this.pedidosActivos.set(pedido_id, pedidoCocina);
-    this.internalMetrics.pedidos_recibidos++;
+
+    this.metrics?.increment?.('cocina.pedido_recibido.total');
+    this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
 
     this.broadcastSSE({ type: 'nuevo_pedido', data: pedidoCocina });
   }
@@ -187,7 +157,9 @@ class CocinaModule {
     if (!this.pedidosActivos.has(pedido_id)) return;
 
     this.pedidosActivos.delete(pedido_id);
-    this.internalMetrics.pedidos_cancelados++;
+
+    this.metrics?.increment?.('cocina.pedido_cancelado.total');
+    this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
 
     this.broadcastSSE({ type: 'pedido_cancelado', data: { pedido_id } });
 
@@ -202,13 +174,18 @@ class CocinaModule {
     const activos = Array.from(this.pedidosActivos.values());
     activos.sort((a, b) => new Date(a.recibido_at) - new Date(b.recibido_at));
 
-    const itemsPendientes = activos.reduce((sum, p) => {
-      return sum + p.items.filter(i => i.estado === 'pendiente').length;
-    }, 0);
+    let itemsPendientes = 0;
+    let itemsPreparando = 0;
+    for (const p of activos) {
+      for (const i of p.items) {
+        if (i.estado === 'pendiente') itemsPendientes++;
+        else if (i.estado === 'preparando') itemsPreparando++;
+      }
+    }
 
     return {
       status: 200,
-      data: { pedidos: activos, total: activos.length, items_pendientes: itemsPendientes }
+      data: { pedidos: activos, total: activos.length, items_pendientes: itemsPendientes, items_preparando: itemsPreparando }
     };
   }
 
@@ -233,6 +210,12 @@ class CocinaModule {
     return { status: 200, data: pedido };
   }
 
+  /**
+   * Tap toggle para items:
+   *   pendiente → preparando (cocinero empieza a preparar)
+   *   preparando → listo (cocinero termina de preparar)
+   * Si todos los items quedan listo → auto-completa el pedido.
+   */
   async handlePrepararItem(data) {
     const { item_id } = data;
 
@@ -253,10 +236,37 @@ class CocinaModule {
       return { status: 404, error: 'Item no encontrado en cocina' };
     }
 
-    // Marcar como listo
+    if (itemEncontrado.estado === 'listo') {
+      return { status: 400, error: 'Item ya está listo' };
+    }
+
+    const now = new Date().toISOString();
+
+    if (itemEncontrado.estado === 'pendiente') {
+      // Primer tap: empezar a preparar
+      itemEncontrado.estado = 'preparando';
+      itemEncontrado.preparando_at = now;
+
+      this.broadcastSSE({
+        type: 'item_preparando',
+        data: { pedido_id: pedidoEncontrado.pedido_id, item_id }
+      });
+
+      this.logger.info('cocina.item.preparando', {
+        pedido_id: pedidoEncontrado.pedido_id, item_id
+      });
+
+      return {
+        status: 200,
+        data: { item: itemEncontrado, pedido_completo: false }
+      };
+    }
+
+    // Segundo tap (preparando → listo): terminar
     itemEncontrado.estado = 'listo';
-    itemEncontrado.preparado_at = new Date().toISOString();
-    this.internalMetrics.items_preparados++;
+    itemEncontrado.preparado_at = now;
+
+    this.metrics?.increment?.('cocina.item_preparado.total');
 
     await this.publishItemPreparado(pedidoEncontrado, itemEncontrado);
 
@@ -281,6 +291,10 @@ class CocinaModule {
     };
   }
 
+  /**
+   * Marca el pedido entero como listo de golpe (atajo rápido).
+   * Todos los items pendientes/preparando pasan a listo.
+   */
   async handleMarcarListo(data) {
     const { pedido_id } = data;
 
@@ -294,7 +308,7 @@ class CocinaModule {
       if (item.estado !== 'listo') {
         item.estado = 'listo';
         item.preparado_at = now;
-        this.internalMetrics.items_preparados++;
+        this.metrics?.increment?.('cocina.item_preparado.total');
       }
     });
 
@@ -303,10 +317,35 @@ class CocinaModule {
     return { status: 200, data: pedido };
   }
 
+  /**
+   * Registra un cliente SSE y devuelve estado inicial.
+   * El cliente se pasa en data.client (inyectado por el core/ui SSE handler).
+   * Si no hay client (ej. MQTT request), solo devuelve estado.
+   */
   async handleSSEStream(data) {
-    // El uiHandler/core gestiona la conexión SSE
-    // Aquí registramos el interés y devolvemos estado inicial
+    const { client } = data || {};
+
+    if (client) {
+      this.sseClients.add(client);
+
+      // Auto-cleanup cuando el cliente se desconecta
+      const onClose = () => {
+        this.sseClients.delete(client);
+        this.logger.info('cocina.sse.client_disconnected', {
+          clientes_sse: this.sseClients.size
+        });
+      };
+
+      if (client.on) client.on('close', onClose);
+      else if (client.onclose) client.onclose = onClose;
+
+      this.logger.info('cocina.sse.client_connected', {
+        clientes_sse: this.sseClients.size
+      });
+    }
+
     const activos = Array.from(this.pedidosActivos.values());
+    activos.sort((a, b) => new Date(a.recibido_at) - new Date(b.recibido_at));
 
     return {
       status: 200,
@@ -332,12 +371,25 @@ class CocinaModule {
   }
 
   async handleGetMetrics() {
+    const itemsPendientes = Array.from(this.pedidosActivos.values())
+      .reduce((sum, p) => sum + p.items.filter(i => i.estado === 'pendiente').length, 0);
+    const itemsPreparando = Array.from(this.pedidosActivos.values())
+      .reduce((sum, p) => sum + p.items.filter(i => i.estado === 'preparando').length, 0);
+
+    const tiempoPromedio = this.tiemposPreparacion.length > 0
+      ? this.tiemposPreparacion.reduce((a, b) => a + b, 0) / this.tiemposPreparacion.length
+      : 0;
+
     return {
       status: 200,
       data: {
-        ...this.internalMetrics,
         pedidos_activos: this.pedidosActivos.size,
-        clientes_sse: this.sseClients.size
+        items_pendientes: itemsPendientes,
+        items_preparando: itemsPreparando,
+        historial_count: this.historial.length,
+        tiempo_promedio_preparacion: Math.round(tiempoPromedio),
+        clientes_sse: this.sseClients.size,
+        timestamp: new Date().toISOString()
       }
     };
   }
@@ -350,7 +402,7 @@ class CocinaModule {
     pedido.estado = 'listo';
     pedido.listo_at = new Date().toISOString();
 
-    // Tiempo de preparación
+    // Tiempo de preparación (segundos)
     const tiempoPreparacion = (new Date(pedido.listo_at) - new Date(pedido.recibido_at)) / 1000;
     pedido.tiempo_preparacion = tiempoPreparacion;
 
@@ -359,10 +411,11 @@ class CocinaModule {
     if (this.tiemposPreparacion.length > 100) {
       this.tiemposPreparacion.shift();
     }
-    this.internalMetrics.tiempo_promedio_preparacion =
-      this.tiemposPreparacion.reduce((a, b) => a + b, 0) / this.tiemposPreparacion.length;
 
-    this.internalMetrics.pedidos_listos++;
+    // Métricas via core
+    this.metrics?.increment?.('cocina.pedido_listo.total');
+    this.metrics?.timing?.('cocina.preparacion_pedido.duration', tiempoPreparacion * 1000);
+    this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size - 1);
 
     // Historial (últimos 50)
     this.historial.unshift(pedido);

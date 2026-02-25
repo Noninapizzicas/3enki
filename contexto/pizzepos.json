@@ -1,10 +1,22 @@
 {
-  "_VERSION": "3.7.0",
+  "_VERSION": "3.8.0",
   "_CREATED": "2026-02-03",
   "_UPDATED": "2026-02-25",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
+    "3.8.0": {
+      "fecha": "2026-02-25",
+      "cambios": [
+        "FEAT: frontend cocina — pantalla completa: CocinaScreen, PedidoCard, ItemLine, CocinaHeader",
+        "FEAT: cocina store — MQTT subscriptions, optimistic updates, sonido nuevo pedido, extractRef, elapsed timer",
+        "FEAT: cocina route — /[project_id]/cocina — fullscreen dark para tablet/ESP32-P4",
+        "FEAT: PedidoCard — timer en vivo, progress bar, tap header=marcar todo listo, border color por estado, urgencia >10min",
+        "FEAT: ItemLine — tap toggle pendiente→preparando→listo, variaciones visibles (SIN/CON/mitad-mitad), target 60px",
+        "FEAT: CuentaCard — dot color por estado del ciclo de vida, fix subscription estado_nuevo vs estado",
+        "FIX: cuentas store — cuenta.estado_cambiado usa estado_nuevo (campo real del evento) + resetea alerta"
+      ]
+    },
     "3.7.0": {
       "fecha": "2026-02-25",
       "cambios": [
@@ -195,14 +207,16 @@
     },
 
     "cocina": {
-      "version": "2.0.0",
-      "descripcion": "Display de cocina en tiempo real con tracking item a item — recepción de pedidos, preparación, métricas de tiempos",
+      "version": "2.1.0",
+      "descripcion": "Display de cocina en tiempo real con tracking item a item — estados pendiente→preparando→listo por item",
       "ui_domain": "cocina",
       "uiHandlers": ["list-active", "get", "history", "prepare-item", "mark-ready", "stream", "health", "metrics"],
       "eventos_publica": ["cocina.item_preparado", "cocina.pedido_listo"],
       "eventos_suscribe": ["pedido.enviado_cocina", "pedido.cancelado"],
-      "estado_frontend": "PLANIFICADO — ver contexto/pantallas-cocina.json para plan completo de pantalla digital con ESP32-P4",
-      "nota": "cocina.pedido_listo dispara auto-notificación en canales telefono/llevar/glovo/whatsapp. Complementa módulo impresión (comanda física)."
+      "interaccion_item": "Tap toggle: pendiente→preparando (1er tap, cocinero empieza), preparando→listo (2do tap, cocinero termina). mark-ready fuerza todos los items a listo de golpe.",
+      "sse_broadcasts": ["nuevo_pedido", "item_preparando", "item_preparado", "pedido_listo", "pedido_cancelado"],
+      "estado_frontend": "FASE 1 IMPLEMENTADA — CocinaScreen + PedidoCard + ItemLine + CocinaHeader + cocina.ts store. Ruta: /[project_id]/cocina. Pendiente: Phase 2 (estaciones/filtros), Phase 3 (ESP32-P4 firmware)",
+      "nota": "cocina.pedido_listo dispara auto-notificación en canales telefono/llevar/glovo/whatsapp y transiciona cuenta a 'listo'. Complementa módulo impresión (comanda física)."
     },
 
     "comandero": {
@@ -749,8 +763,8 @@
     },
 
     "componentes": {
-      "total": 14,
-      "estado": "UI COMPLETA — todos los componentes core implementados",
+      "total": 18,
+      "estado": "UI COMPLETA — componentes core + cocina Phase 1 implementados",
       "pantalla_cuentas": {
         "CuentasScreen.svelte": "Pantalla principal: header + sidebar + grid de tarjetas + conexión MQTT + reloj",
         "CuentaCard.svelte": "Tarjeta de cuenta: color tipo, info visual (items/total/hora/estado), doble zona táctil (izq→comandero, der→cuenta)",
@@ -770,6 +784,12 @@
         "CobroPanel.svelte": "Procesamiento de pago — 7 métodos, efectivo con billetes rápidos, propinas, cambio calculado",
         "MitadMitadPanel.svelte": "Pizza mitad y mitad — selección visual de 2 pizzas, precio = max de ambas",
         "AlGustoPanel.svelte": "Pizza al gusto — selección de ingredientes individuales, precio = base + extras"
+      },
+      "pantalla_cocina": {
+        "CocinaScreen.svelte": "Layout fullscreen dark: header + grid de PedidoCards. Portrait 1 col, landscape 2 cols. Ruta: /[project_id]/cocina",
+        "CocinaHeader.svelte": "Barra 80px fija: estación, reloj HH:MM:SS, métricas (pedidos/pendientes/preparando/promedio), MQTT status",
+        "PedidoCard.svelte": "Tarjeta pedido: ref (MESA 5), timer vivo, progress bar, items, notas. Tap header=marcar todo listo. Border: slate→yellow→green→red(urgent)",
+        "ItemLine.svelte": "Línea item: tap toggle pendiente→preparando→listo. Qty 2rem, nombre 1.5rem, variaciones. Target 60px para cocina"
       },
       "base": {
         "ConnectionStatus.svelte": "Indicador de conexión MQTT en header (importado de $lib/components/base)"
@@ -823,6 +843,23 @@
         },
         "derived_stores": ["pedido", "pedidoItems", "pedidoTotal", "pedidoCount", "categorias", "productos", "categoriaActiva", "comanderoLoading", "comanderoError"],
         "subscriptions": ["pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina"]
+      },
+      "cocina": {
+        "ubicacion": "frontend/src/lib/stores/cocina.ts",
+        "descripcion": "Store de pantalla cocina — pedidos activos, optimistic updates, timer, sonido",
+        "funciones_api": {
+          "loadPedidosActivos": "Carga pedidos via cocina.list-active",
+          "loadMetrics": "Carga métricas via cocina.metrics",
+          "prepararItem": "Toggle item pendiente→preparando→listo (optimistic)",
+          "marcarListo": "Marca pedido entero como listo (optimistic)"
+        },
+        "helpers": {
+          "extractRef": "Extrae ref legible del cuenta_id (mesa_5→MESA 5, tel→TEL #1)",
+          "elapsed": "Calcula MM:SS desde recibido_at",
+          "playNewOrderSound": "Beep 880Hz via Web Audio API"
+        },
+        "derived_stores": ["pedidosCocina", "cocinaLoading", "cocinaError", "cocinaMetrics", "pedidosCount", "itemsPendientes", "itemsPreparando"],
+        "subscriptions": ["pedido.enviado_cocina", "cocina.item_preparado", "cocina.pedido_listo", "pedido.cancelado"]
       }
     },
 
@@ -840,10 +877,10 @@
         "ejemplo": "/peppone/comandero/mesa_3"
       },
       "/[project_id]/cocina": {
-        "archivo": "frontend/src/routes/[project_id]/cocina/+page.svelte (PLANIFICADO)",
+        "archivo": "frontend/src/routes/[project_id]/cocina/+page.svelte",
         "componente": "CocinaScreen",
-        "descripcion": "Display de cocina — pedidos en tiempo real, marcar items listos. Para ESP32-P4 o tablet.",
-        "ejemplo": "/peppone/cocina, /peppone/cocina?estacion=pizzas",
+        "descripcion": "Display de cocina — pedidos en tiempo real, marcar items listos. Phase 1 implementada.",
+        "ejemplo": "/peppone/cocina",
         "estado": "PLANIFICADO — ver contexto/pantallas-cocina.json"
       },
       "/[project_id]/menu-generator": {

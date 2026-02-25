@@ -23,16 +23,19 @@
   $: color = TIPO_COLORS[cuenta.tipo];
   $: icon = TIPO_ICONS[cuenta.tipo];
 
-  $: estadoLabel = {
-    pendiente: 'Pendiente',
-    con_pedido: 'Con pedido',
-    en_preparacion: 'Preparando',
-    listo: 'Listo',
-    para_cobrar: 'Para cobrar',
-    cobrado: 'Cobrado'
-  }[cuenta.estado] || cuenta.estado;
+  const ESTADO_CONFIG: Record<string, { label: string; color: string; urgent: boolean }> = {
+    pendiente:       { label: 'Pendiente',   color: '#64748b', urgent: false },
+    con_pedido:      { label: 'Con pedido',  color: '#3b82f6', urgent: false },
+    en_preparacion:  { label: 'Preparando',  color: '#eab308', urgent: false },
+    listo:           { label: 'Listo',       color: '#22c55e', urgent: true },
+    para_cobrar:     { label: 'Para cobrar', color: '#a855f7', urgent: true },
+    cobrado:         { label: 'Cobrado',     color: '#6b7280', urgent: false }
+  };
 
-  $: estadoUrgent = cuenta.estado === 'listo' || cuenta.estado === 'para_cobrar';
+  $: estadoCfg = ESTADO_CONFIG[cuenta.estado] || { label: cuenta.estado, color: '#64748b', urgent: false };
+  $: estadoLabel = estadoCfg.label;
+  $: estadoColor = estadoCfg.color;
+  $: estadoUrgent = estadoCfg.urgent;
 
   function handleLeftTap() {
     dispatch('open-comandero', { cuenta_id: cuenta.id });
@@ -86,11 +89,14 @@
     </button>
   </div>
 
-  <!-- Footer: estado + alerta -->
+  <!-- Footer: estado dot + label + alerta -->
   <div class="card-footer">
-    <span class="estado" class:urgent={estadoUrgent}>
-      {estadoLabel}
-    </span>
+    <div class="estado-row">
+      <span class="estado-dot" style="background: {estadoColor}"></span>
+      <span class="estado" class:urgent={estadoUrgent}>
+        {estadoLabel}
+      </span>
+    </div>
     {#if cuenta.alerta}
       <span class="alerta-badge" title="Requiere atención">!</span>
     {/if}
@@ -225,6 +231,19 @@
     justify-content: space-between;
     padding: 4px 10px 6px;
     border-top: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
+  }
+
+  .estado-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .estado-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .estado {

@@ -272,6 +272,16 @@ class EmbeddedBroker extends EventEmitter {
       this.wsServer.on('connection', (socket) => {
         const stream = ws.createWebSocketStream(socket);
         this.aedes.handle(stream);
+
+        // WebSocket-level ping/pong para mantener viva la conexión a través de proxies (Vite, nginx, etc.)
+        const pingInterval = setInterval(() => {
+          if (socket.readyState === ws.OPEN) {
+            socket.ping();
+          }
+        }, 25000); // Cada 25s — menor que el keepalive MQTT (60s)
+
+        socket.on('close', () => clearInterval(pingInterval));
+        socket.on('error', () => clearInterval(pingInterval));
       });
 
       await new Promise((resolve, reject) => {

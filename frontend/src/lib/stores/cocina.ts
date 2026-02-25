@@ -12,6 +12,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core';
+import { onReconnect } from '$lib/ui-core/mqtt';
 
 // =============================================================================
 // TYPES
@@ -438,6 +439,14 @@ export function initCocinaSubscriptions(): () => void {
       }));
     })
   );
+
+  // Recargar datos completos cuando MQTT reconecta (tras pérdida de conexión)
+  const unsubReconnect = onReconnect(() => {
+    console.log('[Cocina] MQTT reconnected — reloading pedidos and metrics');
+    loadPedidosActivos();
+    loadMetrics();
+  });
+  cleanups.push(unsubReconnect);
 
   // Carga inicial
   loadPedidosActivos();

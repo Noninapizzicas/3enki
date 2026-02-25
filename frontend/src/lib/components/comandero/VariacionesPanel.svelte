@@ -21,6 +21,7 @@
 
   export let visible: boolean = true;
   export let projectId: string = '';
+  export let catalogoIngredientes: any[] = [];
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -109,11 +110,7 @@
       const baseIds = new Set(ingredientesBase.map(i => i.id));
 
       // Config variaciones: soft-fail (404 = sin config explícita, usar defaults)
-      // Catálogo ingredientes: siempre necesario
-      const [varRes, ingRes] = await Promise.all([
-        mqttRequest('variaciones', 'get', { producto_id: producto.id }).catch(() => null),
-        mqttRequest('productos', 'ingredientes', { project_id: projectId })
-      ]);
+      const varRes = await mqttRequest('variaciones', 'get', { producto_id: producto.id }).catch(() => null);
 
       // Config variaciones
       const varData = varRes?.data;
@@ -132,12 +129,11 @@
         permiteQuitar = ingredientesBase.map(i => i.id);
       }
 
-      // Catálogo: handle both unwrapped and legacy responses
-      const ingData = ingRes?.data?.ingredientes ? ingRes.data : ingRes?.data?.data;
-      const todosIngredientes = ingData?.ingredientes || [];
-      ingredientesDisponibles = todosIngredientes
+      // Catálogo: usar ingredientes ya cargados en el store (pasados como prop)
+      // Esto evita una request MQTT extra que podía bloquear la UI 10s
+      ingredientesDisponibles = catalogoIngredientes
         .filter((ing: any) => !baseIds.has(ing.id))
-        .filter((ing: any) => ing.disponible !== false)
+        .filter((ing: any) => ing.disponible !== false && ing.activo !== false)
         .map((ing: any) => ({
           id: ing.id,
           nombre: ing.nombre,

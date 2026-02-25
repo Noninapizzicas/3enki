@@ -1,6 +1,6 @@
 {
   "name": "pedidos",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Gestión completa de pedidos - Reemplazo de comandero 100% event-driven",
   "author": "Pizzepos Team",
 

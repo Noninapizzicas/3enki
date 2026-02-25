@@ -1,6 +1,6 @@
 {
   "name": "credential-manager",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Multi-level credential management with .env storage (GLOBAL/PROJECT/CLIENT/CUSTOM)",
   "author": "Aichat Team",
   "main": "index.js",

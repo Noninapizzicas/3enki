@@ -1,7 +1,7 @@
 {
-  "_VERSION": "3.5.0",
+  "_VERSION": "3.6.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-02-21",
+  "_UPDATED": "2026-02-25",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
@@ -62,9 +62,9 @@
   },
 
   "resumen": {
-    "que_es": "Sistema de punto de venta (POS) para pizzerías con 5 canales de venta, gestión de cocina, catálogo de productos y persistencia de ventas",
+    "que_es": "Sistema de punto de venta (POS) para pizzerías con 5 canales de venta, gestión de cocina, catálogo de productos, impresión de comandas y persistencia de ventas",
     "ubicacion": "modules/pizzepos/",
-    "total_modulos": 12,
+    "total_modulos": 13,
     "total_uiHandlers": "95+",
     "total_eventos": "40+ publicados, 20+ suscritos",
     "patron_principal": "Event sourcing — todos los eventos se graban y se reconstruyen ventas desde el stream"
@@ -78,18 +78,19 @@
     },
     "flujo_principal": [
       "1. cuentas-canales → registra cuenta según canal (mesa/telefono/llevar/glovo/whatsapp) → cuenta.creada",
-      "2. comandero (camarero) → añade items al buffer → pedido.item_agregado",
-      "3. comandero → enviar cocina → pedido.creado + pedido.enviado_cocina",
-      "4. pedidos (FUTURO) → gestiona ciclo de vida en cocina (estados, tiempos, preparación por estaciones)",
-      "5. cocina → recibe pedido, gestiona preparación por estaciones",
-      "6. cobros → procesa pago (efectivo/tarjeta/mixto) → cobro.procesado",
-      "7. cuentas-canales → cierra cuenta automáticamente tras cobro → cuenta.cerrada",
-      "8. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
+      "2. comandero (camarero) → añade items al buffer → comandero.item_agregado",
+      "3. comandero → enviar cocina → comandero.enviar_cocina",
+      "4. pedidos → escucha comandero.enviar_cocina → crea pedido formal → pedido.creado + pedido.enviado_cocina",
+      "5. cocina → recibe pedido.enviado_cocina → gestiona preparación item a item → cocina.pedido_listo",
+      "6. impresion → recibe pedido.enviado_cocina → genera comanda ESC/POS → imprime ticket",
+      "7. cobros → procesa pago (efectivo/tarjeta/bizum/transferencia/mixto/link/qr) → cobro.procesado",
+      "8. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada",
+      "9. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
     ],
     "separacion_comandero_pedidos": {
-      "principio": "El comandero CREA pedidos (interfaz del camarero). El módulo pedidos GESTIONA su ciclo de vida (cocina, estados, tiempos). Son complementarios, no redundantes.",
-      "evento_puente": "pedido.creado — publicado por comandero al confirmar envío a cocina. Persistencia lo graba, pedidos (futuro) lo recoge para gestionar estados.",
-      "estado_actual": "comandero implementado y operativo. pedidos existe como estructura pero su rol principal (gestión cocina) es futuro."
+      "principio": "Comandero es la UI del camarero (buffer de items). Pedidos gestiona el ciclo de vida formal (crear, enviar cocina, completar, cancelar).",
+      "cadena_eventos": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina → cocina e impresión reciben",
+      "estado_actual": "Ambos módulos implementados y operativos. Comandero maneja el buffer, pedidos maneja el ciclo de vida."
     },
     "evento_critico": {
       "nombre": "cobro.procesado",
@@ -144,42 +145,46 @@
 
     "pedidos": {
       "version": "2.0.0",
-      "descripcion": "Gestión del ciclo de vida de pedidos en cocina — estados, tiempos, preparación, orden",
-      "rol_futuro": "Recibe pedido.creado (publicado por comandero) y gestiona: estados (borrador→confirmado→en_cocina→completado→cancelado), tiempos de preparación, orden de preparación por estaciones",
+      "version_module_json": "1.0.0 (DESACTUALIZADO — debería ser 2.0.0)",
+      "descripcion": "Gestión del ciclo de vida de pedidos — recibe de comandero, gestiona estados, envía a cocina",
       "ui_domain": "pedidos",
-      "uiHandlers": ["crear", "get", "agregar_item", "eliminar_item", "aplicar_variacion", "confirmar", "cancelar", "activos", "health", "metrics", "por_cuenta"],
-      "eventos_publica": ["pedido.confirmado", "pedido.cancelado"],
-      "eventos_suscribe": ["pedido.creado", "cocina.pedido_listo"],
-      "nota": "El módulo pedidos NO crea pedidos en el flujo normal — los recibe del comandero via pedido.creado. Su valor es la gestión del ciclo de vida en cocina."
+      "uiHandlers": ["list", "get", "create", "add-item", "update-item", "delete-item", "send-kitchen", "complete", "cancel", "total", "health"],
+      "eventos_publica": ["pedido.creado", "pedido.item_agregado", "pedido.item_actualizado", "pedido.item_eliminado", "pedido.enviado_cocina", "pedido.completado", "pedido.cancelado"],
+      "eventos_suscribe": ["comandero.enviar_cocina", "variacion.validada", "variacion.rechazada", "cuenta.creada", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
+      "nota": "pedidos recibe la señal de comandero.enviar_cocina y gestiona el ciclo completo: creación → items → envío cocina → completado/cancelado."
     },
 
     "cobros": {
       "version": "2.0.0",
-      "descripcion": "Procesamiento de pagos — efectivo, tarjeta, mixto, con cálculo de cambio",
+      "version_module_json": "1.1.0 (DESACTUALIZADO — debería ser 2.0.0)",
+      "descripcion": "Procesamiento de pagos — efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr",
       "ui_domain": "cobros",
-      "uiHandlers": ["procesar", "get", "pendientes", "anular", "resumen", "cierre", "health", "metrics"],
-      "eventos_publica": ["cobro.procesado", "cobro.anulado"],
-      "eventos_suscribe": ["pedido.confirmado"],
-      "nota": "cobro.procesado es el evento que dispara el cierre automático de cuenta en cuentas-canales"
+      "uiHandlers": ["create", "list", "get", "confirm", "refund", "payment-methods", "health", "metrics"],
+      "eventos_publica": ["cobro.iniciado", "cobro.procesado", "cobro.reembolsado"],
+      "eventos_suscribe": ["pedido.completado"],
+      "nota": "cobro.procesado es el evento que dispara el cierre automático de cuenta en cuentas-canales. NOTA: module.json documenta cobro.completado y cobro.fallido pero el código real publica cobro.procesado y cobro.reembolsado."
     },
 
     "cocina": {
       "version": "2.0.0",
-      "descripcion": "Gestión de cocina — recepción de pedidos, estaciones de trabajo, tiempos de preparación",
+      "descripcion": "Display de cocina en tiempo real con tracking item a item — recepción de pedidos, preparación, métricas de tiempos",
       "ui_domain": "cocina",
-      "uiHandlers": ["pendientes", "iniciar", "completar", "get", "estaciones", "reasignar", "health", "metrics"],
-      "eventos_publica": ["cocina.pedido_recibido", "cocina.pedido_iniciado", "cocina.pedido_listo"],
-      "eventos_suscribe": ["pedido.confirmado"],
-      "nota": "cocina.pedido_listo dispara auto-notificación en canales telefono/llevar/glovo/whatsapp"
+      "uiHandlers": ["list-active", "get", "history", "prepare-item", "mark-ready", "stream", "health", "metrics"],
+      "eventos_publica": ["cocina.item_preparado", "cocina.pedido_listo"],
+      "eventos_suscribe": ["pedido.enviado_cocina", "pedido.cancelado"],
+      "estado_frontend": "PLANIFICADO — ver contexto/pantallas-cocina.json para plan completo de pantalla digital con ESP32-P4",
+      "nota": "cocina.pedido_listo dispara auto-notificación en canales telefono/llevar/glovo/whatsapp. Complementa módulo impresión (comanda física)."
     },
 
     "comandero": {
       "version": "2.2.0",
+      "version_module_json": "2.0.0",
       "descripcion": "Interfaz del camarero — puerta de entrada para tomar pedidos. Buffer por cuenta, add/remove items, enviar cocina.",
       "ui_domain": "comandero",
-      "uiHandlers": ["get", "add-item", "remove-item", "update-item", "send-kitchen", "health"],
-      "eventos_publica": ["pedido.creado", "pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina"],
+      "uiHandlers": ["get", "add-item", "remove-item", "update-item", "send-kitchen", "health", "buffers"],
+      "eventos_publica": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina"],
       "eventos_suscribe": ["cuenta.actualizada", "caja.cerrada", "dia.iniciado", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
+      "nota_eventos": "IMPORTANTE: comandero publica comandero.* (NO pedido.*). El módulo pedidos escucha comandero.enviar_cocina y es quien publica pedido.creado/enviado_cocina.",
       "productosCache": "Se sincroniza via catalogo.actualizado (array completo) y producto.creado/actualizado (individual). Resuelve nombre/precio al añadir items.",
       "enviar_cocina": {
         "comportamiento": "Solo envía items con enviado=false. Marca items enviados con flag enviado+enviado_at+pedido_id. Devuelve pedido completo al frontend.",
@@ -190,15 +195,16 @@
         "nombre_override": "MitadMitad y AlGusto envían nombre compuesto (ej: '½ Country / ½ R&B'). addItem() lo usa como nombre del item.",
         "precio_override": "Variaciones, MitadMitad y AlGusto envían precio calculado. addItem() lo usa en vez del precio base."
       },
-      "nota": "Es la interfaz principal del camarero. Publica pedido.creado al enviar a cocina — es el puente con persistencia y el futuro módulo pedidos (gestión cocina)."
+      "nota": "Es la interfaz principal del camarero. Publica comandero.enviar_cocina → pedidos lo recibe y publica pedido.creado + pedido.enviado_cocina."
     },
 
     "productos": {
       "version": "2.3.0",
+      "version_module_json": "2.0.0 (DESACTUALIZADO — debería ser 2.3.0)",
       "descripcion": "Catálogo de productos — CRUD, sincronización desde menú AI, cache de precios. Multi-tenant (Map por proyecto).",
       "ui_domain": "productos",
       "uiHandlers": ["list", "get", "search", "update", "delete", "categorias", "ingredientes", "pizzas", "stats", "health", "metrics", "load_carta", "carta_completa"],
-      "eventos_publica": ["producto.creado", "producto.actualizado", "producto.eliminado", "catalogo.actualizado"],
+      "eventos_publica": ["producto.creado", "producto.actualizado", "producto.eliminado", "catalogo.actualizado", "menu.generado (auto-publish en loadCartaFromProject)"],
       "eventos_suscribe": ["menu.generado", "menu.validado", "project.activated", "project.get.response"],
       "flujo_sync": "menu.generado → guarda draft en menusPendientes → menu.validado → syncCatalogo() → producto.creado/actualizado → catalogo.actualizado",
       "payloads_evento": {
@@ -209,26 +215,33 @@
     },
 
     "categorias": {
-      "version": "2.0.0",
+      "version": "2.1.0",
+      "version_module_json": "1.0.0 (DESACTUALIZADO — debería ser 2.1.0)",
       "descripcion": "Catálogo de categorías con soporte de reordenación",
       "ui_domain": "categorias",
-      "uiHandlers": ["crear", "actualizar", "get", "list", "eliminar", "reorder", "health"],
+      "uiHandlers": ["list", "get", "create", "update", "reorder", "health", "metrics"],
+      "eventos_publica": ["categoria.creada", "categoria.actualizada", "categoria.orden_actualizado"],
       "eventos_suscribe": ["menu.generado"]
     },
 
     "ingredientes": {
       "version": "2.0.0",
+      "version_module_json": "1.0.0 (DESACTUALIZADO — debería ser 2.0.0)",
       "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos",
       "ui_domain": "ingredientes",
-      "uiHandlers": ["crear", "actualizar", "get", "list", "buscar", "eliminar", "health"],
+      "uiHandlers": ["list", "get", "search", "alergenos", "update", "health", "metrics"],
+      "eventos_publica": ["ingrediente.creado", "ingrediente.actualizado"],
       "eventos_suscribe": ["menu.generado", "producto.creado"]
     },
 
     "variaciones": {
       "version": "2.0.0",
+      "version_module_json": "1.0.0 (DESACTUALIZADO — debería ser 2.0.0)",
       "descripcion": "Customizaciones de productos — quitar/añadir ingredientes con recálculo de precio",
       "ui_domain": "variaciones",
-      "uiHandlers": ["crear", "validar", "get", "por_producto", "health"],
+      "uiHandlers": ["get", "validar", "calcular_precio", "health", "metrics"],
+      "eventos_publica": ["variacion.validada", "variacion.rechazada"],
+      "eventos_suscribe": ["producto.creado", "comandero.item_agregado"],
       "logica_negocio": "validarVariacion() es pura: valida quitar, añadir, disponibilidad, computa precio e ingredientes finales"
     },
 
@@ -442,6 +455,31 @@
         "respuesta": "{ cuentas: [...] } — array de cuentas activas del cache",
         "integracion": "cuentas.ts usa loadCuentasFromPersistencia() para obtener estado real"
       }
+    },
+
+    "impresion": {
+      "version": "1.1.0",
+      "descripcion": "Impresión de comandas de cocina via impresora térmica Bluetooth (58mm NETUM / 80mm). Sin precios — solo info relevante para cocina. Formato ESC/POS.",
+      "ui_domain": "impresion",
+      "uiHandlers": ["ticket", "conectar", "estado", "historial", "health", "metrics"],
+      "eventos_publica": ["impresion.comanda_generada", "impresion.error", "impresion.raw"],
+      "eventos_suscribe": ["pedido.enviado_cocina"],
+      "transporte": {
+        "modos": ["dispositivo (/dev/rfcomm0)", "rfcomm (MAC + canal)", "comando (shell)", "TCP (host:puerto)"],
+        "entorno": "Termux en Android con Bluetooth",
+        "auto_reconnect": "Si desconectado al imprimir, intenta reconectar una vez"
+      },
+      "formateador": {
+        "anchos": { "58mm": 32, "80mm": 42 },
+        "secciones": ["Header COMANDA", "Ref mesa/canal", "Hora/Fecha", "Items con variaciones", "Notas", "Footer", "Corte parcial"],
+        "items_formatea": ["cantidad + nombre", "mitad-mitad (IZQ/DER)", "ingredientes (+)", "variaciones (SIN/CON)", "notas (>> texto)"]
+      },
+      "frontend": {
+        "store": "frontend/src/lib/stores/impresion.ts",
+        "ui_module": "frontend/src/lib/modules/impresion/ — work-bar, routes: ['/comandero']",
+        "panel": "ImpresionPanel.svelte — conectar, estado, historial, reimprimir"
+      },
+      "relacion_cocina": "COMPLEMENTARIO — impresión genera ticket físico (snapshot), pantalla cocina muestra cola digital (estado vivo). Ambos escuchan pedido.enviado_cocina."
     }
   },
 
@@ -477,14 +515,16 @@
   },
 
   "mapa_eventos": {
-    "descripcion": "Flujo de eventos entre módulos — quién publica qué y quién consume",
+    "descripcion": "Flujo de eventos entre módulos — quién publica qué y quién consume. VERIFICADO 2026-02-25.",
     "flujo_pedido_completo": {
-      "1_crear_cuenta": "cuentas-canales publica cuenta.creada → persistencia registra cuenta activa",
-      "2_añadir_items": "comandero publica pedido.item_agregado / pedido.item_eliminado → persistencia graba eventos",
-      "3_enviar_cocina": "comandero publica pedido.creado (snapshot completo: items+total) + pedido.enviado_cocina → persistencia asocia pedido a cuenta → cocina recibe",
-      "4_cocina_prepara": "cocina publica cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican",
-      "5_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo → cuenta.cerrada",
-      "6_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json"
+      "1_crear_cuenta": "cuentas-canales publica cuenta.creada → cuentas actualiza → persistencia registra cuenta activa",
+      "2_añadir_items": "comandero publica comandero.item_agregado / comandero.item_eliminado → cuentas actualiza totales → persistencia graba",
+      "3_enviar_cocina": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina",
+      "4_recepcion": "cocina recibe pedido.enviado_cocina (display digital) + impresion recibe pedido.enviado_cocina (ticket físico)",
+      "5_cocina_prepara": "cocinero marca items → cocina publica cocina.item_preparado → cuando todos listos → cocina.pedido_listo",
+      "6_notificacion": "cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican al cliente",
+      "7_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo → cuenta.cerrada",
+      "8_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json"
     },
     "flujo_catalogo": {
       "1_generar": "menu-generator publica menu.generado (con ingredientes_catalogo enriquecidos: tipo, precio_extra) → productos guarda draft",
@@ -768,6 +808,13 @@
         "componente": "ComanderoScreen",
         "descripcion": "Pantalla de pedido para cuenta específica",
         "ejemplo": "/peppone/comandero/mesa_3"
+      },
+      "/[project_id]/cocina": {
+        "archivo": "frontend/src/routes/[project_id]/cocina/+page.svelte (PLANIFICADO)",
+        "componente": "CocinaScreen",
+        "descripcion": "Display de cocina — pedidos en tiempo real, marcar items listos. Para ESP32-P4 o tablet.",
+        "ejemplo": "/peppone/cocina, /peppone/cocina?estacion=pizzas",
+        "estado": "PLANIFICADO — ver contexto/pantallas-cocina.json"
       },
       "/[project_id]/menu-generator": {
         "archivo": "frontend/src/routes/[project_id]/menu-generator/+page.svelte",

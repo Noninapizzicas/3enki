@@ -238,6 +238,17 @@ export async function loadHealth(): Promise<void> {
   }
 }
 
+/**
+ * Renderiza una carta como HTML para previsualización/impresión
+ * El panel html-preview se abre automáticamente vía initHtmlPreviewSubscriptions()
+ */
+export async function renderCartaHtml(
+  cartaId: string,
+  plantillaId: string = 'a4-clasica'
+): Promise<void> {
+  await mqttRequest('carta', 'render', { carta_id: cartaId, plantilla_id: plantillaId });
+}
+
 // =============================================================================
 // UI ACTIONS
 // =============================================================================

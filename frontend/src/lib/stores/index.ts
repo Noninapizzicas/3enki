@@ -209,6 +209,11 @@ export {
 } from './conversations';
 export type { Conversation, Message, ConversationSection, ConversationsState, ContextStats } from './conversations';
 
+// Menu Generator Store
+export {
+  renderCartaHtml
+} from './menu-generator';
+
 // HTML Preview Store
 export {
   htmlPreviewStore,

@@ -16,6 +16,7 @@
     initMenuGeneratorSubscriptions,
     getCarta,
     selectCarta,
+    renderCartaHtml,
     type CartaEstado,
     type Producto
   } from '$lib/stores/menu-generator';
@@ -27,6 +28,7 @@
 
   // Vista: 'list' o 'detail'
   let view: 'list' | 'detail' = 'list';
+  let rendering: string | null = null;
 
   $: cartas = $sortedCartas;
   $: carta = $selectedCarta;
@@ -50,6 +52,15 @@
   function handleBack() {
     selectCarta(null);
     view = 'list';
+  }
+
+  async function handleRender(id: string) {
+    rendering = id;
+    try {
+      await renderCartaHtml(id);
+    } finally {
+      rendering = null;
+    }
   }
 
   function getEstadoIcon(estado: CartaEstado): string {
@@ -126,9 +137,15 @@
             <div class="carta-actions">
               <span class="carta-fecha">{formatDate(item.created_at)}</span>
               {#if item.estado === 'generada'}
-                <button class="btn-view" on:click={() => handleViewCarta(item.id)} title="Ver">
-                  👁️
-                </button>
+                <div class="action-buttons">
+                  <button class="btn-view" on:click={() => handleViewCarta(item.id)} title="Ver detalle">
+                    👁️
+                  </button>
+                  <button class="btn-view" on:click={() => handleRender(item.id)}
+                    title="Ver HTML / Imprimir" disabled={rendering === item.id}>
+                    {rendering === item.id ? '⏳' : '🖨️'}
+                  </button>
+                </div>
               {/if}
             </div>
           </div>
@@ -273,6 +290,8 @@
     cursor: pointer;
   }
   .btn-view:hover { background: rgba(59,130,246,0.2); }
+  .btn-view:disabled { opacity: 0.5; cursor: default; }
+  .action-buttons { display: flex; gap: 0.2rem; }
 
   /* DETALLE */
   .detalle {

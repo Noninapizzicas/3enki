@@ -1,14 +1,13 @@
 {
   "name": "cobros",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Gestión unificada de cobros - 7 métodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr",
   "author": "Pizzepos Team",
 
   "provides": {
     "events": [
       "cobro.iniciado",
-      "cobro.completado",
-      "cobro.fallido",
+      "cobro.procesado",
       "cobro.reembolsado"
     ],
     "queries": ["cobro.obtener", "cobro.listar", "cobro.por_cuenta"]
@@ -24,17 +23,10 @@
         }
       },
       {
-        "event": "cobro.completado",
-        "description": "Cobro completado exitosamente",
+        "event": "cobro.procesado",
+        "description": "Cobro procesado exitosamente",
         "schema": {
-          "$ref": "./schemas/events.json#/definitions/cobro_completado"
-        }
-      },
-      {
-        "event": "cobro.fallido",
-        "description": "Cobro fallido",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cobro_fallido"
+          "$ref": "./schemas/events.json#/definitions/cobro_procesado"
         }
       },
       {
@@ -95,8 +87,7 @@
             "endpoint": "/modules/cobros/cobros",
             "mqtt_topics": [
               "cobro.iniciado",
-              "cobro.completado",
-              "cobro.fallido",
+              "cobro.procesado",
               "cobro.reembolsado"
             ],
             "refresh_on_event": true
@@ -142,14 +133,12 @@
       "enabled": true,
       "topics": [
         "cobro.iniciado",
-        "cobro.completado",
-        "cobro.fallido",
+        "cobro.procesado",
         "cobro.reembolsado"
       ],
       "auto_refresh": true,
       "sounds": {
-        "cobro.completado": "success",
-        "cobro.fallido": "error"
+        "cobro.procesado": "success"
       }
     },
 
@@ -294,8 +283,7 @@
       "enabled": true,
       "counters": [
         "cobro.iniciado.total",
-        "cobro.completado.total",
-        "cobro.fallido.total",
+        "cobro.procesado.total",
         "cobro.reembolsado.total"
       ],
       "gauges": [

@@ -20,12 +20,40 @@
     return precio.toFixed(2) + ' \u20AC';
   }
 
-  // Extraer variaciones legibles
-  $: variacionesTexto = (item.variaciones || []).map((v: any) => {
-    if (v.tipo === 'quitar') return `sin ${v.nombre || v.ingrediente_id}`;
-    if (v.tipo === 'anadir') return `+ ${v.nombre || v.ingrediente_id}`;
-    return v.nombre || v.ingrediente_id || '';
-  }).filter(Boolean);
+  // Extraer variaciones legibles (soporta array legacy y objeto nuevo)
+  $: variacionesTexto = extractVariacionesTexto(item.variaciones);
+
+  function extractVariacionesTexto(v: any): string[] {
+    if (!v) return [];
+
+    // Formato nuevo (objeto): { ingredientes_quitar: string[], ingredientes_anadir: [{nombre, ...}] }
+    if (!Array.isArray(v) && typeof v === 'object') {
+      const textos: string[] = [];
+      if (Array.isArray(v.ingredientes_quitar)) {
+        for (const nombre of v.ingredientes_quitar) {
+          textos.push(`sin ${nombre}`);
+        }
+      }
+      if (Array.isArray(v.ingredientes_anadir)) {
+        for (const ing of v.ingredientes_anadir) {
+          const nombre = typeof ing === 'string' ? ing : ing.nombre;
+          if (nombre) textos.push(`+ ${nombre}`);
+        }
+      }
+      return textos;
+    }
+
+    // Formato legacy (array): [{ tipo: 'quitar'|'anadir', nombre|ingrediente_id }]
+    if (Array.isArray(v)) {
+      return v.map((vi: any) => {
+        if (vi.tipo === 'quitar') return `sin ${vi.nombre || vi.ingrediente_id}`;
+        if (vi.tipo === 'anadir') return `+ ${vi.nombre || vi.ingrediente_id}`;
+        return vi.nombre || vi.ingrediente_id || '';
+      }).filter(Boolean);
+    }
+
+    return [];
+  }
 
   $: tieneDetalle = variacionesTexto.length > 0
     || item.notas

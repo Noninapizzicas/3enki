@@ -146,7 +146,7 @@ The `contexto/` directory with 28 files is unusually thorough for a project this
 
 - **43 modules** (30 core + 13 pizzepos) — 34 enabled, 6 disabled
 - **44 local service providers** (~198 functions)
-- **7 LLM providers** (DeepSeek, Anthropic, OpenAI, Groq, Gemini, Ollama + base)
+- **6 LLM providers** (DeepSeek, Anthropic, OpenAI, Groq, Gemini, Ollama)
 - **6 OCR backends** (Document AI, Vision, Anthropic Vision, OpenAI Vision, Tesseract, Scribe)
 - **250+ events**, **250+ APIs**, **90+ AI tools**
 - **14 UI handlers** in project-manager

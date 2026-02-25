@@ -1,10 +1,23 @@
 {
-  "_VERSION": "3.6.0",
+  "_VERSION": "3.7.0",
   "_CREATED": "2026-02-03",
   "_UPDATED": "2026-02-25",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
 
   "_CHANGELOG": {
+    "3.7.0": {
+      "fecha": "2026-02-25",
+      "cambios": [
+        "FEAT: cuentas v2.2 — ciclo de vida completo: pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado",
+        "FEAT: cuentas — máquina de estados con TRANSICIONES_VALIDAS, transiciones validadas y logueadas",
+        "FEAT: cuentas — publica cuenta.estado_cambiado en cada transición (evento que estaba definido pero nunca se publicaba)",
+        "FEAT: cuentas — alerta automática a los 30 min en estado pendiente (campo alerta que estaba siempre false)",
+        "FEAT: cuentas — handleGetMetrics (handler que estaba declarado en module.json pero no implementado)",
+        "FEAT: cuentas — suscripciones nuevas: comandero.enviar_cocina, cocina.pedido_listo, cobro.iniciado",
+        "FIX: cuentas — onComanderoItemEliminado no desestructuraba cuenta_id del evento",
+        "ARCH: enlace coherente entre módulos — los eventos que ya existían ahora actualizan el estado de la cuenta"
+      ]
+    },
     "3.5.0": {
       "fecha": "2026-02-21",
       "cambios": [
@@ -84,13 +97,29 @@
       "5. cocina → recibe pedido.enviado_cocina → gestiona preparación item a item → cocina.pedido_listo",
       "6. impresion → recibe pedido.enviado_cocina → genera comanda ESC/POS → imprime ticket",
       "7. cobros → procesa pago (efectivo/tarjeta/bizum/transferencia/mixto/link/qr) → cobro.procesado",
-      "8. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada",
-      "9. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
+      "8. cuentas → escucha todos los eventos y transiciona estado: pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado (publica cuenta.estado_cambiado)",
+      "9. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada",
+      "10. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
     ],
     "separacion_comandero_pedidos": {
       "principio": "Comandero es la UI del camarero (buffer de items). Pedidos gestiona el ciclo de vida formal (crear, enviar cocina, completar, cancelar).",
       "cadena_eventos": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina → cocina e impresión reciben",
       "estado_actual": "Ambos módulos implementados y operativos. Comandero maneja el buffer, pedidos maneja el ciclo de vida."
+    },
+    "ciclo_vida_cuenta": {
+      "descripcion": "El módulo cuentas (v2.2) ahora refleja el ciclo de vida completo escuchando eventos de otros módulos",
+      "estados": ["pendiente", "con_pedido", "en_preparacion", "listo", "para_cobrar", "cobrado"],
+      "transiciones": {
+        "pendiente→con_pedido": "comandero.item_agregado (primer item añadido)",
+        "con_pedido→en_preparacion": "comandero.enviar_cocina (items enviados a cocina)",
+        "en_preparacion→listo": "cocina.pedido_listo (todos los items preparados)",
+        "listo→para_cobrar": "cobro.iniciado (camarero abre cobro)",
+        "para_cobrar→cobrado": "cobro.procesado (pago confirmado)",
+        "listo→en_preparacion": "comandero.enviar_cocina (cliente pide más tras primer pedido listo)",
+        "con_pedido→pendiente": "comandero.item_eliminado (último item eliminado sin enviar)"
+      },
+      "evento_publicado": "cuenta.estado_cambiado {cuenta_id, estado_anterior, estado_nuevo}",
+      "alerta": "Timer de 30 min en estado pendiente — activa alerta visual en tarjeta de cuenta"
     },
     "evento_critico": {
       "nombre": "cobro.procesado",
@@ -614,7 +643,8 @@
           "mqttRequest('cuenta', 'get', { id })",
           "mqttRequest('cuenta', 'delete', { id })",
           "mqttRequest('cuenta', 'stats')",
-          "mqttRequest('cuenta', 'health')"
+          "mqttRequest('cuenta', 'health')",
+          "mqttRequest('cuenta', 'metrics')"
         ]
       },
       "comandero": {

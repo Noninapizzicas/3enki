@@ -380,15 +380,28 @@
               nombre: item.nombre_override || item.nombre,
               cantidad: item.cantidad
             };
-            if (item.variaciones?.length) {
-              ci.variaciones = {
-                ingredientes_quitar: item.variaciones
-                  .filter((v: any) => v.tipo === 'quitar')
-                  .map((v: any) => v.ingrediente_id),
-                ingredientes_anadir: item.variaciones
-                  .filter((v: any) => v.tipo === 'anadir')
-                  .map((v: any) => v.ingrediente_id)
-              };
+            // Variaciones: soportar formato objeto nuevo y array legacy
+            const v = item.variaciones as any;
+            if (v) {
+              if (!Array.isArray(v) && typeof v === 'object' && (v.ingredientes_quitar || v.ingredientes_anadir)) {
+                // Formato nuevo (objeto directo)
+                ci.variaciones = {
+                  ingredientes_quitar: v.ingredientes_quitar || [],
+                  ingredientes_anadir: (v.ingredientes_anadir || []).map((i: any) =>
+                    typeof i === 'string' ? i : i.nombre
+                  )
+                };
+              } else if (Array.isArray(v) && v.length > 0) {
+                // Formato legacy (array)
+                ci.variaciones = {
+                  ingredientes_quitar: v
+                    .filter((x: any) => x.tipo === 'quitar')
+                    .map((x: any) => x.ingrediente_id),
+                  ingredientes_anadir: v
+                    .filter((x: any) => x.tipo === 'anadir')
+                    .map((x: any) => x.ingrediente_id)
+                };
+              }
             }
             if (item.tipo === 'mitad_mitad') {
               ci.tipo = 'mitad-mitad';

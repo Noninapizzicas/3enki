@@ -34,6 +34,7 @@
     type Producto
   } from '$lib/stores/comandero';
   import { renameMesa } from '$lib/stores/cuentas';
+  import { imprimirComanda, type ComandaItem, type Canal } from '$lib/stores/impresion';
 
   import BotonEspecial from './BotonEspecial.svelte';
   import CategoriaBtn from './CategoriaBtn.svelte';
@@ -192,9 +193,13 @@
   const acciones = [
     { id: 'cuenta', label: 'Cuenta', icon: '📄', variant: 'default' as const },
     { id: 'enviar', label: 'Enviar', icon: '🍳', variant: 'primary' as const },
+    { id: 'imprimir', label: 'Imprimir', icon: '🖨️', variant: 'default' as const },
     { id: 'cobro', label: 'Cobro', icon: '💶', variant: 'default' as const },
     { id: 'salir', label: 'Salir', icon: '↩️', variant: 'danger' as const }
   ];
+
+  // Estado resultado impresion
+  let printResult: { type: 'ok' | 'error'; msg: string } | null = null;
 
   // Handlers
   function handleCategoriaSelect(e: CustomEvent<{ id: string }>) {
@@ -340,6 +345,51 @@
         const result = await enviarCocina();
         if (!result.success) {
           console.error('[Comandero] Error enviando:', result.error);
+        }
+        break;
+      case 'imprimir':
+        if ($pedidoItems.length === 0) {
+          printResult = { type: 'error', msg: 'Sin items' };
+          setTimeout(() => printResult = null, 2000);
+          break;
+        }
+        {
+          // Convertir pedidoItems al formato ComandaItem
+          const comandaItems: ComandaItem[] = $pedidoItems.map(item => {
+            const ci: ComandaItem = {
+              nombre: item.nombre_override || item.nombre,
+              cantidad: item.cantidad
+            };
+            if (item.variaciones?.length) {
+              ci.variaciones = {
+                ingredientes_quitar: item.variaciones
+                  .filter((v: any) => v.tipo === 'quitar')
+                  .map((v: any) => v.ingrediente_id),
+                ingredientes_anadir: item.variaciones
+                  .filter((v: any) => v.tipo === 'anadir')
+                  .map((v: any) => v.ingrediente_id)
+              };
+            }
+            if (item.tipo === 'mitad_mitad') {
+              ci.tipo = 'mitad-mitad';
+              ci.pizza_izquierda = item.pizza_izquierda?.nombre;
+              ci.pizza_derecha = item.pizza_derecha?.nombre;
+            }
+            return ci;
+          });
+
+          // Detectar canal desde cuenta_id
+          const canalDetected: Canal = cuenta_id.startsWith('mesa_') ? 'mesa'
+            : cuenta_id.startsWith('telefono_') ? 'telefono'
+            : cuenta_id.startsWith('llevar_') ? 'llevar'
+            : cuenta_id.startsWith('glovo_') ? 'glovo'
+            : 'mesa';
+
+          const reg = await imprimirComanda(cuenta_id, canalDetected, comandaItems);
+          printResult = reg
+            ? { type: 'ok', msg: `Impreso` }
+            : { type: 'error', msg: 'Error impresora' };
+          setTimeout(() => printResult = null, 3000);
         }
         break;
       case 'cobro':
@@ -564,6 +614,13 @@
       on:close={handleAlGustoClose}
       on:confirm={handleAlGustoConfirm}
     />
+  {/if}
+
+  <!-- Toast impresion -->
+  {#if printResult}
+    <div class="print-toast print-toast-{printResult.type}">
+      {printResult.type === 'ok' ? '🖨️' : '⚠️'} {printResult.msg}
+    </div>
   {/if}
 </div>
 
@@ -865,5 +922,35 @@
     .productos-grid {
       grid-template-columns: repeat(2, 1fr);
     }
+  }
+
+  /* Print toast */
+  .print-toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    z-index: 100;
+    pointer-events: none;
+    animation: toast-in 0.2s ease-out;
+  }
+
+  .print-toast-ok {
+    background: rgba(34, 197, 94, 0.9);
+    color: #fff;
+  }
+
+  .print-toast-error {
+    background: rgba(239, 68, 68, 0.9);
+    color: #fff;
+  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
   }
 </style>

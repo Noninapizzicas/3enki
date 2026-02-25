@@ -50,30 +50,54 @@ export function showHtmlPreview(opts: { html: string; title: string; filename?: 
 }
 
 // =============================================================================
+// HELPERS
+// =============================================================================
+
+type HtmlPreviewData = { html?: string; title?: string; filename?: string };
+
+function extractHtmlPreviewData(payload: unknown): HtmlPreviewData {
+  const envelope = payload as { data?: HtmlPreviewData };
+  return envelope?.data || (payload as HtmlPreviewData);
+}
+
+// =============================================================================
 // SUSCRIPCIONES MQTT
 // =============================================================================
 
-// Inicializar suscripciones MQTT para el panel de preview HTML.
-// Escucha el evento del event bus: carta.html.generada
-// Topic MQTT: core/[asterisk]/events/carta/html/generada
-// El payload es un EventEnvelope con campo `data`:
-// { carta_id, plantilla_id, project_id, html_path, html, title, filename }
-export function initHtmlPreviewSubscriptions(): () => void {
-  const unsubs: Array<() => void> = [];
-
-  // carta.html.generada → core/*/events/carta/html/generada
-  unsubs.push(subscribe('core/*/events/carta/html/generada', (_, payload: unknown) => {
-    const envelope = payload as { data?: { html?: string; title?: string; filename?: string } };
-    const data = envelope?.data || (payload as { html?: string; title?: string; filename?: string });
+/**
+ * Registra un topic MQTT que abre el panel de preview HTML al recibir datos.
+ *
+ * Cualquier módulo puede llamar esta función en su propio init para asociar
+ * su evento MQTT al panel HTML, sin tocar initHtmlPreviewSubscriptions.
+ *
+ * Ejemplo:
+ *   registerHtmlPreviewTopic('core/+/events/reporte/html/generado', { defaultTitle: 'Reporte' })
+ */
+export function registerHtmlPreviewTopic(
+  topic: string,
+  opts?: {
+    defaultTitle?: string;
+    dataExtractor?: (payload: unknown) => HtmlPreviewData;
+  }
+): () => void {
+  return subscribe(topic, (_, payload: unknown) => {
+    const data = opts?.dataExtractor
+      ? opts.dataExtractor(payload)
+      : extractHtmlPreviewData(payload);
 
     if (data?.html) {
       showHtmlPreview({
         html: data.html,
-        title: data.title || 'Carta',
+        title: data.title || opts?.defaultTitle || 'Documento',
         filename: data.filename
       });
     }
-  }));
+  });
+}
 
-  return () => unsubs.forEach(fn => fn());
+// Inicializa la suscripción MQTT para carta.html.generada (retrocompatibilidad).
+export function initHtmlPreviewSubscriptions(): () => void {
+  return registerHtmlPreviewTopic('core/*/events/carta/html/generada', {
+    defaultTitle: 'Carta'
+  });
 }

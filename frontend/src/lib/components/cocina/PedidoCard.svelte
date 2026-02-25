@@ -100,10 +100,11 @@
     {/each}
   </div>
 
-  <!-- Notas generales -->
+  <!-- Notas generales del pedido -->
   {#if pedido.notas_generales}
     <div class="card-notas">
-      {pedido.notas_generales}
+      <span class="notas-label">NOTA PEDIDO:</span>
+      <span class="notas-text">{pedido.notas_generales}</span>
     </div>
   {/if}
 </article>
@@ -216,14 +217,29 @@
     flex-direction: column;
   }
 
-  /* Notas */
+  /* Notas generales del pedido */
   .card-notas {
-    padding: 8px 16px 10px;
-    font-size: 1rem;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 16px;
+    border-top: 2px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  .notas-label {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #f59e0b;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  .notas-text {
+    font-size: 1.15rem;
     color: #fbbf24;
-    font-weight: 600;
-    border-top: 1px solid #334155;
-    background: rgba(234, 179, 8, 0.05);
+    font-weight: 700;
+    word-break: break-word;
   }
 
   /* Animations */

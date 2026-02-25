@@ -23,13 +23,22 @@
     pedidosCocina,
     cocinaLoading,
     pedidosCount,
-    initCocinaSubscriptions
+    initCocinaSubscriptions,
+    resumeAudioContext
   } from '$lib/stores/cocina';
 
   import CocinaHeader from './CocinaHeader.svelte';
   import PedidoCard from './PedidoCard.svelte';
 
   let cleanupSubs: (() => void) | null = null;
+  let audioUnlocked = false;
+
+  function unlockAudio() {
+    if (!audioUnlocked) {
+      resumeAudioContext();
+      audioUnlocked = true;
+    }
+  }
 
   onMount(() => {
     connect().then(() => {
@@ -42,6 +51,10 @@
 
     // Prevenir scroll bounce en iOS/ESP32 WebView
     document.body.style.overflow = 'hidden';
+
+    // Desbloquear audio con cualquier interacción
+    document.addEventListener('click', unlockAudio, { once: true });
+    document.addEventListener('touchstart', unlockAudio, { once: true });
   });
 
   onDestroy(() => {
@@ -49,6 +62,8 @@
     disconnect();
     removeVisibilityHandler();
     document.body.style.overflow = '';
+    document.removeEventListener('click', unlockAudio);
+    document.removeEventListener('touchstart', unlockAudio);
   });
 </script>
 

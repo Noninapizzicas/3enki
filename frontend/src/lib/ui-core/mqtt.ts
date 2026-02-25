@@ -84,7 +84,7 @@ const DEFAULT_CONFIG: MqttConfig = {
   url: getMqttUrl(),
   clientId: `ui-${Date.now().toString(36)}`,
   options: {
-    keepalive: 30,           // Reducido a 30s para evitar keep alive timeout
+    keepalive: 60,           // 60s — holgura para proxy Vite que puede bufferear pings
     reconnectPeriod: 2000,   // Reconexión automática
     connectTimeout: 5000,    // Timeout de conexión
     clean: true
@@ -102,6 +102,8 @@ const lastMessageStore = writable<MqttMessage | null>(null);
 let client: MqttClientLike | null = null;
 const handlers = new Map<string, Set<MessageHandler>>();
 const topicSubscriptions = new Map<string, number>(); // topic -> refcount
+let hasConnectedOnce = false;
+let reconnectCallbacks: Array<() => void> = [];
 
 // =============================================================================
 // PENDING MESSAGES QUEUE - Mensajes encolados antes de conexión
@@ -343,6 +345,15 @@ async function initMqttConnection(config: MqttConfig): Promise<void> {
 
       // Enviar mensajes que estaban encolados esperando conexión
       flushPendingMessages();
+
+      // Notificar a los stores que deben recargar datos (solo en reconexión, no en primera conexión)
+      if (hasConnectedOnce) {
+        console.log('[MQTT] Reconnected — notifying stores to reload data');
+        for (const cb of reconnectCallbacks) {
+          try { cb(); } catch (e) { console.error('[MQTT] Reconnect callback error:', e); }
+        }
+      }
+      hasConnectedOnce = true;
     });
 
     client.on('message', (topic: string, buffer: { toString(encoding: string): string }) => {
@@ -387,6 +398,9 @@ export function disconnect(): void {
     statusStore.set('disconnected');
     handlers.clear();
     topicSubscriptions.clear();
+    // Limpiar estado de reconexión
+    hasConnectedOnce = false;
+    reconnectCallbacks = [];
     // Limpiar referencia para mqtt-request
     _setMqttClient(null);
   }
@@ -496,6 +510,18 @@ export function subscribe(pattern: string, handler: MessageHandler): () => void 
     } else {
       topicSubscriptions.set(pattern, newRefcount);
     }
+  };
+}
+
+/**
+ * Registra un callback que se ejecuta cuando MQTT reconecta (no en la primera conexión).
+ * Útil para que los stores recarguen datos que pudieron perderse durante la desconexión.
+ * Retorna función para des-registrar el callback.
+ */
+export function onReconnect(callback: () => void): () => void {
+  reconnectCallbacks.push(callback);
+  return () => {
+    reconnectCallbacks = reconnectCallbacks.filter(cb => cb !== callback);
   };
 }
 

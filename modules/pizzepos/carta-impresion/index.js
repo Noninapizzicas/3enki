@@ -56,6 +56,14 @@ const PLANTILLAS_GLOBALES = [
     formato: 'A4',
     orientacion: 'landscape',
     global: true
+  },
+  {
+    id: 'a4-paisaje-5col',
+    nombre: 'A4 Apaisado 5 Columnas',
+    descripcion: 'A4 horizontal con 5 columnas CSS. Ideal para muchas categorías en una sola hoja.',
+    formato: 'A4',
+    orientacion: 'landscape',
+    global: true
   }
 ];
 

@@ -36,13 +36,16 @@
   $: isAlGusto = item.tipo === 'al_gusto' && item.ingredientes?.length;
   $: ingredientesAlGusto = (item.ingredientes || []).map(parseIngrediente);
 
+  // — Ingredientes base (todos los productos) —
+  $: hasIngredientesBase = !isMitad && !isAlGusto && item.ingredientes_base?.length;
+
   // — Variaciones (quitar / añadir) —
   $: quitarList = extractQuitar(item);
   $: anadirList = extractAnadir(item);
   $: hasVariaciones = quitarList.length > 0 || anadirList.length > 0;
 
   // — Tiene detalles extra —
-  $: hasDetails = isMitad || isAlGusto || hasVariaciones || !!item.notas;
+  $: hasDetails = isMitad || isAlGusto || hasIngredientesBase || hasVariaciones || !!item.notas;
 
   // ——————————————————————————————————————————
   // Helpers para extraer datos con formatos flexibles
@@ -65,23 +68,44 @@
   function extractQuitar(item: ItemCocina): string[] {
     if (!item.variaciones) return [];
     const v = item.variaciones as any;
-    // Formato objeto: { ingredientes_quitar: string[] }
+
+    // Formato nuevo (objeto): { ingredientes_quitar: string[] }
     if (Array.isArray(v.ingredientes_quitar)) {
       return v.ingredientes_quitar.map((i: any) => typeof i === 'string' ? i : i.nombre || '???');
     }
+
+    // Formato legacy (array): [{ tipo: 'quitar', ingrediente_id | nombre }]
+    if (Array.isArray(v)) {
+      return v
+        .filter((x: any) => x.tipo === 'quitar')
+        .map((x: any) => x.nombre || x.ingrediente_id || '???');
+    }
+
     return [];
   }
 
   function extractAnadir(item: ItemCocina): { nombre: string; cantidad?: number }[] {
     if (!item.variaciones) return [];
     const v = item.variaciones as any;
-    // Formato objeto: { ingredientes_anadir: Array<string | { nombre, cantidad? }> }
+
+    // Formato nuevo (objeto): { ingredientes_anadir: [{ nombre, cantidad? }] }
     if (Array.isArray(v.ingredientes_anadir)) {
       return v.ingredientes_anadir.map((i: any) => {
         if (typeof i === 'string') return { nombre: i };
         return { nombre: i.nombre || '???', cantidad: i.cantidad };
       });
     }
+
+    // Formato legacy (array): [{ tipo: 'anadir', ingrediente_id | nombre, cantidad? }]
+    if (Array.isArray(v)) {
+      return v
+        .filter((x: any) => x.tipo === 'anadir')
+        .map((x: any) => ({
+          nombre: x.nombre || x.ingrediente_id || '???',
+          cantidad: x.cantidad
+        }));
+    }
+
     return [];
   }
 
@@ -122,6 +146,13 @@
         <span class="tipo-badge badge-algusto">AL GUSTO</span>
       {/if}
     </div>
+
+    <!-- ============ INGREDIENTES BASE (productos regulares) ============ -->
+    {#if hasIngredientesBase}
+      <div class="detail-section base-section">
+        <span class="base-ings">{item.ingredientes_base?.join(', ')}</span>
+      </div>
+    {/if}
 
     <!-- ============ MITAD Y MITAD ============ -->
     {#if isMitad}
@@ -327,6 +358,21 @@
     margin-bottom: 3px;
   }
 
+  /* ——— INGREDIENTES BASE ——— */
+  .base-section {
+    padding: 4px 8px;
+    background: rgba(148, 163, 184, 0.08);
+    border-radius: 6px;
+    border-left: 3px solid #475569;
+  }
+
+  .base-ings {
+    font-size: 1rem;
+    color: #94a3b8;
+    font-style: italic;
+    line-height: 1.3;
+  }
+
   /* ——— MITAD Y MITAD ——— */
   .mitad-section {
     display: flex;
@@ -464,6 +510,7 @@
   @media (max-width: 600px) {
     .qty { font-size: 1.5rem; }
     .name { font-size: 1.2rem; }
+    .base-ings { font-size: 0.85rem; }
     .mitad-name { font-size: 1rem; }
     .mitad-ings { font-size: 0.8rem; }
     .algusto-ing { font-size: 0.9rem; }

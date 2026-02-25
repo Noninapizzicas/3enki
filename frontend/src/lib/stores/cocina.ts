@@ -39,16 +39,14 @@ export interface ItemCocina {
   producto_id: string;
   nombre: string;
   cantidad: number;
-  variaciones?: {
-    ingredientes_quitar?: string[];
-    ingredientes_anadir?: Array<string | { nombre: string; precio_extra?: number; cantidad?: number }>;
-  };
+  variaciones?: any;
   notas?: string;
   estado: EstadoItem;
   tipo?: 'mitad_mitad' | 'al_gusto' | string;
   pizza_izquierda?: string | PizzaHalf;
   pizza_derecha?: string | PizzaHalf;
   ingredientes?: Array<string | IngredienteAlGusto>;
+  ingredientes_base?: string[];
   preparando_at?: string;
   preparado_at?: string;
 }

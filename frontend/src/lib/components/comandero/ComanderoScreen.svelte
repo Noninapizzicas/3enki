@@ -207,7 +207,14 @@
   }
 
   function handleProductoAdd(e: CustomEvent<{ producto: Producto }>) {
-    addItem(e.detail.producto.id);
+    const prod = e.detail.producto;
+    // Enviar ingredientes_base del producto para que cocina sepa qué lleva
+    const ingsBase = (prod.ingredientes || []).map((i: any) => typeof i === 'string' ? i : i.nombre).filter(Boolean);
+    if (ingsBase.length > 0) {
+      addItem(prod.id, 1, [], { ingredientes_base: ingsBase });
+    } else {
+      addItem(prod.id);
+    }
   }
 
   function handleProductoVariaciones(e: CustomEvent<{ producto: Producto }>) {
@@ -236,16 +243,18 @@
   function handleVariacionesConfirm(e: CustomEvent<{
     producto_id: string;
     ingredientes_quitar: string[];
-    ingredientes_anadir: { ingrediente_id: string; cantidad: number }[];
+    ingredientes_anadir: { nombre: string; cantidad: number; precio_extra?: number }[];
+    ingredientes_base: string[];
     precio_total: number;
   }>) {
-    const { producto_id, ingredientes_quitar, ingredientes_anadir, precio_total } = e.detail;
+    const { producto_id, ingredientes_quitar, ingredientes_anadir, ingredientes_base, precio_total } = e.detail;
 
-    // Añadir item con variaciones y precio ajustado
-    addItem(producto_id, 1, [
-      ...ingredientes_quitar.map(id => ({ tipo: 'quitar', ingrediente_id: id })),
-      ...ingredientes_anadir.map(item => ({ tipo: 'anadir', ...item }))
-    ], { precio_override: precio_total });
+    // Variaciones como objeto con NOMBRES legibles (no IDs)
+    addItem(producto_id, 1, [], {
+      precio_override: precio_total,
+      variaciones: { ingredientes_quitar, ingredientes_anadir },
+      ingredientes_base
+    });
 
     // Cerrar panel
     showVariaciones = false;
@@ -298,14 +307,21 @@
   }>) {
     const { pizza_izquierda, pizza_derecha, precio_final, nombre_compuesto } = e.detail;
 
-    // Añadir como item especial al pedido
-    // Usamos el ID de la primera pizza como base, con metadata de combinación
+    // Incluir ingredientes_base de cada mitad para que cocina vea qué lleva
+    const extractBase = (pizza: any) => ({
+      id: pizza.id,
+      nombre: pizza.nombre,
+      ingredientes_base: (pizza.ingredientes_base || pizza.ingredientes || [])
+        .map((i: any) => typeof i === 'string' ? i : i.nombre)
+        .filter(Boolean)
+    });
+
     addItem(pizza_izquierda.id, 1, [], {
       tipo: 'mitad_mitad',
       nombre_override: nombre_compuesto,
       precio_override: precio_final,
-      pizza_izquierda: { id: pizza_izquierda.id, nombre: pizza_izquierda.nombre },
-      pizza_derecha: { id: pizza_derecha.id, nombre: pizza_derecha.nombre }
+      pizza_izquierda: extractBase(pizza_izquierda),
+      pizza_derecha: extractBase(pizza_derecha)
     });
 
     showMitadMitad = false;
@@ -322,13 +338,16 @@
   }>) {
     const { ingredientes, precio_total, nombre_compuesto } = e.detail;
 
-    // Añadir como item especial al pedido
-    // Usamos un ID especial para pizza al gusto
     addItem('pizza_algusto', 1, [], {
       tipo: 'al_gusto',
       nombre_override: nombre_compuesto,
       precio_override: precio_total,
-      ingredientes: ingredientes.map(i => ({ id: i.id, nombre: i.nombre, precio: i.precio_extra }))
+      ingredientes: ingredientes.map(i => ({
+        id: i.id,
+        nombre: i.nombre,
+        precio_extra: i.precio_extra || 0,
+        tipo: i.tipo || null
+      }))
     });
 
     showAlGusto = false;

@@ -191,7 +191,8 @@ class ComanderoModule {
 
   async handleAddItem(data) {
     const { cuenta_id, producto_id, nombre, precio, cantidad, variaciones, notas,
-            tipo, pizza_izquierda, pizza_derecha, ingredientes: metaIngredientes } = data;
+            tipo, pizza_izquierda, pizza_derecha, ingredientes: metaIngredientes,
+            ingredientes_base } = data;
 
     if (!cuenta_id) {
       return { status: 400, error: 'cuenta_id es requerido' };
@@ -242,6 +243,9 @@ class ComanderoModule {
     }
     if (metaIngredientes) {
       item.ingredientes = metaIngredientes;
+    }
+    if (ingredientes_base) {
+      item.ingredientes_base = ingredientes_base;
     }
 
     pedido.items.push(item);

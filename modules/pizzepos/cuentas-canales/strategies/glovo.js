@@ -225,10 +225,41 @@ class GlovoStrategy {
         hora_recibido: pedido.hora_recibido
       });
 
+      // Auto-enviar a cocina — el pedido entra directo a la cola de cocina
+      const pedido_id = `ped_${cuenta_id}`;
+      pedido.pedidos.push(pedido_id);
+
+      const cocinaItems = (items || []).map((item, idx) => ({
+        item_id: `${pedido_id}_item_${idx + 1}`,
+        producto_id: item.producto_id || item.id || `glovo_prod_${idx + 1}`,
+        nombre: item.nombre || item.name || 'Producto Glovo',
+        cantidad: item.cantidad || item.quantity || 1,
+        variaciones: item.variaciones || item.variations || null,
+        notas: item.notas || item.notes || '',
+        estado: 'pendiente'
+      }));
+
+      await this.modulo.eventBus.publish('pedido.enviado_cocina', {
+        pedido_id,
+        cuenta_id,
+        canal: 'glovo',
+        items: cocinaItems,
+        notas_generales: notas || '',
+        metadata: {
+          glovo_order_id,
+          cliente_nombre: cliente_nombre || 'Cliente Glovo',
+          direccion_entrega: direccion_entrega || '',
+          requiere_confirmacion: true,
+          tiempo_estimado_entrega: tiempo_estimado_entrega || 45,
+          total: total || 0
+        }
+      });
+
       this.modulo.logger.info('glovo.pedido_recibido', {
         cuenta_id,
         glovo_order_id,
-        total: pedido.total
+        total: pedido.total,
+        enviado_cocina: true
       });
 
       return { status: 201, data: pedido };

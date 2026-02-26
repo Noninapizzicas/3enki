@@ -107,7 +107,7 @@ class CocinaModule {
   async onPedidoEnviadoCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { pedido_id, items, cuenta_id, canal, notas_generales } = data;
+    const { pedido_id, items, cuenta_id, canal, notas_generales, metadata } = data;
 
     this.logger.info('cocina.pedido.recibido', {
       correlation_id: correlationId,
@@ -140,7 +140,8 @@ class CocinaModule {
       }),
       estado: 'activo',
       notas_generales: notas_generales || '',
-      recibido_at: new Date().toISOString()
+      recibido_at: new Date().toISOString(),
+      metadata: metadata || null
     };
 
     this.pedidosActivos.set(pedido_id, pedidoCocina);

@@ -14,7 +14,10 @@
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { PedidoCocina } from '$lib/stores/cocina';
-  import { extractRef, elapsed, prepararItem, marcarListo } from '$lib/stores/cocina';
+  import {
+    extractRef, elapsed, prepararItem, marcarListo,
+    confirmarGlovo, rechazarGlovo, isGlovoConfirmado
+  } from '$lib/stores/cocina';
 
   import ItemLine from './ItemLine.svelte';
 
@@ -24,6 +27,8 @@
 
   let elapsedTime = '00:00';
   let timerInterval: ReturnType<typeof setInterval>;
+  let confirmando = false;
+  let rechazando = false;
 
   onMount(() => {
     updateTimer();
@@ -46,24 +51,50 @@
   $: itemsTotal = pedido.items.length;
   $: progress = itemsTotal > 0 ? itemsListos / itemsTotal : 0;
 
+  // Glovo detection
+  $: isGlovo = pedido.canal === 'glovo';
+  $: pendienteConfirmacion = isGlovo
+    && pedido.metadata?.requiere_confirmacion
+    && !isGlovoConfirmado(pedido.cuenta_id);
+
   // Timer warning: >10 minutos
   $: elapsedSeconds = (Date.now() - new Date(pedido.recibido_at).getTime()) / 1000;
   $: isUrgent = elapsedSeconds > 600 && !isListo;
 
   $: borderColor = isListo
     ? '#22c55e'
-    : hasPreparando
-      ? '#eab308'
-      : isUrgent
-        ? '#ef4444'
-        : '#334155';
+    : isGlovo && pendienteConfirmacion
+      ? '#FF6B00'
+      : isGlovo
+        ? '#FF6B00'
+        : hasPreparando
+          ? '#eab308'
+          : isUrgent
+            ? '#ef4444'
+            : '#334155';
 
   function handleMarkReady() {
+    if (pendienteConfirmacion) return;
     marcarListo(pedido.pedido_id);
   }
 
   function handleItemTap(e: CustomEvent<{ item_id: string }>) {
+    if (pendienteConfirmacion) return;
     prepararItem(e.detail.item_id);
+  }
+
+  async function handleConfirmarGlovo() {
+    if (confirmando) return;
+    confirmando = true;
+    await confirmarGlovo(pedido.cuenta_id);
+    confirmando = false;
+  }
+
+  async function handleRechazarGlovo() {
+    if (rechazando) return;
+    rechazando = true;
+    await rechazarGlovo(pedido.cuenta_id, 'Rechazado desde cocina');
+    rechazando = false;
   }
 </script>
 
@@ -71,14 +102,20 @@
   class="pedido-card"
   class:listo={isListo}
   class:urgent={isUrgent}
-  class:new-order={allPendiente && elapsedSeconds < 5}
+  class:glovo={isGlovo}
+  class:glovo-pendiente={pendienteConfirmacion}
+  class:new-order={allPendiente && elapsedSeconds < 5 && !isGlovo}
+  class:glovo-new={isGlovo && allPendiente && elapsedSeconds < 5}
   style="--border-color: {borderColor}"
 >
   <!-- Header: ref + timer + progress -->
-  <button class="card-header" on:click={handleMarkReady} title="Marcar todo listo">
+  <button class="card-header" class:glovo-header={isGlovo} on:click={handleMarkReady} title="Marcar todo listo">
     <div class="header-left">
+      {#if isGlovo}
+        <span class="glovo-badge">GLOVO</span>
+      {/if}
       <span class="ref">{ref}</span>
-      {#if pedido.canal}
+      {#if pedido.canal && !isGlovo}
         <span class="canal">{pedido.canal}</span>
       {/if}
     </div>
@@ -89,16 +126,66 @@
   </button>
 
   <!-- Progress bar -->
-  <div class="progress-bar">
-    <div class="progress-fill" style="width: {progress * 100}%"></div>
+  <div class="progress-bar" class:glovo-bar={isGlovo}>
+    <div class="progress-fill" class:glovo-fill={isGlovo} style="width: {progress * 100}%"></div>
   </div>
 
-  <!-- Items -->
-  <div class="card-items">
-    {#each pedido.items as item (item.item_id)}
-      <ItemLine {item} on:tap={handleItemTap} />
-    {/each}
-  </div>
+  {#if pendienteConfirmacion}
+    <!-- Glovo sin confirmar: resumen + botones -->
+    <div class="glovo-info">
+      {#if pedido.metadata?.cliente_nombre}
+        <div class="glovo-detail">
+          <span class="glovo-label">CLIENTE</span>
+          <span class="glovo-value">{pedido.metadata.cliente_nombre}</span>
+        </div>
+      {/if}
+      {#if pedido.metadata?.total}
+        <div class="glovo-detail">
+          <span class="glovo-label">TOTAL</span>
+          <span class="glovo-value">{pedido.metadata.total.toFixed(2)}€</span>
+        </div>
+      {/if}
+      {#if pedido.metadata?.tiempo_estimado_entrega}
+        <div class="glovo-detail">
+          <span class="glovo-label">ENTREGA</span>
+          <span class="glovo-value">{pedido.metadata.tiempo_estimado_entrega} min</span>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Items (no interactivos, resumen con ingredientes) -->
+    <div class="card-items glovo-items-preview">
+      {#each pedido.items as item (item.item_id)}
+        <div class="glovo-item-line">
+          <span class="glovo-item-qty">{item.cantidad}x</span>
+          <span class="glovo-item-name">{item.nombre}</span>
+        </div>
+        {#if item.ingredientes_base?.length}
+          <div class="glovo-item-ings">{item.ingredientes_base.join(', ')}</div>
+        {/if}
+        {#if item.notas}
+          <div class="glovo-item-nota">{item.notas}</div>
+        {/if}
+      {/each}
+    </div>
+
+    <!-- Botones confirmar/rechazar -->
+    <div class="glovo-actions">
+      <button class="glovo-btn glovo-btn-confirm" on:click={handleConfirmarGlovo} disabled={confirmando}>
+        {confirmando ? 'CONFIRMANDO...' : 'CONFIRMAR'}
+      </button>
+      <button class="glovo-btn glovo-btn-reject" on:click={handleRechazarGlovo} disabled={rechazando}>
+        {rechazando ? '...' : 'RECHAZAR'}
+      </button>
+    </div>
+  {:else}
+    <!-- Flujo normal: items interactivos -->
+    <div class="card-items">
+      {#each pedido.items as item (item.item_id)}
+        <ItemLine {item} on:tap={handleItemTap} />
+      {/each}
+    </div>
+  {/if}
 
   <!-- Notas generales del pedido -->
   {#if pedido.notas_generales}
@@ -242,15 +329,170 @@
     word-break: break-word;
   }
 
+  /* ===== GLOVO STYLES ===== */
+
+  .glovo-badge {
+    display: inline-block;
+    background: #FF6B00;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 900;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 1.5px;
+    line-height: 1.4;
+  }
+
+  .glovo-header {
+    border-bottom-color: #FF6B00;
+  }
+
+  .pedido-card.glovo-pendiente {
+    animation: glovo-pulse 1.5s ease-in-out infinite;
+  }
+
+  .glovo-bar .glovo-fill {
+    background: #FF6B00;
+  }
+
+  /* Glovo info section */
+  .glovo-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 16px;
+    background: rgba(255, 107, 0, 0.08);
+    border-bottom: 1px solid rgba(255, 107, 0, 0.2);
+  }
+
+  .glovo-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .glovo-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #FF6B00;
+    letter-spacing: 1px;
+  }
+
+  .glovo-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+
+  /* Glovo items preview (non-interactive) */
+  .glovo-items-preview {
+    padding: 8px 16px;
+    gap: 4px;
+  }
+
+  .glovo-item-line {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0;
+    color: #94a3b8;
+    font-size: 0.95rem;
+  }
+
+  .glovo-item-qty {
+    font-weight: 700;
+    color: #f8fafc;
+    min-width: 2.5em;
+  }
+
+  .glovo-item-name {
+    font-weight: 500;
+  }
+
+  .glovo-item-ings {
+    padding-left: 2.5em;
+    font-size: 0.8rem;
+    color: #64748b;
+    font-style: italic;
+    margin-top: -2px;
+  }
+
+  .glovo-item-nota {
+    padding-left: 2.5em;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fbbf24;
+    margin-top: 1px;
+  }
+
+  /* Glovo action buttons */
+  .glovo-actions {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 107, 0, 0.2);
+  }
+
+  .glovo-btn {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s;
+  }
+
+  .glovo-btn:disabled {
+    opacity: 0.5;
+  }
+
+  .glovo-btn-confirm {
+    background: #16a34a;
+    color: #fff;
+    flex: 3;
+  }
+
+  .glovo-btn-confirm:active:not(:disabled) {
+    background: #15803d;
+  }
+
+  .glovo-btn-reject {
+    background: #dc2626;
+    color: #fff;
+    flex: 1;
+    font-size: 0.9rem;
+  }
+
+  .glovo-btn-reject:active:not(:disabled) {
+    background: #b91c1c;
+  }
+
   /* Animations */
   @keyframes urgent-pulse {
     0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.2); }
     50% { box-shadow: 0 0 24px rgba(239, 68, 68, 0.5); }
   }
 
+  @keyframes glovo-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 107, 0, 0.2); }
+    50% { box-shadow: 0 0 28px rgba(255, 107, 0, 0.6); }
+  }
+
   @keyframes flash-in {
     0% { background: #1e40af; transform: scale(1.02); }
     100% { background: #1e293b; transform: scale(1); }
+  }
+
+  @keyframes glovo-flash-in {
+    0% { background: #FF6B00; transform: scale(1.03); }
+    100% { background: #1e293b; transform: scale(1); }
+  }
+
+  .pedido-card.glovo-new {
+    animation: glovo-flash-in 0.6s ease-out;
   }
 
   @keyframes blink {

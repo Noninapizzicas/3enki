@@ -10,20 +10,29 @@ import { mqttRequest } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core';
 
 // Types
+
+/** Variaciones en formato canónico (objeto) */
+export interface Variaciones {
+  ingredientes_quitar?: string[];
+  ingredientes_anadir?: { nombre: string; cantidad?: number; precio_extra?: number }[];
+}
+
 export interface PedidoItem {
   id: string;
   producto_id: string;
   nombre: string;
+  nombre_override?: string;
   precio: number;
   cantidad: number;
-  variaciones: any[];
+  variaciones: Variaciones | any[];
   notas: string;
   subtotal: number;
   created_at: string;
   tipo?: string;
-  pizza_izquierda?: { id: string; nombre: string };
-  pizza_derecha?: { id: string; nombre: string };
+  pizza_izquierda?: { id: string; nombre: string; ingredientes_base?: string[] };
+  pizza_derecha?: { id: string; nombre: string; ingredientes_base?: string[] };
   ingredientes?: any[];
+  ingredientes_base?: string[];
 }
 
 export interface Pedido {
@@ -237,7 +246,7 @@ export function selectCategoria(categoria_id: string): void {
 export async function addItem(
   producto_id: string,
   cantidad: number = 1,
-  variaciones: any[] = [],
+  _variaciones: any[] = [],
   metadata: string | Record<string, any> = ''
 ): Promise<{ success: boolean; error?: string }> {
   const state = get(comanderoStore);
@@ -252,7 +261,16 @@ export async function addItem(
   try {
     const precioFinal = (extra.precio_override != null) ? extra.precio_override : producto?.precio;
     const nombreFinal = extra.nombre_override || producto?.nombre;
-    const { precio_override: _p, nombre_override: _n, ...extraRest } = extra;
+
+    // Extraer campos conocidos del metadata, el resto va como propiedades extra
+    const {
+      precio_override: _p, nombre_override: _n, variaciones: metaVariaciones,
+      ingredientes_base, tipo, pizza_izquierda, pizza_derecha, ingredientes,
+      ...otherExtra
+    } = extra;
+
+    // Variaciones: prioridad metadata.variaciones > parámetro _variaciones
+    const variaciones = metaVariaciones || (_variaciones.length ? _variaciones : undefined);
 
     const res = await mqttRequest('comandero', 'add-item', {
       project_id: state.project_id,
@@ -261,9 +279,15 @@ export async function addItem(
       nombre: nombreFinal,
       precio: precioFinal,
       cantidad,
-      variaciones,
       notas,
-      ...extraRest
+      // Campos opcionales — solo enviar si existen
+      ...(variaciones && { variaciones }),
+      ...(ingredientes_base && { ingredientes_base }),
+      ...(tipo && { tipo }),
+      ...(pizza_izquierda && { pizza_izquierda }),
+      ...(pizza_derecha && { pizza_derecha }),
+      ...(ingredientes && { ingredientes }),
+      ...otherExtra
     });
 
     const addData = res?.data as any;

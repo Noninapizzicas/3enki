@@ -15,9 +15,10 @@
     },
     "enfoque": "WebView — la pantalla carga una URL de SvelteKit. Un solo codebase web sirve para ESP32, tablets Android, navegadores desktop. El ESP32 es simplemente un kiosko.",
     "estado_actual": {
-      "backend_cocina": "COMPLETO — módulo cocina v2.0 con handlers, eventos, SSE, métricas",
-      "frontend_cocina": "NO EXISTE — necesita crearse (ruta, componentes, store)",
+      "backend_cocina": "COMPLETO — módulo cocina v2.1 con handlers, eventos, SSE, métricas. Default variaciones=null (no {})",
+      "frontend_cocina": "IMPLEMENTADO — ruta /[project_id]/cocina, componentes (CocinaScreen, PedidoCard, ItemLine, CocinaHeader), store cocina.ts con optimistic updates, sonido triple-ding, timer elapsed, suscripciones realtime (pedido.enviado_cocina, cocina.item_preparado, cocina.pedido_listo, pedido.cancelado), auto-reconnect",
       "impresion": "COMPLETO — módulo impresión genera comandas ESC/POS automáticamente en pedido.enviado_cocina",
+      "variaciones": "Formato canónico: objeto {ingredientes_quitar: string[], ingredientes_anadir: [{nombre, cantidad?, precio_extra?}]}. Frontend (ItemLine, PedidoItem) soporta ambos formatos (objeto + array legacy). VariacionesPanel recibe catalogoIngredientes como prop del store (sin MQTT extra).",
       "relacion": "La pantalla digital COMPLEMENTA la impresora. La comanda impresa es para el cocinero en la estación, la pantalla es la vista general de la cola."
     }
   },

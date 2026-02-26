@@ -20,7 +20,7 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 // TYPES
 // =============================================================================
 
-export type TipoCuenta = 'local' | 'delivery' | 'llevar';
+export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo';
 export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'para_cobrar' | 'cobrado';
 
 export interface Cuenta {
@@ -49,19 +49,22 @@ export interface CuentasState {
 export const TIPO_COLORS: Record<TipoCuenta, string> = {
   local: '#3b82f6',
   delivery: '#f59e0b',
-  llevar: '#22c55e'
+  llevar: '#22c55e',
+  glovo: '#FF6B00'
 };
 
 export const TIPO_ICONS: Record<TipoCuenta, string> = {
   local: '\uD83C\uDFE0',
   delivery: '\uD83D\uDEF5',
-  llevar: '\uD83D\uDCE6'
+  llevar: '\uD83D\uDCE6',
+  glovo: '\uD83D\uDEF5'
 };
 
 export const TIPO_LABELS: Record<TipoCuenta, string> = {
   local: 'Local',
   delivery: 'Delivery',
-  llevar: 'Llevar'
+  llevar: 'Llevar',
+  glovo: 'Glovo'
 };
 
 // Mapeo de tipos de persistencia a tipos del store
@@ -71,13 +74,16 @@ const TIPO_MAP: Record<string, TipoCuenta> = {
   telefono: 'delivery',
   delivery: 'delivery',
   llevar: 'llevar',
-  recoger: 'llevar'
+  recoger: 'llevar',
+  glovo: 'glovo'
 };
 
 // Mapeo de estado de persistencia a EstadoCuenta
 function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
   if (cuenta.estado === 'abierta') {
     if (!cuenta.pedidos || cuenta.pedidos.length === 0) return 'pendiente';
+    // Glovo con pedidos = en preparación en cocina
+    if (cuenta.tipo === 'glovo') return 'en_preparacion';
     // Si tiene pedidos, verificar si están enviados a cocina
     return 'con_pedido';
   }
@@ -259,18 +265,34 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
       const cuentasPersistencia = pData.cuentas;
 
       // Convertir formato persistencia → formato store
-      const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => ({
-        id: cp.cuenta_id,
-        tipo: TIPO_MAP[cp.tipo] || 'local',
-        nombre: cp.datos_especificos?.nombre || cp.datos_especificos?.cliente_nombre || cp.datos_especificos?.numero_ticket || TIPO_LABELS[TIPO_MAP[cp.tipo] || 'local'] || cp.tipo,
-        estado: mapEstadoPersistencia(cp),
-        hora: formatHora(cp.created_at),
-        items: countItems(cp.pedidos),
-        total: cp.total || 0,
-        alerta: checkAlerta(cp),
-        created_at: cp.created_at,
-        updated_at: cp.updated_at
-      }));
+      const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => {
+        const mappedTipo = TIPO_MAP[cp.tipo] || 'local';
+
+        // Nombre: para Glovo, extraer número secuencial del cuenta_id (glovo_20260226_003 → "Glovo #3")
+        let nombre = cp.datos_especificos?.nombre
+          || cp.datos_especificos?.cliente_nombre
+          || cp.datos_especificos?.numero_ticket
+          || TIPO_LABELS[mappedTipo]
+          || cp.tipo;
+        if (cp.tipo === 'glovo') {
+          const seqMatch = cp.cuenta_id?.match(/_(\d+)$/);
+          const num = seqMatch ? parseInt(seqMatch[1], 10) : 0;
+          if (num > 0) nombre = `Glovo #${num}`;
+        }
+
+        return {
+          id: cp.cuenta_id,
+          tipo: mappedTipo,
+          nombre,
+          estado: mapEstadoPersistencia(cp),
+          hora: formatHora(cp.created_at),
+          items: countItems(cp.pedidos),
+          total: cp.total || 0,
+          alerta: checkAlerta(cp),
+          created_at: cp.created_at,
+          updated_at: cp.updated_at
+        };
+      });
 
       cuentasStore.update(s => ({
         ...s,
@@ -525,6 +547,40 @@ export function initCuentasSubscriptions(projectId: string): () => void {
         cuentas: s.cuentas.map(c =>
           c.id === data.cuenta_id
             ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta }
+            : c
+        )
+      }));
+    })
+  );
+
+  // cocina.pedido_listo → pedido terminado en cocina, marcar cuenta como 'listo'
+  cleanups.push(
+    mqttSubscribe('cocina.pedido_listo', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c =>
+          c.id === data.cuenta_id
+            ? { ...c, estado: 'listo' as EstadoCuenta, alerta: true, updated_at: data.listo_at || new Date().toISOString() }
+            : c
+        )
+      }));
+    })
+  );
+
+  // glovo.pedido_listo → Glovo listo para rider (belt + suspenders con cocina.pedido_listo)
+  cleanups.push(
+    mqttSubscribe('glovo.pedido_listo', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c =>
+          c.id === data.cuenta_id
+            ? { ...c, estado: 'listo' as EstadoCuenta, alerta: true, updated_at: data.hora_listo || new Date().toISOString() }
             : c
         )
       }));

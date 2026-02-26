@@ -15,6 +15,7 @@
   export let visible: boolean = true;
   export let precioBase: number = 8.00; // Precio base pizza al gusto
   export let projectId: string = '';
+  export let catalogoIngredientes: any[] = [];
 
   const dispatch = createEventDispatcher<{
     close: void;

@@ -31,9 +31,11 @@
         "/facturas": "Modo facturas — work-bar con herramientas de facturación",
         "/[project_id]/menu-generator": "Modo generador de cartas — work-bar con herramientas de menú",
         "/[project_id]/comandero": "Pantalla de cuentas activas (standalone, sin AppShell)",
-        "/[project_id]/comandero/[cuenta_id]": "Pedido de cuenta específica (standalone)"
+        "/[project_id]/comandero/[cuenta_id]": "Pedido de cuenta específica (standalone)",
+        "/[project_id]/cocina": "Pantalla digital de cocina — display de pedidos en tiempo real (standalone)",
+        "/comandero/[cuenta_id]": "Pedido de cuenta (ruta alternativa sin project_id, usa activeProjectId)"
       },
-      "futuras": "Cada vertical (cocina, cobros...) puede tener su propia ruta con work-bar específica"
+      "futuras": "Cada vertical (cobros, gestión...) puede tener su propia ruta con work-bar específica"
     },
     "principles": [
       "1 click = 1 panel flotante (no double-click, no long-press)",
@@ -98,9 +100,9 @@
   },
   "stores": {
     "location": "frontend/src/lib/stores/",
-    "total_files": 18,
+    "total_files": 19,
     "pattern": "Svelte writable stores + async functions",
-    "all_stores": ["attachments.ts", "chat.ts", "comandero.ts", "conversations.ts", "credentials.ts", "cuentas.ts", "facturas.ts", "files.ts", "impresion.ts", "index.ts", "menu-generator.ts", "page-context.ts", "persistence.ts", "projects.ts", "prompts.ts", "theme.ts", "ui.ts", "workspace.ts"],
+    "all_stores": ["attachments.ts", "chat.ts", "cocina.ts", "comandero.ts", "conversations.ts", "credentials.ts", "cuentas.ts", "facturas.ts", "files.ts", "impresion.ts", "index.ts", "menu-generator.ts", "page-context.ts", "persistence.ts", "projects.ts", "prompts.ts", "theme.ts", "ui.ts", "workspace.ts"],
     "examples": {
       "projects.ts": {
         "store": "projectsStore",

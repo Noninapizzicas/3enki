@@ -24,14 +24,39 @@
     cocinaLoading,
     pedidosCount,
     initCocinaSubscriptions,
-    resumeAudioContext
+    resumeAudioContext,
+    isGlovoConfirmado
   } from '$lib/stores/cocina';
+  import type { PedidoCocina } from '$lib/stores/cocina';
 
   import CocinaHeader from './CocinaHeader.svelte';
   import PedidoCard from './PedidoCard.svelte';
 
   let cleanupSubs: (() => void) | null = null;
   let audioUnlocked = false;
+
+  /**
+   * Ordenar pedidos: Glovo pendientes de confirmar primero, luego cronológico
+   */
+  function sortPedidos(pedidos: PedidoCocina[]): PedidoCocina[] {
+    return [...pedidos].sort((a, b) => {
+      const aGlovoPendiente = a.canal === 'glovo'
+        && a.metadata?.requiere_confirmacion
+        && !isGlovoConfirmado(a.cuenta_id);
+      const bGlovoPendiente = b.canal === 'glovo'
+        && b.metadata?.requiere_confirmacion
+        && !isGlovoConfirmado(b.cuenta_id);
+
+      // Glovo pendientes primero
+      if (aGlovoPendiente && !bGlovoPendiente) return -1;
+      if (!aGlovoPendiente && bGlovoPendiente) return 1;
+
+      // Dentro del mismo grupo: cronológico (más antiguo primero)
+      return new Date(a.recibido_at).getTime() - new Date(b.recibido_at).getTime();
+    });
+  }
+
+  $: pedidosOrdenados = sortPedidos($pedidosCocina);
 
   function unlockAudio() {
     if (!audioUnlocked) {
@@ -85,11 +110,11 @@
       <div class="empty-state">
         <span class="empty-icon">&#10003;</span>
         <p class="empty-title">Sin pedidos</p>
-        <p class="empty-hint">Los pedidos aparecen cuando se envían desde el comandero</p>
+        <p class="empty-hint">Los pedidos aparecen desde el comandero o Glovo</p>
       </div>
     {:else}
       <div class="pedidos-grid">
-        {#each $pedidosCocina as pedido (pedido.pedido_id)}
+        {#each pedidosOrdenados as pedido (pedido.pedido_id)}
           <PedidoCard {pedido} />
         {/each}
       </div>

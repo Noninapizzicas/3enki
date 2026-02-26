@@ -267,6 +267,9 @@ class ComanderoModule {
     if (tipo) eventPayload.tipo = tipo;
     if (pizza_izquierda) eventPayload.pizza_izquierda = pizza_izquierda;
     if (pizza_derecha) eventPayload.pizza_derecha = pizza_derecha;
+    if (item.variaciones) eventPayload.variaciones = item.variaciones;
+    if (item.ingredientes_base) eventPayload.ingredientes_base = item.ingredientes_base;
+    if (metaIngredientes) eventPayload.ingredientes = metaIngredientes;
 
     await this.eventBus.publish('comandero.item_agregado', eventPayload);
 

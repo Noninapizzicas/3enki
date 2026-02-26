@@ -52,6 +52,15 @@ export interface ItemCocina {
   preparado_at?: string;
 }
 
+export interface GlovoMetadata {
+  glovo_order_id?: string;
+  cliente_nombre?: string;
+  direccion_entrega?: string;
+  requiere_confirmacion?: boolean;
+  tiempo_estimado_entrega?: number;
+  total?: number;
+}
+
 export interface PedidoCocina {
   pedido_id: string;
   cuenta_id: string;
@@ -62,6 +71,7 @@ export interface PedidoCocina {
   recibido_at: string;
   listo_at?: string;
   tiempo_preparacion?: number;
+  metadata?: GlovoMetadata | null;
 }
 
 export interface CocinaMetrics {
@@ -109,6 +119,9 @@ export const cocinaStore = writable<CocinaState>({
   metrics: null
 });
 
+// Glovo: Set de cuenta_ids ya confirmados (aceptados en Glovo API)
+const glovoConfirmados = new Set<string>();
+
 // Derivados
 export const pedidosCocina = derived(cocinaStore, $s => $s.pedidos);
 export const cocinaLoading = derived(cocinaStore, $s => $s.loading);
@@ -123,6 +136,11 @@ export const itemsPendientes = derived(cocinaStore, $s =>
 export const itemsPreparando = derived(cocinaStore, $s =>
   $s.pedidos.reduce((sum, p) => sum + p.items.filter(i => i.estado === 'preparando').length, 0)
 );
+
+/** Comprobar si un pedido Glovo ya fue confirmado */
+export function isGlovoConfirmado(cuentaId: string): boolean {
+  return glovoConfirmados.has(cuentaId);
+}
 
 // =============================================================================
 // OPERATIONS
@@ -241,6 +259,48 @@ export async function marcarListo(pedidoId: string): Promise<boolean> {
 }
 
 // =============================================================================
+// GLOVO OPERATIONS
+// =============================================================================
+
+/**
+ * Confirmar pedido Glovo — acepta en Glovo API y permite preparación
+ */
+export async function confirmarGlovo(cuentaId: string, tiempoEstimado?: number): Promise<boolean> {
+  try {
+    await mqttRequest<any>('glovo', 'aceptar', {
+      cuenta_id: cuentaId,
+      tiempo_preparacion_estimado: tiempoEstimado || 25
+    });
+    glovoConfirmados.add(cuentaId);
+    // Forzar re-render actualizando pedidos
+    cocinaStore.update(s => ({ ...s, pedidos: [...s.pedidos] }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rechazar pedido Glovo — rechaza en Glovo API y quita de cocina
+ */
+export async function rechazarGlovo(cuentaId: string, motivo: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('glovo', 'rechazar', {
+      cuenta_id: cuentaId,
+      motivo
+    });
+    // Quitar de la cola de cocina
+    cocinaStore.update(s => ({
+      ...s,
+      pedidos: s.pedidos.filter(p => p.cuenta_id !== cuentaId)
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// =============================================================================
 // SOUND — Campana de cocina (triple ding ascendente, audible en ambiente ruidoso)
 // =============================================================================
 
@@ -291,6 +351,37 @@ function playNewOrderSound() {
     // Ding 3 — aún más alto (300ms después)
     bellTone(t + 0.30, 1800, 0.45, 0.4);
     bellTone(t + 0.30, 3600, 0.15, 0.3);
+  } catch {
+    // Audio not available
+  }
+}
+
+/**
+ * Alarma Glovo — más grave, más larga, doble secuencia
+ * Distinguible del bell normal en ambiente ruidoso de cocina
+ */
+function playGlovoAlertSound() {
+  try {
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const t = audioCtx.currentTime;
+
+    // Secuencia 1: tono grave de alerta (800Hz base)
+    bellTone(t, 800, 0.6, 0.3);
+    bellTone(t, 1600, 0.3, 0.2);
+    bellTone(t + 0.12, 1000, 0.6, 0.3);
+    bellTone(t + 0.12, 2000, 0.3, 0.2);
+    bellTone(t + 0.24, 1200, 0.5, 0.35);
+    bellTone(t + 0.24, 2400, 0.25, 0.25);
+
+    // Pausa breve, luego secuencia 2 (repetir para urgencia)
+    bellTone(t + 0.6, 800, 0.6, 0.3);
+    bellTone(t + 0.6, 1600, 0.3, 0.2);
+    bellTone(t + 0.72, 1000, 0.6, 0.3);
+    bellTone(t + 0.72, 2000, 0.3, 0.2);
+    bellTone(t + 0.84, 1200, 0.5, 0.35);
+    bellTone(t + 0.84, 2400, 0.25, 0.25);
   } catch {
     // Audio not available
   }
@@ -354,6 +445,8 @@ export function initCocinaSubscriptions(): () => void {
       const data = event?.data || event?.payload || event;
       if (!data?.pedido_id) return;
 
+      const isGlovo = data.canal === 'glovo';
+
       const pedidoCocina: PedidoCocina = {
         pedido_id: data.pedido_id,
         cuenta_id: data.cuenta_id,
@@ -364,7 +457,8 @@ export function initCocinaSubscriptions(): () => void {
         })),
         estado: 'activo',
         notas_generales: data.notas_generales || '',
-        recibido_at: data.recibido_at || new Date().toISOString()
+        recibido_at: data.recibido_at || new Date().toISOString(),
+        metadata: isGlovo ? (data.metadata || null) : null
       };
 
       cocinaStore.update(s => {
@@ -373,7 +467,12 @@ export function initCocinaSubscriptions(): () => void {
         return { ...s, pedidos: [...s.pedidos, pedidoCocina] };
       });
 
-      playNewOrderSound();
+      // Sonido diferenciado: Glovo = alarma doble grave, resto = campana triple
+      if (isGlovo) {
+        playGlovoAlertSound();
+      } else {
+        playNewOrderSound();
+      }
     })
   );
 
@@ -436,6 +535,29 @@ export function initCocinaSubscriptions(): () => void {
       cocinaStore.update(s => ({
         ...s,
         pedidos: s.pedidos.filter(p => p.pedido_id !== data.pedido_id)
+      }));
+    })
+  );
+
+  // glovo.pedido_aceptado → marcar como confirmado (sync multi-pantalla)
+  cleanups.push(
+    mqttSubscribe('glovo.pedido_aceptado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      glovoConfirmados.add(data.cuenta_id);
+      // Forzar re-render
+      cocinaStore.update(s => ({ ...s, pedidos: [...s.pedidos] }));
+    })
+  );
+
+  // glovo.pedido_rechazado → quitar de cola cocina (sync multi-pantalla)
+  cleanups.push(
+    mqttSubscribe('glovo.pedido_rechazado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      cocinaStore.update(s => ({
+        ...s,
+        pedidos: s.pedidos.filter(p => p.cuenta_id !== data.cuenta_id)
       }));
     })
   );

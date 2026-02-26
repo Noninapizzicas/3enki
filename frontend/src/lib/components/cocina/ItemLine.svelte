@@ -154,10 +154,14 @@
     {#if expanded}
       <!-- ======== EXPANDED: ficha completa (preparando) ======== -->
       <div class="expanded-details" transition:slide={{ duration: 200 }}>
-        <!-- INGREDIENTES BASE -->
+        <!-- INGREDIENTES BASE — lista vertical -->
         {#if hasIngredientesBase}
           <div class="detail-section base-section">
-            <span class="base-ings">{item.ingredientes_base?.join(', ')}</span>
+            <ul class="base-list">
+              {#each item.ingredientes_base || [] as ing}
+                <li class="base-item">{ing}</li>
+              {/each}
+            </ul>
           </div>
         {/if}
 
@@ -169,7 +173,11 @@
                 <span class="mitad-arrow left">&#9664;</span>
                 <span class="mitad-name">{pizzaIzq.nombre}</span>
                 {#if pizzaIzq.ingredientes.length > 0}
-                  <span class="mitad-ings">{pizzaIzq.ingredientes.join(', ')}</span>
+                  <ul class="mitad-ing-list">
+                    {#each pizzaIzq.ingredientes as ing}
+                      <li class="mitad-ing-item">{ing}</li>
+                    {/each}
+                  </ul>
                 {/if}
               </div>
             {/if}
@@ -178,7 +186,11 @@
                 <span class="mitad-arrow right">&#9654;</span>
                 <span class="mitad-name">{pizzaDer.nombre}</span>
                 {#if pizzaDer.ingredientes.length > 0}
-                  <span class="mitad-ings">{pizzaDer.ingredientes.join(', ')}</span>
+                  <ul class="mitad-ing-list">
+                    {#each pizzaDer.ingredientes as ing}
+                      <li class="mitad-ing-item">{ing}</li>
+                    {/each}
+                  </ul>
                 {/if}
               </div>
             {/if}
@@ -189,11 +201,11 @@
         {#if isAlGusto}
           <div class="detail-section algusto-section">
             <span class="section-label">INGREDIENTES:</span>
-            <div class="algusto-list">
+            <ul class="algusto-list">
               {#each ingredientesAlGusto as ing}
-                <span class="algusto-ing">{ing}</span>
+                <li class="algusto-ing">{ing}</li>
               {/each}
-            </div>
+            </ul>
           </div>
         {/if}
 
@@ -279,33 +291,34 @@
     text-decoration-color: #22c55e;
   }
 
-  /* ===== EXPANDED STATE (preparando) ===== */
+  /* ===== EXPANDED STATE (preparando) — exagerado ===== */
   .item-line.expanded {
-    padding: 18px 20px 22px;
-    border-left-width: 6px;
-    background: rgba(234, 179, 8, 0.10);
+    padding: 24px 24px 28px;
+    border-left-width: 8px;
+    background: rgba(234, 179, 8, 0.15);
+    box-shadow: inset 0 0 40px rgba(234, 179, 8, 0.06);
   }
 
   .item-line.expanded .item-state {
-    width: 44px;
-    height: 44px;
+    width: 52px;
+    height: 52px;
   }
 
   .item-line.expanded .fire {
-    font-size: 1.6rem;
+    font-size: 2rem;
   }
 
   .item-line.expanded .qty {
-    font-size: 3rem;
+    font-size: 4rem;
   }
 
   .item-line.expanded .name {
-    font-size: 2.2rem;
+    font-size: 3rem;
   }
 
   .item-line.expanded .tipo-badge {
-    font-size: 0.85rem;
-    padding: 3px 10px;
+    font-size: 1rem;
+    padding: 4px 12px;
   }
 
   /* ===== State indicator ===== */
@@ -399,8 +412,8 @@
   .expanded-details {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 12px;
+    margin-top: 12px;
   }
 
   /* ——— Detail sections (shared) ——— */
@@ -409,49 +422,69 @@
   }
 
   .section-label {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #64748b;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     display: block;
-    margin-bottom: 3px;
+    margin-bottom: 4px;
   }
 
-  /* ——— INGREDIENTES BASE ——— */
+  /* ——— INGREDIENTES BASE — lista vertical ——— */
   .base-section {
-    padding: 6px 10px;
+    padding: 8px 12px;
     background: rgba(148, 163, 184, 0.08);
-    border-radius: 6px;
-    border-left: 3px solid #475569;
+    border-radius: 8px;
+    border-left: 4px solid #475569;
   }
 
-  .base-ings {
-    font-size: 1.15rem;
+  .base-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .base-item {
+    font-size: 1.35rem;
     color: #94a3b8;
-    font-style: italic;
     line-height: 1.3;
+    padding: 2px 0;
+  }
+
+  .base-item::before {
+    content: '\2022  ';
+    color: #475569;
+    font-weight: 800;
   }
 
   /* ——— MITAD Y MITAD ——— */
   .mitad-section {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 10px 12px;
     background: rgba(124, 58, 237, 0.1);
-    border-radius: 6px;
-    border-left: 3px solid #7c3aed;
+    border-radius: 8px;
+    border-left: 4px solid #7c3aed;
   }
 
   .mitad-half {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .mitad-half > :first-child {
+    display: flex;
     align-items: baseline;
-    gap: 6px;
-    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .mitad-arrow {
-    font-size: 0.95rem;
+    font-size: 1.1rem;
     font-weight: 800;
     flex-shrink: 0;
   }
@@ -460,62 +493,83 @@
   .mitad-arrow.right { color: #c084fc; }
 
   .mitad-name {
-    font-size: 1.4rem;
+    font-size: 1.7rem;
     font-weight: 700;
     color: #e2e8f0;
   }
 
-  .mitad-ings {
-    font-size: 1rem;
-    color: #94a3b8;
-    font-style: italic;
+  .mitad-ing-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
-  /* ——— AL GUSTO ——— */
+  .mitad-ing-item {
+    font-size: 1.2rem;
+    color: #94a3b8;
+    line-height: 1.3;
+  }
+
+  .mitad-ing-item::before {
+    content: '- ';
+    color: #7c3aed;
+  }
+
+  /* ——— AL GUSTO — lista vertical ——— */
   .algusto-section {
-    padding: 8px 10px;
+    padding: 10px 12px;
     background: rgba(8, 145, 178, 0.1);
-    border-radius: 6px;
-    border-left: 3px solid #0891b2;
+    border-radius: 8px;
+    border-left: 4px solid #0891b2;
   }
 
   .algusto-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px 10px;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .algusto-ing {
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     font-weight: 600;
     color: #67e8f9;
+    padding: 2px 0;
   }
 
   .algusto-ing::before {
-    content: '\2022 ';
+    content: '\2022  ';
     color: #0891b2;
+    font-weight: 800;
   }
 
   /* ——— VARIACIONES ——— */
   .variaciones-section {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 6px;
   }
 
   .var-line {
     display: flex;
     align-items: baseline;
-    gap: 6px;
-    font-size: 1.2rem;
+    gap: 8px;
+    font-size: 1.4rem;
     font-weight: 700;
+    padding: 3px 0;
   }
 
   .var-icon {
     flex-shrink: 0;
-    width: 18px;
+    width: 22px;
     text-align: center;
     font-weight: 900;
+    font-size: 1.2rem;
   }
 
   .var-quitar {
@@ -537,27 +591,28 @@
   /* ——— NOTAS (expanded) ——— */
   .notas-section {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 6px 10px;
-    background: rgba(251, 191, 36, 0.12);
-    border-radius: 6px;
-    border-left: 3px solid #f59e0b;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: rgba(251, 191, 36, 0.15);
+    border-radius: 8px;
+    border-left: 4px solid #f59e0b;
   }
 
   .nota-label {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 800;
     color: #f59e0b;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     flex-shrink: 0;
   }
 
   .nota-text {
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     font-weight: 600;
     color: #fbbf24;
     word-break: break-word;
+    line-height: 1.3;
   }
 
   /* ===== COMPACT SUMMARY (pendiente/listo) ===== */
@@ -609,13 +664,13 @@
   @media (max-width: 600px) {
     .qty { font-size: 1.5rem; }
     .name { font-size: 1.2rem; }
-    .item-line.expanded .qty { font-size: 2.2rem; }
-    .item-line.expanded .name { font-size: 1.7rem; }
-    .base-ings { font-size: 0.95rem; }
-    .mitad-name { font-size: 1.1rem; }
-    .mitad-ings { font-size: 0.85rem; }
-    .algusto-ing { font-size: 1rem; }
-    .var-line { font-size: 1rem; }
-    .nota-text { font-size: 1rem; }
+    .item-line.expanded .qty { font-size: 2.8rem; }
+    .item-line.expanded .name { font-size: 2rem; }
+    .base-item { font-size: 1.1rem; }
+    .mitad-name { font-size: 1.3rem; }
+    .mitad-ing-item { font-size: 1rem; }
+    .algusto-ing { font-size: 1.1rem; }
+    .var-line { font-size: 1.1rem; }
+    .nota-text { font-size: 1.1rem; }
   }
 </style>

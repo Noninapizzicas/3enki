@@ -2,17 +2,16 @@
   /**
    * ItemLine — Línea de item en la tarjeta de pedido cocina
    *
-   * Muestra TODA la información del producto:
-   *   - Cantidad + nombre + badge tipo (MITAD, AL GUSTO)
-   *   - Mitad/Mitad: ambas mitades con ingredientes base
-   *   - Al Gusto: lista completa de ingredientes seleccionados
-   *   - Variaciones: SIN (rojo) y + (verde) siempre visibles
-   *   - Notas: siempre visibles, fondo amarillo
+   * Comportamiento expand/collapse por estado:
+   *   - PENDIENTE: compacto — qty + nombre + variaciones inline + notas inline
+   *   - PREPARANDO: expandido — ficha completa con ingredientes, variaciones,
+   *     notas grandes. Foco visual en el producto a elaborar.
+   *   - LISTO: compacto otra vez — faded + strikethrough
    *
-   * Tap toggle: pendiente → preparando → listo
+   * Tap toggle: pendiente → preparando (expande) → listo (comprime)
    * Target mínimo 60px para manos con harina
-   * Texto grande legible a 2m
    */
+  import { slide } from 'svelte/transition';
   import { createEventDispatcher } from 'svelte';
   import type { ItemCocina, PizzaHalf, IngredienteAlGusto } from '$lib/stores/cocina';
   import { ESTADO_ITEM_COLORS } from '$lib/stores/cocina';
@@ -26,6 +25,7 @@
   $: color = ESTADO_ITEM_COLORS[item.estado];
   $: isListo = item.estado === 'listo';
   $: isPreparando = item.estado === 'preparando';
+  $: expanded = isPreparando;
 
   // — Mitad y Mitad —
   $: isMitad = item.tipo === 'mitad_mitad' && (item.pizza_izquierda || item.pizza_derecha);
@@ -44,8 +44,12 @@
   $: anadirList = extractAnadir(item);
   $: hasVariaciones = quitarList.length > 0 || anadirList.length > 0;
 
-  // — Tiene detalles extra —
-  $: hasDetails = isMitad || isAlGusto || hasIngredientesBase || hasVariaciones || !!item.notas;
+  // — Compact inline summary (pendiente/listo) —
+  $: compactVariaciones = [
+    ...quitarList.map(n => `SIN ${n.toUpperCase()}`),
+    ...anadirList.map(a => `+${a.nombre.toUpperCase()}`)
+  ];
+  $: hasCompactSummary = compactVariaciones.length > 0 || !!item.notas;
 
   // ——————————————————————————————————————————
   // Helpers para extraer datos con formatos flexibles
@@ -120,7 +124,7 @@
   class="item-line"
   class:listo={isListo}
   class:preparando={isPreparando}
-  class:has-details={hasDetails}
+  class:expanded
   style="--item-color: {color}"
   on:click={handleTap}
   disabled={isListo}
@@ -147,81 +151,103 @@
       {/if}
     </div>
 
-    <!-- ============ INGREDIENTES BASE (productos regulares) ============ -->
-    {#if hasIngredientesBase}
-      <div class="detail-section base-section">
-        <span class="base-ings">{item.ingredientes_base?.join(', ')}</span>
-      </div>
-    {/if}
+    {#if expanded}
+      <!-- ======== EXPANDED: ficha completa (preparando) ======== -->
+      <div class="expanded-details" transition:slide={{ duration: 200 }}>
+        <!-- INGREDIENTES BASE -->
+        {#if hasIngredientesBase}
+          <div class="detail-section base-section">
+            <span class="base-ings">{item.ingredientes_base?.join(', ')}</span>
+          </div>
+        {/if}
 
-    <!-- ============ MITAD Y MITAD ============ -->
-    {#if isMitad}
-      <div class="detail-section mitad-section">
-        {#if pizzaIzq}
-          <div class="mitad-half">
-            <span class="mitad-arrow left">&#9664;</span>
-            <span class="mitad-name">{pizzaIzq.nombre}</span>
-            {#if pizzaIzq.ingredientes.length > 0}
-              <span class="mitad-ings">{pizzaIzq.ingredientes.join(', ')}</span>
+        <!-- MITAD Y MITAD -->
+        {#if isMitad}
+          <div class="detail-section mitad-section">
+            {#if pizzaIzq}
+              <div class="mitad-half">
+                <span class="mitad-arrow left">&#9664;</span>
+                <span class="mitad-name">{pizzaIzq.nombre}</span>
+                {#if pizzaIzq.ingredientes.length > 0}
+                  <span class="mitad-ings">{pizzaIzq.ingredientes.join(', ')}</span>
+                {/if}
+              </div>
+            {/if}
+            {#if pizzaDer}
+              <div class="mitad-half">
+                <span class="mitad-arrow right">&#9654;</span>
+                <span class="mitad-name">{pizzaDer.nombre}</span>
+                {#if pizzaDer.ingredientes.length > 0}
+                  <span class="mitad-ings">{pizzaDer.ingredientes.join(', ')}</span>
+                {/if}
+              </div>
             {/if}
           </div>
         {/if}
-        {#if pizzaDer}
-          <div class="mitad-half">
-            <span class="mitad-arrow right">&#9654;</span>
-            <span class="mitad-name">{pizzaDer.nombre}</span>
-            {#if pizzaDer.ingredientes.length > 0}
-              <span class="mitad-ings">{pizzaDer.ingredientes.join(', ')}</span>
-            {/if}
+
+        <!-- AL GUSTO -->
+        {#if isAlGusto}
+          <div class="detail-section algusto-section">
+            <span class="section-label">INGREDIENTES:</span>
+            <div class="algusto-list">
+              {#each ingredientesAlGusto as ing}
+                <span class="algusto-ing">{ing}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- VARIACIONES -->
+        {#if hasVariaciones}
+          <div class="detail-section variaciones-section">
+            {#each quitarList as nombre}
+              <div class="var-line var-quitar">
+                <span class="var-icon">&#10005;</span>
+                <span>SIN {nombre.toUpperCase()}</span>
+              </div>
+            {/each}
+            {#each anadirList as addItem}
+              <div class="var-line var-anadir">
+                <span class="var-icon">+</span>
+                <span>
+                  {#if addItem.cantidad && addItem.cantidad > 1}{addItem.cantidad}x{/if}
+                  {addItem.nombre.toUpperCase()}
+                </span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- NOTAS -->
+        {#if item.notas}
+          <div class="detail-section notas-section">
+            <span class="nota-label">NOTA:</span>
+            <span class="nota-text">{item.notas}</span>
           </div>
         {/if}
       </div>
-    {/if}
-
-    <!-- ============ AL GUSTO ============ -->
-    {#if isAlGusto}
-      <div class="detail-section algusto-section">
-        <span class="section-label">INGREDIENTES:</span>
-        <div class="algusto-list">
-          {#each ingredientesAlGusto as ing}
-            <span class="algusto-ing">{ing}</span>
-          {/each}
-        </div>
-      </div>
-    {/if}
-
-    <!-- ============ VARIACIONES ============ -->
-    {#if hasVariaciones}
-      <div class="detail-section variaciones-section">
-        {#each quitarList as nombre}
-          <div class="var-line var-quitar">
-            <span class="var-icon">&#10005;</span>
-            <span>SIN {nombre.toUpperCase()}</span>
-          </div>
+    {:else if hasCompactSummary}
+      <!-- ======== COMPACT: resumen inline (pendiente/listo) ======== -->
+      <div class="compact-summary">
+        {#each compactVariaciones as v}
+          <span
+            class="compact-var"
+            class:compact-var-remove={v.startsWith('SIN')}
+            class:compact-var-add={v.startsWith('+')}
+          >{v}</span>
         {/each}
-        {#each anadirList as item}
-          <div class="var-line var-anadir">
-            <span class="var-icon">+</span>
-            <span>
-              {#if item.cantidad && item.cantidad > 1}{item.cantidad}x{/if}
-              {item.nombre.toUpperCase()}
-            </span>
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    <!-- ============ NOTAS ============ -->
-    {#if item.notas}
-      <div class="detail-section notas-section">
-        <span class="nota-label">NOTA:</span>
-        <span class="nota-text">{item.notas}</span>
+        {#if item.notas}
+          <span class="compact-nota">
+            <span class="compact-nota-label">NOTA:</span> {item.notas}
+          </span>
+        {/if}
       </div>
     {/if}
   </div>
 </button>
 
 <style>
+  /* ===== BASE ITEM LINE ===== */
   .item-line {
     display: flex;
     align-items: flex-start;
@@ -235,12 +261,8 @@
     color: #f8fafc;
     cursor: pointer;
     text-align: left;
-    transition: background 0.15s, opacity 0.3s;
+    transition: background 0.2s, padding 0.2s, border-left-width 0.2s;
     -webkit-tap-highlight-color: transparent;
-  }
-
-  .item-line.has-details {
-    padding-bottom: 14px;
   }
 
   .item-line:not(.listo):active {
@@ -257,11 +279,36 @@
     text-decoration-color: #22c55e;
   }
 
-  .item-line.preparando {
-    background: rgba(234, 179, 8, 0.08);
+  /* ===== EXPANDED STATE (preparando) ===== */
+  .item-line.expanded {
+    padding: 18px 20px 22px;
+    border-left-width: 6px;
+    background: rgba(234, 179, 8, 0.10);
   }
 
-  /* State indicator */
+  .item-line.expanded .item-state {
+    width: 44px;
+    height: 44px;
+  }
+
+  .item-line.expanded .fire {
+    font-size: 1.6rem;
+  }
+
+  .item-line.expanded .qty {
+    font-size: 3rem;
+  }
+
+  .item-line.expanded .name {
+    font-size: 2.2rem;
+  }
+
+  .item-line.expanded .tipo-badge {
+    font-size: 0.85rem;
+    padding: 3px 10px;
+  }
+
+  /* ===== State indicator ===== */
   .item-state {
     display: flex;
     align-items: center;
@@ -270,6 +317,7 @@
     height: 32px;
     flex-shrink: 0;
     margin-top: 2px;
+    transition: width 0.2s, height 0.2s;
   }
 
   .check {
@@ -282,6 +330,7 @@
     font-size: 1.2rem;
     color: #eab308;
     animation: spin-slow 2s linear infinite;
+    transition: font-size 0.2s;
   }
 
   .dot {
@@ -289,13 +338,13 @@
     color: #64748b;
   }
 
-  /* Info container */
+  /* ===== Info container ===== */
   .item-info {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
   /* Main line: qty + name + badge */
@@ -312,6 +361,7 @@
     color: var(--item-color);
     line-height: 1;
     font-variant-numeric: tabular-nums;
+    transition: font-size 0.2s;
   }
 
   .name {
@@ -319,6 +369,7 @@
     font-weight: 700;
     line-height: 1.1;
     word-break: break-word;
+    transition: font-size 0.2s;
   }
 
   /* Tipo badge */
@@ -331,6 +382,7 @@
     letter-spacing: 1px;
     line-height: 1.4;
     flex-shrink: 0;
+    transition: font-size 0.2s, padding 0.2s;
   }
 
   .badge-mitad {
@@ -343,14 +395,21 @@
     color: #ecfeff;
   }
 
+  /* ===== EXPANDED DETAILS ===== */
+  .expanded-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
   /* ——— Detail sections (shared) ——— */
   .detail-section {
-    margin-top: 2px;
     padding-left: 2px;
   }
 
   .section-label {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: #64748b;
     letter-spacing: 1px;
@@ -360,14 +419,14 @@
 
   /* ——— INGREDIENTES BASE ——— */
   .base-section {
-    padding: 4px 8px;
+    padding: 6px 10px;
     background: rgba(148, 163, 184, 0.08);
     border-radius: 6px;
     border-left: 3px solid #475569;
   }
 
   .base-ings {
-    font-size: 1rem;
+    font-size: 1.15rem;
     color: #94a3b8;
     font-style: italic;
     line-height: 1.3;
@@ -378,7 +437,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 6px 8px;
+    padding: 8px 10px;
     background: rgba(124, 58, 237, 0.1);
     border-radius: 6px;
     border-left: 3px solid #7c3aed;
@@ -392,7 +451,7 @@
   }
 
   .mitad-arrow {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     font-weight: 800;
     flex-shrink: 0;
   }
@@ -401,20 +460,20 @@
   .mitad-arrow.right { color: #c084fc; }
 
   .mitad-name {
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     font-weight: 700;
     color: #e2e8f0;
   }
 
   .mitad-ings {
-    font-size: 0.9rem;
+    font-size: 1rem;
     color: #94a3b8;
     font-style: italic;
   }
 
   /* ——— AL GUSTO ——— */
   .algusto-section {
-    padding: 6px 8px;
+    padding: 8px 10px;
     background: rgba(8, 145, 178, 0.1);
     border-radius: 6px;
     border-left: 3px solid #0891b2;
@@ -427,7 +486,7 @@
   }
 
   .algusto-ing {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
     font-weight: 600;
     color: #67e8f9;
   }
@@ -441,14 +500,14 @@
   .variaciones-section {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
   }
 
   .var-line {
     display: flex;
     align-items: baseline;
     gap: 6px;
-    font-size: 1.1rem;
+    font-size: 1.2rem;
     font-weight: 700;
   }
 
@@ -475,19 +534,19 @@
     color: #22c55e;
   }
 
-  /* ——— NOTAS ——— */
+  /* ——— NOTAS (expanded) ——— */
   .notas-section {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    padding: 5px 8px;
+    padding: 6px 10px;
     background: rgba(251, 191, 36, 0.12);
     border-radius: 6px;
     border-left: 3px solid #f59e0b;
   }
 
   .nota-label {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 800;
     color: #f59e0b;
     letter-spacing: 1px;
@@ -495,26 +554,68 @@
   }
 
   .nota-text {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
     font-weight: 600;
     color: #fbbf24;
     word-break: break-word;
   }
 
-  /* Animations */
+  /* ===== COMPACT SUMMARY (pendiente/listo) ===== */
+  .compact-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 2px;
+  }
+
+  .compact-var {
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  .compact-var-remove {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.12);
+  }
+
+  .compact-var-add {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.12);
+  }
+
+  .compact-nota {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #fbbf24;
+  }
+
+  .compact-nota-label {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #f59e0b;
+    letter-spacing: 0.5px;
+  }
+
+  /* ===== Animations ===== */
   @keyframes spin-slow {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
 
+  /* ===== Mobile ===== */
   @media (max-width: 600px) {
     .qty { font-size: 1.5rem; }
     .name { font-size: 1.2rem; }
-    .base-ings { font-size: 0.85rem; }
-    .mitad-name { font-size: 1rem; }
-    .mitad-ings { font-size: 0.8rem; }
-    .algusto-ing { font-size: 0.9rem; }
-    .var-line { font-size: 0.9rem; }
-    .nota-text { font-size: 0.9rem; }
+    .item-line.expanded .qty { font-size: 2.2rem; }
+    .item-line.expanded .name { font-size: 1.7rem; }
+    .base-ings { font-size: 0.95rem; }
+    .mitad-name { font-size: 1.1rem; }
+    .mitad-ings { font-size: 0.85rem; }
+    .algusto-ing { font-size: 1rem; }
+    .var-line { font-size: 1rem; }
+    .nota-text { font-size: 1rem; }
   }
 </style>

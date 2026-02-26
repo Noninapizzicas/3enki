@@ -229,14 +229,19 @@ class GlovoStrategy {
       const pedido_id = `ped_${cuenta_id}`;
       pedido.pedidos.push(pedido_id);
 
-      const cocinaItems = (items || []).map((item, idx) => ({
+      // Enriquecer items con catálogo local (ingredientes_base, alérgenos)
+      const enrichedItems = await this.enrichItemsWithCatalog(items || []);
+
+      const cocinaItems = enrichedItems.map((item, idx) => ({
         item_id: `${pedido_id}_item_${idx + 1}`,
         producto_id: item.producto_id || item.id || `glovo_prod_${idx + 1}`,
         nombre: item.nombre || item.name || 'Producto Glovo',
         cantidad: item.cantidad || item.quantity || 1,
         variaciones: item.variaciones || item.variations || null,
         notas: item.notas || item.notes || '',
-        estado: 'pendiente'
+        estado: 'pendiente',
+        ...(item.ingredientes_base && { ingredientes_base: item.ingredientes_base }),
+        ...(item.alergenos?.length && { alergenos: item.alergenos })
       }));
 
       await this.modulo.eventBus.publish('pedido.enviado_cocina', {
@@ -451,6 +456,74 @@ class GlovoStrategy {
 
   async handleGetMetrics() {
     return { status: 200, data: this.getMetrics() };
+  }
+
+  // ==========================================
+  // Product Catalog Enrichment
+  // ==========================================
+
+  /**
+   * Enriquece items de Glovo con datos del catálogo local:
+   * producto_id real, ingredientes_base, alérgenos
+   * Matching por nombre (case-insensitive, substring)
+   */
+  async enrichItemsWithCatalog(items) {
+    if (!items?.length) return items;
+
+    const searchHandler = this.modulo?.uiHandler?.handlers?.get('productos.search');
+    if (!searchHandler) {
+      this.modulo?.logger?.debug('glovo.enrich.skip', { reason: 'productos.search handler not available' });
+      return items;
+    }
+
+    const enriched = [];
+    for (const item of items) {
+      const nombre = item.nombre || item.name || '';
+      if (!nombre) {
+        enriched.push(item);
+        continue;
+      }
+
+      try {
+        const result = await searchHandler({ project_id: 'default', q: nombre });
+        const resultados = result?.data?.resultados || [];
+
+        // Buscar match exacto primero, luego parcial
+        const exactMatch = resultados.find(p =>
+          (p.nombre || '').toLowerCase() === nombre.toLowerCase()
+        );
+        const producto = exactMatch || resultados[0];
+
+        if (producto) {
+          const enrichedItem = {
+            ...item,
+            producto_id: producto.id || item.producto_id || item.id,
+            ingredientes_base: producto.ingredientes_base
+              ? producto.ingredientes_base.map(ing =>
+                  typeof ing === 'string' ? ing : ing.nombre || ing
+                )
+              : undefined,
+            alergenos: producto.alergenos || undefined
+          };
+
+          this.modulo?.logger?.debug('glovo.enrich.match', {
+            glovo_nombre: nombre,
+            producto_id: producto.id,
+            ingredientes: enrichedItem.ingredientes_base?.length || 0,
+            alergenos: enrichedItem.alergenos?.length || 0
+          });
+
+          enriched.push(enrichedItem);
+        } else {
+          enriched.push(item);
+        }
+      } catch (err) {
+        this.modulo?.logger?.debug('glovo.enrich.error', { nombre, error: err.message });
+        enriched.push(item);
+      }
+    }
+
+    return enriched;
   }
 
   // ==========================================

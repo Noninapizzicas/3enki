@@ -153,13 +153,25 @@
       {/if}
     </div>
 
-    <!-- Items (no interactivos, solo resumen) -->
+    <!-- Items (no interactivos, resumen con ingredientes y alérgenos) -->
     <div class="card-items glovo-items-preview">
       {#each pedido.items as item (item.item_id)}
         <div class="glovo-item-line">
           <span class="glovo-item-qty">{item.cantidad}x</span>
           <span class="glovo-item-name">{item.nombre}</span>
         </div>
+        {#if item.ingredientes_base?.length}
+          <div class="glovo-item-ings">{item.ingredientes_base.join(', ')}</div>
+        {/if}
+        {#if item.alergenos?.length}
+          <div class="glovo-item-alergenos">
+            <span class="alergeno-warn">&#9888;</span>
+            {item.alergenos.map((a: string) => a.toUpperCase()).join(', ')}
+          </div>
+        {/if}
+        {#if item.notas}
+          <div class="glovo-item-nota">{item.notas}</div>
+        {/if}
       {/each}
     </div>
 
@@ -400,6 +412,35 @@
 
   .glovo-item-name {
     font-weight: 500;
+  }
+
+  .glovo-item-ings {
+    padding-left: 2.5em;
+    font-size: 0.8rem;
+    color: #64748b;
+    font-style: italic;
+    margin-top: -2px;
+  }
+
+  .glovo-item-alergenos {
+    padding-left: 2.5em;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fca5a5;
+    margin-top: 1px;
+  }
+
+  .alergeno-warn {
+    color: #ef4444;
+    margin-right: 2px;
+  }
+
+  .glovo-item-nota {
+    padding-left: 2.5em;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fbbf24;
+    margin-top: 1px;
   }
 
   /* Glovo action buttons */

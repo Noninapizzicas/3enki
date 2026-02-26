@@ -36,8 +36,12 @@ class GlovoStrategy {
     this.modulo = null;
     this._uiActions = [
       'recibir', 'aceptar', 'rechazar', 'marcar_listo',
-      'activos', 'get', 'historial', 'health', 'metrics'
+      'activos', 'get', 'historial', 'poll', 'health', 'metrics'
     ];
+
+    // Polling interval (configurable, default 60s)
+    this._pollInterval = null;
+    this._pollIntervalMs = 60000;
   }
 
   // ==========================================
@@ -59,6 +63,7 @@ class GlovoStrategy {
     uiHandler.register('glovo', 'activos', this.handleGetActivos.bind(this));
     uiHandler.register('glovo', 'get', this.handleGetPedido.bind(this));
     uiHandler.register('glovo', 'historial', this.handleGetHistorial.bind(this));
+    uiHandler.register('glovo', 'poll', this.handlePoll.bind(this));
     uiHandler.register('glovo', 'health', this.handleHealthCheck.bind(this));
     uiHandler.register('glovo', 'metrics', this.handleGetMetrics.bind(this));
 
@@ -75,6 +80,26 @@ class GlovoStrategy {
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
+
+    // Auto-polling: consultar Glovo cada 60s si hay credenciales configuradas
+    const hasCredentials = process.env.GLOVO_API_KEY || process.env.GLOVO_API_KEY_GLOBAL;
+    if (hasCredentials) {
+      this._pollInterval = setInterval(async () => {
+        try {
+          await this.pollNuevosPedidos();
+        } catch (err) {
+          this.modulo?.logger?.warn('glovo.poll.interval.error', { error: err.message });
+        }
+      }, this._pollIntervalMs);
+
+      this.modulo.logger.info('glovo.polling.activado', {
+        intervalo_ms: this._pollIntervalMs
+      });
+    } else {
+      this.modulo.logger.info('glovo.polling.desactivado', {
+        nota: 'Sin GLOVO_API_KEY — polling manual via glovo/poll'
+      });
+    }
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
@@ -103,6 +128,10 @@ class GlovoStrategy {
   }
 
   cleanup() {
+    if (this._pollInterval) {
+      clearInterval(this._pollInterval);
+      this._pollInterval = null;
+    }
     this.pedidosActivos.clear();
     this.externalOrderMap.clear();
   }
@@ -373,6 +402,18 @@ class GlovoStrategy {
     };
   }
 
+  async handlePoll() {
+    const result = await this.pollNuevosPedidos();
+    return {
+      status: 200,
+      data: {
+        ...result,
+        pedidos_activos: this.pedidosActivos.size,
+        polling_activo: !!this._pollInterval
+      }
+    };
+  }
+
   async handleHealthCheck() {
     return { status: 200, data: this.getHealth() };
   }
@@ -463,26 +504,134 @@ class GlovoStrategy {
   }
 
   // ==========================================
-  // Integración Glovo API
+  // Integración Glovo API via provider local.glovo
   // ==========================================
 
   async notificarGlovoAPI(action, pedido) {
-    // TODO: Implementar integración real con Glovo Partner API
-    // https://partner-api.glovoapp.com/
-    //
-    // Acciones:
-    //   accept  → PATCH /orders/{id}/accept
-    //   reject  → PATCH /orders/{id}/reject
-    //   ready   → PATCH /orders/{id}/ready
-    //
-    // Credenciales en: this.modulo.config.glovo?.api_key
-    //                  this.modulo.config.glovo?.store_id
+    const orderId = pedido.glovo_order_id;
+    if (!orderId) return;
 
-    this.modulo.logger.info('glovo.api_notificacion', {
-      action,
-      glovo_order_id: pedido.glovo_order_id,
-      nota: 'Pendiente integración con Glovo Partner API'
-    });
+    // Mapeo action → función del provider
+    const actionMap = {
+      accept: 'accept_order',
+      reject: 'reject_order',
+      ready: 'mark_ready'
+    };
+
+    const providerAction = actionMap[action];
+    if (!providerAction) {
+      this.modulo.logger.warn('glovo.api.action_desconocida', { action, orderId });
+      return;
+    }
+
+    try {
+      // Llamar al provider via eventBus (patrón request/response)
+      const response = await new Promise((resolve, reject) => {
+        const correlationId = `glovo-${action}-${orderId}-${Date.now()}`;
+        const responseEvent = `local.glovo.${providerAction}.response`;
+        let timeout;
+
+        const handler = (event) => {
+          const data = event?.data || event?.payload || event;
+          if (data?.correlationId === correlationId || event?.metadata?.correlationId === correlationId) {
+            clearTimeout(timeout);
+            this.modulo.eventBus.unsubscribe(responseEvent, handler);
+            if (data?.success === false || data?.error) {
+              reject(new Error(data.error || 'Glovo API error'));
+            } else {
+              resolve(data);
+            }
+          }
+        };
+
+        this.modulo.eventBus.subscribe(responseEvent, handler);
+
+        timeout = setTimeout(() => {
+          this.modulo.eventBus.unsubscribe(responseEvent, handler);
+          reject(new Error('Glovo API: timeout (30s)'));
+        }, 30000);
+
+        this.modulo.eventBus.publish(`local.glovo.${providerAction}.request`, {
+          order_id: orderId,
+          ...(action === 'reject' && pedido.motivo_rechazo && { reason: pedido.motivo_rechazo })
+        }, { correlationId });
+      });
+
+      this.modulo.logger.info('glovo.api.ok', {
+        action,
+        glovo_order_id: orderId,
+        response: response?.data || response
+      });
+
+    } catch (error) {
+      // Log pero no bloquear — el pedido interno ya se procesó
+      this.modulo.logger.warn('glovo.api.error', {
+        action,
+        glovo_order_id: orderId,
+        error: error.message
+      });
+    }
+  }
+
+  // ==========================================
+  // Polling — llamado por scheduler o manualmente
+  // ==========================================
+
+  async pollNuevosPedidos() {
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const correlationId = `glovo-poll-${Date.now()}`;
+        let timeout;
+
+        const handler = (event) => {
+          const data = event?.data || event?.payload || event;
+          if (data?.correlationId === correlationId || event?.metadata?.correlationId === correlationId) {
+            clearTimeout(timeout);
+            this.modulo.eventBus.unsubscribe('local.glovo.poll_orders.response', handler);
+            resolve(data);
+          }
+        };
+
+        this.modulo.eventBus.subscribe('local.glovo.poll_orders.response', handler);
+
+        timeout = setTimeout(() => {
+          this.modulo.eventBus.unsubscribe('local.glovo.poll_orders.response', handler);
+          reject(new Error('Glovo polling: timeout'));
+        }, 30000);
+
+        this.modulo.eventBus.publish('local.glovo.poll_orders.request', {
+          status: 'NEW'
+        }, { correlationId });
+      });
+
+      const orders = response?.data?.orders || response?.orders || [];
+
+      for (const order of orders) {
+        // Solo procesar si no lo tenemos ya
+        if (!this.externalOrderMap.has(order.glovo_order_id)) {
+          await this.handleRecibirPedido({
+            glovo_order_id: order.glovo_order_id,
+            items: order.items,
+            total: order.total,
+            cliente_nombre: order.cliente_nombre,
+            direccion_entrega: order.direccion_entrega,
+            notas: order.notas,
+            tiempo_estimado_entrega: order.tiempo_estimado_entrega
+          });
+
+          this.modulo.logger.info('glovo.poll.nuevo_pedido', {
+            glovo_order_id: order.glovo_order_id,
+            total: order.total
+          });
+        }
+      }
+
+      return { nuevos: orders.filter(o => !this.externalOrderMap.has(o.glovo_order_id)).length };
+
+    } catch (error) {
+      this.modulo.logger.warn('glovo.poll.error', { error: error.message });
+      return { nuevos: 0, error: error.message };
+    }
   }
 }
 

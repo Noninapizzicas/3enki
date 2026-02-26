@@ -22,6 +22,8 @@
 
   $: color = TIPO_COLORS[cuenta.tipo];
   $: icon = TIPO_ICONS[cuenta.tipo];
+  $: isGlovo = cuenta.tipo === 'glovo';
+  $: glovoListo = isGlovo && cuenta.estado === 'listo';
 
   const ESTADO_CONFIG: Record<string, { label: string; color: string; urgent: boolean }> = {
     pendiente:       { label: 'Pendiente',   color: '#64748b', urgent: false },
@@ -54,11 +56,17 @@
   class="cuenta-card"
   class:alerta={cuenta.alerta}
   class:cobrado={cuenta.estado === 'cobrado'}
+  class:glovo={isGlovo}
+  class:glovo-listo={glovoListo}
   style="--card-color: {color}"
 >
   <!-- Header: tipo icon + nombre + hora -->
   <div class="card-header">
-    <span class="tipo-icon">{icon}</span>
+    {#if isGlovo}
+      <span class="glovo-badge">GLOVO</span>
+    {:else}
+      <span class="tipo-icon">{icon}</span>
+    {/if}
     <span class="nombre">{cuenta.nombre}</span>
     <span class="hora">{cuenta.hora}</span>
   </div>
@@ -273,10 +281,38 @@
     font-weight: 800;
   }
 
+  /* ===== GLOVO STYLES ===== */
+
+  .glovo-badge {
+    display: inline-block;
+    background: #FF6B00;
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 900;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 1.5px;
+    line-height: 1.4;
+    flex-shrink: 0;
+  }
+
+  .cuenta-card.glovo .card-header {
+    border-bottom-color: color-mix(in srgb, #FF6B00 30%, transparent);
+  }
+
+  .cuenta-card.glovo-listo {
+    animation: glovo-listo-pulse 1.5s ease-in-out infinite;
+  }
+
   /* Animations */
   @keyframes alert-pulse {
     0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--card-color) 20%, transparent); }
     50% { box-shadow: 0 0 20px color-mix(in srgb, var(--card-color) 50%, transparent); }
+  }
+
+  @keyframes glovo-listo-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 107, 0, 0.3); }
+    50% { box-shadow: 0 0 24px rgba(255, 107, 0, 0.7); }
   }
 
   @keyframes blink-soft {

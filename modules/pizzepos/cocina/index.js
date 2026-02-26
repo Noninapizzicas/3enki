@@ -136,7 +136,6 @@ class CocinaModule {
         if (item.pizza_derecha) cocinaItem.pizza_derecha = item.pizza_derecha;
         if (item.ingredientes) cocinaItem.ingredientes = item.ingredientes;
         if (item.ingredientes_base) cocinaItem.ingredientes_base = item.ingredientes_base;
-        if (item.alergenos) cocinaItem.alergenos = item.alergenos;
         return cocinaItem;
       }),
       estado: 'activo',

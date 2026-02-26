@@ -153,7 +153,7 @@
       {/if}
     </div>
 
-    <!-- Items (no interactivos, resumen con ingredientes y alérgenos) -->
+    <!-- Items (no interactivos, resumen con ingredientes) -->
     <div class="card-items glovo-items-preview">
       {#each pedido.items as item (item.item_id)}
         <div class="glovo-item-line">
@@ -162,12 +162,6 @@
         </div>
         {#if item.ingredientes_base?.length}
           <div class="glovo-item-ings">{item.ingredientes_base.join(', ')}</div>
-        {/if}
-        {#if item.alergenos?.length}
-          <div class="glovo-item-alergenos">
-            <span class="alergeno-warn">&#9888;</span>
-            {item.alergenos.map((a: string) => a.toUpperCase()).join(', ')}
-          </div>
         {/if}
         {#if item.notas}
           <div class="glovo-item-nota">{item.notas}</div>
@@ -420,19 +414,6 @@
     color: #64748b;
     font-style: italic;
     margin-top: -2px;
-  }
-
-  .glovo-item-alergenos {
-    padding-left: 2.5em;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #fca5a5;
-    margin-top: 1px;
-  }
-
-  .alergeno-warn {
-    color: #ef4444;
-    margin-right: 2px;
   }
 
   .glovo-item-nota {

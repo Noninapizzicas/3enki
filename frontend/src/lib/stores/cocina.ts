@@ -48,7 +48,6 @@ export interface ItemCocina {
   pizza_derecha?: string | PizzaHalf;
   ingredientes?: Array<string | IngredienteAlGusto>;
   ingredientes_base?: string[];
-  alergenos?: string[];
   preparando_at?: string;
   preparado_at?: string;
 }

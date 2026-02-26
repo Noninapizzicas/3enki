@@ -229,7 +229,7 @@ class GlovoStrategy {
       const pedido_id = `ped_${cuenta_id}`;
       pedido.pedidos.push(pedido_id);
 
-      // Enriquecer items con catálogo local (ingredientes_base, alérgenos)
+      // Enriquecer items con catálogo local (ingredientes_base para cocina)
       const enrichedItems = await this.enrichItemsWithCatalog(items || []);
 
       const cocinaItems = enrichedItems.map((item, idx) => ({
@@ -240,8 +240,7 @@ class GlovoStrategy {
         variaciones: item.variaciones || item.variations || null,
         notas: item.notas || item.notes || '',
         estado: 'pendiente',
-        ...(item.ingredientes_base && { ingredientes_base: item.ingredientes_base }),
-        ...(item.alergenos?.length && { alergenos: item.alergenos })
+        ...(item.ingredientes_base && { ingredientes_base: item.ingredientes_base })
       }));
 
       await this.modulo.eventBus.publish('pedido.enviado_cocina', {
@@ -464,8 +463,8 @@ class GlovoStrategy {
 
   /**
    * Enriquece items de Glovo con datos del catálogo local:
-   * producto_id real, ingredientes_base, alérgenos
-   * Matching por nombre (case-insensitive, substring)
+   * producto_id real e ingredientes_base
+   * Matching por nombre (case-insensitive, exacto primero)
    */
   async enrichItemsWithCatalog(items) {
     if (!items?.length) return items;
@@ -502,15 +501,13 @@ class GlovoStrategy {
               ? producto.ingredientes_base.map(ing =>
                   typeof ing === 'string' ? ing : ing.nombre || ing
                 )
-              : undefined,
-            alergenos: producto.alergenos || undefined
+              : undefined
           };
 
           this.modulo?.logger?.debug('glovo.enrich.match', {
             glovo_nombre: nombre,
             producto_id: producto.id,
-            ingredientes: enrichedItem.ingredientes_base?.length || 0,
-            alergenos: enrichedItem.alergenos?.length || 0
+            ingredientes: enrichedItem.ingredientes_base?.length || 0
           });
 
           enriched.push(enrichedItem);

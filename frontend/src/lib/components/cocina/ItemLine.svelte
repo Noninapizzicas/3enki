@@ -39,16 +39,13 @@
   // — Ingredientes base (todos los productos) —
   $: hasIngredientesBase = !isMitad && !isAlGusto && item.ingredientes_base?.length;
 
-  // — Alérgenos —
-  $: hasAlergenos = item.alergenos?.length;
-
   // — Variaciones (quitar / añadir) —
   $: quitarList = extractQuitar(item);
   $: anadirList = extractAnadir(item);
   $: hasVariaciones = quitarList.length > 0 || anadirList.length > 0;
 
   // — Tiene detalles extra —
-  $: hasDetails = isMitad || isAlGusto || hasIngredientesBase || hasAlergenos || hasVariaciones || !!item.notas;
+  $: hasDetails = isMitad || isAlGusto || hasIngredientesBase || hasVariaciones || !!item.notas;
 
   // ——————————————————————————————————————————
   // Helpers para extraer datos con formatos flexibles
@@ -112,21 +109,6 @@
     return [];
   }
 
-  const ALERGENO_LABELS: Record<string, string> = {
-    gluten: 'GLUTEN',
-    lactosa: 'LACTOSA',
-    huevo: 'HUEVO',
-    pescado: 'PESCADO',
-    marisco: 'MARISCO',
-    frutos_secos: 'FRUTOS SECOS',
-    soja: 'SOJA',
-    apio: 'APIO',
-    mostaza: 'MOSTAZA',
-    sesamo: 'SÉSAMO',
-    sulfitos: 'SULFITOS',
-    altramuces: 'ALTRAMUCES'
-  };
-
   function handleTap() {
     if (!isListo) {
       dispatch('tap', { item_id: item.item_id });
@@ -169,19 +151,6 @@
     {#if hasIngredientesBase}
       <div class="detail-section base-section">
         <span class="base-ings">{item.ingredientes_base?.join(', ')}</span>
-      </div>
-    {/if}
-
-    <!-- ============ ALÉRGENOS ============ -->
-    {#if hasAlergenos}
-      <div class="detail-section alergenos-section">
-        <span class="alergenos-icon">&#9888;</span>
-        <span class="alergenos-label">ALÉRGENOS:</span>
-        <span class="alergenos-list">
-          {#each item.alergenos || [] as alergeno}
-            <span class="alergeno-tag">{ALERGENO_LABELS[alergeno] || alergeno.toUpperCase()}</span>
-          {/each}
-        </span>
       </div>
     {/if}
 
@@ -402,50 +371,6 @@
     color: #94a3b8;
     font-style: italic;
     line-height: 1.3;
-  }
-
-  /* ——— ALÉRGENOS ——— */
-  .alergenos-section {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 5px 8px;
-    background: rgba(239, 68, 68, 0.12);
-    border-radius: 6px;
-    border-left: 3px solid #ef4444;
-  }
-
-  .alergenos-icon {
-    font-size: 1rem;
-    color: #ef4444;
-    flex-shrink: 0;
-  }
-
-  .alergenos-label {
-    font-size: 0.7rem;
-    font-weight: 800;
-    color: #ef4444;
-    letter-spacing: 1px;
-    flex-shrink: 0;
-  }
-
-  .alergenos-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .alergeno-tag {
-    display: inline-block;
-    padding: 1px 6px;
-    background: rgba(239, 68, 68, 0.2);
-    border: 1px solid rgba(239, 68, 68, 0.4);
-    border-radius: 3px;
-    font-size: 0.75rem;
-    font-weight: 800;
-    color: #fca5a5;
-    letter-spacing: 0.5px;
   }
 
   /* ——— MITAD Y MITAD ——— */

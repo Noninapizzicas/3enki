@@ -81,8 +81,8 @@ class GlovoStrategy {
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
 
-    // Auto-polling: consultar Glovo cada 60s si hay credenciales configuradas
-    const hasCredentials = process.env.GLOVO_API_KEY || process.env.GLOVO_API_KEY_GLOBAL;
+    // Auto-polling: consultar Glovo cada 60s si hay credenciales OAuth2 configuradas
+    const hasCredentials = process.env.GLOVO_CLIENT_ID || process.env.GLOVO_CLIENT_ID_GLOBAL;
     if (hasCredentials) {
       this._pollInterval = setInterval(async () => {
         try {
@@ -97,7 +97,7 @@ class GlovoStrategy {
       });
     } else {
       this.modulo.logger.info('glovo.polling.desactivado', {
-        nota: 'Sin GLOVO_API_KEY — polling manual via glovo/poll'
+        nota: 'Sin GLOVO_CLIENT_ID — polling manual via glovo/poll'
       });
     }
   }

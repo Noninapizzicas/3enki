@@ -186,7 +186,7 @@
 
     "pedidos": {
       "version": "2.0.0",
-      "version_module_json": "1.0.0 (DESACTUALIZADO — debería ser 2.0.0)",
+      "version_module_json": "2.0.0",
       "descripcion": "Gestión del ciclo de vida de pedidos — recibe de comandero, gestiona estados, envía a cocina",
       "ui_domain": "pedidos",
       "uiHandlers": ["list", "get", "create", "add-item", "update-item", "delete-item", "send-kitchen", "complete", "cancel", "total", "health"],
@@ -197,7 +197,7 @@
 
     "cobros": {
       "version": "2.0.0",
-      "version_module_json": "1.1.0 (DESACTUALIZADO — debería ser 2.0.0)",
+      "version_module_json": "2.0.0",
       "descripcion": "Procesamiento de pagos — efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr",
       "ui_domain": "cobros",
       "uiHandlers": ["create", "list", "get", "confirm", "refund", "payment-methods", "health", "metrics"],
@@ -232,7 +232,8 @@
       "enviar_cocina": {
         "comportamiento": "Solo envía items con enviado=false. Marca items enviados con flag enviado+enviado_at+pedido_id. Devuelve pedido completo al frontend.",
         "flujo": "filtrar items no enviados → generar pedido_id → marcar items → publicar pedido.creado + pedido.enviado_cocina (solo items nuevos) → devolver pedido actualizado",
-        "segunda_ronda": "El camarero puede añadir más items después de enviar. Al enviar de nuevo, solo van los nuevos."
+        "segunda_ronda": "El camarero puede añadir más items después de enviar. Al enviar de nuevo, solo van los nuevos.",
+        "evento_payload": "comandero.item_agregado incluye: variaciones (objeto canónico), ingredientes_base (string[]), ingredientes, tipo, pizza_izquierda, pizza_derecha en el payload del evento"
       },
       "addItem_overrides": {
         "nombre_override": "MitadMitad y AlGusto envían nombre compuesto (ej: '½ Country / ½ R&B'). addItem() lo usa como nombre del item.",
@@ -269,8 +270,8 @@
 
     "ingredientes": {
       "version": "2.0.0",
-      "version_module_json": "1.0.0 (DESACTUALIZADO — debería ser 2.0.0)",
-      "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos",
+      "version_module_json": "2.0.0",
+      "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos. Ingredientes se cargan en initComandero() via carta_completa y se pasan como prop catalogoIngredientes a VariacionesPanel/AlGustoPanel — sin request MQTT adicional.",
       "ui_domain": "ingredientes",
       "uiHandlers": ["list", "get", "search", "alergenos", "update", "health", "metrics"],
       "eventos_publica": ["ingrediente.creado", "ingrediente.actualizado"],
@@ -279,13 +280,21 @@
 
     "variaciones": {
       "version": "2.0.0",
-      "version_module_json": "1.0.0 (DESACTUALIZADO — debería ser 2.0.0)",
+      "version_module_json": "2.0.0",
       "descripcion": "Customizaciones de productos — quitar/añadir ingredientes con recálculo de precio",
       "ui_domain": "variaciones",
       "uiHandlers": ["get", "validar", "calcular_precio", "health", "metrics"],
       "eventos_publica": ["variacion.validada", "variacion.rechazada"],
       "eventos_suscribe": ["producto.creado", "comandero.item_agregado"],
-      "logica_negocio": "validarVariacion() es pura: valida quitar, añadir, disponibilidad, computa precio e ingredientes finales"
+      "logica_negocio": "validarVariacion() es pura: valida quitar, añadir, disponibilidad, computa precio e ingredientes finales",
+      "formato_canonico": {
+        "variaciones": {
+          "tipo": "OBJETO (no array)",
+          "ingredientes_quitar": "string[] — IDs/nombres de ingredientes a quitar del base",
+          "ingredientes_anadir": "[{nombre, cantidad?, precio_extra?}] — ingredientes extra"
+        },
+        "nota": "Frontend (PedidoItem, ItemLine) soporta ambos formatos (objeto canónico + array legacy) para backward compat. Backend almacena tal cual llega."
+      }
     },
 
     "menu-generator": {
@@ -465,7 +474,7 @@
     },
 
     "persistencia-comandero": {
-      "version": "2.1.0",
+      "version": "2.0.0",
       "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas. FUENTE DE VERDAD para cuentas activas.",
       "ui_domain": "persistencia",
       "uiHandlers": ["cuentas_activas", "eventos", "eventos_fecha", "ventas", "ventas_fecha", "cuadre", "cuadre_fecha", "cierre", "iniciar_dia", "backup", "health", "metrics"],

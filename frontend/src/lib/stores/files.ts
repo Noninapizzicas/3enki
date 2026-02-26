@@ -52,7 +52,7 @@ export interface SearchResult {
   match_type: 'filename' | 'content';
 }
 
-export type ViewType = 'explorer' | 'editor' | 'pdf' | 'image';
+export type ViewType = 'explorer' | 'editor' | 'pdf' | 'image' | 'html';
 
 export interface FilesStoreState {
   // Navigation
@@ -92,6 +92,7 @@ export interface FilesStoreState {
 // CONSTANTS
 // =============================================================================
 
+export const HTML_EXTENSION = 'html';
 export const TEXT_EXTENSIONS = ['md', 'json', 'txt', 'html', 'css', 'js', 'ts', 'yaml', 'yml', 'xml', 'svelte', 'jsx', 'tsx'];
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'];
 export const PDF_EXTENSION = 'pdf';
@@ -234,7 +235,29 @@ export async function openFile(filePath: string): Promise<void> {
     let viewType: ViewType = 'explorer';
     let fileContent: FileContent;
 
-    if (ext === PDF_EXTENSION) {
+    if (ext === HTML_EXTENSION) {
+      // Use filesystem for HTML files (read as text, render in iframe)
+      const response = await mqttRequest<{
+        path: string;
+        content: string;
+        encoding: string;
+        size: number;
+        modified: string;
+        type: string;
+      }>('fs', 'read', { path: filePath });
+
+      fileContent = {
+        file_path: response.data.path,
+        type: 'text',
+        content: response.data.content,
+        extension: ext,
+        size: response.data.size,
+        modified: response.data.modified,
+        readonly: false
+      };
+      viewType = 'html';
+
+    } else if (ext === PDF_EXTENSION) {
       // Use pdf-viewer
       const response = await mqttRequest<{
         file_path: string;

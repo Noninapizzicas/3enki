@@ -126,7 +126,7 @@ class CocinaModule {
           producto_id: item.producto_id,
           nombre: item.nombre,
           cantidad: item.cantidad,
-          variaciones: item.variaciones || {},
+          variaciones: item.variaciones || null,
           notas: item.notas || '',
           estado: 'pendiente'
         };

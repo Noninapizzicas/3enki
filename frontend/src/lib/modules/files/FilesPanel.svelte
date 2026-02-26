@@ -20,6 +20,7 @@
     moveFile,
     navigateUp,
     closeFile,
+    setView,
     updateEditorContent,
     searchFiles,
     clearSearch,
@@ -396,6 +397,9 @@
         <button class="icon-btn" on:click={handleClose} title="Cerrar">⬅️</button>
         <span class="file-title">{state.currentFilePath}</span>
         <div class="editor-actions">
+          {#if state.currentFile?.extension === 'html'}
+            <button class="btn secondary small" on:click={() => setView('html')} title="Vista renderizada">🌐</button>
+          {/if}
           <button class="btn secondary small" on:click={handleFormat} title="Formatear">📐</button>
           <button
             class="btn primary small"
@@ -469,6 +473,32 @@
         </div>
       {:else}
         <div class="loading">Cargando imagen...</div>
+      {/if}
+    </div>
+
+  {:else if state.currentView === 'html'}
+    <!-- HTML RENDERED VIEW -->
+    <div class="html-view">
+      <div class="viewer-header">
+        <button class="icon-btn" on:click={handleClose} title="Cerrar">⬅️</button>
+        <span class="file-title">{state.currentFilePath}</span>
+        <div class="html-actions">
+          <button class="btn secondary small" on:click={() => setView('editor')} title="Ver código fuente">
+            {'</>'}
+          </button>
+          <span class="file-size">{formatFileSize(state.currentFile?.size || 0)}</span>
+        </div>
+      </div>
+
+      {#if state.currentFile && state.currentFile.content}
+        <iframe
+          class="html-frame"
+          srcdoc={state.currentFile.content}
+          title="HTML Preview"
+          sandbox="allow-same-origin"
+        ></iframe>
+      {:else}
+        <div class="loading">Cargando HTML...</div>
       {/if}
     </div>
   {/if}
@@ -917,5 +947,24 @@
     max-height: 100%;
     object-fit: contain;
     border-radius: 0.25rem;
+  }
+
+  /* HTML rendered view */
+  .html-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .html-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .html-frame {
+    flex: 1;
+    border: none;
+    background: white;
   }
 </style>

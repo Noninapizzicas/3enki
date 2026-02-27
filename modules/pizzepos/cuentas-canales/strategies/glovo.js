@@ -53,6 +53,9 @@ class GlovoStrategy {
 
     modulo.safeAddSchema(require('../schemas/glovo.json'));
     modulo.safeAddSchema(require('../schemas/glovo-events.json'));
+
+    // Restaurar pedidos Glovo activos desde persistencia
+    await this.restaurarDesdeArchivo();
   }
 
   registerUIHandlers(uiHandler) {
@@ -521,6 +524,66 @@ class GlovoStrategy {
     }
 
     return enriched;
+  }
+
+  // ==========================================
+  // Restauración desde persistencia
+  // ==========================================
+
+  async restaurarDesdeArchivo() {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const archivo = path.join('./data/current', 'cuentas_activas.json');
+      const contenido = await fs.readFile(archivo, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.cuentas) return;
+
+      let restaurados = 0;
+      for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
+        if (!cuenta_id.startsWith(this.prefijo)) continue;
+
+        const seqMatch = cuenta_id.match(/_(\d+)$/);
+        const seq = seqMatch ? parseInt(seqMatch[1], 10) : (restaurados + 1);
+
+        const pedido = {
+          cuenta_id,
+          glovo_order_id: cuenta.datos_especificos?.glovo_order_id || null,
+          numero_pedido: seq,
+          plataforma: 'glovo',
+          estado: 'aceptado',
+          items: [],
+          total: cuenta.total || 0,
+          cliente_nombre: cuenta.datos_especificos?.cliente_nombre || 'Cliente Glovo',
+          direccion_entrega: cuenta.datos_especificos?.direccion_entrega || '',
+          notas: '',
+          tiempo_estimado_entrega: 45,
+          hora_recibido: cuenta.created_at || new Date().toISOString(),
+          hora_aceptado: cuenta.created_at || new Date().toISOString(),
+          hora_listo: null,
+          hora_recogido: null,
+          rider_info: null,
+          pedidos: (cuenta.pedidos || []).map(p => p.pedido_id)
+        };
+
+        this.pedidosActivos.set(cuenta_id, pedido);
+        if (pedido.glovo_order_id) {
+          this.externalOrderMap.set(pedido.glovo_order_id, cuenta_id);
+        }
+        restaurados++;
+      }
+
+      if (restaurados > 0) {
+        this.modulo.logger.info('canal.glovo.estado_restaurado', {
+          pedidos_restaurados: restaurados
+        });
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.modulo?.logger?.warn('canal.glovo.restaurar.error', { error: error.message });
+      }
+    }
   }
 
   // ==========================================

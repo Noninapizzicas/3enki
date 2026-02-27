@@ -42,6 +42,9 @@ class TelefonoStrategy {
 
     modulo.safeAddSchema(require('../schemas/telefono.json'));
     modulo.safeAddSchema(require('../schemas/telefono-events.json'));
+
+    // Restaurar pedidos telefónicos activos desde persistencia
+    await this.restaurarDesdeArchivo();
   }
 
   registerUIHandlers(uiHandler) {
@@ -357,6 +360,62 @@ class TelefonoStrategy {
 
   async handleGetMetrics() {
     return { status: 200, data: this.getMetrics() };
+  }
+
+  // ==========================================
+  // Restauración desde persistencia
+  // ==========================================
+
+  async restaurarDesdeArchivo() {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const archivo = path.join('./data/current', 'cuentas_activas.json');
+      const contenido = await fs.readFile(archivo, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.cuentas) return;
+
+      let restaurados = 0;
+      for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
+        if (!cuenta_id.startsWith(this.prefijo)) continue;
+
+        const numMatch = cuenta_id.match(/_(\d+)$/);
+        const numero = numMatch ? parseInt(numMatch[1], 10) : (restaurados + 1);
+
+        const pedido = {
+          cuenta_id,
+          numero_pedido: numero,
+          telefono: cuenta.datos_especificos?.telefono || '',
+          caller_id_detectado: false,
+          contacto: {
+            telefono: cuenta.datos_especificos?.telefono || '',
+            nombre: cuenta.datos_especificos?.nombre || 'Cliente',
+            pedidos_anteriores: 0
+          },
+          estado: 'pendiente',
+          total: cuenta.total || 0,
+          hora_pedido: cuenta.created_at || new Date().toISOString(),
+          hora_recogida_estimada: null,
+          whatsapp_enviado: false,
+          pedidos: (cuenta.pedidos || []).map(p => p.pedido_id),
+          notas: ''
+        };
+
+        this.pedidosActivos.set(cuenta_id, pedido);
+        restaurados++;
+      }
+
+      if (restaurados > 0) {
+        this.modulo.logger.info('canal.telefono.estado_restaurado', {
+          pedidos_restaurados: restaurados
+        });
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.modulo?.logger?.warn('canal.telefono.restaurar.error', { error: error.message });
+      }
+    }
   }
 
   // ==========================================

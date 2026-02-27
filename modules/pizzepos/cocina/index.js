@@ -43,6 +43,9 @@ class CocinaModule {
     // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
 
+    // Restaurar pedidos activos en cocina desde persistencia
+    await this.restaurarDesdeArchivo();
+
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
@@ -394,6 +397,89 @@ class CocinaModule {
         timestamp: new Date().toISOString()
       }
     };
+  }
+
+  // ==========================================
+  // Restauración desde persistencia
+  // ==========================================
+
+  /**
+   * Reconstruye pedidos activos de cocina desde cuentas_activas.json.
+   * Los pedidos que tenían estado en_preparacion/con_pedido se restauran
+   * como pendientes en cocina.
+   */
+  async restaurarDesdeArchivo() {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const archivo = path.join('./data/current', 'cuentas_activas.json');
+      const contenido = await fs.readFile(archivo, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.cuentas) return;
+
+      let restaurados = 0;
+      for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
+        if (!cuenta.pedidos || cuenta.pedidos.length === 0) continue;
+
+        for (const pedidoData of cuenta.pedidos) {
+          const pedido_id = pedidoData.pedido_id;
+          if (!pedido_id || this.pedidosActivos.has(pedido_id)) continue;
+
+          const items = (pedidoData.items || []).map((item, idx) => {
+            const cocinaItem = {
+              item_id: item.item_id || item.id || `${pedido_id}_item_${idx + 1}`,
+              producto_id: item.producto_id,
+              nombre: item.nombre,
+              cantidad: item.cantidad || 1,
+              variaciones: item.variaciones || null,
+              notas: item.notas || '',
+              estado: 'pendiente'
+            };
+            if (item.tipo) cocinaItem.tipo = item.tipo;
+            if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
+            if (item.pizza_derecha) cocinaItem.pizza_derecha = item.pizza_derecha;
+            if (item.ingredientes) cocinaItem.ingredientes = item.ingredientes;
+            if (item.ingredientes_base) cocinaItem.ingredientes_base = item.ingredientes_base;
+            return cocinaItem;
+          });
+
+          if (items.length === 0) continue;
+
+          // Detectar canal por prefijo del cuenta_id
+          let canal = null;
+          if (cuenta_id.startsWith('mesa_')) canal = 'mesa';
+          else if (cuenta_id.startsWith('tel_')) canal = 'telefono';
+          else if (cuenta_id.startsWith('llevar_')) canal = 'llevar';
+          else if (cuenta_id.startsWith('glovo_')) canal = 'glovo';
+
+          const pedidoCocina = {
+            pedido_id,
+            cuenta_id,
+            canal,
+            items,
+            estado: 'activo',
+            notas_generales: '',
+            recibido_at: cuenta.created_at || new Date().toISOString(),
+            metadata: null
+          };
+
+          this.pedidosActivos.set(pedido_id, pedidoCocina);
+          restaurados++;
+        }
+      }
+
+      if (restaurados > 0) {
+        this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
+        this.logger.info('cocina.estado_restaurado', {
+          pedidos_restaurados: restaurados
+        });
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.logger.warn('cocina.restaurar.error', { error: error.message });
+      }
+    }
   }
 
   // ==========================================

@@ -7,6 +7,8 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs').promises;
+const path = require('path');
 
 class ComanderoModule {
   constructor() {
@@ -24,6 +26,10 @@ class ComanderoModule {
 
     // Caché de productos (para resolver nombre/precio)
     this.productosCache = new Map();
+
+    // Persistencia del buffer (debounced)
+    this._bufferFile = path.join('./data/current', 'comandero_buffers.json');
+    this._saveTimer = null;
   }
 
   // ==========================================
@@ -40,6 +46,9 @@ class ComanderoModule {
 
     // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
+
+    // Restaurar buffers desde persistencia
+    await this.restaurarBuffers();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
@@ -122,6 +131,7 @@ class ComanderoModule {
   async onCajaCerrada(event) {
     const size = this.pedidos.size;
     this.pedidos.clear();
+    this.guardarBuffers();
 
     this.logger.info('comandero.reset.caja_cerrada', {
       pedidos_limpiados: size,
@@ -132,6 +142,7 @@ class ComanderoModule {
   async onDiaIniciado(event) {
     const size = this.pedidos.size;
     this.pedidos.clear();
+    this.guardarBuffers();
 
     this.logger.info('comandero.reset.dia_iniciado', {
       pedidos_limpiados: size,
@@ -273,6 +284,9 @@ class ComanderoModule {
 
     await this.eventBus.publish('comandero.item_agregado', eventPayload);
 
+    // Persistir buffer a disco (debounced)
+    this.guardarBuffers();
+
     this.logger.info('comandero.item.agregado', {
       cuenta_id, item_id, producto_id, precio: itemPrecio, cantidad: itemCantidad
     });
@@ -312,6 +326,9 @@ class ComanderoModule {
       pedido_total: pedido.total,
       pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
     });
+
+    // Persistir buffer a disco (debounced)
+    this.guardarBuffers();
 
     this.logger.info('comandero.item.eliminado', { cuenta_id, item_id });
 
@@ -364,6 +381,9 @@ class ComanderoModule {
 
     pedido.total = this.calcularTotal(pedido.items);
 
+    // Persistir buffer a disco (debounced)
+    this.guardarBuffers();
+
     this.logger.info('comandero.item.actualizado', { cuenta_id, item_id, cantidad, notas });
 
     return {
@@ -414,6 +434,9 @@ class ComanderoModule {
       created_at: ahora
     });
 
+    // Persistir buffer a disco (items enviados ya no se guardan)
+    this.guardarBuffers();
+
     this.logger.info('comandero.enviado_cocina', {
       cuenta_id, pedido_id, items_enviados: itemsParaEnviar.length, total_enviado: totalEnviado
     });
@@ -458,6 +481,74 @@ class ComanderoModule {
         timestamp: new Date().toISOString()
       }
     };
+  }
+
+  // ==========================================
+  // Persistencia transitoria del buffer
+  // ==========================================
+
+  /**
+   * Restaura buffers del comandero desde disco.
+   * Items no enviados a cocina sobreviven reinicio del servidor.
+   */
+  async restaurarBuffers() {
+    try {
+      const contenido = await fs.readFile(this._bufferFile, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.buffers) return;
+
+      let restaurados = 0;
+      for (const [cuenta_id, buffer] of Object.entries(datos.buffers)) {
+        if (!buffer.items || buffer.items.length === 0) continue;
+
+        this.pedidos.set(cuenta_id, {
+          items: buffer.items,
+          notas: buffer.notas || '',
+          total: this.calcularTotal(buffer.items)
+        });
+        restaurados++;
+      }
+
+      if (restaurados > 0) {
+        this.logger.info('comandero.buffers_restaurados', {
+          buffers_restaurados: restaurados,
+          items_total: Array.from(this.pedidos.values()).reduce((s, p) => s + p.items.length, 0)
+        });
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.logger.warn('comandero.restaurar.error', { error: error.message });
+      }
+    }
+  }
+
+  /**
+   * Guarda buffers a disco (debounced 1s para no escribir en cada item).
+   */
+  guardarBuffers() {
+    if (this._saveTimer) clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(async () => {
+      try {
+        const buffers = {};
+        for (const [cuenta_id, pedido] of this.pedidos.entries()) {
+          // Solo persistir items no enviados (los enviados ya están en persistencia-comandero)
+          const itemsNoEnviados = pedido.items.filter(i => !i.enviado);
+          if (itemsNoEnviados.length > 0) {
+            buffers[cuenta_id] = {
+              items: itemsNoEnviados,
+              notas: pedido.notas,
+              total: this.calcularTotal(itemsNoEnviados)
+            };
+          }
+        }
+
+        await fs.mkdir(path.dirname(this._bufferFile), { recursive: true });
+        await fs.writeFile(this._bufferFile, JSON.stringify({ buffers, updated_at: new Date().toISOString() }, null, 2));
+      } catch (error) {
+        this.logger?.warn('comandero.guardar_buffers.error', { error: error.message });
+      }
+    }, 1000);
   }
 
   // ==========================================

@@ -6,6 +6,8 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs').promises;
+const path = require('path');
 
 // Transiciones válidas de estado
 const TRANSICIONES_VALIDAS = {
@@ -59,6 +61,9 @@ class CuentasModule {
     // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
     this.startMetricsReporting();
+
+    // Restaurar cuentas activas desde persistencia (sobrevive reinicio servidor)
+    await this.restaurarDesdeArchivo();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
@@ -596,6 +601,78 @@ class CuentasModule {
       tipo,
       motivo
     });
+  }
+
+  // ==========================================
+  // Restauración desde persistencia
+  // ==========================================
+
+  /**
+   * Lee cuentas_activas.json y repuebla el Map en memoria.
+   * Se ejecuta en onLoad para sobrevivir reinicios del servidor.
+   */
+  async restaurarDesdeArchivo() {
+    try {
+      const archivo = path.join('./data/current', 'cuentas_activas.json');
+      const contenido = await fs.readFile(archivo, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.cuentas || Object.keys(datos.cuentas).length === 0) return;
+
+      let restauradas = 0;
+      for (const [cuenta_id, cp] of Object.entries(datos.cuentas)) {
+        // Mapear estado de persistencia → estado de cuentas
+        let estado = 'pendiente';
+        if (cp.pedidos && cp.pedidos.length > 0) {
+          estado = 'con_pedido';
+        }
+
+        // Contar items totales de todos los pedidos
+        let itemsCount = 0;
+        if (cp.pedidos && Array.isArray(cp.pedidos)) {
+          for (const p of cp.pedidos) {
+            if (p.items && Array.isArray(p.items)) {
+              itemsCount += p.items.reduce((sum, i) => sum + (i.cantidad || 1), 0);
+            }
+          }
+        }
+
+        // Formatear hora
+        let hora = '--:--';
+        try {
+          const d = new Date(cp.created_at);
+          hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        } catch (_) { /* ignore */ }
+
+        const cuenta = {
+          id: cuenta_id,
+          project_id: cp.project_id || null,
+          tipo: cp.tipo || 'local',
+          nombre: cp.datos_especificos?.nombre || cp.tipo || 'Cuenta',
+          estado,
+          hora,
+          items: itemsCount,
+          total: cp.total || 0,
+          alerta: false,
+          created_at: cp.created_at || new Date().toISOString(),
+          updated_at: cp.updated_at || cp.created_at || new Date().toISOString()
+        };
+
+        this.cuentas.set(cuenta_id, cuenta);
+        restauradas++;
+      }
+
+      this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
+
+      this.logger.info('cuentas.estado_restaurado', {
+        cuentas_restauradas: restauradas
+      });
+    } catch (error) {
+      // No hay archivo o está vacío — arranque limpio
+      if (error.code !== 'ENOENT') {
+        this.logger.warn('cuentas.restaurar.error', { error: error.message });
+      }
+    }
   }
 
   // ==========================================

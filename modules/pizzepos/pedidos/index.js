@@ -5,6 +5,8 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs').promises;
+const path = require('path');
 
 class PedidosModule {
   constructor() {
@@ -39,6 +41,9 @@ class PedidosModule {
 
     // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
+
+    // Restaurar pedidos activos desde persistencia (sobrevive reinicio servidor)
+    await this.restaurarDesdeArchivo();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
@@ -760,6 +765,82 @@ class PedidosModule {
       motivo: motivo || 'sin_especificar',
       cancelado_at: pedido.cancelado_at
     });
+  }
+
+  // ==========================================
+  // Restauración desde persistencia
+  // ==========================================
+
+  /**
+   * Lee cuentas_activas.json y reconstruye pedidos formales desde los pedidos
+   * almacenados en cada cuenta activa.
+   */
+  async restaurarDesdeArchivo() {
+    try {
+      const archivo = path.join('./data/current', 'cuentas_activas.json');
+      const contenido = await fs.readFile(archivo, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.cuentas) return;
+
+      let restaurados = 0;
+      for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
+        if (!cuenta.pedidos || cuenta.pedidos.length === 0) continue;
+
+        if (!this.pedidosPorCuenta.has(cuenta_id)) {
+          this.pedidosPorCuenta.set(cuenta_id, new Set());
+        }
+
+        const canal = this.detectarCanal(cuenta_id);
+
+        for (const pedidoData of cuenta.pedidos) {
+          const pedido_id = pedidoData.pedido_id;
+          if (!pedido_id || this.pedidos.has(pedido_id)) continue;
+
+          const pedido = {
+            id: pedido_id,
+            cuenta_id,
+            canal,
+            project_id: cuenta.project_id || null,
+            items: (pedidoData.items || []).map(item => ({
+              item_id: item.item_id || item.id || crypto.randomUUID(),
+              producto_id: item.producto_id,
+              nombre: item.nombre,
+              cantidad: item.cantidad || 1,
+              precio_unitario: item.precio || item.precio_unitario || 0,
+              precio_total: item.subtotal || item.precio_total || (item.precio || 0) * (item.cantidad || 1),
+              variaciones: item.variaciones || null,
+              notas: item.notas || null,
+              estado: 'en_cocina',
+              created_at: item.created_at || cuenta.created_at || new Date().toISOString(),
+              updated_at: cuenta.updated_at || new Date().toISOString()
+            })),
+            estado: 'en_cocina',
+            subtotal: pedidoData.total || 0,
+            total: pedidoData.total || 0,
+            notas_generales: null,
+            created_at: cuenta.created_at || new Date().toISOString(),
+            updated_at: cuenta.updated_at || new Date().toISOString()
+          };
+
+          this.pedidos.set(pedido_id, pedido);
+          this.pedidosPorCuenta.get(cuenta_id).add(pedido_id);
+          restaurados++;
+        }
+      }
+
+      if (restaurados > 0) {
+        this.metrics?.gauge?.('pedido.activos.count', this.pedidos.size);
+        this.logger.info('pedidos.estado_restaurado', {
+          pedidos_restaurados: restaurados,
+          cuentas_con_pedidos: this.pedidosPorCuenta.size
+        });
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.logger.warn('pedidos.restaurar.error', { error: error.message });
+      }
+    }
   }
 
   // ==========================================

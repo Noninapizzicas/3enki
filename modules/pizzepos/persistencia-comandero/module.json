@@ -58,6 +58,11 @@
         "handler": "onCuentaCerrada"
       },
       {
+        "event": "cuenta.eliminada",
+        "description": "Eliminar cuenta de cache cuando se elimina (safety net tras cobro)",
+        "handler": "onCuentaEliminada"
+      },
+      {
         "event": "cobro.iniciado",
         "description": "Guardar evento de cobro iniciado",
         "handler": "onEvento"

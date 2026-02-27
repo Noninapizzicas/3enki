@@ -49,6 +49,9 @@ class MesaStrategy {
 
     modulo.safeAddSchema(require('../schemas/mesa.json'));
     modulo.safeAddSchema(require('../schemas/mesa-events.json'));
+
+    // Restaurar mesas activas desde persistencia (sobrevive reinicio servidor)
+    await this.restaurarDesdeArchivo();
   }
 
   registerUIHandlers(uiHandler) {
@@ -333,6 +336,61 @@ class MesaStrategy {
 
   async handleGetMetrics() {
     return { status: 200, data: this.getMetrics() };
+  }
+
+  // ==========================================
+  // Restauración desde persistencia
+  // ==========================================
+
+  async restaurarDesdeArchivo() {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const archivo = path.join('./data/current', 'cuentas_activas.json');
+      const contenido = await fs.readFile(archivo, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.cuentas) return;
+
+      let restauradas = 0;
+      let maxNumero = 0;
+      for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
+        if (!cuenta_id.startsWith(this.prefijo)) continue;
+
+        // Extraer número de mesa del cuenta_id (mesa_{num}_{fecha}_{seq})
+        const numMatch = cuenta_id.match(/^mesa_(\d+)_/);
+        const numero = numMatch ? parseInt(numMatch[1], 10) : (restauradas + 1);
+        if (numero > maxNumero) maxNumero = numero;
+
+        const mesa = {
+          cuenta_id,
+          nombre: cuenta.datos_especificos?.nombre || `Mesa ${numero}`,
+          numero,
+          comensales: cuenta.datos_especificos?.comensales || null,
+          camarero: cuenta.datos_especificos?.camarero || null,
+          estado: 'ocupada',
+          total: cuenta.total || 0,
+          pedidos_count: cuenta.pedidos?.length || 0,
+          hora_apertura: cuenta.created_at || new Date().toISOString(),
+          notas: ''
+        };
+
+        this.mesasActivas.set(cuenta_id, mesa);
+        restauradas++;
+      }
+
+      if (restauradas > 0) {
+        this.contadorDiario = maxNumero;
+        this.modulo.logger.info('canal.mesa.estado_restaurado', {
+          mesas_restauradas: restauradas,
+          contador_diario: this.contadorDiario
+        });
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.modulo?.logger?.warn('canal.mesa.restaurar.error', { error: error.message });
+      }
+    }
   }
 
   // ==========================================

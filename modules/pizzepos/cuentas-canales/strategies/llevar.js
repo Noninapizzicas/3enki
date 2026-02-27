@@ -40,6 +40,9 @@ class LlevarStrategy {
 
     modulo.safeAddSchema(require('../schemas/llevar.json'));
     modulo.safeAddSchema(require('../schemas/llevar-events.json'));
+
+    // Restaurar tickets activos desde persistencia
+    await this.restaurarDesdeArchivo();
   }
 
   registerUIHandlers(uiHandler) {
@@ -262,6 +265,59 @@ class LlevarStrategy {
 
   async handleGetMetrics() {
     return { status: 200, data: this.getMetrics() };
+  }
+
+  // ==========================================
+  // Restauración desde persistencia
+  // ==========================================
+
+  async restaurarDesdeArchivo() {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const archivo = path.join('./data/current', 'cuentas_activas.json');
+      const contenido = await fs.readFile(archivo, 'utf8');
+      const datos = JSON.parse(contenido);
+
+      if (!datos.cuentas) return;
+
+      let restaurados = 0;
+      let maxSeq = 0;
+      for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
+        if (!cuenta_id.startsWith(this.prefijo)) continue;
+
+        const seqMatch = cuenta_id.match(/_(\d+)$/);
+        const seq = seqMatch ? parseInt(seqMatch[1], 10) : (restaurados + 1);
+        if (seq > maxSeq) maxSeq = seq;
+
+        const ticket = {
+          cuenta_id,
+          numero_ticket: seq,
+          cliente_nombre: cuenta.datos_especificos?.cliente_nombre
+            || cuenta.datos_especificos?.numero_ticket
+            || `Cliente ${seq}`,
+          estado: 'pendiente',
+          total: cuenta.total || 0,
+          hora_creacion: cuenta.created_at || new Date().toISOString(),
+          pedidos: (cuenta.pedidos || []).map(p => p.pedido_id),
+          notas: '',
+          mostrado_en_display: false
+        };
+
+        this.ticketsActivos.set(cuenta_id, ticket);
+        restaurados++;
+      }
+
+      if (restaurados > 0) {
+        this.modulo.logger.info('canal.llevar.estado_restaurado', {
+          tickets_restaurados: restaurados
+        });
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.modulo?.logger?.warn('canal.llevar.restaurar.error', { error: error.message });
+      }
+    }
   }
 
   // ==========================================

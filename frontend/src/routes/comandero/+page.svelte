@@ -1,24 +1,36 @@
 <script lang="ts">
   /**
-   * Página Comandero — Pantalla de cuentas activas
+   * /comandero — Redirect a /{project_id}/comandero
    *
-   * Standalone: sin LazyShell, sin AppShell, sin chat.
-   * La puerta de entrada al flujo de trabajo operativo.
-   * Obtiene project_id del store global (proyecto activo).
+   * Ruta legacy. Redirige al comandero del proyecto activo.
    */
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { activeProjectId } from '$lib/stores/projects';
-  import { CuentasScreen } from '$lib/components/comandero';
+  import { getState } from '$lib/stores/persistence';
 
-  $: projectId = $activeProjectId || '';
-
-  function handleNavigate(path: string) {
-    goto(path);
-  }
+  onMount(() => {
+    const state = getState();
+    const projectId = state.workspace?.projectId;
+    if (projectId) {
+      goto(`/${projectId}/comandero`, { replaceState: true });
+    } else {
+      goto('/', { replaceState: true });
+    }
+  });
 </script>
 
-<svelte:head>
-  <title>Comandero</title>
-</svelte:head>
+<div class="redirect-screen">
+  <p>Redirigiendo...</p>
+</div>
 
-<CuentasScreen {projectId} onNavigate={handleNavigate} />
+<style>
+  .redirect-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #0a0a0a;
+    color: #888;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+</style>

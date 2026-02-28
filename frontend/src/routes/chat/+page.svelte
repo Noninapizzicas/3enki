@@ -1,8 +1,36 @@
 <script lang="ts">
   /**
-   * Página de Chat - Usa el sistema de UI modular
+   * /chat — Redirect a /{project_id}/chat
+   *
+   * Ruta legacy. Redirige al chat del proyecto activo.
    */
-  import { Shell } from '$lib/components/layout';
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { getState } from '$lib/stores/persistence';
+
+  onMount(() => {
+    const state = getState();
+    const projectId = state.workspace?.projectId;
+    if (projectId) {
+      goto(`/${projectId}/chat`, { replaceState: true });
+    } else {
+      goto('/', { replaceState: true });
+    }
+  });
 </script>
 
-<Shell />
+<div class="redirect-screen">
+  <p>Redirigiendo...</p>
+</div>
+
+<style>
+  .redirect-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #0a0a0a;
+    color: #888;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+</style>

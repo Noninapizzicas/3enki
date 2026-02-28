@@ -10,6 +10,8 @@
    */
 
   import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { activeProject, selectProject, closePanel } from '$lib/stores';
   import {
     projectsStore,
@@ -154,6 +156,34 @@
       workspaceType: project.workspaceType
     });
     closePanel();
+
+    // Navegar a la ruta project-scoped
+    const currentPath = $page.url.pathname;
+    const subRoute = getSubRoute(currentPath);
+    goto(`/${project.id}/${subRoute}`);
+  }
+
+  /**
+   * Extrae la sub-ruta actual para reutilizarla con el nuevo proyecto.
+   * /old_project/chat → chat
+   * /old_project/facturas → facturas
+   * /chat → chat
+   * / → chat (default)
+   */
+  function getSubRoute(path: string): string {
+    const segments = path.split('/').filter(Boolean);
+
+    if (segments.length === 0) {
+      return 'chat';
+    }
+
+    if (segments.length === 1) {
+      // /chat, /facturas, /comandero → usar como sub-ruta
+      return segments[0];
+    }
+
+    // /project_id/chat → chat, /project_id/comandero/cuenta_id → comandero/cuenta_id
+    return segments.slice(1).join('/');
   }
 
   // ============================================================================

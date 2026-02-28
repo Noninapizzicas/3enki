@@ -449,14 +449,14 @@
 
   .base-item {
     font-size: 1.35rem;
-    color: #94a3b8;
+    color: #e2e8f0;
     line-height: 1.3;
     padding: 2px 0;
   }
 
   .base-item::before {
     content: '\2022  ';
-    color: #475569;
+    color: #94a3b8;
     font-weight: 800;
   }
 
@@ -509,7 +509,7 @@
 
   .mitad-ing-item {
     font-size: 1.2rem;
-    color: #94a3b8;
+    color: #e2e8f0;
     line-height: 1.3;
   }
 

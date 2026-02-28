@@ -1,218 +1,435 @@
-# System Analysis: event-core v1.5.0
+# Event-Core: Análisis Completo del Sistema
 
-**Date:** 2026-02-25
-**Scope:** All 28 files in `contexto/` (27 JSON + this analysis)
-**Approach:** Honest, methodical, analytical — full read of every file
+**Fecha:** 2026-02-28
+**Versión real (package.json):** 0.2.0
+**Versión declarada (README):** 0.5.0 "Network"
 
 ---
 
-## What It Is
+## 1. IDEA GLOBAL DEL SISTEMA
 
-A meta-core event-driven framework built on Node.js + MQTT (Aedes) + SvelteKit 2 / Svelte 5 + SQLite (sql.js). Functions as a general-purpose platform for building event-driven applications, with two concrete verticals: **PizzePOS** (point-of-sale for pizzerias) and a **fiscal invoice pipeline** (OCR + AI + CSV).
+Event-Core es un **framework meta-core fractal event-driven** construido en Node.js. Su propósito es ser una plataforma modular que puede escalar desde un solo proceso hasta N instancias distribuidas comunicándose vía MQTT.
 
-## Architecture - Strengths
+**La metáfora:** El core es como un sistema operativo ligero. No hace nada por sí mismo — solo provee infraestructura (bus de eventos, broker MQTT, gateway HTTP, cargador de módulos, observabilidad). Toda la funcionalidad de negocio vive en **módulos** que se auto-descubren y se cargan dinámicamente.
 
-1. **Consistent event-driven pattern throughout.** The `{provider}.{function}.request → response` and `ui/request/{domain}/{action} → ui/response/{request_id}` patterns are well-defined, documented, and uniformly applied.
+**El caso de uso principal actual:** PizzePOS — un sistema de punto de venta para restaurantes/pizzerías, con un ecosistema de IA integrado (multi-proveedor LLM, OCR, visión, audio).
 
-2. **Clean credential isolation.** The 4-level cascade (CUSTOM > CLIENT > PROJECT > GLOBAL) with automatic injection via provider-loader keeps providers "dumb" and credential logic centralized.
+**Filosofía central:**
+- "El módulo NO sabe cómo se conecta al sistema. Solo sabe hacer su trabajo."
+- El core es la fontanería; los módulos son los grifos.
+- Todo se comunica por eventos; las APIs HTTP son solo una fachada.
+- El frontend habla con el backend por MQTT (patrón request/response), no por REST directo.
 
-3. **Module auto-discovery and auto-wiring.** Both backend (40 modules from `modules/`) and frontend (via `import.meta.glob` + `manifest.json`) self-register without manual wiring. The loader also auto-wires event subscriptions and UI handlers declared in `module.json` — modules no longer contain imperative subscribe/register/unregister boilerplate (28/28 core modules migrated).
+---
 
-4. **Project-scoped operations.** Handlers in `data/projects/{id}/handlers/` automatically get `project_id` and corresponding credentials, making multi-tenancy implicit.
+## 2. ARQUITECTURA POR CAPAS
 
-5. **Progressive composition system (5 phases).** Links → dependencies → systems → shared context → inherited context. All 5 phases fully implemented in project-manager (lines 728-2452). Avoids premature coupling while supporting complex multi-project topologies.
-
-6. **Good code generation infrastructure.** 10 Plop generators covering modules (`module`, `service-module`, `full-module`), providers (`local-provider`), handlers (`handler`), components (`svelte-component`), and selector panels (`selector-panel`).
-
-7. **Multi-provider AI gateway with unified tool calling.** 6 LLM providers (DeepSeek, Anthropic, OpenAI, Ollama, Groq, Gemini) with normalized tool calling, auto-fallback by priority, and provider-specific message conversion. ToolManager v2.0.0 unifies tool registries between chat and agents.
-
-8. **Blueprint-based feature composition.** Declarative JSON blueprints in `blueprints/project-types/` enable adding features (pizzepos, facturas) to a business as isolated subprojects with their own handlers, config, and storage — fully leveraging all 5 PM composition phases.
-
-9. **Tiered document processing.** 6-tier OCR backend hierarchy (Google Document AI → Google Vision + AI → Anthropic Vision → OpenAI Vision → Tesseract → Scribe OCR) with automatic fallback based on availability and quality scores.
-
-10. **Generic learning system.** Domain-agnostic experience-based learning with similarity matching (numeric, string, Jaccard for arrays), JSONL append-only storage, and best-action recommendation queries.
-
-## Architecture - Weaknesses & Risks
-
-1. **project-manager is a 3731-line monolith.** Handles CRUD + HTTP + UI + Events + 5 composition phases + blueprint features in a single file. 32 registered UI handlers, 16 DB columns, 8 indices. Proposed split into `core.js`, `composition.js`, `systems.js`, `context.js`, `handlers/` hasn't happened. `module.json` doesn't declare 12 composition events.
-
-2. **Dual envelope problem in handlers.** The `const data = event.data || event` pattern is a workaround for inconsistent event wrapping. Root cause should be fixed at the source.
-
-3. **Post-hoc streaming is a UX debt.** `simulateStreaming()` waits for full response then delivers progressively (~12 chars/10ms) — cosmetic, not real streaming. Native SSE streaming is listed as low priority.
-
-4. **~~conversation-manager is a zombie module.~~** Now disabled via config.modules.disabled (commit 962ca7f). Handlers redistributed to chat-session and chat-ai-bridge.
-
-5. **Frontend-backend sync is fragile.** No automatic mechanism to keep frontend constants in sync with backend definitions (e.g., provider lists, credential schemas). `credentials.ts` and `ProviderPanel.svelte` were manually aligned.
-
-6. **Legacy Plop generators still present.** `chat-module` (outdated: doesn't use chat-ai-bridge or prompt-composer) and `from-blueprint` (deprecated: requires uninstalled `yaml` package) can mislead developers.
-
-7. **ai-gateway slow initialization.** Each LLM provider resolves credentials via request/response with 5s timeout. 6 providers × 2 attempts = potential ~60s startup just for ai-gateway.
-
-8. **Low event adoption.** project-manager emits 17+ events but only 2 modules actively consume them (filesystem, prompt-composer). chat-ai-bridge and chat-session cache project lifecycle but don't consume composition events.
-
-9. **Chat refactoring increased total lines.** The chat module split (conversation-manager → 4 modules) was expected to reduce from 3992 to 3023 lines but actual is 6136 lines due to streaming, safety-nets, and advanced FIFO context. Net increase of ~2144 lines with better separation.
-
-## Architecture - Completed Improvements
-
-The following have been completed since the system was first documented:
-
-- **Chat refactoring**: Monolithic conversation-manager (2469 lines) split into chat-session (1233), chat-ai-bridge (1023), prompt-composer (1296). Option B (tools in chat-ai-bridge) was chosen. 4 critical bugs fixed (BUG-001 through BUG-004).
-- **Tool registry unification**: ToolManager v2.0.0 imports from `moduleLoader.toolsRegistry` (unified mode) + 13 agent-specific builtins + 7 backward-compatible aliases.
-- **New AI providers**: Groq (LPU, ultra-low latency) and Gemini (1M context, RAG) added.
-- **DeepSeek reasoning mode**: `deepseek-reasoner` with chain-of-thought visible.
-- **Tool calling fixes**: All 6 providers now have functional complete tool calling cycles (Anthropic `tool_use` blocks, Gemini `functionCall` parts, etc.).
-- **Frontend-provider alignment**: `DEFAULT_PROVIDERS` in `credentials.ts` and `ProviderPanel.svelte` now mirror backend sources.
-- **Loader auto-wiring**: 28/28 core modules migrated — subscribes and UI handlers declared in `module.json`, -700+ lines of boilerplate removed.
-- **Project lifecycle caching**: chat-ai-bridge, chat-session, scheduler, filesystem all react to `project.activated`/`project.deactivated`.
-
-## Module Architecture Map
-
-### Core Infrastructure (8 modules)
-| Module | Lines | Role |
-|--------|-------|------|
-| project-manager | 3731 | CRUD + 5-phase composition + blueprints |
-| ai-gateway | 1523 | Multi-provider LLM gateway + tool normalization |
-| prompt-composer | 1296 | Multi-layer system prompt composition |
-| chat-session | 1233 | Conversation/message persistence + context FIFO |
-| chat-ai-bridge | 1023 | Chat orchestration (7-step flow) + agentic tool loop |
-| credential-manager | ~800 | 4-level credential cascade + OAuth |
-| filesystem | ~500 | Project-scoped file operations |
-| scheduler | ~400 | Cron/interval/datetime/event triggers |
-
-### AI & Agents (3 modules)
-| Module | Role |
-|--------|------|
-| bot-manager | Telegram file download, auto-responses, command routing |
-| agent-manager | Agent selection, context building, pipeline orchestration |
-| ai-agent-framework | Agent execution with ToolManager, agentic loop |
-
-### PizzePOS Vertical (13 modules)
-| Module | Pattern |
-|--------|---------|
-| cuentas | Base account CRUD + state management |
-| cuentas-canales | Strategy pattern: 5 channels (mesa/telefono/llevar/glovo/whatsapp) |
-| pedidos | Order management with line items |
-| cobros | Payment processing with channel routing |
-| cocina | Kitchen display — real-time tracking item by item |
-| comandero | POS interface (14 Svelte components) |
-| productos | Product catalog from carta/ |
-| categorias | Category management |
-| ingredientes | Ingredient tracking |
-| variaciones | Product variations |
-| menu-generator | v4.0.0: 11 AI tools, 5 micro-module panels |
-| persistencia-comandero | Event sourcing + nightly compaction |
-| impresion | ESC/POS thermal printer — kitchen tickets via Bluetooth |
-
-### Invoice Pipeline (handler-based)
-- `procesar-facturas.js`: 8-step batch pipeline
-- Steps: Gmail → PDF→PNG → Sharp → Google Vision OCR → DeepSeek structure → CSV (SII format) → Move processed
-- Test commands: `/gogmail`, `/gopdf`, `/gosharp`, `/gocr`, `/gostructure`, `/goexport`, `/gofull`
-
-## Documentation Quality
-
-The `contexto/` directory with 28 files is unusually thorough for a project this size. It functions as a living knowledge base that enables AI assistants to work effectively with the codebase.
-
-**Strengths:**
-- Comprehensive coverage of architecture, patterns, gotchas, and rationale
-- `index.json` serves as an effective routing table for context lookup
-- Historical decisions documented with reasoning (e.g., chat-refactoring option B chosen for streaming control)
-- Honest self-assessment (analisis-project-manager.json acknowledges tech debt)
-
-**Issues:**
-- Spanish/English mix adds cognitive load — architecture docs lean English, domain docs lean Spanish
-- `mejoras-pendientes.json` mixes 7 completed and 9 pending items (should filter or archive)
-- `chat-refactoring.json` is mostly historical — 661 lines of completed work that could be summarized
-- Some version inconsistencies (project-manager: module.json says 2.0.0, constructor says 1.0.0)
-
-## Pending Improvements (Actual)
-
-| Priority | Item | Impact |
-|----------|------|--------|
-| Alta | **Pantallas cocina ESP32-P4** | **Digital kitchen display — backend ready, needs frontend (see pantallas-cocina.json)** |
-| Alta | OCR.space provider | Better OCR for real photos (25k free/month) |
-| Alta | Anthropic prompt caching | 90% cost + 85% latency reduction |
-| Media | Anthropic extended thinking | Better complex analysis (adaptive mode) |
-| Media | Anthropic code execution sandbox | Safe server-side computation |
-| Media | Split project-manager monolith | Maintainability (5 files < 500 lines each) |
-| Media | Optimize listSystems N+1 queries | Performance at scale |
-| Media | Refactor estructurar-deepseek via ai-gateway | Provider-agnostic invoice structuring |
-| Baja | Eliminate conversation-manager completely | Dead code cleanup |
-| Baja | Native SSE streaming | Real-time UX (replace post-hoc) |
-| Baja | OpenAI Responses API migration | Future-proofing (Assistants deprecated Aug 2026) |
-| Baja | Gemini File Search RAG | Free storage, 150+ formats, semantic search |
-| Baja | Groq Compound models | Server-side web search + code execution |
-
-## System Stats
-
-- **43 modules** (30 core + 13 pizzepos) — 34 enabled, 6 disabled
-- **44 local service providers** (~198 functions)
-- **6 LLM providers** (DeepSeek, Anthropic, OpenAI, Groq, Gemini, Ollama)
-- **6 OCR backends** (Document AI, Vision, Anthropic Vision, OpenAI Vision, Tesseract, Scribe)
-- **250+ events**, **250+ APIs**, **90+ AI tools**
-- **14 UI handlers** in project-manager
-- **10 Plop generators** (8 active, 1 needs-update, 1 deprecated)
-- **5 PM composition phases** fully implemented
-- **29 context documentation files**
-- **18 frontend stores**, **12 UI modules**, **39 Svelte components**, **11 routes**
-- **4 active handlers** (2 global + 2 project), **37 archived handlers**
-
-## Key Patterns (Mandatory)
-
-1. `const data = event.data || event` — envelope unwrapping in all handlers
-2. Never resolve credentials inside providers — receive `_credentials` injected
-3. `services.call('ai', 'chat')` for AI, **not** `'ai-gateway'`
-4. Declare UI handlers and event subscribes in `module.json` — the loader auto-wires them. No imperative register/subscribe in onLoad (exception: wildcard or dynamic subscriptions)
-5. Cache active project via `project.activated`/`project.deactivated` events
-6. Naming: kebab-case (modules/handlers), dot.notation (events), slash/notation (MQTT topics)
-7. onUnload only cleans module-specific state (pending requests, timers, caches) — the loader handles unsubscribe/unregister automatically
-8. Logger API: `logger.info('event.name', { data })` — first arg string, second object. **Not** pino-style `logger.info({obj}, 'msg')`
-9. Database queries: use `project_id: 'system'` in db.query.request events. **Never** `database: 'system'`
-10. Load order: event subscriptions are wired BEFORE onLoad(). Modules can publish requests and receive responses during initialization.
-
-## Cross-Cutting Concerns
-
-### Event Flow Examples
 ```
-User sends message in chat:
-  Frontend → mqttRequest('conversation', 'send') → chat-ai-bridge
-    → session.save.request → chat-session (save user msg)
-    → session.getMessages.request → chat-session (load context)
-    → prompt.compose.request → prompt-composer (build system prompt)
-    → ai.chat.request → ai-gateway → LLM provider
-    → [agentic tool loop if needed]
-    → session.save.request → chat-session (save assistant msg)
-    → MQTT QoS 1 safety-net → Frontend
-
-PizzePOS order flow:
-  cuenta.creada → pedido.creado → pedido.confirmado
-    → cocina.pedido_listo → cobro.procesado → cuenta.cerrada
-  cobro.procesado routes by prefix: mesa_ → MesaStrategy, tel_ → TelefonoStrategy
-
-Invoice pipeline:
-  /gofull → Gmail download → PDF→PNG → Sharp prepare → Google Vision OCR
-    → DeepSeek structure (via ai-gateway) → CSV SII format → Move to procesados/
+┌─────────────────────────────────────────────────┐
+│                FRONTEND (SvelteKit)              │
+│         Svelte 5 + TypeScript + Tailwind         │
+│          Se comunica por MQTT WebSocket          │
+└────────────────────┬────────────────────────────┘
+                     │ MQTT (ws://localhost:9001)
+┌────────────────────┼────────────────────────────┐
+│                    │     HTTP Gateway (:3000)     │
+│                    │   /modules/{name}/{path}     │
+│   ┌────────────────┴────────────────────────┐    │
+│   │         UI Request Handler              │    │
+│   │   ui/request/{domain}/{action}          │    │
+│   │   ui/response/{request_id}              │    │
+│   └─────────────────────────────────────────┘    │
+│                                                   │
+│   ┌─────────────────────────────────────────┐    │
+│   │            MODULE LOADER                 │    │
+│   │   Auto-descubre ./modules/              │    │
+│   │   Auto-wires: apis, tools,              │    │
+│   │   subscribes (con handler), ui_handlers │    │
+│   │   Hot-reload con fs.watch               │    │
+│   └────────────────┬────────────────────────┘    │
+│                    │                              │
+│   ┌────────────────┴────────────────────────┐    │
+│   │          EVENT BUS (Híbrido)             │    │
+│   │   EventEmitter (local) + MQTT (distrib)  │    │
+│   │   Envelopes con trace_id, correlation_id │    │
+│   └────────────────┬────────────────────────┘    │
+│                    │                              │
+│   ┌────────────────┴────────────────────────┐    │
+│   │         MQTT BROKER (Aedes)              │    │
+│   │   TCP :1883 | WebSocket :9001            │    │
+│   │   Embebido (fallback) o externo          │    │
+│   └─────────────────────────────────────────┘    │
+│                                                   │
+│   ┌─────────────────────────────────────────┐    │
+│   │         OBSERVABILITY                    │    │
+│   │   Logger, Tracer (W3C), Metrics,         │    │
+│   │   ActivityLogger                         │    │
+│   └─────────────────────────────────────────┘    │
+│                     EVENT CORE                    │
+└───────────────────────────────────────────────────┘
 ```
 
-### Frontend Initialization Order (Critical)
+---
+
+## 3. SECUENCIA DE ARRANQUE (index.js)
+
+El `index.js` orquesta la inicialización de todo el sistema en orden:
+
+| Paso | Componente | Qué hace |
+|------|-----------|----------|
+| 1 | **Observability** | Logger, Tracer, Metrics |
+| 2 | **Validation** | ValidationManager + schemas comunes (Ajv) |
+| 3 | **MQTT Client** | Conecta a broker externo; si falla, arranca broker embebido (Aedes) |
+| 4 | **Hook System** | HookManager para interceptores (beforeEventPublish, afterEventReceive, etc.) |
+| 5 | **Event Bus** | EventEmitter + MQTT bridge. ActivityLogger se ata aquí |
+| 5.5 | **UI Request Handler** | Escucha `ui/request/#`, despacha a handlers registrados |
+| 6 | **Providers** | Carga service providers desde `services/providers/` |
+| 6.5 | **Module Loader** | Descubre y carga módulos desde `./modules/`. Registra provider tools en el toolsRegistry |
+| 6.7 | **Handler Loader** | Carga handlers centralizados desde `./handlers/` |
+| 7 | **Service Registry** | Auto-asigna puerto HTTP libre, registra el servicio |
+| 8 | **HTTP Gateway** | Servidor HTTP nativo (Node.js `http` module, sin Express). Enruta `/modules/{name}/{path}` a módulos |
+
+**Shutdown graceful:** Timer heartbeat → Service Registry → ActivityLogger → HTTP Gateway → UI Handler → Modules → Handlers → Providers → MQTT Client.
+
+---
+
+## 4. COMPONENTES DEL CORE (directorio `core/`)
+
+### 4.1 Event Bus (`core/events/bus.js`)
+- Extiende `EventEmitter` de Node.js
+- **Híbrido:** eventos locales (in-process) + eventos distribuidos (MQTT a otros cores)
+- `emit(eventType, data)` → publica localmente Y por MQTT
+- `emitTo(targetCoreId, eventType, data)` → publica a un core específico
+- `subscribe(eventType, handler)` → retorna función de unsubscribe
+- Soporte de `EventEnvelope` con `event_id`, `source.core_id`, `source.module_id`, `trace_id`
+- Hooks: `beforeEventPublish`, `afterEventReceive` pueden bloquear o modificar eventos
+- Validación opcional contra `constants.js`
+
+### 4.2 MQTT Client (`core/mqtt/client.js`)
+- Wrapper sobre `mqtt.js` con fallback automático a broker embebido (Aedes)
+- Connection pooling implementado pero deshabilitado por defecto
+- Topics convenidos: `core/{core-id}/events/{event-type}`, `core/*/events/#` (broadcast)
+- Pool (`core/mqtt/pool.js`): min/max connections, health check, idle timeout
+
+### 4.3 Module Loader (`core/modules/loader.js`) — 1291 líneas
+**Es el componente más importante y más evolucionado del sistema.**
+
+Funcionalidades:
+- **Auto-descubrimiento:** escanea `./modules/`, lee `module.json`, requiere `index.js`
+- **Auto-wiring de APIs:** `manifest.apis` → registra rutas HTTP automáticamente
+- **Auto-wiring de Tools:** `manifest.tools` → registra herramientas para AI
+- **Auto-wiring de Eventos:** `manifest.subscribes` con `handler` → suscribe automáticamente y guarda `_eventUnsubs` para cleanup
+- **Auto-wiring de UI Handlers:** `manifest.ui_handlers` / `manifest.uiActions` / `manifest.handlers` → registra en UIRequestHandler y guarda `_uiRegistrations` para cleanup
+- **Normalización:** acepta formatos legacy (3 variantes de subscribes, 3 de UI handlers)
+- **Módulos agrupados:** soporta subdirectorios (ej: `modules/pizzepos/pedidos/`)
+- **Hot-reload:** `watch()` con `fs.watch` + debounce 500ms
+- **Deshabilitación:** `config.modules.disabled` en config.json
+- **Provider Tools:** unifica tools de providers (OCR, Gmail, etc.) con tools de módulos en un solo `toolsRegistry`
+- **Cleanup automático:** `unload()` deshace TODAS las suscripciones de eventos y UI handlers
+
+### 4.4 HTTP Gateway (`core/gateway/http.js`)
+- Servidor HTTP nativo (Node.js `http` module, sin Express/Fastify)
+- Enrutamiento: `/modules/{moduleName}/{path}` → handler del módulo
+- Endpoints fijos: `/health`, `/stats`, `/modules`, `/events`, `/tools`, `/ui/*`
+- CORS habilitado por defecto
+- Middleware: Validación (Ajv), Compresión (gzip/deflate), Cache in-memory
+- Request body parsing con límite configurable (default 1MB)
+- Timeout configurable (default 30s)
+
+### 4.5 UI Request Handler (`core/ui/UIRequestHandler.js`)
+- Implementa semántica REST sobre MQTT
+- Topics: `ui/request/{domain}/{action}` → `ui/response/{request_id}`
+- Status codes (200, 201, 400, 404, 409, 500)
+- Error classes: UIRequestError, ValidationError, NotFoundError, ConflictError
+- Los módulos se registran: `uiHandler.register('pedido', 'list', handler)`
+
+### 4.6 Observability (`core/observability/`)
+- **Logger:** Structured logging con nivel, coreId, contexto. Niveles: debug/info/warn/error
+- **Tracer:** W3C Trace Context compatible. Genera trace_id y span_id
+- **Metrics:** Counters, gauges, histograms. In-memory (no Prometheus/Grafana aún)
+- **ActivityLogger:** Monitoreo centralizado de actividad del sistema via EventBus
+
+### 4.7 Otros componentes del core
+- **Hooks (`core/hooks.js`):** Sistema de interceptores. Puntos: beforeEventPublish, afterEventReceive, beforeRequest, afterResponse
+- **Validation (`core/validation/`):** ValidationManager basado en Ajv. Schemas JSON Schema
+- **Config (`core/config/`):** Prioridad: CLI args > ENV vars > config.{env}.json > config.json
+- **Providers (`core/providers/`):** Sistema de providers con loader, registry, executor
+- **Discovery (`core/discovery/`):** Implementado pero NO activado en el startup
+- **Flow Engine (`core/flow/`):** Implementado pero NO activado en el startup
+- **Handler Loader (`core/handler-loader.js`):** Carga handlers centralizados desde `./handlers/`
+- **Service Executor (`core/service-executor.js`):** Ejecuta acciones de handlers
+- **Service Registry (`core/utils/`):** Registro de servicios con auto-cleanup y heartbeat
+
+---
+
+## 5. MÓDULOS — El corazón funcional
+
+### 5.1 Inventario completo (35 módulos + 14 PizzePOS)
+
+**Módulos de infraestructura/plataforma:**
+
+| Módulo | Líneas | Descripción | Estado |
+|--------|--------|-------------|--------|
+| `ai-gateway` | 1872 | Gateway multi-LLM (DeepSeek, Claude, OpenAI, Groq, Gemini, Ollama). Streaming SSE, function calling, cost tracking | Funcional |
+| `credential-manager` | 2635 | Gestión de credenciales multi-nivel (GLOBAL/PROJECT/CLIENT/CUSTOM). Almacenamiento en .env. OAuth2 para Google/Gmail | Funcional, bien declarado |
+| `chat-session` | 1411 | Gestión de sesiones de chat con historial y contexto | Funcional |
+| `chat-ai-bridge` | 1236 | Puente entre chat y AI gateway | Funcional |
+| `prompt-manager` | 1618 | CRUD de prompts con categorías, tags, favoritos | Funcional |
+| `prompt-composer` | 1306 | Composición dinámica de prompts con variables y templates | Funcional |
+| `database-manager` | 1425 | Gestión de bases de datos SQLite (sql.js). CRUD genérico | Funcional |
+| `filesystem` | 1232 | Operaciones de sistema de archivos. 15 UI handlers | Funcional |
+| `scheduler` | 1146 | Programador de tareas (cron-like). 11 UI handlers | Funcional |
+| `project-manager` | 1070 | Gestión de proyectos multi-tenant | Funcional |
+| `plugin-manager` | 515 | Gestión dinámica de plugins | Funcional |
+| `metricas` | 713 | Métricas centralizadas. Escucha `*.creado`, `*.actualizado`, etc. | Funcional |
+| `log-manager` | 506 | Gestión centralizada de logs | Funcional |
+| `admin-panel` | 542 | Panel de administración del sistema | Funcional |
+| `telegram-service` | 752 | Integración con Telegram Bot API | Funcional |
+| `system-inspector` | 235 | Inspección del estado del sistema | Funcional |
+
+**Módulos de IA/Agentes:**
+
+| Módulo | Líneas | Descripción | Estado |
+|--------|--------|-------------|--------|
+| `ai-agent-framework` | 610 | Framework para agentes IA con pipeline executor, strategy patterns | Funcional |
+| `agent-manager` | 340 | Gestión de agentes IA | Funcional |
+| `bot-manager` | 330 | Gestión de bots | Funcional |
+| `context-manager` | 521 | Gestión de contexto para IA | Funcional |
+| `composition-manager` | 716 | Composición de pantallas declarativas (puzzle system) | Funcional |
+
+**Módulos de utilidad:**
+
+| Módulo | Líneas | Descripción | Estado |
+|--------|--------|-------------|--------|
+| `text-editor` | 579 | Editor de texto con UI handlers | Funcional |
+| `pdf-viewer` | 1096 | Visor/procesador de PDFs | Funcional |
+| `code-executor` | 620 | Sandbox para ejecución de código (Node.js) | Funcional, riesgo seguridad |
+| `calling-generator` | 811 | Generador de llamadas/calling con AI | Funcional |
+| `security-p2p` | 291 | Encriptación P2P entre cores | Parcial |
+| `staff-manager` | 393 | Gestión de personal | Funcional |
+
+**Módulos deshabilitados/deprecated:**
+
+| Módulo | Líneas | Estado |
+|--------|--------|--------|
+| `conversation-manager` | 523 | Reemplazado por chat-session |
+| `scratch-designer` | 412 | Experimental |
+| `ui-designer` | 1280 | Experimental |
+| `dashboard` | 360 | Deprecated |
+| `notas` | 484 | Deprecated |
+
+### 5.2 Módulos PizzePOS (`modules/pizzepos/`)
+
+El vertical de restaurante, con 14 submódulos:
+
+| Módulo | Descripción |
+|--------|-------------|
+| `productos` | Catálogo de productos (pizzas, bebidas, etc.) |
+| `categorias` | Categorías de productos |
+| `ingredientes` | Gestión de ingredientes |
+| `variaciones` | Variaciones de productos (tamaño, extras) |
+| `pedidos` | Gestión de pedidos event-driven |
+| `comandero` | Interfaz del camarero para tomar pedidos |
+| `persistencia-comandero` | Persistencia del estado del comandero |
+| `cuentas` | Cuentas/mesas abiertas |
+| `cuentas-canales` | Canales de venta (mesa, llevar, teléfono) |
+| `cobros` | Procesamiento de pagos (efectivo, tarjeta, Bizum, etc.) |
+| `cocina` | Pantalla de cocina (KDS) |
+| `carta-impresion` | Generación e impresión de cartas |
+| `impresion` | Sistema de impresión (tickets, comandas) |
+| `menu-generator` | Generador de menús con AI |
+
+**Flujo de eventos PizzePOS:**
 ```
-LazyShell.svelte onMount:
-  1. initWorkspaceSubscriptions()
-  2. initChatSubscriptions()
-  3. connect()
-  4. initProjectsSubscriptions()  ← must be before conversations
-  5. initConversations()
+Comandero → pedido.creado → Pedidos → pedido.enviado_cocina → Cocina
+                                   → pedido.item_agregado → Cuentas (actualiza total)
+Cobros ← cobro.procesado ← cuenta.estado_cambiado ← Cuentas
 ```
 
-### Gotchas (From Production Experience)
-- DeepSeek does NOT support images via API — use Google Vision for OCR
-- `services.call('ai-gateway', 'chat')` silently fails — must use `services.call('ai', 'chat')`
-- Frontend timeout must be >= backend timeout (was 60s vs 180s — BUG-004)
-- `isStreaming` must be controlled ONLY by `sendMessage` completion, not by MQTT stream/end signals
-- Gmail refresh token must be stored as `GMAIL_REFRESH_TOKEN_{account}` not `GMAIL_API_KEY_GLOBAL`
-- credential-manager previously deleted .env keys it didn't recognize — fixed with `_unmanagedLines`
+---
 
-## Honest Summary
+## 6. PLUGINS (`plugins/`)
 
-event-core is a well-architected system with strong conventions and unusually good self-documentation. The event-driven pattern is applied consistently, the credential system is clean, module auto-discovery works well, and the progressive composition system is genuinely sophisticated. The AI gateway with 6 providers and unified tool calling is production-ready. The two verticals (PizzePOS and invoice pipeline) demonstrate the framework's extensibility.
+Extensiones externas cargadas dinámicamente:
 
-Main risks: project-manager monolith (3731 lines, hardest to change), post-hoc streaming debt, low adoption of composition events, and the dual envelope workaround that should be fixed at the source. The system is production-capable for its current verticals and has solid infrastructure for adding new ones via blueprints.
+| Plugin | Descripción |
+|--------|-------------|
+| `github` | Integración con GitHub API |
+| `slack` | Integración con Slack |
+| `weather` | API del tiempo |
+| `http-utils` | Utilidades HTTP |
+| `ocr` | OCR con múltiples backends (Google Vision, Tesseract, etc.) |
+
+---
+
+## 7. PROVIDERS (`services/providers/`)
+
+Sistema de service providers que se cargan desde `services/manifest-loader.js`:
+
+**Categorías de providers (documentados en contexto):**
+- **LLM:** DeepSeek, Claude/Anthropic, OpenAI, Groq, Gemini, Ollama
+- **Visión/OCR:** Google Vision, Tesseract, modelo local
+- **Audio:** Whisper (transcripción), ElevenLabs (TTS)
+- **Documentos:** pdf-parse, FFmpeg
+- **Datos:** CSV, Zip, SQLite (sql.js), Notion
+- **Integración:** GitHub, Slack, Weather, Gmail
+
+Los providers se registran como tools en el `toolsRegistry` del Module Loader, unificando tools de módulos y tools de providers en un solo sistema accesible por el AI Gateway.
+
+---
+
+## 8. HANDLERS (`handlers/`)
+
+Sistema de handlers centralizados con dos niveles:
+- `handlers/global/` — Handlers que aplican a todo el sistema
+- `handlers/projects/{id}/` — Handlers específicos por proyecto
+
+Incluye un directorio `handlers/global/archived/` con 30+ handlers deprecated.
+
+---
+
+## 9. FRONTEND (`frontend/`)
+
+**Stack:** SvelteKit 2.16, Svelte 5, TypeScript, Vite, Tailwind CSS
+
+**Estructura:**
+- 14 rutas SvelteKit
+- 68 archivos `.svelte`, 48 archivos `.ts`
+- 6 Svelte stores
+- Comunicación con backend via MQTT WebSocket (no REST directo)
+
+**Componentes clave:**
+- ChatInput, ConversationPanel, PromptSelector — UI de chat con IA
+- Sidebar, Header, MobileWorkspaceLayout — navegación
+- Modal, Toast, Alert, FloatingPanel — feedback
+- StatCard, EventStream, Grid, Table — visualización de datos
+- Button, Card, Form, Select, Input — primitivos UI
+
+**Issues documentados:**
+- Migración a Tailwind incompleta
+- Sin telemetría frontend
+- Conexión MQTT no pooled
+- Rutas legacy sin limpiar
+
+---
+
+## 10. BLUEPRINTS Y TEMPLATES
+
+### Blueprints (`blueprints/`)
+Arquitecturas de referencia pre-diseñadas para componer features:
+- Templates de módulos
+- Templates de eventos
+- Templates de APIs
+- Templates de pantallas
+
+### Plop Templates (`plop-templates/`)
+Generadores de código con Plop.js para scaffolding de:
+- Nuevos módulos
+- Nuevas APIs
+- Nuevos eventos
+- Nuevas pantallas
+
+### plopfile.js (59,265 líneas)
+Archivo de generación masivo que incluye generadores para todos los patrones del sistema.
+
+---
+
+## 11. INFRAESTRUCTURA
+
+### Docker
+- `Dockerfile`: Multi-stage build (Alpine), optimizado
+- `docker-compose.yml`: Configuración para 2 cores (`core-a`, `core-b`)
+- `docker/`: Configuraciones adicionales
+
+### Deployment
+- `deployment/`: Helm chart para Kubernetes
+- Scripts operacionales:
+  - `start.sh` (10,906 líneas) — Arranque completo con detección de plataforma
+  - `stop.sh` (5,427 líneas) — Shutdown graceful
+  - `dev.sh` (8,011 líneas) — Modo desarrollo con hot-reload
+  - `restart.sh` (2,183 líneas) — Restart con preservación de estado
+  - `install.sh` (1,908 líneas) — Instalador auto-detectante (Termux/Linux)
+
+### Puertos
+| Puerto | Servicio |
+|--------|----------|
+| 3000 | HTTP Gateway |
+| 1883 | MQTT Broker (TCP) |
+| 9001 | MQTT over WebSocket |
+
+---
+
+## 12. ESTADO REAL vs DOCUMENTADO
+
+### Lo que FUNCIONA (implementado en código):
+1. **Core completo:** MQTT broker embebido, EventBus híbrido, HTTP Gateway, Module Loader con auto-wiring de APIs/tools/events/UI handlers, Hooks, Observability
+2. **Module Loader avanzado:** `wireEventSubscriptions()` y `wireUIHandlers()` YA están implementados con cleanup automático
+3. **35+ módulos** cargables con auto-descubrimiento
+4. **14 módulos PizzePOS** con flujo completo de eventos
+5. **AI Gateway** multi-proveedor (6 LLMs) con function calling y streaming
+6. **Tool system unificado** (module tools + provider tools)
+7. **Frontend SvelteKit** funcional con MQTT
+
+### Lo que NO está implementado o está roto:
+1. **Seguridad (3/10):** Sin autenticación HTTP, sin ACLs MQTT, sin rate limiting, sin SSL/TLS documentado
+2. **Discovery y Flow Engine:** Implementados en core pero NO conectados al startup
+3. **Connection pooling MQTT:** Implementado pero deshabilitado
+4. **CI/CD:** No existe
+5. **Cobertura de tests:** Sin herramienta de coverage, sin tests por módulo
+6. **Migración de módulos:** Los módulos que usan `subscribes` SIN campo `handler` no se auto-wiran (el loader los ignora). Módulos que se suscriben imperativamente en `onLoad()` siguen funcionando pero con riesgo de leaks si no limpian en `onUnload()`
+
+### Descuadre principal entre documentación y código:
+- El `plan.md` describe que `wireEventSubscriptions` y `wireUIHandlers` NO existen → **YA están implementados en `loader.js`**
+- El `SYSTEM-ANALYSIS.md` anterior decía que el loader NO auto-wires subscribes → **INCORRECTO, ya lo hace** (pero solo para subscribes que declaran `handler`)
+- La versión en `index.js` dice "v0.1.0", en `package.json` dice "v0.2.0", el README dice "v0.5.0"
+
+---
+
+## 13. MAPA DE DEPENDENCIAS ENTRE COMPONENTES
+
+```
+index.js (orquestador)
+  ├── core/config        → loadConfig()
+  ├── core/observability  → Logger, Tracer, Metrics, ActivityLogger
+  ├── core/validation     → ValidationManager, commonSchemas
+  ├── core/mqtt           → MQTTClient (→ core/broker/embedded)
+  ├── core/hooks          → HookManager
+  ├── core/events         → EventBus (usa mqtt, hooks, tracer, metrics)
+  ├── core/ui             → UIRequestHandler (usa mqttClient)
+  ├── core/providers      → ProviderSystem (loader, registry, executor)
+  ├── core/modules        → ModuleLoader + ModuleRegistry
+  │     ├── Descubre ./modules/*/module.json
+  │     ├── Auto-wire: apis → HTTPGateway
+  │     ├── Auto-wire: tools → toolsRegistry
+  │     ├── Auto-wire: subscribes[handler] → EventBus
+  │     └── Auto-wire: ui_handlers → UIRequestHandler
+  ├── core/handler-loader → HandlerLoader (→ handlers/global/, handlers/projects/)
+  ├── core/service-executor → ServiceExecutor
+  ├── core/utils          → ServiceRegistry
+  └── core/gateway/http   → HTTPGateway (usa registry, eventBus, validation, compression, cache)
+```
+
+---
+
+## 14. RESUMEN EJECUTIVO
+
+**Event-Core es un sistema ambicioso y bien diseñado** que implementa correctamente su visión de meta-core event-driven. Los patrones arquitectónicos son sólidos:
+
+1. **IoC real:** Los módulos declaran contratos en JSON; el loader los conecta
+2. **Event-driven puro:** Todo fluye por eventos (MQTT + EventEmitter)
+3. **Fractal:** Múltiples cores pueden comunicarse via MQTT
+4. **Modular:** 35+ módulos con auto-descubrimiento y hot-reload
+
+**El estado real del sistema está entre v0.2.0 y v0.3.0.** Los puntos críticos para producción son:
+
+| Prioridad | Issue | Impacto |
+|-----------|-------|---------|
+| P0 | Sin autenticación HTTP/MQTT | Cualquiera puede acceder |
+| P1 | Módulos con suscripciones imperativas | Leaks de memoria en hot-reload |
+| P1 | Discovery/Flow no conectados | Capacidades implementadas pero inaccesibles |
+| P2 | Sin CI/CD | No hay pipeline de validación |
+| P2 | Código muerto (_archived, handlers deprecated) | Confusión, deuda técnica |
+| P3 | Frontend sin telemetría | Sin visibilidad del lado cliente |
+| P3 | Versiones inconsistentes | Confusión sobre estado real |
+
+**Lo más importante:** El Module Loader YA implementa `wireEventSubscriptions()` y `wireUIHandlers()`. El trabajo pendiente es **migrar los `module.json` de los módulos** que aún no declaran `handler` en sus `subscribes`, y luego eliminar el código imperativo redundante de sus `onLoad()`.

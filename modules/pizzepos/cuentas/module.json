@@ -1,6 +1,6 @@
 {
   "name": "cuentas",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Gestión de cuentas con ciclo de vida completo - 100% Event-Driven",
   "author": "Pizzepos Team",
 
@@ -118,6 +118,12 @@
       "path": "/cuentas/:id",
       "handler": "handleDeleteCuenta",
       "description": "Eliminar cuenta (publica evento cuenta.eliminada)"
+    },
+    {
+      "method": "POST",
+      "path": "/cuentas/:id/marcar_entregado",
+      "handler": "handleMarcarEntregado",
+      "description": "Marcar cuenta como entregada (listo → entregado)"
     },
     {
       "method": "GET",
@@ -254,6 +260,7 @@
         "cuenta.por_estado.con_pedido",
         "cuenta.por_estado.en_preparacion",
         "cuenta.por_estado.listo",
+        "cuenta.por_estado.entregado",
         "cuenta.por_estado.para_cobrar",
         "cuenta.por_estado.cobrado",
         "cuenta.alertas.count"

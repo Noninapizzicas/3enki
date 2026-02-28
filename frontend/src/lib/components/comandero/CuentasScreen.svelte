@@ -130,6 +130,7 @@
           {#each $cuentas as cuenta (cuenta.id)}
             <CuentaCard
               {cuenta}
+              {projectId}
               on:open-comandero={handleOpenComandero}
               on:open-cuenta={handleOpenCuenta}
             />

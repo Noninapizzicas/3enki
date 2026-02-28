@@ -11,9 +11,10 @@
    */
   import { createEventDispatcher } from 'svelte';
   import type { Cuenta, TipoCuenta } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, marcarEntregado, deleteCuenta } from '$lib/stores/cuentas';
 
   export let cuenta: Cuenta;
+  export let projectId: string = '';
 
   const dispatch = createEventDispatcher<{
     'open-comandero': { cuenta_id: string };
@@ -30,7 +31,8 @@
     con_pedido:      { label: 'Con pedido',  color: '#3b82f6', urgent: false },
     en_preparacion:  { label: 'Preparando',  color: '#eab308', urgent: false },
     listo:           { label: 'Listo',       color: '#22c55e', urgent: true },
-    para_cobrar:     { label: 'Para cobrar', color: '#a855f7', urgent: true },
+    entregado:       { label: 'Entregado',   color: '#a855f7', urgent: false },
+    para_cobrar:     { label: 'Para cobrar', color: '#f59e0b', urgent: true },
     cobrado:         { label: 'Cobrado',     color: '#6b7280', urgent: false }
   };
 
@@ -39,12 +41,32 @@
   $: estadoColor = estadoCfg.color;
   $: estadoUrgent = estadoCfg.urgent;
 
+  // Acciones contextuales según estado
+  $: showEntregarBtn = cuenta.estado === 'listo';
+  $: showCobrarBtn = cuenta.estado === 'listo' || cuenta.estado === 'entregado';
+  $: showDeleteBtn = cuenta.estado === 'pendiente' || cuenta.estado === 'cobrado';
+  $: showActions = showEntregarBtn || showCobrarBtn || showDeleteBtn;
+
   function handleLeftTap() {
     dispatch('open-comandero', { cuenta_id: cuenta.id });
   }
 
   function handleRightTap() {
     dispatch('open-cuenta', { cuenta_id: cuenta.id });
+  }
+
+  async function handleEntregado() {
+    if (!projectId) return;
+    await marcarEntregado(projectId, cuenta.id);
+  }
+
+  function handleCobrar() {
+    dispatch('open-cuenta', { cuenta_id: cuenta.id });
+  }
+
+  async function handleDelete() {
+    if (!projectId) return;
+    await deleteCuenta(projectId, cuenta.id);
   }
 
   function formatTotal(total: number): string {
@@ -96,6 +118,27 @@
       </div>
     </button>
   </div>
+
+  <!-- Action buttons (contextual) -->
+  {#if showActions}
+    <div class="card-actions">
+      {#if showEntregarBtn}
+        <button class="action-btn action-entregar" on:click|stopPropagation={handleEntregado} title="Marcar entregado">
+          ENTREGAR
+        </button>
+      {/if}
+      {#if showCobrarBtn}
+        <button class="action-btn action-cobrar" on:click|stopPropagation={handleCobrar} title="Cobrar">
+          COBRAR
+        </button>
+      {/if}
+      {#if showDeleteBtn}
+        <button class="action-btn action-delete" on:click|stopPropagation={handleDelete} title="Eliminar cuenta">
+          X
+        </button>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Footer: estado dot + label + alerta -->
   <div class="card-footer">
@@ -281,6 +324,49 @@
     font-weight: 800;
   }
 
+  /* ===== ACTION BUTTONS ===== */
+
+  .card-actions {
+    display: flex;
+    gap: 4px;
+    padding: 4px 8px;
+    border-top: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
+  }
+
+  .action-btn {
+    flex: 1;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 0;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .action-btn:active {
+    opacity: 0.7;
+  }
+
+  .action-entregar {
+    background: #a855f7;
+    color: #fff;
+  }
+
+  .action-cobrar {
+    background: #22c55e;
+    color: #fff;
+  }
+
+  .action-delete {
+    background: transparent;
+    border: 1px solid #ef4444;
+    color: #ef4444;
+    flex: 0 0 28px;
+  }
+
   /* ===== GLOVO STYLES ===== */
 
   .glovo-badge {
@@ -338,5 +424,8 @@
     .estado { font-size: 0.55rem; }
     .alerta-badge { width: 13px; height: 13px; font-size: 0.5rem; }
     .glovo-badge { font-size: 0.5rem; padding: 1px 4px; }
+    .card-actions { padding: 3px 6px; gap: 3px; }
+    .action-btn { padding: 4px 0; font-size: 0.5rem; }
+    .action-delete { flex: 0 0 24px; }
   }
 </style>

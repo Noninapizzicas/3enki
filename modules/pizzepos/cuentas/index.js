@@ -1,7 +1,7 @@
 /**
- * Módulo Cuentas v2.2
+ * Módulo Cuentas v2.3
  * Gestión de cuentas 100% Event-Driven
- * Ciclo de vida completo: pendiente → con_pedido → en_preparacion → listo → para_cobrar → cobrado
+ * Ciclo de vida completo: pendiente → con_pedido → en_preparacion → listo → entregado → para_cobrar → cobrado
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
@@ -14,7 +14,8 @@ const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
   con_pedido: ['en_preparacion', 'con_pedido'], // con_pedido→con_pedido: más items sin enviar
   en_preparacion: ['listo', 'en_preparacion'],   // en_preparacion→en_preparacion: nuevo envío parcial
-  listo: ['para_cobrar', 'en_preparacion'],       // puede volver a en_preparacion si piden más
+  listo: ['entregado', 'para_cobrar', 'en_preparacion'], // entregado = entregado al cliente/rider
+  entregado: ['para_cobrar', 'en_preparacion'],  // entregado→para_cobrar: cobrar después de entregar
   para_cobrar: ['cobrado'],
   cobrado: []
 };
@@ -25,7 +26,7 @@ const ALERTA_PENDIENTE_MS = 30 * 60 * 1000; // 30 minutos
 class CuentasModule {
   constructor() {
     this.name = 'cuentas';
-    this.version = '2.2.0';
+    this.version = '2.3.0';
 
     // Estado en memoria
     this.cuentas = new Map(); // cuenta_id -> cuenta
@@ -91,7 +92,7 @@ class CuentasModule {
 
     // Desregistrar UI handlers
     if (this.uiHandler) {
-      const actions = ['list', 'get', 'create', 'delete', 'stats', 'health', 'metrics'];
+      const actions = ['list', 'get', 'create', 'delete', 'marcar_entregado', 'stats', 'health', 'metrics'];
       for (const action of actions) {
         this.uiHandler.unregister('cuenta', action);
       }
@@ -117,12 +118,13 @@ class CuentasModule {
     this.uiHandler.register('cuenta', 'get', this.handleGetCuenta.bind(this));
     this.uiHandler.register('cuenta', 'create', this.handleCreateCuenta.bind(this));
     this.uiHandler.register('cuenta', 'delete', this.handleDeleteCuenta.bind(this));
+    this.uiHandler.register('cuenta', 'marcar_entregado', this.handleMarcarEntregado.bind(this));
     this.uiHandler.register('cuenta', 'stats', this.handleGetStats.bind(this));
     this.uiHandler.register('cuenta', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('cuenta', 'metrics', this.handleGetMetrics.bind(this));
 
     this.logger.info('cuentas.ui_handlers.registered', {
-      handlers: ['list', 'get', 'create', 'delete', 'stats', 'health', 'metrics']
+      handlers: ['list', 'get', 'create', 'delete', 'marcar_entregado', 'stats', 'health', 'metrics']
     });
   }
 
@@ -332,7 +334,7 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    if (cuenta.estado === 'listo') {
+    if (cuenta.estado === 'listo' || cuenta.estado === 'entregado') {
       await this.transicionarEstado(cuenta_id, 'para_cobrar');
     }
   }
@@ -503,6 +505,31 @@ class CuentasModule {
     this.logger.info('cuenta.eliminada', { project_id: cuenta.project_id, cuenta_id: id, tipo: cuenta.tipo });
 
     return { status: 200, data: { message: 'Cuenta eliminada' } };
+  }
+
+  async handleMarcarEntregado(data) {
+    const { project_id, id } = data;
+    const cuenta = this.cuentas.get(id);
+
+    if (!cuenta) {
+      return { status: 404, error: `Cuenta ${id} no encontrada` };
+    }
+
+    if (project_id && cuenta.project_id !== project_id) {
+      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
+    }
+
+    if (cuenta.estado !== 'listo') {
+      return { status: 400, error: `Cuenta debe estar en estado 'listo' para marcar entregado (actual: ${cuenta.estado})` };
+    }
+
+    const ok = await this.transicionarEstado(id, 'entregado');
+    if (!ok) {
+      return { status: 500, error: 'No se pudo transicionar a entregado' };
+    }
+
+    this.logger.info('cuenta.marcada_entregado', { project_id: cuenta.project_id, cuenta_id: id });
+    return { status: 200, data: { message: 'Cuenta marcada como entregada' } };
   }
 
   async handleGetStats() {
@@ -699,7 +726,7 @@ class CuentasModule {
       this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
 
       const por_tipo = { local: 0, delivery: 0, llevar: 0 };
-      const por_estado = { pendiente: 0, con_pedido: 0, en_preparacion: 0, listo: 0, para_cobrar: 0, cobrado: 0 };
+      const por_estado = { pendiente: 0, con_pedido: 0, en_preparacion: 0, listo: 0, entregado: 0, para_cobrar: 0, cobrado: 0 };
       let alertas = 0;
 
       for (const cuenta of this.cuentas.values()) {
@@ -715,6 +742,7 @@ class CuentasModule {
       this.metrics.gauge('cuenta.por_estado.con_pedido', por_estado.con_pedido);
       this.metrics.gauge('cuenta.por_estado.en_preparacion', por_estado.en_preparacion);
       this.metrics.gauge('cuenta.por_estado.listo', por_estado.listo);
+      this.metrics.gauge('cuenta.por_estado.entregado', por_estado.entregado);
       this.metrics.gauge('cuenta.por_estado.para_cobrar', por_estado.para_cobrar);
       this.metrics.gauge('cuenta.por_estado.cobrado', por_estado.cobrado);
       this.metrics.gauge('cuenta.alertas.count', alertas);

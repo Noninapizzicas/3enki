@@ -356,8 +356,31 @@ export async function toggleMessageContext(messageId: string, inContext: boolean
 export function initChatSubscriptions(): () => void {
   const unsubs: Array<() => void> = [];
 
-  // Mensaje recibido
+  /**
+   * Extraer conversation_id del topic MQTT.
+   * Topic: conversation/{conv_id}/message → conv_id
+   */
+  function getConvIdFromTopic(topic: string): string | null {
+    const parts = topic.split('/');
+    return parts.length >= 2 ? parts[1] : null;
+  }
+
+  /**
+   * Verificar si un mensaje pertenece a la conversación activa.
+   * Si no hay conversación activa, aceptar todos (para nuevas conversaciones).
+   */
+  function isActiveConversation(topic: string): boolean {
+    const convId = get(conversationId);
+    if (!convId) return true; // Sin conversación activa = aceptar todo
+    const topicConvId = getConvIdFromTopic(topic);
+    if (!topicConvId || topicConvId === '+') return true; // Topic sin conv_id
+    return topicConvId === convId;
+  }
+
+  // Mensaje recibido — filtrar por conversación activa
   unsubs.push(subscribe('conversation/+/message', (topic, payload) => {
+    if (!isActiveConversation(topic)) return; // Ignorar mensajes de otras conversaciones
+
     const data = payload as Message;
     addMessage({
       id: data.id || generateUUID(),
@@ -369,8 +392,10 @@ export function initChatSubscriptions(): () => void {
     });
   }));
 
-  // Tool status
+  // Tool status — filtrar por conversación activa
   unsubs.push(subscribe('conversation/+/tool-status', (topic, payload) => {
+    if (!isActiveConversation(topic)) return;
+
     const data = payload as { tool: { name: string; status: string } };
     if (data.tool) {
       toolStatus.set(data.tool);

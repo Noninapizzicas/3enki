@@ -33,7 +33,7 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "GROQ", "GEMINI", "OLLAMA", "GOOGLE", "GMAIL"],
+            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "GROQ", "GEMINI", "OLLAMA", "GOOGLE", "GMAIL", "GLOVO"],
             "description": "Filtrar por proveedor (opcional)"
           }
         },
@@ -124,7 +124,9 @@
     { "domain": "credential", "action": "oauth.status", "handler": "handleUIOAuthStatus" },
     { "domain": "credential", "action": "oauth.config.list", "handler": "handleUIOAuthConfigList" },
     { "domain": "credential", "action": "oauth.config.save", "handler": "handleUIOAuthConfigSave" },
-    { "domain": "credential", "action": "oauth.config.delete", "handler": "handleUIOAuthConfigDelete" }
+    { "domain": "credential", "action": "oauth.config.delete", "handler": "handleUIOAuthConfigDelete" },
+    { "domain": "credential", "action": "glovo.save", "handler": "handleUIGlovoSave" },
+    { "domain": "credential", "action": "glovo.delete", "handler": "handleUIGlovoDelete" }
   ],
 
   "ui": {

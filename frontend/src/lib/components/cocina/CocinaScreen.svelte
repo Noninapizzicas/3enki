@@ -25,6 +25,7 @@
     pedidosCount,
     initCocinaSubscriptions,
     resumeAudioContext,
+    requestNotificationPermission,
     isGlovoConfirmado
   } from '$lib/stores/cocina';
   import type { PedidoCocina } from '$lib/stores/cocina';
@@ -61,6 +62,7 @@
   function unlockAudio() {
     if (!audioUnlocked) {
       resumeAudioContext();
+      requestNotificationPermission();
       audioUnlocked = true;
     }
   }

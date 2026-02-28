@@ -54,6 +54,15 @@ export interface OAuthConfig {
   configured: boolean;
 }
 
+export interface GlovoConfig {
+  level: string;
+  identifier: string | null;
+  clientIdPreview: string;
+  hasSecret: boolean;
+  chainId: string;
+  configured: boolean;
+}
+
 export interface CredentialsState {
   providers: ProviderOption[];
   levels: LevelOption[];
@@ -68,6 +77,7 @@ export interface CredentialsState {
     byLevel: Record<string, number>;
   };
   oauthConfigs: OAuthConfig[];
+  glovoConfigs: GlovoConfig[];
   loading: boolean;
   error: string | null;
   selectedKey: string | null;
@@ -140,7 +150,8 @@ const DEFAULT_PROVIDERS: ProviderOption[] = [
   { id: 'GEMINI', name: 'Google Gemini', icon: '💎' },
   { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
   { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
-  { id: 'GMAIL', name: 'Gmail', icon: '📧' }
+  { id: 'GMAIL', name: 'Gmail', icon: '📧' },
+  { id: 'GLOVO', name: 'Glovo', icon: '🛵' }
 ];
 
 const DEFAULT_LEVELS: LevelOption[] = [
@@ -165,6 +176,7 @@ const initialState: CredentialsState = {
   },
   stats: { total: 0, byLevel: {} },
   oauthConfigs: [],
+  glovoConfigs: [],
   loading: false,
   error: null,
   selectedKey: null,
@@ -205,6 +217,7 @@ export async function loadCredentials(): Promise<void> {
       },
       stats: response.data.stats || { total: 0, byLevel: {} },
       oauthConfigs: response.data.oauthConfigs || [],
+      glovoConfigs: response.data.glovoConfigs || [],
       loading: false,
       error: null
     }));
@@ -424,6 +437,61 @@ export async function deleteOAuthConfig(accountId: string): Promise<void> {
 }
 
 /**
+ * Guarda configuración Glovo (Client ID + Client Secret + Chain ID)
+ */
+export async function saveGlovoConfig(
+  level: string,
+  identifier: string | null,
+  clientId: string,
+  clientSecret: string,
+  chainId: string
+): Promise<any> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const response = await mqttRequest<any>('credential', 'glovo.save', {
+      level,
+      identifier,
+      client_id: clientId,
+      client_secret: clientSecret,
+      chain_id: chainId
+    });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] Glovo config saved:', response.data?.level);
+    return response.data;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Glovo config save failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
+ * Elimina configuración Glovo
+ */
+export async function deleteGlovoConfig(level: string, identifier: string | null): Promise<void> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<any>('credential', 'glovo.delete', { level, identifier });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] Glovo config deleted:', level);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Glovo config delete failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
  * Inicia flujo OAuth2 para Gmail/Google
  * Retorna URL de autorización para abrir en popup/redirect
  */
@@ -524,6 +592,9 @@ export const oauthConfigs = derived(credentialsStore, $s => $s.oauthConfigs);
 
 /** Tiene configuración OAuth */
 export const hasOAuthConfig = derived(credentialsStore, $s => $s.oauthConfigs.length > 0);
+
+/** Configuraciones de Glovo (multi-campo) */
+export const glovoConfigs = derived(credentialsStore, $s => $s.glovoConfigs);
 
 /** Credencial seleccionada actual */
 export const selectedCredential = derived(

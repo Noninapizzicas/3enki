@@ -521,6 +521,16 @@ export function initCuentasSubscriptions(projectId: string): () => void {
     })
   );
 
+  // cobro.procesado → recargar tras breve delay (belt-and-suspenders con cuenta.cerrada)
+  cleanups.push(
+    mqttSubscribe('cobro.procesado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      // Dar tiempo a que persistencia procese cuenta.cerrada
+      setTimeout(() => loadCuentasFromPersistencia(projectId), 2000);
+    })
+  );
+
   // comandero.item_agregado → actualizar card en vivo (antes de enviar cocina)
   cleanups.push(
     mqttSubscribe('comandero.item_agregado', (event: any) => {

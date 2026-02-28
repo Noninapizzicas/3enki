@@ -27,6 +27,8 @@
     clearTestResult,
     saveOAuthConfig,
     deleteOAuthConfig,
+    saveGlovoConfig,
+    deleteGlovoConfig,
     startOAuth,
     globalCredentials,
     projectCredentials,
@@ -35,6 +37,7 @@
     botCredentials,
     selectedCredential,
     oauthConfigs,
+    glovoConfigs,
     type ServiceType
   } from '$lib/stores/credentials';
   import { closePanel } from '$lib/stores';
@@ -70,6 +73,15 @@
     accountName: '',
     clientId: '',
     clientSecret: ''
+  };
+
+  // Form state for Glovo credentials
+  let glovoForm = {
+    level: 'GLOBAL',
+    identifier: '',
+    clientId: '',
+    clientSecret: '',
+    chainId: ''
   };
 
   // OAuth authorize form
@@ -124,10 +136,14 @@
   $: telegramBots = $botCredentials;
 
   // Form validation
-  $: selectedLevel = levels.find(l => l.id === newForm.level);
+  $: isGlovoSelected = newForm.provider === 'GLOVO';
+  $: selectedLevel = levels.find(l => l.id === (isGlovoSelected ? glovoForm.level : newForm.level));
   $: requiresIdentifier = selectedLevel?.requiresIdentifier ?? false;
-  $: canSaveNew = newForm.provider && newForm.apiKey.length > 0 &&
-    (!requiresIdentifier || newForm.identifier.length > 0);
+  $: canSaveNew = isGlovoSelected
+    ? (glovoForm.clientId.length > 0 && glovoForm.clientSecret.length > 0 && glovoForm.chainId.length > 0 &&
+       (!requiresIdentifier || glovoForm.identifier.length > 0))
+    : (newForm.provider && newForm.apiKey.length > 0 &&
+       (!requiresIdentifier || newForm.identifier.length > 0));
   $: canSaveEdit = editApiKey.length > 0;
 
   // ==========================================================================
@@ -212,6 +228,30 @@
   async function handleSaveNew() {
     if (!canSaveNew || saving) return;
 
+    // Glovo: guardar multi-campo sin test previo
+    if (isGlovoSelected) {
+      saving = true;
+      error = null;
+      try {
+        const glovoLevel = levels.find(l => l.id === glovoForm.level);
+        const glovoRequiresId = glovoLevel?.requiresIdentifier ?? false;
+        await saveGlovoConfig(
+          glovoForm.level,
+          glovoRequiresId ? glovoForm.identifier : null,
+          glovoForm.clientId,
+          glovoForm.clientSecret,
+          glovoForm.chainId
+        );
+        glovoForm = { level: 'GLOBAL', identifier: '', clientId: '', clientSecret: '', chainId: '' };
+        setActiveTab('lista');
+      } catch (err) {
+        error = err instanceof Error ? err.message : 'Error al guardar credenciales Glovo';
+      } finally {
+        saving = false;
+      }
+      return;
+    }
+
     // Test first if not tested
     if (!testResult) {
       await handleTestNew();
@@ -255,9 +295,23 @@
       identifier: '',
       apiKey: ''
     };
+    glovoForm = { level: 'GLOBAL', identifier: '', clientId: '', clientSecret: '', chainId: '' };
     clearTestResult();
     error = null;
     setActiveTab('lista');
+  }
+
+  async function handleDeleteGlovo(level: string, identifier: string | null) {
+    if (!confirm(`Eliminar credenciales Glovo ${level}${identifier ? ` (${identifier})` : ''}?`)) return;
+    deleting = true;
+    error = null;
+    try {
+      await deleteGlovoConfig(level, identifier);
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al eliminar credenciales Glovo';
+    } finally {
+      deleting = false;
+    }
   }
 
   // ==========================================================================
@@ -851,103 +905,248 @@
             </div>
           </fieldset>
 
-          <!-- Level -->
-          <fieldset class="field">
-            <legend class="label">Nivel</legend>
-            <div class="levels-grid" role="group">
-              {#each aiLevels as l (l.id)}
-                <button
-                  type="button"
-                  class="level-btn"
-                  class:active={newForm.level === l.id}
-                  on:click={() => { newForm.level = l.id; newForm.identifier = ''; }}
-                >
-                  <span>{l.icon}</span>
-                  <span>{l.name}</span>
-                </button>
-              {/each}
-            </div>
-          </fieldset>
+          {#if isGlovoSelected}
+            <!-- ============================================ -->
+            <!-- GLOVO: Formulario multi-campo -->
+            <!-- ============================================ -->
 
-          <!-- Identifier -->
-          {#if requiresIdentifier}
+            <!-- Level -->
+            <fieldset class="field">
+              <legend class="label">Nivel</legend>
+              <div class="levels-grid" role="group">
+                {#each aiLevels as l (l.id)}
+                  <button
+                    type="button"
+                    class="level-btn"
+                    class:active={glovoForm.level === l.id}
+                    on:click={() => { glovoForm.level = l.id; glovoForm.identifier = ''; }}
+                  >
+                    <span>{l.icon}</span>
+                    <span>{l.name}</span>
+                  </button>
+                {/each}
+              </div>
+            </fieldset>
+
+            <!-- Identifier -->
+            {#if requiresIdentifier}
+              <div class="field">
+                <label class="label" for="glovo-identifier">Identificador</label>
+                <input
+                  id="glovo-identifier"
+                  type="text"
+                  class="input"
+                  placeholder={glovoForm.level === 'PROJECT' ? 'mi-restaurante' : 'identificador'}
+                  bind:value={glovoForm.identifier}
+                />
+              </div>
+            {/if}
+
+            <!-- Client ID -->
             <div class="field">
-              <label class="label" for="new-identifier">Identificador</label>
+              <label class="label" for="glovo-client-id">Client ID</label>
               <input
-                id="new-identifier"
+                id="glovo-client-id"
                 type="text"
                 class="input"
-                placeholder={newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
-                bind:value={newForm.identifier}
+                placeholder="Client ID de Glovo Developer Portal"
+                bind:value={glovoForm.clientId}
               />
             </div>
-          {/if}
 
-          <!-- API Key -->
-          <div class="field">
-            <label class="label" for="new-apikey">API Key</label>
-            <div class="password-wrapper">
-              {#if showPassword}
-                <input
-                  id="new-apikey"
-                  type="text"
-                  class="input password-input"
-                  placeholder="sk-..."
-                  bind:value={newForm.apiKey}
-                  on:input={() => clearTestResult()}
-                />
-              {:else}
-                <input
-                  id="new-apikey"
-                  type="password"
-                  class="input password-input"
-                  placeholder="sk-..."
-                  bind:value={newForm.apiKey}
-                  on:input={() => clearTestResult()}
-                />
-              {/if}
+            <!-- Client Secret -->
+            <div class="field">
+              <label class="label" for="glovo-client-secret">Client Secret</label>
+              <div class="password-wrapper">
+                {#if showPassword}
+                  <input
+                    id="glovo-client-secret"
+                    type="text"
+                    class="input password-input"
+                    placeholder="Client Secret de Glovo Developer Portal"
+                    bind:value={glovoForm.clientSecret}
+                  />
+                {:else}
+                  <input
+                    id="glovo-client-secret"
+                    type="password"
+                    class="input password-input"
+                    placeholder="Client Secret de Glovo Developer Portal"
+                    bind:value={glovoForm.clientSecret}
+                  />
+                {/if}
+                <button
+                  type="button"
+                  class="toggle-password"
+                  on:click={togglePassword}
+                >
+                  {showPassword ? '🙈' : '👁'}
+                </button>
+              </div>
+            </div>
+
+            <!-- Chain ID -->
+            <div class="field">
+              <label class="label" for="glovo-chain-id">Chain ID</label>
+              <input
+                id="glovo-chain-id"
+                type="text"
+                class="input"
+                placeholder="ID del restaurante en Glovo"
+                bind:value={glovoForm.chainId}
+              />
+            </div>
+
+            <!-- Glovo configs existentes -->
+            {#if $glovoConfigs.length > 0}
+              <div class="field">
+                <label class="label">Configuraciones existentes</label>
+                {#each $glovoConfigs as gc}
+                  <div class="glovo-config-item">
+                    <span class="glovo-config-info">
+                      <span class="cred-icon">🛵</span>
+                      <span>{gc.level}{gc.identifier ? ` (${gc.identifier})` : ''}</span>
+                      <span class="cred-preview">{gc.clientIdPreview}</span>
+                      {#if gc.configured}
+                        <span title="Configurado">✅</span>
+                      {:else}
+                        <span title="Incompleto">⚠️</span>
+                      {/if}
+                    </span>
+                    <button
+                      class="btn danger small"
+                      on:click={() => handleDeleteGlovo(gc.level, gc.identifier)}
+                      disabled={deleting}
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            <!-- Error -->
+            {#if error}
+              <div class="error-msg">{error}</div>
+            {/if}
+
+            <!-- Actions -->
+            <div class="actions">
+              <button class="btn secondary" on:click={handleCancelNew} disabled={saving}>
+                Cancelar
+              </button>
               <button
-                type="button"
-                class="toggle-password"
-                on:click={togglePassword}
+                class="btn primary"
+                on:click={handleSaveNew}
+                disabled={!canSaveNew || saving}
               >
-                {showPassword ? '🙈' : '👁'}
+                {saving ? '⏳...' : '💾 Guardar Glovo'}
               </button>
             </div>
-          </div>
 
-          <!-- Test Result -->
-          {#if testResult}
-            <div class="test-result" class:valid={testResult.valid} class:invalid={!testResult.valid}>
-              {testResult.valid ? '✅' : '❌'} {testResult.message}
+          {:else}
+            <!-- ============================================ -->
+            <!-- PROVIDERS NORMALES: Formulario 1 campo -->
+            <!-- ============================================ -->
+
+            <!-- Level -->
+            <fieldset class="field">
+              <legend class="label">Nivel</legend>
+              <div class="levels-grid" role="group">
+                {#each aiLevels as l (l.id)}
+                  <button
+                    type="button"
+                    class="level-btn"
+                    class:active={newForm.level === l.id}
+                    on:click={() => { newForm.level = l.id; newForm.identifier = ''; }}
+                  >
+                    <span>{l.icon}</span>
+                    <span>{l.name}</span>
+                  </button>
+                {/each}
+              </div>
+            </fieldset>
+
+            <!-- Identifier -->
+            {#if requiresIdentifier}
+              <div class="field">
+                <label class="label" for="new-identifier">Identificador</label>
+                <input
+                  id="new-identifier"
+                  type="text"
+                  class="input"
+                  placeholder={newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
+                  bind:value={newForm.identifier}
+                />
+              </div>
+            {/if}
+
+            <!-- API Key -->
+            <div class="field">
+              <label class="label" for="new-apikey">API Key</label>
+              <div class="password-wrapper">
+                {#if showPassword}
+                  <input
+                    id="new-apikey"
+                    type="text"
+                    class="input password-input"
+                    placeholder="sk-..."
+                    bind:value={newForm.apiKey}
+                    on:input={() => clearTestResult()}
+                  />
+                {:else}
+                  <input
+                    id="new-apikey"
+                    type="password"
+                    class="input password-input"
+                    placeholder="sk-..."
+                    bind:value={newForm.apiKey}
+                    on:input={() => clearTestResult()}
+                  />
+                {/if}
+                <button
+                  type="button"
+                  class="toggle-password"
+                  on:click={togglePassword}
+                >
+                  {showPassword ? '🙈' : '👁'}
+                </button>
+              </div>
+            </div>
+
+            <!-- Test Result -->
+            {#if testResult}
+              <div class="test-result" class:valid={testResult.valid} class:invalid={!testResult.valid}>
+                {testResult.valid ? '✅' : '❌'} {testResult.message}
+              </div>
+            {/if}
+
+            <!-- Error -->
+            {#if error}
+              <div class="error-msg">{error}</div>
+            {/if}
+
+            <!-- Actions -->
+            <div class="actions">
+              <button class="btn secondary" on:click={handleCancelNew} disabled={saving || testing}>
+                Cancelar
+              </button>
+              <button
+                class="btn secondary"
+                on:click={handleTestNew}
+                disabled={!newForm.apiKey || testing || saving}
+              >
+                {testing ? '🔍...' : '🧪 Test'}
+              </button>
+              <button
+                class="btn primary"
+                on:click={handleSaveNew}
+                disabled={!canSaveNew || saving || testing}
+              >
+                {saving ? '⏳...' : '💾 Guardar'}
+              </button>
             </div>
           {/if}
-
-          <!-- Error -->
-          {#if error}
-            <div class="error-msg">{error}</div>
-          {/if}
-
-          <!-- Actions -->
-          <div class="actions">
-            <button class="btn secondary" on:click={handleCancelNew} disabled={saving || testing}>
-              Cancelar
-            </button>
-            <button
-              class="btn secondary"
-              on:click={handleTestNew}
-              disabled={!newForm.apiKey || testing || saving}
-            >
-              {testing ? '🔍...' : '🧪 Test'}
-            </button>
-            <button
-              class="btn primary"
-              on:click={handleSaveNew}
-              disabled={!canSaveNew || saving || testing}
-            >
-              {saving ? '⏳...' : '💾 Guardar'}
-            </button>
-          </div>
         </div>
       {/if}
 
@@ -1790,6 +1989,29 @@
     border-radius: var(--_radius);
     font-size: 0.8rem;
     text-align: center;
+  }
+
+  /* Glovo config items */
+  .glovo-config-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.6rem;
+    background: var(--_bg-subtle, rgba(255,255,255,0.05));
+    border-radius: var(--_radius);
+    margin-bottom: 0.3rem;
+    font-size: 0.85rem;
+  }
+
+  .glovo-config-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn.small {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
   }
 
   /* ==========================================================================

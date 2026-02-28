@@ -221,74 +221,75 @@ class PersistenciaComanderoModule {
 
     const { cuenta_id, tipo, total, metadata } = eventData;
 
+    // Obtener project_id de la cuenta activa en cache antes de borrarla
+    const cuentaActiva = this.cuentasActivasCache.get(cuenta_id);
+    const project_id = eventData.project_id || cuentaActiva?.project_id || null;
+
+    // Buscar cobro asociado para crear registro de venta
     const cobroEvento = this.eventosCache
       .filter(e => e.event_type === 'cobro.procesado')
       .find(e => e.payload?.cuenta_id === cuenta_id);
 
-    if (!cobroEvento) {
+    if (cobroEvento) {
+      const cuentaCreadaEvento = this.eventosCache
+        .filter(e => e.event_type === 'cuenta.creada')
+        .find(e => e.payload?.cuenta_id === cuenta_id);
+
+      const pedidosEventos = this.eventosCache
+        .filter(e => e.event_type === 'pedido.creado')
+        .filter(e => e.payload?.cuenta_id === cuenta_id);
+
+      const venta = {
+        venta_id: `venta_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: new Date().toISOString(),
+        project_id,
+        cuenta: {
+          cuenta_id,
+          tipo,
+          origen: cuentaCreadaEvento?.payload?.origen || 'desconocido',
+          hora_apertura: cuentaCreadaEvento?.timestamp || null,
+          hora_cierre: new Date().toISOString(),
+          metadata: metadata || {}
+        },
+        cobro: {
+          cobro_id: cobroEvento.payload.cobro_id,
+          monto: cobroEvento.payload.monto || total,
+          propina: cobroEvento.payload.propina || 0,
+          monto_total: cobroEvento.payload.monto_total || total,
+          metodo_pago: cobroEvento.payload.metodo_pago,
+          referencia_pago: cobroEvento.payload.referencia_pago
+        },
+        pedidos: pedidosEventos.map(p => ({
+          pedido_id: p.payload.pedido_id,
+          items: p.payload.items || [],
+          total: p.payload.total || 0
+        })),
+        resumen: {
+          subtotal: total,
+          propina: cobroEvento.payload.propina || 0,
+          total_final: cobroEvento.payload.monto_total || total
+        }
+      };
+
+      this.ventasCache.push(venta);
+      this.internalMetrics.ventas_guardadas++;
+      this.metrics.increment('persistencia.ventas.total');
+
+      await this.guardarVentas();
+
+      this.logger.info('persistencia.venta.registrada', {
+        correlation_id: correlationId,
+        venta_id: venta.venta_id,
+        total: venta.resumen.total_final
+      });
+    } else {
       this.logger.warn('persistencia.cuenta_sin_cobro', {
         correlation_id: correlationId,
         cuenta_id
       });
-      return;
     }
 
-    const cuentaCreadaEvento = this.eventosCache
-      .filter(e => e.event_type === 'cuenta.creada')
-      .find(e => e.payload?.cuenta_id === cuenta_id);
-
-    const pedidosEventos = this.eventosCache
-      .filter(e => e.event_type === 'pedido.creado')
-      .filter(e => e.payload?.cuenta_id === cuenta_id);
-
-    // Obtener project_id de la cuenta activa en cache
-    const cuentaActiva = this.cuentasActivasCache.get(cuenta_id);
-    const project_id = eventData.project_id || cuentaActiva?.project_id || null;
-
-    const venta = {
-      venta_id: `venta_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      project_id,
-      cuenta: {
-        cuenta_id,
-        tipo,
-        origen: cuentaCreadaEvento?.payload?.origen || 'desconocido',
-        hora_apertura: cuentaCreadaEvento?.timestamp || null,
-        hora_cierre: new Date().toISOString(),
-        metadata: metadata || {}
-      },
-      cobro: {
-        cobro_id: cobroEvento.payload.cobro_id,
-        monto: cobroEvento.payload.monto || total,
-        propina: cobroEvento.payload.propina || 0,
-        monto_total: cobroEvento.payload.monto_total || total,
-        metodo_pago: cobroEvento.payload.metodo_pago,
-        referencia_pago: cobroEvento.payload.referencia_pago
-      },
-      pedidos: pedidosEventos.map(p => ({
-        pedido_id: p.payload.pedido_id,
-        items: p.payload.items || [],
-        total: p.payload.total || 0
-      })),
-      resumen: {
-        subtotal: total,
-        propina: cobroEvento.payload.propina || 0,
-        total_final: cobroEvento.payload.monto_total || total
-      }
-    };
-
-    this.ventasCache.push(venta);
-    this.internalMetrics.ventas_guardadas++;
-    this.metrics.increment('persistencia.ventas.total');
-
-    await this.guardarVentas();
-
-    this.logger.info('persistencia.venta.registrada', {
-      correlation_id: correlationId,
-      venta_id: venta.venta_id,
-      total: venta.resumen.total_final
-    });
-
+    // SIEMPRE eliminar cuenta de cache (independiente de si hay cobro o no)
     this.cuentasActivasCache.delete(cuenta_id);
     await this.guardarCuentasActivas();
   }
@@ -323,6 +324,27 @@ class PersistenciaComanderoModule {
       cuenta_id,
       tipo
     });
+  }
+
+  async onCuentaEliminada(event) {
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+
+    await this.onEvento(event);
+
+    const { cuenta_id } = eventData;
+    if (!cuenta_id) return;
+
+    // Safety net: si la cuenta sigue en cache (por race condition o fallo previo), eliminarla
+    if (this.cuentasActivasCache.has(cuenta_id)) {
+      this.cuentasActivasCache.delete(cuenta_id);
+      await this.guardarCuentasActivas();
+
+      this.logger.info('persistencia.cuenta_eliminada.limpieza', {
+        correlation_id: correlationId,
+        cuenta_id
+      });
+    }
   }
 
   async onPedidoCreado(event) {

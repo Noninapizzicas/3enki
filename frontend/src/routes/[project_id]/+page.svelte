@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Página principal del proyecto
-   * Redirige automáticamente a /comandero
+   * Redirige automáticamente a /chat
    */
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
@@ -10,13 +10,13 @@
   $: project_id = $page.params.project_id;
 
   onMount(() => {
-    // Redirigir a comandero
-    goto(`/${project_id}/comandero`, { replaceState: true });
+    // Redirigir a chat (página principal del proyecto)
+    goto(`/${project_id}/chat`, { replaceState: true });
   });
 </script>
 
 <div class="redirect-screen">
-  <p>Redirigiendo a comandero...</p>
+  <p>Redirigiendo...</p>
 </div>
 
 <style>

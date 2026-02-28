@@ -2,17 +2,19 @@
   /**
    * Layout de Proyecto
    *
-   * Valida que el proyecto existe y tiene carta (es pizzepos).
+   * Sincroniza el project_id de la URL con los stores.
    * Pasa el contexto del proyecto a todos los hijos.
+   * La URL es la fuente de verdad para el proyecto activo.
    */
   import { page } from '$app/stores';
   import { onMount, onDestroy } from 'svelte';
   import { setContext } from 'svelte';
   import { writable } from 'svelte/store';
-  import { goto } from '$app/navigation';
   import { mqttRequest, MqttNotConnectedError, MqttRequestError } from '$lib/ui-core/mqtt-request';
   import { connected } from '$lib/ui-core/mqtt';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { activeProjectId, activateProject } from '$lib/stores/projects';
+  import { selectProject } from '$lib/stores/workspace';
+  import { saveWorkspace } from '$lib/stores/persistence';
 
   // Store del proyecto actual
   const projectStore = writable<{
@@ -32,14 +34,35 @@
   // Pasar contexto a hijos
   setContext('project', projectStore);
 
-  // URL param puede ser alias corto (ej: "a"); activeProjectId tiene el UUID real
+  // URL es la fuente de verdad
   $: urlParam = $page.params.project_id;
-  $: project_id = $activeProjectId || urlParam;
+  $: project_id = urlParam;
+
+  // Sincronizar URL → stores
+  // 1. Guardar en localStorage para que initProjects lo recoja al conectar MQTT
+  // 2. Si MQTT ya conectado, activar inmediatamente (navegación entre proyectos)
+  let lastSyncedParam = '';
+  $: if (urlParam && urlParam !== lastSyncedParam) {
+    lastSyncedParam = urlParam;
+    saveWorkspace({ projectId: urlParam });
+
+    // Si MQTT conectado y el proyecto activo difiere, activar el de la URL
+    if ($connected && urlParam !== $activeProjectId) {
+      activateProject(urlParam).catch(err => {
+        console.warn('[ProjectLayout] Activate from URL failed:', err);
+      });
+    }
+    // Si MQTT no conectado, initProjects() lo recogerá de localStorage
+  }
 
   let loaded = false;
+  let lastLoadedParam = '';
   let unsubConnected: (() => void) | null = null;
 
   onMount(() => {
+    // Marcar el param inicial como cargado
+    lastLoadedParam = project_id;
+
     // Render immediately with defaults — don't block on MQTT
     projectStore.set({
       id: project_id,
@@ -64,6 +87,20 @@
     if (unsubConnected) unsubConnected();
   });
 
+  // Recargar datos cuando cambia el proyecto en la URL (no en el mount inicial)
+  $: if (urlParam && urlParam !== lastLoadedParam && lastLoadedParam !== '') {
+    lastLoadedParam = urlParam;
+    loaded = false;
+    projectStore.set({
+      id: urlParam,
+      name: urlParam,
+      isPizzepos: true,
+      loading: false,
+      error: null
+    });
+    loadProject();
+  }
+
   async function loadProject() {
     if (!project_id) return;
 
@@ -79,6 +116,17 @@
         loading: false,
         error: null
       });
+
+      // Sincronizar datos completos al workspace store
+      if (project) {
+        selectProject({
+          id: project.id || project_id,
+          name: project.name || project_id,
+          color: project.color || 'blue',
+          icon: project.icon || '',
+          workspaceType: project.workspaceType || 'general'
+        });
+      }
 
       loaded = true;
 

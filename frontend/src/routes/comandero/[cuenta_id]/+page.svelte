@@ -1,37 +1,40 @@
 <script lang="ts">
   /**
-   * Página Comandero — Pantalla de pedido para una cuenta específica
+   * /comandero/[cuenta_id] — Redirect a /{project_id}/comandero/[cuenta_id]
    *
-   * Standalone: sin LazyShell, sin AppShell, sin chat.
-   * Ruta: /comandero/[cuenta_id]
-   * Obtiene project_id del store global (proyecto activo).
+   * Ruta legacy. Redirige al comandero del proyecto activo.
    */
   import { page } from '$app/stores';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { activeProjectId } from '$lib/stores/projects';
-  import { ComanderoScreen } from '$lib/components/comandero';
+  import { getState } from '$lib/stores/persistence';
 
   $: cuenta_id = $page.params.cuenta_id;
-  $: initialView = $page.url.searchParams.get('view') || undefined;
-  $: projectId = $activeProjectId || '';
+  $: queryString = $page.url.search || '';
 
-  function handleNavigate(path: string) {
-    goto(path);
-  }
-
-  function handleOpenPanel(panel: string, data?: any) {
-    console.log('[Comandero] Open panel:', panel, data);
-  }
+  onMount(() => {
+    const state = getState();
+    const projectId = state.workspace?.projectId;
+    if (projectId) {
+      goto(`/${projectId}/comandero/${cuenta_id}${queryString}`, { replaceState: true });
+    } else {
+      goto('/', { replaceState: true });
+    }
+  });
 </script>
 
-<svelte:head>
-  <title>Comandero</title>
-</svelte:head>
+<div class="redirect-screen">
+  <p>Redirigiendo...</p>
+</div>
 
-<ComanderoScreen
-  {cuenta_id}
-  {projectId}
-  {initialView}
-  onNavigate={handleNavigate}
-  onOpenPanel={handleOpenPanel}
-/>
+<style>
+  .redirect-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #0a0a0a;
+    color: #888;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+</style>

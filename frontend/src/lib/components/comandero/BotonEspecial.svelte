@@ -70,4 +70,14 @@
   .label {
     line-height: 1;
   }
+
+  @media (max-width: 600px) {
+    .boton-especial {
+      padding: 5px 10px;
+      font-size: 0.75rem;
+      gap: 4px;
+      border-radius: 6px;
+    }
+    .icon { font-size: 0.85rem; }
+  }
 </style>

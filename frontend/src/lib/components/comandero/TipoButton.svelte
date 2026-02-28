@@ -144,4 +144,16 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
+
+  @media (max-width: 600px) {
+    .tipo-btn {
+      flex-direction: row;
+      padding: 8px 10px;
+      gap: 5px;
+      border-radius: 8px;
+      border-width: 1.5px;
+    }
+    .icon { font-size: 1.1rem; }
+    .label { font-size: 0.6rem; }
+  }
 </style>

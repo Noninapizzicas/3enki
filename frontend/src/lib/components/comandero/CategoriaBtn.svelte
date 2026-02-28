@@ -76,4 +76,15 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
   }
+
+  @media (max-width: 600px) {
+    .categoria-btn {
+      padding: 6px 4px;
+      gap: 2px;
+      border-radius: 6px;
+      font-size: 0.6rem;
+    }
+    .icon { font-size: 0.9rem; }
+    .nombre { -webkit-line-clamp: 1; }
+  }
 </style>

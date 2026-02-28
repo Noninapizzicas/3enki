@@ -319,4 +319,24 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
+
+  /* ===== MOBILE COMPACT ===== */
+  @media (max-width: 600px) {
+    .cuenta-card { border-radius: 8px; border-width: 1.5px; }
+    .card-header { padding: 4px 8px; gap: 4px; }
+    .tipo-icon { font-size: 0.75rem; }
+    .nombre { font-size: 0.7rem; }
+    .hora { font-size: 0.6rem; }
+    .tap-zones { min-height: 40px; }
+    .zone { padding: 4px; }
+    .items-count { font-size: 1rem; }
+    .items-label { font-size: 0.5rem; }
+    .total { font-size: 0.85rem; }
+    .empty-label { font-size: 0.6rem; }
+    .card-footer { padding: 3px 8px 4px; }
+    .estado-dot { width: 5px; height: 5px; }
+    .estado { font-size: 0.55rem; }
+    .alerta-badge { width: 13px; height: 13px; font-size: 0.5rem; }
+    .glovo-badge { font-size: 0.5rem; padding: 1px 4px; }
+  }
 </style>

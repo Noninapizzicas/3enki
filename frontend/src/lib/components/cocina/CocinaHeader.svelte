@@ -189,11 +189,19 @@
 
   @media (max-width: 600px) {
     .cocina-header {
-      height: 60px;
-      padding: 0 12px;
+      height: 44px;
+      padding: 0 8px;
+      gap: 6px;
     }
-    .station-name { font-size: 1rem; }
-    .metric-value { font-size: 1.2rem; }
-    .clock { font-size: 1rem; }
+    .header-section { min-width: auto; gap: 6px; }
+    .station-name { font-size: 0.8rem; letter-spacing: 1px; }
+    .header-metrics { gap: 6px; }
+    .metric { gap: 0; }
+    .metric-value { font-size: 1rem; }
+    .metric-value.avg { font-size: 0.85rem; }
+    .metric-label { font-size: 0.5rem; letter-spacing: 0.5px; }
+    .metric-divider { height: 24px; }
+    .clock { font-size: 0.8rem; }
+    .refresh-btn { width: 32px; height: 32px; font-size: 1.1rem; border-radius: 6px; }
   }
 </style>

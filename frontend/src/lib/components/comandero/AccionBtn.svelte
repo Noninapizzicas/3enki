@@ -89,4 +89,14 @@
   .label {
     line-height: 1;
   }
+
+  @media (max-width: 600px) {
+    .accion-btn {
+      padding: 6px 4px;
+      border-radius: 6px;
+      border-width: 1.5px;
+      font-size: 0.55rem;
+    }
+    .icon { font-size: 0.85rem; }
+  }
 </style>

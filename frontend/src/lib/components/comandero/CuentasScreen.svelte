@@ -272,6 +272,15 @@
 
   /* Mobile: sidebar becomes horizontal bar at top */
   @media (max-width: 600px) {
+    .screen-header {
+      padding: 5px 10px;
+    }
+
+    .title { font-size: 0.85rem; }
+    .count { min-width: 18px; height: 18px; font-size: 0.65rem; padding: 0 4px; }
+    .header-right { gap: 8px; }
+    .clock { font-size: 0.75rem; }
+
     .screen-body {
       flex-direction: column;
     }
@@ -282,14 +291,24 @@
       order: 0; /* Top */
       border-left: none;
       border-bottom: 1px solid #1a1a1a;
-      padding: 8px 12px;
+      padding: 4px 8px;
+      gap: 6px;
       overflow-x: auto;
       overflow-y: hidden;
     }
 
-    .cuentas-grid {
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    .grid-area {
+      padding: 6px;
     }
+
+    .cuentas-grid {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 6px;
+    }
+
+    .empty-icon { font-size: 2rem; }
+    .empty-state p { font-size: 0.75rem; }
+    .empty-hint { font-size: 0.65rem !important; }
   }
 
   /* Tablet */

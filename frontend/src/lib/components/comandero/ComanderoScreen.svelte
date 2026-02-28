@@ -918,6 +918,14 @@
 
   /* Mobile */
   @media (max-width: 600px) {
+    .cuenta-header { padding: 4px 8px; gap: 6px; }
+    .back-btn { font-size: 1rem; padding: 2px 6px; }
+    .name-display { font-size: 0.85rem; padding: 2px 6px; }
+    .name-input { font-size: 0.85rem; padding: 2px 6px; }
+    .voice-btn { font-size: 0.9rem; padding: 2px 8px; min-width: 32px; border-radius: 6px; }
+
+    .top-bar { padding: 4px 8px; gap: 5px; }
+
     .main-body {
       flex-direction: column;
     }
@@ -936,19 +944,27 @@
       flex: 1;
       overflow-x: auto;
       overflow-y: hidden;
-      padding: 6px;
+      padding: 4px;
+      gap: 4px;
     }
 
     .acciones {
       flex-direction: row;
       border-top: none;
       border-left: 1px solid #222;
-      padding: 6px;
+      padding: 4px;
+      gap: 4px;
     }
 
-    .productos-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
+    .productos-area { padding: 6px; }
+    .productos-grid { grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .loading, .empty { min-height: 120px; font-size: 0.75rem; }
+
+    .fab-pedido { width: 46px; height: 46px; bottom: 10px; right: 10px; }
+    .fab-count { font-size: 0.85rem; }
+    .fab-total { font-size: 0.5rem; }
+
+    .print-toast { font-size: 0.75rem; padding: 6px 14px; bottom: 64px; }
   }
 
   /* Tablet */

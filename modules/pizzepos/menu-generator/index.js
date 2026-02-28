@@ -700,6 +700,79 @@ class MenuGeneratorModule {
     return { status: 200, data: prod };
   }
 
+  async toolUpdateIngredientPrices({ carta_id, project_id, precios, porcentaje, tipo }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    if (!precios && porcentaje === undefined) {
+      return { status: 400, error: 'Se requiere "precios" (objeto {nombre_ingrediente: nuevo_precio}) o "porcentaje" (número)' };
+    }
+
+    const cambios = [];
+    const preciosNorm = {};
+    if (precios && typeof precios === 'object') {
+      for (const [nombre, precio] of Object.entries(precios)) {
+        preciosNorm[nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')] = Number(precio);
+      }
+    }
+
+    for (const prod of carta.productos) {
+      for (const ing of (prod.ingredientes || [])) {
+        const ingNorm = ing.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const anterior = ing.precio_extra ?? 0;
+
+        if (preciosNorm[ingNorm] !== undefined) {
+          ing.precio_extra = preciosNorm[ingNorm];
+          if (ing.precio_extra !== anterior) {
+            cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: ing.precio_extra });
+          }
+        } else if (typeof porcentaje === 'number') {
+          if (tipo && ing.tipo !== tipo) continue;
+          const nuevoP = Math.round(anterior * (1 + porcentaje / 100) * 100) / 100;
+          ing.precio_extra = nuevoP;
+          if (nuevoP !== anterior) {
+            cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: nuevoP });
+          }
+        }
+      }
+    }
+
+    if (cambios.length === 0) {
+      return { status: 200, data: { carta_id, cambios: [], message: 'No se encontraron ingredientes que modificar' } };
+    }
+
+    await this.saveCartaToDisk(carta, project_id);
+    this.metrics?.increment('menu.ingredient_prices.updated');
+
+    // Publicar cambios individuales para que ingredientes y productos actualicen en tiempo real
+    const ingredientesActualizados = new Map();
+    for (const c of cambios) {
+      const id = `ing_${this.slugify(c.ingrediente)}`;
+      if (!ingredientesActualizados.has(id)) {
+        ingredientesActualizados.set(id, { nombre: c.ingrediente, precio_extra: c.nuevo, anterior: c.anterior });
+      }
+    }
+
+    for (const [id, data] of ingredientesActualizados) {
+      await this.eventBus.publish('ingrediente.actualizado', {
+        ingrediente_id: id,
+        cambios: { precio_extra: { anterior: data.anterior, nuevo: data.precio_extra } },
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        ingredientes_actualizados: ingredientesActualizados.size,
+        cambios_en_productos: cambios.length,
+        cambios
+      }
+    };
+  }
+
   async toolSearchProducts({ carta_id, project_id, query }) {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     const carta = this.getCartas(project_id).get(carta_id);

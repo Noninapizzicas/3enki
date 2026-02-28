@@ -371,6 +371,32 @@ class ProductosModule {
     }
   }
 
+  async onIngredienteActualizado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { ingrediente_id, cambios } = eventData;
+
+    if (!ingrediente_id || !cambios) return;
+
+    // Actualizar en todos los proyectos que tengan este ingrediente
+    for (const [projectId, ingredientesMap] of this.ingredientesPerProject) {
+      const ing = ingredientesMap.get(ingrediente_id);
+      if (!ing) continue;
+
+      for (const [campo, valores] of Object.entries(cambios)) {
+        const nuevoValor = valores?.nuevo !== undefined ? valores.nuevo : valores;
+        ing[campo] = nuevoValor;
+      }
+      ing.updated_at = new Date().toISOString();
+      ingredientesMap.set(ingrediente_id, ing);
+
+      this.logger.info('productos.ingrediente.synced', {
+        project_id: projectId,
+        ingrediente_id,
+        campos: Object.keys(cambios)
+      });
+    }
+  }
+
   // ==========================================
   // UI Handlers (MQTT Request/Response)
   // ==========================================

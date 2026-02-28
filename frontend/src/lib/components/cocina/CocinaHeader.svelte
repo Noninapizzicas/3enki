@@ -4,7 +4,16 @@
    * Info: estacion, reloj HH:MM:SS, pedidos activos, items pendientes, tiempo promedio, MQTT
    */
   import { ConnectionStatus } from '$lib/components/base';
-  import { pedidosCount, itemsPendientes, itemsPreparando, cocinaMetrics } from '$lib/stores/cocina';
+  import { pedidosCount, itemsPendientes, itemsPreparando, cocinaMetrics, loadPedidosActivos, loadMetrics } from '$lib/stores/cocina';
+
+  let refreshing = false;
+
+  async function handleRefresh() {
+    if (refreshing) return;
+    refreshing = true;
+    await Promise.all([loadPedidosActivos(), loadMetrics()]);
+    setTimeout(() => { refreshing = false; }, 1000);
+  }
 
   let clock = '';
   let clockInterval: ReturnType<typeof setInterval>;
@@ -58,6 +67,9 @@
   </div>
 
   <div class="header-section right">
+    <button class="refresh-btn" class:spinning={refreshing} on:click={handleRefresh} title="Recargar pedidos">
+      &#x21bb;
+    </button>
     <ConnectionStatus showLabel={false} size="sm" />
     <span class="clock">{clock}</span>
   </div>
@@ -142,6 +154,37 @@
     color: #94a3b8;
     font-variant-numeric: tabular-nums;
     font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .refresh-btn {
+    background: none;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 1.4rem;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, border-color 0.2s, transform 0.3s;
+    flex-shrink: 0;
+  }
+
+  .refresh-btn:active {
+    color: #f8fafc;
+    border-color: #60a5fa;
+  }
+
+  .refresh-btn.spinning {
+    animation: spin 0.8s ease-in-out;
+    color: #60a5fa;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   @media (max-width: 600px) {

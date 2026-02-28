@@ -21,7 +21,7 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 // =============================================================================
 
 export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo';
-export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'para_cobrar' | 'cobrado';
+export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'entregado' | 'para_cobrar' | 'cobrado';
 
 export interface Cuenta {
   id: string;
@@ -174,6 +174,16 @@ export async function deleteCuenta(projectId: string, id: string): Promise<boole
     return true;
   } catch (err: any) {
     cuentasStore.update(s => ({ ...s, error: err.message || 'Error al eliminar cuenta' }));
+    return false;
+  }
+}
+
+export async function marcarEntregado(projectId: string, id: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('cuenta', 'marcar_entregado', { project_id: projectId, id });
+    return true;
+  } catch (err: any) {
+    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al marcar entregado' }));
     return false;
   }
 }

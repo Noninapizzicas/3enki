@@ -297,6 +297,29 @@
         "frontend/src/lib/modules/provider/ProviderPanel.svelte"
       ],
       "nota": "Los comentarios en cada fichero documentan la fuente de verdad para futuras actualizaciones"
+    },
+    {
+      "id": "integrar-discovery-startup",
+      "titulo": "Integrar módulo Discovery en la secuencia de inicio",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-28",
+      "descripcion": "El módulo Discovery (core/discovery/) está completo en código pero NO está integrado en la secuencia de inicio de index.js. Permite descubrimiento automático entre múltiples instancias de event-core via MQTT retained messages. Publica estado en core/{coreId}/status, detecta cores nuevos/offline, y mantiene registro de cores activos.",
+      "componentes": {
+        "Discovery": "core/discovery/index.js — lógica principal de publicación/suscripción MQTT",
+        "CoreStatus": "core/discovery/core-status.js — modelo de datos de cada core remoto"
+      },
+      "funcionalidad": [
+        "Heartbeat cada 30s (republica estado propio como MQTT retained)",
+        "Alive check cada 30s (detecta cores offline)",
+        "Eventos: core:discovered, core:updated, core:offline, core:dead",
+        "updateModules() y updateCapabilities() para re-publicar estado"
+      ],
+      "implementacion": {
+        "donde": "index.js — añadir paso en la secuencia de inicio (después de EventBus, antes de HTTPGateway)",
+        "como": "Instanciar Discovery con mqttClient y eventBus, llamar start(), integrar en graceful shutdown con stop()"
+      },
+      "cuando_implementar": "Cuando se desplieguen múltiples instancias de event-core (multi-core)"
     }
   ]
 }

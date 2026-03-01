@@ -21,6 +21,7 @@
    */
   import { onMount, onDestroy } from 'svelte';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
+  import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { ConnectionStatus } from '$lib/components/base';
   import {
     cuentas,
@@ -32,6 +33,7 @@
 
   import TipoButton from './TipoButton.svelte';
   import CuentaCard from './CuentaCard.svelte';
+  import CuentaCardMesa from './CuentaCardMesa.svelte';
 
   // Props
   export let onNavigate: ((path: string) => void) | null = null;
@@ -40,6 +42,30 @@
   let cleanupSubs: (() => void) | null = null;
   let clock = '';
   let clockInterval: ReturnType<typeof setInterval>;
+
+  /** Map producto_id → nombre categoría (para CuentaCardMesa) */
+  let categoriasMap: Record<string, string> = {};
+
+  async function loadCategorias() {
+    try {
+      const res = await mqttRequest<any>('productos', 'carta_completa', { project_id: projectId });
+      const data = res?.data?.categorias ? res.data : res?.data?.data;
+      if (data?.categorias && data?.productos) {
+        const catNames = new Map<string, string>();
+        for (const cat of data.categorias) {
+          catNames.set(cat.id, cat.nombre);
+        }
+        const map: Record<string, string> = {};
+        for (const prod of data.productos) {
+          const catId = prod.categoria_id || prod.categoria;
+          map[prod.id] = catNames.get(catId) || catId || 'Otros';
+        }
+        categoriasMap = map;
+      }
+    } catch (err) {
+      console.warn('[CuentasScreen] Could not load categories:', err);
+    }
+  }
 
   // Clock
   function updateClock() {
@@ -73,9 +99,10 @@
     updateClock();
     clockInterval = setInterval(updateClock, 10000);
 
-    // Connect MQTT + init subscriptions
+    // Connect MQTT + init subscriptions + load categories
     connect().then(() => {
       cleanupSubs = initCuentasSubscriptions(projectId);
+      loadCategorias();
     }).catch((err) => {
       console.error('[CuentasScreen] MQTT connection failed', err);
     });
@@ -128,12 +155,22 @@
       {:else}
         <div class="cuentas-grid">
           {#each $cuentas as cuenta (cuenta.id)}
-            <CuentaCard
-              {cuenta}
-              {projectId}
-              on:open-comandero={handleOpenComandero}
-              on:open-cuenta={handleOpenCuenta}
-            />
+            {#if cuenta.tipo === 'local'}
+              <CuentaCardMesa
+                {cuenta}
+                {projectId}
+                {categoriasMap}
+                on:open-comandero={handleOpenComandero}
+                on:open-cuenta={handleOpenCuenta}
+              />
+            {:else}
+              <CuentaCard
+                {cuenta}
+                {projectId}
+                on:open-comandero={handleOpenComandero}
+                on:open-cuenta={handleOpenCuenta}
+              />
+            {/if}
           {/each}
         </div>
       {/if}

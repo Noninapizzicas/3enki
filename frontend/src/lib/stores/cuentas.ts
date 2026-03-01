@@ -22,6 +22,17 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 
 export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo';
 export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'entregado' | 'para_cobrar' | 'cobrado';
+export type EstadoCocinaItem = 'en_cocina' | 'listo';
+
+export interface ItemDetalle {
+  item_id: string;
+  producto_id: string;
+  nombre: string;
+  cantidad: number;
+  precio: number;
+  estado_cocina: EstadoCocinaItem;
+  listo_at?: string;
+}
 
 export interface Cuenta {
   id: string;
@@ -34,6 +45,7 @@ export interface Cuenta {
   alerta: boolean;
   created_at: string;
   updated_at: string;
+  itemsDetalle?: ItemDetalle[];
 }
 
 export interface CuentasState {
@@ -290,6 +302,25 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           if (num > 0) nombre = `Glovo #${num}`;
         }
 
+        // Extraer items detallados de pedidos (para tarjeta mesa)
+        const itemsDetalle: ItemDetalle[] = [];
+        if (cp.pedidos && Array.isArray(cp.pedidos)) {
+          for (const pedido of cp.pedidos) {
+            if (pedido.items && Array.isArray(pedido.items)) {
+              for (const item of pedido.items) {
+                itemsDetalle.push({
+                  item_id: item.item_id || item.id || '',
+                  producto_id: item.producto_id || '',
+                  nombre: item.nombre || '',
+                  cantidad: item.cantidad || 1,
+                  precio: item.precio || item.precio_unitario || item.subtotal || 0,
+                  estado_cocina: 'en_cocina'
+                });
+              }
+            }
+          }
+        }
+
         return {
           id: cp.cuenta_id,
           tipo: mappedTipo,
@@ -300,7 +331,8 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           total: cp.total || 0,
           alerta: checkAlerta(cp),
           created_at: cp.created_at,
-          updated_at: cp.updated_at
+          updated_at: cp.updated_at,
+          itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined
         };
       });
 
@@ -569,6 +601,29 @@ export function initCuentasSubscriptions(projectId: string): () => void {
             ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta }
             : c
         )
+      }));
+    })
+  );
+
+  // cocina.item_preparado → item individual listo en cocina, actualizar itemsDetalle
+  cleanups.push(
+    mqttSubscribe('cocina.item_preparado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id || !data?.item_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id || !c.itemsDetalle) return c;
+          return {
+            ...c,
+            itemsDetalle: c.itemsDetalle.map(item =>
+              item.item_id === data.item_id
+                ? { ...item, estado_cocina: 'listo' as EstadoCocinaItem, listo_at: data.preparado_at || new Date().toISOString() }
+                : item
+            )
+          };
+        })
       }));
     })
   );

@@ -119,10 +119,11 @@
         <div class="category-group">
           <div class="category-label">{group.categoria}</div>
           {#each group.items as item}
-            <div class="item-row" class:item-listo={item.estado_cocina === 'listo'} class:item-aviso={isRecienListo(item)}>
+            <div class="item-row" class:item-preparando={item.estado_cocina === 'preparando'} class:item-listo={item.estado_cocina === 'listo'} class:item-aviso={isRecienListo(item)}>
               <span
                 class="item-dot"
                 class:dot-cocina={item.estado_cocina === 'en_cocina'}
+                class:dot-preparando={item.estado_cocina === 'preparando'}
                 class:dot-listo={item.estado_cocina === 'listo'}
               ></span>
               <span class="item-nombre">{item.nombre}</span>
@@ -297,7 +298,13 @@
   }
 
   .item-dot.dot-cocina {
+    background: #475569;
+  }
+
+  .item-dot.dot-preparando {
     background: #eab308;
+    animation: preparando-pulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 4px rgba(234, 179, 8, 0.5);
   }
 
   .item-dot.dot-listo {
@@ -316,6 +323,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .item-row.item-preparando .item-nombre {
+    color: #eab308;
   }
 
   .item-row.item-listo .item-nombre {
@@ -450,6 +461,11 @@
   @keyframes mesa-pulse {
     0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--card-color) 20%, transparent); }
     50% { box-shadow: 0 0 20px color-mix(in srgb, var(--card-color) 50%, transparent); }
+  }
+
+  @keyframes preparando-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(234, 179, 8, 0.5); }
+    50% { opacity: 0.5; box-shadow: 0 0 8px rgba(234, 179, 8, 0.8); }
   }
 
   @keyframes aviso-pulse {

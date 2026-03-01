@@ -6,6 +6,7 @@
 
   "provides": {
     "events": [
+      "cocina.item_preparando",
       "cocina.item_preparado",
       "cocina.pedido_listo"
     ],
@@ -14,6 +15,20 @@
 
   "events": {
     "publishes": [
+      {
+        "event": "cocina.item_preparando",
+        "description": "Cocinero empieza a preparar un item (primer tap)",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "pedido_id": { "type": "string" },
+            "cuenta_id": { "type": "string" },
+            "item_id": { "type": "string" },
+            "nombre": { "type": "string" },
+            "preparando_at": { "type": "string" }
+          }
+        }
+      },
       {
         "event": "cocina.item_preparado",
         "description": "Item marcado como preparado",

@@ -22,7 +22,7 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 
 export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo';
 export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'entregado' | 'para_cobrar' | 'cobrado';
-export type EstadoCocinaItem = 'en_cocina' | 'listo';
+export type EstadoCocinaItem = 'en_cocina' | 'preparando' | 'listo';
 
 export interface ItemDetalle {
   item_id: string;
@@ -601,6 +601,29 @@ export function initCuentasSubscriptions(projectId: string): () => void {
             ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta }
             : c
         )
+      }));
+    })
+  );
+
+  // cocina.item_preparando → cocinero empieza a preparar item, actualizar itemsDetalle
+  cleanups.push(
+    mqttSubscribe('cocina.item_preparando', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id || !data?.item_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id || !c.itemsDetalle) return c;
+          return {
+            ...c,
+            itemsDetalle: c.itemsDetalle.map(item =>
+              item.item_id === data.item_id
+                ? { ...item, estado_cocina: 'preparando' as EstadoCocinaItem }
+                : item
+            )
+          };
+        })
       }));
     })
   );

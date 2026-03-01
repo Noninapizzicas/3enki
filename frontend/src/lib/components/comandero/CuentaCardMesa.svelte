@@ -102,13 +102,15 @@
   style="--card-color: {color}"
 >
   <!-- Header: icon + nombre + total -->
-  <button class="card-header" on:click={handleOpenComandero}>
-    <span class="tipo-icon">{icon}</span>
-    <span class="nombre">{cuenta.nombre}</span>
-    <button class="total-btn" on:click|stopPropagation={handleOpenCuenta}>
+  <div class="card-header">
+    <button class="header-tap" on:click={handleOpenComandero}>
+      <span class="tipo-icon">{icon}</span>
+      <span class="nombre">{cuenta.nombre}</span>
+    </button>
+    <button class="total-btn" on:click={handleOpenCuenta}>
       {formatTotal(cuenta.total)}
     </button>
-  </button>
+  </div>
 
   <!-- Items body -->
   <div class="items-body" on:click={handleOpenComandero} role="button" tabindex="0" on:keydown={e => e.key === 'Enter' && handleOpenComandero()}>
@@ -196,18 +198,31 @@
   .card-header {
     display: flex;
     align-items: center;
+    background: color-mix(in srgb, var(--card-color) 15%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--card-color) 20%, transparent);
+  }
+
+  .header-tap {
+    flex: 1;
+    display: flex;
+    align-items: center;
     gap: 6px;
     padding: 8px 10px;
-    background: color-mix(in srgb, var(--card-color) 15%, transparent);
+    background: none;
     border: none;
-    border-bottom: 1px solid color-mix(in srgb, var(--card-color) 20%, transparent);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    min-width: 0;
+  }
+
+  .header-tap:active {
+    background: color-mix(in srgb, var(--card-color) 20%, transparent);
   }
 
   .tipo-icon {
     font-size: 0.9rem;
     line-height: 1;
+    flex-shrink: 0;
   }
 
   .nombre {
@@ -228,11 +243,11 @@
     font-variant-numeric: tabular-nums;
     background: color-mix(in srgb, var(--card-color) 30%, transparent);
     border: none;
-    border-radius: 4px;
-    padding: 2px 8px;
+    padding: 8px 10px;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     transition: background 0.1s;
+    flex-shrink: 0;
   }
 
   .total-btn:active {
@@ -450,10 +465,10 @@
   /* ===== MOBILE ===== */
   @media (max-width: 600px) {
     .card-mesa { border-radius: 8px; border-width: 1.5px; }
-    .card-header { padding: 4px 8px; gap: 4px; }
+    .header-tap { padding: 4px 8px; gap: 4px; }
     .tipo-icon { font-size: 0.75rem; }
     .nombre { font-size: 0.7rem; }
-    .total-btn { font-size: 0.7rem; padding: 1px 6px; }
+    .total-btn { font-size: 0.7rem; padding: 4px 6px; }
     .items-body { padding: 4px 8px; min-height: 36px; max-height: 150px; }
     .category-label { font-size: 0.5rem; }
     .item-row { padding: 1px 0 1px 6px; gap: 4px; }

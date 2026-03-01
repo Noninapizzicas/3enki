@@ -374,6 +374,70 @@ class CuentasModule {
     this._pendingTimeouts.add(timeout);
   }
 
+  /**
+   * cuenta.creada → registrar cuenta de canal externo (cuentas-canales) en el Map.
+   * Permite que la máquina de estados funcione para mesas, teléfono, llevar, glovo, whatsapp.
+   */
+  async onCuentaExternaCreada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, tipo, project_id, total, metadata } = data;
+
+    if (!cuenta_id) return;
+
+    // Dedup: si ya existe (creada por handleCreateCuenta), no duplicar
+    if (this.cuentas.has(cuenta_id)) return;
+
+    const now = new Date();
+    const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const cuenta = {
+      id: cuenta_id,
+      project_id: project_id || null,
+      tipo: tipo || 'local',
+      nombre: metadata?.nombre || tipo || 'Cuenta',
+      estado: 'pendiente',
+      hora,
+      items: 0,
+      total: total || 0,
+      alerta: false,
+      created_at: now.toISOString(),
+      updated_at: now.toISOString()
+    };
+
+    this.cuentas.set(cuenta_id, cuenta);
+    this.gestionarAlerta(cuenta_id, 'pendiente');
+
+    this.logger.info('cuenta.externa.registrada', {
+      cuenta_id, tipo, project_id,
+      origen: data.origen || 'unknown'
+    });
+  }
+
+  /**
+   * cuenta.cerrada → limpiar cuenta del Map y timers
+   */
+  async onCuentaExternaCerrada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+
+    if (!cuenta_id) return;
+    if (!this.cuentas.has(cuenta_id)) return;
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    this.cuentas.delete(cuenta_id);
+
+    // Limpiar timer de alerta
+    if (this._alertaTimers.has(cuenta_id)) {
+      clearTimeout(this._alertaTimers.get(cuenta_id));
+      this._alertaTimers.delete(cuenta_id);
+    }
+
+    this.logger.info('cuenta.externa.cerrada', {
+      cuenta_id,
+      tipo: cuenta?.tipo
+    });
+  }
+
   // ==========================================
   // UI Handlers (MQTT Request/Response)
   // ==========================================

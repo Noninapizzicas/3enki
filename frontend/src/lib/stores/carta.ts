@@ -123,6 +123,31 @@ export async function initCarta(project_id: string) {
   cartaStore.update(s => ({ ...s, project_id, loading: true, error: null }));
 
   try {
+    // Cargar config del backend (soft-fail: si no responde, usa defaults)
+    const configRes = await mqttRequest('carta-digital', 'config', { project_id }).catch(() => null);
+    if (configRes?.data) {
+      const cd = configRes.data;
+      cartaStore.update(s => ({
+        ...s,
+        config: {
+          ...s.config,
+          whatsapp_telefono: cd.whatsapp_telefono || s.config.whatsapp_telefono,
+          nombre_negocio: cd.nombre_negocio || s.config.nombre_negocio,
+          moneda: cd.moneda || s.config.moneda,
+          mensaje_header: cd.mensaje_header || s.config.mensaje_header
+        }
+      }));
+      console.log('[Carta] Config loaded from backend');
+    }
+
+    // Crear sesión de analytics (fire-and-forget)
+    mqttRequest('carta-digital', 'create-session', {
+      project_id,
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      referrer: typeof document !== 'undefined' ? document.referrer : ''
+    }).catch(() => {});
+
+    // Cargar carta completa de productos
     const cartaRes = await mqttRequest('productos', 'carta_completa', { project_id });
     const data = cartaRes?.data || cartaRes;
 

@@ -1,0 +1,98 @@
+{
+  "name": "carta-digital",
+  "version": "1.0.0",
+  "description": "Carta digital para clientes — config, sesiones y pedidos via WhatsApp",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": ["carta-digital.sesion_creada", "carta-digital.pedido_recibido"],
+    "queries": ["carta-digital.config", "carta-digital.sesion"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "carta-digital.sesion_creada",
+        "description": "Nueva sesión de cliente viendo la carta"
+      },
+      {
+        "event": "carta-digital.pedido_recibido",
+        "description": "Pedido recibido desde la carta digital (via WhatsApp o directo)"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "project.activated",
+        "description": "Cache base_path del proyecto y cargar config",
+        "handler": "onProjectActivated"
+      }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "carta-digital", "action": "config", "handler": "handleGetConfig" },
+    { "domain": "carta-digital", "action": "update-config", "handler": "handleUpdateConfig" },
+    { "domain": "carta-digital", "action": "create-session", "handler": "handleCreateSession" },
+    { "domain": "carta-digital", "action": "register-pedido", "handler": "handleRegisterPedido" },
+    { "domain": "carta-digital", "action": "stats", "handler": "handleGetStats" },
+    { "domain": "carta-digital", "action": "health", "handler": "handleHealthCheck" }
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/config",
+      "handler": "handleGetConfig",
+      "description": "Obtener configuración de la carta digital (WhatsApp, branding)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/config",
+      "handler": "handleUpdateConfig",
+      "description": "Actualizar configuración de la carta digital"
+    },
+    {
+      "method": "POST",
+      "path": "/session",
+      "handler": "handleCreateSession",
+      "description": "Crear sesión de visualización (analytics)"
+    },
+    {
+      "method": "POST",
+      "path": "/pedido",
+      "handler": "handleRegisterPedido",
+      "description": "Registrar pedido recibido desde la carta digital"
+    },
+    {
+      "method": "GET",
+      "path": "/stats",
+      "handler": "handleGetStats",
+      "description": "Estadísticas de uso de la carta digital"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    }
+  ],
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "carta-digital.sesion.total",
+        "carta-digital.pedido.total",
+        "carta-digital.producto_visto.total"
+      ],
+      "gauges": [
+        "carta-digital.sesiones_activas.count"
+      ]
+    }
+  }
+}

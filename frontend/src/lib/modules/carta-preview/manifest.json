@@ -1,0 +1,10 @@
+{
+  "id": "carta-preview",
+  "name": "Preview Carta Digital",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 2,
+  "routes": ["/carta-digital"],
+  "icon": "👁️",
+  "label": "Preview"
+}

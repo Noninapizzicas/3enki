@@ -39,6 +39,10 @@ class CuentasModule {
     this._pendingTimeouts = new Set();
     this._alertaTimers = new Map(); // cuenta_id -> timeout
 
+    // Tracking de pedidos activos en cocina por cuenta
+    // cuenta_id -> Set(pedido_id) — solo transiciona a 'listo' cuando el Set queda vacío
+    this._pedidosEnCocina = new Map();
+
     // Dependencias (inyectadas en onLoad)
     this.logger = null;
     this.metrics = null;
@@ -100,6 +104,7 @@ class CuentasModule {
 
     // Limpiar estado
     this.cuentas.clear();
+    this._pedidosEnCocina.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -280,39 +285,71 @@ class CuentasModule {
   }
 
   /**
-   * comandero.enviar_cocina → con_pedido→en_preparacion (o listo→en_preparacion si piden más)
+   * comandero.enviar_cocina → con_pedido→en_preparacion (o listo/entregado→en_preparacion si piden más)
+   * Registra pedido_id en el tracking de pedidos activos en cocina.
    */
   async onComanderoEnviarCocina(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id } = data;
+    const { cuenta_id, pedido_id } = data;
 
     this.logger.info('comandero.enviar_cocina.received', {
       cuenta_id,
+      pedido_id,
       correlation_id: event?.metadata?.correlationId
     });
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    if (cuenta.estado === 'con_pedido' || cuenta.estado === 'listo') {
+    // Registrar pedido en tracking de cocina
+    if (pedido_id) {
+      if (!this._pedidosEnCocina.has(cuenta_id)) {
+        this._pedidosEnCocina.set(cuenta_id, new Set());
+      }
+      this._pedidosEnCocina.get(cuenta_id).add(pedido_id);
+    }
+
+    // Transicionar a en_preparacion desde cualquier estado que lo permita
+    if (cuenta.estado === 'con_pedido' || cuenta.estado === 'listo' ||
+        cuenta.estado === 'entregado' || cuenta.estado === 'en_preparacion') {
       await this.transicionarEstado(cuenta_id, 'en_preparacion');
     }
   }
 
   /**
-   * cocina.pedido_listo → en_preparacion→listo
+   * cocina.pedido_listo → en_preparacion→listo (solo cuando TODOS los pedidos de la cuenta terminaron)
    */
   async onCocinaPedidoListo(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id } = data;
+    const { cuenta_id, pedido_id } = data;
 
     this.logger.info('cocina.pedido_listo.received', {
       cuenta_id,
+      pedido_id,
       correlation_id: event?.metadata?.correlationId
     });
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
+
+    // Quitar pedido del tracking de cocina
+    const pedidosActivos = this._pedidosEnCocina.get(cuenta_id);
+    if (pedidosActivos && pedido_id) {
+      pedidosActivos.delete(pedido_id);
+
+      // Si quedan pedidos en cocina, NO transicionar aún
+      if (pedidosActivos.size > 0) {
+        this.logger.info('cocina.pedido_listo.pendientes_restantes', {
+          cuenta_id,
+          pedido_id,
+          pedidos_restantes: pedidosActivos.size
+        });
+        return;
+      }
+
+      // Limpiar Set vacío
+      this._pedidosEnCocina.delete(cuenta_id);
+    }
 
     if (cuenta.estado === 'en_preparacion') {
       await this.transicionarEstado(cuenta_id, 'listo');
@@ -343,6 +380,7 @@ class CuentasModule {
    * cobro.procesado → marcar pagado.
    * Si la cuenta ya fue entregada → cobrado + auto-eliminación.
    * Si no → la cuenta sigue activa esperando entrega física.
+   * Idempotente: ignora si ya estaba pagada o cobrada.
    */
   async onCobroProcesado(event) {
     const data = event?.data || event?.payload || event;
@@ -355,6 +393,16 @@ class CuentasModule {
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
+
+    // Guardia de idempotencia: si ya está pagada o cobrada, ignorar duplicado
+    if (cuenta.pagado || cuenta.estado === 'cobrado') {
+      this.logger.warn('cobro.procesado.duplicado_ignorado', {
+        cuenta_id,
+        pagado: cuenta.pagado,
+        estado: cuenta.estado
+      });
+      return;
+    }
 
     cuenta.pagado = true;
     cuenta.updated_at = new Date().toISOString();
@@ -382,6 +430,9 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
+    // Guardia: no cerrar dos veces
+    if (cuenta.estado === 'cobrado') return;
+
     const estado_anterior = cuenta.estado;
     cuenta.estado = 'cobrado';
     cuenta.updated_at = new Date().toISOString();
@@ -389,6 +440,9 @@ class CuentasModule {
     this.gestionarAlerta(cuenta_id, 'cobrado');
 
     await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'cobrado');
+
+    // Limpiar tracking de cocina
+    this._pedidosEnCocina.delete(cuenta_id);
 
     // Eliminar cuenta después de 5 minutos (con referencia para cleanup)
     const project_id = cuenta.project_id;
@@ -454,6 +508,7 @@ class CuentasModule {
 
     const cuenta = this.cuentas.get(cuenta_id);
     this.cuentas.delete(cuenta_id);
+    this._pedidosEnCocina.delete(cuenta_id);
 
     // Limpiar timer de alerta
     if (this._alertaTimers.has(cuenta_id)) {
@@ -583,6 +638,7 @@ class CuentasModule {
     }
 
     this.cuentas.delete(id);
+    this._pedidosEnCocina.delete(id);
 
     // Limpiar timer de alerta si existía
     const alertaTimer = this._alertaTimers.get(id);

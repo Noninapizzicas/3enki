@@ -155,6 +155,23 @@ class CobrosModule {
         return { status: 400, error: `Método de pago no soportado: ${metodo_pago}. Válidos: ${this.metodosPago.join(', ')}` };
       }
 
+      // Guardia de idempotencia: rechazar si ya existe un cobro activo para esta cuenta
+      const cobroExistente = Array.from(this.cobros.values()).find(
+        c => c.cuenta_id === cuenta_id && (c.estado === 'pendiente' || c.estado === 'procesando' || c.estado === 'completado')
+      );
+      if (cobroExistente) {
+        this.logger.warn('cobros.duplicado.rechazado', {
+          cuenta_id,
+          cobro_existente_id: cobroExistente.id,
+          cobro_existente_estado: cobroExistente.estado
+        });
+        return {
+          status: 409,
+          error: `Ya existe un cobro ${cobroExistente.estado} para esta cuenta`,
+          data: { cobro_id: cobroExistente.id, estado: cobroExistente.estado }
+        };
+      }
+
       const cobro_id = crypto.randomUUID();
       const monto_total = monto + (propina || 0);
 

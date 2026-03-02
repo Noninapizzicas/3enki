@@ -1,7 +1,7 @@
 {
   "name": "carta-digital",
-  "version": "1.0.0",
-  "description": "Carta digital para clientes — config, sesiones y pedidos via WhatsApp",
+  "version": "1.1.0",
+  "description": "Carta digital para clientes — config, sesiones, pedidos, media serving y carta enriquecida",
   "author": "Pizzepos Team",
 
   "provides": {
@@ -35,7 +35,8 @@
     { "domain": "carta-digital", "action": "create-session", "handler": "handleCreateSession" },
     { "domain": "carta-digital", "action": "register-pedido", "handler": "handleRegisterPedido" },
     { "domain": "carta-digital", "action": "stats", "handler": "handleGetStats" },
-    { "domain": "carta-digital", "action": "health", "handler": "handleHealthCheck" }
+    { "domain": "carta-digital", "action": "health", "handler": "handleHealthCheck" },
+    { "domain": "carta-digital", "action": "carta-completa", "handler": "handleCartaDigitalCompleta" }
   ],
 
   "apis": [
@@ -74,6 +75,18 @@
       "path": "/health",
       "handler": "handleHealthCheck",
       "description": "Health check"
+    },
+    {
+      "method": "GET",
+      "path": "/media/:path",
+      "handler": "handleServeMedia",
+      "description": "Servir imágenes y media del storage del proyecto"
+    },
+    {
+      "method": "GET",
+      "path": "/carta",
+      "handler": "handleCartaDigitalCompleta",
+      "description": "Carta completa enriquecida con config, descripciones, imágenes y tema"
     }
   ],
 
@@ -88,7 +101,8 @@
       "counters": [
         "carta-digital.sesion.total",
         "carta-digital.pedido.total",
-        "carta-digital.producto_visto.total"
+        "carta-digital.producto_visto.total",
+        "carta-digital.media.served"
       ],
       "gauges": [
         "carta-digital.sesiones_activas.count"

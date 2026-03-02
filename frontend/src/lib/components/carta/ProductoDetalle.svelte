@@ -22,8 +22,15 @@
 
   function getBadges(prod: Producto): { label: string; color: string }[] {
     const b: { label: string; color: string }[] = [];
-    if (prod.metadata?.vegano) b.push({ label: 'Vegano', color: '#22c55e' });
-    if (prod.metadata?.vegetariano) b.push({ label: 'Vegetariano', color: '#4ade80' });
+    const tags = prod.tags || [];
+    if (tags.includes('vegano') || prod.metadata?.vegano) b.push({ label: 'Vegano', color: '#22c55e' });
+    else if (tags.includes('vegetariano') || prod.metadata?.vegetariano) b.push({ label: 'Vegetariano', color: '#4ade80' });
+    if (tags.includes('picante')) b.push({ label: 'Picante', color: '#ef4444' });
+    if (tags.includes('popular')) b.push({ label: 'Popular', color: '#f59e0b' });
+    if (tags.includes('nuevo')) b.push({ label: 'Nuevo', color: '#3b82f6' });
+    if (tags.includes('premium')) b.push({ label: 'Premium', color: '#a855f7' });
+    if (tags.includes('especial')) b.push({ label: 'Especial', color: '#ec4899' });
+    if (tags.includes('clasico')) b.push({ label: 'Clasico', color: '#6b7280' });
     return b;
   }
 
@@ -62,7 +69,7 @@
     <div class="panel-content">
       <!-- Header -->
       <div class="detail-header">
-        <h2 class="detail-nombre">{producto.nombre}</h2>
+        <h2 class="detail-nombre">{producto.emoji || ''} {producto.nombre}</h2>
         <span class="detail-precio">{formatPrecio(producto.precio)}</span>
       </div>
 
@@ -88,7 +95,7 @@
           <h3 class="section-title">Ingredientes</h3>
           <div class="ingredientes-list">
             {#each ingredientes as ing}
-              <span class="ingrediente-chip">
+              <span class="ingrediente-chip" class:tipo-queso={ing.tipo === 'queso'} class:tipo-carne={ing.tipo === 'carne'} class:tipo-verdura={ing.tipo === 'verdura'} class:tipo-marisco={ing.tipo === 'marisco'}>
                 {#if ing.emoji}
                   <span class="ing-emoji">{ing.emoji}</span>
                 {/if}
@@ -293,6 +300,19 @@
   .ingrediente-chip.alergeno {
     border-color: rgba(239, 68, 68, 0.3);
     color: #ef4444;
+  }
+
+  .ingrediente-chip.tipo-queso {
+    border-color: rgba(250, 204, 21, 0.25);
+  }
+  .ingrediente-chip.tipo-carne {
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+  .ingrediente-chip.tipo-verdura {
+    border-color: rgba(34, 197, 94, 0.2);
+  }
+  .ingrediente-chip.tipo-marisco {
+    border-color: rgba(59, 130, 246, 0.2);
   }
 
   .ing-emoji {

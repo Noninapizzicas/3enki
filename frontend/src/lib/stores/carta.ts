@@ -26,8 +26,9 @@ export interface Producto {
   precio: number;
   descripcion?: string;
   tiene_variaciones: boolean;
-  ingredientes?: any[];
+  ingredientes?: { nombre: string; emoji?: string; tipo?: string; precio_extra?: number }[];
   ingredientes_base?: { id: string; nombre: string; emoji?: string }[];
+  tags?: string[];
   metadata?: {
     vegano?: boolean;
     vegetariano?: boolean;
@@ -67,11 +68,19 @@ interface CartaState {
   config: CartaConfig;
 }
 
+export interface CartaTema {
+  color_primario: string;
+  color_fondo: string;
+  color_texto: string;
+  logo_emoji: string;
+}
+
 export interface CartaConfig {
   whatsapp_telefono: string;
   nombre_negocio: string;
   moneda: string;
   mensaje_header: string;
+  tema?: CartaTema;
 }
 
 const DEFAULT_CONFIG: CartaConfig = {
@@ -123,23 +132,6 @@ export async function initCarta(project_id: string) {
   cartaStore.update(s => ({ ...s, project_id, loading: true, error: null }));
 
   try {
-    // Cargar config del backend (soft-fail: si no responde, usa defaults)
-    const configRes = await mqttRequest('carta-digital', 'config', { project_id }).catch(() => null);
-    if (configRes?.data) {
-      const cd = configRes.data;
-      cartaStore.update(s => ({
-        ...s,
-        config: {
-          ...s.config,
-          whatsapp_telefono: cd.whatsapp_telefono || s.config.whatsapp_telefono,
-          nombre_negocio: cd.nombre_negocio || s.config.nombre_negocio,
-          moneda: cd.moneda || s.config.moneda,
-          mensaje_header: cd.mensaje_header || s.config.mensaje_header
-        }
-      }));
-      console.log('[Carta] Config loaded from backend');
-    }
-
     // Crear sesión de analytics (fire-and-forget)
     mqttRequest('carta-digital', 'create-session', {
       project_id,
@@ -147,13 +139,55 @@ export async function initCarta(project_id: string) {
       referrer: typeof document !== 'undefined' ? document.referrer : ''
     }).catch(() => {});
 
-    // Cargar carta completa de productos
-    const cartaRes = await mqttRequest('productos', 'carta_completa', { project_id });
-    const data = cartaRes?.data || cartaRes;
+    // Intentar cargar carta enriquecida desde carta-digital (incluye config + descripciones + imágenes)
+    let cats: Categoria[] = [];
+    let prods: Producto[] = [];
+    let ings: any[] = [];
+    let loadedConfig: Partial<CartaConfig> = {};
 
-    const cats: Categoria[] = data.categorias || [];
-    const prods: Producto[] = data.productos || [];
-    const ings: any[] = data.ingredientes || [];
+    const enrichedRes = await mqttRequest('carta-digital', 'carta-completa', { project_id }).catch(() => null);
+
+    if (enrichedRes?.data?.productos?.length) {
+      const data = enrichedRes.data;
+      cats = data.categorias || [];
+      prods = data.productos || [];
+      ings = []; // enriched endpoint embeds ingredients in each product
+
+      if (data.config) {
+        loadedConfig = {
+          whatsapp_telefono: data.config.whatsapp_telefono,
+          nombre_negocio: data.config.nombre_negocio,
+          moneda: data.config.moneda,
+          mensaje_header: data.config.mensaje_header,
+          tema: data.config.tema
+        };
+      }
+
+      console.log('[Carta] Loaded enriched carta:', prods.length, 'productos');
+    } else {
+      // Fallback: cargar desde productos.carta_completa + config separada
+      const [configRes, cartaRes] = await Promise.all([
+        mqttRequest('carta-digital', 'config', { project_id }).catch(() => null),
+        mqttRequest('productos', 'carta_completa', { project_id })
+      ]);
+
+      if (configRes?.data) {
+        const cd = configRes.data;
+        loadedConfig = {
+          whatsapp_telefono: cd.whatsapp_telefono,
+          nombre_negocio: cd.nombre_negocio,
+          moneda: cd.moneda,
+          mensaje_header: cd.mensaje_header
+        };
+      }
+
+      const data = cartaRes?.data || cartaRes;
+      cats = data.categorias || [];
+      prods = data.productos || [];
+      ings = data.ingredientes || [];
+
+      console.log('[Carta] Loaded from productos:', prods.length, 'productos');
+    }
 
     const firstCat = cats.length > 0 ? cats[0].id : null;
     const filtered = firstCat
@@ -162,6 +196,7 @@ export async function initCarta(project_id: string) {
 
     cartaStore.update(s => ({
       ...s,
+      config: { ...s.config, ...loadedConfig },
       categorias: cats,
       todosProductos: prods,
       productos: filtered,
@@ -170,7 +205,7 @@ export async function initCarta(project_id: string) {
       loading: false
     }));
 
-    console.log('[Carta] Loaded:', prods.length, 'productos,', cats.length, 'categorias');
+    console.log('[Carta] Ready:', prods.length, 'productos,', cats.length, 'categorias');
   } catch (err: any) {
     console.error('[Carta] Load error:', err);
     cartaStore.update(s => ({

@@ -27,15 +27,20 @@
 
   function getIngredientesPreview(prod: Producto): string {
     const ings = prod.ingredientes_base || prod.ingredientes || [];
-    const nombres = ings.slice(0, 4).map((i: any) => i.emoji ? `${i.emoji}` : i.nombre?.slice(0, 8));
-    if (ings.length > 4) nombres.push('...');
+    const nombres = ings.slice(0, 5).map((i: any) => i.emoji ? `${i.emoji}` : i.nombre?.slice(0, 8));
+    if (ings.length > 5) nombres.push('...');
     return nombres.join(' ');
   }
 
   function getBadges(prod: Producto): string[] {
     const b: string[] = [];
-    if (prod.metadata?.vegano) b.push('Vegano');
-    if (prod.metadata?.vegetariano) b.push('Vegetariano');
+    // From enrichment tags
+    if (prod.tags?.includes('vegano') || prod.metadata?.vegano) b.push('Vegano');
+    else if (prod.tags?.includes('vegetariano') || prod.metadata?.vegetariano) b.push('Vegetariano');
+    if (prod.tags?.includes('picante')) b.push('Picante');
+    if (prod.tags?.includes('popular')) b.push('Popular');
+    if (prod.tags?.includes('nuevo')) b.push('Nuevo');
+    if (prod.tags?.includes('premium')) b.push('Premium');
     return b;
   }
 
@@ -79,8 +84,10 @@
 
   <!-- Info -->
   <div class="card-body">
-    <span class="card-nombre">{producto.nombre}</span>
-    {#if ingredientesPreview}
+    <span class="card-nombre">{producto.emoji || ''} {producto.nombre}</span>
+    {#if producto.descripcion}
+      <span class="card-descripcion">{producto.descripcion}</span>
+    {:else if ingredientesPreview}
       <span class="card-ingredientes">{ingredientesPreview}</span>
     {/if}
   </div>
@@ -183,6 +190,16 @@
     font-weight: 700;
     color: #e5e5e5;
     line-height: 1.2;
+  }
+
+  .card-descripcion {
+    font-size: 0.7rem;
+    color: #999;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .card-ingredientes {

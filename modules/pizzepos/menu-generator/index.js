@@ -351,6 +351,30 @@ class MenuGeneratorModule {
     };
   }
 
+  async handleEnrichProducts(data) {
+    const result = await this.toolEnrichProducts(data);
+    if (result.error) {
+      throw { status: result.status || 400, code: 'ENRICH_ERROR', message: result.error };
+    }
+    return result.data;
+  }
+
+  async handleSetProductImage(data) {
+    const result = await this.toolSetProductImage(data);
+    if (result.error) {
+      throw { status: result.status || 400, code: 'IMAGE_ERROR', message: result.error };
+    }
+    return result.data;
+  }
+
+  async handleSetCategoryImage(data) {
+    const result = await this.toolSetCategoryImage(data);
+    if (result.error) {
+      throw { status: result.status || 400, code: 'IMAGE_ERROR', message: result.error };
+    }
+    return result.data;
+  }
+
   // ==========================================
   // Pipeline Handlers — bridge frontend panels to local service providers
   // ==========================================
@@ -838,7 +862,7 @@ class MenuGeneratorModule {
     if (!pendingData) return;
 
     this.pendingAI.delete(correlationId);
-    const { id: cartaId, nombre, project_id } = pendingData;
+    const { id: cartaId, nombre, project_id, _enrichment } = pendingData;
 
     if (!eventData.success && eventData.error) {
       this.logger.error('menu.generate.ai_error', { carta_id: cartaId, project_id, error: eventData.error });
@@ -854,6 +878,35 @@ class MenuGeneratorModule {
 
     try {
       const content = eventData.content || eventData.text || '';
+
+      // Enrichment response — apply to existing carta
+      if (_enrichment) {
+        const carta = this.getCartas(project_id).get(cartaId);
+        if (!carta) {
+          this.logger.warn('menu.enrich.carta_not_found', { carta_id: cartaId, project_id });
+          return;
+        }
+
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('La IA no devolvió un JSON válido para enrichment');
+
+        const enrichmentData = JSON.parse(jsonMatch[0]);
+        const enriched = this.applyEnrichment(carta, enrichmentData, project_id);
+
+        await this.saveCartaToDisk(carta, project_id);
+        this.metrics?.increment('menu.enrich.completed');
+
+        await this.eventBus.publish('carta.generada', carta, { correlationId });
+
+        this.logger.info('menu.enrich.completed', {
+          carta_id: cartaId,
+          project_id,
+          productos_enriched: enriched
+        });
+        return;
+      }
+
+      // Standard generation response
       const carta = this.parseAndStructure(cartaId, nombre, content);
 
       this.getCartas(project_id).set(cartaId, carta);
@@ -1092,6 +1145,218 @@ class MenuGeneratorModule {
     if (/masa|harina|levadura/.test(n)) return 'masa';
 
     return 'otro';
+  }
+
+  // ==========================================
+  // Content Enrichment — tools para carta digital
+  // ==========================================
+
+  /**
+   * Enriquece productos de una carta con descripciones, emojis e ingredientes
+   * clasificados via AI. Guarda los datos enriquecidos directamente en la carta JSON.
+   */
+  async toolEnrichProducts({ carta_id, project_id, producto_ids, idioma }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const lang = idioma || 'es';
+    const targets = producto_ids
+      ? carta.productos.filter(p => producto_ids.includes(p.id))
+      : carta.productos;
+
+    if (targets.length === 0) {
+      return { status: 400, error: 'No hay productos para enriquecer' };
+    }
+
+    const requestId = crypto.randomUUID();
+
+    // Build AI prompt
+    const productosTexto = targets.map(p => {
+      const ings = (p.ingredientes || []).map(i => i.nombre).join(', ');
+      return `- ${p.id}: "${p.nombre}" (${p.precio}€) — Ingredientes: ${ings || 'N/A'}`;
+    }).join('\n');
+
+    const prompt = `Eres un copywriter gastronómico experto para cartas digitales de restaurantes.
+
+Para cada producto de la siguiente lista, genera:
+1. "descripcion": Una descripción atractiva y breve (máximo 2 frases, ~30 palabras). Destaca los sabores y la experiencia. No repitas el nombre del producto.
+2. "emoji": Un único emoji que mejor represente el producto (basándote en su ingrediente principal o personalidad).
+3. "tags": Array de 1-3 tags relevantes del producto. Opciones válidas: "picante", "vegetariano", "vegano", "sin_gluten", "popular", "nuevo", "especial", "clasico", "premium".
+4. "ingredientes_enriquecidos": Array con cada ingrediente del producto enriquecido:
+   - "nombre": nombre original
+   - "emoji": emoji representativo del ingrediente
+   - "tipo": uno de "queso", "carne", "verdura", "salsa", "masa", "marisco", "otro"
+
+PRODUCTOS:
+${productosTexto}
+
+Idioma de las descripciones: ${lang === 'es' ? 'español' : lang}
+
+Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
+{
+  "productos": [
+    {
+      "id": "producto_id",
+      "descripcion": "Descripción atractiva...",
+      "emoji": "🍕",
+      "tags": ["clasico"],
+      "ingredientes_enriquecidos": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" }
+      ]
+    }
+  ]
+}`;
+
+    this.pendingAI.set(requestId, {
+      id: carta_id,
+      project_id,
+      _enrichment: true,
+      targets: targets.map(t => t.id),
+      created_at: new Date().toISOString()
+    });
+
+    await this.eventBus.publish('ai.chat.request', {
+      request_id: requestId,
+      messages: [
+        { role: 'system', content: prompt }
+      ],
+      provider: 'auto',
+      temperature: 0.7,
+      max_tokens: 4000,
+      stream: false,
+      tools: false
+    }, { correlationId: requestId });
+
+    this.metrics?.increment('menu.enrich.requested');
+    this.logger.info('menu.enrich.requested', {
+      carta_id, project_id,
+      productos: targets.length
+    });
+
+    return {
+      status: 202,
+      data: {
+        carta_id,
+        productos_en_proceso: targets.length,
+        estado: 'enriqueciendo',
+        message: `Enriqueciendo ${targets.length} productos. Usa menu.get_carta para ver el resultado cuando termine.`
+      }
+    };
+  }
+
+  /**
+   * Apply AI enrichment results to carta products.
+   * Called from onAIChatResponse when the pending entry has _enrichment flag.
+   */
+  applyEnrichment(carta, enrichmentData, projectId) {
+    const productoMap = new Map(carta.productos.map(p => [p.id, p]));
+    let enriched = 0;
+
+    for (const item of (enrichmentData.productos || [])) {
+      const prod = productoMap.get(item.id);
+      if (!prod) continue;
+
+      if (item.descripcion) prod.descripcion = item.descripcion;
+      if (item.emoji) prod.emoji = item.emoji;
+      if (item.tags) prod.tags = item.tags;
+
+      // Merge enriched ingredient data back
+      if (item.ingredientes_enriquecidos && Array.isArray(item.ingredientes_enriquecidos)) {
+        const enrichedIngs = new Map(item.ingredientes_enriquecidos.map(i => [
+          i.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+          i
+        ]));
+
+        for (const ing of (prod.ingredientes || [])) {
+          const key = ing.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const enrichedIng = enrichedIngs.get(key);
+          if (enrichedIng) {
+            if (enrichedIng.emoji) ing.emoji = enrichedIng.emoji;
+            if (enrichedIng.tipo) ing.tipo = enrichedIng.tipo;
+          }
+        }
+      }
+
+      enriched++;
+    }
+
+    // Mark carta as enriched
+    if (!carta.meta.enrichment) carta.meta.enrichment = {};
+    carta.meta.enrichment.last_enriched_at = new Date().toISOString();
+    carta.meta.enrichment.productos_enriched = enriched;
+
+    return enriched;
+  }
+
+  /**
+   * Asocia una imagen a un producto de la carta.
+   * La imagen puede ser una ruta relativa al storage del proyecto,
+   * una ruta absoluta local, o una URL externa.
+   */
+  async toolSetProductImage({ carta_id, project_id, producto_id, imagen, imagen_base64 }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!producto_id) return { status: 400, error: 'Se requiere producto_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const prod = carta.productos.find(p => p.id === producto_id);
+    if (!prod) return { status: 404, error: `Producto "${producto_id}" no encontrado` };
+
+    // If base64 image provided, save it to disk
+    if (imagen_base64) {
+      try {
+        const { relativePath } = await this.savePipelineFile(
+          imagen_base64, `prod_${this.slugify(prod.nombre)}`, project_id, '.jpg'
+        );
+        prod.imagen = relativePath;
+      } catch (err) {
+        return { status: 500, error: `Error guardando imagen: ${err.message}` };
+      }
+    } else if (imagen) {
+      prod.imagen = imagen;
+    } else {
+      return { status: 400, error: 'Se requiere "imagen" (ruta) o "imagen_base64" (base64)' };
+    }
+
+    await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', carta);
+
+    this.logger.info('menu.product_image.set', {
+      carta_id, project_id, producto_id,
+      imagen: prod.imagen
+    });
+
+    return {
+      status: 200,
+      data: {
+        producto_id,
+        imagen: prod.imagen,
+        message: `Imagen asignada a "${prod.nombre}"`
+      }
+    };
+  }
+
+  /**
+   * Asocia una imagen a una categoría de la carta.
+   */
+  async toolSetCategoryImage({ carta_id, project_id, categoria_id, imagen, icon }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const cat = carta.categorias.find(c => c.id === categoria_id);
+    if (!cat) return { status: 404, error: `Categoría "${categoria_id}" no encontrada` };
+
+    if (imagen) cat.imagen = imagen;
+    if (icon) cat.icon = icon;
+
+    await this.saveCartaToDisk(carta, project_id);
+
+    return {
+      status: 200,
+      data: { categoria_id, imagen: cat.imagen, icon: cat.icon }
+    };
   }
 
   /**

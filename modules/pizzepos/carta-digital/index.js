@@ -1,14 +1,18 @@
 /**
- * Módulo Carta Digital v1.0
- * Carta del cliente — configuración, sesiones y pedidos
+ * Módulo Carta Digital v1.1
+ * Carta del cliente — configuración, sesiones, pedidos y media serving
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  * Multi-tenant: cada proyecto tiene su propia config
  *
  * Emite: carta-digital.sesion_creada, carta-digital.pedido_recibido
  * Consume: project.activated
+ *
+ * APIs HTTP:
+ *   GET /media/:path — Sirve imágenes del storage del proyecto
  */
 
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -362,6 +366,223 @@ class CartaDigitalModule {
         sesiones_activas: this.sesionesActivas.size
       }
     };
+  }
+
+  // ==========================================
+  // Media Serving — HTTP endpoint for images
+  // ==========================================
+
+  /**
+   * Sirve archivos estáticos (imágenes) desde el storage del proyecto.
+   * Ruta: GET /modules/carta-digital/media/*
+   *
+   * El path del archivo se pasa como parámetro de query o en la ruta.
+   * Solo sirve archivos de imagen permitidos.
+   * Soporta Cache-Control y Content-Type apropiado.
+   */
+  async handleServeMedia(req, context) {
+    // Extract file path from URL: /modules/carta-digital/media/pizzepos/preprocesadas/img.jpg
+    const url = req?.url || context?.url || '';
+    const mediaPrefix = '/modules/carta-digital/media/';
+    let relativePath = '';
+
+    if (url.includes(mediaPrefix)) {
+      relativePath = decodeURIComponent(url.split(mediaPrefix)[1] || '');
+    } else if (req?.params?.path) {
+      relativePath = req.params.path;
+    } else if (context?.path) {
+      relativePath = context.path;
+    }
+
+    if (!relativePath) {
+      return { status: 400, error: 'Se requiere ruta del archivo' };
+    }
+
+    // Security: prevent directory traversal
+    const normalized = path.normalize(relativePath).replace(/^(\.\.[\/\\])+/, '');
+    if (normalized.includes('..')) {
+      return { status: 403, error: 'Ruta no permitida' };
+    }
+
+    // Allowed extensions
+    const ext = path.extname(normalized).toLowerCase();
+    const MIME_TYPES = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon'
+    };
+
+    const contentType = MIME_TYPES[ext];
+    if (!contentType) {
+      return { status: 415, error: `Tipo de archivo no soportado: ${ext}` };
+    }
+
+    // Resolve to project storage — try each project path
+    let absolutePath = null;
+    for (const [, storagePath] of this.projectPaths) {
+      const candidate = path.join(storagePath, '..', normalized);
+      try {
+        await fs.access(candidate);
+        absolutePath = candidate;
+        break;
+      } catch {}
+    }
+
+    // Fallback: try from cwd/storage
+    if (!absolutePath) {
+      const fallback = path.join(process.cwd(), 'storage', normalized);
+      try {
+        await fs.access(fallback);
+        absolutePath = fallback;
+      } catch {}
+    }
+
+    if (!absolutePath) {
+      return { status: 404, error: 'Archivo no encontrado' };
+    }
+
+    try {
+      const data = await fs.readFile(absolutePath);
+
+      return {
+        status: 200,
+        body: data,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': data.length.toString(),
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*'
+        }
+      };
+    } catch (err) {
+      this.logger.error('carta-digital.media.read_failed', {
+        path: relativePath,
+        error: err.message
+      });
+      return { status: 500, error: 'Error leyendo archivo' };
+    }
+  }
+
+  /**
+   * Devuelve la carta completa con datos enriquecidos para la carta digital.
+   * Combina datos de productos (via carta_completa) con la carta JSON original
+   * que contiene descripciones, emojis e imágenes enriquecidas.
+   */
+  async handleCartaDigitalCompleta(data) {
+    const projectId = this.resolveProject(data?.project_id);
+    const cartaId = data?.carta_id;
+
+    // Load carta JSON from disk (contains enriched data)
+    const storagePath = this.projectPaths.get(projectId);
+    if (!storagePath) {
+      return { status: 404, error: 'Proyecto no encontrado' };
+    }
+
+    const cartasDir = path.join(storagePath, 'cartas');
+
+    try {
+      // If specific carta_id provided, load that one
+      if (cartaId) {
+        const cartaPath = path.join(cartasDir, `${cartaId}.json`);
+        const raw = await fs.readFile(cartaPath, 'utf8');
+        const carta = JSON.parse(raw);
+        return this.formatCartaDigitalResponse(carta, projectId);
+      }
+
+      // Otherwise, find the first carta available
+      const files = await fs.readdir(cartasDir);
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+      if (jsonFiles.length === 0) {
+        return { status: 404, error: 'No hay cartas disponibles' };
+      }
+
+      const raw = await fs.readFile(path.join(cartasDir, jsonFiles[0]), 'utf8');
+      const carta = JSON.parse(raw);
+      return this.formatCartaDigitalResponse(carta, projectId);
+    } catch (err) {
+      this.logger.error('carta-digital.carta_completa.error', {
+        project_id: projectId,
+        error: err.message
+      });
+      return { status: 500, error: 'Error cargando carta' };
+    }
+  }
+
+  /**
+   * Formatea la carta para la respuesta de carta digital,
+   * añadiendo URLs de media resueltas.
+   */
+  formatCartaDigitalResponse(carta, projectId) {
+    const config = this.configPerProject.get(projectId) || this.defaultConfig();
+
+    // Map products with resolved image URLs
+    const productos = (carta.productos || []).map(p => ({
+      id: p.id,
+      nombre: p.nombre,
+      categoria: p.categoria,
+      precio: p.precio,
+      descripcion: p.descripcion || null,
+      emoji: p.emoji || null,
+      tags: p.tags || [],
+      imagen: p.imagen ? this.resolveMediaUrl(p.imagen) : null,
+      ingredientes: (p.ingredientes || []).map(ing => ({
+        nombre: ing.nombre,
+        emoji: ing.emoji || null,
+        tipo: ing.tipo || null,
+        precio_extra: ing.precio_extra ?? null
+      })),
+      tiene_variaciones: (p.ingredientes && p.ingredientes.length > 0)
+    }));
+
+    const categorias = (carta.categorias || []).map(c => ({
+      id: c.id,
+      nombre: c.nombre,
+      orden: c.orden,
+      icon: c.icon || null,
+      imagen: c.imagen ? this.resolveMediaUrl(c.imagen) : null
+    }));
+
+    return {
+      status: 200,
+      data: {
+        project_id: projectId,
+        carta_id: carta.meta?.id,
+        nombre: carta.meta?.nombre || config.nombre_negocio,
+        config: {
+          whatsapp_telefono: config.whatsapp_telefono,
+          nombre_negocio: config.nombre_negocio,
+          moneda: config.moneda,
+          mensaje_header: config.mensaje_header,
+          tema: config.tema
+        },
+        categorias,
+        productos,
+        total_categorias: categorias.length,
+        total_productos: productos.length,
+        enrichment: carta.meta?.enrichment || null
+      }
+    };
+  }
+
+  /**
+   * Resuelve una ruta de imagen relativa al storage a una URL de media serving.
+   * Ejemplo: "/pizzepos/preprocesadas/prod_country.jpg"
+   *   → "/modules/carta-digital/media/pizzepos/preprocesadas/prod_country.jpg"
+   */
+  resolveMediaUrl(imagePath) {
+    if (!imagePath) return null;
+    // If already a full URL, return as-is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) return imagePath;
+    // If already points to media endpoint, return as-is
+    if (imagePath.startsWith('/modules/carta-digital/media/')) return imagePath;
+    // Resolve relative storage path to media URL
+    const clean = imagePath.replace(/^\/+/, '');
+    return `/modules/carta-digital/media/${clean}`;
   }
 }
 

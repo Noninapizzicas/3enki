@@ -71,7 +71,22 @@ class LlevarStrategy {
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
-    await this.marcarEntregado(cuenta_id, correlationId);
+    const ticket = this.ticketsActivos.get(cuenta_id);
+    if (!ticket) return;
+
+    ticket.pagado = true;
+    ticket.hora_pago = new Date().toISOString();
+
+    this.modulo.logger.info('llevar.ticket_pagado', {
+      correlation_id: correlationId,
+      numero_ticket: ticket.numero_ticket,
+      estado: ticket.estado
+    });
+
+    // Si ya fue entregado físicamente, cerrar la cuenta
+    if (ticket.estado === 'entregado') {
+      await this.cerrarTicket(cuenta_id, correlationId);
+    }
   }
 
   getHealth() {
@@ -157,6 +172,7 @@ class LlevarStrategy {
         numero_ticket,
         cliente_nombre: cliente_nombre || `Cliente ${numero_ticket}`,
         estado: 'pendiente',
+        pagado: false,
         total: 0,
         hora_creacion: new Date().toISOString(),
         pedidos: [],
@@ -297,6 +313,7 @@ class LlevarStrategy {
             || cuenta.datos_especificos?.numero_ticket
             || `Cliente ${seq}`,
           estado: 'pendiente',
+          pagado: false,
           total: cuenta.total || 0,
           hora_creacion: cuenta.created_at || new Date().toISOString(),
           pedidos: (cuenta.pedidos || []).map(p => p.pedido_id),
@@ -386,6 +403,21 @@ class LlevarStrategy {
       hora_entrega: ticket.hora_entrega
     }, { correlationId });
 
+    // Solo cerrar si ya pagado; si no, la cuenta sigue activa esperando pago
+    if (ticket.pagado) {
+      await this.cerrarTicket(cuenta_id, correlationId);
+    } else {
+      this.modulo.logger.info('llevar.ticket_entregado_pendiente_pago', {
+        correlation_id: correlationId,
+        numero_ticket: ticket.numero_ticket
+      });
+    }
+  }
+
+  async cerrarTicket(cuenta_id, correlationId) {
+    const ticket = this.ticketsActivos.get(cuenta_id);
+    if (!ticket) return;
+
     await this.modulo.publishCuentaCerrada({
       cuenta_id: ticket.cuenta_id,
       tipo: 'llevar',
@@ -404,7 +436,7 @@ class LlevarStrategy {
       data: { numero_ticket: ticket.numero_ticket }
     });
 
-    this.modulo.logger.info('llevar.ticket_entregado', {
+    this.modulo.logger.info('llevar.ticket_cerrado', {
       correlation_id: correlationId,
       numero_ticket: ticket.numero_ticket
     });

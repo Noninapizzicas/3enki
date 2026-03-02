@@ -476,39 +476,69 @@ export function publish(topic: string, payload: unknown, retain = false): void {
 }
 
 /**
- * Suscribirse a un topic
- * Retorna función para desuscribirse
+ * Detecta si un patron es un nombre de evento (dot notation) y lo convierte
+ * al topic MQTT real del EventBus: cocina.item_preparando => core/star/events/cocina/item_preparando
+ */
+function normalizeEventPattern(pattern: string): { topic: string; isEvent: boolean } {
+  // Si ya tiene slashes, es un topic MQTT directo (ej: 'ui/response/xxx')
+  if (pattern.includes('/')) {
+    return { topic: pattern, isEvent: false };
+  }
+  // Si tiene dots, es un nombre de evento => convertir a topic MQTT
+  if (pattern.includes('.')) {
+    const parts = pattern.split('.');
+    const domain = parts[0];
+    const action = parts.slice(1).join('/');
+    return { topic: `core/*/events/${domain}/${action}`, isEvent: true };
+  }
+  // Simple string sin dots ni slashes: topic directo
+  return { topic: pattern, isEvent: false };
+}
+
+/**
+ * Suscribirse a un topic MQTT o evento del EventBus.
+ * Acepta topics directos (ui/response/xxx) y dot notation (cocina.item_preparando).
+ * Para dot notation, convierte al topic MQTT y pasa el envelope al handler.
  */
 export function subscribe(pattern: string, handler: MessageHandler): () => void {
+  const { topic: mqttTopic, isEvent } = normalizeEventPattern(pattern);
+
+  // Para eventos, wrap handler para pasar (envelope, envelope) en vez de (topic, payload)
+  // Los stores hacen: (event: any) => { const data = event?.data || ... }
+  // donde 'event' es el primer arg — necesita ser el envelope, no el topic string
+  const effectiveHandler: MessageHandler = isEvent
+    ? (_topic: string, payload: unknown) => handler(payload as any, payload)
+    : handler;
+
   // Añadir handler
-  if (!handlers.has(pattern)) {
-    handlers.set(pattern, new Set());
+  if (!handlers.has(mqttTopic)) {
+    handlers.set(mqttTopic, new Set());
   }
-  handlers.get(pattern)!.add(handler);
+  handlers.get(mqttTopic)!.add(effectiveHandler);
 
   // Suscribir al broker si es primera vez
-  const refcount = topicSubscriptions.get(pattern) ?? 0;
+  const refcount = topicSubscriptions.get(mqttTopic) ?? 0;
   if (refcount === 0 && client?.connected) {
-    client.subscribe(pattern);
+    client.subscribe(mqttTopic);
     // Log subscription
-    logMqttInteraction('subscribe', pattern);
+    logMqttInteraction('subscribe', mqttTopic);
   }
-  topicSubscriptions.set(pattern, refcount + 1);
+  topicSubscriptions.set(mqttTopic, refcount + 1);
 
   // Retornar función de limpieza
   return () => {
-    handlers.get(pattern)?.delete(handler);
+    handlers.get(mqttTopic)?.delete(effectiveHandler);
 
-    const newRefcount = (topicSubscriptions.get(pattern) ?? 1) - 1;
+    const newRefcount = (topicSubscriptions.get(mqttTopic) ?? 1) - 1;
     if (newRefcount <= 0) {
-      topicSubscriptions.delete(pattern);
+      topicSubscriptions.delete(mqttTopic);
       if (client?.connected) {
-        client.unsubscribe(pattern);
+        client.unsubscribe(mqttTopic);
         // Log unsubscription
-        logMqttInteraction('unsubscribe', pattern);
+        logMqttInteraction('unsubscribe', mqttTopic);
       }
     } else {
-      topicSubscriptions.set(pattern, newRefcount);
+      topicSubscriptions.set(mqttTopic, newRefcount);
     }
   };
 }

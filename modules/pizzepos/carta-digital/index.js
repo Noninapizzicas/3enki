@@ -12,7 +12,6 @@
  */
 
 const fs = require('fs').promises;
-const fsSync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -114,9 +113,10 @@ class CartaDigitalModule {
     this.uiHandler.register('carta-digital', 'register-pedido', this.handleRegisterPedido.bind(this));
     this.uiHandler.register('carta-digital', 'stats', this.handleGetStats.bind(this));
     this.uiHandler.register('carta-digital', 'health', this.handleHealthCheck.bind(this));
+    this.uiHandler.register('carta-digital', 'export-static', this.handleExportStatic.bind(this));
 
     this.logger.info('carta-digital.ui_handlers.registered', {
-      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health']
+      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static']
     });
   }
 
@@ -583,6 +583,140 @@ class CartaDigitalModule {
     // Resolve relative storage path to media URL
     const clean = imagePath.replace(/^\/+/, '');
     return `/modules/carta-digital/media/${clean}`;
+  }
+
+  // ==========================================
+  // Static Export — generate deployable static site
+  // ==========================================
+
+  /**
+   * Genera un sitio estático auto-contenido de la carta digital.
+   * Produce: index.html, sw.js, manifest.json en un directorio de output.
+   *
+   * El HTML tiene todos los datos, CSS y JS inline — no necesita backend.
+   * Listo para desplegar en GitHub Pages, Netlify, o cualquier hosting estático.
+   */
+  async handleExportStatic(data) {
+    const projectId = this.resolveProject(data?.project_id);
+    const cartaId = data?.carta_id;
+
+    const storagePath = this.projectPaths.get(projectId);
+    if (!storagePath) {
+      return { status: 404, error: 'Proyecto no encontrado' };
+    }
+
+    // Load carta
+    const cartasDir = path.join(storagePath, 'cartas');
+    let carta;
+    try {
+      if (cartaId) {
+        const raw = await fs.readFile(path.join(cartasDir, `${cartaId}.json`), 'utf8');
+        carta = JSON.parse(raw);
+      } else {
+        const files = (await fs.readdir(cartasDir)).filter(f => f.endsWith('.json'));
+        if (files.length === 0) return { status: 404, error: 'No hay cartas disponibles' };
+        const raw = await fs.readFile(path.join(cartasDir, files[0]), 'utf8');
+        carta = JSON.parse(raw);
+      }
+    } catch (err) {
+      return { status: 500, error: `Error leyendo carta: ${err.message}` };
+    }
+
+    const config = this.configPerProject.get(projectId) || this.defaultConfig();
+    const tema = config.tema || {};
+
+    // Copy images: resolve relative paths to actual file contents
+    // For static export, images need to be relative paths in the output dir
+    const imagesToCopy = [];
+    for (const p of carta.productos) {
+      if (p.imagen && !p.imagen.startsWith('http')) {
+        const clean = p.imagen.replace(/^\/+/, '');
+        const srcPath = path.join(storagePath, '..', clean);
+        try {
+          await fs.access(srcPath);
+          const destName = 'img/' + path.basename(clean);
+          imagesToCopy.push({ src: srcPath, dest: destName });
+          p.imagen = destName;
+        } catch {
+          // Image not found, clear reference
+          p.imagen = null;
+        }
+      }
+    }
+
+    // Generate static files
+    const { generateStaticHTML, generateServiceWorker, generateManifest, slugify } = require('./static-template');
+
+    const html = generateStaticHTML(carta, config);
+    const sw = generateServiceWorker(config.nombre_negocio);
+    const manifest = generateManifest(
+      config.nombre_negocio,
+      tema.color_primario,
+      tema.color_fondo
+    );
+
+    // Output directory
+    const slug = slugify(config.nombre_negocio);
+    const outputDir = path.join(storagePath, 'carta-static', slug);
+    const imgDir = path.join(outputDir, 'img');
+
+    try {
+      await fs.mkdir(imgDir, { recursive: true });
+      await fs.writeFile(path.join(outputDir, 'index.html'), html, 'utf8');
+      await fs.writeFile(path.join(outputDir, 'sw.js'), sw, 'utf8');
+      await fs.writeFile(path.join(outputDir, 'manifest.json'), manifest, 'utf8');
+
+      // Copy images
+      let imagesCopied = 0;
+      for (const img of imagesToCopy) {
+        try {
+          const data = await fs.readFile(img.src);
+          await fs.writeFile(path.join(outputDir, img.dest), data);
+          imagesCopied++;
+        } catch (err) {
+          this.logger.warn('carta-digital.export.image_failed', {
+            src: img.src, error: err.message
+          });
+        }
+      }
+
+      this.logger.info('carta-digital.export.completed', {
+        project_id: projectId,
+        output_dir: outputDir,
+        productos: carta.productos.length,
+        images: imagesCopied
+      });
+
+      return {
+        status: 200,
+        data: {
+          output_dir: outputDir,
+          files: ['index.html', 'sw.js', 'manifest.json'],
+          productos: carta.productos.length,
+          categorias: carta.categorias.length,
+          images_copied: imagesCopied,
+          message: `Carta estática generada en ${outputDir}. Lista para desplegar en GitHub Pages o cualquier hosting estático.`,
+          deploy_instructions: {
+            github_pages: [
+              `1. Crear repositorio en GitHub (ej: ${slug})`,
+              `2. Copiar contenido de ${outputDir} al repositorio`,
+              `3. Activar GitHub Pages en Settings > Pages > Source: main`,
+              `4. La carta estará en https://tu-usuario.github.io/${slug}/`
+            ],
+            netlify: [
+              `1. Arrastrar la carpeta ${outputDir} a app.netlify.com/drop`,
+              `2. Recibirás un URL con HTTPS automáticamente`
+            ]
+          }
+        }
+      };
+    } catch (err) {
+      this.logger.error('carta-digital.export.failed', {
+        project_id: projectId,
+        error: err.message
+      });
+      return { status: 500, error: `Error generando export: ${err.message}` };
+    }
   }
 }
 

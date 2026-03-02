@@ -36,7 +36,8 @@
     { "domain": "carta-digital", "action": "register-pedido", "handler": "handleRegisterPedido" },
     { "domain": "carta-digital", "action": "stats", "handler": "handleGetStats" },
     { "domain": "carta-digital", "action": "health", "handler": "handleHealthCheck" },
-    { "domain": "carta-digital", "action": "carta-completa", "handler": "handleCartaDigitalCompleta" }
+    { "domain": "carta-digital", "action": "carta-completa", "handler": "handleCartaDigitalCompleta" },
+    { "domain": "carta-digital", "action": "export-static", "handler": "handleExportStatic" }
   ],
 
   "apis": [
@@ -87,6 +88,12 @@
       "path": "/carta",
       "handler": "handleCartaDigitalCompleta",
       "description": "Carta completa enriquecida con config, descripciones, imágenes y tema"
+    },
+    {
+      "method": "POST",
+      "path": "/export-static",
+      "handler": "handleExportStatic",
+      "description": "Genera sitio estático auto-contenido para desplegar en GitHub Pages / Netlify"
     }
   ],
 
@@ -102,7 +109,8 @@
         "carta-digital.sesion.total",
         "carta-digital.pedido.total",
         "carta-digital.producto_visto.total",
-        "carta-digital.media.served"
+        "carta-digital.media.served",
+        "carta-digital.export.completed"
       ],
       "gauges": [
         "carta-digital.sesiones_activas.count"

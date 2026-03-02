@@ -244,8 +244,32 @@ class MenuGeneratorModule {
   }
 
   /**
+   * Save base64 media file to media/{subfolder}/ in the project storage.
+   * Used for product images, category images, branding, etc.
+   * Keeps media separate from the OCR pipeline (preprocesadas/).
+   * Returns { absolutePath, relativePath }.
+   */
+  async saveMediaFile(base64Data, prefix, projectId, subfolder = 'productos', ext = '.jpg') {
+    const paths = this.getPaths(projectId);
+    if (!paths) {
+      throw new Error(`No paths for project ${projectId} — cannot save media file`);
+    }
+
+    const dir = path.join(paths.featurePath, 'media', subfolder);
+    await fs.mkdir(dir, { recursive: true });
+
+    const filename = `${prefix}_${Date.now().toString(36)}${ext}`;
+    const absolutePath = path.join(dir, filename);
+    const buffer = Buffer.from(base64Data, 'base64');
+    await fs.writeFile(absolutePath, buffer);
+
+    const relativePath = '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
+    return { absolutePath, relativePath };
+  }
+
+  /**
    * Save base64 image to the project's preprocesadas/ directory.
-   * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
+   * Used exclusively for the OCR pipeline (PDF→Image→Prepare→OCR).
    * Returns { absolutePath, relativePath } where relativePath is for the frontend FilePicker.
    */
   async savePipelineFile(base64Data, prefix, projectId, ext = '.png') {
@@ -1306,8 +1330,8 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     // If base64 image provided, save it to disk
     if (imagen_base64) {
       try {
-        const { relativePath } = await this.savePipelineFile(
-          imagen_base64, `prod_${this.slugify(prod.nombre)}`, project_id, '.jpg'
+        const { relativePath } = await this.saveMediaFile(
+          imagen_base64, `prod_${this.slugify(prod.nombre)}`, project_id, 'productos', '.jpg'
         );
         prod.imagen = relativePath;
       } catch (err) {
@@ -1340,7 +1364,7 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
   /**
    * Asocia una imagen a una categoría de la carta.
    */
-  async toolSetCategoryImage({ carta_id, project_id, categoria_id, imagen, icon }) {
+  async toolSetCategoryImage({ carta_id, project_id, categoria_id, imagen, imagen_base64, icon }) {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
@@ -1348,7 +1372,18 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     const cat = carta.categorias.find(c => c.id === categoria_id);
     if (!cat) return { status: 404, error: `Categoría "${categoria_id}" no encontrada` };
 
-    if (imagen) cat.imagen = imagen;
+    if (imagen_base64) {
+      try {
+        const { relativePath } = await this.saveMediaFile(
+          imagen_base64, `cat_${this.slugify(cat.nombre)}`, project_id, 'categorias', '.jpg'
+        );
+        cat.imagen = relativePath;
+      } catch (err) {
+        return { status: 500, error: `Error guardando imagen: ${err.message}` };
+      }
+    } else if (imagen) {
+      cat.imagen = imagen;
+    }
     if (icon) cat.icon = icon;
 
     await this.saveCartaToDisk(carta, project_id);

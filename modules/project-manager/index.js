@@ -282,6 +282,7 @@ class ProjectManagerModule {
       id: p.id, name: p.name, description: p.description || '',
       color: p.metadata?.color || 'blue', icon: p.metadata?.icon || '📁',
       workspaceType: p.metadata?.workspaceType || 'general',
+      metadata: p.metadata || {},
       isActive: p.is_active === true || p.is_active === 1,
       createdAt: p.created_at, updatedAt: p.updated_at,
       systemId: p.system_id || null, systemRole: p.system_role || null,

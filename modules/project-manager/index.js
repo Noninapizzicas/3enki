@@ -199,6 +199,32 @@ class ProjectManagerModule {
     }
   }
 
+  /**
+   * Re-emits project.activated for all projects with is_active=1.
+   * Called from root index.js after all modules are loaded so they receive the events.
+   */
+  async reactivateExistingProjects() {
+    if (this.activeProjectIds.size === 0) return;
+
+    for (const projectId of this.activeProjectIds) {
+      const project = this.projects.get(projectId);
+      if (!project) continue;
+
+      await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
+        project_id: projectId,
+        name: project.name,
+        base_path: project.base_path,
+        metadata: project.metadata || {},
+        activated_at: new Date().toISOString()
+      });
+    }
+
+    this.logger.info('project-manager.reactivated', {
+      count: this.activeProjectIds.size,
+      projects: [...this.activeProjectIds]
+    });
+  }
+
   async ensureSystemProject() {
     const cid = crypto.randomUUID();
     const SYSTEM_PROJECT_NAME = 'Sistema';
@@ -206,7 +232,17 @@ class ProjectManagerModule {
     const existingSystem = Array.from(this.projects.values()).find(
       p => p.name === SYSTEM_PROJECT_NAME || p.metadata?.is_system
     );
-    if (existingSystem) return existingSystem;
+    if (existingSystem) {
+      // Ensure System Project is always active
+      if (!existingSystem.is_active) {
+        existingSystem.is_active = true;
+        this.projects.set(existingSystem.id, existingSystem);
+        this.activeProjectIds.add(existingSystem.id);
+        await this.queryDatabase('UPDATE projects SET is_active = 1 WHERE id = ?', [existingSystem.id], false, cid);
+        this.logger.info('project-manager.system.activated', { projectId: existingSystem.id });
+      }
+      return existingSystem;
+    }
 
     try {
       const projectId = crypto.randomUUID();
@@ -220,7 +256,7 @@ class ProjectManagerModule {
         INSERT INTO projects (
           id, name, description, created_at, updated_at, is_active, metadata,
           last_conversation_id, provider, model, prompt_id, base_path, session_state, system_role
-        ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         projectId, SYSTEM_PROJECT_NAME,
         'Proyecto padre del sistema. Gestiona la configuración, módulos, logs y todos los directorios del sistema event-core.',
@@ -231,12 +267,13 @@ class ProjectManagerModule {
       const project = {
         id: projectId, name: SYSTEM_PROJECT_NAME,
         description: 'Proyecto padre del sistema. Gestiona la configuración, módulos, logs y todos los directorios del sistema event-core.',
-        created_at: now, updated_at: now, is_active: false, metadata,
+        created_at: now, updated_at: now, is_active: true, metadata,
         last_conversation_id: null, provider: null, model: null, prompt_id: null,
         base_path: basePath, session_state: {},
         system_id: null, system_role: 'root', parent_project_id: null
       };
       this.projects.set(projectId, project);
+      this.activeProjectIds.add(projectId);
       await this.initializeProjectSchema(projectId, cid);
 
       // Create root system via composition-manager

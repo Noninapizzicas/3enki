@@ -1,10 +1,24 @@
 {
-  "_VERSION": "3.8.0",
+  "_VERSION": "4.0.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-02-25",
-  "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos",
+  "_UPDATED": "2026-03-02",
+  "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "4.0.0": {
+      "fecha": "2026-03-02",
+      "cambios": [
+        "FEAT: carta-digital — módulo completo: config por proyecto, sesiones, pedidos, media serving, carta enriquecida",
+        "FEAT: carta-digital — frontend: CartaScreen, ProductoCard, ProductoDetalle, CategoriaScroll, CarritoPanel con WhatsApp",
+        "FEAT: carta-digital — store Svelte: cartaStore con carrito, categorías, productos, ingredientes, WhatsApp integration",
+        "FEAT: carta-digital — export estático: genera HTML auto-contenido con datos inline, zero backend, PWA + service worker",
+        "FEAT: carta-digital — CLI export: node export-cli.js --whatsapp 34XXX genera bundle para GitHub Pages / Netlify",
+        "FEAT: carta-impresion — templates HTML (A4, A5, custom) para imprimir cartas desde el navegador",
+        "FEAT: menu-generator — tools nuevos: menu.enrich_products (AI descriptions/emojis), menu.set_product_image, menu.set_category_image",
+        "DOC: módulos totales pizzepos 14→15 con carta-digital como módulo #15",
+        "ARCH: estrategia hosting: backend local (event-core) + frontend estático público (GitHub Pages) para HTTPS sin servidor propio"
+      ]
+    },
     "3.8.0": {
       "fecha": "2026-02-25",
       "cambios": [
@@ -307,7 +321,7 @@
         "uiHandlers": ["generate", "list", "get", "health", "export"],
         "pipeline_uiHandlers": ["sharp.prepare-ocr", "pdfjs.info", "pdfjs.render", "google-vision.extract", "tesseract.extract", "scribe-ocr.extract", "document-processor.process"],
         "tools": {
-          "descripcion": "11 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
+          "descripcion": "14 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
           "lista": [
             { "name": "menu.generate", "handler": "toolGenerate", "desc": "Genera carta estructurada desde texto (OCR, lista, JSON)" },
             { "name": "menu.list_cartas", "handler": "toolListCartas", "desc": "Lista cartas generadas con resumen" },
@@ -319,6 +333,9 @@
             { "name": "menu.update_product", "handler": "toolUpdateProduct", "desc": "Actualiza nombre/precio/ingredientes/categoría" },
             { "name": "menu.search_products", "handler": "toolSearchProducts", "desc": "Busca productos por nombre o ingrediente" },
             { "name": "menu.stats", "handler": "toolStats", "desc": "Estadísticas: total, por categoría, precio medio, rango" },
+            { "name": "menu.enrich_products", "handler": "toolEnrichProducts", "desc": "Enriquece productos con AI: descripciones atractivas, emojis, ingredientes clasificados" },
+            { "name": "menu.set_product_image", "handler": "toolSetProductImage", "desc": "Asigna imagen a producto (ruta o base64)" },
+            { "name": "menu.set_category_image", "handler": "toolSetCategoryImage", "desc": "Asigna imagen/icono a categoría" },
             { "name": "menu.export_to_pos", "handler": "toolExportToPOS", "desc": "Exporta carta al POS: publica menu.generado + menu.validado" }
           ]
         },
@@ -532,6 +549,92 @@
         "panel": "ImpresionPanel.svelte — conectar, estado, historial, reimprimir"
       },
       "relacion_cocina": "COMPLEMENTARIO — impresión genera ticket físico (snapshot), pantalla cocina muestra cola digital (estado vivo). Ambos escuchan pedido.enviado_cocina."
+    },
+
+    "carta-impresion": {
+      "version": "1.0.0",
+      "descripcion": "Generación de HTML para imprimir cartas de restaurante desde el navegador (Ctrl+P). Templates A4, A5 y custom.",
+      "ui_domain": "carta",
+      "uiHandlers": ["render", "plantillas", "plantilla_crear", "plantilla_eliminar"],
+      "tools": [
+        { "name": "carta.render", "desc": "Genera HTML imprimible desde carta_id + plantilla" },
+        { "name": "carta.plantillas", "desc": "Lista plantillas disponibles" },
+        { "name": "carta.plantilla_crear", "desc": "Crea plantilla custom" },
+        { "name": "carta.plantilla_eliminar", "desc": "Elimina plantilla" }
+      ],
+      "eventos_suscribe": ["project.activated", "project.deactivated"],
+      "plantillas_incluidas": ["a4-clasica", "a5-compacta"],
+      "nota": "Output es HTML — el navegador se encarga del print/PDF via Ctrl+P o window.print()"
+    },
+
+    "carta-digital": {
+      "version": "1.1.0",
+      "descripcion": "Carta web para clientes (QR, WhatsApp link). Carrito client-side + pedido via WhatsApp. Export estático para hosting público con HTTPS.",
+      "ui_domain": "carta-digital",
+      "uiHandlers": ["config", "update-config", "create-session", "register-pedido", "stats", "health", "export-static"],
+      "eventos_publica": ["carta-digital.sesion_creada", "carta-digital.pedido_recibido"],
+      "eventos_suscribe": ["project.activated"],
+      "apis": [
+        { "method": "GET", "path": "/config", "desc": "Config del módulo (WhatsApp, branding, tema)" },
+        { "method": "PATCH", "path": "/config", "desc": "Actualizar config" },
+        { "method": "POST", "path": "/session", "desc": "Crear sesión de visualización (analytics)" },
+        { "method": "POST", "path": "/pedido", "desc": "Registrar pedido desde carta digital" },
+        { "method": "GET", "path": "/stats", "desc": "Estadísticas de uso" },
+        { "method": "GET", "path": "/media/:path", "desc": "Servir imágenes de productos desde storage" },
+        { "method": "GET", "path": "/carta", "desc": "Carta completa enriquecida con config, descripciones, imágenes" },
+        { "method": "POST", "path": "/export-static", "desc": "Genera sitio estático auto-contenido" }
+      ],
+      "config_por_proyecto": {
+        "nombre_negocio": "string — nombre para header y WhatsApp",
+        "moneda": "string — símbolo (default: €)",
+        "whatsapp_telefono": "string — número con código país (ej: 34612345678)",
+        "mensaje_header": "string — inicio del mensaje WhatsApp",
+        "tema": {
+          "color_primario": "hex — color de marca (default: #f59e0b)",
+          "color_fondo": "hex — fondo oscuro (default: #0a0a0a)",
+          "color_texto": "hex — texto claro (default: #e5e5e5)"
+        },
+        "funcionalidades": {
+          "carrito": "bool — habilitar carrito",
+          "compartir": "bool — botón compartir pedido",
+          "variaciones": "bool — permitir quitar/añadir ingredientes"
+        }
+      },
+      "export_estatico": {
+        "descripcion": "Genera bundle HTML auto-contenido deployable en GitHub Pages, Netlify o cualquier hosting estático. Zero backend.",
+        "archivos_generados": ["index.html (todo inline: CSS + JS + datos)", "sw.js (service worker para offline/PWA)", "manifest.json (PWA manifest)", "img/ (imágenes copiadas)"],
+        "cli": "node modules/pizzepos/carta-digital/export-cli.js --whatsapp 34XXX --nombre Pizzicas",
+        "opciones_cli": ["--carta (ruta al JSON)", "--output (directorio salida)", "--whatsapp (número)", "--nombre (negocio)", "--moneda (€)", "--color (#hex)"],
+        "funcionalidades_html": [
+          "Grid de productos con imágenes, descripciones, tags, emojis",
+          "Modal detalle con ingredientes tipados por categoría",
+          "Carrito completo con +/- cantidades (todo client-side)",
+          "Botón WhatsApp que abre wa.me/ con pedido formateado",
+          "Service worker para funcionar offline (PWA instalable)",
+          "Responsive mobile-first (diseño dark, mismos estilos que CartaScreen.svelte)"
+        ],
+        "deploy_recomendado": {
+          "netlify": "Drag & drop en app.netlify.com/drop → HTTPS instantáneo",
+          "github_pages": "git init + gh repo create + push → Settings > Pages",
+          "razon": "Resuelve el problema de servir a clientes fuera de la red local sin HTTPS propio ni servidor público"
+        }
+      },
+      "frontend": {
+        "componentes": {
+          "CartaScreen.svelte": "Pantalla principal: header + categorías scroll + grid productos + carrito FAB",
+          "ProductoCard.svelte": "Tarjeta de producto: imagen/placeholder, nombre, ingredientes, precio, botón añadir",
+          "ProductoDetalle.svelte": "Modal detalle: imagen grande, descripción, ingredientes tipados, tags, botón añadir",
+          "CategoriaScroll.svelte": "Scroll horizontal de categorías con pill activa",
+          "CarritoPanel.svelte": "Panel slide-up: items con qty +/-, variaciones visibles, total, botones vaciar/compartir/WhatsApp"
+        },
+        "store": "frontend/src/lib/stores/carta.ts — cartaStore con carrito, categorías, productos, WhatsApp URL builder",
+        "ruta": "/carta/:projectId (standalone, sin AppShell)"
+      },
+      "relacion_otros_modulos": {
+        "menu-generator": "Provee los datos: carta enriquecida con descripciones AI, emojis, ingredientes clasificados, imágenes",
+        "impresion": "Complementario: impresion=ticket físico cocina, carta-digital=web pública clientes",
+        "carta-impresion": "Complementario: carta-impresion=imprimir para mesa, carta-digital=QR/WhatsApp digital"
+      }
     }
   },
 
@@ -615,6 +718,17 @@
       "id": "tests",
       "descripcion": "No hay tests para ningún módulo — prioridad en cobros, pedidos, persistencia",
       "solucion": "Tests unitarios para lógica de negocio pura (validarVariacion, calcularCambio, etc.)"
+    },
+    {
+      "id": "proyecto-pizzepos-activacion",
+      "descripcion": "No existe proyecto 'pizzepos' en data/projects/. La carta existe en storage/pizzepos/cartas/ pero fuera de la estructura de proyectos.",
+      "solucion": "Crear proyecto pizzepos en data/projects/ con config, activarlo para que carta-digital y menu-generator reciban onProjectActivated",
+      "workaround": "export-cli.js funciona sin activación de proyecto — lee la carta directamente del disco"
+    },
+    {
+      "id": "enriquecer-carta-pizzicas",
+      "descripcion": "La carta_pizzicas.json tiene 29 productos con datos básicos (nombre, precio, ingredientes) pero sin descripciones, emojis ni imágenes",
+      "solucion": "Ejecutar menu.enrich_products cuando la AI esté configurada, luego fotos con menu.set_product_image"
     }
   ],
 
@@ -897,6 +1011,12 @@
         "componente": "LazyShell + PageContext",
         "descripcion": "Pipeline de cartas: PDF→OCR→Generar + chat contextual",
         "ejemplo": "/peppone/menu-generator"
+      },
+      "/carta/:projectId": {
+        "archivo": "frontend/src/lib/components/carta/CartaScreen.svelte",
+        "componente": "CartaScreen (standalone)",
+        "descripcion": "Carta digital para clientes — grid productos, carrito, WhatsApp. Sin AppShell.",
+        "ejemplo": "/carta/pizzicas"
       }
     },
 

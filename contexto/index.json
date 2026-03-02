@@ -18,7 +18,7 @@
       "services_catalog": "Read catalogo-servicios.json (listado completo de módulos, APIs, tools, providers)",
       "learning_system": "Read learning.json (sistema de aprendizaje genérico, feedback, recomendaciones)",
       "flow_engine": "Read flow-engine.json (motor de flows, registry, agente IA)",
-      "pizzepos_pos": "Read pizzepos.json (vertical POS pizzería: 12 módulos, 5 canales, Strategy pattern)",
+      "pizzepos_pos": "Read pizzepos.json (vertical POS pizzería: 15 módulos, 5 canales, carta-digital con export estático)",
       "facturas_pipeline": "Read facturas.json (pipeline OCR+IA+CSV fiscal, handlers /go*, gotchas)",
       "blueprints_features": "Read blueprints-features.json (sistema de módulos/features, blueprint schema, add-features)"
     },
@@ -34,8 +34,8 @@
     "name": "event-core",
     "version": "0.5.0",
     "description": "Meta-Core Event-Driven Framework",
-    "last_context_update": "2026-02-25",
-    "module_count": { "core": 30, "pizzepos": 13, "total": 43 }
+    "last_context_update": "2026-03-02",
+    "module_count": { "core": 30, "pizzepos": 15, "total": 45 }
   },
 
   "context_files": [

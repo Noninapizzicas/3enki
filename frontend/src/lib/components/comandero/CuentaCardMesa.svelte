@@ -1,17 +1,23 @@
 <script lang="ts">
   /**
-   * CuentaCardMesa — Tarjeta de cuenta para Mesa/Local
+   * CuentaCardMesa — Tarjeta de cuenta (todos los tipos)
    *
-   * Muestra items agrupados por categoría con estados de cocina:
-   *   en_cocina → punto naranja (cocinando)
+   * Muestra items por nombre agrupados por categoría con estados de cocina:
+   *   en_cocina → punto gris
+   *   preparando → punto amarillo pulsante
    *   listo     → punto verde + pulso (aviso: recoger!)
+   *
+   * Botones contextuales:
+   *   ENTREGAR → cuando estado = listo
+   *   COBRAR   → cuando estado = listo o entregado
+   *   X        → cuando estado = pendiente o cobrado
    *
    * Tap header → abre comandero (añadir pedidos)
    * Tap total  → abre cuenta (cobrar)
    */
   import { createEventDispatcher } from 'svelte';
   import type { Cuenta, ItemDetalle } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta, marcarEntregado } from '$lib/stores/cuentas';
 
   export let cuenta: Cuenta;
   export let projectId: string = '';
@@ -25,6 +31,8 @@
 
   $: color = TIPO_COLORS[cuenta.tipo] || '#3b82f6';
   $: icon = TIPO_ICONS[cuenta.tipo] || '\uD83C\uDFE0';
+  $: isGlovo = cuenta.tipo === 'glovo';
+  $: glovoListo = isGlovo && cuenta.estado === 'listo';
 
   // Agrupar items por categoría
   interface ItemGroup {
@@ -57,6 +65,7 @@
   $: hasItems = totalItems > 0;
 
   // Acciones contextuales
+  $: showEntregarBtn = cuenta.estado === 'listo';
   $: showCobrarBtn = cuenta.estado === 'listo' || cuenta.estado === 'entregado';
   $: showDeleteBtn = cuenta.estado === 'pendiente' || cuenta.estado === 'cobrado';
 
@@ -80,6 +89,11 @@
     dispatch('open-cuenta', { cuenta_id: cuenta.id });
   }
 
+  async function handleEntregado() {
+    if (!projectId) return;
+    await marcarEntregado(projectId, cuenta.id);
+  }
+
   async function handleDelete() {
     if (!projectId) return;
     await deleteCuenta(projectId, cuenta.id);
@@ -99,12 +113,17 @@
   class="card-mesa"
   class:alerta={cuenta.alerta || avisoCount > 0}
   class:cobrado={cuenta.estado === 'cobrado'}
+  class:glovo-listo={glovoListo}
   style="--card-color: {color}"
 >
   <!-- Header: icon + nombre + total -->
   <div class="card-header">
     <button class="header-tap" on:click={handleOpenComandero}>
-      <span class="tipo-icon">{icon}</span>
+      {#if isGlovo}
+        <span class="glovo-badge">GLOVO</span>
+      {:else}
+        <span class="tipo-icon">{icon}</span>
+      {/if}
       <span class="nombre">{cuenta.nombre}</span>
     </button>
     <button class="total-btn" on:click={handleOpenCuenta}>
@@ -158,6 +177,11 @@
       {/if}
     </div>
     <div class="footer-actions">
+      {#if showEntregarBtn}
+        <button class="action-btn action-entregar" on:click|stopPropagation={handleEntregado}>
+          ENTREGAR
+        </button>
+      {/if}
       {#if showCobrarBtn}
         <button class="action-btn action-cobrar" on:click|stopPropagation={handleOpenCuenta}>
           COBRAR
@@ -446,6 +470,11 @@
     opacity: 0.7;
   }
 
+  .action-entregar {
+    background: #a855f7;
+    color: #fff;
+  }
+
   .action-cobrar {
     background: #22c55e;
     color: #fff;
@@ -455,6 +484,24 @@
     background: transparent;
     border: 1px solid #ef4444;
     color: #ef4444;
+  }
+
+  /* ===== GLOVO ===== */
+  .glovo-badge {
+    display: inline-block;
+    background: #FF6B00;
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 900;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 1.5px;
+    line-height: 1.4;
+    flex-shrink: 0;
+  }
+
+  .card-mesa.glovo-listo {
+    animation: glovo-listo-pulse 1.5s ease-in-out infinite;
   }
 
   /* ===== ANIMATIONS ===== */
@@ -471,6 +518,11 @@
   @keyframes aviso-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
+  }
+
+  @keyframes glovo-listo-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 107, 0, 0.3); }
+    50% { box-shadow: 0 0 24px rgba(255, 107, 0, 0.7); }
   }
 
   @keyframes blink-soft {
@@ -496,5 +548,6 @@
     .estado-label { font-size: 0.55rem; }
     .aviso-badge { font-size: 0.5rem; padding: 1px 4px; }
     .action-btn { padding: 3px 8px; font-size: 0.5rem; }
+    .glovo-badge { font-size: 0.5rem; padding: 1px 4px; }
   }
 </style>

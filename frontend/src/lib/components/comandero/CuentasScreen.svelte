@@ -32,7 +32,6 @@
   } from '$lib/stores/cuentas';
 
   import TipoButton from './TipoButton.svelte';
-  import CuentaCard from './CuentaCard.svelte';
   import CuentaCardMesa from './CuentaCardMesa.svelte';
 
   // Props
@@ -155,7 +154,6 @@
       {:else}
         <div class="cuentas-grid">
           {#each $cuentas as cuenta (cuenta.id)}
-            {#if cuenta.tipo === 'local'}
               <CuentaCardMesa
                 {cuenta}
                 {projectId}
@@ -163,14 +161,6 @@
                 on:open-comandero={handleOpenComandero}
                 on:open-cuenta={handleOpenCuenta}
               />
-            {:else}
-              <CuentaCard
-                {cuenta}
-                {projectId}
-                on:open-comandero={handleOpenComandero}
-                on:open-cuenta={handleOpenCuenta}
-              />
-            {/if}
           {/each}
         </div>
       {/if}

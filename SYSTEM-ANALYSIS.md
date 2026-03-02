@@ -1,364 +1,510 @@
 # Analisis del Sistema Event-Core
 
-> Fecha: 2026-02-16
-> Autor: Analisis automatizado
-> Version analizada: v0.2.0 (package.json) / README dice v0.5.0
+> Fecha: 2026-03-02
+> Autor: Analisis automatizado (code-verified)
+> Version analizada: v0.2.0 (package.json)
 
 ---
 
 ## 1. RESUMEN EJECUTIVO
 
-**Event-Core** es un framework event-driven fractal construido sobre Node.js 18+ con MQTT (Aedes), SvelteKit 5, y SQLite (sql.js). Implementa una arquitectura distribuida de multiples cores que se comunican via MQTT, con un sistema modular de 40 modulos y 32+ proveedores de servicios.
+**Event-Core** es un meta-framework event-driven construido sobre Node.js 18+ con MQTT (Aedes broker embebido), SvelteKit 2 + Svelte 5, y SQLite (sql.js). Implementa una arquitectura modular distribuida donde multiples cores se comunican via MQTT pub/sub, con un sistema de 46 modulos descubiertos automaticamente y 35 proveedores de servicios.
 
-### Veredicto General: 6/10
+La vertical principal implementada es **Pizzepos** — un sistema POS completo para pizzeria con 14 modulos especializados (cuentas, pedidos, cobros, cocina, comandero, etc.).
 
-El sistema esta **bien arquitectado** pero tiene **deuda tecnica significativa**: codigo muerto, modulos monoliticos, refactorizaciones incompletas, e inconsistencias entre documentacion y estado real.
+### Estadisticas del Codigo (verificadas)
+
+| Area | Archivos | Lineas de codigo |
+|------|----------|-----------------|
+| index.js | 1 | 678 |
+| core/ | ~30 .js | 15,672 |
+| modules/ | ~100 .js | 52,443 |
+| frontend/ | ~200 .svelte/.ts | 38,298 |
+| services/providers/ | 35 .js | 13,508 |
+| handlers/ | ~20 .js | 5,999 |
+| **Total JS (sin node_modules)** | **~400** | **~121,700** |
 
 ---
 
 ## 2. ARQUITECTURA CORE
 
-### 2.1 Punto de Entrada: `index.js`
+### 2.1 Punto de Entrada: `index.js` (678 lineas)
 
-Orquestador principal que inicializa 15 sistemas en secuencia:
+Secuencia de inicializacion de 8 pasos:
 
 ```
-1. Cargar Config (CLI > ENV > config.{env}.json > config.json)
-2. Inicializar Observabilidad (Logger, Tracer, Metrics)
-3. Inicializar Validacion (JSON Schema con AJV)
-4. Conectar MQTT (broker externo o embebido fallback)
-5. Inicializar Hooks (interceptores pre/post)
-6. Inicializar EventBus (hibrido local + MQTT)
-7. Inicializar ActivityLogger
-8. Inicializar UI Handler
-9. Cargar Providers (servicios externos)
-10. Cargar Modulos (auto-discovery + carga dinamica)
-11. Cargar Handlers (acciones centralizadas)
-12. Inicializar Service Registry (puertos + heartbeat)
-13. Iniciar HTTP Gateway (REST API)
-14. Registrar en Service Registry (heartbeat cada 10s)
-15. Manejar Signals (shutdown graceful SIGINT/SIGTERM)
+1. Observability     → Logger + Tracer + Metrics
+2. Validation        → JSON Schema (AJV)
+3. MQTT              → Aedes broker embebido + mqtt.js client
+4. Hooks             → Sistema de lifecycle hooks
+5. EventBus          → Pub/sub hibrido (local + MQTT)
+5.5 UIRequestHandler → Request/response sobre MQTT para frontend
+6. Providers         → Carga servicios de services/providers/
+6.5 Modules          → Carga modulos de modules/ (auto-discovery recursivo)
+6.7 Handlers         → Carga handlers globales y por proyecto
+7. ServiceRegistry   → Auto-allocacion de puerto
+8. HTTP Gateway      → Express server con routing a modulos
 ```
 
-### 2.2 Sistemas Core
+### 2.2 Componentes Core (`core/`)
 
-| Sistema | Ubicacion | Funcion | Estado |
-|---------|-----------|---------|--------|
-| **EventBus** | `core/events/bus.js` | Pub/sub hibrido (local + MQTT) | Funcional |
-| **Event Envelope** | `core/events/envelope.js` | Formato estandar de eventos con trace | Funcional |
-| **MQTT Client** | `core/mqtt/client.js` | Cliente con fallback a broker embebido | Funcional |
-| **Embedded Broker** | `core/broker/embedded.js` | Aedes MQTT broker (TCP:1883 + WS:9001) | Funcional |
-| **Hook System** | `core/hooks.js` | Interceptores pre/post operacion | Funcional |
-| **Handler Loader** | `core/handler-loader.js` | Auto-discovery y carga de handlers | Funcional |
-| **Handler Store** | `core/handler-store.js` | Persistencia key-value por handler | Funcional (sincrono) |
-| **Service Executor** | `core/service-executor.js` | Request-response sobre MQTT (60s timeout) | Funcional |
-| **Module Loader** | `core/modules/loader.js` | Discovery y carga dinamica de modulos | **INCOMPLETO** |
-| **Module Registry** | `core/modules/registry.js` | Registro central de capacidades | Funcional |
-| **Provider System** | `core/providers/` | Integracion con servicios externos | Funcional |
-| **Validation** | `core/validation/` | JSON Schema con AJV | Funcional |
-| **Observability** | `core/observability/` | Logger, Tracer, Metrics, ActivityLogger | Funcional |
-| **HTTP Gateway** | `core/gateway/http.js` | REST API (Node.js nativo, sin Express) | Funcional |
-| **Discovery** | `core/discovery/` | Multi-core auto-discovery via MQTT | **NO ACTIVADO** en index.js |
-| **Flow Engine** | `core/flow/` | Motor de flujos paso a paso | **NO ACTIVADO** en index.js |
-| **Config** | `core/config/` | Carga jerarquica de configuracion | Funcional |
+| Componente | Ubicacion | Lineas | Funcion |
+|-----------|-----------|--------|---------|
+| EventBus | core/events/bus.js | ~600 | Emisor hibrido local+MQTT con envelopes estandar |
+| Envelope | core/events/envelope.js | ~150 | Estructura estandar de eventos (id, type, source, data, trace) |
+| MQTTClient | core/mqtt/index.js | ~400 | Wrapper con pool de conexiones y broker embebido |
+| ModuleLoader | core/modules/loader.js | ~800 | Auto-discovery y carga de modulos con wiring declarativo |
+| ModuleRegistry | core/modules/registry.js | ~200 | Registro de modulos cargados |
+| HTTPGateway | core/gateway/http.js | ~600 | Express server con routing, CORS, compresion, cache |
+| UIRequestHandler | core/ui/UIRequestHandler.js | ~300 | Request/response sobre MQTT (ui/request/{domain}/{action}) |
+| HandlerLoader | core/handler-loader.js | ~500 | Carga y ejecuta handlers JavaScript puros |
+| ServiceExecutor | core/service-executor.js | ~200 | Ejecutor de llamadas a providers |
+| HandlerStore | core/handler-store.js | ~150 | Key-value persistente por handler |
+| HookManager | core/hooks.js | ~200 | Interceptores pre/post para lifecycle |
+| Discovery | core/discovery/ | ~300 | Descubrimiento multi-core via MQTT retained (NO integrado en startup) |
+| FlowEngine | core/flow/ | ~400 | Motor de flows con registry (legacy, reemplazado por handlers) |
+| Orchestrator | core/orchestrator/ | ~200 | Orquestador de servicios multi-maquina |
+| Constants | core/constants.js | ~1000 | Constantes generadas del sistema |
+| Observability | core/observability/ | ~800 | Logger, Tracer, Metrics, ActivityLogger |
+| Validation | core/validation/ | ~400 | AJV schemas + middleware |
+| Config | core/config/ | ~200 | Carga config con prioridad CLI > ENV > file |
+| Providers | core/providers/ | ~300 | ProviderRegistry + ProviderLoader + ProviderExecutor |
 
-### 2.3 Patrones Arquitectonicos
+### 2.3 Patrones Clave del Core
 
-1. **Diseno Fractal/Multi-Core**: Multiples cores identicos comunicados via MQTT
-2. **Capas**: HTTP Gateway > Modulos > EventBus > MQTT Broker
-3. **Event-Driven**: Toda comunicacion asincrona via eventos
-4. **IoC (Inversion de Control)**: Modulos/handlers no se conocen entre si
-5. **Fallback/Resiliencia**: Broker externo > embebido, modulos aislados
+**Event Envelope estandar:**
+```javascript
+{
+  event_id: "uuid",
+  event_type: "pedido.creado",
+  timestamp: "ISO-8601",
+  source: { core_id: "core-a", module_id: "pedidos" },
+  data: { /* payload */ },
+  trace: { trace_id, span_id, parent_span_id },
+  metadata: { /* custom */ }
+}
+```
 
----
+**Topics MQTT:**
+- Eventos: `core/{coreId}/events/{module}/{event}`
+- UI Request: `ui/request/{domain}/{action}`
+- UI Response: `ui/response/{requestId}`
+- Servicios: `{provider}.{function}.request` / `.response`
+- Discovery: `core/{coreId}/status`
 
-## 3. INVENTARIO DE MODULOS (40 total)
-
-### 3.1 Modulos Core (28)
-
-| Modulo | Version | Lineas | UI | Estado | Problemas |
-|--------|---------|--------|----|--------|-----------|
-| credential-manager | 2.0.0 | 2472 | Si | Activo | 6 event leaks + 11 UI leaks |
-| ai-gateway | 1.0.0 | 1745 | Si | Activo | 3 event leaks, inicio lento (~60s) |
-| prompt-manager | 2.0.0 | 1618 | Si | Activo | 2 event + 13 UI leaks |
-| project-manager | 2.0.0 | 3731 | Si | Activo | **MONOLITO - necesita split** |
-| chat-session | 1.0.0 | 1411 | Si | Activo | OK |
-| database-manager | 2.0.0 | 1425 | Si | Activo | 2 event leaks |
-| prompt-composer | 1.1.0 | 1306 | Si | Activo | OK |
-| ui-designer | 1.0.0 | 1280 | Si | Parcial | Conflicto con blueprints |
-| filesystem | 1.0.0 | 1232 | Si | Activo | 15 UI leaks |
-| chat-ai-bridge | 1.0.0 | 1201 | Si | Activo | OK |
-| scheduler | 1.0.0 | 1146 | Si | Activo | 11 UI leaks, TODO concurrencia |
-| pdf-viewer | 1.0.0 | 896 | Si | Activo | 3 UI leaks |
-| calling-generator | 2.0.0 | 811 | Si | Activo | 4 event leaks |
-| telegram-service | 3.0.0 | 752 | Si | Activo | 14 eventos divergentes |
-| metricas | 1.0.0 | 713 | Si | Activo | 5 event leaks |
-| code-executor | 1.0.0 | 620 | Si | Activo | OK |
-| ai-agent-framework | 1.0.0 | 610 | Si | Activo | OK |
-| text-editor | 1.0.0 | 579 | Si | Activo | 4 UI leaks, dep inexistente |
-| admin-panel | 1.0.0 | 542 | Si | Activo | TODO: creacion agentes |
-| plugin-manager | 2.0.0 | - | Si | Activo | 2 event leaks |
-| log-manager | 2.0.0 | - | Parcial | Activo | OK |
-| system-inspector | 1.0.0 | - | No | Dev only | OK |
-| dashboard | 2.0.0 | - | Si | **Deshabilitado** | Movido a web UI |
-| notas | 1.0.0 | - | Si | **Deshabilitado** | Sin uso |
-| scratch-designer | 2.0.0 | - | Si | **Deshabilitado** | Incompleto |
-| conversation-manager | 2.1.0 | 523 | Si | **DEPRECATED** | Reemplazado por chat-session |
-| bot-manager | 1.0.0 | - | No | Activo | OK |
-| agent-manager | 1.0.0 | - | No | Activo | OK |
-
-### 3.2 Modulos PizzePOS (12)
-
-| Modulo | Funcion | Problemas |
-|--------|---------|-----------|
-| menu-generator | Generador de menus con IA/OCR | TODOs: Glovo, WhatsApp, Twilio |
-| productos | Catalogo de productos | OK |
-| categorias | Categorias de productos | OK |
-| ingredientes | Gestion de ingredientes | OK |
-| variaciones | Variaciones de producto | OK |
-| pedidos | Gestion de pedidos | OK |
-| cuentas | Cuentas/mesas | OK |
-| cuentas-canales | Multi-canal (delivery, llevar, telefono) | **Integraciones stub** |
-| comandero | Interfaz camarero | **Siendo reemplazado** por pedidos |
-| persistencia-comandero | Persistencia de sesion | **Legacy** |
-| cocina | Display de cocina (KDS) | OK |
-| cobros | Procesamiento de pagos (7 metodos) | OK |
-
-### 3.3 Hallazgo Critico: 13 Modulos con Bugs
-
-Segun `plan.md`, el Module Loader **NO auto-wirea** eventos ni UI handlers. Esto causa:
-
-- **metricas**: 5 event leaks
-- **plugin-manager**: 2 event leaks
-- **calling-generator**: 4 event leaks
-- **credential-manager**: 6 event leaks + 11 UI leaks
-- **prompt-manager**: 2 event + 13 UI leaks
-- **filesystem**: 15 UI leaks
-- **scheduler**: 11 UI leaks
-- **pdf-viewer**: 3 UI leaks
-- **text-editor**: 4 UI leaks
-- **telegram-service**: 14 eventos divergentes
-- **database-manager**: 2 event leaks
-- **ai-gateway**: 3 event leaks
-- **admin-panel**: 1 event leak
-
-**Total: ~100 event/UI leaks no gestionados por el loader.**
+**Module Auto-Wiring (declarativo en module.json):**
+```javascript
+// Las suscripciones y UI handlers se cablean ANTES de onLoad
+// Los tools se registran DESPUES de onLoad
+// 28/28 modulos core migrados a wiring declarativo
+```
 
 ---
 
-## 4. SERVICIOS Y PROVEEDORES (32+)
+## 3. MODULOS (46 descubiertos, 40 activos, 6 disabled)
 
-### 4.1 Proveedores de IA (LLMs)
-- DeepSeek, Claude (Anthropic), OpenAI, Groq, Gemini, Ollama
+### 3.1 Modulos Core (32 en modules/)
 
-### 4.2 Proveedores de Vision/OCR
-- Google Vision, Claude Vision, OpenAI Vision, Tesseract, OCR.space, Google DocumentAI
+#### Tier 1 — Infraestructura
+| Modulo | Estado | Funcion |
+|--------|--------|---------|
+| credential-manager | activo | Credenciales multi-nivel (GLOBAL/PROJECT/CLIENT/CUSTOM) con cascada |
+| database-manager | activo | SQLite por proyecto via sql.js |
+| log-manager | activo | Gestion centralizada de logs |
+| filesystem | activo | Operaciones de archivos |
 
-### 4.3 Proveedores de Audio
-- Whisper (STT), ElevenLabs (TTS), Google TTS
+#### Tier 2 — Plataforma
+| Modulo | Estado | Funcion |
+|--------|--------|---------|
+| plugin-manager | activo | Descubre y gestiona plugins JSON |
+| prompt-manager | activo | Gestion de prompts con versionado |
+| prompt-composer | activo | Composicion de system prompts (con page-context) |
+| scheduler | activo | Jobs con triggers cron/interval/datetime/event |
 
-### 4.4 Proveedores de Documentos
-- pdf-parse, pdfjs, pdf-to-png, FFmpeg
+#### Tier 3 — Core de Negocio
+| Modulo | Estado | Funcion |
+|--------|--------|---------|
+| project-manager | activo | CRUD proyectos, composicion 5 fases, split en 12 archivos lib/ |
+| composition-manager | activo | Composicion de proyectos |
+| context-manager | activo | Estado de aplicacion |
+| system-inspector | activo | Inspeccion del sistema |
+| ai-gateway | activo | Gateway unificado 6 LLM providers (DeepSeek, Claude, OpenAI, Groq, Gemini, Ollama) |
+| ai-agent-framework | activo | Framework agentes IA event-driven con ToolManager unificado |
+| agent-manager | activo | Gestion de agentes |
 
-### 4.5 Proveedores de Datos/Integracion
-- CSV, Zip, SVG, SQL.js, Notion
+#### Tier 4 — Features
+| Modulo | Estado | Funcion |
+|--------|--------|---------|
+| calling-generator | activo | Genera funciones JS desde plugins |
+| bot-manager | activo | Gestion de bots (Telegram) |
+| chat-ai-bridge | activo | Puente chat↔AI con agentic loop de tools |
+| chat-session | activo | Sesiones de chat con historial SQLite |
+| code-executor | activo | Ejecucion segura de codigo |
 
-### 4.6 Plugins
-- GitHub (5 funciones), Slack (5), Weather (3), HTTP-Utils (3)
-- OCR engines: claude-vision, google-vision, openai-vision
+#### Tier 5 — UI y Presentacion
+| Modulo | Estado | Funcion |
+|--------|--------|---------|
+| admin-panel | activo | Panel de administracion |
+| pdf-viewer | activo | Visor de PDFs |
+| telegram-service | activo | Servicio de Telegram v3.0.0 |
+| text-editor | activo | Editor de texto |
+| staff-manager | activo | Gestion de personal |
+| security-p2p | activo | Seguridad peer-to-peer |
 
----
+#### Disabled
+| Modulo | Estado | Razon |
+|--------|--------|-------|
+| conversation-manager | disabled | Legacy facade — reemplazado por chat-session + chat-ai-bridge |
+| dashboard | disabled | Panel de observabilidad |
+| metricas | disabled | Metricas centralizadas |
+| notas | disabled | Notas rapidas |
+| scratch-designer | disabled | Disenador scratch |
+| ui-designer | disabled | Disenador visual de interfaces |
 
-## 5. FRONTEND
+### 3.2 Modulos Pizzepos (14 en modules/pizzepos/)
 
-| Aspecto | Detalle |
-|---------|---------|
-| Framework | SvelteKit 2.16.0 + Svelte 5.16.0 |
-| Lenguaje | TypeScript 5.7.2 |
-| Build | Vite 6.0.3 |
-| Estilo | Tailwind CSS (migracion en curso) |
-| Comunicacion | MQTT via mqtt 5.14.1 |
-| Archivos | 116 archivos (68 .svelte, 48 .ts) |
-| Rutas | 14 paginas SvelteKit |
-| Stores | 6 stores Svelte |
-
-**Problemas:**
-- Rutas legacy (`/menu-generator/`, `/comandero/`) fuera de scope de proyecto
-- Migracion Tailwind incompleta
-- Sin telemetria de rendimiento frontend
-- Conexion MQTT no pooled
-
----
-
-## 6. INFRAESTRUCTURA
-
-### 6.1 Docker
-- Dockerfile multi-stage (Alpine 18), usuario no-root, health checks
-- docker-compose.yml: 2 cores (Core A + Core B)
-
-### 6.2 Kubernetes
-- Helm chart completo (StatefulSet, HPA, Ingress, ServiceAccount)
-- Falta documentacion de despliegue
-
-### 6.3 Scripts Operativos
-| Script | Funcion | Calidad |
+| Modulo | Version | Funcion |
 |--------|---------|---------|
-| start.sh | Arranque con deteccion de puertos | Buena |
-| stop.sh | Shutdown graceful con fallback SIGKILL | Buena |
-| dev.sh | Menu interactivo para desarrollo | Buena |
-| restart.sh | Stop + Start | Basica |
-| install.sh | Auto-deteccion Termux/Linux | Basica |
-
-### 6.4 Tests
-- **Unit tests**: hooks (21), observability (19), http-gateway (20), cli, security, conversation-manager
-- **Integration tests**: full-stack (18/19 pass = 95%), port-management
-- **Total estimado**: 60+ unit + 18 integration
-- **Carencias**: Sin coverage tool, sin tests por modulo, sin e2e, sin CI/CD
-
----
-
-## 7. DOCUMENTACION
-
-| Documento | Lineas | Calidad | Problema |
-|-----------|--------|---------|----------|
-| README.md | 508 | Alta | Dice v0.5.0, real es v0.2.0 |
-| plan.md | 422 | Alta | Todo es trabajo PENDIENTE |
-| TEMPLATE_API.md | 1172 | Excelente | OK |
-| TEMPLATE_EVENTOS.md | 838 | Excelente | OK |
-| TEMPLATE_MODULO.md | 601 | Excelente | OK |
-| INSTALL.md | - | Media | Falta Docker |
-| contexto/ (27 archivos) | 230KB+ | Excelente | Mezcla ES/EN |
-| prompts/ (15 prompts) | - | Buena | Sin telemetria |
-| strategy/ | - | Media | Roadmap vs realidad desalineados |
-
-### Hallazgo Critico: README vs plan.md
-
-- **README dice**: v0.5.0 "Network - COMPLETADO", "Production Ready"
-- **plan.md revela**: 13 modulos con bugs, Module Loader incompleto, 5 pasos pendientes
-- **Realidad**: El sistema esta entre v0.2.0 y v0.3.0
+| cuentas | 2.2+ | Maquina de estados: pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado |
+| cuentas-canales | 1.0 | 5 canales Strategy pattern: mesa, telefono, llevar, glovo, whatsapp |
+| pedidos | 1.0 | Gestion de pedidos event-driven |
+| cobros | 1.1 | 7 metodos de pago (efectivo, tarjeta, bizum, transferencia, mixto, link, QR) |
+| cocina | 2.1 | Display cocina tiempo real, 3 estados por item (pendiente→preparando→listo) |
+| comandero | 1.0+ | Toma de pedidos, grid productos, categorias, envio a cocina |
+| productos | 2.0 | Catalogo de productos |
+| categorias | 1.0 | Catalogo de categorias |
+| ingredientes | 1.0 | Catalogo de ingredientes y alergenos |
+| variaciones | 1.0 | Quitar/anadir ingredientes (formato canonico objeto) |
+| menu-generator | 4.0+ | Pipeline IA: upload carta → OCR → LLM → menu estructurado (10 tools) |
+| persistencia-comandero | 1.0 | Persistencia de estado del comandero |
+| impresion | 1.0 | Impresion termica de tickets |
+| carta-impresion | 1.0 | Impresion de cartas de menu |
 
 ---
 
-## 8. CODIGO MUERTO Y DEUDA TECNICA
+## 4. PROVEEDORES DE SERVICIOS (35 en services/providers/local/)
 
-### 8.1 Codigo Archivado (~300-400 KB)
-- `_archived/`: 3 directorios (UI v1, reset, otros-modulos)
-- `handlers/global/archived/`: 30+ handlers deprecados (OCR, email, PDF)
-- `plop-templates/chat-module/`: Template obsoleto
+### 4.1 Documentos y OCR
+| Provider | Funcion |
+|----------|---------|
+| google-vision | OCR via Google Vision API |
+| google-documentai | Extraccion estructurada via Document AI |
+| tesseract | OCR local (Tesseract.js v6) |
+| scribe-ocr | OCR alternativo (Scribe.js) |
+| document-processor | Procesamiento de documentos |
+| pdf | Generacion de PDFs (PDFKit) |
+| pdf-parse | Parsing de PDFs |
+| pdf-to-png | Conversion PDF → PNG |
+| pdfjs | Rendering PDF (pdfjs-dist) |
 
-### 8.2 Modulos Deshabilitados en `/modules/`
-- conversation-manager (DEPRECATED)
-- scratch-designer (Incompleto)
-- ui-designer (Parcial)
-- dashboard (Movido)
-- notas (Sin uso)
+### 4.2 Imagenes y Media
+| Provider | Funcion |
+|----------|---------|
+| sharp | Procesamiento de imagenes |
+| svg | Generacion de SVGs |
+| ffmpeg | Procesamiento de video/audio |
+| whisper | Speech-to-text |
 
-### 8.3 Sistemas No Activados
-- `core/discovery/`: Definido pero no activado en startup
-- `core/flow/`: Motor de flujos existente pero no usado
-- Connection Pooling MQTT: Implementado pero deshabilitado
+### 4.3 Datos y Formatos
+| Provider | Funcion |
+|----------|---------|
+| csv | Generacion/parsing CSV |
+| xlsx | Procesamiento Excel |
+| zip | Compresion/descompresion |
+| dxf | Archivos DXF (CAD) |
 
----
+### 4.4 APIs Externas
+| Provider | Funcion |
+|----------|---------|
+| gmail | Envio/lectura email |
+| slack | Integracion Slack |
+| stripe | Pagos con Stripe |
+| notion | Integracion Notion |
+| woocommerce | Integracion WooCommerce |
+| glovo | Integracion Glovo (delivery) |
+| whatsapp | Integracion WhatsApp |
+| etherscan | Blockchain explorer |
+| coingecko | Precios crypto |
+| yahoo-finance | Datos financieros |
 
-## 9. PROBLEMAS DE SEGURIDAD
-
-| Problema | Severidad | Detalle |
-|----------|-----------|---------|
-| Sin autenticacion HTTP | ALTA | Todos los endpoints abiertos |
-| Sin rate limiting | MEDIA | HTTP Gateway sin limites |
-| Sin MQTT ACLs | MEDIA | Cualquiera puede pub/sub |
-| Sin SSL/TLS docs | MEDIA | No hay guia de produccion |
-| code-executor bypass potencial | BAJA | Regex de bloqueo puede ser evadido |
-
----
-
-## 10. PUNTUACION POR AREA
-
-| Area | Puntuacion | Nota |
-|------|-----------|------|
-| Arquitectura Core | 8/10 | Bien disenada, patrones correctos |
-| Module Loader | 4/10 | APIs ok, Events/UI NO auto-wired |
-| Modulos | 6/10 | Funcionales pero 13 con leaks |
-| Frontend | 7/10 | SvelteKit 5, migracion Tailwind pendiente |
-| Infraestructura | 7/10 | Docker/K8s ready |
-| Tests | 5/10 | Basicos, sin coverage, sin CI/CD |
-| Documentacion | 6.5/10 | Detallada pero inconsistente con realidad |
-| Seguridad | 3/10 | Sin auth, sin rate limit, sin ACLs |
-| PizzePOS | 6/10 | Funcional pero acoplado a pizzeria |
-| Codigo Muerto | 3/10 | Limpieza significativa necesaria |
-| Flows | 4/10 | Framework existe, infrautilizado |
-| Proveedores | 7/10 | 32+ proveedores, falta admin UI |
-
-### **Puntuacion Global: 6/10**
-
----
-
-## 11. PRIORIDADES DE ACCION
-
-### CRITICAS (Hacer Primero)
-
-1. **Completar Module Loader** (plan.md pasos 1-5)
-   - Auto-wiring de eventos y UI handlers
-   - Esto resuelve los ~100 leaks en 13 modulos
-
-2. **Anadir autenticacion HTTP**
-   - Al menos API keys o JWT para el Gateway
-   - Sin esto, cualquier endpoint es accesible
-
-3. **Limpiar codigo muerto**
-   - Mover 30+ handlers archivados fuera de `handlers/global/`
-   - Mover modulos deshabilitados a `_archived/`
-
-### ALTAS (Hacer Pronto)
-
-4. **Dividir project-manager** (3731 lineas)
-   - project-crud.js (~800 lineas)
-   - project-composition.js (~1200 lineas)
-   - project-context.js (~800 lineas)
-   - project-ui.js (~930 lineas)
-
-5. **Optimizar ai-gateway inicio**
-   - Lazy load de proveedores o cache de credenciales
-   - Reducir startup de ~60s a <10s
-
-6. **Corregir README.md**
-   - Actualizar version real (v0.2.0)
-   - Documentar estado real vs aspiracional
-
-### MEDIAS (Planificar)
-
-7. Completar migracion Tailwind
-8. Anadir tests por modulo (especialmente credential-manager, ai-gateway)
-9. Implementar CI/CD (GitHub Actions)
-10. Activar Discovery System en startup
-11. Completar integraciones PizzePOS (Glovo, WhatsApp, Twilio)
-12. Unificar idioma en documentacion (ES o EN, no ambos)
+### 4.5 Utilidades del Sistema
+| Provider | Funcion |
+|----------|---------|
+| backup-manager | Backups automaticos |
+| context-sync | Sincronizacion de contexto |
+| esp32 | Control de dispositivos ESP32 |
+| facturas-db | Base de datos de facturas |
+| handler-generator | Generacion de handlers |
+| learning | Sistema de aprendizaje (feedback + recomendaciones) |
+| skills | Generacion de providers locales |
+| url-data | Extraccion de datos de URLs |
 
 ---
 
-## 12. FORTALEZAS DEL SISTEMA
+## 5. FRONTEND (SvelteKit 2 + Svelte 5 + Tailwind CSS)
 
-- Arquitectura event-driven genuinamente desacoplada
-- 32+ proveedores de servicios integrados
-- Documentacion interna exhaustiva (contexto/ con 27 archivos)
-- Templates de codigo excelentes (TEMPLATE_*.md)
-- Scripts operativos robustos (start/stop/dev)
-- Fallback automatico (broker externo > embebido)
-- Aislamiento de errores (un modulo falla, el resto sigue)
-- Sistema de hooks para interceptar operaciones
-- Persistencia por handler (handler-store)
-- Soporte multi-core distribuido (aunque no activado)
+### 5.1 Rutas
+
+**Project-scoped (bajo /[project_id]/):**
+- `/[project_id]/comandero` — Pantalla de cuentas activas
+- `/[project_id]/comandero/[cuenta_id]` — Pedido de una cuenta
+- `/[project_id]/cocina` — Display de cocina fullscreen dark
+- `/[project_id]/menu-generator` — Pipeline de generacion de menus
+- `/[project_id]/facturas` — Gestion de facturas
+- `/[project_id]/chat` — Chat con contexto de proyecto
+
+**Globales:**
+- `/` — Home (LazyShell)
+- `/chat` — Chat standalone
+- `/facturas` — Facturas (legacy, redirige a proyecto activo)
+- `/comandero` — Comandero (legacy, redirige)
+- `/menu-generator` — Menu generator (legacy, redirige)
+- `/staff` — Gestion de personal
+
+### 5.2 Stores (21 archivos en frontend/src/lib/stores/)
+
+| Store | Funcion |
+|-------|---------|
+| chat.ts | Estado del chat, envio de mensajes con pageContext |
+| cocina.ts | Store de cocina con MQTT subscriptions, optimistic updates, sonido |
+| comandero.ts | Estado del comandero |
+| cuentas.ts | Estado de cuentas con maquina de estados |
+| credentials.ts | Credenciales (8 providers espejados del backend) |
+| facturas.ts | Estado de facturas |
+| impresion.ts | Estado de impresion |
+| menu-generator.ts | Estado del menu generator |
+| page-context.ts | Patron reutilizable: contexto de pagina para chat contextual |
+| projects.ts | Proyectos y proyecto activo |
+| workspace.ts | Estado del workspace |
+| ui.ts | Estado UI general |
+| theme.ts | Tema visual |
+| staff.ts | Gestion de personal |
+| persistence.ts | Persistencia local |
+| conversations.ts | Conversaciones |
+| prompts.ts | Prompts disponibles |
+| files.ts | Archivos |
+| attachments.ts | Adjuntos |
+| html-preview.ts | Preview HTML |
+| index.ts | Re-exports |
+
+### 5.3 Patron page-context
+
+Patron central reutilizable que conecta UI y chat contextual:
+
+```
+1. +page.svelte → setPageContext({ route, title, description, instructions, state })
+2. Panel completa accion → updatePageState('key', value)
+3. Usuario envia mensaje → chat.ts captura getPageContextSnapshot()
+4. chat-ai-bridge → prompt-composer con page_context
+5. prompt-composer → ## Page Context en system prompt
+6. LLM recibe contexto de la pagina → usa tools informadamente
+7. onDestroy → clearPageContext()
+```
+
+Primera implementacion: menu-generator (10 tools + 5 paneles).
+Siguientes: comandero, cocina, facturacion.
 
 ---
 
-## 13. CONCLUSION HONESTA
+## 6. HANDLERS (Sistema de Orquestacion)
 
-Event-Core es un **proyecto ambicioso con arquitectura solida** pero en estado de **desarrollo activo con deuda tecnica acumulada**. La vision fractal/distribuida es correcta y la base de codigo es extensible. Sin embargo:
+### 6.1 Estructura
 
-1. **No esta en v0.5.0** como dice el README. Esta entre v0.2.0 y v0.3.0 funcionalmente.
-2. **El Module Loader incompleto** es el problema raiz que causa ~100 leaks en 13 modulos.
-3. **La seguridad es insuficiente** para cualquier despliegue fuera de localhost.
-4. **El codigo muerto y modulos deshabilitados** anade confusion y carga cognitiva.
-5. **PizzePOS funciona** pero esta tightly-coupled y las integraciones externas son stubs.
+```
+handlers/
+├── global/              # Sin project_id, credenciales GLOBAL
+│   ├── telegram-url-extractor.js
+│   └── archived/
+└── projects/
+    └── facturas-nonina/ # project_id=facturas-nonina, credenciales PROJECT_facturas-nonina
+        └── (handlers de procesamiento de facturas)
+```
 
-**El sistema necesita consolidacion antes de expansion.** Los proximos 3-6 meses deberian enfocarse en: completar el loader, limpiar codigo muerto, anadir autenticacion, y estabilizar los 13 modulos con leaks. Solo despues deberia considerarse anadir nuevas funcionalidades.
+### 6.2 Contexto del Handler
+
+```javascript
+module.exports = {
+  name: 'mi-handler',
+  trigger: 'evento.recibido',
+  filter: (event) => event.data?.tipo === 'pdf',
+  async handle(event, { services, logger, emit, config, store, projectId }) {
+    const data = event.data || event;  // CRITICO: EventBus envuelve en .data
+    // services.call('provider', 'action', params)
+    // emit('evento.procesado', { ...data, resultado })
+    // await store.set('key', value)
+  }
+};
+```
+
+### 6.3 Encadenamiento via emit()
+
+Los handlers se conectan entre si emitiendo eventos:
+```
+telegram.document.received → recibir-documento
+    → emit('documento.recibido')
+        → procesar-ocr → emit('texto.extraido')
+            → extraer-datos → emit('factura.procesada')
+```
+
+---
+
+## 7. SISTEMA DE PLUGINS
+
+```
+plugins/
+├── github/     # Integracion GitHub
+├── http-utils/ # Utilidades HTTP
+├── ocr/        # Procesamiento OCR
+├── slack/      # Integracion Slack
+└── weather/    # API del tiempo
+```
+
+Los plugins son JSON que el `plugin-manager` carga y el `calling-generator` convierte en funciones JS ejecutables.
+
+---
+
+## 8. DISCREPANCIAS CONTEXTO vs CODIGO REAL
+
+### 8.1 Modulos que existen en codigo pero NO en INVENTARIO-SISTEMA.json
+
+| Modulo | Existe en codigo | En INVENTARIO |
+|--------|-----------------|---------------|
+| security-p2p | Si | No |
+| staff-manager | Si | No |
+| carta-impresion | Si | No |
+| composition-manager | Si | No en lista principal |
+| context-manager | Si | No en lista principal |
+| database-manager | Si | No en lista principal |
+| agent-manager | Si | No en lista principal |
+| chat-ai-bridge | Si | No en lista principal |
+| chat-session | Si | No en lista principal |
+| code-executor | Si | No en lista principal |
+| prompt-composer | Si | No en lista principal |
+| scheduler | Si | No en lista principal |
+| persistencia-comandero | Si | No en lista principal |
+
+### 8.2 INVENTARIO-SISTEMA.json tiene estructura diferente
+
+El INVENTARIO organiza modulos en `principales` (modules/) y `negocio_restaurante` (otros-modulos/modules/), pero la realidad es:
+- **No existe** `otros-modulos/modules/` como directorio separado
+- Los modulos de restaurante estan en `modules/pizzepos/`
+- El INVENTARIO lista solo 13 modulos principales + 11 de restaurante = 24, pero hay **46 reales**
+
+### 8.3 Conteo de modulos en contexto/modules.json vs realidad
+
+- **contexto/modules.json dice:** 30 core + 13 pizzepos = 43 total, 37 activos
+- **Realidad:** 32 core + 14 pizzepos = 46 total, ~40 activos
+- **Diferencia:** +3 core (security-p2p, staff-manager, no contados) y +1 pizzepos (carta-impresion)
+
+### 8.4 Discovery NO integrado en startup
+
+- `core/discovery/` tiene codigo completo para descubrimiento multi-core
+- **NO esta** instanciado en index.js
+- contexto/mejoras-pendientes.json lo documenta como pendiente
+- Implicacion: el sistema NO puede descubrir otros cores automaticamente
+
+### 8.5 FlowEngine es legacy
+
+- `core/flow/` existe pero fue reemplazado por el sistema de handlers
+- contexto/flow-engine.json lo documenta pero handlers.json dice "reemplaza flow-engine"
+- El codigo sigue presente pero no se usa activamente
+
+### 8.6 Version inconsistente
+
+- `package.json`: v0.2.0
+- `contexto/index.json`: v0.5.0
+- `index.js` banner: v0.1.0
+- **Ninguna es autoritativa**
+
+### 8.7 Eventos de cocina desactualizados en INVENTARIO
+
+- INVENTARIO lista: `cocina.item_preparado`, `cocina.pedido_listo`
+- Realidad (module.json): tambien tiene `cocina.item_preparando` (nuevo evento del primer tap)
+
+---
+
+## 9. FLUJO DE DATOS PRINCIPAL (Pizzepos)
+
+```
+[Frontend Svelte]
+    ↓ MQTT ui/request/cuentas/create
+[UIRequestHandler]
+    ↓ Delega a modulo cuentas
+[cuentas] → cuenta.creada (evento)
+    ↓
+[comandero] ← usuario selecciona productos
+    ↓ pedido.item_agregado (evento)
+[pedidos] → registra items
+    ↓ pedido.enviado_cocina (evento)
+[cocina] → muestra en pantalla
+    ↓ cocina.item_preparando → cocina.item_preparado
+    ↓ cocina.pedido_listo (evento)
+[cuentas] → actualiza estado (en_preparacion → listo → para_cobrar)
+    ↓
+[cobros] → procesa pago (7 metodos)
+    ↓ cobro.completado (evento)
+[cuentas] → estado = cobrado → cuenta cerrada
+```
+
+---
+
+## 10. MEJORAS PENDIENTES (verificadas contra codigo)
+
+### Alta prioridad
+| ID | Estado | Descripcion |
+|----|--------|-------------|
+| anthropic-prompt-caching | pendiente | Cache de system prompt (90% ahorro) |
+| ocr-space-provider | pendiente | Alternativa OCR a Tesseract para fotos reales |
+| integrar-discovery-startup | pendiente | Integrar Discovery en secuencia de inicio |
+
+### Media prioridad
+| ID | Estado | Descripcion |
+|----|--------|-------------|
+| refactor-ai-gateway | pendiente | Migrar estructurar-deepseek para usar ai-gateway |
+| anthropic-extended-thinking | pendiente | Thinking adaptivo para tareas complejas |
+| anthropic-code-execution | pendiente | Sandbox de ejecucion de codigo |
+| optimizar-listSystems-n1 | pendiente | JOIN en vez de N+1 queries |
+| gemini-file-search-rag | pendiente | RAG gestionado de Google |
+
+### Baja prioridad
+| ID | Estado | Descripcion |
+|----|--------|-------------|
+| streaming-nativo-sse | pendiente | Streaming real vs post-hoc actual |
+| openai-responses-api | pendiente | Migrar a Responses API |
+| groq-compound-models | pendiente | Web search + code execution server-side |
+| eliminar-conversation-manager | parcial | Facade eliminada, modulo aun existe (disabled) |
+
+### Implementados recientemente
+| ID | Fecha | Descripcion |
+|----|-------|-------------|
+| pantallas-cocina (fase 1) | 2026-02-26 | Frontend cocina completo con MQTT tiempo real |
+| unificar-tool-registries | 2026-02-10 | ToolManager importa de moduleLoader |
+| nuevos-providers-groq-gemini | 2026-02-10 | Groq y Gemini en ai-gateway |
+| deepseek-reasoning-mode | 2026-02-10 | Chain-of-thought visible |
+| fix-tool-calling-anthropic-gemini | 2026-02-11 | Ciclo completo de tools para 6 providers |
+| split-project-manager | 2026-02-16 | 3731 → 128 lineas index.js + 12 archivos lib/ |
+| chat-context-optimization | 2026-02-10 | Caching system prompt, templates por tipo |
+
+---
+
+## 11. FORTALEZAS DEL SISTEMA
+
+1. **Arquitectura event-driven bien ejecutada** — Todo se comunica via eventos, desacoplamiento real
+2. **Module auto-wiring declarativo** — module.json define todo, el loader cablean automaticamente
+3. **Sistema de handlers pragmatico** — JavaScript puro, sin abstracciones innecesarias
+4. **Patron page-context reutilizable** — Conecta UI y chat sin acoplamiento
+5. **AI Gateway multi-provider** — 6 providers con tool calling unificado
+6. **Vertical Pizzepos completa** — 14 modulos con flujo end-to-end funcional
+7. **35 service providers** — Ecosistema rico de integraciones
+8. **Frontend reactivo** — MQTT subscriptions en tiempo real
+
+## 12. DEBILIDADES Y DEUDA TECNICA
+
+1. **Discovery no integrado** — Codigo listo pero no se usa, sistema es single-core de facto
+2. **Versiones inconsistentes** — 3 versiones diferentes segun donde mires
+3. **FlowEngine legacy** — Codigo muerto en core/flow/
+4. **INVENTARIO-SISTEMA.json desactualizado** — Falta 22+ modulos, estructura incorrecta
+5. **conversation-manager zombie** — Disabled pero codigo sigue presente
+6. **Streaming post-hoc** — No es streaming real, simula con timer
+7. **No hay tests actualizados** — package.json referencia tests de modulos que cambiaron
+8. **6 modulos disabled sin plan claro** — dashboard, metricas, notas podrian ser utiles

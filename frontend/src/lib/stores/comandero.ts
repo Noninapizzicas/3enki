@@ -17,6 +17,8 @@ export interface Variaciones {
   ingredientes_anadir?: { nombre: string; cantidad?: number; precio_extra?: number }[];
 }
 
+export type EstadoCocinaItem = 'pendiente' | 'preparando' | 'listo';
+
 export interface PedidoItem {
   id: string;
   producto_id: string;
@@ -33,6 +35,7 @@ export interface PedidoItem {
   pizza_derecha?: { id: string; nombre: string; ingredientes_base?: string[] };
   ingredientes?: any[];
   ingredientes_base?: string[];
+  estado_cocina?: EstadoCocinaItem;
 }
 
 export interface Pedido {
@@ -406,6 +409,71 @@ export function initComanderoSubscriptions(projectId: string): () => void {
     if (data?.cuenta_id === currentState.cuenta_id) {
       console.log('[Comandero] Pedido enviado a cocina', data);
     }
+  }));
+
+  // cocina.item_preparando → cocinero empieza a preparar un item
+  unsubs.push(mqttSubscribe('cocina.item_preparando', (event: any) => {
+    const data = event?.data || event?.payload || event;
+    const currentState = get(comanderoStore);
+    if (!data?.item_id || data?.cuenta_id !== currentState.cuenta_id) return;
+
+    comanderoStore.update(s => {
+      if (!s.pedido?.items) return s;
+      return {
+        ...s,
+        pedido: {
+          ...s.pedido,
+          items: s.pedido.items.map(item =>
+            item.id === data.item_id
+              ? { ...item, estado_cocina: 'preparando' as EstadoCocinaItem }
+              : item
+          )
+        }
+      };
+    });
+    console.log('[Comandero] Item preparando:', data.item_id, data.nombre);
+  }));
+
+  // cocina.item_preparado → item listo en cocina
+  unsubs.push(mqttSubscribe('cocina.item_preparado', (event: any) => {
+    const data = event?.data || event?.payload || event;
+    const currentState = get(comanderoStore);
+    if (!data?.item_id || data?.cuenta_id !== currentState.cuenta_id) return;
+
+    comanderoStore.update(s => {
+      if (!s.pedido?.items) return s;
+      return {
+        ...s,
+        pedido: {
+          ...s.pedido,
+          items: s.pedido.items.map(item =>
+            item.id === data.item_id
+              ? { ...item, estado_cocina: 'listo' as EstadoCocinaItem }
+              : item
+          )
+        }
+      };
+    });
+    console.log('[Comandero] Item listo:', data.item_id, data.nombre);
+  }));
+
+  // cocina.pedido_listo → todos los items del pedido listos
+  unsubs.push(mqttSubscribe('cocina.pedido_listo', (event: any) => {
+    const data = event?.data || event?.payload || event;
+    const currentState = get(comanderoStore);
+    if (data?.cuenta_id !== currentState.cuenta_id) return;
+
+    comanderoStore.update(s => {
+      if (!s.pedido?.items) return s;
+      return {
+        ...s,
+        pedido: {
+          ...s.pedido,
+          items: s.pedido.items.map(item => ({ ...item, estado_cocina: 'listo' as EstadoCocinaItem }))
+        }
+      };
+    });
+    console.log('[Comandero] Pedido completo en cocina:', data.pedido_id);
   }));
 
   return () => unsubs.forEach(fn => fn());

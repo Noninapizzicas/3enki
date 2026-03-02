@@ -90,6 +90,9 @@ const TIPO_MAP: Record<string, TipoCuenta> = {
   glovo: 'glovo'
 };
 
+// Orden de progresión de estados (índice mayor = más avanzado)
+const ESTADO_ORDER: EstadoCuenta[] = ['pendiente', 'con_pedido', 'en_preparacion', 'listo', 'entregado', 'para_cobrar', 'cobrado'];
+
 // Mapeo de estado de persistencia a EstadoCuenta
 function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
   if (cuenta.estado === 'abierta') {
@@ -100,6 +103,14 @@ function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
     return 'con_pedido';
   }
   return 'pendiente';
+}
+
+/** Preservar el estado más avanzado entre persistencia y store actual */
+function mergeEstado(fromPersistencia: EstadoCuenta, fromStore: EstadoCuenta | undefined): EstadoCuenta {
+  if (!fromStore) return fromPersistencia;
+  const iPers = ESTADO_ORDER.indexOf(fromPersistencia);
+  const iStore = ESTADO_ORDER.indexOf(fromStore);
+  return iStore > iPers ? fromStore : fromPersistencia;
 }
 
 // =============================================================================
@@ -286,6 +297,13 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
     if (res?.status === 200 && pData?.cuentas) {
       const cuentasPersistencia = pData.cuentas;
 
+      // Snapshot del store actual para preservar estados de cocina durante reload
+      const currentState = get(cuentasStore);
+      const currentCuentasMap = new Map<string, Cuenta>();
+      for (const c of currentState.cuentas) {
+        currentCuentasMap.set(c.id, c);
+      }
+
       // Convertir formato persistencia → formato store
       const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => {
         const mappedTipo = TIPO_MAP[cp.tipo] || 'local';
@@ -302,19 +320,31 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           if (num > 0) nombre = `Glovo #${num}`;
         }
 
+        // Preservar estados de cocina del store actual (evita que reload borre preparando/listo)
+        const existingCuenta = currentCuentasMap.get(cp.cuenta_id);
+        const existingItemsMap = new Map<string, ItemDetalle>();
+        if (existingCuenta?.itemsDetalle) {
+          for (const item of existingCuenta.itemsDetalle) {
+            existingItemsMap.set(item.item_id, item);
+          }
+        }
+
         // Extraer items detallados de pedidos (para tarjeta mesa)
         const itemsDetalle: ItemDetalle[] = [];
         if (cp.pedidos && Array.isArray(cp.pedidos)) {
           for (const pedido of cp.pedidos) {
             if (pedido.items && Array.isArray(pedido.items)) {
               for (const item of pedido.items) {
+                const itemId = item.item_id || item.id || '';
+                const existing = existingItemsMap.get(itemId);
                 itemsDetalle.push({
-                  item_id: item.item_id || item.id || '',
+                  item_id: itemId,
                   producto_id: item.producto_id || '',
                   nombre: item.nombre || '',
                   cantidad: item.cantidad || 1,
                   precio: item.precio || item.precio_unitario || item.subtotal || 0,
-                  estado_cocina: 'en_cocina'
+                  estado_cocina: existing?.estado_cocina || 'en_cocina',
+                  ...(existing?.listo_at && { listo_at: existing.listo_at })
                 });
               }
             }
@@ -325,11 +355,11 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           id: cp.cuenta_id,
           tipo: mappedTipo,
           nombre,
-          estado: mapEstadoPersistencia(cp),
+          estado: mergeEstado(mapEstadoPersistencia(cp), existingCuenta?.estado),
           hora: formatHora(cp.created_at),
           items: countItems(cp.pedidos),
           total: cp.total || 0,
-          alerta: checkAlerta(cp),
+          alerta: existingCuenta?.alerta || checkAlerta(cp),
           created_at: cp.created_at,
           updated_at: cp.updated_at,
           itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined

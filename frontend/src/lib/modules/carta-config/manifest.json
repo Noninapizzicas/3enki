@@ -1,0 +1,10 @@
+{
+  "id": "carta-config",
+  "name": "Configuración Carta Digital",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 1,
+  "routes": ["/carta-digital"],
+  "icon": "⚙️",
+  "label": "Config"
+}

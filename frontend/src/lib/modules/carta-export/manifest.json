@@ -1,0 +1,10 @@
+{
+  "id": "carta-export",
+  "name": "Exportar Carta Digital",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 3,
+  "routes": ["/carta-digital"],
+  "icon": "📤",
+  "label": "Exportar"
+}

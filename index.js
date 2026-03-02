@@ -557,6 +557,16 @@ async function main() {
     core.metrics.increment('core.startup.success');
 
     // ========================================================================
+    // Re-activate existing projects (notify modules of active projects)
+    // ========================================================================
+    if (core.moduleLoader) {
+      const pmData = core.moduleLoader.getModule('project-manager');
+      if (pmData?.instance?.reactivateExistingProjects) {
+        await pmData.instance.reactivateExistingProjects();
+      }
+    }
+
+    // ========================================================================
     // Graceful Shutdown
     // ========================================================================
     const shutdown = async (signal) => {

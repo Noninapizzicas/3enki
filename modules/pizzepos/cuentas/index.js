@@ -340,7 +340,9 @@ class CuentasModule {
   }
 
   /**
-   * cobro.procesado → para_cobrar→cobrado + auto-eliminación a los 5 min
+   * cobro.procesado → marcar pagado.
+   * Si la cuenta ya fue entregada → cobrado + auto-eliminación.
+   * Si no → la cuenta sigue activa esperando entrega física.
    */
   async onCobroProcesado(event) {
     const data = event?.data || event?.payload || event;
@@ -354,21 +356,47 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
+    cuenta.pagado = true;
+    cuenta.updated_at = new Date().toISOString();
+
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      pagado: true
+    });
+
+    this.logger.info('cuenta.pagada', {
+      cuenta_id,
+      estado: cuenta.estado
+    });
+
+    // Si ya fue entregada (o es mesa donde entrega es implícita), cerrar
+    if (cuenta.estado === 'entregado' || cuenta.tipo === 'local') {
+      await this.cerrarCuentaCobrada(cuenta_id);
+    }
+  }
+
+  /**
+   * Cierra una cuenta cobrada: transiciona a cobrado y programa auto-eliminación.
+   * Se llama cuando se cumplen ambas condiciones: pagado AND entregado.
+   */
+  async cerrarCuentaCobrada(cuenta_id) {
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+
     const estado_anterior = cuenta.estado;
     cuenta.estado = 'cobrado';
     cuenta.updated_at = new Date().toISOString();
 
-    // Cancelar alerta si existía
     this.gestionarAlerta(cuenta_id, 'cobrado');
 
     await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'cobrado');
 
     // Eliminar cuenta después de 5 minutos (con referencia para cleanup)
     const project_id = cuenta.project_id;
+    const tipo = cuenta.tipo;
     const timeout = setTimeout(() => {
       this._pendingTimeouts.delete(timeout);
       this.cuentas.delete(cuenta_id);
-      this.publishCuentaEliminada(project_id, cuenta_id, cuenta.tipo, 'cobro_completado');
+      this.publishCuentaEliminada(project_id, cuenta_id, tipo, 'cobro_completado');
     }, 5 * 60 * 1000);
 
     this._pendingTimeouts.add(timeout);
@@ -396,6 +424,7 @@ class CuentasModule {
       tipo: tipo || 'local',
       nombre: metadata?.nombre || tipo || 'Cuenta',
       estado: 'pendiente',
+      pagado: false,
       hora,
       items: 0,
       total: total || 0,
@@ -465,6 +494,7 @@ class CuentasModule {
         tipo: tipoFinal,
         nombre: cuenta_nombre,
         estado: 'pendiente',
+        pagado: false,
         hora,
         items: 0,
         total: 0,
@@ -592,7 +622,13 @@ class CuentasModule {
       return { status: 500, error: 'No se pudo transicionar a entregado' };
     }
 
-    this.logger.info('cuenta.marcada_entregado', { project_id: cuenta.project_id, cuenta_id: id });
+    this.logger.info('cuenta.marcada_entregado', { project_id: cuenta.project_id, cuenta_id: id, pagado: cuenta.pagado });
+
+    // Si ya estaba pagado, cerrar automáticamente
+    if (cuenta.pagado) {
+      await this.cerrarCuentaCobrada(id);
+    }
+
     return { status: 200, data: { message: 'Cuenta marcada como entregada' } };
   }
 
@@ -741,6 +777,7 @@ class CuentasModule {
           tipo: cp.tipo || 'local',
           nombre: cp.datos_especificos?.nombre || cp.tipo || 'Cuenta',
           estado,
+          pagado: false,
           hora,
           items: itemsCount,
           total: cp.total || 0,

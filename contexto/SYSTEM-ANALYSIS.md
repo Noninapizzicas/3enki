@@ -164,7 +164,7 @@ Funcionalidades:
 
 ## 5. MÓDULOS — El corazón funcional
 
-### 5.1 Inventario completo (35 módulos + 14 PizzePOS)
+### 5.1 Inventario completo (35 módulos + 15 PizzePOS)
 
 **Módulos de infraestructura/plataforma:**
 
@@ -220,7 +220,7 @@ Funcionalidades:
 
 ### 5.2 Módulos PizzePOS (`modules/pizzepos/`)
 
-El vertical de restaurante, con 14 submódulos:
+El vertical de restaurante, con 15 submódulos:
 
 | Módulo | Descripción |
 |--------|-------------|
@@ -232,12 +232,13 @@ El vertical de restaurante, con 14 submódulos:
 | `comandero` | Interfaz del camarero para tomar pedidos |
 | `persistencia-comandero` | Persistencia del estado del comandero |
 | `cuentas` | Cuentas/mesas abiertas |
-| `cuentas-canales` | Canales de venta (mesa, llevar, teléfono) |
+| `cuentas-canales` | Canales de venta (mesa, llevar, teléfono, glovo, whatsapp) |
 | `cobros` | Procesamiento de pagos (efectivo, tarjeta, Bizum, etc.) |
 | `cocina` | Pantalla de cocina (KDS) |
-| `carta-impresion` | Generación e impresión de cartas |
-| `impresion` | Sistema de impresión (tickets, comandas) |
-| `menu-generator` | Generador de menús con AI |
+| `carta-impresion` | Templates HTML para imprimir cartas (A4, A5, custom) |
+| `carta-digital` | Carta web para clientes + WhatsApp + export estático para hosting público |
+| `impresion` | Sistema de impresión térmica (tickets, comandas) |
+| `menu-generator` | Generador/editor de menús con AI (14 tools, enriquecimiento, imágenes) |
 
 **Flujo de eventos PizzePOS:**
 ```

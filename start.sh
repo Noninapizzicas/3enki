@@ -6,9 +6,10 @@
 # Si un puerto está ocupado, busca el siguiente disponible.
 #
 # Uso:
-#   ./start.sh              # Inicia todo (backend + frontend)
+#   ./start.sh              # Inicia todo (backend + frontend) - desarrollo
 #   ./start.sh backend      # Solo backend
 #   ./start.sh frontend     # Solo frontend
+#   ./start.sh production   # Inicia via systemd (backend + caddy) - VPS
 #   ./start.sh --help       # Ayuda
 #
 # Variables de entorno:
@@ -113,9 +114,10 @@ ${GREEN}Uso:${NC}
   ./start.sh [comando] [opciones]
 
 ${GREEN}Comandos:${NC}
-  (sin args)    Inicia backend + frontend
+  (sin args)    Inicia backend + frontend (desarrollo)
   backend       Solo inicia el backend (Event-Core)
   frontend      Solo inicia el frontend (SvelteKit)
+  production    Inicia via systemd: event-core + caddy (VPS)
   status        Muestra el estado de los servicios
   --help, -h    Muestra esta ayuda
 
@@ -126,13 +128,15 @@ ${GREEN}Variables de entorno:${NC}
   MQTT_WS_PORT    Puerto MQTT WebSocket (default: $DEFAULT_MQTT_WS_PORT)
 
 ${GREEN}Ejemplos:${NC}
-  ./start.sh                          # Todo con puertos por defecto
+  ./start.sh                          # Desarrollo: todo con puertos por defecto
+  ./start.sh production               # VPS: systemd + caddy (HTTPS)
   BACKEND_PORT=4000 ./start.sh        # Backend en puerto 4000
   ./start.sh frontend                 # Solo frontend
 
 ${GREEN}Archivos:${NC}
-  .pids/                PIDs de procesos
-  logs/                 Logs de servicios
+  .pids/                PIDs de procesos (desarrollo)
+  logs/                 Logs de servicios (desarrollo)
+  .production           Config de VPS (generado por setup-vps.sh)
 
 EOF
 }
@@ -242,6 +246,45 @@ start_frontend() {
     cd "$SCRIPT_DIR"
 }
 
+start_production() {
+    log_info "Iniciando servicios de producción (systemd)..."
+
+    # Verificar que el setup se haya ejecutado
+    if ! systemctl list-unit-files event-core.service &>/dev/null; then
+        log_error "Servicio event-core.service no encontrado."
+        log_info "Ejecuta primero: ./setup-vps.sh"
+        return 1
+    fi
+
+    # Iniciar event-core
+    sudo systemctl start event-core
+    sleep 2
+    if systemctl is-active --quiet event-core; then
+        log_success "event-core activo"
+    else
+        log_error "event-core falló. Ver: journalctl -u event-core -n 20"
+    fi
+
+    # Iniciar Caddy
+    sudo systemctl start caddy
+    sleep 1
+    if systemctl is-active --quiet caddy; then
+        log_success "Caddy activo (HTTPS)"
+    else
+        log_error "Caddy falló. Ver: journalctl -u caddy -n 20"
+    fi
+
+    # Mostrar dominio si existe
+    if [ -f "$SCRIPT_DIR/.production" ]; then
+        local domain=$(grep "^DOMAIN=" "$SCRIPT_DIR/.production" | cut -d= -f2)
+        if [ -n "$domain" ]; then
+            echo ""
+            echo -e "  ${GREEN}→${NC} https://$domain"
+            echo -e "  ${GREEN}→${NC} https://$domain/health"
+        fi
+    fi
+}
+
 show_status() {
     echo ""
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -275,6 +318,33 @@ show_status() {
         echo -e "  ${YELLOW}●${NC} Frontend: No iniciado"
     fi
 
+    # Servicios de producción (systemd)
+    if systemctl list-unit-files event-core.service &>/dev/null 2>&1; then
+        echo ""
+        echo -e "  ${BLUE}── Producción (systemd) ──${NC}"
+        local ec_status=$(systemctl is-active event-core 2>/dev/null || echo "no instalado")
+        local caddy_status=$(systemctl is-active caddy 2>/dev/null || echo "no instalado")
+
+        if [ "$ec_status" = "active" ]; then
+            echo -e "  ${GREEN}●${NC} event-core: activo (systemd)"
+        else
+            echo -e "  ${YELLOW}●${NC} event-core: $ec_status"
+        fi
+
+        if [ "$caddy_status" = "active" ]; then
+            echo -e "  ${GREEN}●${NC} caddy:      activo (HTTPS)"
+        else
+            echo -e "  ${YELLOW}●${NC} caddy:      $caddy_status"
+        fi
+
+        if [ -f "$SCRIPT_DIR/.production" ]; then
+            local domain=$(grep "^DOMAIN=" "$SCRIPT_DIR/.production" | cut -d= -f2)
+            if [ -n "$domain" ]; then
+                echo -e "  ${BLUE}→${NC} https://$domain"
+            fi
+        fi
+    fi
+
     echo ""
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo ""
@@ -292,6 +362,14 @@ case "${1:-all}" in
     frontend)
         check_dependencies
         start_frontend
+        ;;
+    production|prod)
+        echo ""
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}          Event-Core - Iniciando Producción (VPS)           ${NC}"
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo ""
+        start_production
         ;;
     status)
         show_status

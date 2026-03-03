@@ -15,7 +15,10 @@ function generateStaticHTML(carta, config, options = {}) {
     whatsapp_telefono = config.whatsapp_telefono || '',
     mensaje_header = config.mensaje_header || '¡Hola! Quiero pedir:',
     tema = config.tema || {},
-    lang = 'es'
+    lang = 'es',
+    ai_endpoint = config.ai_endpoint || '',
+    ai_provider = config.ai_provider || 'auto',
+    chat_enabled = config.chat_enabled !== false && !!ai_endpoint
   } = options;
 
   const colorPrimario = tema.color_primario || '#f59e0b';
@@ -45,8 +48,28 @@ function generateStaticHTML(carta, config, options = {}) {
 
   const dataJSON = JSON.stringify({ categorias, productos });
   const configJSON = JSON.stringify({
-    nombre_negocio, moneda, whatsapp_telefono, mensaje_header
+    nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
+    ai_endpoint, ai_provider, chat_enabled
   });
+
+  // Build system prompt for AI assistant with full menu context
+  const menuResumen = productos.map(p => {
+    const ings = (p.ingredientes || []).map(i => i.nombre).join(', ');
+    const tags = (p.tags || []).join(', ');
+    return `- ${p.nombre}: ${p.precio.toFixed(2)}${moneda}${ings ? ' (' + ings + ')' : ''}${tags ? ' [' + tags + ']' : ''}`;
+  }).join('\n');
+
+  const systemPromptJSON = JSON.stringify(
+    `Eres el asistente virtual de ${nombre_negocio}. Ayudas a los clientes a elegir y hacer su pedido.\n\n` +
+    `REGLAS:\n` +
+    `- Responde SIEMPRE en español, breve y amable (max 2-3 frases)\n` +
+    `- Recomienda platos segun preferencias del cliente\n` +
+    `- Si el cliente quiere pedir, confirma los items y cantidades\n` +
+    `- Cuando el pedido este listo, responde con un JSON al final: {"pedido":[{"id":"ID","nombre":"NOMBRE","qty":N}]}\n` +
+    `- Si no sabes algo, di que el cliente puede contactar por WhatsApp\n` +
+    `- NO inventes productos que no estan en el menu\n\n` +
+    `MENU DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}`
+  );
 
   return `<!DOCTYPE html>
 <html lang="${lang}">
@@ -181,9 +204,54 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .empty{text-align:center;padding:40px 20px;color:#555}
 .empty-ico{font-size:2.5rem;display:block;margin-bottom:8px}
 
+/* Chat widget */
+.chat-fab{position:fixed;bottom:24px;left:24px;width:56px;height:56px;border:none;border-radius:50%;background:var(--primary);color:#000;cursor:pointer;z-index:50;box-shadow:0 4px 20px rgba(245,158,11,.35);transition:transform .15s;display:none;align-items:center;justify-content:center;font-size:1.5rem}
+.chat-fab.show{display:flex}.chat-fab:active{transform:scale(.9)}
+.chat-fab .notif{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:var(--danger);border:2px solid var(--bg)}
+
+.chat-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:flex-end;justify-content:center;z-index:1200;opacity:0;pointer-events:none;transition:opacity .2s}
+.chat-overlay.open{opacity:1;pointer-events:auto}
+.chat-panel{background:var(--bg-surface);border-radius:20px 20px 0 0;width:100%;max-width:500px;height:75vh;display:flex;flex-direction:column;overflow:hidden;transform:translateY(100%);transition:transform .25s ease-out}
+.chat-overlay.open .chat-panel{transform:translateY(0)}
+
+.chat-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #222}
+.chat-head-info{display:flex;align-items:center;gap:10px}
+.chat-avatar{width:36px;height:36px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+.chat-head-text{display:flex;flex-direction:column}
+.chat-head-name{font-size:.9rem;font-weight:700;color:#fff}
+.chat-head-status{font-size:.65rem;color:var(--success)}
+
+.chat-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.chat-msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:.85rem;line-height:1.45;word-wrap:break-word}
+.chat-msg.user{align-self:flex-end;background:var(--primary);color:#000;border-bottom-right-radius:4px}
+.chat-msg.bot{align-self:flex-start;background:#1e1e1e;color:var(--text);border-bottom-left-radius:4px}
+.chat-msg.bot .typing{display:inline-flex;gap:4px}
+.chat-msg.bot .typing span{width:6px;height:6px;border-radius:50%;background:#555;animation:blink 1.2s infinite}
+.chat-msg.bot .typing span:nth-child(2){animation-delay:.2s}
+.chat-msg.bot .typing span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%{opacity:.3}40%{opacity:1}}
+
+.chat-input-row{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid #222;background:var(--bg-surface)}
+.chat-input{flex:1;padding:10px 14px;border:1px solid #333;border-radius:20px;background:#1a1a1a;color:var(--text);font-size:.85rem;outline:none;resize:none;max-height:80px;line-height:1.4;font-family:inherit}
+.chat-input::placeholder{color:#555}
+.chat-input:focus{border-color:var(--primary)}
+.chat-btn{width:38px;height:38px;border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.chat-btn:active{transform:scale(.9)}
+.chat-btn-send{background:var(--primary);color:#000;font-size:1rem}
+.chat-btn-send:disabled{opacity:.3;cursor:default}
+.chat-btn-mic{background:transparent;border:1.5px solid #444;color:#888;font-size:1.1rem}
+.chat-btn-mic.recording{border-color:var(--danger);color:var(--danger);background:rgba(239,68,68,.1);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.3)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
+
+.chat-quick{display:flex;gap:6px;padding:0 16px 10px;overflow-x:auto;scrollbar-width:none}
+.chat-quick::-webkit-scrollbar{display:none}
+.chat-quick button{flex-shrink:0;padding:6px 12px;border:1px solid #333;border-radius:16px;background:#1a1a1a;color:var(--text-mid);font-size:.72rem;cursor:pointer;white-space:nowrap}
+.chat-quick button:active{background:#333;border-color:var(--primary);color:var(--primary)}
+
 @media(min-width:600px){
   .overlay.open{align-items:center}.detail{border-radius:20px;max-height:80vh}
   .cart-overlay.open{align-items:center}.cart{border-radius:20px}
+  .chat-overlay.open{align-items:center}.chat-panel{border-radius:20px;height:70vh}
 }
 </style>
 </head>
@@ -228,6 +296,30 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
     </header>
     <div class="cart-items" id="cart-items"></div>
     <div class="cart-footer" id="cart-footer" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Chat widget -->
+<button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="Asistente">💬</button>
+<div class="chat-overlay" id="chat-overlay" onclick="toggleChat()">
+  <div class="chat-panel" onclick="event.stopPropagation()">
+    <div class="chat-head">
+      <div class="chat-head-info">
+        <div class="chat-avatar">${logoEmoji}</div>
+        <div class="chat-head-text">
+          <span class="chat-head-name">${escapeHtml(nombre_negocio)}</span>
+          <span class="chat-head-status" id="chat-status">En línea</span>
+        </div>
+      </div>
+      <button class="close-btn" onclick="toggleChat()">✕</button>
+    </div>
+    <div class="chat-msgs" id="chat-msgs"></div>
+    <div class="chat-quick" id="chat-quick"></div>
+    <div class="chat-input-row">
+      <button class="chat-btn chat-btn-mic" id="chat-mic" onclick="toggleVoice()" title="Hablar">🎤</button>
+      <textarea class="chat-input" id="chat-input" rows="1" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+      <button class="chat-btn chat-btn-send" id="chat-send" onclick="sendChat()" title="Enviar">➤</button>
+    </div>
   </div>
 </div>
 
@@ -431,7 +523,212 @@ function shareOrder() {
   }
 }
 
+// ─── Chat & AI Assistant ───
+const SYSTEM_PROMPT = ${systemPromptJSON};
+let chatMsgs = [];
+let chatOpen = false;
+let chatReady = CONFIG.chat_enabled && CONFIG.ai_endpoint;
+let isRecording = false;
+let recognition = null;
+let speechSynth = window.speechSynthesis || null;
+
+// Show chat FAB only if AI is configured
+function initChat() {
+  if (!chatReady) return;
+  document.getElementById('chat-fab').classList.add('show');
+  // Quick suggestion buttons
+  const quickEl = document.getElementById('chat-quick');
+  const suggestions = ['¿Qué me recomiendas?', 'Algo sin carne', 'Lo más popular', '¿Tenéis ofertas?'];
+  quickEl.innerHTML = suggestions.map(function(s) {
+    return '<button onclick="sendQuick(this,\\'' + s.replace(/'/g, "\\\\'") + '\\')">' + s + '</button>';
+  }).join('');
+  // Welcome message
+  addBotMsg('¡Hola! 👋 Soy el asistente de ' + CONFIG.nombre_negocio + '. Puedo ayudarte a elegir del menú o hacer tu pedido. ¿Qué te apetece?');
+}
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  document.getElementById('chat-overlay').classList.toggle('open', chatOpen);
+  if (chatOpen) {
+    setTimeout(function() { document.getElementById('chat-input').focus(); }, 300);
+  }
+}
+
+function addBotMsg(text) {
+  chatMsgs.push({ role: 'assistant', content: text });
+  renderChatMsgs();
+}
+
+function addUserMsg(text) {
+  chatMsgs.push({ role: 'user', content: text });
+  renderChatMsgs();
+}
+
+function renderChatMsgs() {
+  var el = document.getElementById('chat-msgs');
+  var html = '';
+  for (var i = 0; i < chatMsgs.length; i++) {
+    var m = chatMsgs[i];
+    var cls = m.role === 'user' ? 'user' : 'bot';
+    html += '<div class="chat-msg ' + cls + '">' + esc(m.content) + '</div>';
+  }
+  el.innerHTML = html;
+  el.scrollTop = el.scrollHeight;
+}
+
+function showTyping() {
+  var el = document.getElementById('chat-msgs');
+  el.innerHTML += '<div class="chat-msg bot" id="typing"><span class="typing"><span></span><span></span><span></span></span></div>';
+  el.scrollTop = el.scrollHeight;
+}
+
+function hideTyping() {
+  var t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+function sendQuick(btn, text) {
+  btn.style.display = 'none';
+  sendMessage(text);
+}
+
+function sendChat() {
+  var input = document.getElementById('chat-input');
+  var text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+  sendMessage(text);
+}
+
+function sendMessage(text) {
+  addUserMsg(text);
+  document.getElementById('chat-send').disabled = true;
+  document.getElementById('chat-status').textContent = 'Escribiendo...';
+  showTyping();
+
+  // Build messages array for AI (include system prompt + history, keep last 20 msgs)
+  var aiMsgs = [{ role: 'system', content: SYSTEM_PROMPT }];
+  var history = chatMsgs.slice(-20);
+  for (var i = 0; i < history.length; i++) {
+    aiMsgs.push({ role: history[i].role, content: history[i].content });
+  }
+
+  fetch(CONFIG.ai_endpoint + '/modules/ai-gateway/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: aiMsgs, provider: CONFIG.ai_provider || 'auto' })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    hideTyping();
+    document.getElementById('chat-send').disabled = false;
+    document.getElementById('chat-status').textContent = 'En línea';
+    var reply = (json.data && json.data.content) || 'Lo siento, no he podido responder. Intenta de nuevo.';
+    // Check if AI included an order JSON
+    var orderMatch = reply.match(/\\{"pedido"\\s*:\\s*\\[.*?\\]\\}/s);
+    if (orderMatch) {
+      try {
+        var orderData = JSON.parse(orderMatch[0]);
+        if (orderData.pedido && orderData.pedido.length > 0) {
+          applyAIOrder(orderData.pedido);
+          reply = reply.replace(orderMatch[0], '').trim();
+          if (!reply) reply = '¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.';
+          else reply += '\\n\\n✅ ¡Añadido al carrito!';
+        }
+      } catch(e) {}
+    }
+    addBotMsg(reply);
+    // Voice output
+    if (speechSynth && isRecording) speakText(reply);
+  })
+  .catch(function(err) {
+    hideTyping();
+    document.getElementById('chat-send').disabled = false;
+    document.getElementById('chat-status').textContent = 'En línea';
+    addBotMsg('No puedo conectar con el asistente ahora. ¿Probamos luego?');
+  });
+}
+
+function applyAIOrder(items) {
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var prod = DATA.productos.find(function(p) { return p.id === item.id; });
+    if (prod) {
+      var qty = item.qty || 1;
+      for (var q = 0; q < qty; q++) {
+        cart.push({ _id: ++cartId, id: prod.id, nombre: prod.nombre, precio: prod.precio, qty: 1 });
+      }
+    }
+  }
+  // Merge same items
+  var merged = {};
+  for (var j = 0; j < cart.length; j++) {
+    var c = cart[j];
+    if (merged[c.id]) { merged[c.id].qty += c.qty; }
+    else { merged[c.id] = Object.assign({}, c); }
+  }
+  cart = Object.values(merged);
+  updateCart();
+}
+
+// ─── Voice Input (Web Speech API) ───
+function initVoice() {
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    document.getElementById('chat-mic').style.display = 'none';
+    return;
+  }
+  recognition = new SpeechRec();
+  recognition.lang = 'es-ES';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onresult = function(e) {
+    var transcript = e.results[0][0].transcript;
+    if (transcript) {
+      document.getElementById('chat-input').value = transcript;
+      sendChat();
+    }
+    stopVoice();
+  };
+  recognition.onerror = function() { stopVoice(); };
+  recognition.onend = function() { stopVoice(); };
+}
+
+function toggleVoice() {
+  if (isRecording) { stopVoice(); }
+  else { startVoice(); }
+}
+
+function startVoice() {
+  if (!recognition) return;
+  isRecording = true;
+  document.getElementById('chat-mic').classList.add('recording');
+  document.getElementById('chat-status').textContent = '🎤 Escuchando...';
+  try { recognition.start(); } catch(e) {}
+}
+
+function stopVoice() {
+  isRecording = false;
+  document.getElementById('chat-mic').classList.remove('recording');
+  document.getElementById('chat-status').textContent = 'En línea';
+  try { recognition.stop(); } catch(e) {}
+}
+
+// ─── Voice Output (SpeechSynthesis) ───
+function speakText(text) {
+  if (!speechSynth) return;
+  speechSynth.cancel();
+  var utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'es-ES';
+  utt.rate = 1.05;
+  utt.pitch = 1;
+  speechSynth.speak(utt);
+}
+
 // Init
+initChat();
+initVoice();
 renderCats();
 renderGrid();
 updateCart();

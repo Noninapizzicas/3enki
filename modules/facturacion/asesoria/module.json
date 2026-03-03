@@ -1,0 +1,82 @@
+{
+  "name": "asesoria",
+  "version": "1.0.0",
+  "description": "Generación de paquetes (CSV + originales) para asesoría contable",
+  "author": "Event-Core Team",
+  "main": "index.js",
+
+  "handlers": [
+    { "domain": "asesoria", "action": "generar-paquete", "method": "handleGenerarPaquete" },
+    { "domain": "asesoria", "action": "historial", "method": "handleHistorial" },
+    { "domain": "asesoria", "action": "descargar", "method": "handleDescargar" },
+    { "domain": "asesoria", "action": "preview", "method": "handlePreview" }
+  ],
+
+  "tools": [
+    {
+      "name": "asesoria.generar-paquete",
+      "description": "Genera paquete CSV + ZIP con facturas procesadas para la asesoría contable",
+      "handler": "handleToolGenerarPaquete",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "projectId": { "type": "string", "description": "ID del proyecto" },
+          "periodo": { "type": "string", "description": "Periodo YYYY-MM para filtrar" },
+          "incluirOriginales": { "type": "boolean", "default": true, "description": "Incluir archivos originales (PDF/IMG) en el ZIP" }
+        },
+        "required": ["projectId"]
+      }
+    },
+    {
+      "name": "asesoria.historial",
+      "description": "Lista paquetes generados previamente para la asesoría",
+      "handler": "handleToolHistorial",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "projectId": { "type": "string", "description": "ID del proyecto" }
+        },
+        "required": ["projectId"]
+      }
+    }
+  ],
+
+  "events": {
+    "publishes": [
+      "asesoria.paquete.generado",
+      "asesoria.paquete.error"
+    ],
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" }
+    ]
+  },
+
+  "config": {
+    "csv": {
+      "separator": ";",
+      "decimal": ",",
+      "bom": true
+    },
+    "timeouts": {
+      "db": 30000,
+      "zip": 60000
+    }
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "asesoria.paquetes.generados.total",
+        "asesoria.paquetes.errores.total"
+      ],
+      "histograms": [
+        "asesoria.generacion.duration"
+      ]
+    }
+  }
+}

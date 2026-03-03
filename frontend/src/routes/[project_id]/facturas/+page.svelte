@@ -1,84 +1,46 @@
 <script lang="ts">
   /**
-   * /{project_id}/facturas — Facturas del proyecto
+   * Página Facturas (scoped a proyecto)
    *
-   * Ruta project-scoped. El project_id viene de la URL.
+   * URL: /[project_id]/facturas
+   * Ej:  /noninapizzicas/facturas
+   *
+   * Misma base que carta-digital y menu-generator (chat, work-bar, system-bar).
+   * La work-bar muestra el módulo facturas filtrado por ruta /facturas.
+   * El panel flotante se abre desde ahí.
    */
-  import { getContext } from 'svelte';
-  import { AppShell } from '$lib/components/layout';
-  import { FacturasPanel } from '$lib/modules/facturas';
+  import { onMount, onDestroy, getContext } from 'svelte';
+  import { page } from '$app/stores';
+  import { LazyShell } from '$lib/components/layout';
+  import { setPageContext, clearPageContext } from '$lib/stores/page-context';
+
+  $: project_id = $page.params.project_id;
 
   const projectStore = getContext<any>('project');
+
+  onMount(() => {
+    setPageContext({
+      route: '/facturas',
+      title: 'Facturas',
+      description: 'Procesamiento y gestión de facturas del proyecto: subida, OCR, datos estructurados, exportación.',
+      instructions: `El usuario está en la gestión de facturas para el proyecto "${project_id}". Puede usar el panel de la barra superior o pedirte las cosas por el chat.
+
+Cuando el usuario dice "factura", "subir factura", "mis facturas" se refiere a las facturas del proyecto activo.
+Cuando menciona "procesar", "OCR", "extraer datos" se refiere al pipeline de procesamiento.
+
+Tools disponibles para esta página:
+- facturas.procesar: procesa un archivo de factura (PDF/imagen) y extrae datos via OCR + IA
+- facturas.listar: lista facturas del proyecto con filtros opcionales
+- facturas.estadisticas: obtiene estadísticas de facturas del proyecto`,
+      state: {
+        projectId: project_id
+      }
+    });
+  });
+
+  onDestroy(() => {
+    clearPageContext();
+  });
 </script>
 
-<svelte:head>
-  <title>Facturas</title>
-</svelte:head>
-
-<AppShell>
-  <div slot="content" class="facturas-page">
-    {#if $projectStore}
-      <header class="page-header">
-        <h1>
-          <span class="project-name">{$projectStore.name}</span>
-          <span class="separator">/</span>
-          <span class="page-title">Facturas</span>
-        </h1>
-      </header>
-      <div class="panel-container">
-        <FacturasPanel panelId="facturas-main" />
-      </div>
-    {:else}
-      <div class="loading">Cargando proyecto...</div>
-    {/if}
-  </div>
-</AppShell>
-
-<style>
-  .facturas-page {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: var(--color-bg, #121212);
-  }
-
-  .page-header {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-    flex-shrink: 0;
-  }
-
-  .page-header h1 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--color-text, #e5e5e5);
-  }
-
-  .separator {
-    color: var(--color-text-muted, #888);
-    font-weight: 400;
-  }
-
-  .page-title {
-    color: var(--color-text-muted, #888);
-    font-weight: 400;
-  }
-
-  .panel-container {
-    flex: 1;
-    overflow: hidden;
-    padding: 1rem 1.5rem;
-  }
-
-  .loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: var(--color-text-muted, #888);
-  }
-</style>
+<LazyShell />

@@ -1,153 +1,218 @@
 {
-  "_VERSION": "2.0.0",
+  "_VERSION": "3.0.0",
   "_CREATED": "2026-01-20",
-  "_UPDATED": "2026-02-03",
-  "_DESCRIPTION": "Pipeline de facturas basado en handlers - procesamiento OCR + IA + CSV fiscal",
+  "_UPDATED": "2026-03-03",
+  "_DESCRIPTION": "Sistema de facturación: módulo facturas (extracción OCR+IA) + grupo facturacion/ (asesoría, compras, contabilidad)",
 
   "_AI_INSTRUCTIONS": {
-    "cuando_leer": "ANTES de trabajar con facturas, OCR, PDF, CSV fiscal o asesorias",
-    "principio_clave": "Pipeline basado en handlers JS directos, NO en flow-engine JSON",
+    "cuando_leer": "ANTES de trabajar con facturas, OCR, PDF, CSV fiscal, asesoria o contabilidad",
+    "principio_clave": "Separación de responsabilidades: facturas EXTRAE datos, módulos en facturacion/ los CONSUMEN",
     "CRITICO_SERVICIOS": "ai-gateway se llama con services.call('ai', 'chat') — NO 'ai-gateway'",
     "CRITICO_DEEPSEEK": "DeepSeek NO soporta imagenes via API. Usar Google Vision para OCR",
     "CRITICO_RESULTADO": "Siempre: const d = result.data || result;",
-    "CRITICO_REPROCESO": "Archivos procesados sin error se mueven a procesados/ — no se reprocesan",
-    "referencia_handlers": "contexto/handlers.json",
+    "referencia_modulo_facturas": "modules/facturas/index.js + module.json",
+    "referencia_modulo_asesoria": "modules/facturacion/asesoria/index.js + module.json",
     "referencia_providers": "contexto/providers.json",
     "referencia_credenciales": "contexto/credentials.json"
+  },
+
+  "arquitectura": {
+    "descripcion": "El sistema de facturación se divide en dos niveles: extracción (módulo facturas) y consumo (grupo facturacion/)",
+    "separacion_responsabilidades": {
+      "facturas": {
+        "ubicacion": "modules/facturas/",
+        "rol": "Motor de extracción — convierte PDF/IMG en datos estructurados",
+        "NO_sabe_de": ["asesoria", "compras", "contabilidad"]
+      },
+      "facturacion": {
+        "ubicacion": "modules/facturacion/",
+        "rol": "Grupo vertical de consumidores — usan datos extraídos por facturas",
+        "patron": "Mismo patrón que modules/pizzepos/ — auto-discovery por el loader",
+        "modulos": {
+          "asesoria": {
+            "estado": "implementado",
+            "descripcion": "Genera paquetes CSV+ZIP para la asesoría contable"
+          },
+          "compras": {
+            "estado": "futuro",
+            "descripcion": "Gestión de compras y proveedores"
+          },
+          "contabilidad-real": {
+            "estado": "futuro",
+            "descripcion": "Contabilidad de gestión (cash flow, P&L)"
+          },
+          "contabilidad-legal": {
+            "estado": "futuro",
+            "descripcion": "Contabilidad fiscal (SII, modelos, libros)"
+          }
+        }
+      }
+    },
+    "comunicacion": "Solo via eventos y servicios compartidos (facturas-db). Acoplamiento CERO entre módulos."
+  },
+
+  "modulo_facturas": {
+    "ubicacion": "modules/facturas/",
+    "version": "1.0.0",
+    "clase": "FacturasModule",
+    "descripcion": "Procesa archivos (PDF/IMG) → OCR → IA → datos estructurados en BD",
+
+    "ui_handlers": {
+      "domain": "facturas",
+      "acciones": ["procesar", "subir", "reprocesar", "listar", "obtener", "actualizar", "estadisticas", "exportar"]
+    },
+
+    "ai_tools": [
+      "facturas.procesar — procesar archivo individual",
+      "facturas.listar — listar facturas con filtros",
+      "facturas.estadisticas — stats del proyecto"
+    ],
+
+    "eventos": {
+      "publica": ["factura.recibida", "factura.procesada", "factura.error", "factura.exportada"],
+      "suscribe": ["project.activated"]
+    },
+
+    "servicios_usados": {
+      "local.facturas-db": "BD SQLite por proyecto — registrar, actualizar, listar, obtener, exportar",
+      "local.pdf-to-png": "Conversión PDF → PNG (poppler)",
+      "local.sharp": "Preparación imagen para OCR (grayscale, normalize, sharpen)",
+      "local.google-vision": "OCR con Google Vision API",
+      "ai (ai-gateway)": "Estructuración del texto OCR con DeepSeek"
+    },
+
+    "pipeline_procesamiento": {
+      "descripcion": "Pipeline interno del módulo facturas — ejecutado por procesarArchivo()",
+      "pasos": {
+        "1_registro_db": "facturas-db.registrar() → estado: pendiente",
+        "2_pdf_a_png": "local.pdf-to-png.convert (si es PDF) → imágenes en preprocesadas/",
+        "3_sharp_prepare": "local.sharp.prepare-ocr → grayscale, normalize, sharpen",
+        "4_ocr": "local.google-vision.extract → texto OCR en ocr/",
+        "5_estructura_ia": "ai.chat con DeepSeek → JSON estructurado en estructuradas/",
+        "6_guardar_db": "facturas-db.actualizar() → campos aplanados en BD, estado: procesada",
+        "7_evento": "Emite factura.procesada con datos completos"
+      }
+    },
+
+    "config": {
+      "ocr": { "provider": "local.google-vision", "hint": "DOCUMENT_TEXT_DETECTION", "languages": ["es", "en"] },
+      "ai": { "provider": "deepseek", "temperature": 0.1, "maxTokens": 2000 },
+      "processing": { "dpi": 300, "maxWidth": 2400, "maxHeight": 3200 },
+      "timeouts": { "pdfConvert": 60000, "sharp": 30000, "ocr": 60000, "ai": 60000, "db": 30000 }
+    }
+  },
+
+  "modulo_asesoria": {
+    "ubicacion": "modules/facturacion/asesoria/",
+    "version": "1.0.0",
+    "clase": "AsesoriaModule",
+    "descripcion": "Genera paquetes para la asesoría contable: CSV + archivos originales en ZIP",
+
+    "ui_handlers": {
+      "domain": "asesoria",
+      "acciones": ["generar-paquete", "historial", "descargar", "preview"]
+    },
+
+    "ai_tools": [
+      "asesoria.generar-paquete — genera paquete CSV+ZIP del periodo",
+      "asesoria.historial — lista paquetes generados"
+    ],
+
+    "eventos": {
+      "publica": ["asesoria.paquete.generado", "asesoria.paquete.error"],
+      "suscribe": ["project.activated"]
+    },
+
+    "como_funciona": {
+      "1_lee_datos": "Consulta local.facturas-db.listar (SOLO lectura, no modifica nada)",
+      "2_filtra_periodo": "Filtra por factura_fecha (no fecha_entrada) usando periodo YYYY-MM",
+      "3_genera_csv": "CSV formato contable español: ; separador, coma decimal, BOM UTF-8",
+      "4_genera_resumen": "Resumen .txt con totales del periodo",
+      "5_empaqueta_zip": "Usa local.zip.createFromFiles → CSV + resumen + originales/",
+      "6_evento": "Emite asesoria.paquete.generado"
+    },
+
+    "estructura_zip": {
+      "ejemplo": "asesoria_2026-03_2026-03-03.zip",
+      "contenido": {
+        "asesoria_2026-03_2026-03-03.csv": "Reporte con datos de todas las facturas",
+        "resumen.txt": "Totales: base imponible, IVA, total, num facturas",
+        "originales/": "Copias de los PDFs/imágenes originales procesados"
+      }
+    },
+
+    "csv_columnas": [
+      "Fecha", "Num_Factura", "NIF_Emisor", "Nombre_Emisor",
+      "Concepto", "Base_Imponible", "Tipo_IVA", "Cuota_IVA",
+      "Total", "Forma_Pago", "Archivo_Origen"
+    ],
+
+    "persistencia": "Sin DB propia — historial se deduce del filesystem (lista ZIPs en export/asesoria/)",
+
+    "uso_frontend": {
+      "generar": "mqttRequest('asesoria', 'generar-paquete', { proyecto, periodo: '2026-03' })",
+      "preview": "mqttRequest('asesoria', 'preview', { proyecto, periodo: '2026-03' })",
+      "historial": "mqttRequest('asesoria', 'historial', { proyecto })",
+      "descargar": "mqttRequest('asesoria', 'descargar', { proyecto, archivo })"
+    }
+  },
+
+  "facturas_db": {
+    "provider": "local.facturas-db",
+    "ubicacion": "services/providers/local/facturas-db/",
+    "descripcion": "BD SQLite por proyecto con schema de 50+ columnas para facturas",
+    "funciones": ["init", "registrar", "actualizar", "listar", "obtener", "pendientes", "estadisticas", "exportar", "marcarExportadas"],
+    "campos_principales": {
+      "identificacion": ["id", "nombre_archivo", "path_original", "path_procesada", "path_ocr_json"],
+      "origen": ["source (telegram/gmail/manual)", "fecha_entrada", "origen_bot", "origen_chat_id", "origen_email_*"],
+      "estado": ["estado (pendiente/procesando/procesada/error/exportada)", "fecha_procesado", "ocr_provider", "ocr_confianza"],
+      "datos_factura": ["factura_numero", "factura_fecha", "proveedor_nif", "proveedor_nombre", "concepto", "categoria"],
+      "importes": ["base_imponible", "tipo_iva", "cuota_iva", "cuota_deducible", "retencion_irpf", "total_factura"],
+      "pago": ["metodo_pago", "estado_pago", "fecha_vencimiento", "fecha_pago"],
+      "export": ["semana_export", "fecha_exportado"],
+      "metadata": ["notas", "revisado_por", "created_at", "updated_at"]
+    },
+    "listar_filtros": {
+      "estado": "Filtra por estado (pendiente, procesada, error, exportada)",
+      "desde": "Filtra por fecha_entrada >= desde",
+      "hasta": "Filtra por fecha_entrada <= hasta",
+      "limit": "Máximo resultados (default: 100)",
+      "nota": "Filtra por fecha_entrada, NO por factura_fecha. El módulo asesoria hace filtro adicional por factura_fecha"
+    }
   },
 
   "proyecto_referencia": {
     "id": "facturas-nonina",
     "nombre": "Facturas Nonina Pizzicas",
     "config": "data/projects/facturas-nonina/config/config.json",
-    "handlers": "data/projects/facturas-nonina/handlers/",
-    "storage": "data/projects/facturas-nonina/storage/",
-    "nota": "Proyecto generico — bot name y cuenta Gmail vienen de config, reutilizable para distintas empresas"
+    "storage": "data/projects/facturas-nonina/storage/"
   },
 
   "fuentes_entrada": {
     "telegram_bot": {
-      "directorio": "data/bots/{botName}/received/",
       "tipos": ["jpg", "jpeg", "png", "webp", "tiff", "pdf"],
-      "como_llegan": "Usuario envia foto/PDF al bot de Telegram",
-      "config_key": "telegram.botName"
+      "como_llegan": "Usuario envia foto/PDF al bot de Telegram → source: 'telegram'"
     },
     "gmail": {
-      "directorio": "data/gmail/{account}/",
       "tipos": ["pdf"],
-      "como_llegan": "Descargados con /gogmail o paso 1 del batch",
-      "config_keys": ["gmail.account", "gmail.query", "gmail.maxResults"]
-    }
-  },
-
-  "pipeline_completo": {
-    "comando": "/gofull",
-    "handler": "procesar-facturas.js",
-    "descripcion": "Pipeline batch: Gmail → PDF→PNG → Sharp → OCR → Estructura → CSV → Mover procesados",
-    "pasos": {
-      "1_gmail": {
-        "servicio": "local.gmail",
-        "acciones": ["search", "read", "attachments.download"],
-        "timeout": 30000,
-        "resultado": "PDFs descargados a data/gmail/{account}/",
-        "nota": "Solo si gmail.account esta configurado"
-      },
-      "2_recoger_inbox": {
-        "servicio": "filesystem",
-        "fuentes": ["data/bots/{botName}/received/", "data/gmail/{account}/"],
-        "tipos": {
-          "pdf": "Se convierte a PNG en paso 3",
-          "imagen": "Se copia directamente a preprocesadas/"
-        }
-      },
-      "3_pdf_a_png": {
-        "servicio": "local.pdf-to-png",
-        "accion": "convert",
-        "params": { "pdf": "ruta", "dpi": 300, "outputFolder": "storage/preprocesadas/" },
-        "timeout": 60000,
-        "nota": "Un PDF puede generar multiples paginas (imagenes)"
-      },
-      "4_sharp_prepare": {
-        "servicio": "local.sharp",
-        "accion": "prepare-ocr",
-        "params": {
-          "image": "ruta imagen",
-          "options": { "grayscale": true, "normalize": true, "sharpen": true, "maxWidth": 2400, "maxHeight": 3200 },
-          "output": "storage/preprocesadas/prepared_{nombre}.png"
-        },
-        "timeout": 30000
-      },
-      "5_ocr": {
-        "servicio": "local.google-vision",
-        "accion": "extract",
-        "params": { "image": "ruta preparada", "hint": "DOCUMENT_TEXT_DETECTION", "languageHints": ["es"] },
-        "timeout": 60000,
-        "resultado": "Texto OCR guardado en storage/ocr/{nombre}.txt",
-        "confianza_tipica": "92%"
-      },
-      "6_estructura": {
-        "servicio": "ai (ai-gateway)",
-        "accion": "chat",
-        "IMPORTANTE": "services.call('ai', 'chat') — NO 'ai-gateway'",
-        "params": {
-          "messages": ["system: prompt extraccion", "user: texto OCR"],
-          "provider": "deepseek",
-          "temperature": 0.1,
-          "max_tokens": 2000
-        },
-        "timeout": 60000,
-        "resultado": "JSON estructurado guardado en storage/estructuradas/{nombre}.json",
-        "coste_tipico": "$0.0002 por factura"
-      },
-      "7_csv_fiscal": {
-        "servicio": "local (generacion propia)",
-        "formato": "Libro Registro Facturas Recibidas (SII/modelo 303)",
-        "separador": ";",
-        "encoding": "UTF-8 con BOM",
-        "columnas": [
-          "Fecha", "Num_Factura", "NIF_Emisor", "Nombre_Emisor",
-          "NIF_Receptor", "Nombre_Receptor", "Descripcion",
-          "Base_Imponible", "Tipo_IVA", "Cuota_IVA",
-          "Tipo_RE", "Cuota_RE", "Total_Factura",
-          "Forma_Pago", "Clave_Operacion"
-        ],
-        "claves_operacion": {
-          "F1": "Factura corriente (tiene NIF emisor y total >= 400 o tiene NIF receptor)",
-          "F2": "Factura simplificada (sin NIF emisor o total < 400 sin NIF receptor)"
-        },
-        "resultado": "storage/export/facturas_{fecha}.csv",
-        "envio": "Se envia como documento por Telegram"
-      },
-      "8_descarte": {
-        "accion": "fs.renameSync(original, procesados/)",
-        "condicion": "SOLO si todos los pasos del archivo fueron OK",
-        "efecto": "Original sale del inbox — no se reprocesa",
-        "fallos": "Se quedan en inbox para reintento en siguiente ejecucion"
-      }
-    }
-  },
-
-  "handlers_test": {
-    "descripcion": "Comandos /go* para probar cada paso individualmente",
-    "tabla": {
-      "/gogmail": { "handler": "test-gmail.js", "paso": "1. Descarga Gmail" },
-      "/gopdf": { "handler": "test-pdf.js", "paso": "2. PDF a PNG" },
-      "/gosharp": { "handler": "test-preparar.js", "paso": "3. Sharp prepare-ocr" },
-      "/gocr": { "handler": "test-ocr.js", "paso": "4. OCR Google Vision" },
-      "/gostructure": { "handler": "test-structure.js", "paso": "5. Estructura DeepSeek" },
-      "/goexport": { "handler": "test-export.js", "paso": "6. CSV fiscal" },
-      "/gofull": { "handler": "procesar-facturas.js", "paso": "Pipeline completo" }
+      "como_llegan": "Descargados de Gmail via handler → source: 'gmail'"
+    },
+    "manual": {
+      "tipos": ["jpg", "jpeg", "png", "webp", "tiff", "pdf"],
+      "como_llegan": "Upload manual desde frontend → source: 'manual'"
     }
   },
 
   "estructura_storage": {
     "base": "data/projects/{projectId}/storage/",
     "directorios": {
-      "preprocesadas/": "Imagenes convertidas de PDF y preparadas con Sharp",
+      "pendientes/": "Archivos subidos manualmente pendientes de procesar",
+      "preprocesadas/": "Imágenes convertidas de PDF y preparadas con Sharp",
       "ocr/": "Textos OCR extraidos (.txt)",
       "estructuradas/": "JSONs con datos estructurados (.json)",
-      "export/": "CSVs fiscales generados",
-      "procesados/": "Originales procesados sin error (sacados del inbox)"
+      "procesadas/": "Archivos originales procesados sin error",
+      "export/": "CSVs fiscales generados por módulo facturas",
+      "export/asesoria/": "Paquetes ZIP generados por módulo asesoría"
     }
   },
 
@@ -162,38 +227,14 @@
     }
   },
 
-  "config_proyecto": {
-    "archivo": "data/projects/{projectId}/config/config.json",
-    "campos_usados": {
-      "telegram.botName": "Nombre del bot Telegram (determina directorio received)",
-      "gmail.account": "Cuenta Gmail para descargar adjuntos",
-      "gmail.query": "Query de busqueda Gmail (default: 'has:attachment is:unread')",
-      "gmail.maxResults": "Max resultados Gmail (default: 20)",
-      "storage.inbox.telegram": "Ruta inbox bot (default: data/bots/{botName}/received)",
-      "storage.inbox.gmail": "Ruta inbox gmail (default: data/gmail/{account})",
-      "storage.procesados": "Ruta para originales procesados",
-      "schedule.gmail.cron": "Cron para ejecucion batch (default: '0 3 * * 0')"
-    },
-    "ejemplo": {
-      "telegram": { "botName": "facturas_noninapizzicas_bot" },
-      "gmail": { "account": "noninapizzicas", "query": "has:attachment is:unread", "maxResults": 20 },
-      "storage": {
-        "inbox": {
-          "telegram": "./data/bots/facturas_noninapizzicas_bot/received",
-          "gmail": "./data/gmail/noninapizzicas"
-        },
-        "procesados": "./data/projects/facturas-nonina/storage/procesados"
-      },
-      "schedule": { "gmail": { "cron": "0 3 * * 0" } }
-    }
-  },
-
-  "scheduler": {
-    "job": "facturas-nonina-gmail-domingo",
-    "archivo": "data/scheduler/jobs.json",
-    "cron": "0 3 * * 0",
-    "timezone": "Europe/Madrid",
-    "descripcion": "Domingos a las 3:00 AM — ejecuta pipeline completo"
+  "handlers_legacy": {
+    "estado": "archivados en handlers/global/archived/",
+    "nota": "Los handlers /go* del pipeline original están archivados. La funcionalidad ahora vive en el módulo facturas",
+    "archivados": [
+      "generar-csv-asesoria.js — Generación CSV (lógica portada al módulo asesoria)",
+      "comando-exportar-csv.js — Comando /exportarcsv de Telegram",
+      "notificar-csv-generado.js — Notificación por Telegram del CSV"
+    ]
   },
 
   "gotchas": {
@@ -207,48 +248,27 @@
       "causa": "DeepSeek NO soporta imagenes via API",
       "solucion": "Usar Google Vision para OCR, DeepSeek solo para texto (estructurar)"
     },
-    "http_timeout": {
-      "problema": "Requests HTTP colgados infinitamente",
-      "causa": "base-provider.js no tenia timeout",
-      "solucion": "Se anadio req.setTimeout(90000) en base-provider.js"
+    "periodo_vs_fecha_entrada": {
+      "problema": "facturas-db.listar filtra por fecha_entrada, no factura_fecha",
+      "causa": "Una factura de marzo puede haberse subido en abril",
+      "solucion": "El módulo asesoria hace filtro adicional en JS por factura_fecha.startsWith(periodo)"
     },
-    "credential_manager_borra": {
-      "problema": "credential-manager borraba claves .env al guardar",
-      "causa": "Solo cargaba patron _API_KEY_ con nivel, ignoraba legacy y otras lineas",
-      "solucion": "Anadido soporte _API_KEY legacy + _unmanagedLines para preservar todo"
-    },
-    "gmail_refresh_token": {
-      "problema": "Gmail: No refresh token found",
-      "causa": "Token guardado como GMAIL_API_KEY_GLOBAL (nombre incorrecto)",
-      "solucion": "Usar GMAIL_REFRESH_TOKEN_{account} en .env"
-    },
-    "error_sin_diagnostico": {
-      "problema": "Handlers reportan 'Errores: 25' sin decir que fallo",
-      "causa": "Catch solo logueaba, no mostraba en Telegram",
-      "solucion": "Anadir primerError al mensaje: capturar primer error.message"
+    "zip_path_resolution": {
+      "problema": "El servicio local.zip transforma rutas absolutas con resolvePath()",
+      "causa": "resolvePath prepend 'data/' a rutas que empiezan con /",
+      "solucion": "Pasar rutas relativas al cwd usando path.relative(cwd, absolutePath)"
     }
   },
 
-  "resultado_tests": {
-    "descripcion": "Resultados de tests reales con facturas de Nonina Pizzicas",
-    "sharp": "OK — grayscale, normalize, sharpen aplicados",
-    "ocr": "OK — 92% confianza, texto completo extraido (factura Zambu)",
-    "estructura": "OK — JSON completo con emisor, receptor, lineas, totales. Coste: $0.0002",
-    "csv": "OK — formato SII correcto, separador ;, BOM UTF-8",
-    "gmail": "OK — 25 correos, 25 adjuntos PDF descargados",
-    "pdf_a_png": "OK — 25 PDFs convertidos, 33 paginas generadas",
-    "pipeline_completo": "Pendiente test batch /gofull"
-  },
-
   "proximos_pasos": {
-    "inmediato": [
-      "Probar /gofull end-to-end",
-      "Conectar scheduler con /gofull"
+    "asesoria": [
+      "Frontend: sección dedicada de asesoría en la UI",
+      "Envío automático del paquete por email/Telegram"
     ],
-    "futuro_fiscal": [
-      "Gestion interna de negocio (no solo asesoria)",
-      "Dashboard de gastos por categoria",
-      "Integracion con contabilidad externa"
+    "futuros_modulos": [
+      "modules/facturacion/compras/ — tracking de compras y proveedores",
+      "modules/facturacion/contabilidad-real/ — P&L, cash flow, presupuesto",
+      "modules/facturacion/contabilidad-legal/ — SII, modelos fiscales, libros registros"
     ]
   }
 }

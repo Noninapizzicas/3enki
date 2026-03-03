@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-02-26",
+  "_updated": "2026-03-03",
   "mejoras": [
     {
       "id": "pantallas-cocina",
@@ -320,6 +320,59 @@
         "como": "Instanciar Discovery con mqttClient y eventBus, llamar start(), integrar en graceful shutdown con stop()"
       },
       "cuando_implementar": "Cuando se desplieguen múltiples instancias de event-core (multi-core)"
+    },
+    {
+      "id": "fix-version-inconsistency",
+      "titulo": "Unificar número de versión del proyecto",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "Existen 3 versiones distintas declaradas: package.json dice v0.2.0, README.md dice v0.5.0, index.js dice v0.1.0. Deben unificarse en una sola fuente de verdad (package.json) y el resto leer de ahí.",
+      "archivos_afectados": ["package.json", "README.md", "index.js"],
+      "cuando_implementar": "Próxima sesión de limpieza o antes de un release"
+    },
+    {
+      "id": "eliminar-flow-engine-legacy",
+      "titulo": "Eliminar código muerto de FlowEngine (core/flow/)",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "core/flow/ contiene el motor de flujos original que fue reemplazado por el sistema de handlers. Es código muerto que no se usa en ningún sitio. Eliminarlo reduce confusión y tamaño del proyecto.",
+      "archivos_afectados": ["core/flow/"],
+      "cuando_implementar": "Próxima sesión de limpieza"
+    },
+    {
+      "id": "actualizar-test-coverage",
+      "titulo": "Actualizar test coverage y scripts de test",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "package.json referencia tests para módulos que han cambiado. Faltan tests para módulos nuevos/modificados (pizzepos, chat-ai-bridge, ai-agent-framework). Cobertura actual: hooks, observability, gateway, conversation, security, cli, integration.",
+      "beneficios": ["Prevenir regresiones en módulos críticos", "Validar flujos de tools end-to-end", "Cobertura para los 14 módulos pizzepos"],
+      "cuando_implementar": "Antes de un release o cuando se modifiquen módulos sin tests"
+    },
+    {
+      "id": "sincronizar-inventario-sistema",
+      "titulo": "Sincronizar INVENTARIO-SISTEMA.json con módulos reales",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "INVENTARIO-SISTEMA.json lista solo 24 módulos pero hay 46+ en el sistema (32 core + 14 pizzepos). Falta documentar más de la mitad de los módulos. Este archivo debería generarse automáticamente desde los module.json.",
+      "implementacion": {
+        "propuesto": "Script que recorra modules/**/module.json y genere el inventario automáticamente",
+        "ubicacion": "scripts/generate-inventory.js"
+      },
+      "cuando_implementar": "Próxima auditoría de documentación o via context-sync skill"
+    },
+    {
+      "id": "evaluar-modulos-deshabilitados",
+      "titulo": "Evaluar módulos deshabilitados: eliminar o reactivar",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "6 módulos están deshabilitados en config.json sin una decisión clara sobre su futuro: dashboard, metricas, notas, scratch-designer, ui-designer, y conversation-manager. Evaluar cuáles tienen valor para reactivar y cuáles son código muerto a eliminar.",
+      "modulos_afectados": ["dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "conversation-manager"],
+      "cuando_implementar": "Próxima revisión de arquitectura"
     }
   ]
 }

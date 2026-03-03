@@ -54,8 +54,11 @@ type MessageHandler = (topic: string, payload: unknown) => void;
 
 /**
  * Detecta la URL de MQTT automáticamente basada en el entorno
- * - En desarrollo (Vite): usa el proxy ws://127.0.0.1:5173/mqtt
- * - En producción: usa ws://hostname:9001 directamente
+ *
+ * Estrategia por entorno:
+ * - Vite dev (5173): ws://127.0.0.1:5173/mqtt (proxy de Vite)
+ * - HTTPS (VPS + Caddy): wss://domain.com/mqtt (reverse proxy)
+ * - HTTP directo (Termux, LAN): ws://host:9001 (conexión directa al broker)
  *
  * NOTA: Usamos 127.0.0.1 en lugar de localhost para evitar
  * problemas de resolución IPv6 (::1) en algunos sistemas
@@ -66,18 +69,25 @@ function getMqttUrl(): string {
   }
 
   const { protocol, hostname, port } = window.location;
-  const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
 
   // Normalizar hostname: localhost → 127.0.0.1 (evita IPv6)
   const normalizedHost = hostname === 'localhost' ? '127.0.0.1' : hostname;
 
   // En desarrollo con Vite (puerto 5173), usar el proxy
   if (port === '5173') {
+    const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
     return `${wsProtocol}//${normalizedHost}:${port}/mqtt`;
   }
 
-  // En producción o con otro servidor, conectar directo al broker
-  return `${wsProtocol}//${normalizedHost}:9001`;
+  // HTTPS = estamos detrás de un reverse proxy (Caddy/nginx)
+  // El proxy redirige /mqtt → ws://localhost:9001
+  if (protocol === 'https:') {
+    return `wss://${hostname}/mqtt`;
+  }
+
+  // HTTP directo (Termux, LAN, desarrollo sin proxy)
+  // Conectar directamente al puerto WebSocket del broker
+  return `ws://${normalizedHost}:9001`;
 }
 
 const DEFAULT_CONFIG: MqttConfig = {

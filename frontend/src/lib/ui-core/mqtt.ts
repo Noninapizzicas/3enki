@@ -54,8 +54,9 @@ type MessageHandler = (topic: string, payload: unknown) => void;
 
 /**
  * Detecta la URL de MQTT automáticamente basada en el entorno
- * - En desarrollo (Vite): usa el proxy ws://127.0.0.1:5173/mqtt
- * - En producción: usa ws://hostname:9001 directamente
+ * - En desarrollo (Vite, puerto 5173): usa el proxy ws://host:5173/mqtt
+ * - Tras reverse proxy (puerto 80/443): usa ws(s)://host/mqtt (Caddy/nginx)
+ * - Conexión directa (otro puerto): usa ws://host:9001
  *
  * NOTA: Usamos 127.0.0.1 en lugar de localhost para evitar
  * problemas de resolución IPv6 (::1) en algunos sistemas
@@ -76,7 +77,13 @@ function getMqttUrl(): string {
     return `${wsProtocol}//${normalizedHost}:${port}/mqtt`;
   }
 
-  // En producción o con otro servidor, conectar directo al broker
+  // Tras reverse proxy con SSL (puerto 443) o HTTP estándar (80/sin puerto),
+  // usar path /mqtt que el reverse proxy (Caddy/nginx) redirige al broker
+  if (port === '' || port === '443' || port === '80') {
+    return `${wsProtocol}//${normalizedHost}/mqtt`;
+  }
+
+  // Conexión directa al broker (sin reverse proxy)
   return `${wsProtocol}//${normalizedHost}:9001`;
 }
 

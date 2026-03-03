@@ -59,6 +59,7 @@ function generateStaticHTML(carta, config, options = {}) {
 <title>${nombre_negocio} — Carta Digital</title>
 <meta name="description" content="Carta digital de ${nombre_negocio}. Consulta nuestro menú y haz tu pedido por WhatsApp.">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.svg">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -446,10 +447,11 @@ if ('serviceWorker' in navigator) {
 
 /**
  * Generate a minimal service worker for offline caching.
+ * Uses relative paths (./) so it works in any subdirectory (GitHub Pages, etc.)
  */
 function generateServiceWorker(nombre_negocio) {
   return `const CACHE = '${slugify(nombre_negocio)}-v1';
-const ASSETS = ['/', '/index.html'];
+const ASSETS = ['./', './index.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
@@ -471,7 +473,7 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(e.request, clone));
       }
       return res;
-    })).catch(() => caches.match('/'))
+    })).catch(() => caches.match(self.registration.scope))
   );
 });
 `;
@@ -479,21 +481,35 @@ self.addEventListener('fetch', e => {
 
 /**
  * Generate PWA manifest.json
+ * Uses relative start_url (".") so it works in any subdirectory (GitHub Pages, etc.)
  */
 function generateManifest(nombre_negocio, colorPrimario, colorFondo) {
   return JSON.stringify({
     name: nombre_negocio + ' — Carta Digital',
     short_name: nombre_negocio,
     description: `Carta digital de ${nombre_negocio}`,
-    start_url: '/',
+    start_url: '.',
     display: 'standalone',
     background_color: colorFondo || '#0a0a0a',
     theme_color: colorPrimario || '#f59e0b',
     icons: [
-      { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }
+      { src: 'icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
+      { src: 'icon-512.svg', sizes: '512x512', type: 'image/svg+xml' },
+      { src: 'icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'maskable' }
     ]
   }, null, 2);
+}
+
+/**
+ * Generate SVG icon for PWA (works without image processing dependencies)
+ */
+function generateIcon(size, emoji, colorPrimario, colorFondo) {
+  const fontSize = Math.round(size * 0.55);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <rect width="${size}" height="${size}" rx="${Math.round(size * 0.2)}" fill="${colorFondo || '#0a0a0a'}"/>
+  <circle cx="${size/2}" cy="${size/2}" r="${Math.round(size * 0.35)}" fill="${colorPrimario || '#f59e0b'}" opacity="0.15"/>
+  <text x="${size/2}" y="${size/2}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}">${emoji || '\u{1F355}'}</text>
+</svg>`;
 }
 
 function escapeHtml(str) {
@@ -515,4 +531,4 @@ function slugify(text) {
     || 'carta';
 }
 
-module.exports = { generateStaticHTML, generateServiceWorker, generateManifest, escapeHtml, slugify };
+module.exports = { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, escapeHtml, slugify };

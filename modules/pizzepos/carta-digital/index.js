@@ -645,7 +645,7 @@ class CartaDigitalModule {
     }
 
     // Generate static files
-    const { generateStaticHTML, generateServiceWorker, generateManifest, slugify } = require('./static-template');
+    const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');
 
     const html = generateStaticHTML(carta, config);
     const sw = generateServiceWorker(config.nombre_negocio);
@@ -665,6 +665,13 @@ class CartaDigitalModule {
       await fs.writeFile(path.join(outputDir, 'index.html'), html, 'utf8');
       await fs.writeFile(path.join(outputDir, 'sw.js'), sw, 'utf8');
       await fs.writeFile(path.join(outputDir, 'manifest.json'), manifest, 'utf8');
+
+      // Generate PWA icons (SVG — no dependencies needed)
+      const logoEmoji = tema.logo_emoji || '\u{1F355}';
+      await fs.writeFile(path.join(outputDir, 'icon-192.svg'),
+        generateIcon(192, logoEmoji, tema.color_primario, tema.color_fondo), 'utf8');
+      await fs.writeFile(path.join(outputDir, 'icon-512.svg'),
+        generateIcon(512, logoEmoji, tema.color_primario, tema.color_fondo), 'utf8');
 
       // Copy images
       let imagesCopied = 0;

@@ -18,6 +18,7 @@ function generateStaticHTML(carta, config, options = {}) {
     lang = 'es',
     ai_endpoint = config.ai_endpoint || '',
     ai_provider = config.ai_provider || 'auto',
+    ai_chat_path = config.ai_chat_path || '/modules/ai-gateway/chat',
     chat_enabled = config.chat_enabled !== false && !!ai_endpoint
   } = options;
 
@@ -49,7 +50,7 @@ function generateStaticHTML(carta, config, options = {}) {
   const dataJSON = JSON.stringify({ categorias, productos });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
-    ai_endpoint, ai_provider, chat_enabled
+    ai_endpoint, ai_provider, ai_chat_path, chat_enabled
   });
 
   // Build system prompt for AI assistant with full menu context
@@ -614,7 +615,7 @@ function sendMessage(text) {
     aiMsgs.push({ role: history[i].role, content: history[i].content });
   }
 
-  fetch(CONFIG.ai_endpoint + '/modules/ai-gateway/chat', {
+  fetch(CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/modules/ai-gateway/chat'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages: aiMsgs, provider: CONFIG.ai_provider || 'auto' })

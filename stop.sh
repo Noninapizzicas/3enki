@@ -5,9 +5,10 @@
 # Detiene los servicios de Event-Core (backend y frontend).
 #
 # Uso:
-#   ./stop.sh              # Detiene todo
+#   ./stop.sh              # Detiene todo (desarrollo)
 #   ./stop.sh backend      # Solo backend
 #   ./stop.sh frontend     # Solo frontend
+#   ./stop.sh production   # Detiene via systemd (backend + caddy) - VPS
 #   ./stop.sh --force      # Forzar (SIGKILL)
 ###############################################################################
 
@@ -121,6 +122,26 @@ stop_frontend() {
     fi
 }
 
+stop_production() {
+    log_info "Deteniendo servicios de producción (systemd)..."
+
+    # Detener Caddy
+    if systemctl is-active --quiet caddy 2>/dev/null; then
+        sudo systemctl stop caddy
+        log_success "Caddy detenido"
+    else
+        log_warn "Caddy no estaba corriendo"
+    fi
+
+    # Detener event-core
+    if systemctl is-active --quiet event-core 2>/dev/null; then
+        sudo systemctl stop event-core
+        log_success "event-core detenido"
+    else
+        log_warn "event-core no estaba corriendo"
+    fi
+}
+
 show_help() {
     cat << EOF
 ${BLUE}Event-Core - Script de Parada${NC}
@@ -129,16 +150,18 @@ ${GREEN}Uso:${NC}
   ./stop.sh [comando] [opciones]
 
 ${GREEN}Comandos:${NC}
-  (sin args)    Detiene backend + frontend
+  (sin args)    Detiene backend + frontend (desarrollo)
   backend       Solo detiene el backend
   frontend      Solo detiene el frontend
+  production    Detiene via systemd: event-core + caddy (VPS)
   --help, -h    Muestra esta ayuda
 
 ${GREEN}Opciones:${NC}
   --force, -f   Usar SIGKILL inmediatamente
 
 ${GREEN}Ejemplos:${NC}
-  ./stop.sh                 # Detener todo gracefully
+  ./stop.sh                 # Detener todo (desarrollo)
+  ./stop.sh production      # Detener todo (VPS/systemd)
   ./stop.sh --force         # Forzar parada
   ./stop.sh backend         # Solo backend
 
@@ -160,7 +183,7 @@ for arg in "$@"; do
             show_help
             exit 0
             ;;
-        backend|frontend|all)
+        backend|frontend|all|production|prod)
             COMMAND=$arg
             ;;
         *)
@@ -183,6 +206,9 @@ case "$COMMAND" in
         ;;
     frontend)
         stop_frontend
+        ;;
+    production|prod)
+        stop_production
         ;;
     all)
         stop_frontend

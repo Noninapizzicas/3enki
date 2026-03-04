@@ -63,6 +63,16 @@
         "handler": "onCuentaEliminada"
       },
       {
+        "event": "cuenta.estado_cambiado",
+        "description": "Actualizar estado real de cuenta activa en cache y disco",
+        "handler": "onCuentaEstadoCambiado"
+      },
+      {
+        "event": "cuenta.actualizada",
+        "description": "Actualizar campos de cuenta activa (pagado, servido, etc)",
+        "handler": "onCuentaActualizada"
+      },
+      {
         "event": "cobro.iniciado",
         "description": "Guardar evento de cobro iniciado",
         "handler": "onEvento"

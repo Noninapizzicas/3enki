@@ -317,6 +317,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .chat-msg.bot .typing span{width:6px;height:6px;border-radius:50%;background:#555;animation:blink 1.2s infinite}
 .chat-msg.bot .typing span:nth-child(2){animation-delay:.2s}
 .chat-msg.bot .typing span:nth-child(3){animation-delay:.4s}
+.stream-cursor{display:inline-block;width:2px;height:1em;background:var(--primary);margin-left:2px;vertical-align:text-bottom;animation:blink .6s step-end infinite}
+#stream-bubble{min-height:1.4em;white-space:pre-wrap}
 @keyframes blink{0%,80%{opacity:.3}40%{opacity:1}}
 
 .chat-input-row{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid #222;background:var(--bg-surface)}
@@ -865,6 +867,36 @@ function hideTyping() {
   if (t) t.remove();
 }
 
+// Streaming bubble: shows tokens as they arrive
+function showStreamBubble() {
+  hideTyping();
+  var el = document.getElementById('chat-msgs');
+  el.innerHTML += '<div class="chat-msg bot" id="stream-bubble"><span class="stream-cursor"></span></div>';
+  el.scrollTop = el.scrollHeight;
+}
+
+function appendToStream(text) {
+  var bubble = document.getElementById('stream-bubble');
+  if (!bubble) return;
+  // Remove cursor, append text, re-add cursor
+  var cursor = bubble.querySelector('.stream-cursor');
+  if (cursor) cursor.remove();
+  bubble.innerHTML += esc(text);
+  bubble.innerHTML += '<span class="stream-cursor"></span>';
+  var el = document.getElementById('chat-msgs');
+  el.scrollTop = el.scrollHeight;
+}
+
+function finalizeStream() {
+  var bubble = document.getElementById('stream-bubble');
+  if (!bubble) return '';
+  var cursor = bubble.querySelector('.stream-cursor');
+  if (cursor) cursor.remove();
+  var text = bubble.textContent || '';
+  bubble.remove();
+  return text;
+}
+
 function sendQuick(btn, text) {
   btn.style.display = 'none';
   sendMessage(text);
@@ -882,50 +914,109 @@ function sendChat() {
 function sendMessage(text) {
   addUserMsg(text);
   document.getElementById('chat-send').disabled = true;
-  document.getElementById('chat-status').textContent = 'Escribiendo...';
+  document.getElementById('chat-status').textContent = 'Pensando...';
   showTyping();
 
-  // Build messages array for AI (include system prompt + history, keep last 20 msgs)
-  var aiMsgs = [{ role: 'system', content: SYSTEM_PROMPT }];
+  // Build messages array for AI (strip system — server adds it)
   var history = chatMsgs.slice(-20);
+  var aiMsgs = [];
   for (var i = 0; i < history.length; i++) {
     aiMsgs.push({ role: history[i].role, content: history[i].content });
   }
 
-  fetch(CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/modules/ai-gateway/chat'), {
+  var endpoint = CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/modules/ai-gateway/chat');
+
+  fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: aiMsgs, provider: CONFIG.ai_provider || 'auto' })
+    body: JSON.stringify({ messages: aiMsgs, provider: CONFIG.ai_provider || 'auto', stream: true })
   })
-  .then(function(res) { return res.json(); })
-  .then(function(json) {
-    hideTyping();
-    document.getElementById('chat-send').disabled = false;
-    document.getElementById('chat-status').textContent = 'En línea';
-    var reply = (json.data && json.data.content) || 'Lo siento, no he podido responder. Intenta de nuevo.';
-    // Check if AI included an order JSON
-    var orderMatch = reply.match(/\\{"pedido"\\s*:\\s*\\[.*?\\]\\}/s);
-    if (orderMatch) {
-      try {
-        var orderData = JSON.parse(orderMatch[0]);
-        if (orderData.pedido && orderData.pedido.length > 0) {
-          applyAIOrder(orderData.pedido);
-          reply = reply.replace(orderMatch[0], '').trim();
-          if (!reply) reply = '¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.';
-          else reply += '\\n\\n✅ ¡Añadido al carrito!';
-        }
-      } catch(e) {}
+  .then(function(res) {
+    // Check if response is SSE streaming
+    var ct = res.headers.get('Content-Type') || '';
+    if (ct.indexOf('text/event-stream') !== -1 && res.body) {
+      return handleStreamResponse(res);
     }
-    addBotMsg(reply);
-    // Voice output
-    if (speechSynth && isRecording) speakText(reply);
+    // Fallback: non-streaming JSON response
+    return res.json().then(function(json) {
+      hideTyping();
+      var reply = (json.data && json.data.content) || 'Lo siento, no he podido responder. Intenta de nuevo.';
+      processAIReply(reply);
+    });
   })
   .catch(function(err) {
     hideTyping();
+    finalizeStream();
     document.getElementById('chat-send').disabled = false;
     document.getElementById('chat-status').textContent = 'En línea';
     addBotMsg('No puedo conectar con el asistente ahora. ¿Probamos luego?');
   });
+}
+
+function handleStreamResponse(res) {
+  showStreamBubble();
+  document.getElementById('chat-status').textContent = 'Escribiendo...';
+
+  var reader = res.body.getReader();
+  var decoder = new TextDecoder();
+  var buffer = '';
+  var fullContent = '';
+
+  function pump() {
+    return reader.read().then(function(result) {
+      if (result.done) {
+        // Stream finished
+        var reply = finalizeStream() || fullContent;
+        processAIReply(reply);
+        return;
+      }
+
+      buffer += decoder.decode(result.value, { stream: true });
+      var lines = buffer.split('\\n');
+      buffer = lines.pop() || '';
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line || !line.startsWith('data: ')) continue;
+        var data = line.slice(6);
+        if (data === '[DONE]') continue;
+        try {
+          var chunk = JSON.parse(data);
+          var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+          if (delta && delta.content) {
+            fullContent += delta.content;
+            appendToStream(delta.content);
+          }
+        } catch(e) {}
+      }
+
+      return pump();
+    });
+  }
+
+  return pump();
+}
+
+function processAIReply(reply) {
+  document.getElementById('chat-send').disabled = false;
+  document.getElementById('chat-status').textContent = 'En línea';
+
+  // Check if AI included an order JSON
+  var orderMatch = reply.match(/\\{"pedido"\\s*:\\s*\\[.*?\\]\\}/s);
+  if (orderMatch) {
+    try {
+      var orderData = JSON.parse(orderMatch[0]);
+      if (orderData.pedido && orderData.pedido.length > 0) {
+        applyAIOrder(orderData.pedido);
+        reply = reply.replace(orderMatch[0], '').trim();
+        if (!reply) reply = '¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.';
+        else reply += '\\n\\n✅ ¡Añadido al carrito!';
+      }
+    } catch(e) {}
+  }
+  addBotMsg(reply);
+  // Voice output
+  if (speechSynth && isRecording) speakText(reply);
 }
 
 function applyAIOrder(items) {

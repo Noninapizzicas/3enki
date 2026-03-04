@@ -4,6 +4,9 @@
  * Receives chat messages from the PWA, enforces system prompt
  * server-side, forwards to DeepSeek, returns response.
  *
+ * Supports streaming (SSE) and non-streaming modes.
+ * PWA sends `stream: true` in body to get SSE response.
+ *
  * The PWA never sees the API key. The system prompt cannot be
  * overridden by the client.
  *
@@ -58,7 +61,7 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // Only accept POST to /modules/ai-gateway/chat (same path as VPS)
+    // Only accept POST to /chat
     const url = new URL(request.url);
     if (request.method !== 'POST' || !url.pathname.endsWith('/chat')) {
       return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
@@ -95,6 +98,7 @@ export default {
     }
 
     const clientMessages = body.messages || [];
+    const wantStream = body.stream === true;
 
     // SECURITY: Strip any system messages from client input
     const userMessages = clientMessages
@@ -114,7 +118,6 @@ export default {
     ];
 
     // Call DeepSeek
-    const startTime = Date.now();
     let dsResponse;
     try {
       dsResponse = await fetch(DEEPSEEK_API, {
@@ -128,6 +131,7 @@ export default {
           messages,
           max_tokens: maxTokens,
           temperature: 0.7,
+          stream: wantStream,
         })
       });
     } catch (err) {
@@ -146,14 +150,26 @@ export default {
       }, 502, corsHeaders);
     }
 
+    // Streaming mode: pipe SSE from DeepSeek to client
+    if (wantStream) {
+      return new Response(dsResponse.body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          ...corsHeaders
+        }
+      });
+    }
+
+    // Non-streaming mode: same as before
     const dsData = await dsResponse.json();
-    const latency = Date.now() - startTime;
 
     const choice = dsData.choices?.[0];
     const content = choice?.message?.content || 'Lo siento, no he podido responder.';
     const usage = dsData.usage || {};
 
-    // Return in same format as VPS ai-gateway (so PWA code works unchanged)
     return jsonResponse({
       status: 200,
       data: {
@@ -164,8 +180,7 @@ export default {
           prompt_tokens: usage.prompt_tokens || 0,
           completion_tokens: usage.completion_tokens || 0,
           total_tokens: usage.total_tokens || 0
-        },
-        latency_ms: latency
+        }
       }
     }, 200, corsHeaders);
   }

@@ -1,20 +1,12 @@
 <script lang="ts">
   /**
-   * CuentaCardMesa — Tarjeta de cuenta completa
+   * CuentaCardMesa — Tarjeta Boceto B
    *
-   * Informacion visible:
-   *   - Emoji tipo + nombre (con numeracion diaria)
-   *   - Items con cantidad, precio y estado de cocina
-   *   - Estado general de la cuenta
-   *   - Precio total
-   *   - Pagado / no pagado
-   *   - Servido / no servido
-   *   - Cronometro: tiempo transcurrido desde apertura
-   *   - Cuenta atras: tiempo restante hasta recogida
-   *   - Hora estimada de recogida
-   *
-   * Tap header → abre comandero (anadir pedidos)
-   * Tap total  → abre cuenta (cobrar)
+   * Header: emoji_tipo + nombre + emoji_pago + hora + countdown
+   * Split tap zones: izquierda → comandero | derecha → cobro
+   * Items: dot estado cocina + nombre truncado + xN
+   * Barra progreso cocina: ■■■□
+   * Footer: estado + "PEDIDO FUERA!" + acciones
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { Cuenta, ItemDetalle } from '$lib/stores/cuentas';
@@ -22,7 +14,6 @@
 
   export let cuenta: Cuenta;
   export let projectId: string = '';
-  /** Map de producto_id → nombre de categoria */
   export let categoriasMap: Record<string, string> = {};
 
   const dispatch = createEventDispatcher<{
@@ -38,12 +29,10 @@
   // ===== TIMERS =====
   let elapsedStr = '00:00';
   let countdownStr = '';
-  let horaRecogidaStr = '';
   let countdownUrgent = false;
   let timerInterval: ReturnType<typeof setInterval>;
 
   function updateTimers() {
-    // Cronometro desde apertura
     if (cuenta.created_at) {
       const diff = Math.floor((Date.now() - new Date(cuenta.created_at).getTime()) / 1000);
       if (diff >= 0) {
@@ -56,16 +45,12 @@
       }
     }
 
-    // Hora de recogida y cuenta atras
     let recogidaMs: number | null = null;
-
     if (cuenta.hora_recogida) {
-      // hora_recogida puede ser ISO string o HH:MM
       const parsed = new Date(cuenta.hora_recogida);
       if (!isNaN(parsed.getTime())) {
         recogidaMs = parsed.getTime();
       } else {
-        // Intentar HH:MM
         const match = cuenta.hora_recogida.match(/^(\d{1,2}):(\d{2})$/);
         if (match) {
           const today = new Date();
@@ -74,14 +59,10 @@
         }
       }
     } else if (cuenta.tiempo_estimado && cuenta.created_at) {
-      // Calcular hora recogida = created_at + tiempo_estimado minutos
       recogidaMs = new Date(cuenta.created_at).getTime() + cuenta.tiempo_estimado * 60 * 1000;
     }
 
     if (recogidaMs) {
-      const recogidaDate = new Date(recogidaMs);
-      horaRecogidaStr = `${String(recogidaDate.getHours()).padStart(2, '0')}:${String(recogidaDate.getMinutes()).padStart(2, '0')}`;
-
       const remaining = Math.floor((recogidaMs - Date.now()) / 1000);
       if (remaining > 0) {
         const rMins = Math.floor(remaining / 60);
@@ -97,7 +78,6 @@
       }
     } else {
       countdownStr = '';
-      horaRecogidaStr = '';
       countdownUrgent = false;
     }
   }
@@ -112,34 +92,17 @@
   });
 
   // ===== ITEMS =====
-  interface ItemGroup {
-    categoria: string;
-    items: ItemDetalle[];
-  }
+  $: items = cuenta.itemsDetalle || [];
+  $: totalItems = items.length;
+  $: listoCount = items.filter(i => i.estado_cocina === 'listo').length;
+  $: preparandoCount = items.filter(i => i.estado_cocina === 'preparando').length;
+  $: allListo = totalItems > 0 && listoCount === totalItems;
+  $: pedidoFuera = allListo || cuenta.estado === 'listo';
 
-  $: groupedItems = groupByCategoria(cuenta.itemsDetalle || []);
-
-  function groupByCategoria(items: ItemDetalle[]): ItemGroup[] {
-    const groups = new Map<string, ItemDetalle[]>();
-    for (const item of items) {
-      const cat = categoriasMap[item.producto_id] || 'Otros';
-      if (!groups.has(cat)) groups.set(cat, []);
-      groups.get(cat)!.push(item);
-    }
-    return Array.from(groups.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([categoria, items]) => ({ categoria, items }));
-  }
-
-  // Contar items con aviso (recien listo, <60s)
-  $: avisoCount = (cuenta.itemsDetalle || []).filter(i => {
+  $: avisoCount = items.filter(i => {
     if (i.estado_cocina !== 'listo' || !i.listo_at) return false;
     return (Date.now() - new Date(i.listo_at).getTime()) < 60000;
   }).length;
-
-  $: listoCount = (cuenta.itemsDetalle || []).filter(i => i.estado_cocina === 'listo').length;
-  $: totalItems = (cuenta.itemsDetalle || []).length;
-  $: hasItems = totalItems > 0;
 
   // Acciones contextuales
   $: showEntregarBtn = cuenta.estado === 'listo';
@@ -147,22 +110,22 @@
   $: showDeleteBtn = cuenta.estado === 'pendiente' || cuenta.estado === 'cobrado';
 
   const ESTADO_CONFIG: Record<string, { label: string; color: string; urgent: boolean }> = {
-    pendiente:       { label: 'Pendiente',   color: '#64748b', urgent: false },
-    con_pedido:      { label: 'Con pedido',  color: '#3b82f6', urgent: false },
-    en_preparacion:  { label: 'En cocina',   color: '#eab308', urgent: false },
-    listo:           { label: 'Listo',       color: '#22c55e', urgent: true },
-    entregado:       { label: 'Entregado',   color: '#a855f7', urgent: false },
-    para_cobrar:     { label: 'Para cobrar', color: '#f59e0b', urgent: true },
-    cobrado:         { label: 'Cobrado',     color: '#6b7280', urgent: false }
+    pendiente:       { label: 'Pendiente',     color: '#64748b', urgent: false },
+    con_pedido:      { label: 'En cocina',     color: '#3b82f6', urgent: false },
+    en_preparacion:  { label: 'Preparando',    color: '#eab308', urgent: false },
+    listo:           { label: 'PEDIDO FUERA!', color: '#22c55e', urgent: true },
+    entregado:       { label: 'Entregado',     color: '#a855f7', urgent: false },
+    para_cobrar:     { label: 'Para cobrar',   color: '#f59e0b', urgent: true },
+    cobrado:         { label: 'Cobrado',       color: '#6b7280', urgent: false }
   };
 
   $: estadoCfg = ESTADO_CONFIG[cuenta.estado] || { label: cuenta.estado, color: '#64748b', urgent: false };
 
-  function handleOpenComandero() {
+  function handleLeftTap() {
     dispatch('open-comandero', { cuenta_id: cuenta.id });
   }
 
-  function handleOpenCuenta() {
+  function handleRightTap() {
     dispatch('open-cuenta', { cuenta_id: cuenta.id });
   }
 
@@ -180,10 +143,6 @@
     return total.toFixed(2) + ' \u20AC';
   }
 
-  function formatPrecio(precio: number): string {
-    return precio.toFixed(2);
-  }
-
   function isRecienListo(item: ItemDetalle): boolean {
     if (item.estado_cocina !== 'listo' || !item.listo_at) return false;
     return (Date.now() - new Date(item.listo_at).getTime()) < 60000;
@@ -194,41 +153,53 @@
   class="card-mesa"
   class:alerta={cuenta.alerta || avisoCount > 0}
   class:cobrado={cuenta.estado === 'cobrado'}
+  class:pedido-fuera={pedidoFuera}
   class:glovo-listo={glovoListo}
   style="--card-color: {color}"
 >
-  <!-- Header: icon + nombre + hora apertura -->
+  <!-- Header: emoji_tipo + nombre + emoji_pago + hora + countdown -->
   <div class="card-header">
-    <button class="header-tap" on:click={handleOpenComandero}>
-      {#if isGlovo}
-        <span class="glovo-badge">GLOVO</span>
-      {:else}
-        <span class="tipo-icon">{icon}</span>
-      {/if}
-      <span class="nombre">{cuenta.nombre}</span>
-    </button>
-    <span class="hora-apertura">{cuenta.hora}</span>
-  </div>
-
-  <!-- Timer bar: cronometro + cuenta atras + hora recogida -->
-  <div class="timer-bar">
-    <span class="timer elapsed">{elapsedStr}</span>
+    {#if isGlovo}
+      <span class="glovo-badge">GLOVO</span>
+    {:else}
+      <span class="tipo-icon">{icon}</span>
+    {/if}
+    <span class="nombre">{cuenta.nombre}</span>
+    <span class="pago-icon">{cuenta.pagado ? '\uD83D\uDCB0' : '\u274C'}</span>
+    <span class="hora">{cuenta.hora}</span>
     {#if countdownStr}
-      <span class="timer countdown" class:countdown-urgent={countdownUrgent}>{countdownStr}</span>
-    {/if}
-    {#if horaRecogidaStr}
-      <span class="recogida-hora">{horaRecogidaStr}</span>
+      <span class="countdown" class:countdown-urgent={countdownUrgent}>{countdownStr}</span>
     {/if}
   </div>
 
-  <!-- Items body -->
-  <div class="items-body" on:click={handleOpenComandero} role="button" tabindex="0" on:keydown={e => e.key === 'Enter' && handleOpenComandero()}>
-    {#if hasItems}
-      {#each groupedItems as group}
-        <div class="category-group">
-          <div class="category-label">{group.categoria}</div>
-          {#each group.items as item}
-            <div class="item-row" class:item-preparando={item.estado_cocina === 'preparando'} class:item-listo={item.estado_cocina === 'listo'} class:item-aviso={isRecienListo(item)}>
+  <!-- Progress bar cocina -->
+  {#if totalItems > 0}
+    <div class="progress-bar">
+      {#each items as item}
+        <span
+          class="progress-block"
+          class:block-cocina={item.estado_cocina === 'en_cocina'}
+          class:block-preparando={item.estado_cocina === 'preparando'}
+          class:block-listo={item.estado_cocina === 'listo'}
+        ></span>
+      {/each}
+      <span class="progress-count">{listoCount}/{totalItems}</span>
+    </div>
+  {/if}
+
+  <!-- Split tap zones -->
+  <div class="tap-zones">
+    <!-- LEFT: items → comandero -->
+    <button class="zone zone-left" on:click={handleLeftTap}>
+      {#if totalItems > 0}
+        <div class="items-list">
+          {#each items as item}
+            <div
+              class="item-row"
+              class:item-preparando={item.estado_cocina === 'preparando'}
+              class:item-listo={item.estado_cocina === 'listo'}
+              class:item-aviso={isRecienListo(item)}
+            >
               <span
                 class="item-dot"
                 class:dot-cocina={item.estado_cocina === 'en_cocina'}
@@ -236,48 +207,40 @@
                 class:dot-listo={item.estado_cocina === 'listo'}
               ></span>
               <span class="item-nombre">{item.nombre}</span>
-              <span class="item-cantidad">x{item.cantidad}</span>
-              <span class="item-precio">{formatPrecio(item.precio)}</span>
+              <span class="item-qty">x{item.cantidad}</span>
             </div>
           {/each}
         </div>
-      {/each}
-    {:else if cuenta.items > 0}
-      <div class="items-summary">
-        <span class="items-count">{cuenta.items}</span>
-        <span class="items-label">items en buffer</span>
-      </div>
-    {:else}
-      <div class="empty-state">
-        <span class="empty-label">Pedir</span>
-      </div>
-    {/if}
-  </div>
-
-  <!-- Total + badges -->
-  <div class="total-row">
-    <button class="total-btn" on:click={handleOpenCuenta}>
-      {formatTotal(cuenta.total)}
-    </button>
-    <div class="badges">
-      <span class="badge" class:badge-pagado={cuenta.pagado} class:badge-no-pagado={!cuenta.pagado}>
-        {cuenta.pagado ? 'PAGADO' : 'NO PAGADO'}
-      </span>
-      {#if cuenta.servido}
-        <span class="badge badge-servido">SERVIDO</span>
+      {:else if cuenta.items > 0}
+        <div class="zone-center">
+          <span class="items-count">{cuenta.items}</span>
+        </div>
+      {:else}
+        <div class="zone-center">
+          <span class="empty-label">PEDIR</span>
+        </div>
       {/if}
-    </div>
+    </button>
+
+    <!-- DIVIDER -->
+    <div class="zone-divider"></div>
+
+    <!-- RIGHT: total → cobro -->
+    <button class="zone zone-right" on:click={handleRightTap}>
+      <div class="zone-center">
+        <span class="total">{formatTotal(cuenta.total)}</span>
+        <span class="elapsed">{elapsedStr}</span>
+      </div>
+    </button>
   </div>
 
-  <!-- Footer: estado + aviso + items listo count + actions -->
+  <!-- Footer: estado + acciones -->
   <div class="card-footer">
     <div class="footer-info">
       <span class="estado-dot" style="background: {estadoCfg.color}"></span>
       <span class="estado-label" class:urgent={estadoCfg.urgent}>{estadoCfg.label}</span>
       {#if avisoCount > 0}
-        <span class="aviso-badge">{avisoCount} aviso{avisoCount > 1 ? 's' : ''}</span>
-      {:else if listoCount > 0 && totalItems > 0}
-        <span class="listo-info">{listoCount}/{totalItems}</span>
+        <span class="aviso-badge">{avisoCount}!</span>
       {/if}
     </div>
     <div class="footer-actions">
@@ -287,7 +250,7 @@
         </button>
       {/if}
       {#if showCobrarBtn}
-        <button class="action-btn action-cobrar" on:click|stopPropagation={handleOpenCuenta}>
+        <button class="action-btn action-cobrar" on:click|stopPropagation={handleRightTap}>
           COBRAR
         </button>
       {/if}
@@ -323,125 +286,183 @@
     border-style: dashed;
   }
 
+  .card-mesa.pedido-fuera {
+    box-shadow: 0 0 16px color-mix(in srgb, var(--card-color) 50%, transparent);
+  }
+
   /* ===== HEADER ===== */
   .card-header {
     display: flex;
     align-items: center;
+    gap: 5px;
+    padding: 6px 8px;
     background: color-mix(in srgb, var(--card-color) 15%, transparent);
     border-bottom: 1px solid color-mix(in srgb, var(--card-color) 20%, transparent);
-  }
-
-  .header-tap {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    min-width: 0;
-  }
-
-  .header-tap:active {
-    background: color-mix(in srgb, var(--card-color) 20%, transparent);
+    overflow: hidden;
   }
 
   .tipo-icon {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .glovo-badge {
+    display: inline-block;
+    background: #FF6B00;
+    color: #fff;
+    font-size: 0.5rem;
+    font-weight: 900;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    line-height: 1.4;
     flex-shrink: 0;
   }
 
   .nombre {
     flex: 1;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 700;
     color: #fff;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-align: left;
+    min-width: 0;
   }
 
-  .hora-apertura {
-    font-size: 0.65rem;
-    color: rgba(255, 255, 255, 0.4);
-    font-variant-numeric: tabular-nums;
-    padding-right: 10px;
+  .pago-icon {
+    font-size: 0.7rem;
+    line-height: 1;
     flex-shrink: 0;
   }
 
-  /* ===== TIMER BAR ===== */
-  .timer-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 3px 10px;
-    background: rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
+  .hora {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.4);
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
 
-  .timer {
-    font-size: 0.65rem;
+  .countdown {
+    font-size: 0.6rem;
     font-weight: 700;
-    font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
-  }
-
-  .timer.elapsed {
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .timer.countdown {
     color: #22c55e;
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    flex-shrink: 0;
   }
 
-  .timer.countdown.countdown-urgent {
+  .countdown.countdown-urgent {
     color: #ef4444;
     animation: blink-soft 1s ease-in-out infinite;
   }
 
-  .recogida-hora {
-    margin-left: auto;
-    font-size: 0.6rem;
-    color: rgba(255, 255, 255, 0.35);
-    font-variant-numeric: tabular-nums;
+  /* ===== PROGRESS BAR ===== */
+  .progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
   }
 
-  /* ===== ITEMS BODY ===== */
-  .items-body {
+  .progress-block {
     flex: 1;
-    padding: 6px 10px;
-    cursor: pointer;
-    min-height: 48px;
-    max-height: 200px;
-    overflow-y: auto;
+    height: 4px;
+    border-radius: 2px;
+    background: #333;
+    transition: background 0.3s;
   }
 
-  .category-group {
-    margin-bottom: 4px;
+  .progress-block.block-cocina {
+    background: #475569;
   }
 
-  .category-group:last-child {
-    margin-bottom: 0;
+  .progress-block.block-preparando {
+    background: #eab308;
+    animation: preparando-pulse 1.2s ease-in-out infinite;
   }
 
-  .category-label {
-    font-size: 0.6rem;
+  .progress-block.block-listo {
+    background: #22c55e;
+  }
+
+  .progress-count {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.5);
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: rgba(255, 255, 255, 0.35);
-    padding: 2px 0;
+    font-variant-numeric: tabular-nums;
+    margin-left: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ===== TAP ZONES ===== */
+  .tap-zones {
+    display: flex;
+    flex: 1;
+    min-height: 56px;
+  }
+
+  .zone {
+    display: flex;
+    align-items: stretch;
+    border: none;
+    background: transparent;
+    color: #e0e0e0;
+    cursor: pointer;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.1s;
+  }
+
+  .zone:active {
+    background: color-mix(in srgb, var(--card-color) 15%, transparent);
+  }
+
+  .zone-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .zone-divider {
+    width: 1px;
+    background: color-mix(in srgb, var(--card-color) 20%, transparent);
+    flex-shrink: 0;
+  }
+
+  .zone-right {
+    width: 80px;
+    flex-shrink: 0;
+    justify-content: center;
+  }
+
+  .zone-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    gap: 2px;
+    padding: 6px;
+  }
+
+  /* Items list in left zone */
+  .items-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 4px 8px;
+    max-height: 160px;
+    overflow-y: auto;
   }
 
   .item-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 2px 0 2px 8px;
+    gap: 5px;
+    padding: 1px 0;
   }
 
   .item-dot {
@@ -449,7 +470,6 @@
     height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
-    background: #475569;
   }
 
   .item-dot.dot-cocina {
@@ -473,11 +493,13 @@
 
   .item-nombre {
     flex: 1;
-    font-size: 0.75rem;
-    color: #e0e0e0;
+    font-size: 0.7rem;
+    color: #d0d0d0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+    text-align: left;
   }
 
   .item-row.item-preparando .item-nombre {
@@ -493,29 +515,14 @@
     font-weight: 700;
   }
 
-  .item-cantidad {
-    font-size: 0.65rem;
-    color: rgba(255, 255, 255, 0.5);
-    font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
-  }
-
-  .item-precio {
+  .item-qty {
     font-size: 0.6rem;
-    color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.4);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
 
-  /* Empty / summary states */
-  .items-summary, .empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-height: 48px;
-  }
-
+  /* Zone center content */
   .items-count {
     font-size: 1.4rem;
     font-weight: 800;
@@ -523,76 +530,26 @@
     line-height: 1;
   }
 
-  .items-label {
-    font-size: 0.6rem;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.4);
-  }
-
   .empty-label {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: rgba(255, 255, 255, 0.3);
     text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
-  /* ===== TOTAL ROW ===== */
-  .total-row {
-    display: flex;
-    align-items: center;
-    border-top: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
-  }
-
-  .total-btn {
-    font-size: 0.9rem;
+  .total {
+    font-size: 1rem;
     font-weight: 800;
     color: #fff;
     font-variant-numeric: tabular-nums;
-    background: color-mix(in srgb, var(--card-color) 25%, transparent);
-    border: none;
-    padding: 6px 10px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.1s;
-    flex-shrink: 0;
+    line-height: 1;
   }
 
-  .total-btn:active {
-    background: color-mix(in srgb, var(--card-color) 50%, transparent);
-  }
-
-  .badges {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
-    padding-right: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .badge {
-    font-size: 0.5rem;
-    font-weight: 800;
-    padding: 1px 5px;
-    border-radius: 3px;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-    line-height: 1.4;
-  }
-
-  .badge-pagado {
-    background: #22c55e;
-    color: #000;
-  }
-
-  .badge-no-pagado {
-    background: transparent;
-    border: 1px solid #64748b;
-    color: #64748b;
-  }
-
-  .badge-servido {
-    background: #a855f7;
-    color: #fff;
+  .elapsed {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.35);
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', 'Menlo', monospace;
   }
 
   /* ===== FOOTER ===== */
@@ -600,14 +557,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 10px 6px;
+    padding: 4px 8px 5px;
     border-top: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
   }
 
   .footer-info {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
   }
 
   .estado-dot {
@@ -618,7 +575,7 @@
   }
 
   .estado-label {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     text-transform: uppercase;
     letter-spacing: 0.3px;
     color: rgba(255, 255, 255, 0.4);
@@ -627,37 +584,30 @@
 
   .estado-label.urgent {
     color: var(--card-color);
-    font-weight: 700;
+    font-weight: 800;
     animation: blink-soft 1.5s ease-in-out infinite;
   }
 
   .aviso-badge {
-    font-size: 0.55rem;
+    font-size: 0.5rem;
     font-weight: 800;
     background: #22c55e;
     color: #000;
-    padding: 1px 6px;
+    padding: 0px 5px;
     border-radius: 8px;
     animation: aviso-pulse 1s ease-in-out infinite;
   }
 
-  .listo-info {
-    font-size: 0.6rem;
-    color: #22c55e;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
   .footer-actions {
     display: flex;
-    gap: 4px;
+    gap: 3px;
   }
 
   .action-btn {
     border: none;
     border-radius: 4px;
-    padding: 4px 10px;
-    font-size: 0.6rem;
+    padding: 3px 8px;
+    font-size: 0.55rem;
     font-weight: 800;
     letter-spacing: 0.5px;
     cursor: pointer;
@@ -685,24 +635,6 @@
     color: #ef4444;
   }
 
-  /* ===== GLOVO ===== */
-  .glovo-badge {
-    display: inline-block;
-    background: #FF6B00;
-    color: #fff;
-    font-size: 0.55rem;
-    font-weight: 900;
-    padding: 1px 6px;
-    border-radius: 3px;
-    letter-spacing: 1.5px;
-    line-height: 1.4;
-    flex-shrink: 0;
-  }
-
-  .card-mesa.glovo-listo {
-    animation: glovo-listo-pulse 1.5s ease-in-out infinite;
-  }
-
   /* ===== ANIMATIONS ===== */
   @keyframes mesa-pulse {
     0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--card-color) 20%, transparent); }
@@ -724,6 +656,10 @@
     50% { box-shadow: 0 0 24px rgba(255, 107, 0, 0.7); }
   }
 
+  .card-mesa.glovo-listo {
+    animation: glovo-listo-pulse 1.5s ease-in-out infinite;
+  }
+
   @keyframes blink-soft {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
@@ -732,29 +668,27 @@
   /* ===== MOBILE ===== */
   @media (max-width: 600px) {
     .card-mesa { border-radius: 8px; border-width: 1.5px; }
-    .header-tap { padding: 4px 8px; gap: 4px; }
+    .card-header { padding: 4px 6px; gap: 4px; }
     .tipo-icon { font-size: 0.75rem; }
     .nombre { font-size: 0.7rem; }
-    .hora-apertura { font-size: 0.55rem; padding-right: 6px; }
-    .timer-bar { padding: 2px 8px; gap: 6px; }
-    .timer { font-size: 0.55rem; }
-    .recogida-hora { font-size: 0.5rem; }
-    .items-body { padding: 4px 8px; min-height: 36px; max-height: 150px; }
-    .category-label { font-size: 0.5rem; }
-    .item-row { padding: 1px 0 1px 6px; gap: 4px; }
+    .pago-icon { font-size: 0.6rem; }
+    .hora { font-size: 0.5rem; }
+    .countdown { font-size: 0.5rem; }
+    .progress-bar { padding: 2px 6px; gap: 1px; }
+    .progress-block { height: 3px; }
+    .progress-count { font-size: 0.5rem; }
+    .tap-zones { min-height: 44px; }
+    .zone-right { width: 68px; }
+    .items-list { padding: 3px 6px; max-height: 120px; }
     .item-dot { width: 5px; height: 5px; }
-    .item-nombre { font-size: 0.65rem; }
-    .item-cantidad { font-size: 0.55rem; }
-    .item-precio { font-size: 0.5rem; }
-    .total-row { flex-wrap: wrap; }
-    .total-btn { font-size: 0.75rem; padding: 4px 8px; }
-    .badges { gap: 3px; padding-right: 6px; }
-    .badge { font-size: 0.45rem; padding: 1px 3px; }
-    .card-footer { padding: 3px 8px 4px; }
+    .item-nombre { font-size: 0.6rem; }
+    .item-qty { font-size: 0.5rem; }
+    .total { font-size: 0.85rem; }
+    .elapsed { font-size: 0.5rem; }
+    .card-footer { padding: 3px 6px 4px; }
     .estado-dot { width: 5px; height: 5px; }
-    .estado-label { font-size: 0.55rem; }
-    .aviso-badge { font-size: 0.5rem; padding: 1px 4px; }
-    .action-btn { padding: 3px 8px; font-size: 0.5rem; }
-    .glovo-badge { font-size: 0.5rem; padding: 1px 4px; }
+    .estado-label { font-size: 0.5rem; }
+    .action-btn { padding: 2px 6px; font-size: 0.5rem; }
+    .glovo-badge { font-size: 0.45rem; padding: 1px 4px; }
   }
 </style>

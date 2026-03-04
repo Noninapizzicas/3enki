@@ -83,10 +83,8 @@ class LlevarStrategy {
       estado: ticket.estado
     });
 
-    // Si ya fue entregado físicamente, cerrar la cuenta
-    if (ticket.estado === 'entregado') {
-      await this.cerrarTicket(cuenta_id, correlationId);
-    }
+    // Cerrar la cuenta al procesar cobro (igual que mesa)
+    await this.cerrarTicket(cuenta_id, correlationId);
   }
 
   getHealth() {
@@ -403,10 +401,8 @@ class LlevarStrategy {
       hora_entrega: ticket.hora_entrega
     }, { correlationId });
 
-    // Solo cerrar si ya pagado; si no, la cuenta sigue activa esperando pago
-    if (ticket.pagado) {
-      await this.cerrarTicket(cuenta_id, correlationId);
-    } else {
+    // Si ya pagado, la cuenta ya fue cerrada por onCobroProcesado
+    if (!ticket.pagado) {
       this.modulo.logger.info('llevar.ticket_entregado_pendiente_pago', {
         correlation_id: correlationId,
         numero_ticket: ticket.numero_ticket

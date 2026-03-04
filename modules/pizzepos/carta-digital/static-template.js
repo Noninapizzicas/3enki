@@ -47,7 +47,18 @@ function generateStaticHTML(carta, config, options = {}) {
     }))
   }));
 
-  const dataJSON = JSON.stringify({ categorias, productos });
+  const ofertas = (carta.ofertas || []).filter(o => o.activa !== false).map(o => ({
+    id: o.id,
+    nombre: o.nombre,
+    descripcion: o.descripcion || '',
+    tipo: o.tipo || 'combo',
+    productos: o.productos || [],
+    precio_oferta: o.precio_oferta,
+    emoji: o.emoji || '🔥',
+    imagen: o.imagen || null
+  }));
+
+  const dataJSON = JSON.stringify({ categorias, productos, ofertas });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled
@@ -108,7 +119,12 @@ function generateStaticHTML(carta, config, options = {}) {
     `- Si no sabes algo, di que el cliente puede contactar por WhatsApp\n` +
     `- NO inventes productos que no están en el menú\n` +
     upsellRules + `\n` +
-    `MENÚ DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}`
+    `MENÚ DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}` +
+    (ofertas.length > 0
+      ? `\n\nOFERTAS Y COMBOS ACTIVOS:\n` + ofertas.map(o =>
+          `- ${o.emoji} ${o.nombre}: ${o.precio_oferta.toFixed(2)}${moneda} (${o.descripcion || o.tipo})`
+        ).join('\n') + `\n- IMPORTANTE: Promociona las ofertas activamente, son la mejor opción para el cliente`
+      : '')
   );
 
   return `<!DOCTYPE html>
@@ -244,6 +260,27 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .empty{text-align:center;padding:40px 20px;color:#555}
 .empty-ico{font-size:2.5rem;display:block;margin-bottom:8px}
 
+/* Ofertas section */
+.ofertas-section{padding:0 16px 8px}
+.ofertas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ofertas-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--primary);display:flex;align-items:center;gap:6px}
+.ofertas-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.ofertas-scroll::-webkit-scrollbar{display:none}
+.oferta-card{flex-shrink:0;width:260px;background:linear-gradient(135deg,#1a1200 0%,#1a1a1a 100%);border:1px solid rgba(245,158,11,.25);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s;-webkit-tap-highlight-color:transparent;position:relative}
+.oferta-card:active{transform:scale(.97)}
+.oferta-badge{position:absolute;top:8px;right:8px;padding:3px 8px;border-radius:6px;background:var(--danger);color:#fff;font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;z-index:2}
+.oferta-body{padding:12px 14px}
+.oferta-emoji{font-size:1.8rem;margin-bottom:4px;display:block}
+.oferta-nombre{font-size:.9rem;font-weight:800;color:#fff;line-height:1.2;margin-bottom:3px}
+.oferta-desc{font-size:.7rem;color:var(--text-mid);line-height:1.3;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.oferta-items{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.oferta-item-chip{padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.06);font-size:.6rem;color:var(--text-dim);border:1px solid rgba(255,255,255,.08)}
+.oferta-pricing{display:flex;align-items:baseline;gap:8px}
+.oferta-price-old{font-size:.75rem;color:var(--text-dim);text-decoration:line-through}
+.oferta-price-new{font-size:1.05rem;font-weight:800;color:var(--primary)}
+.oferta-save{font-size:.6rem;font-weight:700;color:var(--success);background:rgba(34,197,94,.1);padding:2px 6px;border-radius:4px}
+@media(max-width:400px){.oferta-card{width:230px}.ofertas-section{padding:0 10px 8px}}
+
 /* Upsell toast */
 .upsell-toast{position:fixed;bottom:104px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:12px;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,.5);max-width:calc(100% - 32px);width:360px;transition:transform .3s ease-out,opacity .3s;opacity:0;pointer-events:none}
 .upsell-toast.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
@@ -317,6 +354,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 
 <!-- Categories -->
 <div class="cats" id="cats"></div>
+
+<!-- Ofertas -->
+<div class="ofertas-section" id="ofertas-section" style="display:none">
+  <div class="ofertas-header">
+    <span class="ofertas-title">🔥 Ofertas</span>
+  </div>
+  <div class="ofertas-scroll" id="ofertas-scroll"></div>
+</div>
 
 <!-- Grid -->
 <main class="content">
@@ -400,6 +445,89 @@ let detailProd = null;
 // Helpers
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+
+// Ofertas
+function renderOfertas() {
+  var ofertas = DATA.ofertas || [];
+  if (ofertas.length === 0) return;
+
+  document.getElementById('ofertas-section').style.display = 'block';
+  var el = document.getElementById('ofertas-scroll');
+  var html = '';
+
+  for (var i = 0; i < ofertas.length; i++) {
+    var o = ofertas[i];
+    // Calculate original price from products
+    var precioOriginal = 0;
+    var itemNames = [];
+    for (var j = 0; j < o.productos.length; j++) {
+      var op = o.productos[j];
+      var prod = DATA.productos.find(function(p) { return p.id === op.id; });
+      if (prod) {
+        precioOriginal += prod.precio * (op.qty || 1);
+        var name = prod.emoji ? prod.emoji + ' ' + prod.nombre : prod.nombre;
+        itemNames.push((op.qty > 1 ? op.qty + 'x ' : '') + name);
+      }
+    }
+    var ahorro = precioOriginal > o.precio_oferta ? precioOriginal - o.precio_oferta : 0;
+
+    var badgeText = o.tipo === '2x1' ? '2x1' : o.tipo === 'descuento' ? 'Oferta' : 'Combo';
+
+    html += '<div class="oferta-card" onclick="addOfertaToCart(\\'' + o.id + '\\')">';
+    html += '<span class="oferta-badge">' + badgeText + '</span>';
+    html += '<div class="oferta-body">';
+    html += '<span class="oferta-emoji">' + (o.emoji || '🔥') + '</span>';
+    html += '<div class="oferta-nombre">' + esc(o.nombre) + '</div>';
+    if (o.descripcion) html += '<div class="oferta-desc">' + esc(o.descripcion) + '</div>';
+    html += '<div class="oferta-items">';
+    for (var k = 0; k < itemNames.length; k++) {
+      html += '<span class="oferta-item-chip">' + esc(itemNames[k]) + '</span>';
+    }
+    html += '</div>';
+    html += '<div class="oferta-pricing">';
+    if (precioOriginal > o.precio_oferta) {
+      html += '<span class="oferta-price-old">' + fmt(precioOriginal) + '</span>';
+    }
+    html += '<span class="oferta-price-new">' + fmt(o.precio_oferta) + '</span>';
+    if (ahorro > 0) {
+      html += '<span class="oferta-save">-' + fmt(ahorro) + '</span>';
+    }
+    html += '</div></div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function addOfertaToCart(ofertaId) {
+  var oferta = (DATA.ofertas || []).find(function(o) { return o.id === ofertaId; });
+  if (!oferta) return;
+
+  // Add all products from the oferta as a single grouped entry
+  var nombres = [];
+  var totalOriginal = 0;
+
+  for (var i = 0; i < oferta.productos.length; i++) {
+    var op = oferta.productos[i];
+    var prod = DATA.productos.find(function(p) { return p.id === op.id; });
+    if (prod) {
+      var qty = op.qty || 1;
+      totalOriginal += prod.precio * qty;
+      nombres.push((qty > 1 ? qty + 'x ' : '') + prod.nombre);
+    }
+  }
+
+  // Add as single cart item with oferta price
+  cart.push({
+    _id: ++cartId,
+    id: oferta.id,
+    nombre: (oferta.emoji || '🔥') + ' ' + oferta.nombre,
+    precio: oferta.precio_oferta,
+    qty: 1,
+    es_oferta: true,
+    detalle: nombres.join(' + ')
+  });
+  updateCart();
+}
 
 // Categories
 function renderCats() {
@@ -609,7 +737,8 @@ function updateCart() {
 
   let html = '';
   for (const item of cart) {
-    html += '<div class="cart-item"><div class="ci-info"><span class="ci-name">' + esc(item.nombre) + '</span></div>' +
+    var detalleHtml = item.detalle ? '<span class="ci-var add">' + esc(item.detalle) + '</span>' : '';
+    html += '<div class="cart-item"><div class="ci-info"><span class="ci-name">' + esc(item.nombre) + '</span>' + detalleHtml + '</div>' +
       '<div class="ci-ctrl"><div class="qty"><button onclick="changeQty(' + item._id + ',-1)">-</button><span>' + item.qty + '</span><button onclick="changeQty(' + item._id + ',1)">+</button></div>' +
       '<span class="ci-sub">' + fmt(item.precio * item.qty) + '</span></div></div>';
   }
@@ -646,7 +775,9 @@ function buildOrderMsg() {
   if (cart.length === 0) return '';
   let msg = CONFIG.mensaje_header + '\\n\\n';
   for (const item of cart) {
-    msg += item.qty + 'x ' + item.nombre + ' (' + fmt(item.precio * item.qty) + ')\\n';
+    msg += item.qty + 'x ' + item.nombre + ' (' + fmt(item.precio * item.qty) + ')';
+    if (item.detalle) msg += ' [' + item.detalle + ']';
+    msg += '\\n';
   }
   const total = cart.reduce((s, i) => s + i.precio * i.qty, 0);
   msg += '\\nTotal: ' + fmt(total);
@@ -876,6 +1007,7 @@ function speakText(text) {
 // Init
 initChat();
 initVoice();
+renderOfertas();
 renderCats();
 renderGrid();
 updateCart();

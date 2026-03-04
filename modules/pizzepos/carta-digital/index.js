@@ -30,6 +30,7 @@ class CartaDigitalModule {
     this.configPerProject = new Map();    // project_id -> CartaConfig
     this.sesionesActivas = new Map();     // session_id -> SessionData
     this.pedidosRegistrados = new Map();  // pedido_id -> PedidoData
+    this.ofertasPerProject = new Map();   // project_id -> Map<oferta_id, OfertaData>
 
     // Storage
     this.storageSection = 'pizzepos';
@@ -83,7 +84,8 @@ class CartaDigitalModule {
     this.logger.info('module.unloading', { module: this.name });
 
     if (this.uiHandler) {
-      const actions = ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health'];
+      const actions = ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health',
+        'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta'];
       for (const action of actions) {
         this.uiHandler.unregister('carta-digital', action);
       }
@@ -92,6 +94,7 @@ class CartaDigitalModule {
     this.configPerProject.clear();
     this.sesionesActivas.clear();
     this.pedidosRegistrados.clear();
+    this.ofertasPerProject.clear();
     this.projectPaths.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -115,9 +118,13 @@ class CartaDigitalModule {
     this.uiHandler.register('carta-digital', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('carta-digital', 'export-static', this.handleExportStatic.bind(this));
     this.uiHandler.register('carta-digital', 'deploy-cf-worker', this.handleDeployCFWorker.bind(this));
+    this.uiHandler.register('carta-digital', 'ofertas', this.handleGetOfertas.bind(this));
+    this.uiHandler.register('carta-digital', 'create-oferta', this.handleCreateOferta.bind(this));
+    this.uiHandler.register('carta-digital', 'update-oferta', this.handleUpdateOferta.bind(this));
+    this.uiHandler.register('carta-digital', 'delete-oferta', this.handleDeleteOferta.bind(this));
 
     this.logger.info('carta-digital.ui_handlers.registered', {
-      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static', 'deploy-cf-worker']
+      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static', 'deploy-cf-worker', 'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta']
     });
   }
 
@@ -140,6 +147,14 @@ class CartaDigitalModule {
       // Primera vez — crear config default
       this.configPerProject.set(project_id, this.defaultConfig());
       this.logger.info('carta-digital.config.default_created', { project_id });
+    }
+
+    // Cargar ofertas de disco
+    try {
+      await this.loadOfertas(project_id);
+      this.logger.info('carta-digital.ofertas.loaded', { project_id });
+    } catch (err) {
+      this.ofertasPerProject.set(project_id, new Map());
     }
   }
 
@@ -173,6 +188,56 @@ class CartaDigitalModule {
     } catch (err) {
       this.logger.error('carta-digital.config.save_failed', { project_id, error: err.message });
     }
+  }
+
+  // ==========================================
+  // Ofertas persistence
+  // ==========================================
+
+  async loadOfertas(project_id) {
+    const storagePath = this.projectPaths.get(project_id);
+    if (!storagePath) throw new Error('No storage path for project');
+
+    const ofertasPath = path.join(storagePath, 'carta-digital-ofertas.json');
+    const raw = await fs.readFile(ofertasPath, 'utf8');
+    const arr = JSON.parse(raw);
+
+    const map = new Map();
+    for (const o of arr) { map.set(o.id, o); }
+    this.ofertasPerProject.set(project_id, map);
+  }
+
+  async saveOfertas(project_id) {
+    const storagePath = this.projectPaths.get(project_id);
+    if (!storagePath) return;
+
+    const ofertasPath = path.join(storagePath, 'carta-digital-ofertas.json');
+    const map = this.ofertasPerProject.get(project_id);
+    if (!map) return;
+
+    try {
+      await fs.mkdir(storagePath, { recursive: true });
+      await fs.writeFile(ofertasPath, JSON.stringify(Array.from(map.values()), null, 2), 'utf-8');
+      this.logger.info('carta-digital.ofertas.saved', { project_id });
+    } catch (err) {
+      this.logger.error('carta-digital.ofertas.save_failed', { project_id, error: err.message });
+    }
+  }
+
+  /**
+   * Devuelve ofertas activas (filtra por fecha si tienen fecha_inicio/fecha_fin)
+   */
+  getOfertasActivas(project_id) {
+    const map = this.ofertasPerProject.get(project_id);
+    if (!map) return [];
+
+    const now = new Date();
+    return Array.from(map.values()).filter(o => {
+      if (!o.activa) return false;
+      if (o.fecha_inicio && new Date(o.fecha_inicio) > now) return false;
+      if (o.fecha_fin && new Date(o.fecha_fin) < now) return false;
+      return true;
+    });
   }
 
   // ==========================================
@@ -370,6 +435,136 @@ class CartaDigitalModule {
   }
 
   // ==========================================
+  // Ofertas Handlers — CRUD
+  // ==========================================
+
+  async handleGetOfertas(data) {
+    const projectId = this.resolveProject(data?.project_id);
+    const includeInactive = data?.include_inactive === true;
+
+    const map = this.ofertasPerProject.get(projectId);
+    if (!map) {
+      return { status: 200, data: { project_id: projectId, ofertas: [] } };
+    }
+
+    const ofertas = includeInactive
+      ? Array.from(map.values())
+      : this.getOfertasActivas(projectId);
+
+    return {
+      status: 200,
+      data: {
+        project_id: projectId,
+        ofertas,
+        total: ofertas.length
+      }
+    };
+  }
+
+  async handleCreateOferta(data) {
+    const { project_id, nombre, descripcion, tipo, productos, precio_oferta, emoji, imagen, fecha_inicio, fecha_fin } = data || {};
+    const projectId = this.resolveProject(project_id);
+
+    if (!nombre || !productos || !Array.isArray(productos) || productos.length === 0) {
+      return { status: 400, error: 'Se requiere nombre y al menos un producto' };
+    }
+    if (precio_oferta == null || precio_oferta < 0) {
+      return { status: 400, error: 'Se requiere precio_oferta válido' };
+    }
+
+    const oferta_id = `oferta_${crypto.randomBytes(6).toString('hex')}`;
+
+    // Calcular precio original sumando precios individuales de productos
+    // (se hará en el frontend con los datos reales, aquí solo guardamos)
+    const oferta = {
+      id: oferta_id,
+      nombre,
+      descripcion: descripcion || '',
+      tipo: tipo || 'combo',  // combo | descuento | 2x1 | especial
+      productos,               // [{ id: "prod_x", qty: 1 }]
+      precio_oferta,
+      emoji: emoji || '🔥',
+      imagen: imagen || null,
+      activa: true,
+      fecha_inicio: fecha_inicio || null,
+      fecha_fin: fecha_fin || null,
+      created_at: new Date().toISOString()
+    };
+
+    let map = this.ofertasPerProject.get(projectId);
+    if (!map) {
+      map = new Map();
+      this.ofertasPerProject.set(projectId, map);
+    }
+    map.set(oferta_id, oferta);
+
+    await this.saveOfertas(projectId);
+
+    this.logger.info('carta-digital.oferta.created', {
+      project_id: projectId,
+      oferta_id,
+      nombre,
+      tipo: oferta.tipo,
+      productos_count: productos.length
+    });
+
+    return { status: 201, data: oferta };
+  }
+
+  async handleUpdateOferta(data) {
+    const { project_id, oferta_id, ...updates } = data || {};
+    const projectId = this.resolveProject(project_id);
+
+    if (!oferta_id) {
+      return { status: 400, error: 'Se requiere oferta_id' };
+    }
+
+    const map = this.ofertasPerProject.get(projectId);
+    if (!map || !map.has(oferta_id)) {
+      return { status: 404, error: 'Oferta no encontrada' };
+    }
+
+    const oferta = map.get(oferta_id);
+    const allowed = ['nombre', 'descripcion', 'tipo', 'productos', 'precio_oferta', 'emoji', 'imagen', 'activa', 'fecha_inicio', 'fecha_fin'];
+    for (const key of allowed) {
+      if (updates[key] !== undefined) oferta[key] = updates[key];
+    }
+    oferta.updated_at = new Date().toISOString();
+
+    map.set(oferta_id, oferta);
+    await this.saveOfertas(projectId);
+
+    this.logger.info('carta-digital.oferta.updated', {
+      project_id: projectId,
+      oferta_id,
+      campos: Object.keys(updates).filter(k => allowed.includes(k))
+    });
+
+    return { status: 200, data: oferta };
+  }
+
+  async handleDeleteOferta(data) {
+    const { project_id, oferta_id } = data || {};
+    const projectId = this.resolveProject(project_id);
+
+    if (!oferta_id) {
+      return { status: 400, error: 'Se requiere oferta_id' };
+    }
+
+    const map = this.ofertasPerProject.get(projectId);
+    if (!map || !map.has(oferta_id)) {
+      return { status: 404, error: 'Oferta no encontrada' };
+    }
+
+    map.delete(oferta_id);
+    await this.saveOfertas(projectId);
+
+    this.logger.info('carta-digital.oferta.deleted', { project_id: projectId, oferta_id });
+
+    return { status: 200, data: { oferta_id, deleted: true } };
+  }
+
+  // ==========================================
   // Media Serving — HTTP endpoint for images
   // ==========================================
 
@@ -548,6 +743,9 @@ class CartaDigitalModule {
       imagen: c.imagen ? this.resolveMediaUrl(c.imagen) : null
     }));
 
+    // Include active ofertas
+    const ofertas = this.getOfertasActivas(projectId);
+
     return {
       status: 200,
       data: {
@@ -563,8 +761,10 @@ class CartaDigitalModule {
         },
         categorias,
         productos,
+        ofertas,
         total_categorias: categorias.length,
         total_productos: productos.length,
+        total_ofertas: ofertas.length,
         enrichment: carta.meta?.enrichment || null
       }
     };
@@ -644,6 +844,10 @@ class CartaDigitalModule {
         }
       }
     }
+
+    // Include active ofertas in carta for static export
+    const ofertas = this.getOfertasActivas(projectId);
+    carta.ofertas = ofertas;
 
     // Generate static files
     const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');

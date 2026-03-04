@@ -14,8 +14,8 @@ const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
   con_pedido: ['en_preparacion', 'con_pedido'], // con_pedido→con_pedido: más items sin enviar
   en_preparacion: ['listo', 'en_preparacion'],   // en_preparacion→en_preparacion: nuevo envío parcial
-  listo: ['entregado', 'para_cobrar', 'en_preparacion'], // entregado = entregado al cliente/rider
-  entregado: ['para_cobrar', 'en_preparacion'],  // entregado→para_cobrar: cobrar después de entregar
+  listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'], // cobrado directo si cobro sin paso intermedio
+  entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],  // cobrado directo si cobro post-entrega
   para_cobrar: ['cobrado'],
   cobrado: []
 };
@@ -36,7 +36,7 @@ class CuentasModule {
 
     // Timers activos (para cleanup en onUnload)
     this._metricsInterval = null;
-    this._pendingTimeouts = new Set();
+    this._pendingTimeouts = new Map(); // cuenta_id -> timeout (auto-eliminación post-cobrado)
     this._alertaTimers = new Map(); // cuenta_id -> timeout
 
     // Tracking de pedidos activos en cocina por cuenta
@@ -83,7 +83,7 @@ class CuentasModule {
     }
 
     // Limpiar timeouts pendientes (cuentas cobradas esperando eliminación)
-    for (const timeout of this._pendingTimeouts) {
+    for (const timeout of this._pendingTimeouts.values()) {
       clearTimeout(timeout);
     }
     this._pendingTimeouts.clear();
@@ -272,10 +272,17 @@ class CuentasModule {
     cuenta.updated_at = new Date().toISOString();
 
     // Si se quedó sin items y estaba en con_pedido, volver a pendiente
+    // Nota: con_pedido→pendiente no está en TRANSICIONES_VALIDAS (es una regresión especial),
+    // así que se maneja explícitamente aquí como caso controlado.
     if (cuenta.items === 0 && cuenta.estado === 'con_pedido') {
+      const estado_anterior = cuenta.estado;
       cuenta.estado = 'pendiente';
       this.gestionarAlerta(cuenta_id, 'pendiente');
-      await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, 'con_pedido', 'pendiente');
+      this.logger.info('cuenta.estado_cambiado', {
+        cuenta_id, estado_anterior, estado_nuevo: 'pendiente', motivo: 'items_vacios'
+      });
+      this.metrics?.increment?.('cuenta.transicion.total');
+      await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'pendiente');
     }
 
     await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
@@ -377,9 +384,10 @@ class CuentasModule {
   }
 
   /**
-   * cobro.procesado → marcar pagado.
-   * Si la cuenta ya fue entregada → cobrado + auto-eliminación.
-   * Si no → la cuenta sigue activa esperando entrega física.
+   * cobro.procesado → marcar pagado + transicionar a cobrado + programar eliminación.
+   * Comportamiento uniforme para TODOS los tipos de cuenta (mesa, telefono, llevar, etc.).
+   * El módulo cuentas-canales se encarga de la limpieza específica del canal
+   * y de publicar cuenta.cerrada cuando corresponda.
    * Idempotente: ignora si ya estaba pagada o cobrada.
    */
   async onCobroProcesado(event) {
@@ -416,15 +424,16 @@ class CuentasModule {
       estado: cuenta.estado
     });
 
-    // Si ya fue entregada (o es mesa donde entrega es implícita), cerrar
-    if (cuenta.estado === 'entregado' || cuenta.tipo === 'local') {
-      await this.cerrarCuentaCobrada(cuenta_id);
-    }
+    // Transicionar a cobrado usando la máquina de estados formal
+    await this.cerrarCuentaCobrada(cuenta_id);
   }
 
   /**
    * Cierra una cuenta cobrada: transiciona a cobrado y programa auto-eliminación.
-   * Se llama cuando se cumplen ambas condiciones: pagado AND entregado.
+   * Usa transicionarEstado() para respetar la máquina de estados.
+   * Si la transición no es posible (estado actual no permite → cobrado), solo loguea.
+   * Programa eliminación automática a los 5 minutos como fallback
+   * (si cuentas-canales publica cuenta.cerrada antes, se eliminará inmediatamente).
    */
   async cerrarCuentaCobrada(cuenta_id) {
     const cuenta = this.cuentas.get(cuenta_id);
@@ -433,27 +442,37 @@ class CuentasModule {
     // Guardia: no cerrar dos veces
     if (cuenta.estado === 'cobrado') return;
 
-    const estado_anterior = cuenta.estado;
-    cuenta.estado = 'cobrado';
-    cuenta.updated_at = new Date().toISOString();
-
-    this.gestionarAlerta(cuenta_id, 'cobrado');
-
-    await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'cobrado');
+    // Usar la máquina de estados formal
+    const ok = await this.transicionarEstado(cuenta_id, 'cobrado');
+    if (!ok) {
+      this.logger.warn('cuenta.cerrar_cobrada.transicion_fallida', {
+        cuenta_id,
+        estado_actual: cuenta.estado
+      });
+      return;
+    }
 
     // Limpiar tracking de cocina
     this._pedidosEnCocina.delete(cuenta_id);
 
-    // Eliminar cuenta después de 5 minutos (con referencia para cleanup)
+    // Cancelar timeout anterior si existía (re-entrante)
+    const timeoutAnterior = this._pendingTimeouts.get(cuenta_id);
+    if (timeoutAnterior) {
+      clearTimeout(timeoutAnterior);
+    }
+
+    // Programar eliminación automática a los 5 minutos (fallback).
+    // Si cuenta.cerrada llega desde cuentas-canales, onCuentaExternaCerrada
+    // cancelará este timeout y eliminará inmediatamente.
     const project_id = cuenta.project_id;
     const tipo = cuenta.tipo;
     const timeout = setTimeout(() => {
-      this._pendingTimeouts.delete(timeout);
+      this._pendingTimeouts.delete(cuenta_id);
       this.cuentas.delete(cuenta_id);
       this.publishCuentaEliminada(project_id, cuenta_id, tipo, 'cobro_completado');
     }, 5 * 60 * 1000);
 
-    this._pendingTimeouts.add(timeout);
+    this._pendingTimeouts.set(cuenta_id, timeout);
   }
 
   /**
@@ -497,7 +516,9 @@ class CuentasModule {
   }
 
   /**
-   * cuenta.cerrada → limpiar cuenta del Map y timers
+   * cuenta.cerrada → limpiar cuenta del Map, timers y timeouts pendientes.
+   * Si cerrarCuentaCobrada() programó una eliminación con timeout,
+   * la cancelamos aquí porque la cuenta se elimina inmediatamente.
    */
   async onCuentaExternaCerrada(event) {
     const data = event?.data || event?.payload || event;
@@ -510,11 +531,23 @@ class CuentasModule {
     this.cuentas.delete(cuenta_id);
     this._pedidosEnCocina.delete(cuenta_id);
 
+    // Cancelar timeout de auto-eliminación si existía (ya no hace falta)
+    const pendingTimeout = this._pendingTimeouts.get(cuenta_id);
+    if (pendingTimeout) {
+      clearTimeout(pendingTimeout);
+      this._pendingTimeouts.delete(cuenta_id);
+    }
+
     // Limpiar timer de alerta
     if (this._alertaTimers.has(cuenta_id)) {
       clearTimeout(this._alertaTimers.get(cuenta_id));
       this._alertaTimers.delete(cuenta_id);
     }
+
+    // Publicar eliminación para que persistencia-comandero registre la venta
+    await this.publishCuentaEliminada(
+      cuenta?.project_id, cuenta_id, cuenta?.tipo, 'cuenta_cerrada_canal'
+    );
 
     this.logger.info('cuenta.externa.cerrada', {
       cuenta_id,
@@ -712,7 +745,7 @@ class CuentasModule {
         timestamp: new Date().toISOString(),
         version: this.version,
         cuentas_activas: this.cuentas.size,
-        pending_timeouts: this._pendingTimeouts.size,
+        pending_delete_timeouts: this._pendingTimeouts.size,
         alerta_timers: this._alertaTimers.size
       }
     };
@@ -736,7 +769,7 @@ class CuentasModule {
         por_estado,
         por_tipo,
         alertas_activas,
-        pending_timeouts: this._pendingTimeouts.size,
+        pending_delete_timeouts: this._pendingTimeouts.size,
         alerta_timers: this._alertaTimers.size,
         timestamp: new Date().toISOString()
       }

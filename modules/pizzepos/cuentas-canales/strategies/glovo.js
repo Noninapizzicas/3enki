@@ -243,6 +243,20 @@ class GlovoStrategy {
         hora_recibido: pedido.hora_recibido
       });
 
+      // Publicar cuenta.creada ANTES de enviar a cocina, para que el módulo
+      // cuentas registre la cuenta y el tracking de _pedidosEnCocina funcione.
+      await this.modulo.publishCuentaCreada({
+        cuenta_id: pedido.cuenta_id,
+        tipo: 'glovo',
+        total: pedido.total,
+        project_id: data.project_id,
+        metadata: {
+          glovo_order_id,
+          cliente_nombre: cliente_nombre || 'Cliente Glovo',
+          direccion_entrega: direccion_entrega || ''
+        }
+      });
+
       // Auto-enviar a cocina — el pedido entra directo a la cola de cocina
       const pedido_id = `ped_${cuenta_id}`;
       pedido.pedidos.push(pedido_id);
@@ -320,16 +334,7 @@ class GlovoStrategy {
         hora_aceptado: pedido.hora_aceptado
       });
 
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'glovo',
-        total: pedido.total,
-        metadata: {
-          glovo_order_id: pedido.glovo_order_id,
-          cliente_nombre: pedido.cliente_nombre,
-          direccion_entrega: pedido.direccion_entrega
-        }
-      });
+      // cuenta.creada ya se publicó en handleRecibirPedido (dedup en cuentas)
 
       await this.notificarGlovoAPI('accept', pedido);
 

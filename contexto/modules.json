@@ -137,17 +137,19 @@
     "pizzepos/variaciones",
     "pizzepos/menu-generator",
     "pizzepos/persistencia-comandero",
-    "pizzepos/impresion"
+    "pizzepos/impresion",
+    "facturacion/asesoria"
   ],
   "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer"],
   "module_count": {
-    "_updated": "2026-02-25",
+    "_updated": "2026-03-03",
     "core": 30,
     "core_active": 24,
     "core_disabled": 6,
     "pizzepos": 13,
-    "total_discovered": 43,
-    "total_active": 37,
+    "facturacion": 1,
+    "total_discovered": 44,
+    "total_active": 38,
     "disabled": 6
   },
   "module_categories": {
@@ -193,6 +195,15 @@
         "productos", "categorias", "ingredientes", "variaciones",
         "menu-generator", "persistencia-comandero", "impresion"
       ]
+    },
+    "facturacion": {
+      "description": "Vertical facturación — consumidores de datos de facturas. Ver contexto/facturas.json",
+      "location": "modules/facturacion/",
+      "patron": "Mismo que pizzepos/ — grupo vertical con sub-módulos independientes",
+      "modules": [
+        "asesoria (paquetes CSV+ZIP para asesoría contable)"
+      ],
+      "futuro": ["compras", "contabilidad-real", "contabilidad-legal"]
     }
   },
   "key_modules": {

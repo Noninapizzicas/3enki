@@ -21,7 +21,18 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 // =============================================================================
 
 export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo';
-export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'para_cobrar' | 'cobrado';
+export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'entregado' | 'para_cobrar' | 'cobrado';
+export type EstadoCocinaItem = 'en_cocina' | 'preparando' | 'listo';
+
+export interface ItemDetalle {
+  item_id: string;
+  producto_id: string;
+  nombre: string;
+  cantidad: number;
+  precio: number;
+  estado_cocina: EstadoCocinaItem;
+  listo_at?: string;
+}
 
 export interface Cuenta {
   id: string;
@@ -34,6 +45,7 @@ export interface Cuenta {
   alerta: boolean;
   created_at: string;
   updated_at: string;
+  itemsDetalle?: ItemDetalle[];
 }
 
 export interface CuentasState {
@@ -78,6 +90,9 @@ const TIPO_MAP: Record<string, TipoCuenta> = {
   glovo: 'glovo'
 };
 
+// Orden de progresión de estados (índice mayor = más avanzado)
+const ESTADO_ORDER: EstadoCuenta[] = ['pendiente', 'con_pedido', 'en_preparacion', 'listo', 'entregado', 'para_cobrar', 'cobrado'];
+
 // Mapeo de estado de persistencia a EstadoCuenta
 function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
   if (cuenta.estado === 'abierta') {
@@ -88,6 +103,14 @@ function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
     return 'con_pedido';
   }
   return 'pendiente';
+}
+
+/** Preservar el estado más avanzado entre persistencia y store actual */
+function mergeEstado(fromPersistencia: EstadoCuenta, fromStore: EstadoCuenta | undefined): EstadoCuenta {
+  if (!fromStore) return fromPersistencia;
+  const iPers = ESTADO_ORDER.indexOf(fromPersistencia);
+  const iStore = ESTADO_ORDER.indexOf(fromStore);
+  return iStore > iPers ? fromStore : fromPersistencia;
 }
 
 // =============================================================================
@@ -178,6 +201,16 @@ export async function deleteCuenta(projectId: string, id: string): Promise<boole
   }
 }
 
+export async function marcarEntregado(projectId: string, id: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('cuenta', 'marcar_entregado', { project_id: projectId, id });
+    return true;
+  } catch (err: any) {
+    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al marcar entregado' }));
+    return false;
+  }
+}
+
 export async function getStats(projectId: string): Promise<any> {
   try {
     const res = await mqttRequest<any>('cuenta', 'stats', { project_id: projectId });
@@ -264,6 +297,13 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
     if (res?.status === 200 && pData?.cuentas) {
       const cuentasPersistencia = pData.cuentas;
 
+      // Snapshot del store actual para preservar estados de cocina durante reload
+      const currentState = get(cuentasStore);
+      const currentCuentasMap = new Map<string, Cuenta>();
+      for (const c of currentState.cuentas) {
+        currentCuentasMap.set(c.id, c);
+      }
+
       // Convertir formato persistencia → formato store
       const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => {
         const mappedTipo = TIPO_MAP[cp.tipo] || 'local';
@@ -280,17 +320,49 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           if (num > 0) nombre = `Glovo #${num}`;
         }
 
+        // Preservar estados de cocina del store actual (evita que reload borre preparando/listo)
+        const existingCuenta = currentCuentasMap.get(cp.cuenta_id);
+        const existingItemsMap = new Map<string, ItemDetalle>();
+        if (existingCuenta?.itemsDetalle) {
+          for (const item of existingCuenta.itemsDetalle) {
+            existingItemsMap.set(item.item_id, item);
+          }
+        }
+
+        // Extraer items detallados de pedidos (para tarjeta mesa)
+        const itemsDetalle: ItemDetalle[] = [];
+        if (cp.pedidos && Array.isArray(cp.pedidos)) {
+          for (const pedido of cp.pedidos) {
+            if (pedido.items && Array.isArray(pedido.items)) {
+              for (const item of pedido.items) {
+                const itemId = item.item_id || item.id || '';
+                const existing = existingItemsMap.get(itemId);
+                itemsDetalle.push({
+                  item_id: itemId,
+                  producto_id: item.producto_id || '',
+                  nombre: item.nombre || '',
+                  cantidad: item.cantidad || 1,
+                  precio: item.precio || item.precio_unitario || item.subtotal || 0,
+                  estado_cocina: existing?.estado_cocina || 'en_cocina',
+                  ...(existing?.listo_at && { listo_at: existing.listo_at })
+                });
+              }
+            }
+          }
+        }
+
         return {
           id: cp.cuenta_id,
           tipo: mappedTipo,
           nombre,
-          estado: mapEstadoPersistencia(cp),
+          estado: mergeEstado(mapEstadoPersistencia(cp), existingCuenta?.estado),
           hora: formatHora(cp.created_at),
           items: countItems(cp.pedidos),
           total: cp.total || 0,
-          alerta: checkAlerta(cp),
+          alerta: existingCuenta?.alerta || checkAlerta(cp),
           created_at: cp.created_at,
-          updated_at: cp.updated_at
+          updated_at: cp.updated_at,
+          itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined
         };
       });
 
@@ -559,6 +631,52 @@ export function initCuentasSubscriptions(projectId: string): () => void {
             ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta }
             : c
         )
+      }));
+    })
+  );
+
+  // cocina.item_preparando → cocinero empieza a preparar item, actualizar itemsDetalle
+  cleanups.push(
+    mqttSubscribe('cocina.item_preparando', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id || !data?.item_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id || !c.itemsDetalle) return c;
+          return {
+            ...c,
+            itemsDetalle: c.itemsDetalle.map(item =>
+              item.item_id === data.item_id
+                ? { ...item, estado_cocina: 'preparando' as EstadoCocinaItem }
+                : item
+            )
+          };
+        })
+      }));
+    })
+  );
+
+  // cocina.item_preparado → item individual listo en cocina, actualizar itemsDetalle
+  cleanups.push(
+    mqttSubscribe('cocina.item_preparado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id || !data?.item_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id || !c.itemsDetalle) return c;
+          return {
+            ...c,
+            itemsDetalle: c.itemsDetalle.map(item =>
+              item.item_id === data.item_id
+                ? { ...item, estado_cocina: 'listo' as EstadoCocinaItem, listo_at: data.preparado_at || new Date().toISOString() }
+                : item
+            )
+          };
+        })
       }));
     })
   );

@@ -28,7 +28,7 @@ class TelefonoStrategy {
     this.modulo = null;
     this._uiActions = [
       'llamada', 'crear_pedido', 'pendientes', 'get',
-      'marcar_listo', 'contactos', 'guardar_contacto',
+      'marcar_listo', 'marcar_recogido', 'contactos', 'guardar_contacto',
       'health', 'metrics'
     ];
   }
@@ -53,6 +53,7 @@ class TelefonoStrategy {
     uiHandler.register('telefono', 'pendientes', this.handleGetPendientes.bind(this));
     uiHandler.register('telefono', 'get', this.handleGetPedido.bind(this));
     uiHandler.register('telefono', 'marcar_listo', this.handleMarcarListo.bind(this));
+    uiHandler.register('telefono', 'marcar_recogido', this.handleMarcarRecogido.bind(this));
     uiHandler.register('telefono', 'contactos', this.handleGetContactos.bind(this));
     uiHandler.register('telefono', 'guardar_contacto', this.handleGuardarContacto.bind(this));
     uiHandler.register('telefono', 'health', this.handleHealthCheck.bind(this));
@@ -74,7 +75,22 @@ class TelefonoStrategy {
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
-    await this.cerrarCuenta(cuenta_id, correlationId);
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) return;
+
+    pedido.pagado = true;
+    pedido.hora_pago = new Date().toISOString();
+
+    this.modulo.logger.info('telefono.pedido_pagado', {
+      correlation_id: correlationId,
+      cuenta_id,
+      estado: pedido.estado
+    });
+
+    // Si ya fue recogido físicamente, cerrar la cuenta
+    if (pedido.estado === 'recogido') {
+      await this.cerrarCuenta(cuenta_id, correlationId);
+    }
   }
 
   getHealth() {
@@ -218,6 +234,7 @@ class TelefonoStrategy {
           pedidos_anteriores: 0
         },
         estado: 'pendiente',
+        pagado: false,
         total: 0,
         hora_pedido: new Date().toISOString(),
         hora_recogida_estimada: horaRecogida,
@@ -292,6 +309,18 @@ class TelefonoStrategy {
       return { status: 200, data: { message: 'Pedido marcado como listo y WhatsApp enviado' } };
     } catch (error) {
       this.modulo.logger.error('canal.telefono.marcar_listo.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleMarcarRecogido(data) {
+    const { cuenta_id } = data;
+
+    try {
+      await this.marcarRecogido(cuenta_id);
+      return { status: 200, data: { message: 'Pedido marcado como recogido' } };
+    } catch (error) {
+      this.modulo.logger.error('canal.telefono.marcar_recogido.error', { error: error.message });
       return { status: 500, error: error.message };
     }
   }
@@ -394,6 +423,7 @@ class TelefonoStrategy {
             pedidos_anteriores: 0
           },
           estado: 'pendiente',
+          pagado: false,
           total: cuenta.total || 0,
           hora_pedido: cuenta.created_at || new Date().toISOString(),
           hora_recogida_estimada: null,
@@ -463,7 +493,7 @@ class TelefonoStrategy {
     });
   }
 
-  async cerrarCuenta(cuenta_id, correlationId) {
+  async marcarRecogido(cuenta_id, correlationId) {
     const pedido = this.pedidosActivos.get(cuenta_id);
     if (!pedido) {
       throw new Error('Pedido no encontrado');
@@ -474,6 +504,22 @@ class TelefonoStrategy {
 
     const tiempoPreparacion = (new Date(pedido.hora_recogida_real) - new Date(pedido.hora_pedido)) / 1000 / 60;
     this.modulo.trackTiempo('telefono_preparacion', tiempoPreparacion);
+
+    this.modulo.logger.info('telefono.pedido_recogido', {
+      correlation_id: correlationId,
+      cuenta_id,
+      pagado: pedido.pagado
+    });
+
+    // Solo cerrar si ya pagado; si no, esperar el cobro
+    if (pedido.pagado) {
+      await this.cerrarCuenta(cuenta_id, correlationId);
+    }
+  }
+
+  async cerrarCuenta(cuenta_id, correlationId) {
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) return;
 
     await this.modulo.publishCuentaCerrada({
       cuenta_id: pedido.cuenta_id,

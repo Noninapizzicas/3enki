@@ -132,4 +132,13 @@
     font-weight: 700;
     color: #6366f1;
   }
+
+  @media (max-width: 600px) {
+    .producto-btn { min-height: 50px; border-radius: 8px; }
+    .zone { padding: 5px 4px; gap: 2px; }
+    .zone-right { width: 36px; }
+    .nombre { font-size: 0.72rem; }
+    .precio { font-size: 0.65rem; }
+    .var-icon { font-size: 0.7rem; }
+  }
 </style>

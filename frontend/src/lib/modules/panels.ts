@@ -173,6 +173,18 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/carta-stats/CartaStatsPanel.svelte')
   },
 
+  // === WORK BAR — Facturas ===
+  'facturas-panel': {
+    id: 'facturas-panel',
+    title: 'Facturas',
+    icon: '🧾',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 9,
+    loader: () => import('$lib/modules/facturas/FacturasPanel.svelte')
+  },
+
   // === WORK BAR — Impresion (comandas de cocina) ===
   'impresion-panel': {
     id: 'impresion-panel',

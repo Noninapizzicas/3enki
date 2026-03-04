@@ -21,6 +21,7 @@
    */
   import { onMount, onDestroy } from 'svelte';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
+  import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { ConnectionStatus } from '$lib/components/base';
   import {
     cuentas,
@@ -31,7 +32,7 @@
   } from '$lib/stores/cuentas';
 
   import TipoButton from './TipoButton.svelte';
-  import CuentaCard from './CuentaCard.svelte';
+  import CuentaCardMesa from './CuentaCardMesa.svelte';
 
   // Props
   export let onNavigate: ((path: string) => void) | null = null;
@@ -40,6 +41,30 @@
   let cleanupSubs: (() => void) | null = null;
   let clock = '';
   let clockInterval: ReturnType<typeof setInterval>;
+
+  /** Map producto_id → nombre categoría (para CuentaCardMesa) */
+  let categoriasMap: Record<string, string> = {};
+
+  async function loadCategorias() {
+    try {
+      const res = await mqttRequest<any>('productos', 'carta_completa', { project_id: projectId });
+      const data = res?.data?.categorias ? res.data : res?.data?.data;
+      if (data?.categorias && data?.productos) {
+        const catNames = new Map<string, string>();
+        for (const cat of data.categorias) {
+          catNames.set(cat.id, cat.nombre);
+        }
+        const map: Record<string, string> = {};
+        for (const prod of data.productos) {
+          const catId = prod.categoria_id || prod.categoria;
+          map[prod.id] = catNames.get(catId) || catId || 'Otros';
+        }
+        categoriasMap = map;
+      }
+    } catch (err) {
+      console.warn('[CuentasScreen] Could not load categories:', err);
+    }
+  }
 
   // Clock
   function updateClock() {
@@ -73,9 +98,10 @@
     updateClock();
     clockInterval = setInterval(updateClock, 10000);
 
-    // Connect MQTT + init subscriptions
+    // Connect MQTT + init subscriptions + load categories
     connect().then(() => {
       cleanupSubs = initCuentasSubscriptions(projectId);
+      loadCategorias();
     }).catch((err) => {
       console.error('[CuentasScreen] MQTT connection failed', err);
     });
@@ -128,11 +154,13 @@
       {:else}
         <div class="cuentas-grid">
           {#each $cuentas as cuenta (cuenta.id)}
-            <CuentaCard
-              {cuenta}
-              on:open-comandero={handleOpenComandero}
-              on:open-cuenta={handleOpenCuenta}
-            />
+              <CuentaCardMesa
+                {cuenta}
+                {projectId}
+                {categoriasMap}
+                on:open-comandero={handleOpenComandero}
+                on:open-cuenta={handleOpenCuenta}
+              />
           {/each}
         </div>
       {/if}
@@ -272,6 +300,15 @@
 
   /* Mobile: sidebar becomes horizontal bar at top */
   @media (max-width: 600px) {
+    .screen-header {
+      padding: 5px 10px;
+    }
+
+    .title { font-size: 0.85rem; }
+    .count { min-width: 18px; height: 18px; font-size: 0.65rem; padding: 0 4px; }
+    .header-right { gap: 8px; }
+    .clock { font-size: 0.75rem; }
+
     .screen-body {
       flex-direction: column;
     }
@@ -282,14 +319,24 @@
       order: 0; /* Top */
       border-left: none;
       border-bottom: 1px solid #1a1a1a;
-      padding: 8px 12px;
+      padding: 4px 8px;
+      gap: 6px;
       overflow-x: auto;
       overflow-y: hidden;
     }
 
-    .cuentas-grid {
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    .grid-area {
+      padding: 6px;
     }
+
+    .cuentas-grid {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 6px;
+    }
+
+    .empty-icon { font-size: 2rem; }
+    .empty-state p { font-size: 0.75rem; }
+    .empty-hint { font-size: 0.65rem !important; }
   }
 
   /* Tablet */

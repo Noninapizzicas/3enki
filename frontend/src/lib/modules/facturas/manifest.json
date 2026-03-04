@@ -1,31 +1,11 @@
 {
   "id": "facturas",
   "name": "Facturas",
-  "description": "Gestión de facturas por proyecto",
+  "description": "Procesamiento de facturas: cualquier formato → datos estructurados",
   "version": "1.0.0",
   "zone": "work-bar",
-  "order": 3,
+  "order": 1,
   "routes": ["/facturas"],
   "icon": "🧾",
-  "label": "Facturas",
-  "panel": {
-    "component": "FacturasPanel",
-    "zones": ["work-bar", "system-bar"],
-    "defaultZone": "work-bar",
-    "width": 380,
-    "minWidth": 320,
-    "maxWidth": 500
-  },
-  "triggers": {
-    "events": [
-      "factura/recibida",
-      "factura/procesada",
-      "factura/error",
-      "factura/exportada"
-    ]
-  },
-  "permissions": {
-    "mqtt": ["facturas/*", "factura/*"],
-    "project": true
-  }
+  "label": "Facturas"
 }

@@ -5,9 +5,10 @@
 # Reinicia los servicios de Event-Core.
 #
 # Uso:
-#   ./restart.sh              # Reinicia todo
+#   ./restart.sh              # Reinicia todo (desarrollo)
 #   ./restart.sh backend      # Solo backend
 #   ./restart.sh frontend     # Solo frontend
+#   ./restart.sh production   # Reinicia via systemd (backend + caddy) - VPS
 ###############################################################################
 
 set -e
@@ -28,13 +29,15 @@ ${GREEN}Uso:${NC}
   ./restart.sh [comando]
 
 ${GREEN}Comandos:${NC}
-  (sin args)    Reinicia backend + frontend
+  (sin args)    Reinicia backend + frontend (desarrollo)
   backend       Solo reinicia el backend
   frontend      Solo reinicia el frontend
+  production    Reinicia via systemd: event-core + caddy (VPS)
   --help, -h    Muestra esta ayuda
 
 ${GREEN}Ejemplos:${NC}
-  ./restart.sh              # Reiniciar todo
+  ./restart.sh              # Reiniciar todo (desarrollo)
+  ./restart.sh production   # Reiniciar todo (VPS/systemd)
   ./restart.sh backend      # Solo backend (útil tras cambios en módulos)
   ./restart.sh frontend     # Solo frontend (útil tras cambios en UI)
 
@@ -51,6 +54,22 @@ case "$COMMAND" in
     --help|-h|help)
         show_help
         exit 0
+        ;;
+    production|prod)
+        echo ""
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}          Event-Core - Reiniciando Producción (VPS)         ${NC}"
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo ""
+
+        # Detener
+        "$SCRIPT_DIR/stop.sh" production
+
+        # Pequeña pausa
+        sleep 1
+
+        # Iniciar
+        "$SCRIPT_DIR/start.sh" production
         ;;
     backend|frontend|all)
         echo ""

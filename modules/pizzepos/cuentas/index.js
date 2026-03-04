@@ -1,7 +1,7 @@
 /**
- * Módulo Cuentas v2.2
+ * Módulo Cuentas v2.3
  * Gestión de cuentas 100% Event-Driven
- * Ciclo de vida completo: pendiente → con_pedido → en_preparacion → listo → para_cobrar → cobrado
+ * Ciclo de vida completo: pendiente → con_pedido → en_preparacion → listo → entregado → para_cobrar → cobrado
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
@@ -14,7 +14,8 @@ const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
   con_pedido: ['en_preparacion', 'con_pedido'], // con_pedido→con_pedido: más items sin enviar
   en_preparacion: ['listo', 'en_preparacion'],   // en_preparacion→en_preparacion: nuevo envío parcial
-  listo: ['para_cobrar', 'en_preparacion'],       // puede volver a en_preparacion si piden más
+  listo: ['entregado', 'para_cobrar', 'en_preparacion'], // entregado = entregado al cliente/rider
+  entregado: ['para_cobrar', 'en_preparacion'],  // entregado→para_cobrar: cobrar después de entregar
   para_cobrar: ['cobrado'],
   cobrado: []
 };
@@ -25,7 +26,7 @@ const ALERTA_PENDIENTE_MS = 30 * 60 * 1000; // 30 minutos
 class CuentasModule {
   constructor() {
     this.name = 'cuentas';
-    this.version = '2.2.0';
+    this.version = '2.3.0';
 
     // Estado en memoria
     this.cuentas = new Map(); // cuenta_id -> cuenta
@@ -37,6 +38,10 @@ class CuentasModule {
     this._metricsInterval = null;
     this._pendingTimeouts = new Set();
     this._alertaTimers = new Map(); // cuenta_id -> timeout
+
+    // Tracking de pedidos activos en cocina por cuenta
+    // cuenta_id -> Set(pedido_id) — solo transiciona a 'listo' cuando el Set queda vacío
+    this._pedidosEnCocina = new Map();
 
     // Dependencias (inyectadas en onLoad)
     this.logger = null;
@@ -91,7 +96,7 @@ class CuentasModule {
 
     // Desregistrar UI handlers
     if (this.uiHandler) {
-      const actions = ['list', 'get', 'create', 'delete', 'stats', 'health', 'metrics'];
+      const actions = ['list', 'get', 'create', 'delete', 'marcar_entregado', 'stats', 'health', 'metrics'];
       for (const action of actions) {
         this.uiHandler.unregister('cuenta', action);
       }
@@ -99,6 +104,7 @@ class CuentasModule {
 
     // Limpiar estado
     this.cuentas.clear();
+    this._pedidosEnCocina.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -117,12 +123,13 @@ class CuentasModule {
     this.uiHandler.register('cuenta', 'get', this.handleGetCuenta.bind(this));
     this.uiHandler.register('cuenta', 'create', this.handleCreateCuenta.bind(this));
     this.uiHandler.register('cuenta', 'delete', this.handleDeleteCuenta.bind(this));
+    this.uiHandler.register('cuenta', 'marcar_entregado', this.handleMarcarEntregado.bind(this));
     this.uiHandler.register('cuenta', 'stats', this.handleGetStats.bind(this));
     this.uiHandler.register('cuenta', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('cuenta', 'metrics', this.handleGetMetrics.bind(this));
 
     this.logger.info('cuentas.ui_handlers.registered', {
-      handlers: ['list', 'get', 'create', 'delete', 'stats', 'health', 'metrics']
+      handlers: ['list', 'get', 'create', 'delete', 'marcar_entregado', 'stats', 'health', 'metrics']
     });
   }
 
@@ -278,39 +285,71 @@ class CuentasModule {
   }
 
   /**
-   * comandero.enviar_cocina → con_pedido→en_preparacion (o listo→en_preparacion si piden más)
+   * comandero.enviar_cocina → con_pedido→en_preparacion (o listo/entregado→en_preparacion si piden más)
+   * Registra pedido_id en el tracking de pedidos activos en cocina.
    */
   async onComanderoEnviarCocina(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id } = data;
+    const { cuenta_id, pedido_id } = data;
 
     this.logger.info('comandero.enviar_cocina.received', {
       cuenta_id,
+      pedido_id,
       correlation_id: event?.metadata?.correlationId
     });
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    if (cuenta.estado === 'con_pedido' || cuenta.estado === 'listo') {
+    // Registrar pedido en tracking de cocina
+    if (pedido_id) {
+      if (!this._pedidosEnCocina.has(cuenta_id)) {
+        this._pedidosEnCocina.set(cuenta_id, new Set());
+      }
+      this._pedidosEnCocina.get(cuenta_id).add(pedido_id);
+    }
+
+    // Transicionar a en_preparacion desde cualquier estado que lo permita
+    if (cuenta.estado === 'con_pedido' || cuenta.estado === 'listo' ||
+        cuenta.estado === 'entregado' || cuenta.estado === 'en_preparacion') {
       await this.transicionarEstado(cuenta_id, 'en_preparacion');
     }
   }
 
   /**
-   * cocina.pedido_listo → en_preparacion→listo
+   * cocina.pedido_listo → en_preparacion→listo (solo cuando TODOS los pedidos de la cuenta terminaron)
    */
   async onCocinaPedidoListo(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id } = data;
+    const { cuenta_id, pedido_id } = data;
 
     this.logger.info('cocina.pedido_listo.received', {
       cuenta_id,
+      pedido_id,
       correlation_id: event?.metadata?.correlationId
     });
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
+
+    // Quitar pedido del tracking de cocina
+    const pedidosActivos = this._pedidosEnCocina.get(cuenta_id);
+    if (pedidosActivos && pedido_id) {
+      pedidosActivos.delete(pedido_id);
+
+      // Si quedan pedidos en cocina, NO transicionar aún
+      if (pedidosActivos.size > 0) {
+        this.logger.info('cocina.pedido_listo.pendientes_restantes', {
+          cuenta_id,
+          pedido_id,
+          pedidos_restantes: pedidosActivos.size
+        });
+        return;
+      }
+
+      // Limpiar Set vacío
+      this._pedidosEnCocina.delete(cuenta_id);
+    }
 
     if (cuenta.estado === 'en_preparacion') {
       await this.transicionarEstado(cuenta_id, 'listo');
@@ -332,13 +371,16 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    if (cuenta.estado === 'listo') {
+    if (cuenta.estado === 'listo' || cuenta.estado === 'entregado') {
       await this.transicionarEstado(cuenta_id, 'para_cobrar');
     }
   }
 
   /**
-   * cobro.procesado → para_cobrar→cobrado + auto-eliminación a los 5 min
+   * cobro.procesado → marcar pagado.
+   * Si la cuenta ya fue entregada → cobrado + auto-eliminación.
+   * Si no → la cuenta sigue activa esperando entrega física.
+   * Idempotente: ignora si ya estaba pagada o cobrada.
    */
   async onCobroProcesado(event) {
     const data = event?.data || event?.payload || event;
@@ -352,24 +394,132 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
+    // Guardia de idempotencia: si ya está pagada o cobrada, ignorar duplicado
+    if (cuenta.pagado || cuenta.estado === 'cobrado') {
+      this.logger.warn('cobro.procesado.duplicado_ignorado', {
+        cuenta_id,
+        pagado: cuenta.pagado,
+        estado: cuenta.estado
+      });
+      return;
+    }
+
+    cuenta.pagado = true;
+    cuenta.updated_at = new Date().toISOString();
+
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      pagado: true
+    });
+
+    this.logger.info('cuenta.pagada', {
+      cuenta_id,
+      estado: cuenta.estado
+    });
+
+    // Si ya fue entregada (o es mesa donde entrega es implícita), cerrar
+    if (cuenta.estado === 'entregado' || cuenta.tipo === 'local') {
+      await this.cerrarCuentaCobrada(cuenta_id);
+    }
+  }
+
+  /**
+   * Cierra una cuenta cobrada: transiciona a cobrado y programa auto-eliminación.
+   * Se llama cuando se cumplen ambas condiciones: pagado AND entregado.
+   */
+  async cerrarCuentaCobrada(cuenta_id) {
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+
+    // Guardia: no cerrar dos veces
+    if (cuenta.estado === 'cobrado') return;
+
     const estado_anterior = cuenta.estado;
     cuenta.estado = 'cobrado';
     cuenta.updated_at = new Date().toISOString();
 
-    // Cancelar alerta si existía
     this.gestionarAlerta(cuenta_id, 'cobrado');
 
     await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'cobrado');
 
+    // Limpiar tracking de cocina
+    this._pedidosEnCocina.delete(cuenta_id);
+
     // Eliminar cuenta después de 5 minutos (con referencia para cleanup)
     const project_id = cuenta.project_id;
+    const tipo = cuenta.tipo;
     const timeout = setTimeout(() => {
       this._pendingTimeouts.delete(timeout);
       this.cuentas.delete(cuenta_id);
-      this.publishCuentaEliminada(project_id, cuenta_id, cuenta.tipo, 'cobro_completado');
+      this.publishCuentaEliminada(project_id, cuenta_id, tipo, 'cobro_completado');
     }, 5 * 60 * 1000);
 
     this._pendingTimeouts.add(timeout);
+  }
+
+  /**
+   * cuenta.creada → registrar cuenta de canal externo (cuentas-canales) en el Map.
+   * Permite que la máquina de estados funcione para mesas, teléfono, llevar, glovo, whatsapp.
+   */
+  async onCuentaExternaCreada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, tipo, project_id, total, metadata } = data;
+
+    if (!cuenta_id) return;
+
+    // Dedup: si ya existe (creada por handleCreateCuenta), no duplicar
+    if (this.cuentas.has(cuenta_id)) return;
+
+    const now = new Date();
+    const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const cuenta = {
+      id: cuenta_id,
+      project_id: project_id || null,
+      tipo: tipo || 'local',
+      nombre: metadata?.nombre || tipo || 'Cuenta',
+      estado: 'pendiente',
+      pagado: false,
+      hora,
+      items: 0,
+      total: total || 0,
+      alerta: false,
+      created_at: now.toISOString(),
+      updated_at: now.toISOString()
+    };
+
+    this.cuentas.set(cuenta_id, cuenta);
+    this.gestionarAlerta(cuenta_id, 'pendiente');
+
+    this.logger.info('cuenta.externa.registrada', {
+      cuenta_id, tipo, project_id,
+      origen: data.origen || 'unknown'
+    });
+  }
+
+  /**
+   * cuenta.cerrada → limpiar cuenta del Map y timers
+   */
+  async onCuentaExternaCerrada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+
+    if (!cuenta_id) return;
+    if (!this.cuentas.has(cuenta_id)) return;
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    this.cuentas.delete(cuenta_id);
+    this._pedidosEnCocina.delete(cuenta_id);
+
+    // Limpiar timer de alerta
+    if (this._alertaTimers.has(cuenta_id)) {
+      clearTimeout(this._alertaTimers.get(cuenta_id));
+      this._alertaTimers.delete(cuenta_id);
+    }
+
+    this.logger.info('cuenta.externa.cerrada', {
+      cuenta_id,
+      tipo: cuenta?.tipo
+    });
   }
 
   // ==========================================
@@ -399,6 +549,7 @@ class CuentasModule {
         tipo: tipoFinal,
         nombre: cuenta_nombre,
         estado: 'pendiente',
+        pagado: false,
         hora,
         items: 0,
         total: 0,
@@ -487,6 +638,7 @@ class CuentasModule {
     }
 
     this.cuentas.delete(id);
+    this._pedidosEnCocina.delete(id);
 
     // Limpiar timer de alerta si existía
     const alertaTimer = this._alertaTimers.get(id);
@@ -503,6 +655,37 @@ class CuentasModule {
     this.logger.info('cuenta.eliminada', { project_id: cuenta.project_id, cuenta_id: id, tipo: cuenta.tipo });
 
     return { status: 200, data: { message: 'Cuenta eliminada' } };
+  }
+
+  async handleMarcarEntregado(data) {
+    const { project_id, id } = data;
+    const cuenta = this.cuentas.get(id);
+
+    if (!cuenta) {
+      return { status: 404, error: `Cuenta ${id} no encontrada` };
+    }
+
+    if (project_id && cuenta.project_id !== project_id) {
+      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
+    }
+
+    if (cuenta.estado !== 'listo') {
+      return { status: 400, error: `Cuenta debe estar en estado 'listo' para marcar entregado (actual: ${cuenta.estado})` };
+    }
+
+    const ok = await this.transicionarEstado(id, 'entregado');
+    if (!ok) {
+      return { status: 500, error: 'No se pudo transicionar a entregado' };
+    }
+
+    this.logger.info('cuenta.marcada_entregado', { project_id: cuenta.project_id, cuenta_id: id, pagado: cuenta.pagado });
+
+    // Si ya estaba pagado, cerrar automáticamente
+    if (cuenta.pagado) {
+      await this.cerrarCuentaCobrada(id);
+    }
+
+    return { status: 200, data: { message: 'Cuenta marcada como entregada' } };
   }
 
   async handleGetStats() {
@@ -650,6 +833,7 @@ class CuentasModule {
           tipo: cp.tipo || 'local',
           nombre: cp.datos_especificos?.nombre || cp.tipo || 'Cuenta',
           estado,
+          pagado: false,
           hora,
           items: itemsCount,
           total: cp.total || 0,
@@ -699,7 +883,7 @@ class CuentasModule {
       this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
 
       const por_tipo = { local: 0, delivery: 0, llevar: 0 };
-      const por_estado = { pendiente: 0, con_pedido: 0, en_preparacion: 0, listo: 0, para_cobrar: 0, cobrado: 0 };
+      const por_estado = { pendiente: 0, con_pedido: 0, en_preparacion: 0, listo: 0, entregado: 0, para_cobrar: 0, cobrado: 0 };
       let alertas = 0;
 
       for (const cuenta of this.cuentas.values()) {
@@ -715,6 +899,7 @@ class CuentasModule {
       this.metrics.gauge('cuenta.por_estado.con_pedido', por_estado.con_pedido);
       this.metrics.gauge('cuenta.por_estado.en_preparacion', por_estado.en_preparacion);
       this.metrics.gauge('cuenta.por_estado.listo', por_estado.listo);
+      this.metrics.gauge('cuenta.por_estado.entregado', por_estado.entregado);
       this.metrics.gauge('cuenta.por_estado.para_cobrar', por_estado.para_cobrar);
       this.metrics.gauge('cuenta.por_estado.cobrado', por_estado.cobrado);
       this.metrics.gauge('cuenta.alertas.count', alertas);

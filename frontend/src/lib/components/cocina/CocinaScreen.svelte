@@ -221,4 +221,19 @@
       gap: 10px;
     }
   }
+
+  /* Mobile compact */
+  @media (max-width: 600px) {
+    .cocina-grid-area {
+      padding: 6px;
+    }
+
+    .pedidos-grid {
+      gap: 6px;
+    }
+
+    .empty-icon { font-size: 2.5rem; }
+    .empty-title { font-size: 1.1rem; }
+    .empty-hint { font-size: 0.75rem; }
+  }
 </style>

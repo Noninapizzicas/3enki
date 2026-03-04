@@ -252,6 +252,8 @@ class CocinaModule {
       itemEncontrado.estado = 'preparando';
       itemEncontrado.preparando_at = now;
 
+      await this.publishItemPreparando(pedidoEncontrado, itemEncontrado);
+
       this.broadcastSSE({
         type: 'item_preparando',
         data: { pedido_id: pedidoEncontrado.pedido_id, item_id }
@@ -544,6 +546,19 @@ class CocinaModule {
   // ==========================================
   // Event Publishers
   // ==========================================
+
+  async publishItemPreparando(pedidoCocina, item) {
+    await this.eventBus.publish('cocina.item_preparando', {
+      pedido_id: pedidoCocina.pedido_id,
+      cuenta_id: pedidoCocina.cuenta_id,
+      canal: pedidoCocina.canal || null,
+      item_id: item.item_id,
+      producto_id: item.producto_id,
+      nombre: item.nombre,
+      cantidad: item.cantidad,
+      preparando_at: item.preparando_at
+    });
+  }
 
   async publishItemPreparado(pedidoCocina, item) {
     await this.eventBus.publish('cocina.item_preparado', {

@@ -155,7 +155,7 @@ class CuentasCanalesModule {
     try {
       await strategy.onCobroProcesado(cuenta_id, correlationId, project_id);
 
-      this.logger.info('canales.cuenta_cerrada_tras_cobro', {
+      this.logger.info('canales.cobro_procesado', {
         correlation_id: correlationId,
         canal: strategy.tipo,
         cuenta_id

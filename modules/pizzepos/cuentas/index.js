@@ -838,10 +838,11 @@ class CuentasModule {
 
       let restauradas = 0;
       for (const [cuenta_id, cp] of Object.entries(datos.cuentas)) {
-        // Mapear estado de persistencia → estado de cuentas
-        let estado = 'pendiente';
-        if (cp.pedidos && cp.pedidos.length > 0) {
-          estado = 'con_pedido';
+        // Usar estado real de persistencia si existe, sino inferir
+        let estado = cp.estado || 'pendiente';
+        if (estado === 'abierta') {
+          // Legacy: persistencia sin estado real
+          estado = (cp.pedidos && cp.pedidos.length > 0) ? 'con_pedido' : 'pendiente';
         }
 
         // Contar items totales de todos los pedidos
@@ -867,7 +868,7 @@ class CuentasModule {
           tipo: cp.tipo || 'local',
           nombre: cp.datos_especificos?.nombre || cp.tipo || 'Cuenta',
           estado,
-          pagado: false,
+          pagado: cp.pagado || false,
           hora,
           items: itemsCount,
           total: cp.total || 0,

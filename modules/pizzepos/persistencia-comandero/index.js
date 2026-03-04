@@ -154,37 +154,8 @@ class PersistenciaComanderoModule {
     }
   }
 
-  async suscribirEventos() {
-    // Eventos de UI
-    await this.eventBus.subscribe('boton.pulsado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('ui.accion', this.onEvento.bind(this));
-
-    // Eventos de cuentas
-    await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
-    await this.eventBus.subscribe('cuenta.cerrada', this.onCuentaCerrada.bind(this));
-    await this.eventBus.subscribe('cuenta.estado_cambiado', this.onCuentaEstadoCambiado.bind(this));
-
-    // Eventos de cobros
-    await this.eventBus.subscribe('cobro.iniciado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('cobro.procesado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('cobro.reembolsado', this.onEvento.bind(this));
-
-    // Eventos de pedidos
-    await this.eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));
-    await this.eventBus.subscribe('pedido.enviado_cocina', this.onEvento.bind(this));
-    await this.eventBus.subscribe('pedido.completado', this.onEvento.bind(this));
-
-    // Eventos específicos de canales
-    await this.eventBus.subscribe('mesa.abierta', this.onEvento.bind(this));
-    await this.eventBus.subscribe('mesa.cerrada', this.onEvento.bind(this));
-    await this.eventBus.subscribe('mesa.renombrada', this.onMesaRenombrada.bind(this));
-    await this.eventBus.subscribe('telefono.pedido_creado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('llevar.ticket_creado', this.onEvento.bind(this));
-
-    this.logger.info('persistencia.events.subscribed', {
-      events_count: 14
-    });
-  }
+  // NOTE: Event subscriptions are auto-wired from module.json.
+  // See module.json "subscribes" array for the complete list.
 
   // ==========================================
   // Event Handlers
@@ -343,6 +314,30 @@ class PersistenciaComanderoModule {
       this.logger.info('persistencia.cuenta_activa.estado_actualizado', {
         cuenta_id,
         estado: estado_nuevo
+      });
+    }
+  }
+
+  async onCuentaActualizada(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = eventData;
+    if (!cuenta_id || !cambios) return;
+
+    await this.onEvento(event);
+
+    const cuenta = this.cuentasActivasCache.get(cuenta_id);
+    if (cuenta) {
+      // Persistir campos relevantes: pagado, servido, total, items, estado
+      if (cambios.pagado !== undefined) cuenta.pagado = cambios.pagado;
+      if (cambios.servido !== undefined) cuenta.servido = cambios.servido;
+      if (cambios.total !== undefined) cuenta.total = cambios.total;
+      if (cambios.estado !== undefined) cuenta.estado = cambios.estado;
+      cuenta.updated_at = eventData.updated_at || new Date().toISOString();
+      await this.guardarCuentasActivas();
+
+      this.logger.info('persistencia.cuenta_activa.actualizada', {
+        cuenta_id,
+        cambios: Object.keys(cambios)
       });
     }
   }

@@ -53,23 +53,62 @@ function generateStaticHTML(carta, config, options = {}) {
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled
   });
 
-  // Build system prompt for AI assistant with full menu context
-  const menuResumen = productos.map(p => {
+  // Build system prompt for AI assistant with full menu context + upselling
+  const catMap = {};
+  for (const c of categorias) { catMap[c.id] = c.nombre; }
+
+  const menuPorCategoria = {};
+  for (const p of productos) {
+    const catNombre = catMap[p.categoria] || p.categoria || 'Otros';
+    if (!menuPorCategoria[catNombre]) menuPorCategoria[catNombre] = [];
     const ings = (p.ingredientes || []).map(i => i.nombre).join(', ');
     const tags = (p.tags || []).join(', ');
-    return `- ${p.nombre}: ${p.precio.toFixed(2)}${moneda}${ings ? ' (' + ings + ')' : ''}${tags ? ' [' + tags + ']' : ''}`;
-  }).join('\n');
+    const extras = (p.ingredientes || []).filter(i => i.precio_extra).map(i => `+${i.nombre} ${i.precio_extra.toFixed(2)}${moneda}`).join(', ');
+    menuPorCategoria[catNombre].push(
+      `- ${p.nombre}: ${p.precio.toFixed(2)}${moneda}${ings ? ' (' + ings + ')' : ''}${tags ? ' [' + tags + ']' : ''}${extras ? ' | Extras: ' + extras : ''}`
+    );
+  }
+
+  const menuResumen = Object.entries(menuPorCategoria).map(
+    ([cat, items]) => `## ${cat}\n${items.join('\n')}`
+  ).join('\n\n');
+
+  // Detect available category types for upselling rules
+  const catNombres = Object.keys(menuPorCategoria).map(n => n.toLowerCase());
+  const tieneBebidas = catNombres.some(n => /bebida|drink|refresco/i.test(n));
+  const tienePostres = catNombres.some(n => /postre|dessert|dulce/i.test(n));
+  const tieneEntrantes = catNombres.some(n => /entrante|starter|aperitivo|tapa/i.test(n));
+  const tieneExtras = productos.some(p => (p.ingredientes || []).some(i => i.precio_extra));
+
+  let upsellRules = `\nUPSELLING (MUY IMPORTANTE - hazlo de forma natural, como un camarero amable):\n`;
+  upsellRules += `- Cuando el cliente elija un plato, sugiere UN complemento concreto con nombre y precio\n`;
+  upsellRules += `- Usa frases naturales: "¡Buena elección! ¿Te apetece también...?", "Mucha gente lo combina con..."\n`;
+  upsellRules += `- NO repitas la misma sugerencia dos veces en la conversación\n`;
+  upsellRules += `- Máximo UNA sugerencia por mensaje, no seas insistente\n`;
+  upsellRules += `- Si el cliente dice que no, respeta su decisión y sigue con el pedido\n`;
+
+  if (tieneBebidas) upsellRules += `- Si pide comida sin bebida, sugiere una bebida concreta del menú\n`;
+  if (tienePostres) upsellRules += `- Antes de cerrar el pedido, menciona un postre concreto\n`;
+  if (tieneEntrantes) upsellRules += `- Si pide un plato principal, sugiere un entrante para compartir\n`;
+  if (tieneExtras) upsellRules += `- Si un producto tiene extras disponibles, menciona el más popular\n`;
+  if (!tieneBebidas && !tienePostres && !tieneEntrantes) {
+    // Solo una categoría (ej: solo pizzas) — upselling por variedad
+    upsellRules += `- Si pide un producto, sugiere otro complementario o similar que le pueda gustar\n`;
+    upsellRules += `- Menciona los más populares o los mejor valorados para animar a probar\n`;
+    upsellRules += `- Si pide solo uno, sugiere llevar uno más: "¿Quieres añadir otra para compartir?"\n`;
+  }
 
   const systemPromptJSON = JSON.stringify(
-    `Eres el asistente virtual de ${nombre_negocio}. Ayudas a los clientes a elegir y hacer su pedido.\n\n` +
+    `Eres el asistente virtual de ${nombre_negocio}. Ayudas a los clientes a elegir y hacer su pedido. Eres como un camarero experto: amable, conoces todo el menú y sabes recomendar.\n\n` +
     `REGLAS:\n` +
     `- Responde SIEMPRE en español, breve y amable (max 2-3 frases)\n` +
-    `- Recomienda platos segun preferencias del cliente\n` +
+    `- Recomienda platos según preferencias del cliente\n` +
     `- Si el cliente quiere pedir, confirma los items y cantidades\n` +
-    `- Cuando el pedido este listo, responde con un JSON al final: {"pedido":[{"id":"ID","nombre":"NOMBRE","qty":N}]}\n` +
+    `- Cuando el pedido esté listo, responde con un JSON al final: {"pedido":[{"id":"ID","nombre":"NOMBRE","qty":N}]}\n` +
     `- Si no sabes algo, di que el cliente puede contactar por WhatsApp\n` +
-    `- NO inventes productos que no estan en el menu\n\n` +
-    `MENU DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}`
+    `- NO inventes productos que no están en el menú\n` +
+    upsellRules + `\n` +
+    `MENÚ DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}`
   );
 
   return `<!DOCTYPE html>
@@ -205,6 +244,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .empty{text-align:center;padding:40px 20px;color:#555}
 .empty-ico{font-size:2.5rem;display:block;margin-bottom:8px}
 
+/* Upsell toast */
+.upsell-toast{position:fixed;bottom:104px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:12px;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,.5);max-width:calc(100% - 32px);width:360px;transition:transform .3s ease-out,opacity .3s;opacity:0;pointer-events:none}
+.upsell-toast.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+.upsell-info{flex:1;min-width:0}
+.upsell-label{font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--primary);margin-bottom:2px}
+.upsell-name{font-size:.82rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.upsell-price{font-size:.7rem;color:var(--text-mid)}
+.upsell-add{padding:8px 14px;border:none;border-radius:10px;background:var(--primary);color:#000;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.upsell-add:active{filter:brightness(.85)}
+.upsell-close{width:24px;height:24px;border:none;background:transparent;color:var(--text-dim);font-size:.9rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+
 /* Chat widget */
 .chat-fab{position:fixed;bottom:24px;left:24px;width:56px;height:56px;border:none;border-radius:50%;background:var(--primary);color:#000;cursor:pointer;z-index:50;box-shadow:0 4px 20px rgba(245,158,11,.35);transition:transform .15s;display:none;align-items:center;justify-content:center;font-size:1.5rem}
 .chat-fab.show{display:flex}.chat-fab:active{transform:scale(.9)}
@@ -286,6 +336,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
     <div class="detail-content" id="detail-content"></div>
     <div class="detail-footer" id="detail-footer"></div>
   </div>
+</div>
+
+<!-- Upsell toast -->
+<div class="upsell-toast" id="upsell-toast">
+  <div class="upsell-info">
+    <div class="upsell-label">¿Y también...?</div>
+    <div class="upsell-name" id="upsell-name"></div>
+    <div class="upsell-price" id="upsell-price"></div>
+  </div>
+  <button class="upsell-add" id="upsell-add" onclick="acceptUpsell()">+ Añadir</button>
+  <button class="upsell-close" onclick="dismissUpsell()">✕</button>
 </div>
 
 <!-- Cart panel -->
@@ -441,6 +502,91 @@ function addToCart(id) {
   if (!p) return;
   cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1 });
   updateCart();
+  showUpsell(p);
+}
+
+// ─── Upsell Engine ───
+let upsellTimer = null;
+let upsellProd = null;
+let lastUpsellIds = [];
+
+function getUpsellFor(addedProduct) {
+  // Build list of IDs already in cart
+  var cartIds = cart.map(function(i) { return i.id; });
+  // Don't repeat recent upsells
+  var exclude = cartIds.concat(lastUpsellIds);
+
+  var candidates = [];
+  var addedCat = addedProduct.categoria;
+
+  // Strategy 1: different category (cross-sell: pizza → bebida, etc.)
+  var crossCat = DATA.productos.filter(function(p) {
+    return p.categoria !== addedCat && exclude.indexOf(p.id) === -1;
+  });
+  if (crossCat.length > 0) {
+    // Prefer popular items from other categories
+    var popular = crossCat.filter(function(p) { return (p.tags || []).indexOf('popular') !== -1; });
+    candidates = popular.length > 0 ? popular : crossCat;
+  } else {
+    // Strategy 2: same category (suggest variety)
+    var sameCat = DATA.productos.filter(function(p) {
+      return p.id !== addedProduct.id && exclude.indexOf(p.id) === -1;
+    });
+    // Prefer popular or similarly priced
+    var popular = sameCat.filter(function(p) { return (p.tags || []).indexOf('popular') !== -1; });
+    if (popular.length > 0) {
+      candidates = popular;
+    } else {
+      // Similar price range (±30%)
+      var minP = addedProduct.precio * 0.7;
+      var maxP = addedProduct.precio * 1.3;
+      var similar = sameCat.filter(function(p) { return p.precio >= minP && p.precio <= maxP; });
+      candidates = similar.length > 0 ? similar : sameCat;
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  // Pick random from candidates
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function showUpsell(addedProduct) {
+  dismissUpsell();
+  var suggestion = getUpsellFor(addedProduct);
+  if (!suggestion) return;
+
+  upsellProd = suggestion;
+  lastUpsellIds.push(suggestion.id);
+  if (lastUpsellIds.length > 5) lastUpsellIds.shift();
+
+  document.getElementById('upsell-name').textContent = (suggestion.emoji ? suggestion.emoji + ' ' : '') + suggestion.nombre;
+  document.getElementById('upsell-price').textContent = fmt(suggestion.precio);
+
+  var toast = document.getElementById('upsell-toast');
+  toast.classList.add('show');
+
+  // Auto-dismiss after 5 seconds
+  upsellTimer = setTimeout(function() { dismissUpsell(); }, 5000);
+}
+
+function acceptUpsell() {
+  if (!upsellProd) return;
+  addToCartSilent(upsellProd.id);
+  dismissUpsell();
+}
+
+function addToCartSilent(id) {
+  // Add without triggering another upsell
+  var p = DATA.productos.find(function(x) { return x.id === id; });
+  if (!p) return;
+  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1 });
+  updateCart();
+}
+
+function dismissUpsell() {
+  if (upsellTimer) { clearTimeout(upsellTimer); upsellTimer = null; }
+  upsellProd = null;
+  document.getElementById('upsell-toast').classList.remove('show');
 }
 
 function updateCart() {

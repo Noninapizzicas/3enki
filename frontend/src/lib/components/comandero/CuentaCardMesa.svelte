@@ -10,7 +10,7 @@
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { Cuenta, ItemDetalle } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta, marcarEntregado } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta } from '$lib/stores/cuentas';
 
   export let cuenta: Cuenta;
   export let projectId: string = '';
@@ -104,10 +104,21 @@
     return (Date.now() - new Date(i.listo_at).getTime()) < 60000;
   }).length;
 
-  // Acciones contextuales
-  $: showEntregarBtn = cuenta.estado === 'listo';
-  $: showCobrarBtn = cuenta.estado === 'listo' || cuenta.estado === 'entregado';
-  $: showDeleteBtn = cuenta.estado === 'pendiente' || cuenta.estado === 'cobrado';
+  // Acción principal: botón entregar grande
+  // Visible cuando pedido listo, entregado o cobrado
+  $: showEntregarAction = cuenta.estado === 'listo' || cuenta.estado === 'entregado' || cuenta.estado === 'para_cobrar' || cuenta.estado === 'cobrado';
+  // Pendiente sin items = se puede borrar
+  $: showDeleteBtn = cuenta.estado === 'pendiente' && cuenta.items === 0;
+
+  function handleEntregarAction() {
+    if (cuenta.pagado) {
+      // Pagado → eliminar cuenta (todo hecho)
+      handleDelete();
+    } else {
+      // No pagado → abrir cobros
+      handleRightTap();
+    }
+  }
 
   const ESTADO_CONFIG: Record<string, { label: string; color: string; urgent: boolean }> = {
     pendiente:       { label: 'Pendiente',     color: '#64748b', urgent: false },
@@ -127,11 +138,6 @@
 
   function handleRightTap() {
     dispatch('open-cuenta', { cuenta_id: cuenta.id });
-  }
-
-  async function handleEntregado() {
-    if (!projectId) return;
-    await marcarEntregado(projectId, cuenta.id);
   }
 
   async function handleDelete() {
@@ -236,7 +242,7 @@
     </button>
   </div>
 
-  <!-- Footer: estado + acciones -->
+  <!-- Footer: estado + acción entregar -->
   <div class="card-footer">
     <div class="footer-info">
       <span class="estado-dot" style="background: {estadoCfg.color}"></span>
@@ -246,14 +252,15 @@
       {/if}
     </div>
     <div class="footer-actions">
-      {#if showEntregarBtn}
-        <button class="action-btn action-entregar" on:click|stopPropagation={handleEntregado}>
-          ENTREGAR
-        </button>
-      {/if}
-      {#if showCobrarBtn}
-        <button class="action-btn action-cobrar" on:click|stopPropagation={handleRightTap}>
-          COBRAR
+      {#if showEntregarAction}
+        <button
+          class="entregar-btn"
+          class:entregar-cobrar={!cuenta.pagado}
+          class:entregar-cerrar={cuenta.pagado}
+          on:click|stopPropagation={handleEntregarAction}
+          title={cuenta.pagado ? 'Cerrar cuenta' : 'Cobrar primero'}
+        >
+          {cuenta.pagado ? '\u2705' : '\uD83D\uDCB0'}
         </button>
       {/if}
       {#if showDeleteBtn}
@@ -615,33 +622,56 @@
 
   .footer-actions {
     display: flex;
-    gap: 3px;
+    align-items: center;
+    gap: 4px;
   }
 
+  /* Botón entregar grande emoji */
+  .entregar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    background: transparent;
+  }
+
+  .entregar-btn:active {
+    transform: scale(0.9);
+  }
+
+  .entregar-cobrar {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+    animation: blink-soft 1.5s ease-in-out infinite;
+  }
+
+  .entregar-cerrar {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.15);
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+  }
+
+  /* Delete para cuentas vacías */
   .action-btn {
     border: none;
     border-radius: 4px;
     padding: 3px 8px;
     font-size: 0.55rem;
     font-weight: 800;
-    letter-spacing: 0.5px;
     cursor: pointer;
-    transition: opacity 0.15s;
     -webkit-tap-highlight-color: transparent;
   }
 
   .action-btn:active {
     opacity: 0.7;
-  }
-
-  .action-entregar {
-    background: #a855f7;
-    color: #fff;
-  }
-
-  .action-cobrar {
-    background: #22c55e;
-    color: #fff;
   }
 
   .action-delete {
@@ -703,6 +733,7 @@
     .card-footer { padding: 3px 6px 4px; }
     .estado-dot { width: 5px; height: 5px; }
     .estado-label { font-size: 0.5rem; }
+    .entregar-btn { width: 30px; height: 30px; font-size: 1rem; }
     .action-btn { padding: 2px 6px; font-size: 0.5rem; }
     .glovo-badge { font-size: 0.45rem; padding: 1px 4px; }
   }

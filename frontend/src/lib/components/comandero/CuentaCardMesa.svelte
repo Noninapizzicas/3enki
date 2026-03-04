@@ -157,15 +157,17 @@
   class:glovo-listo={glovoListo}
   style="--card-color: {color}"
 >
-  <!-- Header: emoji_tipo + nombre + emoji_pago + hora + countdown -->
+  <!-- Header: emoji_tipo + pago + nombre + hora + countdown -->
   <div class="card-header">
     {#if isGlovo}
       <span class="glovo-badge">GLOVO</span>
     {:else}
       <span class="tipo-icon">{icon}</span>
     {/if}
+    <span class="pago-pill" class:pagado={cuenta.pagado}>
+      {cuenta.pagado ? '\uD83D\uDCB0' : '\u274C'}
+    </span>
     <span class="nombre">{cuenta.nombre}</span>
-    <span class="pago-icon">{cuenta.pagado ? '\uD83D\uDCB0' : '\u274C'}</span>
     <span class="hora">{cuenta.hora}</span>
     {#if countdownStr}
       <span class="countdown" class:countdown-urgent={countdownUrgent}>{countdownStr}</span>
@@ -331,10 +333,23 @@
     min-width: 0;
   }
 
-  .pago-icon {
-    font-size: 0.7rem;
+  .pago-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 0.8rem;
     line-height: 1;
     flex-shrink: 0;
+    background: rgba(239, 68, 68, 0.25);
+    border: 1.5px solid #ef4444;
+  }
+
+  .pago-pill.pagado {
+    background: rgba(34, 197, 94, 0.25);
+    border-color: #22c55e;
   }
 
   .hora {
@@ -671,7 +686,7 @@
     .card-header { padding: 4px 6px; gap: 4px; }
     .tipo-icon { font-size: 0.75rem; }
     .nombre { font-size: 0.7rem; }
-    .pago-icon { font-size: 0.6rem; }
+    .pago-pill { width: 18px; height: 18px; font-size: 0.65rem; border-width: 1px; }
     .hora { font-size: 0.5rem; }
     .countdown { font-size: 0.5rem; }
     .progress-bar { padding: 2px 6px; gap: 1px; }

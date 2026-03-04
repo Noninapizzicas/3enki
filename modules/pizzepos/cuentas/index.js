@@ -31,8 +31,9 @@ class CuentasModule {
     // Estado en memoria
     this.cuentas = new Map(); // cuenta_id -> cuenta
 
-    // Contadores para auto-numeración
+    // Contadores para auto-numeración con reinicio diario
     this.counters = { local: 1, delivery: 1, llevar: 1 };
+    this._counterDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     // Timers activos (para cleanup en onUnload)
     this._metricsInterval = null;
@@ -897,10 +898,20 @@ class CuentasModule {
   // ==========================================
 
   generateNombre(tipo) {
+    // Reinicio diario de contadores
+    const today = new Date().toISOString().slice(0, 10);
+    if (this._counterDate !== today) {
+      this.counters = { local: 1, delivery: 1, llevar: 1 };
+      this._counterDate = today;
+      this.logger?.info('cuentas.counters.daily_reset', { date: today });
+    }
+
+    // Emoji por tipo + nombre con numero (3 digitos, reinicio diario)
+    const pad = (num) => String(num).padStart(3, '0');
     const templates = {
-      local: (num) => `Mesa ${num}`,
-      delivery: (num) => `Delivery #${num}`,
-      llevar: (num) => `Llevar #${num}`
+      local: (num) => `\uD83C\uDFE0 Mesa ${pad(num)}`,
+      delivery: (num) => `\uD83D\uDEF5 Delivery #${pad(num)}`,
+      llevar: (num) => `\uD83D\uDCE6 Llevar #${pad(num)}`
     };
 
     const fn = templates[tipo] || templates.local;

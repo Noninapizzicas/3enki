@@ -43,9 +43,15 @@ export interface Cuenta {
   items: number;
   total: number;
   alerta: boolean;
+  pagado: boolean;
+  servido: boolean;
   created_at: string;
   updated_at: string;
   itemsDetalle?: ItemDetalle[];
+  /** Hora estimada de recogida (ISO string o HH:MM) */
+  hora_recogida?: string;
+  /** Tiempo estimado en minutos para preparación */
+  tiempo_estimado?: number;
 }
 
 export interface CuentasState {
@@ -360,9 +366,13 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           items: countItems(cp.pedidos),
           total: cp.total || 0,
           alerta: existingCuenta?.alerta || checkAlerta(cp),
+          pagado: cp.pagado || existingCuenta?.pagado || false,
+          servido: cp.servido || existingCuenta?.servido || existingCuenta?.estado === 'entregado' || false,
           created_at: cp.created_at,
           updated_at: cp.updated_at,
-          itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined
+          itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined,
+          hora_recogida: cp.datos_especificos?.hora_recogida || existingCuenta?.hora_recogida,
+          tiempo_estimado: cp.datos_especificos?.tiempo_estimado || existingCuenta?.tiempo_estimado
         };
       });
 
@@ -507,7 +517,13 @@ export function initCuentasSubscriptions(projectId: string): () => void {
         ...s,
         cuentas: s.cuentas.map(c =>
           c.id === data.cuenta_id
-            ? { ...c, ...data.cambios, updated_at: data.updated_at || c.updated_at }
+            ? {
+                ...c,
+                ...data.cambios,
+                pagado: data.cambios?.pagado ?? c.pagado,
+                servido: data.cambios?.servido ?? c.servido,
+                updated_at: data.updated_at || c.updated_at
+              }
             : c
         )
       }));
@@ -542,7 +558,13 @@ export function initCuentasSubscriptions(projectId: string): () => void {
         ...s,
         cuentas: s.cuentas.map(c =>
           c.id === data.cuenta_id
-            ? { ...c, estado: nuevoEstado as EstadoCuenta, alerta: false, updated_at: data.changed_at || new Date().toISOString() }
+            ? {
+                ...c,
+                estado: nuevoEstado as EstadoCuenta,
+                alerta: false,
+                servido: nuevoEstado === 'entregado' || c.servido,
+                updated_at: data.changed_at || new Date().toISOString()
+              }
             : c
         )
       }));

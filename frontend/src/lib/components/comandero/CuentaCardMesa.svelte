@@ -1,27 +1,28 @@
 <script lang="ts">
   /**
-   * CuentaCardMesa — Tarjeta de cuenta (todos los tipos)
+   * CuentaCardMesa — Tarjeta de cuenta completa
    *
-   * Muestra items por nombre agrupados por categoría con estados de cocina:
-   *   en_cocina → punto gris
-   *   preparando → punto amarillo pulsante
-   *   listo     → punto verde + pulso (aviso: recoger!)
+   * Informacion visible:
+   *   - Emoji tipo + nombre (con numeracion diaria)
+   *   - Items con cantidad, precio y estado de cocina
+   *   - Estado general de la cuenta
+   *   - Precio total
+   *   - Pagado / no pagado
+   *   - Servido / no servido
+   *   - Cronometro: tiempo transcurrido desde apertura
+   *   - Cuenta atras: tiempo restante hasta recogida
+   *   - Hora estimada de recogida
    *
-   * Botones contextuales:
-   *   ENTREGAR → cuando estado = listo
-   *   COBRAR   → cuando estado = listo o entregado
-   *   X        → cuando estado = pendiente o cobrado
-   *
-   * Tap header → abre comandero (añadir pedidos)
+   * Tap header → abre comandero (anadir pedidos)
    * Tap total  → abre cuenta (cobrar)
    */
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { Cuenta, ItemDetalle } from '$lib/stores/cuentas';
   import { TIPO_COLORS, TIPO_ICONS, deleteCuenta, marcarEntregado } from '$lib/stores/cuentas';
 
   export let cuenta: Cuenta;
   export let projectId: string = '';
-  /** Map de producto_id → nombre de categoría */
+  /** Map de producto_id → nombre de categoria */
   export let categoriasMap: Record<string, string> = {};
 
   const dispatch = createEventDispatcher<{
@@ -34,7 +35,83 @@
   $: isGlovo = cuenta.tipo === 'glovo';
   $: glovoListo = isGlovo && cuenta.estado === 'listo';
 
-  // Agrupar items por categoría
+  // ===== TIMERS =====
+  let elapsedStr = '00:00';
+  let countdownStr = '';
+  let horaRecogidaStr = '';
+  let countdownUrgent = false;
+  let timerInterval: ReturnType<typeof setInterval>;
+
+  function updateTimers() {
+    // Cronometro desde apertura
+    if (cuenta.created_at) {
+      const diff = Math.floor((Date.now() - new Date(cuenta.created_at).getTime()) / 1000);
+      if (diff >= 0) {
+        const hrs = Math.floor(diff / 3600);
+        const mins = Math.floor((diff % 3600) / 60);
+        const secs = diff % 60;
+        elapsedStr = hrs > 0
+          ? `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+          : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }
+    }
+
+    // Hora de recogida y cuenta atras
+    let recogidaMs: number | null = null;
+
+    if (cuenta.hora_recogida) {
+      // hora_recogida puede ser ISO string o HH:MM
+      const parsed = new Date(cuenta.hora_recogida);
+      if (!isNaN(parsed.getTime())) {
+        recogidaMs = parsed.getTime();
+      } else {
+        // Intentar HH:MM
+        const match = cuenta.hora_recogida.match(/^(\d{1,2}):(\d{2})$/);
+        if (match) {
+          const today = new Date();
+          today.setHours(parseInt(match[1]), parseInt(match[2]), 0, 0);
+          recogidaMs = today.getTime();
+        }
+      }
+    } else if (cuenta.tiempo_estimado && cuenta.created_at) {
+      // Calcular hora recogida = created_at + tiempo_estimado minutos
+      recogidaMs = new Date(cuenta.created_at).getTime() + cuenta.tiempo_estimado * 60 * 1000;
+    }
+
+    if (recogidaMs) {
+      const recogidaDate = new Date(recogidaMs);
+      horaRecogidaStr = `${String(recogidaDate.getHours()).padStart(2, '0')}:${String(recogidaDate.getMinutes()).padStart(2, '0')}`;
+
+      const remaining = Math.floor((recogidaMs - Date.now()) / 1000);
+      if (remaining > 0) {
+        const rMins = Math.floor(remaining / 60);
+        const rSecs = remaining % 60;
+        countdownStr = `-${String(rMins).padStart(2, '0')}:${String(rSecs).padStart(2, '0')}`;
+        countdownUrgent = rMins < 3;
+      } else {
+        const overSecs = Math.abs(remaining);
+        const oMins = Math.floor(overSecs / 60);
+        const oSecs = overSecs % 60;
+        countdownStr = `+${String(oMins).padStart(2, '0')}:${String(oSecs).padStart(2, '0')}`;
+        countdownUrgent = true;
+      }
+    } else {
+      countdownStr = '';
+      horaRecogidaStr = '';
+      countdownUrgent = false;
+    }
+  }
+
+  onMount(() => {
+    updateTimers();
+    timerInterval = setInterval(updateTimers, 1000);
+  });
+
+  onDestroy(() => {
+    clearInterval(timerInterval);
+  });
+
+  // ===== ITEMS =====
   interface ItemGroup {
     categoria: string;
     items: ItemDetalle[];
@@ -54,7 +131,7 @@
       .map(([categoria, items]) => ({ categoria, items }));
   }
 
-  // Contar items con aviso (recién listo, <60s)
+  // Contar items con aviso (recien listo, <60s)
   $: avisoCount = (cuenta.itemsDetalle || []).filter(i => {
     if (i.estado_cocina !== 'listo' || !i.listo_at) return false;
     return (Date.now() - new Date(i.listo_at).getTime()) < 60000;
@@ -100,7 +177,11 @@
   }
 
   function formatTotal(total: number): string {
-    return total.toFixed(2) + ' €';
+    return total.toFixed(2) + ' \u20AC';
+  }
+
+  function formatPrecio(precio: number): string {
+    return precio.toFixed(2);
   }
 
   function isRecienListo(item: ItemDetalle): boolean {
@@ -116,7 +197,7 @@
   class:glovo-listo={glovoListo}
   style="--card-color: {color}"
 >
-  <!-- Header: icon + nombre + total -->
+  <!-- Header: icon + nombre + hora apertura -->
   <div class="card-header">
     <button class="header-tap" on:click={handleOpenComandero}>
       {#if isGlovo}
@@ -126,9 +207,18 @@
       {/if}
       <span class="nombre">{cuenta.nombre}</span>
     </button>
-    <button class="total-btn" on:click={handleOpenCuenta}>
-      {formatTotal(cuenta.total)}
-    </button>
+    <span class="hora-apertura">{cuenta.hora}</span>
+  </div>
+
+  <!-- Timer bar: cronometro + cuenta atras + hora recogida -->
+  <div class="timer-bar">
+    <span class="timer elapsed">{elapsedStr}</span>
+    {#if countdownStr}
+      <span class="timer countdown" class:countdown-urgent={countdownUrgent}>{countdownStr}</span>
+    {/if}
+    {#if horaRecogidaStr}
+      <span class="recogida-hora">{horaRecogidaStr}</span>
+    {/if}
   </div>
 
   <!-- Items body -->
@@ -146,9 +236,8 @@
                 class:dot-listo={item.estado_cocina === 'listo'}
               ></span>
               <span class="item-nombre">{item.nombre}</span>
-              {#if item.cantidad > 1}
-                <span class="item-cantidad">x{item.cantidad}</span>
-              {/if}
+              <span class="item-cantidad">x{item.cantidad}</span>
+              <span class="item-precio">{formatPrecio(item.precio)}</span>
             </div>
           {/each}
         </div>
@@ -165,7 +254,22 @@
     {/if}
   </div>
 
-  <!-- Footer: estado + aviso + actions -->
+  <!-- Total + badges -->
+  <div class="total-row">
+    <button class="total-btn" on:click={handleOpenCuenta}>
+      {formatTotal(cuenta.total)}
+    </button>
+    <div class="badges">
+      <span class="badge" class:badge-pagado={cuenta.pagado} class:badge-no-pagado={!cuenta.pagado}>
+        {cuenta.pagado ? 'PAGADO' : 'NO PAGADO'}
+      </span>
+      {#if cuenta.servido}
+        <span class="badge badge-servido">SERVIDO</span>
+      {/if}
+    </div>
+  </div>
+
+  <!-- Footer: estado + aviso + items listo count + actions -->
   <div class="card-footer">
     <div class="footer-info">
       <span class="estado-dot" style="background: {estadoCfg.color}"></span>
@@ -261,22 +365,49 @@
     text-align: left;
   }
 
-  .total-btn {
-    font-size: 0.85rem;
-    font-weight: 800;
-    color: #fff;
+  .hora-apertura {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.4);
     font-variant-numeric: tabular-nums;
-    background: color-mix(in srgb, var(--card-color) 30%, transparent);
-    border: none;
-    padding: 8px 10px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.1s;
+    padding-right: 10px;
     flex-shrink: 0;
   }
 
-  .total-btn:active {
-    background: color-mix(in srgb, var(--card-color) 50%, transparent);
+  /* ===== TIMER BAR ===== */
+  .timer-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .timer {
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  }
+
+  .timer.elapsed {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .timer.countdown {
+    color: #22c55e;
+  }
+
+  .timer.countdown.countdown-urgent {
+    color: #ef4444;
+    animation: blink-soft 1s ease-in-out infinite;
+  }
+
+  .recogida-hora {
+    margin-left: auto;
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.35);
+    font-variant-numeric: tabular-nums;
   }
 
   /* ===== ITEMS BODY ===== */
@@ -366,6 +497,14 @@
     font-size: 0.65rem;
     color: rgba(255, 255, 255, 0.5);
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .item-precio {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.35);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
 
   /* Empty / summary states */
@@ -394,6 +533,66 @@
     font-size: 0.75rem;
     color: rgba(255, 255, 255, 0.3);
     text-transform: uppercase;
+  }
+
+  /* ===== TOTAL ROW ===== */
+  .total-row {
+    display: flex;
+    align-items: center;
+    border-top: 1px solid color-mix(in srgb, var(--card-color) 10%, transparent);
+  }
+
+  .total-btn {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    background: color-mix(in srgb, var(--card-color) 25%, transparent);
+    border: none;
+    padding: 6px 10px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.1s;
+    flex-shrink: 0;
+  }
+
+  .total-btn:active {
+    background: color-mix(in srgb, var(--card-color) 50%, transparent);
+  }
+
+  .badges {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+    padding-right: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .badge {
+    font-size: 0.5rem;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  .badge-pagado {
+    background: #22c55e;
+    color: #000;
+  }
+
+  .badge-no-pagado {
+    background: transparent;
+    border: 1px solid #64748b;
+    color: #64748b;
+  }
+
+  .badge-servido {
+    background: #a855f7;
+    color: #fff;
   }
 
   /* ===== FOOTER ===== */
@@ -536,13 +735,21 @@
     .header-tap { padding: 4px 8px; gap: 4px; }
     .tipo-icon { font-size: 0.75rem; }
     .nombre { font-size: 0.7rem; }
-    .total-btn { font-size: 0.7rem; padding: 4px 6px; }
+    .hora-apertura { font-size: 0.55rem; padding-right: 6px; }
+    .timer-bar { padding: 2px 8px; gap: 6px; }
+    .timer { font-size: 0.55rem; }
+    .recogida-hora { font-size: 0.5rem; }
     .items-body { padding: 4px 8px; min-height: 36px; max-height: 150px; }
     .category-label { font-size: 0.5rem; }
     .item-row { padding: 1px 0 1px 6px; gap: 4px; }
     .item-dot { width: 5px; height: 5px; }
     .item-nombre { font-size: 0.65rem; }
     .item-cantidad { font-size: 0.55rem; }
+    .item-precio { font-size: 0.5rem; }
+    .total-row { flex-wrap: wrap; }
+    .total-btn { font-size: 0.75rem; padding: 4px 8px; }
+    .badges { gap: 3px; padding-right: 6px; }
+    .badge { font-size: 0.45rem; padding: 1px 3px; }
     .card-footer { padding: 3px 8px 4px; }
     .estado-dot { width: 5px; height: 5px; }
     .estado-label { font-size: 0.55rem; }

@@ -444,6 +444,20 @@ let cart = [];
 let cartId = 0;
 let detailProd = null;
 
+// Tracking — funnel analytics
+var trackSessionId = 'ses_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+function trackEvent(event, productId, extra) {
+  var payload = { event: event, session_id: trackSessionId };
+  if (productId) payload.product_id = productId;
+  if (extra) payload.data = extra;
+  var url = (CONFIG.ai_endpoint || '') + '/modules/carta-digital/track';
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(url, JSON.stringify(payload));
+  } else {
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true }).catch(function(){});
+  }
+}
+
 // Helpers
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
@@ -528,6 +542,7 @@ function addOfertaToCart(ofertaId) {
     es_oferta: true,
     detalle: nombres.join(' + ')
   });
+  trackEvent('add_to_cart', oferta.id, { tipo: 'oferta' });
   updateCart();
 }
 
@@ -588,6 +603,7 @@ function renderGrid() {
 function showDetail(id) {
   detailProd = DATA.productos.find(p => p.id === id);
   if (!detailProd) return;
+  trackEvent('product_view', id);
   const p = detailProd;
 
   const visualEl = document.getElementById('detail-visual');
@@ -631,6 +647,7 @@ function addToCart(id) {
   const p = DATA.productos.find(x => x.id === id);
   if (!p) return;
   cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1 });
+  trackEvent('add_to_cart', id);
   updateCart();
   showUpsell(p);
 }
@@ -789,6 +806,8 @@ function buildOrderMsg() {
 function sendWhatsApp() {
   const msg = buildOrderMsg();
   if (!msg) return;
+  var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
+  trackEvent('order_sent', null, { items: cart.length, total: total });
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -830,6 +849,7 @@ function toggleChat() {
   chatOpen = !chatOpen;
   document.getElementById('chat-overlay').classList.toggle('open', chatOpen);
   if (chatOpen) {
+    trackEvent('chat_open');
     setTimeout(function() { document.getElementById('chat-input').focus(); }, 300);
   }
 }
@@ -1102,6 +1122,7 @@ renderOfertas();
 renderCats();
 renderGrid();
 updateCart();
+trackEvent('page_view');
 
 // PWA: register SW if available
 if ('serviceWorker' in navigator) {

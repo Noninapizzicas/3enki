@@ -42,7 +42,9 @@
     { "domain": "carta-digital", "action": "ofertas", "handler": "handleGetOfertas" },
     { "domain": "carta-digital", "action": "create-oferta", "handler": "handleCreateOferta" },
     { "domain": "carta-digital", "action": "update-oferta", "handler": "handleUpdateOferta" },
-    { "domain": "carta-digital", "action": "delete-oferta", "handler": "handleDeleteOferta" }
+    { "domain": "carta-digital", "action": "delete-oferta", "handler": "handleDeleteOferta" },
+    { "domain": "carta-digital", "action": "track-event", "handler": "handleTrackEvent" },
+    { "domain": "carta-digital", "action": "funnel", "handler": "handleGetFunnel" }
   ],
 
   "apis": [
@@ -129,6 +131,18 @@
       "path": "/ofertas/:oferta_id",
       "handler": "handleDeleteOferta",
       "description": "Eliminar oferta"
+    },
+    {
+      "method": "POST",
+      "path": "/track",
+      "handler": "handleTrackEvent",
+      "description": "Registrar evento de tracking (funnel: page_view, product_view, add_to_cart, order_sent, chat_open)"
+    },
+    {
+      "method": "GET",
+      "path": "/funnel",
+      "handler": "handleGetFunnel",
+      "description": "Análisis del funnel de conversión con tasas y top productos"
     }
   ],
 
@@ -143,7 +157,11 @@
       "counters": [
         "carta-digital.sesion.total",
         "carta-digital.pedido.total",
-        "carta-digital.producto_visto.total",
+        "carta-digital.page_view.total",
+        "carta-digital.product_view.total",
+        "carta-digital.add_to_cart.total",
+        "carta-digital.order_sent.total",
+        "carta-digital.chat_open.total",
         "carta-digital.media.served",
         "carta-digital.export.completed"
       ],

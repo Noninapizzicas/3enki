@@ -31,6 +31,7 @@ class CartaDigitalModule {
     this.sesionesActivas = new Map();     // session_id -> SessionData
     this.pedidosRegistrados = new Map();  // pedido_id -> PedidoData
     this.ofertasPerProject = new Map();   // project_id -> Map<oferta_id, OfertaData>
+    this.funnelEvents = new Map();       // project_id -> Array<FunnelEvent>
 
     // Storage
     this.storageSection = 'pizzepos';
@@ -85,7 +86,7 @@ class CartaDigitalModule {
 
     if (this.uiHandler) {
       const actions = ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health',
-        'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta'];
+        'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta', 'track-event', 'funnel'];
       for (const action of actions) {
         this.uiHandler.unregister('carta-digital', action);
       }
@@ -95,6 +96,7 @@ class CartaDigitalModule {
     this.sesionesActivas.clear();
     this.pedidosRegistrados.clear();
     this.ofertasPerProject.clear();
+    this.funnelEvents.clear();
     this.projectPaths.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -122,9 +124,11 @@ class CartaDigitalModule {
     this.uiHandler.register('carta-digital', 'create-oferta', this.handleCreateOferta.bind(this));
     this.uiHandler.register('carta-digital', 'update-oferta', this.handleUpdateOferta.bind(this));
     this.uiHandler.register('carta-digital', 'delete-oferta', this.handleDeleteOferta.bind(this));
+    this.uiHandler.register('carta-digital', 'track-event', this.handleTrackEvent.bind(this));
+    this.uiHandler.register('carta-digital', 'funnel', this.handleGetFunnel.bind(this));
 
     this.logger.info('carta-digital.ui_handlers.registered', {
-      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static', 'deploy-cf-worker', 'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta']
+      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static', 'deploy-cf-worker', 'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta', 'track-event', 'funnel']
     });
   }
 
@@ -155,6 +159,11 @@ class CartaDigitalModule {
       this.logger.info('carta-digital.ofertas.loaded', { project_id });
     } catch (err) {
       this.ofertasPerProject.set(project_id, new Map());
+    }
+
+    // Init funnel events
+    if (!this.funnelEvents.has(project_id)) {
+      this.funnelEvents.set(project_id, []);
     }
   }
 
@@ -562,6 +571,144 @@ class CartaDigitalModule {
     this.logger.info('carta-digital.oferta.deleted', { project_id: projectId, oferta_id });
 
     return { status: 200, data: { oferta_id, deleted: true } };
+  }
+
+  // ==========================================
+  // Funnel Tracking
+  // ==========================================
+
+  /**
+   * Recibe eventos de tracking desde la PWA.
+   * Eventos válidos del funnel:
+   *   page_view    — usuario abre la carta
+   *   product_view — usuario ve detalle de un producto
+   *   add_to_cart  — usuario añade producto al carrito
+   *   order_sent   — usuario envía pedido por WhatsApp
+   *   chat_open    — usuario abre el chat AI
+   *
+   * Request: { project_id?, session_id?, event, product_id?, data? }
+   */
+  async handleTrackEvent(data) {
+    const { project_id, session_id, event, product_id, data: eventData } = data || {};
+    const projectId = this.resolveProject(project_id);
+
+    const VALID_EVENTS = ['page_view', 'product_view', 'add_to_cart', 'order_sent', 'chat_open'];
+    if (!event || !VALID_EVENTS.includes(event)) {
+      return { status: 400, error: `Evento inválido. Válidos: ${VALID_EVENTS.join(', ')}` };
+    }
+
+    const funnelEvent = {
+      event,
+      project_id: projectId,
+      session_id: session_id || null,
+      product_id: product_id || null,
+      data: eventData || null,
+      timestamp: new Date().toISOString()
+    };
+
+    // Store in memory (capped per project)
+    let events = this.funnelEvents.get(projectId);
+    if (!events) {
+      events = [];
+      this.funnelEvents.set(projectId, events);
+    }
+    events.push(funnelEvent);
+
+    // Cap at 10000 events per project (FIFO)
+    if (events.length > 10000) {
+      events.splice(0, events.length - 10000);
+    }
+
+    // Update session if exists
+    if (session_id && this.sesionesActivas.has(session_id)) {
+      const session = this.sesionesActivas.get(session_id);
+      session.last_activity = new Date().toISOString();
+      if (event === 'product_view' && product_id) {
+        if (!session.productos_vistos.includes(product_id)) {
+          session.productos_vistos.push(product_id);
+        }
+      }
+    }
+
+    // Increment metrics
+    this.metrics?.increment?.(`carta-digital.${event}.total`);
+
+    return { status: 200, data: { tracked: true } };
+  }
+
+  /**
+   * Devuelve análisis del funnel de conversión.
+   * Filtra por día (default: hoy).
+   *
+   * Request: { project_id?, date? }
+   * Response: { funnel: { page_view, product_view, add_to_cart, order_sent },
+   *             conversion_rates: {...}, top_products: [...] }
+   */
+  async handleGetFunnel(data) {
+    const projectId = this.resolveProject(data?.project_id);
+    const targetDate = data?.date || new Date().toISOString().slice(0, 10);
+
+    const events = (this.funnelEvents.get(projectId) || [])
+      .filter(e => e.timestamp.startsWith(targetDate));
+
+    // Count by event type
+    const counts = { page_view: 0, product_view: 0, add_to_cart: 0, order_sent: 0, chat_open: 0 };
+    const productViews = {};   // product_id -> count
+    const productCarts = {};   // product_id -> count
+    const uniqueSessions = { page_view: new Set(), product_view: new Set(), add_to_cart: new Set(), order_sent: new Set() };
+
+    for (const e of events) {
+      if (counts[e.event] !== undefined) {
+        counts[e.event]++;
+        if (e.session_id) uniqueSessions[e.event]?.add(e.session_id);
+      }
+      if (e.event === 'product_view' && e.product_id) {
+        productViews[e.product_id] = (productViews[e.product_id] || 0) + 1;
+      }
+      if (e.event === 'add_to_cart' && e.product_id) {
+        productCarts[e.product_id] = (productCarts[e.product_id] || 0) + 1;
+      }
+    }
+
+    // Conversion rates
+    const rates = {
+      view_to_detail: counts.page_view > 0
+        ? ((counts.product_view / counts.page_view) * 100).toFixed(1) + '%'
+        : '0%',
+      detail_to_cart: counts.product_view > 0
+        ? ((counts.add_to_cart / counts.product_view) * 100).toFixed(1) + '%'
+        : '0%',
+      cart_to_order: counts.add_to_cart > 0
+        ? ((counts.order_sent / counts.add_to_cart) * 100).toFixed(1) + '%'
+        : '0%',
+      overall: counts.page_view > 0
+        ? ((counts.order_sent / counts.page_view) * 100).toFixed(1) + '%'
+        : '0%'
+    };
+
+    // Top viewed products
+    const topViewed = Object.entries(productViews)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([id, views]) => ({ product_id: id, views, cart_adds: productCarts[id] || 0 }));
+
+    return {
+      status: 200,
+      data: {
+        project_id: projectId,
+        date: targetDate,
+        funnel: counts,
+        unique_sessions: {
+          page_view: uniqueSessions.page_view.size,
+          product_view: uniqueSessions.product_view.size,
+          add_to_cart: uniqueSessions.add_to_cart.size,
+          order_sent: uniqueSessions.order_sent.size
+        },
+        conversion_rates: rates,
+        top_products: topViewed,
+        total_events: events.length
+      }
+    };
   }
 
   // ==========================================

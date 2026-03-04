@@ -259,6 +259,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-wa:active{background:#1da851}
 .empty{text-align:center;padding:40px 20px;color:#555}
 .empty-ico{font-size:2.5rem;display:block;margin-bottom:8px}
+.btn-repeat{margin-top:12px;padding:10px 20px;border:1px solid var(--primary);border-radius:10px;background:rgba(245,158,11,.1);color:var(--primary);font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s}
+.btn-repeat:active{background:rgba(245,158,11,.25)}
 
 /* Ofertas section */
 .ofertas-section{padding:0 16px 8px}
@@ -360,7 +362,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 <!-- Ofertas -->
 <div class="ofertas-section" id="ofertas-section" style="display:none">
   <div class="ofertas-header">
-    <span class="ofertas-title">🔥 Ofertas</span>
+    <span class="ofertas-title" id="ofertas-title">🔥 Ofertas</span>
   </div>
   <div class="ofertas-scroll" id="ofertas-scroll"></div>
 </div>
@@ -400,7 +402,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 <div class="cart-overlay" id="cart-overlay" onclick="toggleCart()">
   <div class="cart" onclick="event.stopPropagation()">
     <header class="cart-header">
-      <span class="cart-title">Tu pedido</span>
+      <span class="cart-title" id="cart-title">Tu pedido</span>
       <button class="close-btn" onclick="toggleCart()">✕</button>
     </header>
     <div class="cart-items" id="cart-items"></div>
@@ -438,11 +440,65 @@ const DATA = ${dataJSON};
 const CONFIG = ${configJSON};
 const MONEDA = '${escapeHtml(moneda)}';
 
+// i18n — auto-detect language
+var TRANSLATIONS = {
+  es: { cart_title:'Tu pedido', cart_empty:'Tu carrito está vacío', add:'Añadir', total:'Total', clear:'Vaciar', share:'Compartir', no_products:'No hay productos', offers:'Ofertas', add_upsell:'+ Añadir', chat_placeholder:'Escribe tu mensaje...', chat_welcome:'¡Hola! 👋 Soy el asistente de {name}. Puedo ayudarte a elegir del menú o hacer tu pedido. ¿Qué te apetece?', q1:'¿Qué me recomiendas?', q2:'Algo sin carne', q3:'Lo más popular', q4:'¿Tenéis ofertas?', order_added:'¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.', added_suffix:'✅ ¡Añadido al carrito!', chat_error:'No puedo conectar con el asistente ahora. ¿Probamos luego?', repeat_order:'Repetir último pedido', combo:'Combo', offer:'Oferta', save:'Ahorra' },
+  en: { cart_title:'Your order', cart_empty:'Your cart is empty', add:'Add', total:'Total', clear:'Clear', share:'Share', no_products:'No products', offers:'Offers', add_upsell:'+ Add', chat_placeholder:'Type your message...', chat_welcome:'Hi! 👋 I\\'m the {name} assistant. I can help you choose from our menu or place your order. What do you fancy?', q1:'What do you recommend?', q2:'Something without meat', q3:'Most popular', q4:'Any offers?', order_added:'Order added to cart! Review and send via WhatsApp.', added_suffix:'✅ Added to cart!', chat_error:'Cannot connect to the assistant right now. Try again later?', repeat_order:'Repeat last order', combo:'Combo', offer:'Offer', save:'Save' },
+  fr: { cart_title:'Votre commande', cart_empty:'Votre panier est vide', add:'Ajouter', total:'Total', clear:'Vider', share:'Partager', no_products:'Pas de produits', offers:'Offres', add_upsell:'+ Ajouter', chat_placeholder:'Écrivez votre message...', chat_welcome:'Bonjour! 👋 Je suis l\\'assistant de {name}. Je peux vous aider à choisir ou passer commande. Qu\\'est-ce qui vous ferait plaisir?', q1:'Que recommandez-vous?', q2:'Sans viande', q3:'Les plus populaires', q4:'Des offres?', order_added:'Commande ajoutée au panier! Vérifiez et envoyez par WhatsApp.', added_suffix:'✅ Ajouté au panier!', chat_error:'Impossible de se connecter. Réessayez plus tard?', repeat_order:'Répéter la commande', combo:'Combo', offer:'Offre', save:'Économie' },
+  de: { cart_title:'Ihre Bestellung', cart_empty:'Ihr Warenkorb ist leer', add:'Hinzufügen', total:'Gesamt', clear:'Leeren', share:'Teilen', no_products:'Keine Produkte', offers:'Angebote', add_upsell:'+ Hinzufügen', chat_placeholder:'Nachricht schreiben...', chat_welcome:'Hallo! 👋 Ich bin der Assistent von {name}. Ich kann Ihnen bei der Auswahl helfen. Was möchten Sie?', q1:'Was empfehlen Sie?', q2:'Etwas ohne Fleisch', q3:'Am beliebtesten', q4:'Gibt es Angebote?', order_added:'Bestellung zum Warenkorb hinzugefügt! Per WhatsApp senden.', added_suffix:'✅ Zum Warenkorb!', chat_error:'Verbindung nicht möglich. Später versuchen?', repeat_order:'Letzte Bestellung', combo:'Combo', offer:'Angebot', save:'Sparen' },
+  it: { cart_title:'Il tuo ordine', cart_empty:'Il carrello è vuoto', add:'Aggiungi', total:'Totale', clear:'Svuota', share:'Condividi', no_products:'Nessun prodotto', offers:'Offerte', add_upsell:'+ Aggiungi', chat_placeholder:'Scrivi il tuo messaggio...', chat_welcome:'Ciao! 👋 Sono l\\'assistente di {name}. Posso aiutarti a scegliere dal menu. Cosa ti va?', q1:'Cosa mi consigli?', q2:'Qualcosa senza carne', q3:'I più popolari', q4:'Ci sono offerte?', order_added:'Ordine aggiunto al carrello! Invia tramite WhatsApp.', added_suffix:'✅ Aggiunto al carrello!', chat_error:'Non riesco a connettermi. Riproviamo dopo?', repeat_order:'Ripeti ultimo ordine', combo:'Combo', offer:'Offerta', save:'Risparmio' }
+};
+var userLang = (navigator.language || 'es').slice(0, 2).toLowerCase();
+var T = TRANSLATIONS[userLang] || TRANSLATIONS.es;
+
 // State
 let catActiva = DATA.categorias.length > 0 ? DATA.categorias[0].id : null;
 let cart = [];
 let cartId = 0;
 let detailProd = null;
+
+// localStorage keys
+var LS_CART = 'carta_cart_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
+var LS_LAST_ORDER = 'carta_last_order_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
+
+// Restore cart from localStorage
+try {
+  var saved = localStorage.getItem(LS_CART);
+  if (saved) {
+    var parsed = JSON.parse(saved);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      cart = parsed;
+      cartId = cart.reduce(function(m, i) { return Math.max(m, i._id || 0); }, 0);
+    }
+  }
+} catch(e) {}
+
+function saveCartToStorage() {
+  try { localStorage.setItem(LS_CART, JSON.stringify(cart)); } catch(e) {}
+}
+
+function saveLastOrder() {
+  if (cart.length === 0) return;
+  try { localStorage.setItem(LS_LAST_ORDER, JSON.stringify(cart)); } catch(e) {}
+}
+
+function getLastOrder() {
+  try {
+    var saved = localStorage.getItem(LS_LAST_ORDER);
+    return saved ? JSON.parse(saved) : null;
+  } catch(e) { return null; }
+}
+
+function repeatLastOrder() {
+  var last = getLastOrder();
+  if (!last || !Array.isArray(last) || last.length === 0) return;
+  for (var i = 0; i < last.length; i++) {
+    var item = last[i];
+    cart.push({ _id: ++cartId, id: item.id, nombre: item.nombre, precio: item.precio, qty: item.qty || 1, detalle: item.detalle || null, es_oferta: item.es_oferta || false });
+  }
+  trackEvent('add_to_cart', null, { tipo: 'repeat_order', items: last.length });
+  updateCart();
+}
 
 // Tracking — funnel analytics
 var trackSessionId = 'ses_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -456,6 +512,14 @@ function trackEvent(event, productId, extra) {
   } else {
     fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true }).catch(function(){});
   }
+}
+
+// i18n — apply translations to static DOM elements
+function applyTranslations() {
+  var ct = document.getElementById('cart-title'); if (ct) ct.textContent = T.cart_title;
+  var ot = document.getElementById('ofertas-title'); if (ot) ot.textContent = '🔥 ' + T.offers;
+  var ci = document.getElementById('chat-input'); if (ci) ci.placeholder = T.chat_placeholder;
+  var ua = document.getElementById('upsell-add'); if (ua) ua.textContent = T.add_upsell;
 }
 
 // Helpers
@@ -487,7 +551,7 @@ function renderOfertas() {
     }
     var ahorro = precioOriginal > o.precio_oferta ? precioOriginal - o.precio_oferta : 0;
 
-    var badgeText = o.tipo === '2x1' ? '2x1' : o.tipo === 'descuento' ? 'Oferta' : 'Combo';
+    var badgeText = o.tipo === '2x1' ? '2x1' : o.tipo === 'descuento' ? T.offer : T.combo;
 
     html += '<div class="oferta-card" onclick="addOfertaToCart(\\'' + o.id + '\\')">';
     html += '<span class="oferta-badge">' + badgeText + '</span>';
@@ -567,7 +631,7 @@ function selectCat(id) {
 function renderGrid() {
   const prods = catActiva ? DATA.productos.filter(p => p.categoria === catActiva) : DATA.productos;
   const el = document.getElementById('grid');
-  if (prods.length === 0) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">No hay productos</div>'; return; }
+  if (prods.length === 0) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">' + T.no_products + '</div>'; return; }
 
   let html = '';
   for (const p of prods) {
@@ -632,7 +696,7 @@ function showDetail(id) {
     (ingsHtml ? '<h3 class="section-title">Ingredientes</h3><div class="ing-list">' + ingsHtml + '</div>' : '');
 
   document.getElementById('detail-footer').innerHTML =
-    '<button class="btn btn-primary" onclick="addToCart(\\'' + p.id + '\\');closeDetail()">Añadir ' + fmt(p.precio) + '</button>';
+    '<button class="btn btn-primary" onclick="addToCart(\\'' + p.id + '\\');closeDetail()">' + T.add + ' ' + fmt(p.precio) + '</button>';
 
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -737,6 +801,7 @@ function dismissUpsell() {
 }
 
 function updateCart() {
+  saveCartToStorage();
   const count = cart.reduce((s, i) => s + i.qty, 0);
   const total = cart.reduce((s, i) => s + i.precio * i.qty, 0);
 
@@ -749,7 +814,8 @@ function updateCart() {
   // Cart items
   const el = document.getElementById('cart-items');
   if (cart.length === 0) {
-    el.innerHTML = '<div class="empty"><span class="empty-ico">🛒</span><p>Tu carrito está vacío</p></div>';
+    var repeatBtn = getLastOrder() ? '<button class="btn-repeat" onclick="repeatLastOrder()">🔄 ' + T.repeat_order + '</button>' : '';
+    el.innerHTML = '<div class="empty"><span class="empty-ico">🛒</span><p>' + T.cart_empty + '</p>' + repeatBtn + '</div>';
     document.getElementById('cart-footer').style.display = 'none';
     return;
   }
@@ -767,9 +833,9 @@ function updateCart() {
   footer.style.display = 'block';
   const waBtn = CONFIG.whatsapp_telefono
     ? '<button class="btn-wa" onclick="sendWhatsApp()">WhatsApp</button>'
-    : '<button class="btn-share" onclick="shareOrder()">Enviar pedido</button>';
-  footer.innerHTML = '<div class="total-row"><span class="total-label">Total</span><span class="total-amount">' + fmt(total) + '</span></div>' +
-    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">Vaciar</button><button class="btn-share" onclick="shareOrder()">Compartir</button>' + waBtn + '</div>';
+    : '<button class="btn-share" onclick="shareOrder()">' + T.share + '</button>';
+  footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
+    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button><button class="btn-share" onclick="shareOrder()">' + T.share + '</button>' + waBtn + '</div>';
 }
 
 function changeQty(cid, delta) {
@@ -807,6 +873,7 @@ function sendWhatsApp() {
   const msg = buildOrderMsg();
   if (!msg) return;
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
+  saveLastOrder();
   trackEvent('order_sent', null, { items: cart.length, total: total });
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
 }
@@ -837,12 +904,12 @@ function initChat() {
   document.getElementById('chat-fab').classList.add('show');
   // Quick suggestion buttons
   const quickEl = document.getElementById('chat-quick');
-  const suggestions = ['¿Qué me recomiendas?', 'Algo sin carne', 'Lo más popular', '¿Tenéis ofertas?'];
+  const suggestions = [T.q1, T.q2, T.q3, T.q4];
   quickEl.innerHTML = suggestions.map(function(s) {
     return '<button onclick="sendQuick(this,\\'' + s.replace(/'/g, "\\\\'") + '\\')">' + s + '</button>';
   }).join('');
   // Welcome message
-  addBotMsg('¡Hola! 👋 Soy el asistente de ' + CONFIG.nombre_negocio + '. Puedo ayudarte a elegir del menú o hacer tu pedido. ¿Qué te apetece?');
+  addBotMsg(T.chat_welcome.replace('{name}', CONFIG.nombre_negocio));
 }
 
 function toggleChat() {
@@ -969,7 +1036,7 @@ function sendMessage(text) {
     finalizeStream();
     document.getElementById('chat-send').disabled = false;
     document.getElementById('chat-status').textContent = 'En línea';
-    addBotMsg('No puedo conectar con el asistente ahora. ¿Probamos luego?');
+    addBotMsg(T.chat_error);
   });
 }
 
@@ -1029,8 +1096,8 @@ function processAIReply(reply) {
       if (orderData.pedido && orderData.pedido.length > 0) {
         applyAIOrder(orderData.pedido);
         reply = reply.replace(orderMatch[0], '').trim();
-        if (!reply) reply = '¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.';
-        else reply += '\\n\\n✅ ¡Añadido al carrito!';
+        if (!reply) reply = T.order_added;
+        else reply += '\\n\\n' + T.added_suffix;
       }
     } catch(e) {}
   }
@@ -1116,6 +1183,7 @@ function speakText(text) {
 }
 
 // Init
+applyTranslations();
 initChat();
 initVoice();
 renderOfertas();

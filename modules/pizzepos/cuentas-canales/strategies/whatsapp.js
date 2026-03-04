@@ -277,6 +277,19 @@ class WhatsAppStrategy {
         conversacion.estado = 'pedido_creado';
       }
 
+      // Publicar cuenta.creada al crear pedido (no esperar a confirmar),
+      // para que cuentas registre la cuenta y el comandero/cocina puedan operar.
+      await this.modulo.publishCuentaCreada({
+        cuenta_id: pedido.cuenta_id,
+        tipo: 'whatsapp',
+        total: pedido.total,
+        metadata: {
+          telefono: pedido.telefono,
+          nombre: pedido.nombre,
+          modo_entrega: pedido.modo_entrega
+        }
+      });
+
       await this.modulo.eventBus.publish('whatsapp.pedido_creado', {
         cuenta_id,
         numero_pedido,
@@ -324,16 +337,7 @@ class WhatsAppStrategy {
       pedido.hora_confirmado = new Date().toISOString();
       this.internalMetrics.pedidos_confirmados++;
 
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'whatsapp',
-        total: pedido.total,
-        metadata: {
-          telefono: pedido.telefono,
-          nombre: pedido.nombre,
-          modo_entrega: pedido.modo_entrega
-        }
-      });
+      // cuenta.creada ya se publicó en handleCrearPedido (dedup en cuentas)
 
       await this.modulo.eventBus.publish('whatsapp.pedido_confirmado', {
         cuenta_id: pedido.cuenta_id,

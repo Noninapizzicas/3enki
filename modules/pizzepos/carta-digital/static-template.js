@@ -47,29 +47,91 @@ function generateStaticHTML(carta, config, options = {}) {
     }))
   }));
 
-  const dataJSON = JSON.stringify({ categorias, productos });
+  const ofertas = (carta.ofertas || []).filter(o => o.activa !== false).map(o => ({
+    id: o.id,
+    nombre: o.nombre,
+    descripcion: o.descripcion || '',
+    tipo: o.tipo || 'combo',
+    productos: o.productos || [],
+    precio_oferta: o.precio_oferta,
+    emoji: o.emoji || '🔥',
+    imagen: o.imagen || null
+  }));
+
+  const resenas = (carta.resenas || []).map(r => ({
+    id: r.id, nombre: r.nombre, rating: r.rating, comentario: r.comentario || '',
+    created_at: r.created_at
+  }));
+  const resenasAvg = carta.resenas_avg || 0;
+  const resenasTotal = carta.resenas_total || 0;
+
+  const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled
   });
 
-  // Build system prompt for AI assistant with full menu context
-  const menuResumen = productos.map(p => {
+  // Build system prompt for AI assistant with full menu context + upselling
+  const catMap = {};
+  for (const c of categorias) { catMap[c.id] = c.nombre; }
+
+  const menuPorCategoria = {};
+  for (const p of productos) {
+    const catNombre = catMap[p.categoria] || p.categoria || 'Otros';
+    if (!menuPorCategoria[catNombre]) menuPorCategoria[catNombre] = [];
     const ings = (p.ingredientes || []).map(i => i.nombre).join(', ');
     const tags = (p.tags || []).join(', ');
-    return `- ${p.nombre}: ${p.precio.toFixed(2)}${moneda}${ings ? ' (' + ings + ')' : ''}${tags ? ' [' + tags + ']' : ''}`;
-  }).join('\n');
+    const extras = (p.ingredientes || []).filter(i => i.precio_extra).map(i => `+${i.nombre} ${i.precio_extra.toFixed(2)}${moneda}`).join(', ');
+    menuPorCategoria[catNombre].push(
+      `- ${p.nombre}: ${p.precio.toFixed(2)}${moneda}${ings ? ' (' + ings + ')' : ''}${tags ? ' [' + tags + ']' : ''}${extras ? ' | Extras: ' + extras : ''}`
+    );
+  }
+
+  const menuResumen = Object.entries(menuPorCategoria).map(
+    ([cat, items]) => `## ${cat}\n${items.join('\n')}`
+  ).join('\n\n');
+
+  // Detect available category types for upselling rules
+  const catNombres = Object.keys(menuPorCategoria).map(n => n.toLowerCase());
+  const tieneBebidas = catNombres.some(n => /bebida|drink|refresco/i.test(n));
+  const tienePostres = catNombres.some(n => /postre|dessert|dulce/i.test(n));
+  const tieneEntrantes = catNombres.some(n => /entrante|starter|aperitivo|tapa/i.test(n));
+  const tieneExtras = productos.some(p => (p.ingredientes || []).some(i => i.precio_extra));
+
+  let upsellRules = `\nUPSELLING (MUY IMPORTANTE - hazlo de forma natural, como un camarero amable):\n`;
+  upsellRules += `- Cuando el cliente elija un plato, sugiere UN complemento concreto con nombre y precio\n`;
+  upsellRules += `- Usa frases naturales: "¡Buena elección! ¿Te apetece también...?", "Mucha gente lo combina con..."\n`;
+  upsellRules += `- NO repitas la misma sugerencia dos veces en la conversación\n`;
+  upsellRules += `- Máximo UNA sugerencia por mensaje, no seas insistente\n`;
+  upsellRules += `- Si el cliente dice que no, respeta su decisión y sigue con el pedido\n`;
+
+  if (tieneBebidas) upsellRules += `- Si pide comida sin bebida, sugiere una bebida concreta del menú\n`;
+  if (tienePostres) upsellRules += `- Antes de cerrar el pedido, menciona un postre concreto\n`;
+  if (tieneEntrantes) upsellRules += `- Si pide un plato principal, sugiere un entrante para compartir\n`;
+  if (tieneExtras) upsellRules += `- Si un producto tiene extras disponibles, menciona el más popular\n`;
+  if (!tieneBebidas && !tienePostres && !tieneEntrantes) {
+    // Solo una categoría (ej: solo pizzas) — upselling por variedad
+    upsellRules += `- Si pide un producto, sugiere otro complementario o similar que le pueda gustar\n`;
+    upsellRules += `- Menciona los más populares o los mejor valorados para animar a probar\n`;
+    upsellRules += `- Si pide solo uno, sugiere llevar uno más: "¿Quieres añadir otra para compartir?"\n`;
+  }
 
   const systemPromptJSON = JSON.stringify(
-    `Eres el asistente virtual de ${nombre_negocio}. Ayudas a los clientes a elegir y hacer su pedido.\n\n` +
+    `Eres el asistente virtual de ${nombre_negocio}. Ayudas a los clientes a elegir y hacer su pedido. Eres como un camarero experto: amable, conoces todo el menú y sabes recomendar.\n\n` +
     `REGLAS:\n` +
     `- Responde SIEMPRE en español, breve y amable (max 2-3 frases)\n` +
-    `- Recomienda platos segun preferencias del cliente\n` +
+    `- Recomienda platos según preferencias del cliente\n` +
     `- Si el cliente quiere pedir, confirma los items y cantidades\n` +
-    `- Cuando el pedido este listo, responde con un JSON al final: {"pedido":[{"id":"ID","nombre":"NOMBRE","qty":N}]}\n` +
+    `- Cuando el pedido esté listo, responde con un JSON al final: {"pedido":[{"id":"ID","nombre":"NOMBRE","qty":N}]}\n` +
     `- Si no sabes algo, di que el cliente puede contactar por WhatsApp\n` +
-    `- NO inventes productos que no estan en el menu\n\n` +
-    `MENU DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}`
+    `- NO inventes productos que no están en el menú\n` +
+    upsellRules + `\n` +
+    `MENÚ DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}` +
+    (ofertas.length > 0
+      ? `\n\nOFERTAS Y COMBOS ACTIVOS:\n` + ofertas.map(o =>
+          `- ${o.emoji} ${o.nombre}: ${o.precio_oferta.toFixed(2)}${moneda} (${o.descripcion || o.tipo})`
+        ).join('\n') + `\n- IMPORTANTE: Promociona las ofertas activamente, son la mejor opción para el cliente`
+      : '')
   );
 
   return `<!DOCTYPE html>
@@ -204,6 +266,74 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-wa:active{background:#1da851}
 .empty{text-align:center;padding:40px 20px;color:#555}
 .empty-ico{font-size:2.5rem;display:block;margin-bottom:8px}
+.btn-repeat{margin-top:12px;padding:10px 20px;border:1px solid var(--primary);border-radius:10px;background:rgba(245,158,11,.1);color:var(--primary);font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s}
+.btn-repeat:active{background:rgba(245,158,11,.25)}
+
+/* Reseñas section */
+.resenas-section{padding:0 16px 12px}
+.resenas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.resenas-summary{display:flex;align-items:center;gap:8px}
+.resenas-avg{font-size:1.4rem;font-weight:800;color:var(--primary)}
+.resenas-stars-static{color:#f59e0b;font-size:.85rem;letter-spacing:1px}
+.resenas-count{font-size:.7rem;color:var(--text-dim)}
+.resenas-btn{padding:6px 14px;border:1px solid var(--primary);border-radius:8px;background:transparent;color:var(--primary);font-size:.7rem;font-weight:600;cursor:pointer}
+.resenas-btn:active{background:rgba(245,158,11,.15)}
+.resenas-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.resenas-scroll::-webkit-scrollbar{display:none}
+.resena-card{flex-shrink:0;width:220px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:12px 14px}
+.resena-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.resena-nombre{font-size:.75rem;font-weight:700;color:#fff}
+.resena-stars{color:#f59e0b;font-size:.7rem}
+.resena-text{font-size:.72rem;color:var(--text-mid);line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.resena-date{font-size:.6rem;color:var(--text-dim);margin-top:6px}
+.resena-form-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1300;opacity:0;pointer-events:none;transition:opacity .2s}
+.resena-form-overlay.open{opacity:1;pointer-events:auto}
+.resena-form{background:var(--bg-surface);border-radius:16px;padding:24px;width:90%;max-width:360px}
+.resena-form h3{margin:0 0 16px;font-size:1rem;color:#fff}
+.resena-form input,.resena-form textarea{width:100%;padding:10px 12px;border:1px solid #333;border-radius:8px;background:#1a1a1a;color:var(--text);font-size:.85rem;margin-bottom:10px;box-sizing:border-box;font-family:inherit}
+.resena-form textarea{resize:none;height:70px}
+.resena-form input::placeholder,.resena-form textarea::placeholder{color:#555}
+.resena-stars-input{display:flex;gap:6px;margin-bottom:12px;font-size:1.5rem;cursor:pointer}
+.resena-stars-input span{color:#333;transition:color .1s}
+.resena-stars-input span.active{color:#f59e0b}
+.resena-form-actions{display:flex;gap:8px;justify-content:flex-end}
+.resena-form-actions button{padding:8px 18px;border:none;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer}
+.resena-cancel{background:#333;color:#fff}
+.resena-submit{background:var(--primary);color:#000}
+.resena-submit:disabled{opacity:.4;cursor:default}
+@media(max-width:400px){.resena-card{width:190px}}
+
+/* Ofertas section */
+.ofertas-section{padding:0 16px 8px}
+.ofertas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ofertas-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--primary);display:flex;align-items:center;gap:6px}
+.ofertas-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.ofertas-scroll::-webkit-scrollbar{display:none}
+.oferta-card{flex-shrink:0;width:260px;background:linear-gradient(135deg,#1a1200 0%,#1a1a1a 100%);border:1px solid rgba(245,158,11,.25);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s;-webkit-tap-highlight-color:transparent;position:relative}
+.oferta-card:active{transform:scale(.97)}
+.oferta-badge{position:absolute;top:8px;right:8px;padding:3px 8px;border-radius:6px;background:var(--danger);color:#fff;font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;z-index:2}
+.oferta-body{padding:12px 14px}
+.oferta-emoji{font-size:1.8rem;margin-bottom:4px;display:block}
+.oferta-nombre{font-size:.9rem;font-weight:800;color:#fff;line-height:1.2;margin-bottom:3px}
+.oferta-desc{font-size:.7rem;color:var(--text-mid);line-height:1.3;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.oferta-items{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.oferta-item-chip{padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.06);font-size:.6rem;color:var(--text-dim);border:1px solid rgba(255,255,255,.08)}
+.oferta-pricing{display:flex;align-items:baseline;gap:8px}
+.oferta-price-old{font-size:.75rem;color:var(--text-dim);text-decoration:line-through}
+.oferta-price-new{font-size:1.05rem;font-weight:800;color:var(--primary)}
+.oferta-save{font-size:.6rem;font-weight:700;color:var(--success);background:rgba(34,197,94,.1);padding:2px 6px;border-radius:4px}
+@media(max-width:400px){.oferta-card{width:230px}.ofertas-section{padding:0 10px 8px}}
+
+/* Upsell toast */
+.upsell-toast{position:fixed;bottom:104px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:12px;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,.5);max-width:calc(100% - 32px);width:360px;transition:transform .3s ease-out,opacity .3s;opacity:0;pointer-events:none}
+.upsell-toast.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+.upsell-info{flex:1;min-width:0}
+.upsell-label{font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--primary);margin-bottom:2px}
+.upsell-name{font-size:.82rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.upsell-price{font-size:.7rem;color:var(--text-mid)}
+.upsell-add{padding:8px 14px;border:none;border-radius:10px;background:var(--primary);color:#000;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.upsell-add:active{filter:brightness(.85)}
+.upsell-close{width:24px;height:24px;border:none;background:transparent;color:var(--text-dim);font-size:.9rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 
 /* Chat widget */
 .chat-fab{position:fixed;bottom:24px;left:24px;width:56px;height:56px;border:none;border-radius:50%;background:var(--primary);color:#000;cursor:pointer;z-index:50;box-shadow:0 4px 20px rgba(245,158,11,.35);transition:transform .15s;display:none;align-items:center;justify-content:center;font-size:1.5rem}
@@ -230,6 +360,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .chat-msg.bot .typing span{width:6px;height:6px;border-radius:50%;background:#555;animation:blink 1.2s infinite}
 .chat-msg.bot .typing span:nth-child(2){animation-delay:.2s}
 .chat-msg.bot .typing span:nth-child(3){animation-delay:.4s}
+.stream-cursor{display:inline-block;width:2px;height:1em;background:var(--primary);margin-left:2px;vertical-align:text-bottom;animation:blink .6s step-end infinite}
+#stream-bubble{min-height:1.4em;white-space:pre-wrap}
 @keyframes blink{0%,80%{opacity:.3}40%{opacity:1}}
 
 .chat-input-row{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid #222;background:var(--bg-surface)}
@@ -268,10 +400,53 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 <!-- Categories -->
 <div class="cats" id="cats"></div>
 
+<!-- Ofertas -->
+<div class="ofertas-section" id="ofertas-section" style="display:none">
+  <div class="ofertas-header">
+    <span class="ofertas-title" id="ofertas-title">🔥 Ofertas</span>
+  </div>
+  <div class="ofertas-scroll" id="ofertas-scroll"></div>
+</div>
+
 <!-- Grid -->
 <main class="content">
   <div class="grid" id="grid"></div>
 </main>
+
+<!-- Reseñas section -->
+<div class="resenas-section" id="resenas-section">
+  <div class="resenas-header">
+    <div class="resenas-summary">
+      <span class="resenas-avg" id="resenas-avg"></span>
+      <div>
+        <div class="resenas-stars-static" id="resenas-stars"></div>
+        <span class="resenas-count" id="resenas-count"></span>
+      </div>
+    </div>
+    <button class="resenas-btn" id="resenas-btn" onclick="openReviewForm()"></button>
+  </div>
+  <div class="resenas-scroll" id="resenas-scroll"></div>
+</div>
+
+<!-- Review form overlay -->
+<div class="resena-form-overlay" id="review-overlay" onclick="closeReviewForm()">
+  <div class="resena-form" onclick="event.stopPropagation()">
+    <h3 id="review-form-title"></h3>
+    <div class="resena-stars-input" id="review-stars">
+      <span onclick="setReviewRating(1)">★</span>
+      <span onclick="setReviewRating(2)">★</span>
+      <span onclick="setReviewRating(3)">★</span>
+      <span onclick="setReviewRating(4)">★</span>
+      <span onclick="setReviewRating(5)">★</span>
+    </div>
+    <input type="text" id="review-name" maxlength="50" oninput="checkReviewReady()">
+    <textarea id="review-comment" maxlength="500"></textarea>
+    <div class="resena-form-actions">
+      <button class="resena-cancel" onclick="closeReviewForm()"></button>
+      <button class="resena-submit" id="review-submit" onclick="submitReview()" disabled></button>
+    </div>
+  </div>
+</div>
 
 <!-- Cart FAB -->
 <button class="fab" id="fab" onclick="toggleCart()">
@@ -288,11 +463,22 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   </div>
 </div>
 
+<!-- Upsell toast -->
+<div class="upsell-toast" id="upsell-toast">
+  <div class="upsell-info">
+    <div class="upsell-label">¿Y también...?</div>
+    <div class="upsell-name" id="upsell-name"></div>
+    <div class="upsell-price" id="upsell-price"></div>
+  </div>
+  <button class="upsell-add" id="upsell-add" onclick="acceptUpsell()">+ Añadir</button>
+  <button class="upsell-close" onclick="dismissUpsell()">✕</button>
+</div>
+
 <!-- Cart panel -->
 <div class="cart-overlay" id="cart-overlay" onclick="toggleCart()">
   <div class="cart" onclick="event.stopPropagation()">
     <header class="cart-header">
-      <span class="cart-title">Tu pedido</span>
+      <span class="cart-title" id="cart-title">Tu pedido</span>
       <button class="close-btn" onclick="toggleCart()">✕</button>
     </header>
     <div class="cart-items" id="cart-items"></div>
@@ -330,15 +516,175 @@ const DATA = ${dataJSON};
 const CONFIG = ${configJSON};
 const MONEDA = '${escapeHtml(moneda)}';
 
+// i18n — auto-detect language
+var TRANSLATIONS = {
+  es: { cart_title:'Tu pedido', cart_empty:'Tu carrito está vacío', add:'Añadir', total:'Total', clear:'Vaciar', share:'Compartir', no_products:'No hay productos', offers:'Ofertas', add_upsell:'+ Añadir', chat_placeholder:'Escribe tu mensaje...', chat_welcome:'¡Hola! 👋 Soy el asistente de {name}. Puedo ayudarte a elegir del menú o hacer tu pedido. ¿Qué te apetece?', q1:'¿Qué me recomiendas?', q2:'Algo sin carne', q3:'Lo más popular', q4:'¿Tenéis ofertas?', order_added:'¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.', added_suffix:'✅ ¡Añadido al carrito!', chat_error:'No puedo conectar con el asistente ahora. ¿Probamos luego?', repeat_order:'Repetir último pedido', combo:'Combo', offer:'Oferta', save:'Ahorra', reviews:'Reseñas', write_review:'Escribir reseña', your_name:'Tu nombre', your_comment:'¿Qué te ha parecido? (opcional)', send_review:'Enviar', cancel:'Cancelar', review_thanks:'¡Gracias por tu reseña!', review_exists:'Ya has dejado una reseña', reviews_label:'reseñas' },
+  en: { cart_title:'Your order', cart_empty:'Your cart is empty', add:'Add', total:'Total', clear:'Clear', share:'Share', no_products:'No products', offers:'Offers', add_upsell:'+ Add', chat_placeholder:'Type your message...', chat_welcome:'Hi! 👋 I\\'m the {name} assistant. I can help you choose from our menu or place your order. What do you fancy?', q1:'What do you recommend?', q2:'Something without meat', q3:'Most popular', q4:'Any offers?', order_added:'Order added to cart! Review and send via WhatsApp.', added_suffix:'✅ Added to cart!', chat_error:'Cannot connect to the assistant right now. Try again later?', repeat_order:'Repeat last order', combo:'Combo', offer:'Offer', save:'Save', reviews:'Reviews', write_review:'Write a review', your_name:'Your name', your_comment:'How was it? (optional)', send_review:'Send', cancel:'Cancel', review_thanks:'Thanks for your review!', review_exists:'You already left a review', reviews_label:'reviews' },
+  fr: { cart_title:'Votre commande', cart_empty:'Votre panier est vide', add:'Ajouter', total:'Total', clear:'Vider', share:'Partager', no_products:'Pas de produits', offers:'Offres', add_upsell:'+ Ajouter', chat_placeholder:'Écrivez votre message...', chat_welcome:'Bonjour! 👋 Je suis l\\'assistant de {name}. Je peux vous aider à choisir ou passer commande. Qu\\'est-ce qui vous ferait plaisir?', q1:'Que recommandez-vous?', q2:'Sans viande', q3:'Les plus populaires', q4:'Des offres?', order_added:'Commande ajoutée au panier! Vérifiez et envoyez par WhatsApp.', added_suffix:'✅ Ajouté au panier!', chat_error:'Impossible de se connecter. Réessayez plus tard?', repeat_order:'Répéter la commande', combo:'Combo', offer:'Offre', save:'Économie', reviews:'Avis', write_review:'Écrire un avis', your_name:'Votre nom', your_comment:'Votre avis (facultatif)', send_review:'Envoyer', cancel:'Annuler', review_thanks:'Merci pour votre avis!', review_exists:'Vous avez déjà laissé un avis', reviews_label:'avis' },
+  de: { cart_title:'Ihre Bestellung', cart_empty:'Ihr Warenkorb ist leer', add:'Hinzufügen', total:'Gesamt', clear:'Leeren', share:'Teilen', no_products:'Keine Produkte', offers:'Angebote', add_upsell:'+ Hinzufügen', chat_placeholder:'Nachricht schreiben...', chat_welcome:'Hallo! 👋 Ich bin der Assistent von {name}. Ich kann Ihnen bei der Auswahl helfen. Was möchten Sie?', q1:'Was empfehlen Sie?', q2:'Etwas ohne Fleisch', q3:'Am beliebtesten', q4:'Gibt es Angebote?', order_added:'Bestellung zum Warenkorb hinzugefügt! Per WhatsApp senden.', added_suffix:'✅ Zum Warenkorb!', chat_error:'Verbindung nicht möglich. Später versuchen?', repeat_order:'Letzte Bestellung', combo:'Combo', offer:'Angebot', save:'Sparen', reviews:'Bewertungen', write_review:'Bewertung schreiben', your_name:'Ihr Name', your_comment:'Wie war es? (optional)', send_review:'Senden', cancel:'Abbrechen', review_thanks:'Danke für Ihre Bewertung!', review_exists:'Sie haben bereits bewertet', reviews_label:'Bewertungen' },
+  it: { cart_title:'Il tuo ordine', cart_empty:'Il carrello è vuoto', add:'Aggiungi', total:'Totale', clear:'Svuota', share:'Condividi', no_products:'Nessun prodotto', offers:'Offerte', add_upsell:'+ Aggiungi', chat_placeholder:'Scrivi il tuo messaggio...', chat_welcome:'Ciao! 👋 Sono l\\'assistente di {name}. Posso aiutarti a scegliere dal menu. Cosa ti va?', q1:'Cosa mi consigli?', q2:'Qualcosa senza carne', q3:'I più popolari', q4:'Ci sono offerte?', order_added:'Ordine aggiunto al carrello! Invia tramite WhatsApp.', added_suffix:'✅ Aggiunto al carrello!', chat_error:'Non riesco a connettermi. Riproviamo dopo?', repeat_order:'Ripeti ultimo ordine', combo:'Combo', offer:'Offerta', save:'Risparmio', reviews:'Recensioni', write_review:'Scrivi recensione', your_name:'Il tuo nome', your_comment:'Come è stato? (opzionale)', send_review:'Invia', cancel:'Annulla', review_thanks:'Grazie per la recensione!', review_exists:'Hai già lasciato una recensione', reviews_label:'recensioni' }
+};
+var userLang = (navigator.language || 'es').slice(0, 2).toLowerCase();
+var T = TRANSLATIONS[userLang] || TRANSLATIONS.es;
+
 // State
 let catActiva = DATA.categorias.length > 0 ? DATA.categorias[0].id : null;
 let cart = [];
 let cartId = 0;
 let detailProd = null;
 
+// localStorage keys
+var LS_CART = 'carta_cart_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
+var LS_LAST_ORDER = 'carta_last_order_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
+
+// Restore cart from localStorage
+try {
+  var saved = localStorage.getItem(LS_CART);
+  if (saved) {
+    var parsed = JSON.parse(saved);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      cart = parsed;
+      cartId = cart.reduce(function(m, i) { return Math.max(m, i._id || 0); }, 0);
+    }
+  }
+} catch(e) {}
+
+function saveCartToStorage() {
+  try { localStorage.setItem(LS_CART, JSON.stringify(cart)); } catch(e) {}
+}
+
+function saveLastOrder() {
+  if (cart.length === 0) return;
+  try { localStorage.setItem(LS_LAST_ORDER, JSON.stringify(cart)); } catch(e) {}
+}
+
+function getLastOrder() {
+  try {
+    var saved = localStorage.getItem(LS_LAST_ORDER);
+    return saved ? JSON.parse(saved) : null;
+  } catch(e) { return null; }
+}
+
+function repeatLastOrder() {
+  var last = getLastOrder();
+  if (!last || !Array.isArray(last) || last.length === 0) return;
+  for (var i = 0; i < last.length; i++) {
+    var item = last[i];
+    cart.push({ _id: ++cartId, id: item.id, nombre: item.nombre, precio: item.precio, qty: item.qty || 1, detalle: item.detalle || null, es_oferta: item.es_oferta || false });
+  }
+  trackEvent('add_to_cart', null, { tipo: 'repeat_order', items: last.length });
+  updateCart();
+}
+
+// Tracking — funnel analytics
+var trackSessionId = 'ses_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+function trackEvent(event, productId, extra) {
+  var payload = { event: event, session_id: trackSessionId };
+  if (productId) payload.product_id = productId;
+  if (extra) payload.data = extra;
+  var url = (CONFIG.ai_endpoint || '') + '/modules/carta-digital/track';
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(url, JSON.stringify(payload));
+  } else {
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true }).catch(function(){});
+  }
+}
+
+// i18n — apply translations to static DOM elements
+function applyTranslations() {
+  var ct = document.getElementById('cart-title'); if (ct) ct.textContent = T.cart_title;
+  var ot = document.getElementById('ofertas-title'); if (ot) ot.textContent = '🔥 ' + T.offers;
+  var ci = document.getElementById('chat-input'); if (ci) ci.placeholder = T.chat_placeholder;
+  var ua = document.getElementById('upsell-add'); if (ua) ua.textContent = T.add_upsell;
+}
+
 // Helpers
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+
+// Ofertas
+function renderOfertas() {
+  var ofertas = DATA.ofertas || [];
+  if (ofertas.length === 0) return;
+
+  document.getElementById('ofertas-section').style.display = 'block';
+  var el = document.getElementById('ofertas-scroll');
+  var html = '';
+
+  for (var i = 0; i < ofertas.length; i++) {
+    var o = ofertas[i];
+    // Calculate original price from products
+    var precioOriginal = 0;
+    var itemNames = [];
+    for (var j = 0; j < o.productos.length; j++) {
+      var op = o.productos[j];
+      var prod = DATA.productos.find(function(p) { return p.id === op.id; });
+      if (prod) {
+        precioOriginal += prod.precio * (op.qty || 1);
+        var name = prod.emoji ? prod.emoji + ' ' + prod.nombre : prod.nombre;
+        itemNames.push((op.qty > 1 ? op.qty + 'x ' : '') + name);
+      }
+    }
+    var ahorro = precioOriginal > o.precio_oferta ? precioOriginal - o.precio_oferta : 0;
+
+    var badgeText = o.tipo === '2x1' ? '2x1' : o.tipo === 'descuento' ? T.offer : T.combo;
+
+    html += '<div class="oferta-card" onclick="addOfertaToCart(\\'' + o.id + '\\')">';
+    html += '<span class="oferta-badge">' + badgeText + '</span>';
+    html += '<div class="oferta-body">';
+    html += '<span class="oferta-emoji">' + (o.emoji || '🔥') + '</span>';
+    html += '<div class="oferta-nombre">' + esc(o.nombre) + '</div>';
+    if (o.descripcion) html += '<div class="oferta-desc">' + esc(o.descripcion) + '</div>';
+    html += '<div class="oferta-items">';
+    for (var k = 0; k < itemNames.length; k++) {
+      html += '<span class="oferta-item-chip">' + esc(itemNames[k]) + '</span>';
+    }
+    html += '</div>';
+    html += '<div class="oferta-pricing">';
+    if (precioOriginal > o.precio_oferta) {
+      html += '<span class="oferta-price-old">' + fmt(precioOriginal) + '</span>';
+    }
+    html += '<span class="oferta-price-new">' + fmt(o.precio_oferta) + '</span>';
+    if (ahorro > 0) {
+      html += '<span class="oferta-save">-' + fmt(ahorro) + '</span>';
+    }
+    html += '</div></div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function addOfertaToCart(ofertaId) {
+  var oferta = (DATA.ofertas || []).find(function(o) { return o.id === ofertaId; });
+  if (!oferta) return;
+
+  // Add all products from the oferta as a single grouped entry
+  var nombres = [];
+  var totalOriginal = 0;
+
+  for (var i = 0; i < oferta.productos.length; i++) {
+    var op = oferta.productos[i];
+    var prod = DATA.productos.find(function(p) { return p.id === op.id; });
+    if (prod) {
+      var qty = op.qty || 1;
+      totalOriginal += prod.precio * qty;
+      nombres.push((qty > 1 ? qty + 'x ' : '') + prod.nombre);
+    }
+  }
+
+  // Add as single cart item with oferta price
+  cart.push({
+    _id: ++cartId,
+    id: oferta.id,
+    nombre: (oferta.emoji || '🔥') + ' ' + oferta.nombre,
+    precio: oferta.precio_oferta,
+    qty: 1,
+    es_oferta: true,
+    detalle: nombres.join(' + ')
+  });
+  trackEvent('add_to_cart', oferta.id, { tipo: 'oferta' });
+  updateCart();
+}
 
 // Categories
 function renderCats() {
@@ -361,7 +707,7 @@ function selectCat(id) {
 function renderGrid() {
   const prods = catActiva ? DATA.productos.filter(p => p.categoria === catActiva) : DATA.productos;
   const el = document.getElementById('grid');
-  if (prods.length === 0) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">No hay productos</div>'; return; }
+  if (prods.length === 0) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">' + T.no_products + '</div>'; return; }
 
   let html = '';
   for (const p of prods) {
@@ -397,6 +743,7 @@ function renderGrid() {
 function showDetail(id) {
   detailProd = DATA.productos.find(p => p.id === id);
   if (!detailProd) return;
+  trackEvent('product_view', id);
   const p = detailProd;
 
   const visualEl = document.getElementById('detail-visual');
@@ -425,7 +772,7 @@ function showDetail(id) {
     (ingsHtml ? '<h3 class="section-title">Ingredientes</h3><div class="ing-list">' + ingsHtml + '</div>' : '');
 
   document.getElementById('detail-footer').innerHTML =
-    '<button class="btn btn-primary" onclick="addToCart(\\'' + p.id + '\\');closeDetail()">Añadir ' + fmt(p.precio) + '</button>';
+    '<button class="btn btn-primary" onclick="addToCart(\\'' + p.id + '\\');closeDetail()">' + T.add + ' ' + fmt(p.precio) + '</button>';
 
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -440,10 +787,97 @@ function addToCart(id) {
   const p = DATA.productos.find(x => x.id === id);
   if (!p) return;
   cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1 });
+  trackEvent('add_to_cart', id);
+  updateCart();
+  showUpsell(p);
+}
+
+// ─── Upsell Engine ───
+let upsellTimer = null;
+let upsellProd = null;
+let lastUpsellIds = [];
+
+function getUpsellFor(addedProduct) {
+  // Build list of IDs already in cart
+  var cartIds = cart.map(function(i) { return i.id; });
+  // Don't repeat recent upsells
+  var exclude = cartIds.concat(lastUpsellIds);
+
+  var candidates = [];
+  var addedCat = addedProduct.categoria;
+
+  // Strategy 1: different category (cross-sell: pizza → bebida, etc.)
+  var crossCat = DATA.productos.filter(function(p) {
+    return p.categoria !== addedCat && exclude.indexOf(p.id) === -1;
+  });
+  if (crossCat.length > 0) {
+    // Prefer popular items from other categories
+    var popular = crossCat.filter(function(p) { return (p.tags || []).indexOf('popular') !== -1; });
+    candidates = popular.length > 0 ? popular : crossCat;
+  } else {
+    // Strategy 2: same category (suggest variety)
+    var sameCat = DATA.productos.filter(function(p) {
+      return p.id !== addedProduct.id && exclude.indexOf(p.id) === -1;
+    });
+    // Prefer popular or similarly priced
+    var popular = sameCat.filter(function(p) { return (p.tags || []).indexOf('popular') !== -1; });
+    if (popular.length > 0) {
+      candidates = popular;
+    } else {
+      // Similar price range (±30%)
+      var minP = addedProduct.precio * 0.7;
+      var maxP = addedProduct.precio * 1.3;
+      var similar = sameCat.filter(function(p) { return p.precio >= minP && p.precio <= maxP; });
+      candidates = similar.length > 0 ? similar : sameCat;
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  // Pick random from candidates
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function showUpsell(addedProduct) {
+  dismissUpsell();
+  var suggestion = getUpsellFor(addedProduct);
+  if (!suggestion) return;
+
+  upsellProd = suggestion;
+  lastUpsellIds.push(suggestion.id);
+  if (lastUpsellIds.length > 5) lastUpsellIds.shift();
+
+  document.getElementById('upsell-name').textContent = (suggestion.emoji ? suggestion.emoji + ' ' : '') + suggestion.nombre;
+  document.getElementById('upsell-price').textContent = fmt(suggestion.precio);
+
+  var toast = document.getElementById('upsell-toast');
+  toast.classList.add('show');
+
+  // Auto-dismiss after 5 seconds
+  upsellTimer = setTimeout(function() { dismissUpsell(); }, 5000);
+}
+
+function acceptUpsell() {
+  if (!upsellProd) return;
+  addToCartSilent(upsellProd.id);
+  dismissUpsell();
+}
+
+function addToCartSilent(id) {
+  // Add without triggering another upsell
+  var p = DATA.productos.find(function(x) { return x.id === id; });
+  if (!p) return;
+  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1 });
   updateCart();
 }
 
+function dismissUpsell() {
+  if (upsellTimer) { clearTimeout(upsellTimer); upsellTimer = null; }
+  upsellProd = null;
+  document.getElementById('upsell-toast').classList.remove('show');
+}
+
 function updateCart() {
+  saveCartToStorage();
   const count = cart.reduce((s, i) => s + i.qty, 0);
   const total = cart.reduce((s, i) => s + i.precio * i.qty, 0);
 
@@ -456,14 +890,16 @@ function updateCart() {
   // Cart items
   const el = document.getElementById('cart-items');
   if (cart.length === 0) {
-    el.innerHTML = '<div class="empty"><span class="empty-ico">🛒</span><p>Tu carrito está vacío</p></div>';
+    var repeatBtn = getLastOrder() ? '<button class="btn-repeat" onclick="repeatLastOrder()">🔄 ' + T.repeat_order + '</button>' : '';
+    el.innerHTML = '<div class="empty"><span class="empty-ico">🛒</span><p>' + T.cart_empty + '</p>' + repeatBtn + '</div>';
     document.getElementById('cart-footer').style.display = 'none';
     return;
   }
 
   let html = '';
   for (const item of cart) {
-    html += '<div class="cart-item"><div class="ci-info"><span class="ci-name">' + esc(item.nombre) + '</span></div>' +
+    var detalleHtml = item.detalle ? '<span class="ci-var add">' + esc(item.detalle) + '</span>' : '';
+    html += '<div class="cart-item"><div class="ci-info"><span class="ci-name">' + esc(item.nombre) + '</span>' + detalleHtml + '</div>' +
       '<div class="ci-ctrl"><div class="qty"><button onclick="changeQty(' + item._id + ',-1)">-</button><span>' + item.qty + '</span><button onclick="changeQty(' + item._id + ',1)">+</button></div>' +
       '<span class="ci-sub">' + fmt(item.precio * item.qty) + '</span></div></div>';
   }
@@ -473,9 +909,9 @@ function updateCart() {
   footer.style.display = 'block';
   const waBtn = CONFIG.whatsapp_telefono
     ? '<button class="btn-wa" onclick="sendWhatsApp()">WhatsApp</button>'
-    : '<button class="btn-share" onclick="shareOrder()">Enviar pedido</button>';
-  footer.innerHTML = '<div class="total-row"><span class="total-label">Total</span><span class="total-amount">' + fmt(total) + '</span></div>' +
-    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">Vaciar</button><button class="btn-share" onclick="shareOrder()">Compartir</button>' + waBtn + '</div>';
+    : '<button class="btn-share" onclick="shareOrder()">' + T.share + '</button>';
+  footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
+    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button><button class="btn-share" onclick="shareOrder()">' + T.share + '</button>' + waBtn + '</div>';
 }
 
 function changeQty(cid, delta) {
@@ -500,7 +936,9 @@ function buildOrderMsg() {
   if (cart.length === 0) return '';
   let msg = CONFIG.mensaje_header + '\\n\\n';
   for (const item of cart) {
-    msg += item.qty + 'x ' + item.nombre + ' (' + fmt(item.precio * item.qty) + ')\\n';
+    msg += item.qty + 'x ' + item.nombre + ' (' + fmt(item.precio * item.qty) + ')';
+    if (item.detalle) msg += ' [' + item.detalle + ']';
+    msg += '\\n';
   }
   const total = cart.reduce((s, i) => s + i.precio * i.qty, 0);
   msg += '\\nTotal: ' + fmt(total);
@@ -510,6 +948,9 @@ function buildOrderMsg() {
 function sendWhatsApp() {
   const msg = buildOrderMsg();
   if (!msg) return;
+  var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
+  saveLastOrder();
+  trackEvent('order_sent', null, { items: cart.length, total: total });
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -539,18 +980,19 @@ function initChat() {
   document.getElementById('chat-fab').classList.add('show');
   // Quick suggestion buttons
   const quickEl = document.getElementById('chat-quick');
-  const suggestions = ['¿Qué me recomiendas?', 'Algo sin carne', 'Lo más popular', '¿Tenéis ofertas?'];
+  const suggestions = [T.q1, T.q2, T.q3, T.q4];
   quickEl.innerHTML = suggestions.map(function(s) {
     return '<button onclick="sendQuick(this,\\'' + s.replace(/'/g, "\\\\'") + '\\')">' + s + '</button>';
   }).join('');
   // Welcome message
-  addBotMsg('¡Hola! 👋 Soy el asistente de ' + CONFIG.nombre_negocio + '. Puedo ayudarte a elegir del menú o hacer tu pedido. ¿Qué te apetece?');
+  addBotMsg(T.chat_welcome.replace('{name}', CONFIG.nombre_negocio));
 }
 
 function toggleChat() {
   chatOpen = !chatOpen;
   document.getElementById('chat-overlay').classList.toggle('open', chatOpen);
   if (chatOpen) {
+    trackEvent('chat_open');
     setTimeout(function() { document.getElementById('chat-input').focus(); }, 300);
   }
 }
@@ -588,6 +1030,36 @@ function hideTyping() {
   if (t) t.remove();
 }
 
+// Streaming bubble: shows tokens as they arrive
+function showStreamBubble() {
+  hideTyping();
+  var el = document.getElementById('chat-msgs');
+  el.innerHTML += '<div class="chat-msg bot" id="stream-bubble"><span class="stream-cursor"></span></div>';
+  el.scrollTop = el.scrollHeight;
+}
+
+function appendToStream(text) {
+  var bubble = document.getElementById('stream-bubble');
+  if (!bubble) return;
+  // Remove cursor, append text, re-add cursor
+  var cursor = bubble.querySelector('.stream-cursor');
+  if (cursor) cursor.remove();
+  bubble.innerHTML += esc(text);
+  bubble.innerHTML += '<span class="stream-cursor"></span>';
+  var el = document.getElementById('chat-msgs');
+  el.scrollTop = el.scrollHeight;
+}
+
+function finalizeStream() {
+  var bubble = document.getElementById('stream-bubble');
+  if (!bubble) return '';
+  var cursor = bubble.querySelector('.stream-cursor');
+  if (cursor) cursor.remove();
+  var text = bubble.textContent || '';
+  bubble.remove();
+  return text;
+}
+
 function sendQuick(btn, text) {
   btn.style.display = 'none';
   sendMessage(text);
@@ -605,50 +1077,109 @@ function sendChat() {
 function sendMessage(text) {
   addUserMsg(text);
   document.getElementById('chat-send').disabled = true;
-  document.getElementById('chat-status').textContent = 'Escribiendo...';
+  document.getElementById('chat-status').textContent = 'Pensando...';
   showTyping();
 
-  // Build messages array for AI (include system prompt + history, keep last 20 msgs)
-  var aiMsgs = [{ role: 'system', content: SYSTEM_PROMPT }];
+  // Build messages array for AI (strip system — server adds it)
   var history = chatMsgs.slice(-20);
+  var aiMsgs = [];
   for (var i = 0; i < history.length; i++) {
     aiMsgs.push({ role: history[i].role, content: history[i].content });
   }
 
-  fetch(CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/modules/ai-gateway/chat'), {
+  var endpoint = CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/modules/ai-gateway/chat');
+
+  fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: aiMsgs, provider: CONFIG.ai_provider || 'auto' })
+    body: JSON.stringify({ messages: aiMsgs, provider: CONFIG.ai_provider || 'auto', stream: true })
   })
-  .then(function(res) { return res.json(); })
-  .then(function(json) {
-    hideTyping();
-    document.getElementById('chat-send').disabled = false;
-    document.getElementById('chat-status').textContent = 'En línea';
-    var reply = (json.data && json.data.content) || 'Lo siento, no he podido responder. Intenta de nuevo.';
-    // Check if AI included an order JSON
-    var orderMatch = reply.match(/\\{"pedido"\\s*:\\s*\\[.*?\\]\\}/s);
-    if (orderMatch) {
-      try {
-        var orderData = JSON.parse(orderMatch[0]);
-        if (orderData.pedido && orderData.pedido.length > 0) {
-          applyAIOrder(orderData.pedido);
-          reply = reply.replace(orderMatch[0], '').trim();
-          if (!reply) reply = '¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.';
-          else reply += '\\n\\n✅ ¡Añadido al carrito!';
-        }
-      } catch(e) {}
+  .then(function(res) {
+    // Check if response is SSE streaming
+    var ct = res.headers.get('Content-Type') || '';
+    if (ct.indexOf('text/event-stream') !== -1 && res.body) {
+      return handleStreamResponse(res);
     }
-    addBotMsg(reply);
-    // Voice output
-    if (speechSynth && isRecording) speakText(reply);
+    // Fallback: non-streaming JSON response
+    return res.json().then(function(json) {
+      hideTyping();
+      var reply = (json.data && json.data.content) || 'Lo siento, no he podido responder. Intenta de nuevo.';
+      processAIReply(reply);
+    });
   })
   .catch(function(err) {
     hideTyping();
+    finalizeStream();
     document.getElementById('chat-send').disabled = false;
     document.getElementById('chat-status').textContent = 'En línea';
-    addBotMsg('No puedo conectar con el asistente ahora. ¿Probamos luego?');
+    addBotMsg(T.chat_error);
   });
+}
+
+function handleStreamResponse(res) {
+  showStreamBubble();
+  document.getElementById('chat-status').textContent = 'Escribiendo...';
+
+  var reader = res.body.getReader();
+  var decoder = new TextDecoder();
+  var buffer = '';
+  var fullContent = '';
+
+  function pump() {
+    return reader.read().then(function(result) {
+      if (result.done) {
+        // Stream finished
+        var reply = finalizeStream() || fullContent;
+        processAIReply(reply);
+        return;
+      }
+
+      buffer += decoder.decode(result.value, { stream: true });
+      var lines = buffer.split('\\n');
+      buffer = lines.pop() || '';
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line || !line.startsWith('data: ')) continue;
+        var data = line.slice(6);
+        if (data === '[DONE]') continue;
+        try {
+          var chunk = JSON.parse(data);
+          var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+          if (delta && delta.content) {
+            fullContent += delta.content;
+            appendToStream(delta.content);
+          }
+        } catch(e) {}
+      }
+
+      return pump();
+    });
+  }
+
+  return pump();
+}
+
+function processAIReply(reply) {
+  document.getElementById('chat-send').disabled = false;
+  document.getElementById('chat-status').textContent = 'En línea';
+
+  // Check if AI included an order JSON
+  var orderMatch = reply.match(/\\{"pedido"\\s*:\\s*\\[.*?\\]\\}/s);
+  if (orderMatch) {
+    try {
+      var orderData = JSON.parse(orderMatch[0]);
+      if (orderData.pedido && orderData.pedido.length > 0) {
+        applyAIOrder(orderData.pedido);
+        reply = reply.replace(orderMatch[0], '').trim();
+        if (!reply) reply = T.order_added;
+        else reply += '\\n\\n' + T.added_suffix;
+      }
+    } catch(e) {}
+  }
+  addBotMsg(reply);
+  // Voice output
+  if (speechSynth && isRecording) speakText(reply);
 }
 
 function applyAIOrder(items) {
@@ -727,12 +1258,153 @@ function speakText(text) {
   speechSynth.speak(utt);
 }
 
+// Reseñas
+var LS_REVIEW = 'carta_reviewed_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
+var reviewRating = 0;
+
+function starsHtml(rating, max) {
+  var html = '';
+  for (var i = 1; i <= (max || 5); i++) {
+    html += i <= rating ? '★' : '☆';
+  }
+  return html;
+}
+
+function renderResenas() {
+  var resenas = DATA.resenas || [];
+  var avg = DATA.resenas_avg || 0;
+  var total = DATA.resenas_total || 0;
+
+  // Even if no reviews yet, show the section so users can write one
+  document.getElementById('resenas-avg').textContent = avg > 0 ? avg.toFixed(1) : '—';
+  document.getElementById('resenas-stars').textContent = avg > 0 ? starsHtml(Math.round(avg)) : '☆☆☆☆☆';
+  document.getElementById('resenas-count').textContent = total + ' ' + T.reviews_label;
+  document.getElementById('resenas-btn').textContent = '✍ ' + T.write_review;
+
+  var el = document.getElementById('resenas-scroll');
+  if (resenas.length === 0) {
+    el.innerHTML = '<div style="color:#666;font-size:.75rem;padding:8px">' + T.write_review + '</div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < resenas.length; i++) {
+    var r = resenas[i];
+    var dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString() : '';
+    html += '<div class="resena-card">';
+    html += '<div class="resena-top"><span class="resena-nombre">' + esc(r.nombre) + '</span>';
+    html += '<span class="resena-stars">' + starsHtml(r.rating) + '</span></div>';
+    if (r.comentario) html += '<div class="resena-text">' + esc(r.comentario) + '</div>';
+    html += '<div class="resena-date">' + dateStr + '</div>';
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function openReviewForm() {
+  // Check if already reviewed
+  try {
+    if (localStorage.getItem(LS_REVIEW)) {
+      alert(T.review_exists);
+      return;
+    }
+  } catch(e) {}
+
+  reviewRating = 0;
+  updateStarsInput();
+  document.getElementById('review-name').value = '';
+  document.getElementById('review-comment').value = '';
+  document.getElementById('review-name').placeholder = T.your_name;
+  document.getElementById('review-comment').placeholder = T.your_comment;
+  document.getElementById('review-form-title').textContent = T.write_review;
+  document.getElementById('review-overlay').querySelector('.resena-cancel').textContent = T.cancel;
+  document.getElementById('review-submit').textContent = T.send_review;
+  document.getElementById('review-submit').disabled = true;
+  document.getElementById('review-overlay').classList.add('open');
+}
+
+function closeReviewForm() {
+  document.getElementById('review-overlay').classList.remove('open');
+}
+
+function setReviewRating(n) {
+  reviewRating = n;
+  updateStarsInput();
+  checkReviewReady();
+}
+
+function updateStarsInput() {
+  var stars = document.getElementById('review-stars').children;
+  for (var i = 0; i < stars.length; i++) {
+    stars[i].classList.toggle('active', i < reviewRating);
+  }
+}
+
+function checkReviewReady() {
+  var name = document.getElementById('review-name').value.trim();
+  document.getElementById('review-submit').disabled = !(reviewRating > 0 && name.length > 0);
+}
+
+function submitReview() {
+  var name = document.getElementById('review-name').value.trim();
+  var comment = document.getElementById('review-comment').value.trim();
+  if (!name || reviewRating < 1) return;
+
+  document.getElementById('review-submit').disabled = true;
+
+  var payload = {
+    session_id: trackSessionId,
+    nombre: name,
+    rating: reviewRating,
+    comentario: comment || ''
+  };
+
+  var url = (CONFIG.ai_endpoint || '') + '/modules/carta-digital/resenas';
+
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    closeReviewForm();
+    // Save to localStorage to prevent duplicates
+    try { localStorage.setItem(LS_REVIEW, '1'); } catch(e) {}
+
+    // Add to local data and re-render
+    DATA.resenas.unshift({
+      id: json.data ? json.data.id : 'local',
+      nombre: name,
+      rating: reviewRating,
+      comentario: comment,
+      created_at: new Date().toISOString()
+    });
+    DATA.resenas_total = (DATA.resenas_total || 0) + 1;
+    // Recalculate average
+    var sum = 0;
+    for (var i = 0; i < DATA.resenas.length; i++) sum += DATA.resenas[i].rating;
+    DATA.resenas_avg = parseFloat((sum / DATA.resenas.length).toFixed(1));
+    renderResenas();
+    trackEvent('review_submit', null, { rating: reviewRating });
+
+    alert(T.review_thanks);
+  })
+  .catch(function() {
+    document.getElementById('review-submit').disabled = false;
+  });
+}
+
 // Init
+applyTranslations();
 initChat();
 initVoice();
+renderOfertas();
 renderCats();
 renderGrid();
+renderResenas();
 updateCart();
+trackEvent('page_view');
 
 // PWA: register SW if available
 if ('serviceWorker' in navigator) {

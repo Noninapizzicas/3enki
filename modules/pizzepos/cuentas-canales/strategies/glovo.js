@@ -119,10 +119,8 @@ class GlovoStrategy {
       estado: pedido.estado
     });
 
-    // Si el rider ya recogió, cerrar la cuenta
-    if (pedido.estado === 'recogido') {
-      await this.cerrarCuentaGlovo(cuenta_id, correlationId);
-    }
+    // Cerrar la cuenta al procesar cobro (igual que mesa)
+    await this.cerrarCuentaGlovo(cuenta_id, correlationId);
   }
 
   getHealth() {
@@ -682,9 +680,13 @@ class GlovoStrategy {
       pagado: pedido.pagado
     });
 
-    // Solo cerrar si ya pagado/liquidado; si no, esperar
-    if (pedido.pagado) {
-      await this.cerrarCuentaGlovo(cuenta_id, correlationId);
+    // Si ya pagado, la cuenta ya fue cerrada por onCobroProcesado
+    if (!pedido.pagado) {
+      this.modulo.logger.info('glovo.pedido_recogido_pendiente_pago', {
+        correlation_id: correlationId,
+        cuenta_id,
+        glovo_order_id: pedido.glovo_order_id
+      });
     }
   }
 

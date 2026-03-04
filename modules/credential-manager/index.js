@@ -1178,7 +1178,8 @@ class CredentialManagerModule {
       { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
       { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
       { id: 'GMAIL', name: 'Gmail', icon: '📧' },
-      { id: 'GLOVO', name: 'Glovo', icon: '🛵' }
+      { id: 'GLOVO', name: 'Glovo', icon: '🛵' },
+      { id: 'CLOUDFLARE', name: 'Cloudflare', icon: '☁️' }
     ];
 
     // Niveles disponibles con metadata UI
@@ -1474,6 +1475,11 @@ class CredentialManagerModule {
           // Glovo usa credenciales multi-campo, test se hace desde glovo.save
           valid = api_key && api_key.length > 5;
           message = valid ? 'Formato válido' : 'Client ID demasiado corto';
+          break;
+
+        case 'CLOUDFLARE':
+          valid = await this.testCloudflare(api_key);
+          message = valid ? 'API token válido — permisos Workers confirmados' : 'API token inválido o sin permisos de Workers';
           break;
 
         default:
@@ -2415,6 +2421,35 @@ class CredentialManagerModule {
       return false;
     } catch (error) {
       this.logger.error('gmail.test.error', { error: error.message });
+      return false;
+    }
+  }
+
+  async testCloudflare(apiToken) {
+    try {
+      // Verify token by checking user details + workers permissions
+      const response = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.result && data.result.status === 'active') {
+        this.logger.info('cloudflare.test.success', { status: data.result.status });
+        return true;
+      }
+
+      this.logger.warn('cloudflare.test.failed', {
+        success: data.success,
+        errors: data.errors
+      });
+      return false;
+    } catch (error) {
+      this.logger.error('cloudflare.test.error', { error: error.message });
       return false;
     }
   }

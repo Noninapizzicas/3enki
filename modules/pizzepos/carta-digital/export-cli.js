@@ -19,7 +19,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { generateStaticHTML, generateServiceWorker, generateManifest, slugify } = require('./static-template');
+const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');
 
 // Parse args
 const args = process.argv.slice(2);
@@ -89,6 +89,11 @@ fs.mkdirSync(imgDir, { recursive: true });
 fs.writeFileSync(path.join(outputDir, 'index.html'), html, 'utf8');
 fs.writeFileSync(path.join(outputDir, 'sw.js'), sw, 'utf8');
 fs.writeFileSync(path.join(outputDir, 'manifest.json'), manifest, 'utf8');
+
+// Generate PWA icons (SVG)
+const logoEmoji = config.tema?.logo_emoji || '\u{1F355}';
+fs.writeFileSync(path.join(outputDir, 'icon-192.svg'), generateIcon(192, logoEmoji, colorPrimario, '#0a0a0a'), 'utf8');
+fs.writeFileSync(path.join(outputDir, 'icon-512.svg'), generateIcon(512, logoEmoji, colorPrimario, '#0a0a0a'), 'utf8');
 
 // Copy images if they exist
 let imgCount = 0;

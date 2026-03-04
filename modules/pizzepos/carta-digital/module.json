@@ -37,7 +37,8 @@
     { "domain": "carta-digital", "action": "stats", "handler": "handleGetStats" },
     { "domain": "carta-digital", "action": "health", "handler": "handleHealthCheck" },
     { "domain": "carta-digital", "action": "carta-completa", "handler": "handleCartaDigitalCompleta" },
-    { "domain": "carta-digital", "action": "export-static", "handler": "handleExportStatic" }
+    { "domain": "carta-digital", "action": "export-static", "handler": "handleExportStatic" },
+    { "domain": "carta-digital", "action": "deploy-cf-worker", "handler": "handleDeployCFWorker" }
   ],
 
   "apis": [
@@ -94,6 +95,12 @@
       "path": "/export-static",
       "handler": "handleExportStatic",
       "description": "Genera sitio estático auto-contenido para desplegar en GitHub Pages / Netlify"
+    },
+    {
+      "method": "POST",
+      "path": "/deploy-cf-worker",
+      "handler": "handleDeployCFWorker",
+      "description": "Deploy del Cloudflare Worker como proxy IA para el chat de la carta digital"
     }
   ],
 

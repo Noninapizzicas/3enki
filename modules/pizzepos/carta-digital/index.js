@@ -114,9 +114,10 @@ class CartaDigitalModule {
     this.uiHandler.register('carta-digital', 'stats', this.handleGetStats.bind(this));
     this.uiHandler.register('carta-digital', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('carta-digital', 'export-static', this.handleExportStatic.bind(this));
+    this.uiHandler.register('carta-digital', 'deploy-cf-worker', this.handleDeployCFWorker.bind(this));
 
     this.logger.info('carta-digital.ui_handlers.registered', {
-      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static']
+      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static', 'deploy-cf-worker']
     });
   }
 
@@ -645,7 +646,7 @@ class CartaDigitalModule {
     }
 
     // Generate static files
-    const { generateStaticHTML, generateServiceWorker, generateManifest, slugify } = require('./static-template');
+    const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');
 
     const html = generateStaticHTML(carta, config);
     const sw = generateServiceWorker(config.nombre_negocio);
@@ -665,6 +666,13 @@ class CartaDigitalModule {
       await fs.writeFile(path.join(outputDir, 'index.html'), html, 'utf8');
       await fs.writeFile(path.join(outputDir, 'sw.js'), sw, 'utf8');
       await fs.writeFile(path.join(outputDir, 'manifest.json'), manifest, 'utf8');
+
+      // Generate PWA icons (SVG — no dependencies needed)
+      const logoEmoji = tema.logo_emoji || '\u{1F355}';
+      await fs.writeFile(path.join(outputDir, 'icon-192.svg'),
+        generateIcon(192, logoEmoji, tema.color_primario, tema.color_fondo), 'utf8');
+      await fs.writeFile(path.join(outputDir, 'icon-512.svg'),
+        generateIcon(512, logoEmoji, tema.color_primario, tema.color_fondo), 'utf8');
 
       // Copy images
       let imagesCopied = 0;
@@ -716,6 +724,200 @@ class CartaDigitalModule {
         error: err.message
       });
       return { status: 500, error: `Error generando export: ${err.message}` };
+    }
+  }
+
+  /**
+   * Deploy Cloudflare Worker as AI chat proxy for the carta digital.
+   *
+   * Resolves credentials from credential-manager (CLOUDFLARE + DEEPSEEK),
+   * generates system prompt from carta data, and deploys via wrangler.
+   *
+   * Request: { project_id?, carta_id?, allowed_origin?, max_tokens?, worker_name?, dry_run? }
+   */
+  async handleDeployCFWorker(data) {
+    const projectId = this.resolveProject(data?.project_id);
+
+    this.logger.info('carta-digital.deploy-cf-worker.start', { projectId });
+
+    const storagePath = this.projectPaths.get(projectId);
+    if (!storagePath) {
+      return { status: 404, error: 'Proyecto no encontrado' };
+    }
+
+    // Step 1: Resolve Cloudflare credential via credential-manager
+    let cfToken = null;
+    try {
+      const resolveResult = await this.eventBus.request('credential.resolve.request', {
+        provider: 'CLOUDFLARE',
+        projectId,
+        timeout: 5000
+      });
+      if (resolveResult?.found) {
+        cfToken = resolveResult.apiKey;
+      }
+    } catch {
+      // Fallback to environment
+      cfToken = process.env[`CLOUDFLARE_API_KEY_PROJECT_${projectId}`]
+             || process.env.CLOUDFLARE_API_KEY_GLOBAL
+             || process.env.CLOUDFLARE_API_TOKEN
+             || null;
+    }
+
+    if (!cfToken) {
+      return {
+        status: 400,
+        error: 'No se encontró credencial de Cloudflare. Configura CLOUDFLARE en el Credential Manager (nivel GLOBAL o PROJECT).'
+      };
+    }
+
+    // Step 2: Resolve DeepSeek credential
+    let deepseekKey = null;
+    try {
+      const resolveResult = await this.eventBus.request('credential.resolve.request', {
+        provider: 'DEEPSEEK',
+        projectId,
+        timeout: 5000
+      });
+      if (resolveResult?.found) {
+        deepseekKey = resolveResult.apiKey;
+      }
+    } catch {
+      deepseekKey = process.env[`DEEPSEEK_API_KEY_PROJECT_${projectId}`]
+                 || process.env.DEEPSEEK_API_KEY_GLOBAL
+                 || process.env.DEEPSEEK_API_KEY
+                 || null;
+    }
+
+    if (!deepseekKey) {
+      return {
+        status: 400,
+        error: 'No se encontró credencial de DeepSeek. Configura DEEPSEEK en el Credential Manager.'
+      };
+    }
+
+    // Step 3: Load carta for system prompt
+    const cartasDir = path.join(storagePath, 'cartas');
+    let carta;
+    try {
+      const cartaId = data?.carta_id;
+      if (cartaId) {
+        const raw = await fs.readFile(path.join(cartasDir, `${cartaId}.json`), 'utf8');
+        carta = JSON.parse(raw);
+      } else {
+        const files = (await fs.readdir(cartasDir)).filter(f => f.endsWith('.json'));
+        if (files.length === 0) return { status: 404, error: 'No hay cartas disponibles' };
+        const raw = await fs.readFile(path.join(cartasDir, files[0]), 'utf8');
+        carta = JSON.parse(raw);
+      }
+    } catch (err) {
+      return { status: 500, error: `Error leyendo carta: ${err.message}` };
+    }
+
+    // Step 4: Build system prompt
+    const config = this.configPerProject.get(projectId) || this.defaultConfig();
+    const nombre = config.nombre_negocio || 'Restaurante';
+    const moneda = config.moneda || '€';
+
+    const menuResumen = (carta.productos || []).map(p => {
+      const ings = (p.ingredientes || []).map(i => i.nombre).join(', ');
+      const tags = (p.tags || []).join(', ');
+      return `- ${p.nombre}: ${p.precio.toFixed(2)}${moneda}${ings ? ' (' + ings + ')' : ''}${tags ? ' [' + tags + ']' : ''}`;
+    }).join('\n');
+
+    const systemPrompt =
+      `Eres el asistente virtual de ${nombre}. Ayudas a los clientes a elegir y hacer su pedido.\n\n` +
+      `REGLAS:\n` +
+      `- Responde SIEMPRE en español, breve y amable (max 2-3 frases)\n` +
+      `- Recomienda platos segun preferencias del cliente\n` +
+      `- Si el cliente quiere pedir, confirma los items y cantidades\n` +
+      `- Cuando el pedido este listo, responde con un JSON al final: {"pedido":[{"id":"ID","nombre":"NOMBRE","qty":N}]}\n` +
+      `- Si no sabes algo, di que el cliente puede contactar por WhatsApp\n` +
+      `- NO inventes productos que no estan en el menu\n\n` +
+      `MENU DE ${nombre.toUpperCase()}:\n${menuResumen}`;
+
+    // Step 5: Execute deploy
+    const allowedOrigin = data?.allowed_origin || '*';
+    const maxTokens = String(data?.max_tokens || 300);
+    const workerName = data?.worker_name || `${require('./static-template').slugify(nombre)}-chat`;
+    const dryRun = data?.dry_run === true;
+
+    const workerDir = path.join(__dirname, 'cf-worker');
+    const { execSync } = require('child_process');
+
+    try {
+      // Update wrangler.toml with worker name and vars
+      const tomlPath = path.join(workerDir, 'wrangler.toml');
+      const tomlContent = `name = "${workerName}"\nmain = "worker.js"\ncompatibility_date = "2024-01-01"\n\n[vars]\nALLOWED_ORIGIN = "${allowedOrigin}"\nMAX_TOKENS = "${maxTokens}"\n`;
+      await fs.writeFile(tomlPath, tomlContent, 'utf8');
+
+      if (dryRun) {
+        this.logger.info('carta-digital.deploy-cf-worker.dry-run', { projectId, workerName });
+        return {
+          status: 200,
+          data: {
+            dry_run: true,
+            worker_name: workerName,
+            allowed_origin: allowedOrigin,
+            max_tokens: maxTokens,
+            system_prompt_length: systemPrompt.length,
+            productos: (carta.productos || []).length,
+            message: 'Dry run — todo listo para desplegar. Ejecuta sin dry_run para deploy real.'
+          }
+        };
+      }
+
+      const execOpts = {
+        cwd: workerDir,
+        env: { ...process.env, CLOUDFLARE_API_TOKEN: cfToken },
+        encoding: 'utf8',
+        timeout: 60000,
+        stdio: ['pipe', 'pipe', 'pipe']
+      };
+
+      // Deploy worker code
+      const deployOutput = execSync('wrangler deploy', execOpts);
+
+      // Set secrets
+      execSync('wrangler secret put DEEPSEEK_API_KEY', { ...execOpts, input: deepseekKey });
+      execSync('wrangler secret put SYSTEM_PROMPT', { ...execOpts, input: systemPrompt });
+
+      // Extract worker URL from deploy output
+      const urlMatch = deployOutput.match(/https:\/\/[^\s]+\.workers\.dev/);
+      const workerUrl = urlMatch ? urlMatch[0] : `https://${workerName}.workers.dev`;
+
+      this.logger.info('carta-digital.deploy-cf-worker.success', {
+        projectId,
+        workerName,
+        workerUrl
+      });
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          worker_name: workerName,
+          worker_url: workerUrl,
+          allowed_origin: allowedOrigin,
+          max_tokens: maxTokens,
+          productos: (carta.productos || []).length,
+          message: `Worker desplegado en ${workerUrl}`,
+          pwa_config: {
+            ai_endpoint: workerUrl,
+            ai_chat_path: '/chat'
+          }
+        }
+      };
+    } catch (err) {
+      const errorMsg = err.stderr || err.message || String(err);
+      this.logger.error('carta-digital.deploy-cf-worker.failed', {
+        projectId,
+        error: errorMsg
+      });
+      return {
+        status: 500,
+        error: `Error desplegando Worker: ${errorMsg}`
+      };
     }
   }
 }

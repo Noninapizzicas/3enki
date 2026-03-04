@@ -162,6 +162,7 @@ class PersistenciaComanderoModule {
     // Eventos de cuentas
     await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
     await this.eventBus.subscribe('cuenta.cerrada', this.onCuentaCerrada.bind(this));
+    await this.eventBus.subscribe('cuenta.estado_cambiado', this.onCuentaEstadoCambiado.bind(this));
 
     // Eventos de cobros
     await this.eventBus.subscribe('cobro.iniciado', this.onEvento.bind(this));
@@ -324,6 +325,26 @@ class PersistenciaComanderoModule {
       cuenta_id,
       tipo
     });
+  }
+
+  async onCuentaEstadoCambiado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { cuenta_id, estado_nuevo } = eventData;
+    if (!cuenta_id || !estado_nuevo) return;
+
+    await this.onEvento(event);
+
+    const cuenta = this.cuentasActivasCache.get(cuenta_id);
+    if (cuenta) {
+      cuenta.estado = estado_nuevo;
+      cuenta.updated_at = eventData.changed_at || new Date().toISOString();
+      await this.guardarCuentasActivas();
+
+      this.logger.info('persistencia.cuenta_activa.estado_actualizado', {
+        cuenta_id,
+        estado: estado_nuevo
+      });
+    }
   }
 
   async onCuentaEliminada(event) {

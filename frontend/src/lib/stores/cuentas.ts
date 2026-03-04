@@ -99,20 +99,32 @@ const TIPO_MAP: Record<string, TipoCuenta> = {
 // Orden de progresión de estados (índice mayor = más avanzado)
 const ESTADO_ORDER: EstadoCuenta[] = ['pendiente', 'con_pedido', 'en_preparacion', 'listo', 'entregado', 'para_cobrar', 'cobrado'];
 
+// Estados válidos del dominio
+const ESTADOS_VALIDOS = new Set<EstadoCuenta>(ESTADO_ORDER);
+
 // Mapeo de estado de persistencia a EstadoCuenta
 function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
+  // Si persistencia tiene un estado real del dominio, usarlo directamente
+  if (cuenta.estado && ESTADOS_VALIDOS.has(cuenta.estado as EstadoCuenta)) {
+    return cuenta.estado as EstadoCuenta;
+  }
+  // Legacy: persistencia solo decía "abierta" — inferir desde pedidos
   if (cuenta.estado === 'abierta') {
     if (!cuenta.pedidos || cuenta.pedidos.length === 0) return 'pendiente';
-    // Glovo con pedidos = en preparación en cocina
     if (cuenta.tipo === 'glovo') return 'en_preparacion';
-    // Si tiene pedidos, verificar si están enviados a cocina
     return 'con_pedido';
   }
   return 'pendiente';
 }
 
-/** Preservar el estado más avanzado entre persistencia y store actual */
-function mergeEstado(fromPersistencia: EstadoCuenta, fromStore: EstadoCuenta | undefined): EstadoCuenta {
+/** Merge estado: persistencia es fuente de verdad si tiene estado real.
+ *  Solo preserva store si persistencia devuelve un estado inferido (legacy "abierta"). */
+function mergeEstado(fromPersistencia: EstadoCuenta, fromStore: EstadoCuenta | undefined, rawEstado: string): EstadoCuenta {
+  // Si persistencia tiene estado real del dominio, confiar en él
+  if (ESTADOS_VALIDOS.has(rawEstado as EstadoCuenta)) {
+    return fromPersistencia;
+  }
+  // Legacy fallback: persistencia dijo "abierta", preservar store si más avanzado
   if (!fromStore) return fromPersistencia;
   const iPers = ESTADO_ORDER.indexOf(fromPersistencia);
   const iStore = ESTADO_ORDER.indexOf(fromStore);
@@ -361,7 +373,7 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           id: cp.cuenta_id,
           tipo: mappedTipo,
           nombre,
-          estado: mergeEstado(mapEstadoPersistencia(cp), existingCuenta?.estado),
+          estado: mergeEstado(mapEstadoPersistencia(cp), existingCuenta?.estado, cp.estado || ''),
           hora: formatHora(cp.created_at),
           items: countItems(cp.pedidos),
           total: cp.total || 0,

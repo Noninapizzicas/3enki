@@ -44,7 +44,9 @@
     { "domain": "carta-digital", "action": "update-oferta", "handler": "handleUpdateOferta" },
     { "domain": "carta-digital", "action": "delete-oferta", "handler": "handleDeleteOferta" },
     { "domain": "carta-digital", "action": "track-event", "handler": "handleTrackEvent" },
-    { "domain": "carta-digital", "action": "funnel", "handler": "handleGetFunnel" }
+    { "domain": "carta-digital", "action": "funnel", "handler": "handleGetFunnel" },
+    { "domain": "carta-digital", "action": "resenas", "handler": "handleGetResenas" },
+    { "domain": "carta-digital", "action": "create-resena", "handler": "handleCreateResena" }
   ],
 
   "apis": [
@@ -143,6 +145,18 @@
       "path": "/funnel",
       "handler": "handleGetFunnel",
       "description": "Análisis del funnel de conversión con tasas y top productos"
+    },
+    {
+      "method": "GET",
+      "path": "/resenas",
+      "handler": "handleGetResenas",
+      "description": "Listar reseñas aprobadas con resumen (media, distribución)"
+    },
+    {
+      "method": "POST",
+      "path": "/resenas",
+      "handler": "handleCreateResena",
+      "description": "Crear nueva reseña (nombre, rating 1-5, comentario opcional)"
     }
   ],
 
@@ -162,6 +176,7 @@
         "carta-digital.add_to_cart.total",
         "carta-digital.order_sent.total",
         "carta-digital.chat_open.total",
+        "carta-digital.resena.total",
         "carta-digital.media.served",
         "carta-digital.export.completed"
       ],

@@ -32,6 +32,7 @@ class CartaDigitalModule {
     this.pedidosRegistrados = new Map();  // pedido_id -> PedidoData
     this.ofertasPerProject = new Map();   // project_id -> Map<oferta_id, OfertaData>
     this.funnelEvents = new Map();       // project_id -> Array<FunnelEvent>
+    this.resenasPerProject = new Map();  // project_id -> Array<ResenaData>
 
     // Storage
     this.storageSection = 'pizzepos';
@@ -86,7 +87,8 @@ class CartaDigitalModule {
 
     if (this.uiHandler) {
       const actions = ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health',
-        'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta', 'track-event', 'funnel'];
+        'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta', 'track-event', 'funnel',
+        'resenas', 'create-resena'];
       for (const action of actions) {
         this.uiHandler.unregister('carta-digital', action);
       }
@@ -97,6 +99,7 @@ class CartaDigitalModule {
     this.pedidosRegistrados.clear();
     this.ofertasPerProject.clear();
     this.funnelEvents.clear();
+    this.resenasPerProject.clear();
     this.projectPaths.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -126,9 +129,11 @@ class CartaDigitalModule {
     this.uiHandler.register('carta-digital', 'delete-oferta', this.handleDeleteOferta.bind(this));
     this.uiHandler.register('carta-digital', 'track-event', this.handleTrackEvent.bind(this));
     this.uiHandler.register('carta-digital', 'funnel', this.handleGetFunnel.bind(this));
+    this.uiHandler.register('carta-digital', 'resenas', this.handleGetResenas.bind(this));
+    this.uiHandler.register('carta-digital', 'create-resena', this.handleCreateResena.bind(this));
 
     this.logger.info('carta-digital.ui_handlers.registered', {
-      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static', 'deploy-cf-worker', 'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta', 'track-event', 'funnel']
+      handlers: ['config', 'update-config', 'create-session', 'register-pedido', 'stats', 'health', 'export-static', 'deploy-cf-worker', 'ofertas', 'create-oferta', 'update-oferta', 'delete-oferta', 'track-event', 'funnel', 'resenas', 'create-resena']
     });
   }
 
@@ -164,6 +169,14 @@ class CartaDigitalModule {
     // Init funnel events
     if (!this.funnelEvents.has(project_id)) {
       this.funnelEvents.set(project_id, []);
+    }
+
+    // Cargar reseñas de disco
+    try {
+      await this.loadResenas(project_id);
+      this.logger.info('carta-digital.resenas.loaded', { project_id });
+    } catch (err) {
+      this.resenasPerProject.set(project_id, []);
     }
   }
 
@@ -712,6 +725,142 @@ class CartaDigitalModule {
   }
 
   // ==========================================
+  // Reseñas persistence
+  // ==========================================
+
+  async loadResenas(project_id) {
+    const storagePath = this.projectPaths.get(project_id);
+    if (!storagePath) throw new Error('No storage path for project');
+
+    const resenasPath = path.join(storagePath, 'carta-digital-resenas.json');
+    const raw = await fs.readFile(resenasPath, 'utf8');
+    this.resenasPerProject.set(project_id, JSON.parse(raw));
+  }
+
+  async saveResenas(project_id) {
+    const storagePath = this.projectPaths.get(project_id);
+    if (!storagePath) return;
+
+    const resenasPath = path.join(storagePath, 'carta-digital-resenas.json');
+    const resenas = this.resenasPerProject.get(project_id);
+    if (!resenas) return;
+
+    try {
+      await fs.mkdir(storagePath, { recursive: true });
+      await fs.writeFile(resenasPath, JSON.stringify(resenas, null, 2), 'utf-8');
+      this.logger.info('carta-digital.resenas.saved', { project_id });
+    } catch (err) {
+      this.logger.error('carta-digital.resenas.save_failed', { project_id, error: err.message });
+    }
+  }
+
+  // ==========================================
+  // Reseñas Handlers
+  // ==========================================
+
+  /**
+   * Devuelve las reseñas aprobadas, ordenadas por fecha.
+   * Incluye resumen: media de estrellas, total, distribución.
+   *
+   * Request: { project_id?, limit?, offset? }
+   */
+  async handleGetResenas(data) {
+    const projectId = this.resolveProject(data?.project_id);
+    const limit = data?.limit || 50;
+    const offset = data?.offset || 0;
+
+    const all = (this.resenasPerProject.get(projectId) || [])
+      .filter(r => r.aprobada !== false);
+
+    // Summary
+    const total = all.length;
+    const avgRating = total > 0
+      ? parseFloat((all.reduce((s, r) => s + r.rating, 0) / total).toFixed(1))
+      : 0;
+
+    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    for (const r of all) {
+      if (distribution[r.rating] !== undefined) distribution[r.rating]++;
+    }
+
+    // Paginate (newest first)
+    const sorted = all.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const page = sorted.slice(offset, offset + limit);
+
+    return {
+      status: 200,
+      data: {
+        project_id: projectId,
+        resenas: page,
+        summary: { total, avg_rating: avgRating, distribution },
+        pagination: { offset, limit, has_more: offset + limit < total }
+      }
+    };
+  }
+
+  /**
+   * Crea una nueva reseña.
+   * Anti-spam: max 1 reseña por session_id.
+   *
+   * Request: { project_id?, session_id, nombre, rating (1-5), comentario?, producto_id? }
+   */
+  async handleCreateResena(data) {
+    const { project_id, session_id, nombre, rating, comentario, producto_id } = data || {};
+    const projectId = this.resolveProject(project_id);
+
+    if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
+      return { status: 400, error: 'Se requiere un nombre' };
+    }
+    if (!rating || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+      return { status: 400, error: 'Rating debe ser un entero entre 1 y 5' };
+    }
+
+    let resenas = this.resenasPerProject.get(projectId);
+    if (!resenas) {
+      resenas = [];
+      this.resenasPerProject.set(projectId, resenas);
+    }
+
+    // Anti-spam: una reseña por session
+    if (session_id) {
+      const existing = resenas.find(r => r.session_id === session_id);
+      if (existing) {
+        return { status: 409, error: 'Ya has dejado una reseña. ¡Gracias!' };
+      }
+    }
+
+    const resena_id = `res_${crypto.randomBytes(6).toString('hex')}`;
+    const resena = {
+      id: resena_id,
+      nombre: nombre.trim().slice(0, 50),
+      rating,
+      comentario: comentario ? comentario.trim().slice(0, 500) : '',
+      producto_id: producto_id || null,
+      session_id: session_id || null,
+      aprobada: true,  // auto-approve (puede cambiar a moderación)
+      created_at: new Date().toISOString()
+    };
+
+    resenas.push(resena);
+
+    // Cap at 1000 reviews per project
+    if (resenas.length > 1000) {
+      resenas.splice(0, resenas.length - 1000);
+    }
+
+    await this.saveResenas(projectId);
+    this.metrics?.increment?.('carta-digital.resena.total');
+
+    this.logger.info('carta-digital.resena.created', {
+      project_id: projectId,
+      resena_id,
+      rating
+    });
+
+    return { status: 201, data: resena };
+  }
+
+  // ==========================================
   // Media Serving — HTTP endpoint for images
   // ==========================================
 
@@ -893,6 +1042,16 @@ class CartaDigitalModule {
     // Include active ofertas
     const ofertas = this.getOfertasActivas(projectId);
 
+    // Include recent reviews (last 20, approved)
+    const allResenas = (this.resenasPerProject.get(projectId) || [])
+      .filter(r => r.aprobada !== false);
+    const resenasRecent = allResenas
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 20);
+    const avgRating = allResenas.length > 0
+      ? parseFloat((allResenas.reduce((s, r) => s + r.rating, 0) / allResenas.length).toFixed(1))
+      : 0;
+
     return {
       status: 200,
       data: {
@@ -909,6 +1068,7 @@ class CartaDigitalModule {
         categorias,
         productos,
         ofertas,
+        resenas: { items: resenasRecent, total: allResenas.length, avg_rating: avgRating },
         total_categorias: categorias.length,
         total_productos: productos.length,
         total_ofertas: ofertas.length,
@@ -995,6 +1155,17 @@ class CartaDigitalModule {
     // Include active ofertas in carta for static export
     const ofertas = this.getOfertasActivas(projectId);
     carta.ofertas = ofertas;
+
+    // Include recent reviews
+    const allResenas = (this.resenasPerProject.get(projectId) || [])
+      .filter(r => r.aprobada !== false);
+    carta.resenas = allResenas
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 20);
+    carta.resenas_avg = allResenas.length > 0
+      ? parseFloat((allResenas.reduce((s, r) => s + r.rating, 0) / allResenas.length).toFixed(1))
+      : 0;
+    carta.resenas_total = allResenas.length;
 
     // Generate static files
     const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');

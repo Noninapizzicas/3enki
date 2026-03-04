@@ -58,7 +58,14 @@ function generateStaticHTML(carta, config, options = {}) {
     imagen: o.imagen || null
   }));
 
-  const dataJSON = JSON.stringify({ categorias, productos, ofertas });
+  const resenas = (carta.resenas || []).map(r => ({
+    id: r.id, nombre: r.nombre, rating: r.rating, comentario: r.comentario || '',
+    created_at: r.created_at
+  }));
+  const resenasAvg = carta.resenas_avg || 0;
+  const resenasTotal = carta.resenas_total || 0;
+
+  const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled
@@ -262,6 +269,40 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-repeat{margin-top:12px;padding:10px 20px;border:1px solid var(--primary);border-radius:10px;background:rgba(245,158,11,.1);color:var(--primary);font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s}
 .btn-repeat:active{background:rgba(245,158,11,.25)}
 
+/* Reseñas section */
+.resenas-section{padding:0 16px 12px}
+.resenas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.resenas-summary{display:flex;align-items:center;gap:8px}
+.resenas-avg{font-size:1.4rem;font-weight:800;color:var(--primary)}
+.resenas-stars-static{color:#f59e0b;font-size:.85rem;letter-spacing:1px}
+.resenas-count{font-size:.7rem;color:var(--text-dim)}
+.resenas-btn{padding:6px 14px;border:1px solid var(--primary);border-radius:8px;background:transparent;color:var(--primary);font-size:.7rem;font-weight:600;cursor:pointer}
+.resenas-btn:active{background:rgba(245,158,11,.15)}
+.resenas-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.resenas-scroll::-webkit-scrollbar{display:none}
+.resena-card{flex-shrink:0;width:220px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:12px 14px}
+.resena-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.resena-nombre{font-size:.75rem;font-weight:700;color:#fff}
+.resena-stars{color:#f59e0b;font-size:.7rem}
+.resena-text{font-size:.72rem;color:var(--text-mid);line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.resena-date{font-size:.6rem;color:var(--text-dim);margin-top:6px}
+.resena-form-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1300;opacity:0;pointer-events:none;transition:opacity .2s}
+.resena-form-overlay.open{opacity:1;pointer-events:auto}
+.resena-form{background:var(--bg-surface);border-radius:16px;padding:24px;width:90%;max-width:360px}
+.resena-form h3{margin:0 0 16px;font-size:1rem;color:#fff}
+.resena-form input,.resena-form textarea{width:100%;padding:10px 12px;border:1px solid #333;border-radius:8px;background:#1a1a1a;color:var(--text);font-size:.85rem;margin-bottom:10px;box-sizing:border-box;font-family:inherit}
+.resena-form textarea{resize:none;height:70px}
+.resena-form input::placeholder,.resena-form textarea::placeholder{color:#555}
+.resena-stars-input{display:flex;gap:6px;margin-bottom:12px;font-size:1.5rem;cursor:pointer}
+.resena-stars-input span{color:#333;transition:color .1s}
+.resena-stars-input span.active{color:#f59e0b}
+.resena-form-actions{display:flex;gap:8px;justify-content:flex-end}
+.resena-form-actions button{padding:8px 18px;border:none;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer}
+.resena-cancel{background:#333;color:#fff}
+.resena-submit{background:var(--primary);color:#000}
+.resena-submit:disabled{opacity:.4;cursor:default}
+@media(max-width:400px){.resena-card{width:190px}}
+
 /* Ofertas section */
 .ofertas-section{padding:0 16px 8px}
 .ofertas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -372,6 +413,41 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   <div class="grid" id="grid"></div>
 </main>
 
+<!-- Reseñas section -->
+<div class="resenas-section" id="resenas-section">
+  <div class="resenas-header">
+    <div class="resenas-summary">
+      <span class="resenas-avg" id="resenas-avg"></span>
+      <div>
+        <div class="resenas-stars-static" id="resenas-stars"></div>
+        <span class="resenas-count" id="resenas-count"></span>
+      </div>
+    </div>
+    <button class="resenas-btn" id="resenas-btn" onclick="openReviewForm()"></button>
+  </div>
+  <div class="resenas-scroll" id="resenas-scroll"></div>
+</div>
+
+<!-- Review form overlay -->
+<div class="resena-form-overlay" id="review-overlay" onclick="closeReviewForm()">
+  <div class="resena-form" onclick="event.stopPropagation()">
+    <h3 id="review-form-title"></h3>
+    <div class="resena-stars-input" id="review-stars">
+      <span onclick="setReviewRating(1)">★</span>
+      <span onclick="setReviewRating(2)">★</span>
+      <span onclick="setReviewRating(3)">★</span>
+      <span onclick="setReviewRating(4)">★</span>
+      <span onclick="setReviewRating(5)">★</span>
+    </div>
+    <input type="text" id="review-name" maxlength="50" oninput="checkReviewReady()">
+    <textarea id="review-comment" maxlength="500"></textarea>
+    <div class="resena-form-actions">
+      <button class="resena-cancel" onclick="closeReviewForm()"></button>
+      <button class="resena-submit" id="review-submit" onclick="submitReview()" disabled></button>
+    </div>
+  </div>
+</div>
+
 <!-- Cart FAB -->
 <button class="fab" id="fab" onclick="toggleCart()">
   <span class="fab-count" id="fab-count">0</span>
@@ -442,11 +518,11 @@ const MONEDA = '${escapeHtml(moneda)}';
 
 // i18n — auto-detect language
 var TRANSLATIONS = {
-  es: { cart_title:'Tu pedido', cart_empty:'Tu carrito está vacío', add:'Añadir', total:'Total', clear:'Vaciar', share:'Compartir', no_products:'No hay productos', offers:'Ofertas', add_upsell:'+ Añadir', chat_placeholder:'Escribe tu mensaje...', chat_welcome:'¡Hola! 👋 Soy el asistente de {name}. Puedo ayudarte a elegir del menú o hacer tu pedido. ¿Qué te apetece?', q1:'¿Qué me recomiendas?', q2:'Algo sin carne', q3:'Lo más popular', q4:'¿Tenéis ofertas?', order_added:'¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.', added_suffix:'✅ ¡Añadido al carrito!', chat_error:'No puedo conectar con el asistente ahora. ¿Probamos luego?', repeat_order:'Repetir último pedido', combo:'Combo', offer:'Oferta', save:'Ahorra' },
-  en: { cart_title:'Your order', cart_empty:'Your cart is empty', add:'Add', total:'Total', clear:'Clear', share:'Share', no_products:'No products', offers:'Offers', add_upsell:'+ Add', chat_placeholder:'Type your message...', chat_welcome:'Hi! 👋 I\\'m the {name} assistant. I can help you choose from our menu or place your order. What do you fancy?', q1:'What do you recommend?', q2:'Something without meat', q3:'Most popular', q4:'Any offers?', order_added:'Order added to cart! Review and send via WhatsApp.', added_suffix:'✅ Added to cart!', chat_error:'Cannot connect to the assistant right now. Try again later?', repeat_order:'Repeat last order', combo:'Combo', offer:'Offer', save:'Save' },
-  fr: { cart_title:'Votre commande', cart_empty:'Votre panier est vide', add:'Ajouter', total:'Total', clear:'Vider', share:'Partager', no_products:'Pas de produits', offers:'Offres', add_upsell:'+ Ajouter', chat_placeholder:'Écrivez votre message...', chat_welcome:'Bonjour! 👋 Je suis l\\'assistant de {name}. Je peux vous aider à choisir ou passer commande. Qu\\'est-ce qui vous ferait plaisir?', q1:'Que recommandez-vous?', q2:'Sans viande', q3:'Les plus populaires', q4:'Des offres?', order_added:'Commande ajoutée au panier! Vérifiez et envoyez par WhatsApp.', added_suffix:'✅ Ajouté au panier!', chat_error:'Impossible de se connecter. Réessayez plus tard?', repeat_order:'Répéter la commande', combo:'Combo', offer:'Offre', save:'Économie' },
-  de: { cart_title:'Ihre Bestellung', cart_empty:'Ihr Warenkorb ist leer', add:'Hinzufügen', total:'Gesamt', clear:'Leeren', share:'Teilen', no_products:'Keine Produkte', offers:'Angebote', add_upsell:'+ Hinzufügen', chat_placeholder:'Nachricht schreiben...', chat_welcome:'Hallo! 👋 Ich bin der Assistent von {name}. Ich kann Ihnen bei der Auswahl helfen. Was möchten Sie?', q1:'Was empfehlen Sie?', q2:'Etwas ohne Fleisch', q3:'Am beliebtesten', q4:'Gibt es Angebote?', order_added:'Bestellung zum Warenkorb hinzugefügt! Per WhatsApp senden.', added_suffix:'✅ Zum Warenkorb!', chat_error:'Verbindung nicht möglich. Später versuchen?', repeat_order:'Letzte Bestellung', combo:'Combo', offer:'Angebot', save:'Sparen' },
-  it: { cart_title:'Il tuo ordine', cart_empty:'Il carrello è vuoto', add:'Aggiungi', total:'Totale', clear:'Svuota', share:'Condividi', no_products:'Nessun prodotto', offers:'Offerte', add_upsell:'+ Aggiungi', chat_placeholder:'Scrivi il tuo messaggio...', chat_welcome:'Ciao! 👋 Sono l\\'assistente di {name}. Posso aiutarti a scegliere dal menu. Cosa ti va?', q1:'Cosa mi consigli?', q2:'Qualcosa senza carne', q3:'I più popolari', q4:'Ci sono offerte?', order_added:'Ordine aggiunto al carrello! Invia tramite WhatsApp.', added_suffix:'✅ Aggiunto al carrello!', chat_error:'Non riesco a connettermi. Riproviamo dopo?', repeat_order:'Ripeti ultimo ordine', combo:'Combo', offer:'Offerta', save:'Risparmio' }
+  es: { cart_title:'Tu pedido', cart_empty:'Tu carrito está vacío', add:'Añadir', total:'Total', clear:'Vaciar', share:'Compartir', no_products:'No hay productos', offers:'Ofertas', add_upsell:'+ Añadir', chat_placeholder:'Escribe tu mensaje...', chat_welcome:'¡Hola! 👋 Soy el asistente de {name}. Puedo ayudarte a elegir del menú o hacer tu pedido. ¿Qué te apetece?', q1:'¿Qué me recomiendas?', q2:'Algo sin carne', q3:'Lo más popular', q4:'¿Tenéis ofertas?', order_added:'¡Pedido añadido al carrito! Puedes revisarlo y enviarlo por WhatsApp.', added_suffix:'✅ ¡Añadido al carrito!', chat_error:'No puedo conectar con el asistente ahora. ¿Probamos luego?', repeat_order:'Repetir último pedido', combo:'Combo', offer:'Oferta', save:'Ahorra', reviews:'Reseñas', write_review:'Escribir reseña', your_name:'Tu nombre', your_comment:'¿Qué te ha parecido? (opcional)', send_review:'Enviar', cancel:'Cancelar', review_thanks:'¡Gracias por tu reseña!', review_exists:'Ya has dejado una reseña', reviews_label:'reseñas' },
+  en: { cart_title:'Your order', cart_empty:'Your cart is empty', add:'Add', total:'Total', clear:'Clear', share:'Share', no_products:'No products', offers:'Offers', add_upsell:'+ Add', chat_placeholder:'Type your message...', chat_welcome:'Hi! 👋 I\\'m the {name} assistant. I can help you choose from our menu or place your order. What do you fancy?', q1:'What do you recommend?', q2:'Something without meat', q3:'Most popular', q4:'Any offers?', order_added:'Order added to cart! Review and send via WhatsApp.', added_suffix:'✅ Added to cart!', chat_error:'Cannot connect to the assistant right now. Try again later?', repeat_order:'Repeat last order', combo:'Combo', offer:'Offer', save:'Save', reviews:'Reviews', write_review:'Write a review', your_name:'Your name', your_comment:'How was it? (optional)', send_review:'Send', cancel:'Cancel', review_thanks:'Thanks for your review!', review_exists:'You already left a review', reviews_label:'reviews' },
+  fr: { cart_title:'Votre commande', cart_empty:'Votre panier est vide', add:'Ajouter', total:'Total', clear:'Vider', share:'Partager', no_products:'Pas de produits', offers:'Offres', add_upsell:'+ Ajouter', chat_placeholder:'Écrivez votre message...', chat_welcome:'Bonjour! 👋 Je suis l\\'assistant de {name}. Je peux vous aider à choisir ou passer commande. Qu\\'est-ce qui vous ferait plaisir?', q1:'Que recommandez-vous?', q2:'Sans viande', q3:'Les plus populaires', q4:'Des offres?', order_added:'Commande ajoutée au panier! Vérifiez et envoyez par WhatsApp.', added_suffix:'✅ Ajouté au panier!', chat_error:'Impossible de se connecter. Réessayez plus tard?', repeat_order:'Répéter la commande', combo:'Combo', offer:'Offre', save:'Économie', reviews:'Avis', write_review:'Écrire un avis', your_name:'Votre nom', your_comment:'Votre avis (facultatif)', send_review:'Envoyer', cancel:'Annuler', review_thanks:'Merci pour votre avis!', review_exists:'Vous avez déjà laissé un avis', reviews_label:'avis' },
+  de: { cart_title:'Ihre Bestellung', cart_empty:'Ihr Warenkorb ist leer', add:'Hinzufügen', total:'Gesamt', clear:'Leeren', share:'Teilen', no_products:'Keine Produkte', offers:'Angebote', add_upsell:'+ Hinzufügen', chat_placeholder:'Nachricht schreiben...', chat_welcome:'Hallo! 👋 Ich bin der Assistent von {name}. Ich kann Ihnen bei der Auswahl helfen. Was möchten Sie?', q1:'Was empfehlen Sie?', q2:'Etwas ohne Fleisch', q3:'Am beliebtesten', q4:'Gibt es Angebote?', order_added:'Bestellung zum Warenkorb hinzugefügt! Per WhatsApp senden.', added_suffix:'✅ Zum Warenkorb!', chat_error:'Verbindung nicht möglich. Später versuchen?', repeat_order:'Letzte Bestellung', combo:'Combo', offer:'Angebot', save:'Sparen', reviews:'Bewertungen', write_review:'Bewertung schreiben', your_name:'Ihr Name', your_comment:'Wie war es? (optional)', send_review:'Senden', cancel:'Abbrechen', review_thanks:'Danke für Ihre Bewertung!', review_exists:'Sie haben bereits bewertet', reviews_label:'Bewertungen' },
+  it: { cart_title:'Il tuo ordine', cart_empty:'Il carrello è vuoto', add:'Aggiungi', total:'Totale', clear:'Svuota', share:'Condividi', no_products:'Nessun prodotto', offers:'Offerte', add_upsell:'+ Aggiungi', chat_placeholder:'Scrivi il tuo messaggio...', chat_welcome:'Ciao! 👋 Sono l\\'assistente di {name}. Posso aiutarti a scegliere dal menu. Cosa ti va?', q1:'Cosa mi consigli?', q2:'Qualcosa senza carne', q3:'I più popolari', q4:'Ci sono offerte?', order_added:'Ordine aggiunto al carrello! Invia tramite WhatsApp.', added_suffix:'✅ Aggiunto al carrello!', chat_error:'Non riesco a connettermi. Riproviamo dopo?', repeat_order:'Ripeti ultimo ordine', combo:'Combo', offer:'Offerta', save:'Risparmio', reviews:'Recensioni', write_review:'Scrivi recensione', your_name:'Il tuo nome', your_comment:'Come è stato? (opzionale)', send_review:'Invia', cancel:'Annulla', review_thanks:'Grazie per la recensione!', review_exists:'Hai già lasciato una recensione', reviews_label:'recensioni' }
 };
 var userLang = (navigator.language || 'es').slice(0, 2).toLowerCase();
 var T = TRANSLATIONS[userLang] || TRANSLATIONS.es;
@@ -1182,6 +1258,143 @@ function speakText(text) {
   speechSynth.speak(utt);
 }
 
+// Reseñas
+var LS_REVIEW = 'carta_reviewed_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
+var reviewRating = 0;
+
+function starsHtml(rating, max) {
+  var html = '';
+  for (var i = 1; i <= (max || 5); i++) {
+    html += i <= rating ? '★' : '☆';
+  }
+  return html;
+}
+
+function renderResenas() {
+  var resenas = DATA.resenas || [];
+  var avg = DATA.resenas_avg || 0;
+  var total = DATA.resenas_total || 0;
+
+  // Even if no reviews yet, show the section so users can write one
+  document.getElementById('resenas-avg').textContent = avg > 0 ? avg.toFixed(1) : '—';
+  document.getElementById('resenas-stars').textContent = avg > 0 ? starsHtml(Math.round(avg)) : '☆☆☆☆☆';
+  document.getElementById('resenas-count').textContent = total + ' ' + T.reviews_label;
+  document.getElementById('resenas-btn').textContent = '✍ ' + T.write_review;
+
+  var el = document.getElementById('resenas-scroll');
+  if (resenas.length === 0) {
+    el.innerHTML = '<div style="color:#666;font-size:.75rem;padding:8px">' + T.write_review + '</div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < resenas.length; i++) {
+    var r = resenas[i];
+    var dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString() : '';
+    html += '<div class="resena-card">';
+    html += '<div class="resena-top"><span class="resena-nombre">' + esc(r.nombre) + '</span>';
+    html += '<span class="resena-stars">' + starsHtml(r.rating) + '</span></div>';
+    if (r.comentario) html += '<div class="resena-text">' + esc(r.comentario) + '</div>';
+    html += '<div class="resena-date">' + dateStr + '</div>';
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function openReviewForm() {
+  // Check if already reviewed
+  try {
+    if (localStorage.getItem(LS_REVIEW)) {
+      alert(T.review_exists);
+      return;
+    }
+  } catch(e) {}
+
+  reviewRating = 0;
+  updateStarsInput();
+  document.getElementById('review-name').value = '';
+  document.getElementById('review-comment').value = '';
+  document.getElementById('review-name').placeholder = T.your_name;
+  document.getElementById('review-comment').placeholder = T.your_comment;
+  document.getElementById('review-form-title').textContent = T.write_review;
+  document.getElementById('review-overlay').querySelector('.resena-cancel').textContent = T.cancel;
+  document.getElementById('review-submit').textContent = T.send_review;
+  document.getElementById('review-submit').disabled = true;
+  document.getElementById('review-overlay').classList.add('open');
+}
+
+function closeReviewForm() {
+  document.getElementById('review-overlay').classList.remove('open');
+}
+
+function setReviewRating(n) {
+  reviewRating = n;
+  updateStarsInput();
+  checkReviewReady();
+}
+
+function updateStarsInput() {
+  var stars = document.getElementById('review-stars').children;
+  for (var i = 0; i < stars.length; i++) {
+    stars[i].classList.toggle('active', i < reviewRating);
+  }
+}
+
+function checkReviewReady() {
+  var name = document.getElementById('review-name').value.trim();
+  document.getElementById('review-submit').disabled = !(reviewRating > 0 && name.length > 0);
+}
+
+function submitReview() {
+  var name = document.getElementById('review-name').value.trim();
+  var comment = document.getElementById('review-comment').value.trim();
+  if (!name || reviewRating < 1) return;
+
+  document.getElementById('review-submit').disabled = true;
+
+  var payload = {
+    session_id: trackSessionId,
+    nombre: name,
+    rating: reviewRating,
+    comentario: comment || ''
+  };
+
+  var url = (CONFIG.ai_endpoint || '') + '/modules/carta-digital/resenas';
+
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    closeReviewForm();
+    // Save to localStorage to prevent duplicates
+    try { localStorage.setItem(LS_REVIEW, '1'); } catch(e) {}
+
+    // Add to local data and re-render
+    DATA.resenas.unshift({
+      id: json.data ? json.data.id : 'local',
+      nombre: name,
+      rating: reviewRating,
+      comentario: comment,
+      created_at: new Date().toISOString()
+    });
+    DATA.resenas_total = (DATA.resenas_total || 0) + 1;
+    // Recalculate average
+    var sum = 0;
+    for (var i = 0; i < DATA.resenas.length; i++) sum += DATA.resenas[i].rating;
+    DATA.resenas_avg = parseFloat((sum / DATA.resenas.length).toFixed(1));
+    renderResenas();
+    trackEvent('review_submit', null, { rating: reviewRating });
+
+    alert(T.review_thanks);
+  })
+  .catch(function() {
+    document.getElementById('review-submit').disabled = false;
+  });
+}
+
 // Init
 applyTranslations();
 initChat();
@@ -1189,6 +1402,7 @@ initVoice();
 renderOfertas();
 renderCats();
 renderGrid();
+renderResenas();
 updateCart();
 trackEvent('page_view');
 

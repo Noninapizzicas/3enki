@@ -139,7 +139,8 @@
     "pizzepos/persistencia-comandero",
     "pizzepos/impresion",
     "facturacion/asesoria",
-    "facturacion/fuentes"
+    "facturacion/fuentes",
+    "certificate-authority"
   ],
   "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer"],
   "module_count": {
@@ -181,6 +182,14 @@
     "ui": {
       "description": "Módulos de interfaz de usuario",
       "modules": ["admin-panel", "dashboard", "ui-designer", "notas", "text-editor", "scratch-designer"]
+    },
+    "security": {
+      "description": "Módulos de seguridad y autenticación",
+      "modules": [
+        "certificate-authority (CA interna + mTLS — certificados para clientes y dispositivos)",
+        "security-p2p (cifrado E2E entre cores — disabled)",
+        "credential-manager (gestión de credenciales multi-nivel)"
+      ]
     },
     "system": {
       "description": "Módulos del sistema",

@@ -1,0 +1,161 @@
+{
+  "_meta": {
+    "description": "Documentación del módulo Certificate Authority — CA interna con autenticación mTLS",
+    "updated": "2026-03-05",
+    "version": "1.0.0"
+  },
+
+  "overview": {
+    "purpose": "Autoridad Certificadora interna que emite, verifica y revoca certificados X.509 cliente. Proporciona autenticación mTLS (mutual TLS) como puerta de entrada a los sistemas.",
+    "use_cases": [
+      "Portal de facturación — certificado por cliente/proyecto",
+      "Dispositivos de trabajo — certificado por dispositivo"
+    ],
+    "architecture": "Mismo patrón que FNMT: CA propia → emite certificados → cliente los importa en navegador → mTLS autentica cada request",
+    "location": "modules/certificate-authority/"
+  },
+
+  "files": {
+    "index.js": "Módulo principal — lifecycle (onLoad/onUnload), API handlers, eventos, integración con core",
+    "ca-manager.js": "Gestión de la CA — generar CA raíz, emitir/revocar/renovar certificados, verificación, CRL, P12 bundles",
+    "mtls-middleware.js": "Middleware mTLS — hook beforeRequest que valida certificado cliente y enriquece contexto con auth info",
+    "module.json": "Manifiesto del módulo — APIs, eventos, configuración, observability"
+  },
+
+  "components": {
+    "CAManager": {
+      "description": "Autoridad Certificadora — gestiona todo el ciclo de vida de certificados",
+      "operations": {
+        "initialize()": "Carga CA existente o genera nueva (clave RSA 2048 + certificado auto-firmado)",
+        "issueCertificate(opts)": "Emite certificado cliente/dispositivo firmado por la CA. Retorna cert PEM + clave + P12 bundle",
+        "revokeCertificate(serial, reason)": "Revoca certificado — lo añade a CRL, elimina clave privada y P12",
+        "renewCertificate(serial, overrides)": "Renueva: emite nuevo con mismos datos, revoca el anterior (reason: superseded)",
+        "verifyCertificate(pem)": "Verifica: firmado por CA + no revocado + no expirado → retorna identidad (type, identifier)",
+        "listCertificates(filters)": "Lista certificados con filtros: type (client/device), status (active/revoked/expired), identifier",
+        "getCACertificate()": "Retorna certificado raíz de la CA (público, para instalar en clientes)",
+        "getCRL()": "Retorna Certificate Revocation List",
+        "getP12Bundle(serial)": "Retorna bundle .p12 para descarga",
+        "getStats()": "Estadísticas: total, active, revoked, expired, by_type, expiring_soon"
+      },
+      "storage": {
+        "location": "data/ca/",
+        "structure": {
+          "ca-key.pem": "Clave privada de la CA (mode 0600)",
+          "ca-cert.pem": "Certificado raíz de la CA",
+          "crl.json": "Lista de revocación",
+          "certs/{serialNumber}/": "Directorio por certificado: cert.pem, key.pem, metadata.json, bundle.p12"
+        }
+      }
+    },
+    "MTLSMiddleware": {
+      "description": "Middleware de autenticación por certificado cliente",
+      "modes": {
+        "proxy": "nginx/reverse-proxy pasa certificado en header X-Client-Cert (recomendado para producción)",
+        "native": "Node.js tls.createServer con requestCert (para desarrollo o standalone)"
+      },
+      "hook": "beforeRequest — se registra en core.hooks para interceptar cada request HTTP",
+      "flow": [
+        "1. Verifica si path está excluido (health, ready, etc.)",
+        "2. Extrae certificado del header X-Client-Cert (modo proxy) o del socket TLS (modo native)",
+        "3. Si no hay cert: bloquea (403) o permite según allowUnauthenticated",
+        "4. Verifica certificado contra CA (firma, revocación, expiración)",
+        "5. Si válido: enriquece context.auth con { authenticated, method, type, identifier, serialNumber }",
+        "6. Los handlers del módulo reciben context.auth y saben quién es el cliente/dispositivo"
+      ],
+      "context_auth_schema": {
+        "authenticated": "boolean",
+        "method": "'mtls' | 'none'",
+        "type": "'client' | 'device'",
+        "identifier": "string (projectId o deviceId)",
+        "commonName": "string",
+        "serialNumber": "string",
+        "expiresAt": "ISO date string"
+      }
+    }
+  },
+
+  "apis": {
+    "base_path": "/modules/certificate-authority",
+    "endpoints": [
+      "GET  /status        — Estado del módulo y CA",
+      "GET  /ca-cert       — Descargar certificado raíz (público)",
+      "POST /issue         — Emitir certificado (commonName, type, identifier, passphrase)",
+      "POST /revoke        — Revocar certificado (serialNumber, reason)",
+      "POST /renew         — Renovar certificado (serialNumber)",
+      "GET  /list          — Listar certificados (?type=client&status=active&identifier=x)",
+      "POST /verify        — Verificar certificado (certificate PEM)",
+      "GET  /crl           — Certificate Revocation List",
+      "GET  /download-p12  — Descargar bundle .p12 (?serialNumber=x)",
+      "GET  /nginx-config  — Configuración nginx para mTLS"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      "certificate.issued   — Nuevo certificado emitido",
+      "certificate.revoked  — Certificado revocado",
+      "certificate.renewed  — Certificado renovado (old revocado, new emitido)",
+      "certificate.expired  — Certificado expirado"
+    ]
+  },
+
+  "certificate_types": {
+    "client": {
+      "description": "Certificado para clientes del portal de facturación",
+      "OU": "Portal Clientes",
+      "identifier_format": "projectId (ej: project-001)",
+      "use": "Acceso al portal de facturas — el certificado identifica al proyecto/cliente",
+      "validity": "365 días por defecto"
+    },
+    "device": {
+      "description": "Certificado para dispositivos de trabajo",
+      "OU": "Dispositivos",
+      "identifier_format": "deviceId (ej: device-macbook-001)",
+      "use": "Control de acceso por dispositivo — inventario, auditoría, revocación remota",
+      "validity": "365 días por defecto"
+    }
+  },
+
+  "configuration": {
+    "location": "config.json → modules.certificate-authority",
+    "options": {
+      "mtls_enabled": "boolean — Activar hook mTLS en gateway (default: false)",
+      "mtls_mode": "'proxy' | 'native' (default: proxy)",
+      "cert_header": "Header con certificado en modo proxy (default: x-client-cert)",
+      "allow_unauthenticated": "Permitir requests sin certificado (default: true en dev)",
+      "exclude_paths": "Array de paths excluidos de autenticación",
+      "ca_cn": "Common Name de la CA (default: Event Core Internal CA)",
+      "ca_org": "Organización de la CA (default: Event Core)",
+      "ca_validity_days": "Validez de la CA en días (default: 3650 = 10 años)",
+      "cert_validity_days": "Validez de certificados emitidos (default: 365)",
+      "key_size": "Tamaño de clave RSA (default: 2048)"
+    }
+  },
+
+  "deployment_notes": {
+    "development": "mtls_enabled: false, allow_unauthenticated: true — módulo activo pero no bloquea requests",
+    "production_proxy": [
+      "1. Activar mtls_enabled: true en config",
+      "2. Obtener ca-cert.pem via GET /modules/certificate-authority/ca-cert",
+      "3. Configurar nginx con ssl_client_certificate y ssl_verify_client",
+      "4. nginx pasa certificado en header X-Client-Cert",
+      "5. El middleware valida automáticamente cada request"
+    ],
+    "production_native": [
+      "1. Cambiar gateway HTTP a HTTPS con tls.createServer",
+      "2. Usar getTLSOptions() del middleware para configurar requestCert",
+      "3. Sin necesidad de proxy — Node.js maneja TLS directamente"
+    ]
+  },
+
+  "tests": {
+    "file": "tests/unit/certificate-authority.test.js",
+    "count": 30,
+    "run": "node tests/unit/certificate-authority.test.js",
+    "coverage": [
+      "CAManager: inicialización, persistencia, emisión, revocación, verificación, renovación, CRL, P12, estadísticas",
+      "MTLSMiddleware: exclusiones, autenticación, rechazo, modo permisivo, TLS options, nginx config",
+      "Module: instanciación, carga con core mock"
+    ]
+  }
+}

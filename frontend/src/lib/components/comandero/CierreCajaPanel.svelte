@@ -183,7 +183,7 @@
           </div>
 
         {:else if fase === 'resultado'}
-          <!-- Resultado del cierre (lo que el backend devuelve) -->
+          <!-- Resultado del cierre -->
           <div class="resultado">
             <div class="resultado-icon">✅</div>
             <h3 class="resultado-titulo">Caja cerrada</h3>
@@ -193,6 +193,12 @@
               </p>
             {/if}
             <p class="resultado-contado">Contado: {formatPrecio(totalContado)}</p>
+            {#if cierreResult?.cuentas_cerradas_forzadas?.length > 0}
+              <p class="resultado-forzadas">
+                {cierreResult.cuentas_cerradas_forzadas.length} cuenta{cierreResult.cuentas_cerradas_forzadas.length > 1 ? 's' : ''} abierta{cierreResult.cuentas_cerradas_forzadas.length > 1 ? 's' : ''} cerrada{cierreResult.cuentas_cerradas_forzadas.length > 1 ? 's' : ''} automáticamente
+              </p>
+            {/if}
+            <p class="resultado-envio">Informe enviado</p>
           </div>
         {/if}
       </div>
@@ -463,7 +469,23 @@
     font-size: 0.9rem;
     color: #f59e0b;
     font-weight: 600;
-    margin: 0;
+    margin: 0 0 8px 0;
+  }
+
+  .resultado-forzadas {
+    font-size: 0.8rem;
+    color: #f59e0b;
+    margin: 0 0 4px 0;
+    padding: 6px 12px;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: 6px;
+    display: inline-block;
+  }
+
+  .resultado-envio {
+    font-size: 0.75rem;
+    color: #666;
+    margin: 8px 0 0 0;
   }
 
   /* Footer */

@@ -698,18 +698,47 @@ class PersistenciaComanderoModule {
       return { status: 400, error: 'Se requiere arqueo con el dinero contado' };
     }
 
-    if (this.cuentasActivasCache.size > 0) {
-      return {
-        status: 400,
-        error: 'Hay cuentas abiertas sin cerrar',
-        cuentas_abiertas: this.cuentasActivasCache.size
-      };
-    }
-
     try {
+      // 1. Recopilar informe de cuentas abiertas antes de cerrarlas
+      const cuentasAbiertas = Array.from(this.cuentasActivasCache.values());
+      const informeCuentasAbiertas = cuentasAbiertas.map(c => ({
+        cuenta_id: c.cuenta_id || c.id,
+        tipo: c.tipo,
+        nombre: c.datos_especificos?.nombre || c.nombre || 'Sin nombre',
+        estado: c.estado,
+        total: c.total || 0,
+        items: c.items || 0,
+        hora_apertura: c.created_at,
+        pedidos: c.pedidos || []
+      }));
+
+      // 2. Cerrar automáticamente cuentas abiertas
+      if (cuentasAbiertas.length > 0) {
+        this.logger.info('persistencia.cierre_caja.cerrando_cuentas', {
+          cuentas_abiertas: cuentasAbiertas.length
+        });
+
+        for (const cuenta of cuentasAbiertas) {
+          const cuentaId = cuenta.cuenta_id || cuenta.id;
+
+          // Emitir evento de cierre forzado para cada cuenta
+          await this.eventBus.publish('cuenta.cerrada_forzada', {
+            cuenta_id: cuentaId,
+            motivo: 'cierre_de_caja',
+            cuenta_snapshot: cuenta
+          });
+
+          // Eliminar de cache
+          this.cuentasActivasCache.delete(cuentaId);
+        }
+
+        await this.guardarCuentasActivas();
+      }
+
+      // 3. Calcular resumen del día (incluye ventas cerradas normalmente)
       const resumen = this.calcularResumenDia();
       const totalEsperadoEfectivo = resumen.por_metodo_pago.efectivo || 0;
-      const totalArqueado = (arqueo.efectivo || 0) + (arqueo.monedas || 0);
+      const totalArqueado = arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0));
       const diferencia = totalArqueado - totalEsperadoEfectivo;
 
       const horaCierre = new Date().toISOString();
@@ -721,25 +750,33 @@ class PersistenciaComanderoModule {
         arqueo,
         totales: resumen,
         diferencia,
-        estado: diferencia === 0 ? 'cuadrado' : (diferencia > 0 ? 'sobrante' : 'faltante')
+        estado: diferencia === 0 ? 'cuadrado' : (diferencia > 0 ? 'sobrante' : 'faltante'),
+        cuentas_cerradas_forzadas: informeCuentasAbiertas
       };
+
+      // 4. Generar informe detallado para envío
+      const informe = this.generarInformeCierre(cierre);
 
       const archivoCierre = path.join(this.ventasDir, `cierre_${this.fechaJornada}.json`);
       await fs.writeFile(archivoCierre, JSON.stringify(cierre, null, 2), 'utf8');
 
       await this.archivarDia();
 
+      // 5. Publicar evento con informe completo para notificación
       await this.eventBus.publish('caja.cerrada', {
         fecha: this.fechaJornada,
         arqueo,
         totales: resumen,
-        diferencia
+        diferencia,
+        cierre,
+        informe
       });
 
       this.logger.info('persistencia.cierre_caja', {
         fecha: this.fechaJornada,
         diferencia,
-        estado: cierre.estado
+        estado: cierre.estado,
+        cuentas_forzadas: informeCuentasAbiertas.length
       });
 
       return { status: 200, data: { message: 'Cierre de caja completado', cierre } };
@@ -748,6 +785,99 @@ class PersistenciaComanderoModule {
       this.logger.error('persistencia.cierre_caja.error', { error: error.message });
       return { status: 500, error: 'Error realizando cierre de caja' };
     }
+  }
+
+  /**
+   * Genera informe de cierre en texto plano para envío por mensajería.
+   */
+  generarInformeCierre(cierre) {
+    const { fecha_jornada, hora_inicio, hora_cierre, totales, arqueo, diferencia, estado, cuentas_cerradas_forzadas } = cierre;
+    const ventas = this.ventasCache;
+
+    const lineas = [];
+    lineas.push(`📊 INFORME DE CIERRE DE CAJA`);
+    lineas.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lineas.push(`📅 Jornada: ${fecha_jornada}`);
+    lineas.push(`🕐 Inicio: ${hora_inicio ? new Date(hora_inicio).toLocaleTimeString('es-ES') : '—'}`);
+    lineas.push(`🕐 Cierre: ${hora_cierre ? new Date(hora_cierre).toLocaleTimeString('es-ES') : '—'}`);
+    lineas.push(``);
+
+    // Resumen de ventas
+    lineas.push(`💰 RESUMEN DE VENTAS`);
+    lineas.push(`─────────────────────`);
+    lineas.push(`Total ventas: ${totales.total_ventas}`);
+    lineas.push(`Ingresos: ${(totales.total_ingresos || 0).toFixed(2)} €`);
+    lineas.push(`Propinas: ${(totales.total_propinas || 0).toFixed(2)} €`);
+    lineas.push(``);
+
+    // Por método de pago
+    lineas.push(`💳 POR MÉTODO DE PAGO`);
+    lineas.push(`─────────────────────`);
+    for (const [metodo, total] of Object.entries(totales.por_metodo_pago || {})) {
+      if (Number(total) > 0) {
+        lineas.push(`  ${metodo}: ${Number(total).toFixed(2)} €`);
+      }
+    }
+    lineas.push(``);
+
+    // Por tipo de cuenta
+    lineas.push(`📋 POR TIPO`);
+    lineas.push(`─────────────────────`);
+    for (const [tipo, total] of Object.entries(totales.por_tipo_cuenta || {})) {
+      if (Number(total) > 0) {
+        lineas.push(`  ${tipo}: ${Number(total).toFixed(2)} €`);
+      }
+    }
+    lineas.push(``);
+
+    // Arqueo
+    lineas.push(`🔢 ARQUEO DE CAJA`);
+    lineas.push(`─────────────────────`);
+    const totalContado = arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0));
+    lineas.push(`Efectivo contado: ${totalContado.toFixed(2)} €`);
+    lineas.push(`Efectivo esperado: ${(totales.por_metodo_pago?.efectivo || 0).toFixed(2)} €`);
+    lineas.push(`Diferencia: ${diferencia >= 0 ? '+' : ''}${diferencia.toFixed(2)} €`);
+    lineas.push(`Estado: ${estado === 'cuadrado' ? '✅ Cuadrado' : estado === 'sobrante' ? '⬆️ Sobrante' : '⬇️ Faltante'}`);
+    lineas.push(``);
+
+    // Detalle de ventas cerradas
+    if (ventas.length > 0) {
+      lineas.push(`📝 DETALLE DE VENTAS (${ventas.length})`);
+      lineas.push(`─────────────────────`);
+      for (const venta of ventas) {
+        const nombre = venta.cuenta?.nombre || venta.cuenta?.tipo || '—';
+        const metodo = venta.cobro?.metodo_pago || '—';
+        const total = (venta.resumen?.total_final || 0).toFixed(2);
+        const items = venta.pedidos?.reduce((sum, p) => sum + (p.items?.length || 0), 0) || 0;
+        lineas.push(`  • ${nombre} | ${items} items | ${total} € (${metodo})`);
+      }
+      lineas.push(``);
+    }
+
+    // Cuentas cerradas forzadamente
+    if (cuentas_cerradas_forzadas && cuentas_cerradas_forzadas.length > 0) {
+      lineas.push(`⚠️ CUENTAS CERRADAS AL CIERRE (${cuentas_cerradas_forzadas.length})`);
+      lineas.push(`─────────────────────`);
+      for (const c of cuentas_cerradas_forzadas) {
+        lineas.push(`  • ${c.nombre} | Estado: ${c.estado} | ${(c.total || 0).toFixed(2)} € | ${c.items} items`);
+      }
+      lineas.push(``);
+    }
+
+    // Por camarero
+    if (totales.por_camarero && Object.keys(totales.por_camarero).length > 0) {
+      lineas.push(`👤 POR CAMARERO`);
+      lineas.push(`─────────────────────`);
+      for (const [camarero, total] of Object.entries(totales.por_camarero)) {
+        lineas.push(`  ${camarero}: ${Number(total).toFixed(2)} €`);
+      }
+      lineas.push(``);
+    }
+
+    lineas.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lineas.push(`Generado: ${new Date().toLocaleString('es-ES')}`);
+
+    return lineas.join('\n');
   }
 
   async handleIniciarDia() {

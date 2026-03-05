@@ -5,7 +5,7 @@
   "author": "Pizzepos Team",
 
   "provides": {
-    "events": ["caja.cerrada", "dia.iniciado"],
+    "events": ["caja.cerrada", "cuenta.cerrada_forzada", "dia.iniciado"],
     "queries": ["persistencia.eventos", "persistencia.ventas", "persistencia.cuadre_caja"]
   },
 
@@ -21,6 +21,18 @@
             "arqueo": { "type": "object" },
             "totales": { "type": "object" },
             "diferencia": { "type": "number" }
+          }
+        }
+      },
+      {
+        "event": "cuenta.cerrada_forzada",
+        "description": "Cuenta cerrada automáticamente durante cierre de caja",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "cuenta_id": { "type": "string" },
+            "motivo": { "type": "string" },
+            "cuenta_snapshot": { "type": "object" }
           }
         }
       },

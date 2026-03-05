@@ -1,10 +1,22 @@
 {
   "_VERSION": "4.0.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-03-02",
+  "_UPDATED": "2026-03-05",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "4.1.0": {
+      "fecha": "2026-03-05",
+      "cambios": [
+        "FEAT: persistencia-comandero — cierre de caja ahora auto-cierra cuentas abiertas (cuenta.cerrada_forzada)",
+        "FEAT: persistencia-comandero — genera informe detallado al cierre (ventas, métodos pago, arqueo, cuentas forzadas, por camarero)",
+        "FEAT: persistencia-comandero — nuevo evento publicado: cuenta.cerrada_forzada",
+        "FEAT: handler notificar-cierre-caja — envía informe de cierre por Telegram y/o WhatsApp según config",
+        "FEAT: CierreCajaPanel — cierre ciego: usuario solo cuenta billetes/monedas con +/−, sin ver datos de ventas",
+        "FEAT: CierreCajaPanel — muestra cuentas cerradas automáticamente en resultado",
+        "CONFIG: notificaciones.cierre_caja.telegram: { chatId, botName } / whatsapp: { to }"
+      ]
+    },
     "4.0.0": {
       "fecha": "2026-03-02",
       "cambios": [
@@ -125,7 +137,9 @@
       "7. cobros → procesa pago (efectivo/tarjeta/bizum/transferencia/mixto/link/qr) → cobro.procesado",
       "8. cuentas → escucha todos los eventos y transiciona estado: pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado (publica cuenta.estado_cambiado)",
       "9. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada",
-      "10. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
+      "10. persistencia-comandero → graba TODOS los eventos y reconstruye ventas",
+      "11. cierre de caja → persistencia-comandero auto-cierra cuentas abiertas (cuenta.cerrada_forzada) → genera informe → publica caja.cerrada con informe",
+      "12. handler notificar-cierre-caja → escucha caja.cerrada → envía informe por Telegram/WhatsApp según config"
     ],
     "separacion_comandero_pedidos": {
       "principio": "Comandero es la UI del camarero (buffer de items). Pedidos gestiona el ciclo de vida formal (crear, enviar cocina, completar, cancelar).",
@@ -495,8 +509,9 @@
       "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas. FUENTE DE VERDAD para cuentas activas.",
       "ui_domain": "persistencia",
       "uiHandlers": ["cuentas_activas", "eventos", "eventos_fecha", "ventas", "ventas_fecha", "cuadre", "cuadre_fecha", "cierre", "iniciar_dia", "backup", "health", "metrics"],
-      "eventos_suscribe": ["boton.pulsado", "ui.accion", "cuenta.creada", "cuenta.cerrada", "cobro.iniciado", "cobro.procesado", "cobro.reembolsado", "pedido.creado", "pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina", "pedido.completado", "catalogo.actualizado", "mesa.abierta", "mesa.cerrada", "telefono.pedido_creado", "llevar.ticket_creado"],
-      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día", "Cola de escritura (_enqueueWrite) — serializa writes sin perder eventos"],
+      "eventos_publica": ["caja.cerrada", "cuenta.cerrada_forzada", "dia.iniciado"],
+      "eventos_suscribe": ["boton.pulsado", "ui.accion", "cuenta.creada", "cuenta.cerrada", "cuenta.eliminada", "cuenta.estado_cambiado", "cuenta.actualizada", "cobro.iniciado", "cobro.procesado", "cobro.reembolsado", "pedido.creado", "pedido.enviado_cocina", "pedido.completado", "mesa.abierta", "mesa.cerrada", "mesa.renombrada", "telefono.pedido_creado", "llevar.ticket_creado", "comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina", "catalogo.actualizado"],
+      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día con auto-cierre de cuentas abiertas", "Informe detallado de cierre para envío por mensajería", "Cola de escritura (_enqueueWrite) — serializa writes sin perder eventos"],
       "arquitectura_event_sourcing": {
         "patron": "Event Sourcing — estado reconstruido desde stream de eventos",
         "cache_principal": "cuentasActivasCache — Map en memoria con todas las cuentas abiertas",
@@ -679,7 +694,9 @@
       "5_cocina_prepara": "cocinero marca items → cocina publica cocina.item_preparado → cuando todos listos → cocina.pedido_listo",
       "6_notificacion": "cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican al cliente",
       "7_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo → cuenta.cerrada",
-      "8_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json"
+      "8_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json",
+      "9_cierre": "persistencia-comandero cierre → auto-cierra cuentas abiertas (cuenta.cerrada_forzada) → genera informe detallado → publica caja.cerrada con informe",
+      "10_notificacion_cierre": "handler notificar-cierre-caja escucha caja.cerrada → envía informe por Telegram (telegram.send_message.request) y/o WhatsApp (local.whatsapp.send.request)"
     },
     "flujo_catalogo": {
       "1_generar": "menu-generator publica menu.generado (con ingredientes_catalogo enriquecidos: tipo, precio_extra) → productos guarda draft",

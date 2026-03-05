@@ -5,127 +5,95 @@
   "author": "Event Core Team",
   "routeCode": "3333",
 
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/",
+      "handler": "handleUi",
+      "description": "Serve the Certificate Authority management UI"
+    },
+    {
+      "method": "GET",
+      "path": "/css",
+      "handler": "handleCss",
+      "description": "Serve CSS stylesheet"
+    },
+    {
+      "method": "GET",
+      "path": "/js",
+      "handler": "handleJs",
+      "description": "Serve JavaScript"
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "handler": "handleStatus",
+      "description": "Get CA status, certificate stats, and mTLS middleware stats"
+    },
+    {
+      "method": "GET",
+      "path": "/ca-cert",
+      "handler": "handleGetCACert",
+      "description": "Download CA root certificate (public - for client/device installation)"
+    },
+    {
+      "method": "POST",
+      "path": "/issue",
+      "handler": "handleIssueCertificate",
+      "description": "Issue a new client or device certificate"
+    },
+    {
+      "method": "POST",
+      "path": "/revoke",
+      "handler": "handleRevokeCertificate",
+      "description": "Revoke a certificate by serial number"
+    },
+    {
+      "method": "POST",
+      "path": "/renew",
+      "handler": "handleRenewCertificate",
+      "description": "Renew a certificate (revokes old, issues new)"
+    },
+    {
+      "method": "GET",
+      "path": "/list",
+      "handler": "handleListCertificates",
+      "description": "List all issued certificates with optional filters"
+    },
+    {
+      "method": "POST",
+      "path": "/verify",
+      "handler": "handleVerifyCertificate",
+      "description": "Verify a certificate against the CA"
+    },
+    {
+      "method": "GET",
+      "path": "/crl",
+      "handler": "handleGetCRL",
+      "description": "Get Certificate Revocation List"
+    },
+    {
+      "method": "GET",
+      "path": "/download-p12",
+      "handler": "handleDownloadP12",
+      "description": "Download .p12 bundle for a certificate"
+    },
+    {
+      "method": "GET",
+      "path": "/nginx-config",
+      "handler": "handleGetNginxConfig",
+      "description": "Get nginx mTLS configuration template"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    }
+  ],
+
   "provides": {
-    "hooks": ["beforeRequest"],
-    "apis": [
-      {
-        "name": "ui",
-        "method": "GET",
-        "path": "/",
-        "handler": "handleUi",
-        "description": "Serve the Certificate Authority management UI"
-      },
-      {
-        "name": "css",
-        "method": "GET",
-        "path": "/css",
-        "handler": "handleCss",
-        "description": "Serve CSS stylesheet"
-      },
-      {
-        "name": "js",
-        "method": "GET",
-        "path": "/js",
-        "handler": "handleJs",
-        "description": "Serve JavaScript"
-      },
-      {
-        "name": "status",
-        "method": "GET",
-        "path": "/status",
-        "description": "Get CA status, certificate stats, and mTLS middleware stats"
-      },
-      {
-        "name": "getCACert",
-        "method": "GET",
-        "path": "/ca-cert",
-        "description": "Download CA root certificate (public - for client/device installation)"
-      },
-      {
-        "name": "issueCertificate",
-        "method": "POST",
-        "path": "/issue",
-        "description": "Issue a new client or device certificate",
-        "schema": {
-          "body": {
-            "type": "object",
-            "required": ["commonName", "type", "identifier"],
-            "properties": {
-              "commonName": { "type": "string", "description": "Certificate holder name" },
-              "type": { "type": "string", "enum": ["client", "device"], "description": "Certificate type" },
-              "identifier": { "type": "string", "description": "Unique ID (projectId or deviceId)" },
-              "organization": { "type": "string" },
-              "email": { "type": "string", "format": "email" },
-              "validityDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
-              "passphrase": { "type": "string", "description": "Password for .p12 bundle" }
-            }
-          }
-        }
-      },
-      {
-        "name": "revokeCertificate",
-        "method": "POST",
-        "path": "/revoke",
-        "description": "Revoke a certificate by serial number",
-        "schema": {
-          "body": {
-            "type": "object",
-            "required": ["serialNumber"],
-            "properties": {
-              "serialNumber": { "type": "string" },
-              "reason": { "type": "string" }
-            }
-          }
-        }
-      },
-      {
-        "name": "renewCertificate",
-        "method": "POST",
-        "path": "/renew",
-        "description": "Renew a certificate (revokes old, issues new)",
-        "schema": {
-          "body": {
-            "type": "object",
-            "required": ["serialNumber"],
-            "properties": {
-              "serialNumber": { "type": "string" },
-              "passphrase": { "type": "string" },
-              "validityDays": { "type": "integer", "minimum": 1, "maximum": 3650 }
-            }
-          }
-        }
-      },
-      {
-        "name": "listCertificates",
-        "method": "GET",
-        "path": "/list",
-        "description": "List all issued certificates with optional filters"
-      },
-      {
-        "name": "verifyCertificate",
-        "method": "POST",
-        "path": "/verify",
-        "description": "Verify a certificate against the CA"
-      },
-      {
-        "name": "getCRL",
-        "method": "GET",
-        "path": "/crl",
-        "description": "Get Certificate Revocation List"
-      },
-      {
-        "name": "downloadP12",
-        "method": "GET",
-        "path": "/download-p12",
-        "description": "Download .p12 bundle for a certificate"
-      },
-      {
-        "name": "getNginxConfig",
-        "method": "GET",
-        "path": "/nginx-config",
-        "description": "Get nginx mTLS configuration template"
-      }
-    ]
+    "hooks": ["beforeRequest"]
   },
 
   "events": {
@@ -149,6 +117,21 @@
     ],
     "subscribes": []
   },
+
+  "ui_handlers": [
+    { "domain": "certificate-authority", "action": "status", "handler": "handleStatus" },
+    { "domain": "certificate-authority", "action": "ca-cert", "handler": "handleGetCACert" },
+    { "domain": "certificate-authority", "action": "issue", "handler": "handleIssueCertificate" },
+    { "domain": "certificate-authority", "action": "revoke", "handler": "handleRevokeCertificate" },
+    { "domain": "certificate-authority", "action": "renew", "handler": "handleRenewCertificate" },
+    { "domain": "certificate-authority", "action": "list", "handler": "handleListCertificates" },
+    { "domain": "certificate-authority", "action": "verify", "handler": "handleVerifyCertificate" },
+    { "domain": "certificate-authority", "action": "crl", "handler": "handleGetCRL" },
+    { "domain": "certificate-authority", "action": "download-p12", "handler": "handleDownloadP12" },
+    { "domain": "certificate-authority", "action": "stats", "handler": "handleStatus" },
+    { "domain": "certificate-authority", "action": "nginx-config", "handler": "handleGetNginxConfig" },
+    { "domain": "certificate-authority", "action": "health", "handler": "handleHealthCheck" }
+  ],
 
   "ui": {
     "enabled": true,

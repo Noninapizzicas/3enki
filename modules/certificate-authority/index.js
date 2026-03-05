@@ -87,11 +87,6 @@ class CertificateAuthorityModule {
       core.hooks.register('beforeRequest', this.mtlsMiddleware.authenticate.bind(this.mtlsMiddleware));
     }
 
-    // Registrar UI handlers
-    if (core.uiHandler) {
-      this._registerUIHandlers(core.uiHandler);
-    }
-
     if (this.logger) {
       this.logger.info('module.loaded', {
         module: this.name,
@@ -105,17 +100,7 @@ class CertificateAuthorityModule {
   }
 
   async onUnload() {
-    if (this.core?.uiHandler) {
-      const actions = [
-        'status', 'ca-cert', 'issue', 'revoke', 'renew',
-        'list', 'verify', 'crl', 'download-p12',
-        'stats', 'nginx-config', 'health'
-      ];
-      for (const action of actions) {
-        this.core.uiHandler.unregister('certificate-authority', action);
-      }
-    }
-
+    // UI handlers auto-unwired by loader
     if (this.logger) {
       this.logger.info('module.unloaded', { module: this.name });
     }
@@ -469,24 +454,6 @@ class CertificateAuthorityModule {
     };
   }
 
-  // ==========================================
-  // UI Handlers
-  // ==========================================
-
-  _registerUIHandlers(uiHandler) {
-    uiHandler.register('certificate-authority', 'status', this.handleStatus.bind(this));
-    uiHandler.register('certificate-authority', 'ca-cert', this.handleGetCACert.bind(this));
-    uiHandler.register('certificate-authority', 'issue', this.handleIssueCertificate.bind(this));
-    uiHandler.register('certificate-authority', 'revoke', this.handleRevokeCertificate.bind(this));
-    uiHandler.register('certificate-authority', 'renew', this.handleRenewCertificate.bind(this));
-    uiHandler.register('certificate-authority', 'list', this.handleListCertificates.bind(this));
-    uiHandler.register('certificate-authority', 'verify', this.handleVerifyCertificate.bind(this));
-    uiHandler.register('certificate-authority', 'crl', this.handleGetCRL.bind(this));
-    uiHandler.register('certificate-authority', 'download-p12', this.handleDownloadP12.bind(this));
-    uiHandler.register('certificate-authority', 'stats', this.handleStatus.bind(this));
-    uiHandler.register('certificate-authority', 'nginx-config', this.handleGetNginxConfig.bind(this));
-    uiHandler.register('certificate-authority', 'health', this.handleHealthCheck.bind(this));
-  }
 }
 
 module.exports = CertificateAuthorityModule;

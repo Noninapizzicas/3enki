@@ -463,6 +463,76 @@
       "descripcion": "6 módulos están deshabilitados en config.json sin una decisión clara sobre su futuro: dashboard, metricas, notas, scratch-designer, ui-designer, y conversation-manager. Evaluar cuáles tienen valor para reactivar y cuáles son código muerto a eliminar.",
       "modulos_afectados": ["dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "conversation-manager"],
       "cuando_implementar": "Próxima revisión de arquitectura"
+    },
+    {
+      "id": "portal-cliente-pwa",
+      "titulo": "PWA portal cliente — acceso externo a facturación por proyecto",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-05",
+      "descripcion": "App web progresiva (PWA) para que clientes/negocios externos accedan a su facturación: ver facturas, subir documentos, descargar paquetes de asesoría. Reutiliza toda la infraestructura existente (facturas-db, fuentes, asesoria). Si funciona bien internamente, se puede ofrecer como servicio a otros negocios.",
+      "vision": "Si la herramienta de facturación funciona bien para Nonina, empaquetarla como servicio para otros negocios con un portal web sencillo por cliente",
+      "fases": {
+        "fase_1_backend": {
+          "titulo": "Módulo portal-cliente (backend)",
+          "estado": "pendiente",
+          "tareas": [
+            "Crear modules/facturacion/portal-cliente/ con module.json",
+            "Endpoint de lectura: listar facturas del proyecto (proxy de facturas-db.listar con campos filtrados)",
+            "Endpoint de subida: recibir archivo → emitir factura.entrada (reutiliza fuentes.manual)",
+            "Endpoint de descarga: paquetes de asesoría (proxy de asesoria.descargar)",
+            "Endpoint de estadísticas: resumen del mes (totales, num facturas, pendientes)",
+            "Endpoint de estado: ver estado de procesamiento de facturas subidas"
+          ],
+          "principio": "Solo expone un subconjunto de datos — NO da acceso directo a facturas-db"
+        },
+        "fase_2_frontend": {
+          "titulo": "Frontend PWA",
+          "estado": "pendiente",
+          "tareas": [
+            "Ruta /portal/[project_id] en SvelteKit (separada del admin)",
+            "Pantalla dashboard: resumen mensual, últimas facturas, estado",
+            "Pantalla listado: facturas procesadas con filtros (mes, estado, proveedor)",
+            "Pantalla subir: drag&drop de PDF/imagen → fuentes.manual → feedback en tiempo real via MQTT",
+            "Pantalla descargas: paquetes de asesoría disponibles para descargar",
+            "manifest.json + service worker para PWA instalable",
+            "Diseño responsive mobile-first (los clientes usarán móvil)"
+          ]
+        },
+        "fase_3_seguridad": {
+          "titulo": "Autenticación y control de acceso",
+          "estado": "pendiente",
+          "nota": "Se aborda después de validar que el flujo funciona",
+          "tareas": [
+            "Usar certificate-authority (módulo existente) para autenticación mTLS por proyecto",
+            "Emitir certificado cliente por proyecto — el certificado identifica al cliente/proyecto",
+            "Middleware mTLS ya implementado — activar mtls_enabled en config",
+            "Rate limiting por cliente",
+            "CORS configurado para dominios específicos",
+            "Logs de acceso"
+          ],
+          "nota": "El módulo certificate-authority (routeCode 3333) ya implementa CA interna con mTLS. Emite certificados tipo 'client' con identifier=projectId. Solo falta activar y configurar."
+        },
+        "fase_4_multi_tenant": {
+          "titulo": "Multi-tenant para otros negocios",
+          "estado": "futuro",
+          "tareas": [
+            "Onboarding: crear proyecto + credenciales de portal automáticamente",
+            "Subdominio o ruta por negocio (negocio.tudominio.com o /portal/negocio)",
+            "Panel admin para gestionar clientes/proyectos",
+            "Branding básico configurable por proyecto (logo, colores)"
+          ]
+        }
+      },
+      "reutiliza_existente": {
+        "facturas-db": "Lectura de facturas (listar, obtener, estadísticas)",
+        "fuentes.manual": "Subida de documentos → factura.entrada",
+        "asesoria": "Descarga de paquetes ZIP (historial, descargar)",
+        "mqtt": "Feedback en tiempo real del estado de procesamiento",
+        "project-manager": "Scoping por projectId (multi-tenant nativo)"
+      },
+      "no_toca": "Cero cambios en módulos existentes — es puramente aditivo",
+      "cuando_implementar": "Cuando el sistema de facturación esté estable y validado con uso real en Nonina"
     }
   ]
 }

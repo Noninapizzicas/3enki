@@ -5,9 +5,9 @@
   "_DESCRIPTION": "Catálogo completo de servicios, módulos, utilidades y acciones del sistema Event-Core",
 
   "resumen": {
-    "total_modulos": "41 (28 core + 12 pizzepos + 1 facturacion)",
-    "total_active": 35,
-    "total_disabled": 6,
+    "total_modulos": "51 (34 core + 15 pizzepos + 2 facturacion)",
+    "total_active": 43,
+    "total_disabled": 8,
     "total_providers": 34,
     "total_provider_functions": 119,
     "total_apis": 282,
@@ -16,7 +16,7 @@
     "total_ui_handlers": 110,
     "verticales": [
       "pizzepos (POS pizzería, 12 módulos, 5 canales de venta)",
-      "facturacion (procesamiento contable, 1 módulo: asesoria)"
+      "facturacion (procesamiento contable, 2 módulos: asesoria, fuentes)"
     ]
   },
 
@@ -58,6 +58,18 @@
         "apis": ["GET /all", "GET /counters", "GET /gauges", "GET /timings", "GET /events", "POST /reset"],
         "eventos_publica": ["metricas.snapshot", "metricas.alerta"],
         "intervalo_snapshot": "10s"
+      }
+    },
+
+    "seguridad": {
+      "certificate-authority": {
+        "version": "1.0.0",
+        "descripcion": "CA interna con autenticación mTLS — certificados para clientes y dispositivos",
+        "routeCode": "3333",
+        "apis": ["GET /status", "GET /ca-cert", "POST /issue", "POST /revoke", "POST /renew", "GET /list", "POST /verify", "GET /crl", "GET /download-p12", "GET /nginx-config"],
+        "eventos_publica": ["certificate.issued", "certificate.revoked", "certificate.renewed", "certificate.expired"],
+        "tipos_certificado": ["client (Portal Clientes)", "device (Dispositivos)"],
+        "caracteristicas": ["CA raíz auto-firmada RSA 2048", "Emisión/revocación/renovación", "CRL", "Bundles P12", "Middleware mTLS (proxy/native)", "UI de gestión"]
       }
     },
 
@@ -370,6 +382,15 @@
         "eventos_suscribe": ["project.activated"],
         "servicios_consume": ["local.facturas-db (lectura)", "local.zip (createFromFiles)"],
         "persistencia": "Filesystem — sin DB propia, historial de ZIPs en export/asesoria/"
+      },
+      "fuentes": {
+        "version": "1.0.0",
+        "descripcion": "Adaptadores de entrada para facturas — patrón Strategy (como cuentas-canales)",
+        "ui_handlers": ["status", "check-gmail"],
+        "eventos_publica": ["factura.entrada"],
+        "eventos_suscribe": ["project.activated", "telegram.photo.received", "telegram.document.received"],
+        "strategies": ["telegram (auto — escucha eventos bot)", "gmail (bajo demanda — check-gmail)", "manual (upload directo)"],
+        "config_por_proyecto": "fuentes.telegram.botName, fuentes.gmail.account, fuentes.manual.enabled"
       }
     },
 

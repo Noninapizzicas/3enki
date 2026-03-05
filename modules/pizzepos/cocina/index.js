@@ -421,8 +421,14 @@ class CocinaModule {
       if (!datos.cuentas) return;
 
       let restaurados = 0;
+      // Estados que indican que el pedido ya salió de cocina
+      const ESTADOS_POST_COCINA = new Set(['listo', 'entregado', 'para_cobrar', 'cobrado']);
+
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
         if (!cuenta.pedidos || cuenta.pedidos.length === 0) continue;
+
+        // Si la cuenta ya pasó por cocina, no restaurar sus pedidos
+        if (ESTADOS_POST_COCINA.has(cuenta.estado)) continue;
 
         for (const pedidoData of cuenta.pedidos) {
           const pedido_id = pedidoData.pedido_id;

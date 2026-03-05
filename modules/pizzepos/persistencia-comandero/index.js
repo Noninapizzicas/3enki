@@ -33,7 +33,8 @@ class PersistenciaComanderoModule {
     this.eventosCache = [];
     this.ventasCache = [];
     this.cuentasActivasCache = new Map();
-    this.fechaActual = null;
+    this.fechaJornada = null;
+    this.horaInicioJornada = null;
 
     // Métricas internas
     this.internalMetrics = {
@@ -44,7 +45,6 @@ class PersistenciaComanderoModule {
 
     // Cola de escrituras (evita perder writes por lock booleano)
     this._writeQueue = Promise.resolve();
-    this._rotacionInterval = null;
   }
 
   // ==========================================
@@ -64,16 +64,14 @@ class PersistenciaComanderoModule {
     this.currentDir = this.config.current_dir || './data/current';
     this.backupDir = this.config.backup_dir || './data/backups';
 
-    this.fechaActual = this.getFechaActual();
-
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
     await this.crearDirectorios();
+    await this.cargarJornada();
     await this.cargarDatosActuales();
     // Event subscriptions are auto-wired from module.json by the loader.
     // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
-    this.iniciarRotacionDiaria();
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -85,11 +83,6 @@ class PersistenciaComanderoModule {
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
-
-    if (this._rotacionInterval) {
-      clearInterval(this._rotacionInterval);
-      this._rotacionInterval = null;
-    }
 
     if (this.uiHandler) {
       const actions = [
@@ -435,7 +428,7 @@ class PersistenciaComanderoModule {
     return this._enqueueWrite('guardar_eventos', async () => {
       const archivo = path.join(this.currentDir, 'eventos.json');
       const data = {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         eventos: this.eventosCache,
         total_eventos: this.eventosCache.length,
         ultima_actualizacion: new Date().toISOString()
@@ -449,7 +442,7 @@ class PersistenciaComanderoModule {
       const archivo = path.join(this.currentDir, 'ventas.json');
       const resumen = this.calcularResumenDia();
       const data = {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         ventas: this.ventasCache,
         resumen_dia: resumen,
         ultima_actualizacion: new Date().toISOString()
@@ -466,10 +459,49 @@ class PersistenciaComanderoModule {
         cuentasObj[cuenta_id] = cuenta;
       }
       const data = {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         cuentas: cuentasObj,
         total_cuentas: this.cuentasActivasCache.size,
         ultima_actualizacion: new Date().toISOString()
+      };
+      await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+    });
+  }
+
+  /**
+   * Carga la jornada activa desde disco.
+   * La jornada se fija al iniciar día y NO cambia hasta el cierre,
+   * aunque cruce medianoche (ej: jornada del martes de 18:00 a 00:30).
+   */
+  async cargarJornada() {
+    try {
+      const archivoJornada = path.join(this.currentDir, 'jornada.json');
+      const contenido = await fs.readFile(archivoJornada, 'utf8');
+      const datos = JSON.parse(contenido);
+      this.fechaJornada = datos.fecha_jornada;
+      this.horaInicioJornada = datos.hora_inicio || null;
+      this.logger.info('persistencia.jornada_cargada', {
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: this.horaInicioJornada
+      });
+    } catch (error) {
+      // Sin jornada previa: usar fecha calendario como primera jornada
+      this.fechaJornada = this.getFechaCalendario();
+      this.horaInicioJornada = new Date().toISOString();
+      await this.guardarJornada();
+      this.logger.info('persistencia.jornada_nueva', {
+        fecha_jornada: this.fechaJornada
+      });
+    }
+  }
+
+  async guardarJornada() {
+    return this._enqueueWrite('guardar_jornada', async () => {
+      const archivo = path.join(this.currentDir, 'jornada.json');
+      const data = {
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: this.horaInicioJornada,
+        guardado_at: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
     });
@@ -516,49 +548,8 @@ class PersistenciaComanderoModule {
   // Rotación Diaria
   // ==========================================
 
-  async rotarArchivos() {
-    const fechaAnterior = this.fechaActual;
-    const nuevaFecha = this.getFechaActual();
-
-    if (fechaAnterior === nuevaFecha) {
-      return;
-    }
-
-    this.logger.info('persistencia.rotacion', {
-      fecha_anterior: fechaAnterior,
-      fecha_nueva: nuevaFecha
-    });
-
-    try {
-      const eventosActual = path.join(this.currentDir, 'eventos.json');
-      const eventosArchivo = path.join(this.eventosDir, `${fechaAnterior}.json`);
-      await fs.copyFile(eventosActual, eventosArchivo);
-
-      const ventasActual = path.join(this.currentDir, 'ventas.json');
-      const ventasArchivo = path.join(this.ventasDir, `${fechaAnterior}.json`);
-      await fs.copyFile(ventasActual, ventasArchivo);
-
-      this.eventosCache = [];
-      this.ventasCache = [];
-      this.fechaActual = nuevaFecha;
-
-      await this.guardarEventos();
-      await this.guardarVentas();
-
-      this.logger.info('persistencia.rotacion.completada', {
-        fecha_actual: this.fechaActual
-      });
-
-    } catch (error) {
-      this.logger.error('persistencia.rotacion.error', { error: error.message });
-    }
-  }
-
-  iniciarRotacionDiaria() {
-    this._rotacionInterval = setInterval(() => {
-      this.rotarArchivos();
-    }, 60 * 60 * 1000);
-  }
+  // Rotación automática eliminada: la jornada se controla manualmente
+  // con cierre_caja + iniciar_dia. No hay rotación a medianoche.
 
   // ==========================================
   // UI Handlers (MQTT Request/Response)
@@ -581,7 +572,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         cuentas,
         total: cuentas.length
@@ -602,7 +593,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         eventos,
         total: eventos.length
@@ -639,7 +630,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         ventas,
         resumen_dia: resumen,
@@ -675,7 +666,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         timestamp: new Date().toISOString(),
         cuadre: resumen
@@ -721,30 +712,32 @@ class PersistenciaComanderoModule {
       const totalArqueado = (arqueo.efectivo || 0) + (arqueo.monedas || 0);
       const diferencia = totalArqueado - totalEsperadoEfectivo;
 
+      const horaCierre = new Date().toISOString();
       const cierre = {
         cierre_id: `cierre_${Date.now()}`,
-        fecha: this.fechaActual,
-        hora_cierre: new Date().toISOString(),
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: this.horaInicioJornada,
+        hora_cierre: horaCierre,
         arqueo,
         totales: resumen,
         diferencia,
         estado: diferencia === 0 ? 'cuadrado' : (diferencia > 0 ? 'sobrante' : 'faltante')
       };
 
-      const archivoCierre = path.join(this.ventasDir, `cierre_${this.fechaActual}.json`);
+      const archivoCierre = path.join(this.ventasDir, `cierre_${this.fechaJornada}.json`);
       await fs.writeFile(archivoCierre, JSON.stringify(cierre, null, 2), 'utf8');
 
       await this.archivarDia();
 
       await this.eventBus.publish('caja.cerrada', {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         arqueo,
         totales: resumen,
         diferencia
       });
 
       this.logger.info('persistencia.cierre_caja', {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         diferencia,
         estado: cierre.estado
       });
@@ -759,28 +752,38 @@ class PersistenciaComanderoModule {
 
   async handleIniciarDia() {
     try {
+      // Fijar fecha de jornada = día calendario en que se inicia
+      // Esta fecha NO cambia aunque cruce medianoche
+      const horaInicio = new Date().toISOString();
+      this.fechaJornada = this.getFechaCalendario();
+      this.horaInicioJornada = horaInicio;
+
+      // Limpiar caches del día anterior
       this.eventosCache = [];
       this.ventasCache = [];
       this.cuentasActivasCache.clear();
-      this.fechaActual = this.getFechaActual();
 
+      await this.guardarJornada();
       await this.guardarEventos();
       await this.guardarVentas();
       await this.guardarCuentasActivas();
 
       await this.eventBus.publish('dia.iniciado', {
-        fecha: this.fechaActual,
-        hora_inicio: new Date().toISOString()
+        fecha: this.fechaJornada,
+        hora_inicio: horaInicio
       });
 
-      this.logger.info('persistencia.dia_iniciado', { fecha: this.fechaActual });
+      this.logger.info('persistencia.jornada_iniciada', {
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: horaInicio
+      });
 
       return {
         status: 200,
         data: {
-          message: 'Nuevo día iniciado',
-          fecha: this.fechaActual,
-          hora_inicio: new Date().toISOString()
+          message: 'Jornada iniciada',
+          fecha_jornada: this.fechaJornada,
+          hora_inicio: horaInicio
         }
       };
 
@@ -793,7 +796,7 @@ class PersistenciaComanderoModule {
   async handleBackup() {
     try {
       const timestamp = Date.now();
-      const backupName = `backup_${this.fechaActual}_${timestamp}`;
+      const backupName = `backup_${this.fechaJornada}_${timestamp}`;
       const backupPath = path.join(this.backupDir, backupName);
 
       await fs.mkdir(backupPath, { recursive: true });
@@ -828,7 +831,7 @@ class PersistenciaComanderoModule {
         status: 'healthy',
         module: this.name,
         version: this.version,
-        fecha_actual: this.fechaActual,
+        fecha_jornada: this.fechaJornada,
         eventos_cache: this.eventosCache.length,
         ventas_cache: this.ventasCache.length,
         cuentas_activas: this.cuentasActivasCache.size
@@ -855,14 +858,14 @@ class PersistenciaComanderoModule {
   async archivarDia() {
     try {
       const eventosActual = path.join(this.currentDir, 'eventos.json');
-      const eventosArchivo = path.join(this.eventosDir, `${this.fechaActual}.json`);
+      const eventosArchivo = path.join(this.eventosDir, `${this.fechaJornada}.json`);
       await fs.copyFile(eventosActual, eventosArchivo);
 
       const ventasActual = path.join(this.currentDir, 'ventas.json');
-      const ventasArchivo = path.join(this.ventasDir, `${this.fechaActual}.json`);
+      const ventasArchivo = path.join(this.ventasDir, `${this.fechaJornada}.json`);
       await fs.copyFile(ventasActual, ventasArchivo);
 
-      this.logger.info('persistencia.dia_archivado', { fecha: this.fechaActual });
+      this.logger.info('persistencia.dia_archivado', { fecha: this.fechaJornada });
     } catch (error) {
       this.logger.error('persistencia.archivar_dia.error', { error: error.message });
     }
@@ -919,7 +922,7 @@ class PersistenciaComanderoModule {
   // Helper Methods
   // ==========================================
 
-  getFechaActual() {
+  getFechaCalendario() {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');

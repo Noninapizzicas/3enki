@@ -320,11 +320,16 @@ class PersistenciaComanderoModule {
 
     const cuenta = this.cuentasActivasCache.get(cuenta_id);
     if (cuenta) {
-      // Persistir campos relevantes: pagado, servido, total, items, estado
+      // Persistir campos relevantes: pagado, servido, total, items, estado, nombre
       if (cambios.pagado !== undefined) cuenta.pagado = cambios.pagado;
       if (cambios.servido !== undefined) cuenta.servido = cambios.servido;
       if (cambios.total !== undefined) cuenta.total = cambios.total;
+      if (cambios.items !== undefined) cuenta.items = cambios.items;
       if (cambios.estado !== undefined) cuenta.estado = cambios.estado;
+      if (cambios.nombre !== undefined) {
+        cuenta.datos_especificos = cuenta.datos_especificos || {};
+        cuenta.datos_especificos.nombre = cambios.nombre;
+      }
       cuenta.updated_at = eventData.updated_at || new Date().toISOString();
       await this.guardarCuentasActivas();
 

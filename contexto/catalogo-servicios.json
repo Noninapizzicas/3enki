@@ -5,9 +5,9 @@
   "_DESCRIPTION": "Catálogo completo de servicios, módulos, utilidades y acciones del sistema Event-Core",
 
   "resumen": {
-    "total_modulos": "42 (28 core + 12 pizzepos + 2 facturacion)",
-    "total_active": 35,
-    "total_disabled": 6,
+    "total_modulos": "51 (34 core + 15 pizzepos + 2 facturacion)",
+    "total_active": 43,
+    "total_disabled": 8,
     "total_providers": 34,
     "total_provider_functions": 119,
     "total_apis": 282,
@@ -58,6 +58,18 @@
         "apis": ["GET /all", "GET /counters", "GET /gauges", "GET /timings", "GET /events", "POST /reset"],
         "eventos_publica": ["metricas.snapshot", "metricas.alerta"],
         "intervalo_snapshot": "10s"
+      }
+    },
+
+    "seguridad": {
+      "certificate-authority": {
+        "version": "1.0.0",
+        "descripcion": "CA interna con autenticación mTLS — certificados para clientes y dispositivos",
+        "routeCode": "3333",
+        "apis": ["GET /status", "GET /ca-cert", "POST /issue", "POST /revoke", "POST /renew", "GET /list", "POST /verify", "GET /crl", "GET /download-p12", "GET /nginx-config"],
+        "eventos_publica": ["certificate.issued", "certificate.revoked", "certificate.renewed", "certificate.expired"],
+        "tipos_certificado": ["client (Portal Clientes)", "device (Dispositivos)"],
+        "caracteristicas": ["CA raíz auto-firmada RSA 2048", "Emisión/revocación/renovación", "CRL", "Bundles P12", "Middleware mTLS (proxy/native)", "UI de gestión"]
       }
     },
 

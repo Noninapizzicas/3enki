@@ -11,12 +11,16 @@
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import CierreCajaPanel from './CierreCajaPanel.svelte';
 
   export let cuenta_id: string;
   export let monto: number;
   export let pedido_ids: string[] = [];
   export let visible: boolean = true;
   export let project_id: string = '';
+
+  // Cierre de caja
+  let showCierreCaja = false;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -152,7 +156,10 @@
           <span class="cuenta-label">💶 Cobro</span>
           <span class="cuenta-total">{formatPrecio(montoTotal)}</span>
         </div>
-        <button class="close-btn" on:click={handleClose}>✕</button>
+        <div class="header-actions">
+          <button class="cierre-btn" on:click={() => showCierreCaja = true} title="Cierre de caja">🔐</button>
+          <button class="close-btn" on:click={handleClose}>✕</button>
+        </div>
       </header>
 
       <!-- Content -->
@@ -324,6 +331,12 @@
       </footer>
     </div>
   </div>
+
+  {#if showCierreCaja}
+    <CierreCajaPanel
+      on:close={() => showCierreCaja = false}
+    />
+  {/if}
 {/if}
 
 <style>
@@ -375,6 +388,33 @@
     font-size: 1.4rem;
     font-weight: 800;
     color: #22c55e;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cierre-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.3;
+    transition: opacity 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .cierre-btn:hover,
+  .cierre-btn:active {
+    opacity: 0.8;
   }
 
   .close-btn {

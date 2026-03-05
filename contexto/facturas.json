@@ -29,6 +29,10 @@
         "rol": "Grupo vertical de consumidores — usan datos extraídos por facturas",
         "patron": "Mismo patrón que modules/pizzepos/ — auto-discovery por el loader",
         "modulos": {
+          "fuentes": {
+            "estado": "implementado",
+            "descripcion": "Adaptadores de entrada (Telegram, Gmail) — patrón Strategy como cuentas-canales"
+          },
           "asesoria": {
             "estado": "implementado",
             "descripcion": "Genera paquetes CSV+ZIP para la asesoría contable"
@@ -70,7 +74,7 @@
 
     "eventos": {
       "publica": ["factura.recibida", "factura.procesada", "factura.error", "factura.exportada"],
-      "suscribe": ["project.activated"]
+      "suscribe": ["project.activated", "factura.entrada"]
     },
 
     "servicios_usados": {
@@ -188,18 +192,52 @@
     "storage": "data/projects/facturas-nonina/storage/"
   },
 
-  "fuentes_entrada": {
-    "telegram_bot": {
-      "tipos": ["jpg", "jpeg", "png", "webp", "tiff", "pdf"],
-      "como_llegan": "Usuario envia foto/PDF al bot de Telegram → source: 'telegram'"
+  "modulo_fuentes": {
+    "ubicacion": "modules/facturacion/fuentes/",
+    "version": "1.0.0",
+    "clase": "FuentesModule",
+    "descripcion": "Adaptadores de entrada — patrón Strategy como cuentas-canales",
+
+    "patron": {
+      "analogia": "cuentas = procesa lifecycle → cuentas-canales = adapta canales. facturas = procesa archivos → fuentes = adapta fuentes de entrada",
+      "contrato": "Cualquier fuente emite factura.entrada { projectId, filePath, source, origen }",
+      "extensible": "Añadir fuente = crear strategies/nueva.js + registrar en constructor"
     },
-    "gmail": {
-      "tipos": ["pdf"],
-      "como_llegan": "Descargados de Gmail via handler → source: 'gmail'"
+
+    "strategies": {
+      "telegram": {
+        "archivo": "strategies/telegram.js",
+        "escucha": ["telegram.photo.received", "telegram.document.received"],
+        "flujo": "Detecta proyecto por botName en config → descarga archivo via telegram-service → emite factura.entrada",
+        "tipos": ["image/jpeg", "image/png", "image/webp", "image/tiff", "application/pdf"]
+      },
+      "gmail": {
+        "archivo": "strategies/gmail.js",
+        "activacion": "Bajo demanda via mqttRequest('fuentes', 'check-gmail', { proyecto }) o programado via scheduler",
+        "flujo": "Busca correos con adjuntos → descarga adjuntos via local.gmail → emite factura.entrada por cada uno",
+        "tipos": ["application/pdf", "image/jpeg", "image/png"]
+      }
     },
-    "manual": {
-      "tipos": ["jpg", "jpeg", "png", "webp", "tiff", "pdf"],
-      "como_llegan": "Upload manual desde frontend → source: 'manual'"
+
+    "config_por_proyecto": {
+      "descripcion": "Cada proyecto configura sus fuentes en su config.json",
+      "ejemplo": {
+        "fuentes": {
+          "telegram": { "enabled": true, "botName": "facturas_noninapizzicas_bot" },
+          "gmail": { "enabled": true, "account": "noninapizzicas", "query": "has:attachment is:unread" },
+          "manual": { "enabled": true }
+        }
+      }
+    },
+
+    "ui_handlers": {
+      "domain": "fuentes",
+      "acciones": ["status", "check-gmail"]
+    },
+
+    "eventos": {
+      "publica": ["factura.entrada"],
+      "suscribe": ["project.activated", "telegram.photo.received", "telegram.document.received"]
     }
   },
 

@@ -1,0 +1,34 @@
+{
+  "name": "fuentes",
+  "version": "1.0.0",
+  "description": "Adaptadores de fuentes de entrada para facturas: Telegram, Gmail, y extensible a más",
+  "author": "Event-Core Team",
+  "main": "index.js",
+
+  "handlers": [
+    { "domain": "fuentes", "action": "status", "method": "handleStatus" },
+    { "domain": "fuentes", "action": "check-gmail", "method": "handleCheckGmail" }
+  ],
+
+  "events": {
+    "publishes": [
+      "factura.entrada"
+    ],
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "telegram.photo.received", "handler": "onTelegramPhoto" },
+      { "event": "telegram.document.received", "handler": "onTelegramDocument" }
+    ]
+  },
+
+  "config": {
+    "telegram": {
+      "tipos_permitidos": ["image/jpeg", "image/png", "image/webp", "image/tiff", "application/pdf"]
+    },
+    "gmail": {
+      "tipos_permitidos": ["application/pdf", "image/jpeg", "image/png"],
+      "query_default": "has:attachment is:unread",
+      "max_results": 20
+    }
+  }
+}

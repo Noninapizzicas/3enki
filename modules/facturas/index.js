@@ -143,6 +143,33 @@ class FacturasModule {
     this.logger.debug('facturas.project.activated', { project_id: data.project_id });
   }
 
+  /**
+   * Reacciona a factura.entrada (emitido por fuentes: telegram, gmail, manual, etc.)
+   * Contrato: { projectId, filePath, source, origen }
+   */
+  async onFacturaEntrada(event) {
+    const data = event.data || event;
+    const { projectId, filePath, source, origen } = data;
+
+    if (!projectId || !filePath) {
+      this.logger.warn('facturas.entrada.invalida', { data });
+      return;
+    }
+
+    if (!fs.existsSync(filePath)) {
+      this.logger.error('facturas.entrada.archivo-no-existe', { filePath, projectId });
+      return;
+    }
+
+    this.logger.info('facturas.entrada.recibida', { source, projectId, filePath });
+
+    try {
+      await this.procesarArchivo(filePath, projectId, { source, origen });
+    } catch (e) {
+      this.logger.error('facturas.entrada.error', { error: e.message, filePath, projectId });
+    }
+  }
+
   // ==========================================
   // CORE: Procesamiento de factura individual
   // ==========================================

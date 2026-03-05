@@ -37,7 +37,7 @@
       "tier_3_core": ["project-manager", "composition-manager", "context-manager", "system-inspector", "ai-gateway", "ai-agent-framework", "agent-manager"],
       "tier_4_features": ["calling-generator", "bot-manager", "chat-ai-bridge", "chat-session", "code-executor"],
       "tier_5_domain_pizzepos": ["cuentas", "cuentas-canales", "pedidos", "cobros", "cocina", "comandero", "productos", "categorias", "ingredientes", "variaciones", "persistencia-comandero", "impresion"],
-      "tier_5_domain_facturacion": ["asesoria"],
+      "tier_5_domain_facturacion": ["asesoria", "fuentes"],
       "tier_6_ui": ["admin-panel", "pdf-viewer", "telegram-service", "text-editor", "menu-generator", "carta-digital", "carta-impresion"]
     },
     "razon": "credential-manager y database-manager deben cargar primero porque otros módulos (prompt-manager, project-manager) los necesitan durante su onLoad para consultas a DB y resolución de credenciales",
@@ -46,7 +46,7 @@
 
   "directories": {
     "core": "Core framework code (EventBus, ServiceExecutor, HandlerLoader, etc)",
-    "modules": "Loadable modules (30 core [24 active + 6 disabled] + 15 pizzepos + 1 facturacion = 46 total, 40 active)",
+    "modules": "Loadable modules (30 core [24 active + 6 disabled] + 15 pizzepos + 2 facturacion = 47 total, 41 active)",
     "handlers": "Global event handlers (JavaScript directo)",
     "frontend": "SvelteKit 2 + Svelte 5 + TypeScript app",
     "data": "Runtime data (projects, logs, scheduler, etc)",

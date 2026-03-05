@@ -8,24 +8,6 @@
   "apis": [
     {
       "method": "GET",
-      "path": "/",
-      "handler": "handleUi",
-      "description": "Serve the Certificate Authority management UI"
-    },
-    {
-      "method": "GET",
-      "path": "/css",
-      "handler": "handleCss",
-      "description": "Serve CSS stylesheet"
-    },
-    {
-      "method": "GET",
-      "path": "/js",
-      "handler": "handleJs",
-      "description": "Serve JavaScript"
-    },
-    {
-      "method": "GET",
       "path": "/status",
       "handler": "handleStatus",
       "description": "Get CA status, certificate stats, and mTLS middleware stats"
@@ -136,7 +118,7 @@
   "ui": {
     "enabled": true,
     "title": "Certificate Authority",
-    "icon": "",
+    "icon": "🔐",
     "description": "Gestionar certificados de clientes y dispositivos"
   },
 

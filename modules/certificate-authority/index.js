@@ -17,6 +17,8 @@
 
 const CAManager = require('./ca-manager');
 const MTLSMiddleware = require('./mtls-middleware');
+const fs = require('fs');
+const path = require('path');
 
 class CertificateAuthorityModule {
   constructor() {
@@ -415,6 +417,55 @@ class CertificateAuthorityModule {
         expiring_soon: caStats.expiring_soon,
         mtls_stats: this.mtlsMiddleware.getStats()
       }
+    };
+  }
+
+  // ==========================================
+  // Static File Handlers (UI)
+  // ==========================================
+
+  /**
+   * GET / — Serve UI panel
+   */
+  async handleUi() {
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    if (!fs.existsSync(indexPath)) {
+      return { status: 404, body: 'UI not found' };
+    }
+    return {
+      status: 200,
+      headers: { 'Content-Type': 'text/html' },
+      body: fs.readFileSync(indexPath, 'utf-8')
+    };
+  }
+
+  /**
+   * GET /css — Serve CSS
+   */
+  async handleCss() {
+    const cssPath = path.join(__dirname, 'public', 'css', 'certificate-authority.css');
+    if (!fs.existsSync(cssPath)) {
+      return { status: 404, body: '' };
+    }
+    return {
+      status: 200,
+      headers: { 'Content-Type': 'text/css' },
+      body: fs.readFileSync(cssPath, 'utf-8')
+    };
+  }
+
+  /**
+   * GET /js — Serve JavaScript
+   */
+  async handleJs() {
+    const jsPath = path.join(__dirname, 'public', 'js', 'certificate-authority.js');
+    if (!fs.existsSync(jsPath)) {
+      return { status: 404, body: '' };
+    }
+    return {
+      status: 200,
+      headers: { 'Content-Type': 'application/javascript' },
+      body: fs.readFileSync(jsPath, 'utf-8')
     };
   }
 

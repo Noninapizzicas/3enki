@@ -9,6 +9,27 @@
     "hooks": ["beforeRequest"],
     "apis": [
       {
+        "name": "ui",
+        "method": "GET",
+        "path": "/",
+        "handler": "handleUi",
+        "description": "Serve the Certificate Authority management UI"
+      },
+      {
+        "name": "css",
+        "method": "GET",
+        "path": "/css",
+        "handler": "handleCss",
+        "description": "Serve CSS stylesheet"
+      },
+      {
+        "name": "js",
+        "method": "GET",
+        "path": "/js",
+        "handler": "handleJs",
+        "description": "Serve JavaScript"
+      },
+      {
         "name": "status",
         "method": "GET",
         "path": "/status",
@@ -127,6 +148,13 @@
       }
     ],
     "subscribes": []
+  },
+
+  "ui": {
+    "enabled": true,
+    "title": "Certificate Authority",
+    "icon": "",
+    "description": "Gestionar certificados de clientes y dispositivos"
   },
 
   "config": {

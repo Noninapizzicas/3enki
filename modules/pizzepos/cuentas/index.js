@@ -909,16 +909,9 @@ class CuentasModule {
       this.logger?.info('cuentas.counters.daily_reset', { date: today });
     }
 
-    // Emoji por tipo + nombre con numero (3 digitos, reinicio diario)
+    // Numero 3 digitos (ej: 001) — el emoji se muestra desde TIPO_ICONS en la UI
     const pad = (num) => String(num).padStart(3, '0');
-    const templates = {
-      local: (num) => `\uD83C\uDFE0 Mesa ${pad(num)}`,
-      delivery: (num) => `\uD83D\uDEF5 Delivery #${pad(num)}`,
-      llevar: (num) => `\uD83D\uDCE6 Llevar #${pad(num)}`
-    };
-
-    const fn = templates[tipo] || templates.local;
-    const nombre = fn(this.counters[tipo] || 1);
+    const nombre = pad(this.counters[tipo] || 1);
     this.counters[tipo] = (this.counters[tipo] || 1) + 1;
     return nombre;
   }

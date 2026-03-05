@@ -76,6 +76,8 @@
 
   "apis": {
     "base_path": "/modules/certificate-authority",
+    "route_code": "3333",
+    "note": "Accesible via /3333/{path} (seguridad por ocultación) o /modules/certificate-authority/{path}",
     "endpoints": [
       "GET  /status        — Estado del módulo y CA",
       "GET  /ca-cert       — Descargar certificado raíz (público)",
@@ -87,6 +89,11 @@
       "GET  /crl           — Certificate Revocation List",
       "GET  /download-p12  — Descargar bundle .p12 (?serialNumber=x)",
       "GET  /nginx-config  — Configuración nginx para mTLS"
+    ],
+    "examples": [
+      "GET  /3333/status   — via código numérico (recomendado)",
+      "POST /3333/issue    — emitir certificado via código",
+      "GET  /3333/ca-cert  — descargar CA via código"
     ]
   },
 

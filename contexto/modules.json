@@ -93,6 +93,16 @@
       "cleanup_on_failure": "Si onLoad lanza error, las suscripciones se limpian automáticamente"
     }
   },
+  "route_codes": {
+    "_updated": "2026-03-05",
+    "description": "Sistema de códigos numéricos de ruta — seguridad por ocultación. Los módulos pueden declarar un routeCode en su module.json para ser accesibles via /{code}/{path} en vez de /modules/{name}/{path}",
+    "implementation": "ModuleRegistry.codeIndex — al registrar, si manifest tiene routeCode, indexa APIs también bajo /{code}/{path}",
+    "assigned_codes": {
+      "3333": "certificate-authority (CA interna + mTLS)"
+    },
+    "convention": "Códigos de 4 dígitos. Rango 3000-3999 reservado para módulos de seguridad.",
+    "both_routes_work": "Las rutas por código y por nombre funcionan en paralelo. En producción, exponer solo las rutas por código."
+  },
   "ui_handler_registration": {
     "auto_wired": true,
     "declarative_pattern": "Declare in module.json ui_handlers array: { domain, action, handler }",

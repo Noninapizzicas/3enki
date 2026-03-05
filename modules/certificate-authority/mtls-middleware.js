@@ -32,7 +32,8 @@ class MTLSMiddleware {
       '/health',
       '/ready',
       '/stats',
-      '/modules/certificate-authority/ca-cert'
+      '/modules/certificate-authority/ca-cert',
+      '/3333/ca-cert'
     ];
     this.allowUnauthenticated = options.allowUnauthenticated || false;
 

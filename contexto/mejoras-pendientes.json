@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-03-03",
+  "_updated": "2026-03-05",
   "mejoras": [
     {
       "id": "pantallas-cocina",
@@ -17,6 +17,96 @@
         "fase_3": "Firmware ESP32-P4 kiosko — WebView fullscreen (PENDIENTE)",
         "fase_4": "Alertas sonoras implementadas (triple ding). Tiempos y métricas avanzadas (PENDIENTE)"
       }
+    },
+    {
+      "id": "sistema-impresion-multi-destino",
+      "titulo": "Sistema de impresión multi-destino con ESP32 como proxy local",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-05",
+      "descripcion": "Ampliar el módulo impresion para soportar múltiples impresoras (cocina, caja, barra) con routing por tipo de documento. ESP32 como proxy local entre VPS y impresoras en red local de la pizzería.",
+      "contexto": {
+        "problema": "El VPS no tiene acceso directo a las impresoras de la red local. Se necesita un puente.",
+        "solucion": "ESP32 conectado al WiFi local se suscribe por MQTT al VPS y reenvía ESC/POS a impresoras por TCP o Bluetooth.",
+        "alternativas_descartadas": {
+          "raspberry_pi": "Funciona pero más caro (~20-40€) y más complejo (SO Linux, SD card). ESP32 es suficiente.",
+          "webBluetooth": "HTTPS bloquea conexiones HTTP a IPs locales (mixed content). Solo sirve para BT, no TCP.",
+          "impresoras_cloud": "Epson Connect / Star CloudPRNT — impresoras caras (300€+), dependencia fabricante.",
+          "tailscale_vpn": "Viable pero añade dependencia externa y complejidad de red."
+        }
+      },
+      "componentes": {
+        "1_multi_destino_backend": {
+          "que": "Ampliar config del módulo impresion para registrar N impresoras con nombre y tipo de documento asignado",
+          "donde": "modules/pizzepos/impresion/",
+          "config_ejemplo": {
+            "impresoras": {
+              "cocina": { "tipo_docs": ["comanda"], "destino": "tcp:192.168.1.50:9100" },
+              "caja": { "tipo_docs": ["ticket_cliente", "cierre"], "destino": "tcp:192.168.1.51:9100" },
+              "barra": { "tipo_docs": ["comanda_barra"], "destino": "bt:AA:BB:CC:DD:EE:FF" }
+            }
+          }
+        },
+        "2_ticket_cliente_escpos": {
+          "que": "Nuevo formateador ESC/POS para ticket de cliente: items con precios, subtotal, IVA, propina, total, método de pago, logo",
+          "donde": "modules/pizzepos/impresion/",
+          "trigger": "cobro.procesado → genera ticket → envía a impresora 'caja'",
+          "contenido": ["Logo/nombre negocio", "Fecha/hora", "Items con precio unitario y cantidad", "Subtotal", "IVA desglosado", "Propina", "Total", "Método de pago", "Mensaje de despedida"]
+        },
+        "3_routing_tipo_documento": {
+          "que": "Router que asigna tipo de documento a impresora destino según config",
+          "tipos_documento": ["comanda (cocina)", "ticket_cliente (caja)", "cierre (caja)", "comanda_barra (barra)"],
+          "donde": "modules/pizzepos/impresion/"
+        },
+        "4_publicacion_mqtt": {
+          "que": "Publicar ESC/POS en topic MQTT con destino para que el ESP32 lo reciba",
+          "topic": "impresion/{proyecto}/print",
+          "payload": { "destino": "cocina|caja|barra", "data": "base64 ESC/POS" },
+          "ack": "impresion/{proyecto}/printed",
+          "nota": "Ya existe impresion.raw — ampliar para incluir destino"
+        },
+        "5_firmware_esp32": {
+          "que": "Firmware ESP32 — MQTT→TCP/BT bridge",
+          "funciones": [
+            "Conectar WiFi local",
+            "Conectar MQTT broker del VPS (WSS con TLS)",
+            "Suscribirse a impresion/{proyecto}/print",
+            "Al recibir mensaje: decodificar base64, enviar por TCP o BT según destino",
+            "Publicar ACK en impresion/{proyecto}/printed"
+          ],
+          "lenguaje": "MicroPython o C/Arduino (lo de menos)",
+          "hardware": "ESP32 estándar (~5€), WiFi+BT integrado",
+          "limitacion_usb": "ESP32 NO soporta USB Host — no puede imprimir por USB. Usar impresoras WiFi/TCP o BT.",
+          "coste_estimado": "ESP32 ~5€ + impresora WiFi 80mm ~60€ + impresora WiFi 58mm ~35€"
+        },
+        "6_config_destinos": {
+          "que": "UI o JSON para configurar impresoras: nombre → IP:puerto o MAC BT",
+          "donde": "Ampliar ImpresionPanel.svelte o nuevo panel de configuración"
+        }
+      },
+      "conexiones_soportadas": {
+        "wifi_tcp": { "esp32": true, "nota": "Impresora conectada a la red, puerto 9100. Trivial." },
+        "bluetooth": { "esp32": true, "nota": "ESP32 tiene Bluetooth Classic con SPP. Funciona con térmicas BT." },
+        "usb": { "esp32": false, "nota": "ESP32 no tiene USB Host. Comprar versión WiFi/BT de la impresora (~10-15€ más)." }
+      },
+      "arquitectura_red": {
+        "diagrama": "VPS (event-core) ←MQTT/WSS→ ESP32 (red local) ←TCP/BT→ Impresoras",
+        "flujo": [
+          "1. Evento en VPS (pedido.enviado_cocina, cobro.procesado, caja.cerrada)",
+          "2. Módulo impresion genera ESC/POS + determina destino",
+          "3. Publica en MQTT topic impresion/{proyecto}/print con destino + data base64",
+          "4. ESP32 recibe, decodifica, envía por TCP o BT a la impresora correcta",
+          "5. ESP32 publica ACK en impresion/{proyecto}/printed"
+        ]
+      },
+      "orden_implementacion": [
+        "1. Multi-destino en config del módulo impresion (backend)",
+        "2. Ticket cliente ESC/POS (formateador nuevo)",
+        "3. Routing por tipo de documento",
+        "4. Publicación MQTT con destino",
+        "5. Firmware ESP32 (proxy MQTT→TCP/BT)",
+        "6. UI de configuración de impresoras"
+      ]
     },
     {
       "id": "refactor-ai-gateway",

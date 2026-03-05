@@ -72,10 +72,10 @@ export const TIPO_COLORS: Record<TipoCuenta, string> = {
 };
 
 export const TIPO_ICONS: Record<TipoCuenta, string> = {
-  local: '\uD83C\uDFE0',
-  delivery: '\uD83D\uDEF5',
-  llevar: '\uD83D\uDCE6',
-  glovo: '\uD83D\uDEF5'
+  local: '🍕',
+  delivery: '🛵',
+  llevar: '🥡',
+  glovo: '🛵'
 };
 
 export const TIPO_LABELS: Record<TipoCuenta, string> = {

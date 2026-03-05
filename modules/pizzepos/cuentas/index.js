@@ -12,10 +12,10 @@ const path = require('path');
 // Transiciones válidas de estado
 const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
-  con_pedido: ['en_preparacion', 'con_pedido'], // con_pedido→con_pedido: más items sin enviar
-  en_preparacion: ['listo', 'en_preparacion'],   // en_preparacion→en_preparacion: nuevo envío parcial
-  listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'], // cobrado directo si cobro sin paso intermedio
-  entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],  // cobrado directo si cobro post-entrega
+  con_pedido: ['en_preparacion', 'con_pedido', 'cobrado'], // cobrado: pago rápido sin enviar cocina
+  en_preparacion: ['listo', 'en_preparacion', 'cobrado'],   // cobrado: pago mientras cocina prepara
+  listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'],
+  entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],
   para_cobrar: ['cobrado'],
   cobrado: []
 };
@@ -250,12 +250,12 @@ class CuentasModule {
     // Transicionar a con_pedido si es el primer item
     if (cuenta.estado === 'pendiente') {
       await this.transicionarEstado(cuenta_id, 'con_pedido');
-    } else {
-      await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
-        items: cuenta.items,
-        total: cuenta.total
-      });
     }
+    // Siempre publicar items y total (transicionarEstado solo publica estado)
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      items: cuenta.items,
+      total: cuenta.total
+    });
   }
 
   /**
@@ -787,6 +787,8 @@ class CuentasModule {
       cuenta_id: cuenta.id,
       tipo: cuenta.tipo,
       nombre: cuenta.nombre,
+      origen: cuenta.nombre || cuenta.tipo,
+      metadata: { nombre: cuenta.nombre },
       estado: cuenta.estado,
       created_at: cuenta.created_at
     });
@@ -845,9 +847,9 @@ class CuentasModule {
           estado = (cp.pedidos && cp.pedidos.length > 0) ? 'con_pedido' : 'pendiente';
         }
 
-        // Contar items totales de todos los pedidos
-        let itemsCount = 0;
-        if (cp.pedidos && Array.isArray(cp.pedidos)) {
+        // Items: usar campo directo si persistencia lo guardó, sino contar desde pedidos
+        let itemsCount = cp.items || 0;
+        if (!itemsCount && cp.pedidos && Array.isArray(cp.pedidos)) {
           for (const p of cp.pedidos) {
             if (p.items && Array.isArray(p.items)) {
               itemsCount += p.items.reduce((sum, i) => sum + (i.cantidad || 1), 0);
@@ -907,16 +909,9 @@ class CuentasModule {
       this.logger?.info('cuentas.counters.daily_reset', { date: today });
     }
 
-    // Emoji por tipo + nombre con numero (3 digitos, reinicio diario)
+    // Numero 3 digitos (ej: 001) — el emoji se muestra desde TIPO_ICONS en la UI
     const pad = (num) => String(num).padStart(3, '0');
-    const templates = {
-      local: (num) => `\uD83C\uDFE0 Mesa ${pad(num)}`,
-      delivery: (num) => `\uD83D\uDEF5 Delivery #${pad(num)}`,
-      llevar: (num) => `\uD83D\uDCE6 Llevar #${pad(num)}`
-    };
-
-    const fn = templates[tipo] || templates.local;
-    const nombre = fn(this.counters[tipo] || 1);
+    const nombre = pad(this.counters[tipo] || 1);
     this.counters[tipo] = (this.counters[tipo] || 1) + 1;
     return nombre;
   }

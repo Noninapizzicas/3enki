@@ -488,11 +488,15 @@ class ComanderoModule {
   async handleListBuffers() {
     const buffers = [];
     for (const [cuenta_id, pedido] of this.pedidos.entries()) {
+      // Solo items NO enviados a cocina (los enviados ya están en persistencia.pedidos[])
+      const pendientes = pedido.items.filter(i => !i.enviado);
+      if (pendientes.length === 0) continue;
+
       buffers.push({
         cuenta_id,
-        total: pedido.total,
-        items_count: pedido.items.reduce((s, i) => s + i.cantidad, 0),
-        items: pedido.items.map(i => ({
+        total: this.calcularTotal(pendientes),
+        items_count: pendientes.reduce((s, i) => s + i.cantidad, 0),
+        items: pendientes.map(i => ({
           item_id: i.id,
           producto_id: i.producto_id,
           nombre: i.nombre,

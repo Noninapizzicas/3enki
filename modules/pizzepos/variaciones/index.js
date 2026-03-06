@@ -121,6 +121,19 @@ class VariacionesModule {
 
     this.configuraciones.set(producto_id, config);
 
+    // Cargar precios de ingredientes_base (fuente: menu-generator → productos)
+    if (ingredientes_base) {
+      ingredientes_base.forEach(ing => {
+        if (ing.id && ing.precio_extra != null) {
+          this.ingredientesDisponibles.set(ing.id, {
+            precio: ing.precio_extra,
+            disponible: true
+          });
+        }
+      });
+    }
+
+    // extras_sugeridos sobreescriben precios si existen (configuración específica del producto)
     if (config.extras_sugeridos) {
       config.extras_sugeridos.forEach(extra => {
         this.ingredientesDisponibles.set(extra.ingrediente_id, {

@@ -1,10 +1,19 @@
 {
-  "_VERSION": "4.2.0",
+  "_VERSION": "4.3.0",
   "_CREATED": "2026-02-03",
   "_UPDATED": "2026-03-06",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "4.3.0": {
+      "fecha": "2026-03-06",
+      "cambios": [
+        "FIX: menu-generator — transformCartaToPOS() ahora incluye precio_extra en ingredientes_base de cada producto (antes solo estaba en ingredientes_catalogo separado)",
+        "FIX: ingredientes — onProductoCreado() ahora usa ing.precio_extra del ingredientes_base en vez de hardcodear 0",
+        "FIX: variaciones — onProductoCreado() ahora carga precios desde ingredientes_base (antes solo usaba extras_sugeridos)",
+        "PRINCIPIO: precio_extra fluye desde AI → menu-generator → ingredientes_base → todos los módulos. UNA sola fuente de verdad."
+      ]
+    },
     "4.2.0": {
       "fecha": "2026-03-06",
       "cambios": [
@@ -775,6 +784,25 @@
       "3_notificar": "productos publica catalogo.actualizado (con array productos[]) → comandero sincroniza productosCache de golpe",
       "4_individual": "productos publica producto.creado/actualizado (con id, nombre, precio) → comandero actualiza cache individual",
       "5_ingredientes": "productos.buildIngredientesCatalogo() crea catálogo global con tipo/precio_extra (de IA o fallback por nombre) → frontend consulta via productos/ingredientes"
+    },
+    "flujo_precio_ingredientes": {
+      "CRITICO_NO_MODIFICAR": "El flujo de precios de ingredientes fue unificado para que la IA sea la fuente de verdad. Cualquier cambio debe preservar esta cadena completa.",
+      "fuente_verdad": "AI estima precio_extra por ingrediente → menu-generator lo propaga en AMBOS: ingredientes_catalogo Y ingredientes_base de cada producto",
+      "cadena": {
+        "1_AI": "AI genera precio_extra por ingrediente en la carta",
+        "2_menu_generator": "transformCartaToPOS() pone precio_extra en ingredientes_catalogo (catálogo global) Y en ingredientes_base[] de cada producto (precio por ingrediente en el producto)",
+        "3_ingredientes_catalogo": "ingredientes.onMenuGenerado() recibe ingredientes_catalogo con precio_extra → guarda en this.ingredientes",
+        "4_ingredientes_producto": "ingredientes.onProductoCreado() recibe ingredientes_base con precio_extra → crea ingredientes con precio real (NO hardcoded 0)",
+        "5_productos": "productos.buildIngredientesCatalogo() usa precio_extra de ingredientes_base → fallback precioExtraPorTipo() solo para datos legacy",
+        "6_variaciones": "variaciones.onProductoCreado() carga precios desde ingredientes_base → extras_sugeridos sobreescriben si existen",
+        "7_frontend": "initComandero() carga ingredientes via productos/carta_completa → precios ya correctos"
+      },
+      "trampas_conocidas": [
+        "NO hardcodear precio_extra: 0 en onProductoCreado — usar ing.precio_extra ?? 0",
+        "NO omitir precio_extra en ingredientes_base de transformCartaToPOS — sin él, toda la cadena downstream pierde precios",
+        "precioExtraPorTipo() es SOLO fallback para cartas legacy sin precios de IA — no fuente primaria",
+        "variaciones.ingredientesDisponibles se llena primero desde ingredientes_base, luego extras_sugeridos sobreescribe — orden importa"
+      ]
     }
   },
 

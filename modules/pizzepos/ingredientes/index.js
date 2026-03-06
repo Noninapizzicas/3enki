@@ -174,7 +174,7 @@ class IngredientesModule {
         const ingrediente = {
           ...ing,
           disponible: true,
-          precio_extra: 0,
+          precio_extra: ing.precio_extra ?? 0,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };

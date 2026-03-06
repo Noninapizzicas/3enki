@@ -1059,11 +1059,16 @@ class MenuGeneratorModule {
       nombre: p.nombre,
       categoria: p.categoria,
       precio: p.precio,
-      ingredientes_base: (p.ingredientes || []).map(ing => ({
-        id: `ing_${this.slugify(ing.nombre)}`,
-        nombre: ing.nombre,
-        emoji: ing.emoji || ''
-      })),
+      ingredientes_base: (p.ingredientes || []).map(ing => {
+        const id = `ing_${this.slugify(ing.nombre)}`;
+        const catalogEntry = ingredientesMap.get(id);
+        return {
+          id,
+          nombre: ing.nombre,
+          emoji: ing.emoji || '',
+          precio_extra: catalogEntry?.precio_extra ?? ing.precio_extra ?? 0
+        };
+      }),
       activo: true
     }));
 

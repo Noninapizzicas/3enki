@@ -1088,7 +1088,6 @@ class ProductosModule {
       }
 
       // Cargar cartas
-      let precioExtraDefault = 1.50;
       try {
         const files = await fs.readdir(cartasDir);
         const jsonFiles = files.filter(f => f.endsWith('.json'));
@@ -1097,11 +1096,6 @@ class ProductosModule {
           const cartaPath = path.join(cartasDir, file);
           const cartaData = await fs.readFile(cartaPath, 'utf8');
           const carta = JSON.parse(cartaData);
-
-          // Leer precio_extra_default de la carta si existe
-          if (carta.meta?.precio_extra_default != null) {
-            precioExtraDefault = carta.meta.precio_extra_default;
-          }
 
           // Cargar categorías de la carta
           if (carta.categorias) {
@@ -1134,7 +1128,7 @@ class ProductosModule {
 
       // Construir catálogo de ingredientes deduplicado desde ingredientes_base
       if (result.productos > 0) {
-        const ingCount = this.buildIngredientesCatalogo(project_id, precioExtraDefault);
+        const ingCount = this.buildIngredientesCatalogo(project_id);
         result.ingredientes = Math.max(result.ingredientes, ingCount);
 
         // Persistir ingredientes para próximo reinicio
@@ -1224,10 +1218,9 @@ class ProductosModule {
    * Usa tipo/precio_extra del ingrediente si existen (del menu-generator),
    * o aplica clasificación por nombre y precio estimado como fallback.
    */
-  buildIngredientesCatalogo(projectId, precioExtraDefault) {
+  buildIngredientesCatalogo(projectId) {
     const ingredientesMap = this.getIngredientes(projectId);
     const productosMap = this.getProductos(projectId);
-    const defaultPrice = precioExtraDefault ?? 1.50;
 
     for (const prod of productosMap.values()) {
       const grupo = prod.categoria || 'otro';
@@ -1243,7 +1236,7 @@ class ProductosModule {
             emoji: ing.emoji || '',
             tipo,
             es_alergeno: false,
-            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, defaultPrice),
+            precio_extra: ing.precio_extra ?? 0,
             grupos: [grupo],
             activo: true
           });
@@ -1274,14 +1267,6 @@ class ProductosModule {
     if (/tomate|cebolla|pimiento|champi[nñ]on|seta|aceituna|oliva|alcachofa|esparrago|espinaca|rucula|albahaca|oregano|ajo|maiz|pi[nñ]a|jalape[nñ]o|pepino|lechuga|zanahoria|berenjena|calabacin/.test(n)) return 'verdura';
     if (/masa|harina|levadura/.test(n)) return 'masa';
     return 'otro';
-  }
-
-  /**
-   * Precio extra estimado por tipo de ingrediente (fallback).
-   */
-  precioExtraPorTipo(tipo, precioDefault) {
-    const precios = { carne: 2.00, marisco: 2.50, queso: 1.50, verdura: 1.00, salsa: 0.75, masa: 0.50, otro: precioDefault };
-    return precios[tipo] ?? precioDefault;
   }
 
   applyCorrections(productos, correcciones) {

@@ -85,7 +85,6 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
 
 {
   "nombre_carta": "Nombre del restaurante o carta detectado",
-  "precio_extra_default": 0,
   "categorias": [
     { "id": "categoria_slug", "nombre": "Nombre Original", "orden": 1 }
   ],
@@ -113,12 +112,11 @@ REGLAS OBLIGATORIAS:
    - "nombre": nombre del ingrediente tal cual
    - "emoji": el emoji más representativo
    - "tipo": clasificación obligatoria, uno de: "queso", "carne", "verdura", "salsa", "masa", "marisco", "otro"
-   - "precio_extra": precio en euros si se añade como extra a otro producto (número, ej: 1.50). Por defecto SIEMPRE 0 (gratis) salvo que el texto de la carta indique explícitamente un precio distinto
-7. "precio_extra_default": precio extra genérico para la carta (número). Por defecto 0. Se usa como fallback
-8. Mantén los nombres originales de productos tal cual aparecen
-9. Agrupa productos en categorías tal como aparecen en la carta
-10. Si no hay categorías claras, crea una categoría "general"
-11. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
+   - "precio_extra": SIEMPRE 0. Los precios de extras los configura el jefe manualmente después
+7. Mantén los nombres originales de productos tal cual aparecen
+8. Agrupa productos en categorías tal como aparecen en la carta
+9. Si no hay categorías claras, crea una categoría "general"
+10. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
 
 class MenuGeneratorModule {
   constructor() {
@@ -997,7 +995,7 @@ class MenuGeneratorModule {
         id: cartaId,
         nombre: raw.nombre_carta || nombre,
         generado_desde: 'texto',
-        precio_extra_default: typeof raw.precio_extra_default === 'number' ? raw.precio_extra_default : 0,
+        // precio_extra siempre 0 por defecto — el jefe configura precios via chat
         created_at: new Date().toISOString()
       },
       categorias,
@@ -1041,8 +1039,6 @@ class MenuGeneratorModule {
    * productos, categorias, and ingredientes modules.
    */
   transformCartaToPOS(carta, projectId) {
-    const precioDefault = carta.meta?.precio_extra_default ?? 0;
-
     // Build deduplicated ingredientes_catalogo from all products
     // Cada ingrediente acumula grupos[] = categorías de producto donde aparece
     const ingredientesMap = new Map();
@@ -1058,7 +1054,7 @@ class MenuGeneratorModule {
             emoji: ing.emoji || '',
             tipo,
             es_alergeno: false,
-            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, precioDefault),
+            precio_extra: ing.precio_extra ?? 0,
             grupos: [grupo]
           });
         } else {
@@ -1421,15 +1417,6 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     };
   }
 
-  /**
-   * Devuelve un precio extra estimado según el tipo de ingrediente.
-   * Usado como fallback cuando ni la IA ni la carta especifican precio.
-   */
-  precioExtraPorTipo(tipo, precioDefault) {
-    // Por defecto todos los ingredientes extras son gratis (0€).
-    // El jefe controla los precios manualmente via update_precios.
-    return precioDefault ?? 0;
-  }
 }
 
 module.exports = MenuGeneratorModule;

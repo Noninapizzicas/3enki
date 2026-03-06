@@ -463,7 +463,7 @@
         },
         "output_schema": "schemas/carta-output.json",
         "output_formato": {
-          "meta": "{ id, nombre, generado_desde, precio_extra_default, created_at }",
+          "meta": "{ id, nombre, generado_desde, created_at }",
           "categorias": "[{ id, nombre, orden }]",
           "productos": "[{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji, tipo, precio_extra }] }]"
         },
@@ -473,10 +473,9 @@
             "nombre": "Nombre original (obligatorio)",
             "emoji": "Emoji representativo (obligatorio)",
             "tipo": "Clasificación: queso|carne|verdura|salsa|masa|marisco|otro (IA lo da, fallback por nombre)",
-            "precio_extra": "Precio en € si se añade como extra (IA estima, fallback por tipo: carne 2€, queso 1.50€, verdura 1€, salsa 0.75€)"
+            "precio_extra": "SIEMPRE 0 por defecto. El jefe configura precios manualmente via chat (herramienta menu.update_ingredient_prices)"
           },
-          "precio_extra_default": "En carta.meta — fallback global por carta (default 1.50€)",
-          "fallback_clasificacion": "clasificarIngrediente(nombre) — regex sobre nombres comunes de pizzería. Mismo código en menu-generator y productos."
+          "fallback_clasificacion": "clasificarIngrediente(nombre) — regex sobre nombres comunes de pizzería"
         },
         "tests": {
           "test-generate.js": "40/40 — datos reales Pizzicas (30 productos, 2 categorías)",
@@ -840,7 +839,7 @@
         "NO mezclar ingredientes entre grupos — pizza no ofrece ingredientes de bocadillo",
         "grupos[] es array porque un ingrediente puede estar en varios grupos (ej: tomate en pizzas y bocadillos)",
         "El campo tipo es SOLO visual — NO usar para filtrar disponibilidad, para eso está grupo",
-        "precioExtraPorTipo() es SOLO fallback para cartas legacy — el jefe pone los precios reales"
+        "precio_extra siempre 0 por defecto — el jefe configura precios via chat con menu.update_ingredient_prices"
       ]
     }
   },

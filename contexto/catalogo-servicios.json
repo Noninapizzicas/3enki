@@ -425,9 +425,11 @@
         "uiHandlers": 8
       },
       "comandero": {
-        "version": "2.0.0",
-        "descripcion": "Interfaz del camarero para tomar pedidos",
-        "uiHandlers": 5
+        "version": "2.2.0",
+        "descripcion": "Interfaz del camarero para tomar pedidos — buffer por cuenta, add/remove/update items, enviar cocina",
+        "eventos_publica": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "comandero.enviar_cocina"],
+        "eventos_suscribe": ["cuenta.actualizada", "caja.cerrada", "dia.iniciado", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
+        "uiHandlers": 7
       },
       "productos": {
         "version": "2.1.0",
@@ -446,7 +448,7 @@
         "eventos_publica": ["caja.cerrada", "cuenta.cerrada_forzada", "dia.iniciado"],
         "caracteristicas": ["Rotación diaria", "Archivado", "Backup", "Cuadre de caja", "Cierre del día con auto-cierre e informe"]
       },
-      "cuentas": { "version": "2.2.0", "descripcion": "Módulo base de cuentas — ciclo de vida completo (pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado)", "uiHandlers": 7, "eventos_suscribe": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina", "cocina.pedido_listo", "cobro.iniciado", "cobro.procesado"], "eventos_publica": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"] }
+      "cuentas": { "version": "2.2.0", "descripcion": "Módulo base de cuentas — ciclo de vida completo (pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado)", "uiHandlers": 7, "eventos_suscribe": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "comandero.enviar_cocina", "cocina.pedido_listo", "cobro.iniciado", "cobro.procesado"], "eventos_publica": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"] }
     }
   },
 

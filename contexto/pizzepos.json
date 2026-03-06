@@ -1,10 +1,32 @@
 {
-  "_VERSION": "4.0.0",
+  "_VERSION": "4.2.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-03-05",
+  "_UPDATED": "2026-03-06",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "4.2.0": {
+      "fecha": "2026-03-06",
+      "cambios": [
+        "FIX: persistencia — onPedidoCreado sumaba total OTRA VEZ (ya acumulado via onCuentaActualizada) — precio duplicado al enviar a cocina",
+        "FIX: comandero — handleListBuffers solo devolvía items_count, ahora devuelve items[] con nombre/precio/cantidad para que frontend muestre nombres",
+        "FIX: comandero — handleListBuffers filtra items ya enviados (enviado=true) — evita duplicar items que ya están en persistencia.pedidos[]",
+        "FIX: comandero — handleUpdateItem no emitía eventos al cambiar cantidad (+/-). Nuevo evento comandero.item_actualizado con diff_cantidad/diff_precio",
+        "FIX: comandero — item_eliminado ahora incluye cantidad del item eliminado",
+        "FIX: cuentas — cuenta.items += 1 ignoraba cantidad del item. Ahora suma cantidad real (e.g. 3 pizzas = +3)",
+        "FIX: cuentas — nuevo handler onComanderoItemActualizado para ajustar items/total cuando cambia cantidad",
+        "FIX: cuentas — TRANSICIONES_VALIDAS ampliadas: cobrado accesible desde con_pedido y en_preparacion (pago rápido)",
+        "FIX: cuentas — publishCuentaCreada incluye origen y metadata.nombre para que persistencia guarde el nombre",
+        "FIX: cuentas — onComanderoItemAgregado siempre publica items/total (antes se perdían en primer item por transición)",
+        "FIX: persistencia — onCuentaActualizada ahora persiste cambios.items y cambios.nombre",
+        "FIX: frontend — RT handler comandero.item_agregado ahora añade item a itemsDetalle (nombre visible en tarjeta)",
+        "FIX: frontend — RT handler comandero.item_eliminado ahora elimina item de itemsDetalle",
+        "FIX: frontend — nuevo RT handler comandero.item_actualizado actualiza cantidad en itemsDetalle",
+        "FIX: frontend — buffer merge construye itemsDetalle desde items del buffer (no solo count)",
+        "FEAT: cuentas — generateNombre produce solo 3 dígitos (001, 002...) — emoji se renderiza desde TIPO_ICONS",
+        "FEAT: frontend — TIPO_ICONS actualizados: 🍕 local, 🛵 delivery, 🥡 llevar"
+      ]
+    },
     "4.1.0": {
       "fecha": "2026-03-05",
       "cambios": [
@@ -146,14 +168,51 @@
       "cadena_eventos": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina → cocina e impresión reciben",
       "estado_actual": "Ambos módulos implementados y operativos. Comandero maneja el buffer, pedidos maneja el ciclo de vida."
     },
+    "flujo_item_detallado": {
+      "descripcion": "Flujo completo de un item desde el botón del camarero hasta la tarjeta visual. VERIFICADO 2026-03-06.",
+      "CRITICO_NO_MODIFICAR": "Este flujo fue depurado con múltiples bugs interconectados. Cualquier cambio debe verificar toda la cadena.",
+      "cadena_agregar": [
+        "1. Frontend: ProductoBtn click → addItem(producto_id, cantidad, variaciones, metadata)",
+        "2. Frontend: addItem resuelve nombre/precio desde todosProductos, envía mqttRequest('comandero', 'add-item', {nombre, precio, cantidad})",
+        "3. Backend comandero: handleAddItem → crea item {id, nombre, precio, cantidad, subtotal: precio*cantidad} → push al buffer → publica comandero.item_agregado {precio_total: subtotal, cantidad, nombre, pedido_total, pedido_items}",
+        "4. Backend cuentas: onComanderoItemAgregado → cuenta.items += cantidad (NO +1), cuenta.total += precio_total → publica cuenta.actualizada {items, total}",
+        "5. Backend persistencia: onCuentaActualizada → guarda cambios.items y cambios.total en cuentasActivasCache",
+        "6. Frontend RT: comandero.item_agregado → añade item a itemsDetalle[] con nombre (visible en tarjeta)",
+        "7. Frontend RT: cuenta.actualizada → actualiza items/total del store"
+      ],
+      "cadena_cantidad_plus_minus": [
+        "1. Frontend: handleItemIncrement/Decrement → updateItem(item_id, {cantidad: nueva})",
+        "2. Backend comandero: handleUpdateItem → actualiza item.cantidad y item.subtotal → publica comandero.item_actualizado {diff_cantidad, diff_precio, pedido_total, pedido_items}",
+        "3. Backend cuentas: onComanderoItemActualizado → cuenta.items += diff_cantidad, cuenta.total += diff_precio → publica cuenta.actualizada",
+        "4. Frontend RT: comandero.item_actualizado → actualiza cantidad en itemsDetalle"
+      ],
+      "cadena_enviar_cocina": [
+        "1. Frontend: enviarCocina() → mqttRequest('comandero', 'send-kitchen')",
+        "2. Backend comandero: handleEnviarCocina → filtra items con enviado=false → marca enviado=true → publica comandero.enviar_cocina con items enviados",
+        "3. Backend pedidos: onComanderoEnviarCocina → crea pedido formal → publica pedido.creado {items[], total}",
+        "4. Backend persistencia: onPedidoCreado → guarda en cuenta.pedidos[] (items con nombre/precio). NO suma total (ya acumulado via onCuentaActualizada)",
+        "5. Backend cuentas: onComanderoEnviarCocina → transiciona a en_preparacion",
+        "6. Frontend: recarga desde persistencia → itemsDetalle se construye desde pedidos[] (items enviados)",
+        "7. Buffer: handleListBuffers SOLO devuelve items con enviado=false — evita duplicar items ya en persistencia.pedidos[]"
+      ],
+      "trampas_conocidas": {
+        "doble_conteo_total": "persistencia.onPedidoCreado NO debe sumar total — ya se acumula via onCuentaActualizada en cada item_agregado",
+        "items_count_vs_cantidad": "cuenta.items debe sumar item.cantidad (no +1 por add-item call). 3 pizzas en un add-item = +3",
+        "buffer_duplicacion": "handleListBuffers debe filtrar items con enviado=true — sino se duplican con los de persistencia.pedidos[]",
+        "itemsDetalle_source": "Antes de enviar cocina: viene del buffer merge. Después de enviar: viene de persistencia.pedidos[]. Ambas fuentes se combinan sin duplicar."
+      }
+    },
     "ciclo_vida_cuenta": {
       "descripcion": "El módulo cuentas (v2.2) ahora refleja el ciclo de vida completo escuchando eventos de otros módulos",
       "estados": ["pendiente", "con_pedido", "en_preparacion", "listo", "para_cobrar", "cobrado"],
       "transiciones": {
         "pendiente→con_pedido": "comandero.item_agregado (primer item añadido)",
         "con_pedido→en_preparacion": "comandero.enviar_cocina (items enviados a cocina)",
+        "con_pedido→cobrado": "cobro.procesado (pago rápido sin enviar a cocina)",
         "en_preparacion→listo": "cocina.pedido_listo (todos los items preparados)",
+        "en_preparacion→cobrado": "cobro.procesado (pago mientras cocina prepara)",
         "listo→para_cobrar": "cobro.iniciado (camarero abre cobro)",
+        "listo→cobrado": "cobro.procesado (pago directo)",
         "para_cobrar→cobrado": "cobro.procesado (pago confirmado)",
         "listo→en_preparacion": "comandero.enviar_cocina (cliente pide más tras primer pedido listo)",
         "con_pedido→pendiente": "comandero.item_eliminado (último item eliminado sin enviar)"
@@ -253,7 +312,7 @@
       "descripcion": "Interfaz del camarero — puerta de entrada para tomar pedidos. Buffer por cuenta, add/remove items, enviar cocina.",
       "ui_domain": "comandero",
       "uiHandlers": ["get", "add-item", "remove-item", "update-item", "send-kitchen", "health", "buffers"],
-      "eventos_publica": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina"],
+      "eventos_publica": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "comandero.enviar_cocina"],
       "eventos_suscribe": ["cuenta.actualizada", "caja.cerrada", "dia.iniciado", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
       "nota_eventos": "IMPORTANTE: comandero publica comandero.* (NO pedido.*). El módulo pedidos escucha comandero.enviar_cocina y es quien publica pedido.creado/enviado_cocina.",
       "productosCache": "Se sincroniza via catalogo.actualizado (array completo) y producto.creado/actualizado (individual). Resuelve nombre/precio al añadir items.",
@@ -262,6 +321,17 @@
         "flujo": "filtrar items no enviados → generar pedido_id → marcar items → publicar pedido.creado + pedido.enviado_cocina (solo items nuevos) → devolver pedido actualizado",
         "segunda_ronda": "El camarero puede añadir más items después de enviar. Al enviar de nuevo, solo van los nuevos.",
         "evento_payload": "comandero.item_agregado incluye: variaciones (objeto canónico), ingredientes_base (string[]), ingredientes, tipo, pizza_izquierda, pizza_derecha en el payload del evento"
+      },
+      "handleListBuffers": {
+        "descripcion": "Devuelve items NO enviados a cocina de cada buffer activo",
+        "filtra": "Solo items con enviado=false — los enviados ya están en persistencia.pedidos[]",
+        "payload": "{ cuenta_id, total, items_count, items: [{item_id, producto_id, nombre, cantidad, precio, subtotal}] }",
+        "uso_frontend": "cuentas.ts mergea estos items como itemsDetalle en las tarjetas — así se ven nombres antes de enviar a cocina"
+      },
+      "handleUpdateItem": {
+        "descripcion": "Cambia cantidad o notas de un item en el buffer",
+        "evento": "Emite comandero.item_actualizado con diff_cantidad/diff_precio para que cuentas ajuste totales",
+        "eliminacion": "Si cantidad <= 0, emite comandero.item_eliminado en su lugar"
       },
       "addItem_overrides": {
         "nombre_override": "MitadMitad y AlGusto envían nombre compuesto (ej: '½ Country / ½ R&B'). addItem() lo usa como nombre del item.",
@@ -522,6 +592,7 @@
           "3. Se actualiza cuentasActivasCache",
           "4. Se persiste cuentas_activas.json"
         ],
+        "CRITICO_total": "El total se acumula SOLO via onCuentaActualizada (en cada item_agregado). onPedidoCreado NO suma total — solo guarda items en pedidos[].",
         "reconstruccion": "Al iniciar, lee cuentas_activas.json y restaura el cache",
         "estructura_cuenta_activa": {
           "cuenta_id": "string — ID único",
@@ -688,7 +759,7 @@
     "descripcion": "Flujo de eventos entre módulos — quién publica qué y quién consume. VERIFICADO 2026-02-25.",
     "flujo_pedido_completo": {
       "1_crear_cuenta": "cuentas-canales publica cuenta.creada → cuentas actualiza → persistencia registra cuenta activa",
-      "2_añadir_items": "comandero publica comandero.item_agregado / comandero.item_eliminado → cuentas actualiza totales → persistencia graba",
+      "2_añadir_items": "comandero publica comandero.item_agregado / item_eliminado / item_actualizado → cuentas actualiza items+total (por cantidad real) → persistencia graba",
       "3_enviar_cocina": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina",
       "4_recepcion": "cocina recibe pedido.enviado_cocina (display digital) + impresion recibe pedido.enviado_cocina (ticket físico)",
       "5_cocina_prepara": "cocinero marca items → cocina publica cocina.item_preparado → cuando todos listos → cocina.pedido_listo",
@@ -966,8 +1037,13 @@
           "checkAlerta": "Detecta cuentas inactivas >30 min",
           "mapEstadoPersistencia": "Mapea estado backend a frontend"
         },
-        "subscriptions": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
-        "comportamiento_subscriptions": "Al recibir evento → recargar desde persistencia para estado consistente"
+        "subscriptions": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado", "comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "cobro.procesado"],
+        "comportamiento_subscriptions": "cuenta.creada → recarga desde persistencia. comandero.item_* → actualiza itemsDetalle en vivo (nombres visibles en tarjeta). cuenta.actualizada → actualiza items/total.",
+        "buffer_merge": {
+          "descripcion": "Al cargar, mergea items del buffer del comandero (no enviados a cocina) como itemsDetalle",
+          "fuente": "mqttRequest('comandero', 'buffers') → devuelve items[] con nombre/precio/cantidad",
+          "resultado": "tarjeta muestra nombres de items ANTES de enviar a cocina, no solo un número"
+        }
       },
       "comandero": {
         "ubicacion": "frontend/src/lib/stores/comandero.ts",

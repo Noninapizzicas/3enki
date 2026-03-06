@@ -247,7 +247,7 @@
     },
     {
       "name": "menu.update_ingredient_prices",
-      "description": "Actualiza precios extra de ingredientes en una carta. Puede cambiar precios individuales por nombre o aplicar porcentaje global/por tipo. Los cambios se persisten a disco y se propagan al POS en tiempo real.",
+      "description": "Actualiza precios extra de ingredientes en una carta. Puede cambiar precios individuales por nombre, poner un precio fijo a todos o por tipo, o aplicar porcentaje. Los cambios se persisten a disco y se propagan al POS en tiempo real. Ejemplos: 'pon todos los extras a 0', 'las carnes a 2€', 'sube un 10% los quesos', 'mozzarella a 1.50'.",
       "handler": "toolUpdateIngredientPrices",
       "parameters": {
         "type": "object",
@@ -260,13 +260,17 @@
             "type": "object",
             "description": "Objeto {nombre_ingrediente: nuevo_precio_extra} para precios individuales (ej: {\"Mozzarella\": 2.00, \"Bacon\": 2.50})"
           },
+          "precio_extra": {
+            "type": "number",
+            "description": "Precio fijo a aplicar a todos los ingredientes, o solo a los del tipo indicado (ej: 0 = gratis, 1.50 = todos a 1.50€)"
+          },
           "porcentaje": {
             "type": "number",
             "description": "Porcentaje a aplicar a todos los precio_extra (ej: 10 = +10%, -5 = -5%)"
           },
           "tipo": {
             "type": "string",
-            "description": "Si se indica con porcentaje, solo aplica a ingredientes de este tipo (queso, carne, verdura, salsa, marisco, masa, otro)"
+            "description": "Filtra por tipo de ingrediente: queso, carne, verdura, salsa, marisco, masa, otro. Se combina con precio_extra o porcentaje"
           }
         },
         "required": ["carta_id"]

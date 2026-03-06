@@ -85,7 +85,7 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
 
 {
   "nombre_carta": "Nombre del restaurante o carta detectado",
-  "precio_extra_default": 1.50,
+  "precio_extra_default": 0,
   "categorias": [
     { "id": "categoria_slug", "nombre": "Nombre Original", "orden": 1 }
   ],
@@ -748,13 +748,13 @@ class MenuGeneratorModule {
     return { status: 200, data: prod };
   }
 
-  async toolUpdateIngredientPrices({ carta_id, project_id, precios, porcentaje, tipo }) {
+  async toolUpdateIngredientPrices({ carta_id, project_id, precios, porcentaje, tipo, precio_extra }) {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
-    if (!precios && porcentaje === undefined) {
-      return { status: 400, error: 'Se requiere "precios" (objeto {nombre_ingrediente: nuevo_precio}) o "porcentaje" (número)' };
+    if (!precios && porcentaje === undefined && precio_extra === undefined) {
+      return { status: 400, error: 'Se requiere "precios" (objeto {nombre: precio}), "precio_extra" (número fijo) o "porcentaje" (número)' };
     }
 
     const cambios = [];
@@ -771,11 +771,20 @@ class MenuGeneratorModule {
         const anterior = ing.precio_extra ?? 0;
 
         if (preciosNorm[ingNorm] !== undefined) {
+          // Precio individual por nombre
           ing.precio_extra = preciosNorm[ingNorm];
           if (ing.precio_extra !== anterior) {
             cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: ing.precio_extra });
           }
+        } else if (typeof precio_extra === 'number') {
+          // Precio fijo para todos o filtrado por tipo
+          if (tipo && ing.tipo !== tipo) continue;
+          ing.precio_extra = precio_extra;
+          if (precio_extra !== anterior) {
+            cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: precio_extra });
+          }
         } else if (typeof porcentaje === 'number') {
+          // Porcentaje sobre precio actual
           if (tipo && ing.tipo !== tipo) continue;
           const nuevoP = Math.round(anterior * (1 + porcentaje / 100) * 100) / 100;
           ing.precio_extra = nuevoP;
@@ -988,7 +997,7 @@ class MenuGeneratorModule {
         id: cartaId,
         nombre: raw.nombre_carta || nombre,
         generado_desde: 'texto',
-        precio_extra_default: typeof raw.precio_extra_default === 'number' ? raw.precio_extra_default : 1.50,
+        precio_extra_default: typeof raw.precio_extra_default === 'number' ? raw.precio_extra_default : 0,
         created_at: new Date().toISOString()
       },
       categorias,
@@ -1032,7 +1041,7 @@ class MenuGeneratorModule {
    * productos, categorias, and ingredientes modules.
    */
   transformCartaToPOS(carta, projectId) {
-    const precioDefault = carta.meta?.precio_extra_default ?? 1.50;
+    const precioDefault = carta.meta?.precio_extra_default ?? 0;
 
     // Build deduplicated ingredientes_catalogo from all products
     // Cada ingrediente acumula grupos[] = categorías de producto donde aparece

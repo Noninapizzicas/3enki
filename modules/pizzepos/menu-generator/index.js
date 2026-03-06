@@ -85,7 +85,6 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
 
 {
   "nombre_carta": "Nombre del restaurante o carta detectado",
-  "precio_extra_default": 1.50,
   "categorias": [
     { "id": "categoria_slug", "nombre": "Nombre Original", "orden": 1 }
   ],
@@ -96,8 +95,8 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
       "categoria": "categoria_slug",
       "precio": 11.50,
       "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura", "precio_extra": 1.00 },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso", "precio_extra": 1.50 }
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura", "precio_extra": 0 },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso", "precio_extra": 0 }
       ]
     }
   ]
@@ -113,12 +112,11 @@ REGLAS OBLIGATORIAS:
    - "nombre": nombre del ingrediente tal cual
    - "emoji": el emoji más representativo
    - "tipo": clasificación obligatoria, uno de: "queso", "carne", "verdura", "salsa", "masa", "marisco", "otro"
-   - "precio_extra": precio en euros si se añade como extra a otro producto (número, ej: 1.50). Estima según tipo: carnes/mariscos ~2.00, quesos ~1.50, verduras ~1.00, salsas ~0.75
-7. "precio_extra_default": precio extra genérico para la carta (número, ej: 1.50). Se usa como fallback
-8. Mantén los nombres originales de productos tal cual aparecen
-9. Agrupa productos en categorías tal como aparecen en la carta
-10. Si no hay categorías claras, crea una categoría "general"
-11. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
+   - "precio_extra": SIEMPRE 0. Los precios de extras los configura el jefe manualmente después
+7. Mantén los nombres originales de productos tal cual aparecen
+8. Agrupa productos en categorías tal como aparecen en la carta
+9. Si no hay categorías claras, crea una categoría "general"
+10. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
 
 class MenuGeneratorModule {
   constructor() {
@@ -779,13 +777,13 @@ class MenuGeneratorModule {
     return { status: 200, data: prod };
   }
 
-  async toolUpdateIngredientPrices({ carta_id, project_id, precios, porcentaje, tipo }) {
+  async toolUpdateIngredientPrices({ carta_id, project_id, precios, porcentaje, tipo, precio_extra }) {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     const carta = this.getCartas(project_id).get(carta_id);
     if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
 
-    if (!precios && porcentaje === undefined) {
-      return { status: 400, error: 'Se requiere "precios" (objeto {nombre_ingrediente: nuevo_precio}) o "porcentaje" (número)' };
+    if (!precios && porcentaje === undefined && precio_extra === undefined) {
+      return { status: 400, error: 'Se requiere "precios" (objeto {nombre: precio}), "precio_extra" (número fijo) o "porcentaje" (número)' };
     }
 
     const cambios = [];
@@ -802,11 +800,20 @@ class MenuGeneratorModule {
         const anterior = ing.precio_extra ?? 0;
 
         if (preciosNorm[ingNorm] !== undefined) {
+          // Precio individual por nombre
           ing.precio_extra = preciosNorm[ingNorm];
           if (ing.precio_extra !== anterior) {
             cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: ing.precio_extra });
           }
+        } else if (typeof precio_extra === 'number') {
+          // Precio fijo para todos o filtrado por tipo
+          if (tipo && ing.tipo !== tipo) continue;
+          ing.precio_extra = precio_extra;
+          if (precio_extra !== anterior) {
+            cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: precio_extra });
+          }
         } else if (typeof porcentaje === 'number') {
+          // Porcentaje sobre precio actual
           if (tipo && ing.tipo !== tipo) continue;
           const nuevoP = Math.round(anterior * (1 + porcentaje / 100) * 100) / 100;
           ing.precio_extra = nuevoP;
@@ -1019,7 +1026,7 @@ class MenuGeneratorModule {
         id: cartaId,
         nombre: raw.nombre_carta || nombre,
         generado_desde: 'texto',
-        precio_extra_default: typeof raw.precio_extra_default === 'number' ? raw.precio_extra_default : 1.50,
+        // precio_extra siempre 0 por defecto — el jefe configura precios via chat
         created_at: new Date().toISOString()
       },
       categorias,
@@ -1063,8 +1070,6 @@ class MenuGeneratorModule {
    * productos, categorias, and ingredientes modules.
    */
   transformCartaToPOS(carta, projectId) {
-    const precioDefault = carta.meta?.precio_extra_default ?? 1.50;
-
     // Build deduplicated ingredientes_catalogo from all products
     // Cada ingrediente acumula grupos[] = categorías de producto donde aparece
     const ingredientesMap = new Map();
@@ -1080,7 +1085,7 @@ class MenuGeneratorModule {
             emoji: ing.emoji || '',
             tipo,
             es_alergeno: false,
-            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, precioDefault),
+            precio_extra: ing.precio_extra ?? 0,
             grupos: [grupo]
           });
         } else {
@@ -1443,22 +1448,6 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     };
   }
 
-  /**
-   * Devuelve un precio extra estimado según el tipo de ingrediente.
-   * Usado como fallback cuando ni la IA ni la carta especifican precio.
-   */
-  precioExtraPorTipo(tipo, precioDefault) {
-    const precios = {
-      carne: 2.00,
-      marisco: 2.50,
-      queso: 1.50,
-      verdura: 1.00,
-      salsa: 0.75,
-      masa: 0.50,
-      otro: precioDefault
-    };
-    return precios[tipo] ?? precioDefault;
-  }
 }
 
 module.exports = MenuGeneratorModule;

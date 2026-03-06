@@ -396,15 +396,15 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
 
       console.log('[Cuentas] Loaded from persistencia:', cuentas.length, 'project:', projectId);
 
-      // Merge buffer totals: el buffer del comandero tiene items no enviados
-      // que no están en persistencia aún. Usamos el máximo entre buffer y persistencia.
+      // Merge buffer: el buffer del comandero tiene items no enviados a cocina
+      // que no están en persistencia. Mergear totales + itemsDetalle.
       try {
         const bufRes = await mqttRequest<any>('comandero', 'buffers', {});
         const bufData = bufRes?.data?.buffers || bufRes?.data?.data?.buffers || [];
         if (bufData.length > 0) {
-          const bufferMap = new Map<string, { total: number; items_count: number }>();
+          const bufferMap = new Map<string, { total: number; items_count: number; items: any[] }>();
           for (const b of bufData) {
-            bufferMap.set(b.cuenta_id, { total: b.total, items_count: b.items_count });
+            bufferMap.set(b.cuenta_id, { total: b.total, items_count: b.items_count, items: b.items || [] });
           }
 
           cuentasStore.update(s => ({
@@ -412,18 +412,31 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
             cuentas: s.cuentas.map(c => {
               const buf = bufferMap.get(c.id);
               if (!buf) return c;
-              // Buffer total incluye items enviados + no enviados = total real
-              // Persistencia total solo tiene pedidos formales (enviados)
-              // Usamos el mayor de los dos como total real
+
+              // Construir itemsDetalle desde buffer (items no enviados a cocina)
+              const bufferItems: ItemDetalle[] = buf.items.map((bi: any) => ({
+                item_id: bi.item_id || '',
+                producto_id: bi.producto_id || '',
+                nombre: bi.nombre || '',
+                cantidad: bi.cantidad || 1,
+                precio: bi.precio || 0,
+                estado_cocina: 'en_cocina' as EstadoCocinaItem
+              }));
+
+              // Combinar: items de persistencia (enviados) + buffer (no enviados)
+              const persistenciaItems = c.itemsDetalle || [];
+              const allItems = [...persistenciaItems, ...bufferItems];
+
               return {
                 ...c,
                 total: Math.max(c.total, buf.total),
                 items: Math.max(c.items, buf.items_count),
+                itemsDetalle: allItems.length > 0 ? allItems : undefined,
                 estado: (buf.items_count > 0 && c.estado === 'pendiente' ? 'con_pedido' : c.estado) as EstadoCuenta
               };
             })
           }));
-          console.log('[Cuentas] Buffer totals merged for', bufData.length, 'cuentas');
+          console.log('[Cuentas] Buffer merged (items + totals) for', bufData.length, 'cuentas');
         }
       } catch (bufErr) {
         // No pasa nada si falla — persistencia sola es suficiente
@@ -644,11 +657,28 @@ export function initCuentasSubscriptions(projectId: string): () => void {
       if (!data?.cuenta_id) return;
       cuentasStore.update(s => ({
         ...s,
-        cuentas: s.cuentas.map(c =>
-          c.id === data.cuenta_id
-            ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: (data.pedido_items > 0 ? 'con_pedido' : c.estado) as EstadoCuenta }
-            : c
-        )
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id) return c;
+
+          // Añadir item a itemsDetalle para que la tarjeta muestre nombre
+          const newItem: ItemDetalle = {
+            item_id: data.item_id || '',
+            producto_id: data.producto_id || '',
+            nombre: data.nombre || '',
+            cantidad: data.cantidad || 1,
+            precio: data.precio_unitario || 0,
+            estado_cocina: 'en_cocina'
+          };
+          const currentItems = c.itemsDetalle || [];
+
+          return {
+            ...c,
+            total: data.pedido_total ?? c.total,
+            items: data.pedido_items ?? c.items,
+            itemsDetalle: [...currentItems, newItem],
+            estado: (data.pedido_items > 0 ? 'con_pedido' : c.estado) as EstadoCuenta
+          };
+        })
       }));
     })
   );
@@ -660,11 +690,48 @@ export function initCuentasSubscriptions(projectId: string): () => void {
       if (!data?.cuenta_id) return;
       cuentasStore.update(s => ({
         ...s,
-        cuentas: s.cuentas.map(c =>
-          c.id === data.cuenta_id
-            ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta }
-            : c
-        )
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id) return c;
+
+          // Eliminar item de itemsDetalle
+          const updatedItems = (c.itemsDetalle || []).filter(i => i.item_id !== data.item_id);
+
+          return {
+            ...c,
+            total: data.pedido_total ?? c.total,
+            items: data.pedido_items ?? c.items,
+            itemsDetalle: updatedItems.length > 0 ? updatedItems : undefined,
+            estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta
+          };
+        })
+      }));
+    })
+  );
+
+  // comandero.item_actualizado → cantidad cambiada (+/-), actualizar card
+  cleanups.push(
+    mqttSubscribe('comandero.item_actualizado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id) return c;
+
+          // Actualizar cantidad del item en itemsDetalle
+          const updatedItems = (c.itemsDetalle || []).map(i =>
+            i.item_id === data.item_id
+              ? { ...i, cantidad: data.cantidad_nueva }
+              : i
+          );
+
+          return {
+            ...c,
+            total: data.pedido_total ?? c.total,
+            items: data.pedido_items ?? c.items,
+            itemsDetalle: updatedItems.length > 0 ? updatedItems : undefined
+          };
+        })
       }));
     })
   );

@@ -230,7 +230,7 @@ class CuentasModule {
    */
   async onComanderoItemAgregado(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id, precio_total } = data;
+    const { cuenta_id, precio_total, cantidad } = data;
 
     this.logger.info('comandero.item_agregado.received', {
       cuenta_id,
@@ -243,7 +243,7 @@ class CuentasModule {
       return;
     }
 
-    cuenta.items += 1;
+    cuenta.items += (cantidad || 1);
     cuenta.total += precio_total || 0;
     cuenta.updated_at = new Date().toISOString();
 
@@ -263,12 +263,12 @@ class CuentasModule {
    */
   async onComanderoItemEliminado(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id, precio_total } = data;
+    const { cuenta_id, precio_total, cantidad } = data;
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    cuenta.items = Math.max(0, cuenta.items - 1);
+    cuenta.items = Math.max(0, cuenta.items - (cantidad || 1));
     cuenta.total = Math.max(0, cuenta.total - (precio_total || 0));
     cuenta.updated_at = new Date().toISOString();
 
@@ -285,6 +285,27 @@ class CuentasModule {
       this.metrics?.increment?.('cuenta.transicion.total');
       await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'pendiente');
     }
+
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      items: cuenta.items,
+      total: cuenta.total
+    });
+  }
+
+  /**
+   * comandero.item_actualizado → ajustar items/total cuando cambia cantidad (+/-)
+   */
+  async onComanderoItemActualizado(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, diff_cantidad, diff_precio, pedido_total, pedido_items } = data;
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+
+    // Ajustar con la diferencia
+    cuenta.items = Math.max(0, cuenta.items + (diff_cantidad || 0));
+    cuenta.total = Math.max(0, cuenta.total + (diff_precio || 0));
+    cuenta.updated_at = new Date().toISOString();
 
     await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
       items: cuenta.items,

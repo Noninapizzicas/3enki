@@ -322,6 +322,7 @@ class ComanderoModule {
       cuenta_id,
       item_id,
       producto_id: removedItem.producto_id,
+      cantidad: removedItem.cantidad || 1,
       precio_total: removedItem.subtotal,
       pedido_total: pedido.total,
       pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
@@ -361,7 +362,9 @@ class ComanderoModule {
         pedido.total = this.calcularTotal(pedido.items);
 
         await this.eventBus.publish('comandero.item_eliminado', {
-          cuenta_id, item_id, producto_id: item.producto_id, precio_total: item.subtotal,
+          cuenta_id, item_id, producto_id: item.producto_id,
+          cantidad: item.cantidad || 1,
+          precio_total: item.subtotal,
           pedido_total: pedido.total,
           pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
         });
@@ -371,15 +374,44 @@ class ComanderoModule {
           data: { pedido: { cuenta_id, items: pedido.items, total: pedido.total } }
         };
       }
+      const cantidadAnterior = item.cantidad;
+      const subtotalAnterior = item.subtotal;
       item.cantidad = cantidad;
       item.subtotal = item.precio * cantidad;
+
+      pedido.total = this.calcularTotal(pedido.items);
+
+      // Notificar cambio de cantidad para que cuentas actualice items/total
+      const diffCantidad = cantidad - cantidadAnterior;
+      const diffPrecio = item.subtotal - subtotalAnterior;
+      await this.eventBus.publish('comandero.item_actualizado', {
+        cuenta_id, item_id, producto_id: item.producto_id,
+        nombre: item.nombre,
+        cantidad_anterior: cantidadAnterior,
+        cantidad_nueva: cantidad,
+        diff_cantidad: diffCantidad,
+        diff_precio: diffPrecio,
+        pedido_total: pedido.total,
+        pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
+      });
+
+      // Persistir buffer a disco (debounced)
+      this.guardarBuffers();
+
+      this.logger.info('comandero.item.actualizado', { cuenta_id, item_id, cantidad, notas });
+
+      return {
+        status: 200,
+        data: {
+          item,
+          pedido: { cuenta_id, items: pedido.items, total: pedido.total }
+        }
+      };
     }
 
     if (notas !== undefined) {
       item.notas = notas;
     }
-
-    pedido.total = this.calcularTotal(pedido.items);
 
     // Persistir buffer a disco (debounced)
     this.guardarBuffers();
@@ -459,7 +491,15 @@ class ComanderoModule {
       buffers.push({
         cuenta_id,
         total: pedido.total,
-        items_count: pedido.items.reduce((s, i) => s + i.cantidad, 0)
+        items_count: pedido.items.reduce((s, i) => s + i.cantidad, 0),
+        items: pedido.items.map(i => ({
+          item_id: i.id,
+          producto_id: i.producto_id,
+          nombre: i.nombre,
+          cantidad: i.cantidad,
+          precio: i.precio,
+          subtotal: i.subtotal
+        }))
       });
     }
 

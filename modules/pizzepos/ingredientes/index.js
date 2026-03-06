@@ -1,7 +1,12 @@
 /**
- * Módulo Ingredientes v2.0
- * Catálogo de ingredientes - Actualizado desde menús generados por IA
- * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ * Módulo Ingredientes v3.0
+ * Catálogo de ingredientes organizado por GRUPO (categoría de producto).
+ *
+ * Concepto clave:
+ *   - Cada ingrediente pertenece a uno o más GRUPOS (= categorías de producto: pizzas, bocadillos, etc.)
+ *   - Los ingredientes de un grupo solo se ofrecen a productos de ese grupo
+ *   - El campo "tipo" (queso, carne, verdura...) es para agrupación visual en la UI
+ *   - Precios los controla el jefe: por tipo, por grupo, individual, o por porcentaje
  *
  * Emite: ingrediente.creado, ingrediente.actualizado
  * Consume: menu.generado, producto.creado
@@ -10,7 +15,7 @@
 class IngredientesModule {
   constructor() {
     this.name = 'ingredientes';
-    this.version = '2.0.0';
+    this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -44,7 +49,7 @@ class IngredientesModule {
     this.logger.info('module.unloading', { module: this.name });
 
     if (this.uiHandler) {
-      const actions = ['list', 'get', 'search', 'alergenos', 'update', 'health', 'metrics'];
+      const actions = ['list', 'get', 'search', 'alergenos', 'update', 'update_precios', 'health', 'metrics'];
       for (const action of actions) {
         this.uiHandler.unregister('ingredientes', action);
       }
@@ -70,11 +75,12 @@ class IngredientesModule {
     this.uiHandler.register('ingredientes', 'search', this.handleSearchIngredientes.bind(this));
     this.uiHandler.register('ingredientes', 'alergenos', this.handleListAlergenos.bind(this));
     this.uiHandler.register('ingredientes', 'update', this.handleUpdateIngrediente.bind(this));
+    this.uiHandler.register('ingredientes', 'update_precios', this.handleUpdatePrecios.bind(this));
     this.uiHandler.register('ingredientes', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('ingredientes', 'metrics', this.handleGetMetrics.bind(this));
 
     this.logger.info('ingredientes.ui_handlers.registered', {
-      handlers: ['list', 'get', 'search', 'alergenos', 'update', 'health', 'metrics']
+      handlers: ['list', 'get', 'search', 'alergenos', 'update', 'update_precios', 'health', 'metrics']
     });
   }
 
@@ -119,6 +125,7 @@ class IngredientesModule {
       if (!existente) {
         const ingrediente = {
           ...ing,
+          grupos: ing.grupos || [],
           disponible: true,
           precio_extra: ing.precio_extra || 0,
           created_at: new Date().toISOString(),
@@ -132,16 +139,19 @@ class IngredientesModule {
         await this.publishIngredienteCreado(ingrediente, correlationId);
 
       } else {
+        // Merge grupos: acumular sin duplicar
+        const gruposMerged = [...new Set([...(existente.grupos || []), ...(ing.grupos || [])])];
         const actualizado = {
           ...existente,
           ...ing,
+          grupos: gruposMerged,
           updated_at: new Date().toISOString()
         };
 
         this.ingredientes.set(ing.id, actualizado);
         actualizados++;
 
-        await this.publishIngredienteActualizado(ing.id, { emoji: ing.emoji }, correlationId);
+        await this.publishIngredienteActualizado(ing.id, { emoji: ing.emoji, grupos: gruposMerged }, correlationId);
       }
     }
 
@@ -163,16 +173,20 @@ class IngredientesModule {
   async onProductoCreado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { ingredientes_base, producto_id } = eventData;
+    const { ingredientes_base, producto_id, categoria } = eventData;
 
     if (!ingredientes_base || ingredientes_base.length === 0) {
       return;
     }
 
+    const grupo = categoria || 'otro';
+
     for (const ing of ingredientes_base) {
-      if (!this.ingredientes.has(ing.id)) {
+      const existente = this.ingredientes.get(ing.id);
+      if (!existente) {
         const ingrediente = {
           ...ing,
+          grupos: [grupo],
           disponible: true,
           precio_extra: ing.precio_extra ?? 0,
           created_at: new Date().toISOString(),
@@ -187,9 +201,18 @@ class IngredientesModule {
         this.logger.info('ingrediente.creado', {
           ingrediente_id: ing.id,
           nombre: ing.nombre,
+          grupo,
           from_producto: producto_id,
           correlation_id: correlationId
         });
+      } else {
+        // Añadir grupo si no está
+        if (!existente.grupos) existente.grupos = [];
+        if (!existente.grupos.includes(grupo)) {
+          existente.grupos.push(grupo);
+          existente.updated_at = new Date().toISOString();
+          this.ingredientes.set(ing.id, existente);
+        }
       }
     }
   }
@@ -199,9 +222,16 @@ class IngredientesModule {
   // ==========================================
 
   async handleListIngredientes(data) {
-    const { tipo, alergeno } = data || {};
+    const { tipo, grupo, alergeno } = data || {};
 
     let ingredientes = Array.from(this.ingredientes.values());
+
+    // Filtrar por grupo (categoría de producto)
+    if (grupo) {
+      ingredientes = ingredientes.filter(i =>
+        i.grupos && i.grupos.includes(grupo)
+      );
+    }
 
     if (tipo) {
       ingredientes = ingredientes.filter(i => i.tipo === tipo);
@@ -213,7 +243,7 @@ class IngredientesModule {
 
     ingredientes.sort((a, b) => {
       if (a.tipo !== b.tipo) {
-        return a.tipo.localeCompare(b.tipo);
+        return (a.tipo || '').localeCompare(b.tipo || '');
       }
       return a.nombre.localeCompare(b.nombre);
     });
@@ -236,15 +266,19 @@ class IngredientesModule {
   }
 
   async handleSearchIngredientes(data) {
-    const { q } = data || {};
+    const { q, grupo } = data || {};
 
     if (!q) {
       return { status: 400, error: 'Parámetro "q" requerido' };
     }
 
     const searchTerm = q.toLowerCase();
-    const resultados = Array.from(this.ingredientes.values())
+    let resultados = Array.from(this.ingredientes.values())
       .filter(i => i.nombre.toLowerCase().includes(searchTerm));
+
+    if (grupo) {
+      resultados = resultados.filter(i => i.grupos && i.grupos.includes(grupo));
+    }
 
     return {
       status: 200,
@@ -308,6 +342,72 @@ class IngredientesModule {
     return { status: 200, data: ingrediente };
   }
 
+  /**
+   * Cambiar precios de ingredientes en bloque.
+   * Modos:
+   *   { id, precio_extra }                 → individual
+   *   { tipo, precio_extra }               → todos los de un tipo (carne, queso...)
+   *   { grupo, precio_extra }              → todos los de un grupo (pizzas, bocadillos...)
+   *   { tipo, porcentaje }                 → subir/bajar % a un tipo
+   *   { grupo, tipo, precio_extra }        → tipo dentro de un grupo
+   */
+  async handleUpdatePrecios(data) {
+    const { id, tipo, grupo, precio_extra, porcentaje } = data || {};
+
+    if (precio_extra == null && porcentaje == null) {
+      return { status: 400, error: 'Se requiere precio_extra o porcentaje' };
+    }
+
+    let afectados = [];
+
+    if (id) {
+      // Individual
+      const ing = this.ingredientes.get(id);
+      if (!ing) return { status: 404, error: 'Ingrediente no encontrado' };
+      afectados = [ing];
+    } else {
+      // Filtrar por tipo y/o grupo
+      afectados = Array.from(this.ingredientes.values());
+      if (grupo) {
+        afectados = afectados.filter(i => i.grupos && i.grupos.includes(grupo));
+      }
+      if (tipo) {
+        afectados = afectados.filter(i => i.tipo === tipo);
+      }
+    }
+
+    if (afectados.length === 0) {
+      return { status: 404, error: 'No se encontraron ingredientes con ese filtro' };
+    }
+
+    const actualizados = [];
+    for (const ing of afectados) {
+      const anterior = ing.precio_extra || 0;
+      if (porcentaje != null) {
+        ing.precio_extra = Math.round(anterior * (1 + porcentaje / 100) * 100) / 100;
+      } else {
+        ing.precio_extra = precio_extra;
+      }
+      ing.updated_at = new Date().toISOString();
+      this.ingredientes.set(ing.id, ing);
+      actualizados.push({ id: ing.id, nombre: ing.nombre, anterior, nuevo: ing.precio_extra });
+
+      await this.publishIngredienteActualizado(ing.id, {
+        precio_extra: { anterior, nuevo: ing.precio_extra }
+      });
+    }
+
+    this.logger.info('ingredientes.precios_actualizados', {
+      filtro: { id, tipo, grupo, precio_extra, porcentaje },
+      afectados: actualizados.length
+    });
+
+    return {
+      status: 200,
+      data: { actualizados, total: actualizados.length }
+    };
+  }
+
   async handleHealthCheck() {
     return {
       status: 200,
@@ -318,7 +418,8 @@ class IngredientesModule {
         catalogo: {
           total: this.ingredientes.size,
           alergenos: Array.from(this.ingredientes.values()).filter(i => i.es_alergeno).length,
-          por_tipo: this.countByType()
+          por_tipo: this.countByType(),
+          por_grupo: this.countByGroup()
         }
       }
     };
@@ -350,6 +451,7 @@ class IngredientesModule {
       nombre: ingrediente.nombre,
       emoji: ingrediente.emoji,
       tipo: ingrediente.tipo,
+      grupos: ingrediente.grupos,
       es_alergeno: ingrediente.es_alergeno,
       alergenos: ingrediente.alergenos,
       created_at: ingrediente.created_at
@@ -376,6 +478,16 @@ class IngredientesModule {
     const counts = {};
     Array.from(this.ingredientes.values()).forEach(ing => {
       counts[ing.tipo] = (counts[ing.tipo] || 0) + 1;
+    });
+    return counts;
+  }
+
+  countByGroup() {
+    const counts = {};
+    Array.from(this.ingredientes.values()).forEach(ing => {
+      (ing.grupos || []).forEach(g => {
+        counts[g] = (counts[g] || 0) + 1;
+      });
     });
     return counts;
   }

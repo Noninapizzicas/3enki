@@ -1,12 +1,15 @@
 <script lang="ts">
   /**
-   * VariacionesPanel — Flotante para personalizar producto
+   * VariacionesPanel v3.0 — Personalizar producto por ingredientes de su grupo
    *
-   * - Ingredientes base: tap = rojo (quitar)
-   * - Resto de ingredientes de la carta: tap = verde (añadir)
-   * - Precio dinámico
+   * Estructura:
+   *   1. Arriba: ingredientes del producto (tap = rojo para quitar)
+   *   2. Abajo: ingredientes del mismo GRUPO organizados por TIPO con colores
    *
-   * Usa módulos: variaciones (config) + ingredientes (catálogo completo)
+   * Reglas:
+   *   - Solo se pueden quitar ingredientes que lleva el producto
+   *   - Solo se pueden añadir ingredientes del mismo grupo (categoría)
+   *   - Los ingredientes de otro grupo NO aparecen
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
@@ -15,6 +18,7 @@
     id: string;
     nombre: string;
     precio: number;
+    categoria?: string;
     ingredientes_base?: { id: string; nombre: string; emoji?: string }[];
     ingredientes?: { id: string; nombre: string; emoji?: string }[];
   };
@@ -34,6 +38,17 @@
     };
   }>();
 
+  // Config de tipos — orden visual y colores
+  const tipoConfig: Record<string, { emoji: string; label: string; orden: number; color: string; bg: string }> = {
+    queso:      { emoji: '🧀', label: 'Queso',           orden: 1, color: '#facc15', bg: 'rgba(250, 204, 21, 0.12)' },
+    verdura:    { emoji: '🥬', label: 'Verdura',         orden: 2, color: '#22c55e', bg: 'rgba(34, 197, 94, 0.12)' },
+    carne:      { emoji: '🍖', label: 'Carne y Embutido',orden: 3, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)' },
+    marisco:    { emoji: '🐟', label: 'Pescado/Marisco', orden: 4, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' },
+    salsa:      { emoji: '🍅', label: 'Salsa',           orden: 5, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' },
+    masa:       { emoji: '🫓', label: 'Masa/Base',       orden: 6, color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.12)' },
+    otro:       { emoji: '📦', label: 'Otro',            orden: 9, color: '#888',    bg: 'rgba(136, 136, 136, 0.12)' }
+  };
+
   // Estado
   let loading = true;
   let error: string | null = null;
@@ -41,26 +56,21 @@
   // Config variaciones (del backend)
   let permiteQuitar: string[] = [];
   let permiteAnadir: boolean = false;
-  let maxExtras: number = 5;
+  let maxExtras: number = 10;
+  let grupo: string = '';
 
   // Ingredientes base del producto
   let ingredientesBase: { id: string; nombre: string; emoji?: string }[] = [];
 
-  // Catálogo completo de ingredientes (filtrado: sin los del producto)
-  let ingredientesDisponibles: {
-    id: string;
-    nombre: string;
-    emoji?: string;
-    precio_extra: number;
-    tipo?: string;
-    disponible: boolean;
-  }[] = [];
+  // Ingredientes del grupo organizados por tipo
+  let ingredientesPorTipo: Map<string, any[]> = new Map();
+  let tiposOrden: string[] = [];
 
   // Selecciones del usuario
   let quitarSeleccionados: Set<string> = new Set();
   let anadirSeleccionados: Map<string, number> = new Map(); // id -> cantidad
 
-  // Precio calculado — pasar dependencias explícitas para reactividad Svelte
+  // Precio calculado
   $: precioBase = producto.precio;
   $: precioExtras = calcPrecioExtras(anadirSeleccionados);
   $: precioTotal = precioBase + precioExtras;
@@ -68,15 +78,17 @@
   function calcPrecioExtras(seleccionados: Map<string, number>): number {
     let total = 0;
     seleccionados.forEach((cantidad, id) => {
-      const ing = ingredientesDisponibles.find(i => i.id === id);
-      if (ing) {
-        total += (ing.precio_extra || 0) * cantidad;
+      for (const [, ingredientes] of ingredientesPorTipo) {
+        const ing = ingredientes.find((i: any) => i.id === id);
+        if (ing) {
+          total += (ing.precio_extra || 0) * cantidad;
+          break;
+        }
       }
     });
     return total;
   }
 
-  // Toggle quitar ingrediente
   function toggleQuitar(id: string) {
     if (quitarSeleccionados.has(id)) {
       quitarSeleccionados.delete(id);
@@ -86,7 +98,6 @@
     quitarSeleccionados = new Set(quitarSeleccionados);
   }
 
-  // Toggle añadir ingrediente
   function toggleAnadir(id: string) {
     if (anadirSeleccionados.has(id)) {
       anadirSeleccionados.delete(id);
@@ -98,28 +109,27 @@
     anadirSeleccionados = new Map(anadirSeleccionados);
   }
 
-  // Cargar config de variaciones + catálogo de ingredientes
   async function loadData() {
     loading = true;
     error = null;
 
     try {
-      // Ingredientes base del producto (available immediately)
-      // Prioridad: ingredientes_base (con IDs, normalizado) > ingredientes (raw)
+      // Ingredientes base del producto
       ingredientesBase = producto.ingredientes_base || producto.ingredientes || [];
       const baseIds = new Set(ingredientesBase.map(i => i.id));
 
-      // Config variaciones: soft-fail (404 = sin config explícita, usar defaults)
-      const varRes = await mqttRequest('variaciones', 'get', { producto_id: producto.id }).catch(() => null);
+      // Grupo = categoría del producto
+      grupo = producto.categoria || '';
 
-      // Config variaciones
+      // Config variaciones del backend (soft-fail)
+      const varRes = await mqttRequest('variaciones', 'get', { producto_id: producto.id }).catch(() => null);
       const varData = varRes?.data;
-      if (varData && varData.permite_quitar) {
+      if (varData) {
         permiteQuitar = varData.permite_quitar || [];
-        permiteAnadir = varData.permite_anadir !== false; // default true
+        permiteAnadir = varData.permite_anadir !== false;
         maxExtras = varData.max_ingredientes_extra || 10;
+        if (varData.grupo) grupo = varData.grupo;
       } else {
-        // Si no hay config, permitir todo por defecto
         permiteAnadir = true;
         maxExtras = 10;
       }
@@ -129,24 +139,49 @@
         permiteQuitar = ingredientesBase.map(i => i.id);
       }
 
-      // Catálogo: usar ingredientes ya cargados en el store (pasados como prop)
-      // Esto evita una request MQTT extra que podía bloquear la UI 10s
-      ingredientesDisponibles = catalogoIngredientes
-        .filter((ing: any) => !baseIds.has(ing.id))
-        .filter((ing: any) => ing.disponible !== false && ing.activo !== false)
+      // Filtrar catálogo: solo ingredientes del mismo GRUPO, excluyendo los base
+      const disponibles = catalogoIngredientes
+        .filter((ing: any) => {
+          // Filtrar por grupo
+          if (grupo && ing.grupos && ing.grupos.length > 0) {
+            if (!ing.grupos.includes(grupo)) return false;
+          }
+          // Excluir los que ya son base del producto
+          if (baseIds.has(ing.id)) return false;
+          // Solo disponibles/activos
+          if (ing.disponible === false || ing.activo === false) return false;
+          return true;
+        })
         .map((ing: any) => ({
           id: ing.id,
           nombre: ing.nombre,
           emoji: ing.emoji,
           precio_extra: ing.precio_extra || 0,
-          tipo: ing.tipo,
-          disponible: ing.disponible !== false
-        }))
-        .sort((a: any, b: any) => {
-          // Ordenar por tipo, luego por nombre
-          if (a.tipo !== b.tipo) return (a.tipo || '').localeCompare(b.tipo || '');
-          return a.nombre.localeCompare(b.nombre);
-        });
+          tipo: (ing.tipo || 'otro').toLowerCase(),
+          disponible: true
+        }));
+
+      // Agrupar por tipo
+      ingredientesPorTipo = new Map();
+      for (const ing of disponibles) {
+        const tipo = ing.tipo;
+        if (!ingredientesPorTipo.has(tipo)) {
+          ingredientesPorTipo.set(tipo, []);
+        }
+        ingredientesPorTipo.get(tipo)!.push(ing);
+      }
+
+      // Ordenar ingredientes dentro de cada tipo
+      ingredientesPorTipo.forEach((lista) => {
+        lista.sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
+      });
+
+      // Ordenar tipos
+      tiposOrden = Array.from(ingredientesPorTipo.keys()).sort((a, b) => {
+        const ordenA = tipoConfig[a]?.orden || 99;
+        const ordenB = tipoConfig[b]?.orden || 99;
+        return ordenA - ordenB;
+      });
 
       loading = false;
     } catch (err: any) {
@@ -160,21 +195,26 @@
   }
 
   function handleConfirm() {
-    // Enviar NOMBRES (no IDs) — cocina necesita texto legible
     const ingredientes_quitar = Array.from(quitarSeleccionados).map(id => {
       const base = ingredientesBase.find(i => i.id === id);
       return base?.nombre || id;
     });
-    const ingredientes_anadir = Array.from(anadirSeleccionados.entries()).map(([id, cantidad]) => {
-      const ing = ingredientesDisponibles.find(i => i.id === id);
-      return {
-        nombre: ing?.nombre || id,
-        cantidad,
-        precio_extra: ing?.precio_extra || 0
-      };
+
+    const ingredientes_anadir: { nombre: string; cantidad: number; precio_extra?: number }[] = [];
+    anadirSeleccionados.forEach((cantidad, id) => {
+      for (const [, ingredientes] of ingredientesPorTipo) {
+        const ing = ingredientes.find((i: any) => i.id === id);
+        if (ing) {
+          ingredientes_anadir.push({
+            nombre: ing.nombre,
+            cantidad,
+            precio_extra: ing.precio_extra || 0
+          });
+          break;
+        }
+      }
     });
 
-    // ingredientes_base del producto (para que cocina sepa qué lleva)
     const ingredientes_base = ingredientesBase.map(i => i.nombre);
 
     dispatch('confirm', {
@@ -190,11 +230,23 @@
     return precio.toFixed(2) + ' €';
   }
 
+  function getTipoInfo(tipo: string) {
+    return tipoConfig[tipo] || tipoConfig['otro'];
+  }
+
+  function findIngrediente(id: string): any {
+    for (const [, ingredientes] of ingredientesPorTipo) {
+      const ing = ingredientes.find((i: any) => i.id === id);
+      if (ing) return ing;
+    }
+    return null;
+  }
+
   function getIngredienteNombre(id: string): string {
     const base = ingredientesBase.find(i => i.id === id);
-    if (base) return base.emoji ? `${base.emoji} ${base.nombre}` : base.nombre;
-    const extra = ingredientesDisponibles.find(i => i.id === id);
-    if (extra) return extra.emoji ? `${extra.emoji} ${extra.nombre}` : extra.nombre;
+    if (base) return base.nombre;
+    const extra = findIngrediente(id);
+    if (extra) return extra.nombre;
     return id;
   }
 
@@ -222,9 +274,9 @@
         {:else if error}
           <div class="error">❌ {error}</div>
         {:else}
-          <!-- Ingredientes base (quitar) -->
+          <!-- SECCIÓN 1: Ingredientes del producto (quitar) -->
           {#if ingredientesBase.length > 0}
-            <section class="section">
+            <section class="section section-base">
               <h3 class="section-title">🧾 Ingredientes del producto</h3>
               <div class="chips-grid">
                 {#each ingredientesBase as ing}
@@ -250,39 +302,49 @@
             </section>
           {/if}
 
-          <!-- Todos los ingredientes de la carta (añadir) -->
-          {#if permiteAnadir && ingredientesDisponibles.length > 0}
-            <section class="section">
-              <h3 class="section-title">
-                ➕ Añadir de la carta
-                <span class="max-hint">({anadirSeleccionados.size}/{maxExtras})</span>
-              </h3>
-              <div class="chips-grid">
-                {#each ingredientesDisponibles as ing}
-                  {@const isAdded = anadirSeleccionados.has(ing.id)}
-                  {@const isDisabled = !isAdded && anadirSeleccionados.size >= maxExtras}
-                  <button
-                    class="chip extra"
-                    class:added={isAdded}
-                    disabled={isDisabled}
-                    on:click={() => !isDisabled && toggleAnadir(ing.id)}
-                    title={isDisabled ? `Máximo ${maxExtras} extras` : 'Pulsa para añadir'}
-                  >
-                    {#if isAdded}
-                      <span class="chip-icon">✅</span>
-                    {:else if ing.emoji}
-                      <span class="chip-icon">{ing.emoji}</span>
-                    {/if}
-                    <span class="chip-name">{ing.nombre}</span>
-                    {#if ing.precio_extra > 0}
-                      <span class="chip-price">+{formatPrecio(ing.precio_extra)}</span>
-                    {:else}
-                      <span class="chip-price free">gratis</span>
-                    {/if}
-                  </button>
-                {/each}
-              </div>
-            </section>
+          <!-- SECCIÓN 2+: Ingredientes del grupo por tipo (añadir) -->
+          {#if permiteAnadir && tiposOrden.length > 0}
+            <div class="section-divider">
+              <span>➕ Añadir ingredientes</span>
+              <span class="max-hint">({anadirSeleccionados.size}/{maxExtras})</span>
+            </div>
+
+            {#each tiposOrden as tipo}
+              {@const tipoInfo = getTipoInfo(tipo)}
+              {@const ingredientes = ingredientesPorTipo.get(tipo) || []}
+              <section class="section tipo-section" style="--tipo-color: {tipoInfo.color}; --tipo-bg: {tipoInfo.bg}">
+                <h3 class="tipo-header">
+                  <span class="tipo-emoji">{tipoInfo.emoji}</span>
+                  <span class="tipo-label">{tipoInfo.label}</span>
+                  <span class="tipo-count">({ingredientes.length})</span>
+                </h3>
+                <div class="chips-grid">
+                  {#each ingredientes as ing}
+                    {@const isAdded = anadirSeleccionados.has(ing.id)}
+                    {@const isDisabled = !isAdded && anadirSeleccionados.size >= maxExtras}
+                    <button
+                      class="chip extra"
+                      class:added={isAdded}
+                      disabled={isDisabled}
+                      on:click={() => !isDisabled && toggleAnadir(ing.id)}
+                      title={isDisabled ? `Máximo ${maxExtras} extras` : 'Pulsa para añadir'}
+                    >
+                      {#if isAdded}
+                        <span class="chip-icon">✅</span>
+                      {:else if ing.emoji}
+                        <span class="chip-icon">{ing.emoji}</span>
+                      {/if}
+                      <span class="chip-name">{ing.nombre}</span>
+                      {#if ing.precio_extra > 0}
+                        <span class="chip-price">+{formatPrecio(ing.precio_extra)}</span>
+                      {:else}
+                        <span class="chip-price free">gratis</span>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+              </section>
+            {/each}
           {/if}
 
           <!-- Resumen de cambios -->
@@ -336,7 +398,7 @@
     border: 1px solid #333;
     border-radius: 16px;
     width: 100%;
-    max-width: 480px;
+    max-width: 520px;
     max-height: 85vh;
     display: flex;
     flex-direction: column;
@@ -407,7 +469,7 @@
   }
 
   .section {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
 
   .section-title {
@@ -422,8 +484,55 @@
     margin: 0 0 10px 0;
   }
 
+  /* Divider between base and extras */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    margin: 4px 0 12px;
+    border-top: 1px solid #333;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+  }
+
   .max-hint {
     font-weight: 400;
+    color: #555;
+  }
+
+  /* Tipo sections with colored borders */
+  .tipo-section {
+    border-left: 3px solid var(--tipo-color, #888);
+    padding-left: 12px;
+    margin-bottom: 20px;
+  }
+
+  .tipo-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px 0;
+    padding-bottom: 6px;
+  }
+
+  .tipo-emoji {
+    font-size: 1rem;
+  }
+
+  .tipo-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--tipo-color, #888);
+  }
+
+  .tipo-count {
+    font-size: 0.65rem;
     color: #555;
   }
 
@@ -468,14 +577,16 @@
     text-decoration: line-through;
   }
 
+  /* Extra chips use tipo color when added */
   .chip.extra:not(.added):not(:disabled):hover {
-    border-color: #555;
+    border-color: var(--tipo-color, #555);
+    background: var(--tipo-bg, transparent);
   }
 
   .chip.added {
-    border-color: #22c55e;
-    background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    border-color: var(--tipo-color, #22c55e);
+    background: var(--tipo-bg, rgba(34, 197, 94, 0.15));
+    color: var(--tipo-color, #22c55e);
   }
 
   .chip-icon {
@@ -499,7 +610,7 @@
   }
 
   .chip.added .chip-price {
-    color: #22c55e;
+    color: var(--tipo-color, #22c55e);
   }
 
   /* Resumen */

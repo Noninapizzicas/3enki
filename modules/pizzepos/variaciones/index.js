@@ -98,7 +98,7 @@ class VariacionesModule {
   async onProductoCreado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { producto_id, variaciones, ingredientes_base, precio } = eventData;
+    const { producto_id, variaciones, ingredientes_base, precio, categoria } = eventData;
 
     if (!variaciones) {
       return;
@@ -106,11 +106,13 @@ class VariacionesModule {
 
     this.logger.info('producto.creado.received', {
       producto_id,
+      categoria,
       correlation_id: correlationId
     });
 
     const config = {
       producto_id,
+      grupo: categoria || 'otro',
       precio_base: precio,
       permite_quitar: variaciones.permite_quitar || [],
       permite_anadir: variaciones.permite_anadir || false,
@@ -127,6 +129,7 @@ class VariacionesModule {
         if (ing.id && ing.precio_extra != null) {
           this.ingredientesDisponibles.set(ing.id, {
             precio: ing.precio_extra,
+            grupo: ing.grupo || categoria || 'otro',
             disponible: true
           });
         }
@@ -138,6 +141,7 @@ class VariacionesModule {
       config.extras_sugeridos.forEach(extra => {
         this.ingredientesDisponibles.set(extra.ingrediente_id, {
           precio: extra.precio_extra,
+          grupo: categoria || 'otro',
           disponible: true
         });
       });
@@ -147,6 +151,7 @@ class VariacionesModule {
 
     this.logger.info('variacion.configurada', {
       producto_id,
+      grupo: config.grupo,
       permite_quitar: config.permite_quitar.length,
       extras_sugeridos: config.extras_sugeridos.length,
       correlation_id: correlationId
@@ -197,6 +202,7 @@ class VariacionesModule {
       status: 200,
       data: {
         producto_id,
+        grupo: config.grupo,
         permite_quitar: config.permite_quitar,
         permite_anadir: config.permite_anadir,
         extras_sugeridos: config.extras_sugeridos,

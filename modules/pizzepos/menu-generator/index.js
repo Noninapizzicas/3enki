@@ -1035,8 +1035,10 @@ class MenuGeneratorModule {
     const precioDefault = carta.meta?.precio_extra_default ?? 1.50;
 
     // Build deduplicated ingredientes_catalogo from all products
+    // Cada ingrediente acumula grupos[] = categorías de producto donde aparece
     const ingredientesMap = new Map();
     for (const prod of carta.productos) {
+      const grupo = prod.categoria || 'otro';
       for (const ing of (prod.ingredientes || [])) {
         const id = `ing_${this.slugify(ing.nombre)}`;
         if (!ingredientesMap.has(id)) {
@@ -1047,30 +1049,41 @@ class MenuGeneratorModule {
             emoji: ing.emoji || '',
             tipo,
             es_alergeno: false,
-            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, precioDefault)
+            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, precioDefault),
+            grupos: [grupo]
           });
+        } else {
+          // Ingrediente ya existe — añadir grupo si no está
+          const existing = ingredientesMap.get(id);
+          if (!existing.grupos.includes(grupo)) {
+            existing.grupos.push(grupo);
+          }
         }
       }
     }
 
     // Transform productos: ingredientes → ingredientes_base with IDs
-    const productos = carta.productos.map(p => ({
-      id: p.id,
-      nombre: p.nombre,
-      categoria: p.categoria,
-      precio: p.precio,
-      ingredientes_base: (p.ingredientes || []).map(ing => {
-        const id = `ing_${this.slugify(ing.nombre)}`;
-        const catalogEntry = ingredientesMap.get(id);
-        return {
-          id,
-          nombre: ing.nombre,
-          emoji: ing.emoji || '',
-          precio_extra: catalogEntry?.precio_extra ?? ing.precio_extra ?? 0
-        };
-      }),
-      activo: true
-    }));
+    const productos = carta.productos.map(p => {
+      const grupo = p.categoria || 'otro';
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        categoria: p.categoria,
+        precio: p.precio,
+        ingredientes_base: (p.ingredientes || []).map(ing => {
+          const id = `ing_${this.slugify(ing.nombre)}`;
+          const catalogEntry = ingredientesMap.get(id);
+          return {
+            id,
+            nombre: ing.nombre,
+            emoji: ing.emoji || '',
+            precio_extra: catalogEntry?.precio_extra ?? ing.precio_extra ?? 0,
+            grupo
+          };
+        }),
+        activo: true
+      };
+    });
 
     return {
       menu_id: carta.meta.id,

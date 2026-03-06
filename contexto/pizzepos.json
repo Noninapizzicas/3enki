@@ -1,10 +1,25 @@
 {
-  "_VERSION": "4.3.0",
+  "_VERSION": "5.0.0",
   "_CREATED": "2026-02-03",
   "_UPDATED": "2026-03-06",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "5.0.0": {
+      "fecha": "2026-03-06",
+      "cambios": [
+        "REFACTOR: ingredientes ahora pertenecen a GRUPOS (= categoría de producto: pizzas, bocadillos, etc.)",
+        "REFACTOR: menu-generator — transformCartaToPOS() asigna grupo a cada ingrediente en ingredientes_catalogo y ingredientes_base",
+        "REFACTOR: ingredientes v3.0 — almacena grupos[] por ingrediente, filtro por grupo, nuevo handler update_precios",
+        "REFACTOR: productos — buildIngredientesCatalogo() propaga grupo (categoría) a cada ingrediente",
+        "REFACTOR: variaciones — almacena grupo del producto, ingredientesDisponibles incluye grupo",
+        "REFACTOR: VariacionesPanel v3.0 — filtra ingredientes por grupo del producto, organiza por tipo con colores",
+        "FEAT: ingredientes.update_precios — cambiar precios por tipo, grupo, individual, o porcentaje",
+        "FEAT: VariacionesPanel — secciones por tipo con colores (queso=amarillo, carne=rojo, verdura=verde, marisco=azul, salsa=naranja)",
+        "PRINCIPIO: ingredientes de un grupo NO se mezclan con otros. Quitar = solo los del producto. Añadir = solo los del grupo.",
+        "PRINCIPIO: precios los controla el jefe — la IA pregunta política de precios, el jefe decide"
+      ]
+    },
     "4.3.0": {
       "fecha": "2026-03-06",
       "cambios": [
@@ -376,13 +391,14 @@
     },
 
     "ingredientes": {
-      "version": "2.0.0",
-      "version_module_json": "2.0.0",
-      "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos. Ingredientes se cargan en initComandero() via carta_completa y se pasan como prop catalogoIngredientes a VariacionesPanel/AlGustoPanel — sin request MQTT adicional.",
+      "version": "3.0.0",
+      "version_module_json": "3.0.0",
+      "descripcion": "Catálogo de ingredientes organizado por GRUPO (= categoría de producto). Cada ingrediente tiene grupos[], tipo, precio_extra. Precios los controla el jefe via update_precios. Se cargan en initComandero() via carta_completa con grupos[].",
       "ui_domain": "ingredientes",
-      "uiHandlers": ["list", "get", "search", "alergenos", "update", "health", "metrics"],
+      "uiHandlers": ["list", "get", "search", "alergenos", "update", "update_precios", "health", "metrics"],
       "eventos_publica": ["ingrediente.creado", "ingrediente.actualizado"],
-      "eventos_suscribe": ["menu.generado", "producto.creado"]
+      "eventos_suscribe": ["menu.generado", "producto.creado"],
+      "campos_ingrediente": ["id", "nombre", "emoji", "tipo", "grupos[]", "precio_extra", "disponible", "es_alergeno"]
     },
 
     "variaciones": {
@@ -785,23 +801,46 @@
       "4_individual": "productos publica producto.creado/actualizado (con id, nombre, precio) → comandero actualiza cache individual",
       "5_ingredientes": "productos.buildIngredientesCatalogo() crea catálogo global con tipo/precio_extra (de IA o fallback por nombre) → frontend consulta via productos/ingredientes"
     },
-    "flujo_precio_ingredientes": {
-      "CRITICO_NO_MODIFICAR": "El flujo de precios de ingredientes fue unificado para que la IA sea la fuente de verdad. Cualquier cambio debe preservar esta cadena completa.",
-      "fuente_verdad": "AI estima precio_extra por ingrediente → menu-generator lo propaga en AMBOS: ingredientes_catalogo Y ingredientes_base de cada producto",
+    "flujo_ingredientes_v3": {
+      "CRITICO_NO_MODIFICAR": "Sistema de ingredientes por GRUPO. Cada ingrediente pertenece a una o más categorías de producto. No se mezclan entre grupos.",
+      "concepto": {
+        "grupo": "= categoría de producto (pizzas, bocadillos, entrantes...). Los ingredientes de un grupo solo se ofrecen a productos de ese grupo.",
+        "tipo": "= clasificación visual (queso, carne, verdura, salsa...). Para agrupar en la UI con colores, NO para filtrar disponibilidad.",
+        "quitar": "Solo ingredientes que lleva el producto (ingredientes_base)",
+        "anadir": "Solo ingredientes del mismo grupo (misma categoría)"
+      },
       "cadena": {
-        "1_AI": "AI genera precio_extra por ingrediente en la carta",
-        "2_menu_generator": "transformCartaToPOS() pone precio_extra en ingredientes_catalogo (catálogo global) Y en ingredientes_base[] de cada producto (precio por ingrediente en el producto)",
-        "3_ingredientes_catalogo": "ingredientes.onMenuGenerado() recibe ingredientes_catalogo con precio_extra → guarda en this.ingredientes",
-        "4_ingredientes_producto": "ingredientes.onProductoCreado() recibe ingredientes_base con precio_extra → crea ingredientes con precio real (NO hardcoded 0)",
-        "5_productos": "productos.buildIngredientesCatalogo() usa precio_extra de ingredientes_base → fallback precioExtraPorTipo() solo para datos legacy",
-        "6_variaciones": "variaciones.onProductoCreado() carga precios desde ingredientes_base → extras_sugeridos sobreescriben si existen",
-        "7_frontend": "initComandero() carga ingredientes via productos/carta_completa → precios ya correctos"
+        "1_AI": "AI genera ingredientes con precio_extra y tipo",
+        "2_menu_generator": "transformCartaToPOS() asigna grupo=categoria a cada ingrediente. ingredientes_catalogo tiene grupos[]. ingredientes_base tiene grupo.",
+        "3_ingredientes": "v3.0: almacena grupos[] por ingrediente. Merge de grupos si ingrediente ya existe. Filtro por grupo en handleListIngredientes.",
+        "4_productos": "buildIngredientesCatalogo() asigna grupo=prod.categoria. handleCartaCompleta devuelve ingredientes con grupos[].",
+        "5_variaciones": "onProductoCreado() guarda grupo del producto en config. ingredientesDisponibles incluye grupo.",
+        "6_frontend": "VariacionesPanel filtra catalogoIngredientes por grupo=producto.categoria. Organiza por tipo con colores."
+      },
+      "precios": {
+        "fuente": "La IA pregunta política de precios al jefe. El jefe decide.",
+        "cambiar_precios": "ingredientes.update_precios — por tipo, por grupo, individual, o porcentaje",
+        "ejemplos": [
+          "{ tipo: 'carne', precio_extra: 2.50 } → todos los de carne a 2.50€",
+          "{ tipo: 'verdura', porcentaje: -5 } → verduras bajan 5%",
+          "{ id: 'ing_champinon', precio_extra: 0.80 } → individual",
+          "{ grupo: 'pizzas', tipo: 'queso', precio_extra: 1.50 } → quesos de pizzas a 1.50€"
+        ]
+      },
+      "ui_colores": {
+        "queso": "#facc15 (amarillo)",
+        "verdura": "#22c55e (verde)",
+        "carne": "#ef4444 (rojo)",
+        "marisco": "#3b82f6 (azul)",
+        "salsa": "#f59e0b (naranja)",
+        "masa": "#a78bfa (lila)",
+        "otro": "#888 (gris)"
       },
       "trampas_conocidas": [
-        "NO hardcodear precio_extra: 0 en onProductoCreado — usar ing.precio_extra ?? 0",
-        "NO omitir precio_extra en ingredientes_base de transformCartaToPOS — sin él, toda la cadena downstream pierde precios",
-        "precioExtraPorTipo() es SOLO fallback para cartas legacy sin precios de IA — no fuente primaria",
-        "variaciones.ingredientesDisponibles se llena primero desde ingredientes_base, luego extras_sugeridos sobreescribe — orden importa"
+        "NO mezclar ingredientes entre grupos — pizza no ofrece ingredientes de bocadillo",
+        "grupos[] es array porque un ingrediente puede estar en varios grupos (ej: tomate en pizzas y bocadillos)",
+        "El campo tipo es SOLO visual — NO usar para filtrar disponibilidad, para eso está grupo",
+        "precioExtraPorTipo() es SOLO fallback para cartas legacy — el jefe pone los precios reales"
       ]
     }
   },

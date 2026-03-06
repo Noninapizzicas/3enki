@@ -1220,6 +1220,7 @@ class ProductosModule {
   /**
    * Construye catálogo global de ingredientes deduplicado
    * a partir de todos los productos cargados de un proyecto.
+   * Cada ingrediente acumula grupos[] = categorías de producto donde aparece.
    * Usa tipo/precio_extra del ingrediente si existen (del menu-generator),
    * o aplica clasificación por nombre y precio estimado como fallback.
    */
@@ -1229,9 +1230,12 @@ class ProductosModule {
     const defaultPrice = precioExtraDefault ?? 1.50;
 
     for (const prod of productosMap.values()) {
+      const grupo = prod.categoria || 'otro';
       const base = prod.ingredientes_base || [];
       for (const ing of base) {
-        if (ing.id && !ingredientesMap.has(ing.id)) {
+        if (!ing.id) continue;
+        const existing = ingredientesMap.get(ing.id);
+        if (!existing) {
           const tipo = ing.tipo || this.clasificarIngrediente(ing.nombre);
           ingredientesMap.set(ing.id, {
             id: ing.id,
@@ -1240,8 +1244,15 @@ class ProductosModule {
             tipo,
             es_alergeno: false,
             precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, defaultPrice),
+            grupos: [grupo],
             activo: true
           });
+        } else {
+          // Añadir grupo si no está
+          if (!existing.grupos) existing.grupos = [];
+          if (!existing.grupos.includes(grupo)) {
+            existing.grupos.push(grupo);
+          }
         }
       }
     }

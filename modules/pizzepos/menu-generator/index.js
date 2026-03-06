@@ -96,8 +96,8 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
       "categoria": "categoria_slug",
       "precio": 11.50,
       "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura", "precio_extra": 1.00 },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso", "precio_extra": 1.50 }
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura", "precio_extra": 0 },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso", "precio_extra": 0 }
       ]
     }
   ]
@@ -113,8 +113,8 @@ REGLAS OBLIGATORIAS:
    - "nombre": nombre del ingrediente tal cual
    - "emoji": el emoji más representativo
    - "tipo": clasificación obligatoria, uno de: "queso", "carne", "verdura", "salsa", "masa", "marisco", "otro"
-   - "precio_extra": precio en euros si se añade como extra a otro producto (número, ej: 1.50). Estima según tipo: carnes/mariscos ~2.00, quesos ~1.50, verduras ~1.00, salsas ~0.75
-7. "precio_extra_default": precio extra genérico para la carta (número, ej: 1.50). Se usa como fallback
+   - "precio_extra": precio en euros si se añade como extra a otro producto (número, ej: 1.50). Por defecto SIEMPRE 0 (gratis) salvo que el texto de la carta indique explícitamente un precio distinto
+7. "precio_extra_default": precio extra genérico para la carta (número). Por defecto 0. Se usa como fallback
 8. Mantén los nombres originales de productos tal cual aparecen
 9. Agrupa productos en categorías tal como aparecen en la carta
 10. Si no hay categorías claras, crea una categoría "general"
@@ -1417,16 +1417,9 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
    * Usado como fallback cuando ni la IA ni la carta especifican precio.
    */
   precioExtraPorTipo(tipo, precioDefault) {
-    const precios = {
-      carne: 2.00,
-      marisco: 2.50,
-      queso: 1.50,
-      verdura: 1.00,
-      salsa: 0.75,
-      masa: 0.50,
-      otro: precioDefault
-    };
-    return precios[tipo] ?? precioDefault;
+    // Por defecto todos los ingredientes extras son gratis (0€).
+    // El jefe controla los precios manualmente via update_precios.
+    return precioDefault ?? 0;
   }
 }
 

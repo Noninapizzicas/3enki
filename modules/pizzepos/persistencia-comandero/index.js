@@ -384,7 +384,8 @@ class PersistenciaComanderoModule {
       total: total || 0
     });
 
-    cuenta.total += total || 0;
+    // NO sumar total aquí — ya se acumula via onCuentaActualizada
+    // en cada comandero.item_agregado
     cuenta.updated_at = new Date().toISOString();
 
     await this.guardarCuentasActivas();

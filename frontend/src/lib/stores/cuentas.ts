@@ -293,6 +293,23 @@ export async function renameMesa(projectId: string, cuenta_id: string, nombre: s
   }
 }
 
+/**
+ * Renombra cualquier cuenta (llevar, delivery, etc.) via cuenta/rename.
+ */
+export async function renameCuenta(projectId: string, cuenta_id: string, nombre: string): Promise<boolean> {
+  try {
+    const res = await mqttRequest<any>('cuenta', 'rename', {
+      project_id: projectId,
+      id: cuenta_id,
+      nombre
+    });
+    return res?.status === 200;
+  } catch (err: any) {
+    console.error('[Cuentas] renameCuenta error:', err);
+    return false;
+  }
+}
+
 // =============================================================================
 // PERSISTENCIA — Fuente de verdad para cuentas activas
 // =============================================================================

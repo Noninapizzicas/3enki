@@ -34,7 +34,7 @@
     ingredientes as ingredientesStore,
     type Producto
   } from '$lib/stores/comandero';
-  import { renameMesa } from '$lib/stores/cuentas';
+  import { renameMesa, renameCuenta } from '$lib/stores/cuentas';
   import { imprimirComanda, type ComandaItem, type Canal } from '$lib/stores/impresion';
 
   import BotonEspecial from './BotonEspecial.svelte';
@@ -70,9 +70,11 @@
     pedidoSectionEl?.scrollIntoView({ behavior: 'smooth' });
   }
 
-  // Nombre editable de la mesa
+  // Nombre editable de la cuenta (mesa y llevar)
   const isMesa = cuenta_id.startsWith('mesa_');
-  let cuentaNombre = isMesa ? 'Mesa...' : cuenta_id.split('_')[0] || 'Cuenta';
+  const isLlevar = cuenta_id.startsWith('llevar_');
+  const canRename = isMesa || isLlevar;
+  let cuentaNombre = isMesa ? 'Mesa...' : isLlevar ? 'Llevar...' : cuenta_id.split('_')[0] || 'Cuenta';
   let editingName = false;
   let nameInput = '';
   let nameInputEl: HTMLInputElement;
@@ -94,6 +96,9 @@
 
     if (isMesa) {
       const ok = await renameMesa(projectId, cuenta_id, trimmed);
+      if (ok) cuentaNombre = trimmed;
+    } else if (canRename) {
+      const ok = await renameCuenta(projectId, cuenta_id, trimmed);
       if (ok) cuentaNombre = trimmed;
     }
   }
@@ -140,7 +145,11 @@
           cuentaNombre = nameInput;
           listening = false;
           // Guardar directamente
-          renameMesa(projectId, cuenta_id, nameInput);
+          if (isMesa) {
+            renameMesa(projectId, cuenta_id, nameInput);
+          } else {
+            renameCuenta(projectId, cuenta_id, nameInput);
+          }
         }
       };
 
@@ -439,13 +448,23 @@
       await initComandero(projectId, cuenta_id);
       cleanupSubs = initComanderoSubscriptions(projectId);
 
-      // Cargar nombre real de la mesa
+      // Cargar nombre real de la cuenta
       if (isMesa) {
         try {
           const { mqttRequest } = await import('$lib/ui-core/mqtt-request');
           const res = await mqttRequest('mesa', 'get', {
             project_id: projectId,
             cuenta_id
+          });
+          const data = (res as any)?.data;
+          if (data?.nombre) cuentaNombre = data.nombre;
+        } catch { /* usa nombre por defecto */ }
+      } else if (isLlevar) {
+        try {
+          const { mqttRequest } = await import('$lib/ui-core/mqtt-request');
+          const res = await mqttRequest('cuenta', 'get', {
+            project_id: projectId,
+            id: cuenta_id
           });
           const data = (res as any)?.data;
           if (data?.nombre) cuentaNombre = data.nombre;
@@ -491,15 +510,15 @@
     {:else}
       <button
         class="name-display"
-        class:is-mesa={isMesa}
-        on:click={isMesa ? startEditName : undefined}
-        title={isMesa ? 'Tap para renombrar' : ''}
+        class:is-mesa={canRename}
+        on:click={canRename ? startEditName : undefined}
+        title={canRename ? 'Tap para renombrar' : ''}
       >
         {cuentaNombre}
       </button>
     {/if}
 
-    {#if isMesa && !editingName}
+    {#if canRename && !editingName}
       <button
         class="voice-btn"
         class:listening

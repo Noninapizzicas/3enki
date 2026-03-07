@@ -316,7 +316,8 @@ class ProjectManagerModule {
 
   toUIFormat(p) {
     return {
-      id: p.id, name: p.name, description: p.description || '',
+      id: p.id, name: p.name, slug: this.slugify(p.name),
+      description: p.description || '',
       color: p.metadata?.color || 'blue', icon: p.metadata?.icon || '📁',
       workspaceType: p.metadata?.workspaceType || 'general',
       metadata: p.metadata || {},
@@ -525,25 +526,42 @@ class ProjectManagerModule {
   }
 
   async activateProject(projectId, correlationId) {
-    const project = this.projects.get(projectId);
+    const project = this.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
 
-    if (!this.activeProjectIds.has(projectId)) {
-      await this.queryDatabase('UPDATE projects SET is_active = 1 WHERE id = ?', [projectId], false, correlationId);
+    // Usar siempre el UUID real
+    const realId = project.id;
+
+    if (!this.activeProjectIds.has(realId)) {
+      await this.queryDatabase('UPDATE projects SET is_active = 1 WHERE id = ?', [realId], false, correlationId);
       project.is_active = true;
-      this.projects.set(projectId, project);
-      this.activeProjectIds.add(projectId);
+      this.projects.set(realId, project);
+      this.activeProjectIds.add(realId);
     }
 
     await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {
-      project_id: projectId, name: project.name, base_path: project.base_path,
+      project_id: realId, name: project.name, base_path: project.base_path,
       metadata: project.metadata || {}, activated_at: new Date().toISOString()
     });
 
     return project;
   }
 
-  getProject(projectId) { return this.projects.get(projectId); }
+  getProject(projectId) {
+    // Búsqueda directa por UUID
+    const direct = this.projects.get(projectId);
+    if (direct) return direct;
+
+    // Búsqueda por slug (nombre slugificado)
+    const slugInput = this.slugify(projectId);
+    if (!slugInput) return undefined;
+
+    for (const project of this.projects.values()) {
+      if (this.slugify(project.name) === slugInput) return project;
+    }
+
+    return undefined;
+  }
   listProjects() { return Array.from(this.projects.values()); }
   getActiveProjectIds() { return [...this.activeProjectIds]; }
   getActiveProjectId() { return this.activeProjectIds.size > 0 ? [...this.activeProjectIds][0] : null; }
@@ -1030,9 +1048,10 @@ class ProjectManagerModule {
   async handleUIActivate(data) {
     const { id } = data;
     if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
-    if (!this.getProject(id)) throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
-    await this.activateProject(id, crypto.randomUUID());
-    return { activated: true, activeProjectIds: [...this.activeProjectIds] };
+    const project = this.getProject(id);
+    if (!project) throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    await this.activateProject(project.id, crypto.randomUUID());
+    return { activated: true, id: project.id, slug: this.slugify(project.name), activeProjectIds: [...this.activeProjectIds] };
   }
 
   async handleUIDeactivate(data) {

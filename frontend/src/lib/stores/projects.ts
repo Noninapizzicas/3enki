@@ -25,6 +25,7 @@ import { saveWorkspace, getState } from './persistence';
 export interface Project {
   id: string;
   name: string;
+  slug?: string;
   description: string;
   color: string;
   icon: string;
@@ -225,18 +226,21 @@ export async function activateProject(id: string): Promise<void> {
   projectsStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    await mqttRequest<ActivateResponse>('project', 'activate', { id });
+    const res = await mqttRequest<ActivateResponse>('project', 'activate', { id });
+
+    // Usar el UUID real devuelto por el backend (puede diferir si 'id' era un slug)
+    const realId = res.data?.id || id;
 
     // Actualizar estado local
     projectsStore.update(s => ({
       ...s,
-      activeProjectId: id,
+      activeProjectId: realId,
       loading: false,
       error: null
     }));
 
     // Guardar en localStorage para persistir entre sesiones
-    saveWorkspace({ projectId: id });
+    saveWorkspace({ projectId: realId });
 
     console.log('[Projects] Activated and saved:', id);
   } catch (error) {

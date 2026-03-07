@@ -20,7 +20,8 @@
       "flow_engine": "Read flow-engine.json (motor de flows, registry, agente IA)",
       "pizzepos_pos": "Read pizzepos.json (vertical POS pizzería: 15 módulos, 5 canales, carta-digital con export estático)",
       "facturas_pipeline": "Read facturas.json (pipeline OCR+IA+CSV fiscal, handlers /go*, gotchas)",
-      "blueprints_features": "Read blueprints-features.json (sistema de módulos/features, blueprint schema, add-features)"
+      "blueprints_features": "Read blueprints-features.json (sistema de módulos/features, blueprint schema, add-features)",
+      "certificate_authority": "Read certificate-authority.json (CA interna, mTLS, certificados cliente/dispositivo)"
     },
     "fallback_sources": [
       "contexto/*.json (this directory)",
@@ -34,8 +35,8 @@
     "name": "event-core",
     "version": "0.5.0",
     "description": "Meta-Core Event-Driven Framework",
-    "last_context_update": "2026-03-03",
-    "module_count": { "core": 30, "pizzepos": 15, "facturacion": 1, "total": 46 }
+    "last_context_update": "2026-03-05",
+    "module_count": { "core": 34, "pizzepos": 15, "facturacion": 2, "total": 51 }
   },
 
   "context_files": [
@@ -178,6 +179,11 @@
       "file": "blueprints-features.json",
       "purpose": "Sistema de blueprints para scaffolding de módulos y features",
       "when": "Crear módulos desde blueprints, sistema de features"
+    },
+    {
+      "file": "certificate-authority.json",
+      "purpose": "CA interna con mTLS — certificados para clientes y dispositivos",
+      "when": "Trabajar con certificados digitales, autenticación mTLS, seguridad de acceso"
     }
   ],
 

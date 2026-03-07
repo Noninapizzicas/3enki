@@ -256,13 +256,44 @@ class MenuGeneratorModule {
     const dir = path.join(paths.featurePath, 'media', subfolder);
     await fs.mkdir(dir, { recursive: true });
 
+    let buffer = Buffer.from(base64Data, 'base64');
+
+    // Auto-process product/category images: square crop + resize + compress
+    if (subfolder === 'productos' || subfolder === 'categorias') {
+      buffer = await this.processImageSquare(buffer);
+      ext = '.jpg'; // always output as JPEG after processing
+    }
+
     const filename = `${prefix}_${Date.now().toString(36)}${ext}`;
     const absolutePath = path.join(dir, filename);
-    const buffer = Buffer.from(base64Data, 'base64');
     await fs.writeFile(absolutePath, buffer);
 
     const relativePath = '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
     return { absolutePath, relativePath };
+  }
+
+  /**
+   * Process image for carta display: center-crop to square, resize to 600x600, JPEG q85.
+   * Falls back to original buffer if sharp fails (e.g. unsupported format).
+   */
+  async processImageSquare(buffer, size = 600, quality = 85) {
+    try {
+      const sharp = require('sharp');
+      const processed = await sharp(buffer)
+        .resize(size, size, {
+          fit: 'cover',       // crop to fill the square
+          position: 'centre'  // center the crop
+        })
+        .jpeg({ quality, mozjpeg: true })
+        .toBuffer();
+      return processed;
+    } catch (err) {
+      // If sharp fails, return original buffer unchanged
+      if (this.logger) {
+        this.logger.warn('menu.image.process_failed', { error: err.message });
+      }
+      return buffer;
+    }
   }
 
   /**

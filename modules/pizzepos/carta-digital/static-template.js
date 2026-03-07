@@ -184,7 +184,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 /* Card */
 .card{display:flex;flex-direction:column;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .1s;-webkit-tap-highlight-color:transparent}
 .card:active{transform:scale(.97)}
-.card-visual{position:relative;width:100%;aspect-ratio:4/3;background:#1a1a1a;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.card-visual{position:relative;width:100%;aspect-ratio:1/1;background:#1a1a1a;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .card-img{width:100%;height:100%;object-fit:cover}
 .card-ph{display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,#1a1a1a,#222);font-size:2.5rem;opacity:.6}
 .badges{position:absolute;top:6px;left:6px;display:flex;gap:4px}

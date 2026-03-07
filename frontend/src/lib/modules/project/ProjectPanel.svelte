@@ -157,10 +157,11 @@
     });
     closePanel();
 
-    // Navegar a la ruta project-scoped
+    // Navegar a la ruta project-scoped (preferir slug sobre UUID)
     const currentPath = $page.url.pathname;
     const subRoute = getSubRoute(currentPath);
-    goto(`/${project.id}/${subRoute}`);
+    const projectParam = project.slug || project.id;
+    goto(`/${projectParam}/${subRoute}`);
   }
 
   /**

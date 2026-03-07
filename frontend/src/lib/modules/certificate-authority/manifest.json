@@ -1,0 +1,11 @@
+{
+  "id": "certificate-authority",
+  "name": "Certificados",
+  "description": "Gestión de certificados digitales para clientes y dispositivos",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 2,
+  "routes": ["/certificate-authority"],
+  "icon": "🔐",
+  "label": "Certificados"
+}

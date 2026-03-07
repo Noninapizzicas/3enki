@@ -193,7 +193,8 @@ class LlevarStrategy {
         tipo: 'llevar',
         total: ticket.total,
         metadata: {
-          nombre: ticket.cliente_nombre,
+          nombre: String(numero_ticket).padStart(3, '0'),
+          cliente_nombre: ticket.cliente_nombre,
           numero_ticket: ticket.numero_ticket
         }
       });

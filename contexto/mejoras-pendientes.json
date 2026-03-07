@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-03-05",
+  "_updated": "2026-03-07",
   "mejoras": [
     {
       "id": "pantallas-cocina",
@@ -463,6 +463,21 @@
       "descripcion": "6 módulos están deshabilitados en config.json sin una decisión clara sobre su futuro: dashboard, metricas, notas, scratch-designer, ui-designer, y conversation-manager. Evaluar cuáles tienen valor para reactivar y cuáles son código muerto a eliminar.",
       "modulos_afectados": ["dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "conversation-manager"],
       "cuando_implementar": "Próxima revisión de arquitectura"
+    },
+    {
+      "id": "variaciones-panel-hardcodes",
+      "titulo": "VariacionesPanel: defaults hardcodeados contradicen al backend",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-07",
+      "descripcion": "VariacionesPanel.svelte tiene defaults que contradicen al módulo variaciones del backend cuando variaciones/get falla o devuelve 404 (producto sin config). Frontend asume permiteAnadir=true y maxExtras=10, backend tiene permiteAnadir=false y max=5. También hay emoji 🍕 hardcodeado en header para todos los productos.",
+      "issues": [
+        "1. permiteAnadir default: frontend=true vs backend=false — comportamiento opuesto",
+        "2. maxExtras default: frontend=10 vs backend=5 — inconsistencia",
+        "3. Emoji 🍕 hardcodeado en línea 264 — debería usar producto.emoji o nada",
+        "4. tipoConfig hardcodeado (queso/verdura/carne/etc) con colores — aceptable como UI config pero no extensible sin tocar código"
+      ],
+      "solucion_propuesta": "Alinear defaults del frontend con los del backend (permiteAnadir=false, maxExtras=5). Usar producto.emoji en header. Opcionalmente cargar tipoConfig desde backend."
     }
   ]
 }

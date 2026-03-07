@@ -1,7 +1,7 @@
 {
   "_VERSION": "5.0.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-03-06",
+  "_UPDATED": "2026-03-07",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
@@ -417,6 +417,17 @@
           "ingredientes_anadir": "[{nombre, cantidad?, precio_extra?}] — ingredientes extra"
         },
         "nota": "Frontend (PedidoItem, ItemLine) soporta ambos formatos (objeto canónico + array legacy) para backward compat. Backend almacena tal cual llega."
+      },
+      "defaults_backend": {
+        "permite_anadir": false,
+        "max_ingredientes_extra": 5,
+        "nota": "onProductoCreado() defaults: permite_anadir=false, max=5. Solo se activa si producto.variaciones lo indica explícitamente."
+      },
+      "hardcodes_ui_a_revisar": {
+        "tipoConfig": "VariacionesPanel.svelte:42-50 — mapa hardcodeado de tipos (queso/verdura/carne/marisco/salsa/masa/otro) con emojis, colores y orden. Aceptable como config visual, pero si se añade un tipo nuevo hay que tocar frontend.",
+        "emoji_pizza": "VariacionesPanel.svelte:264 — emoji 🍕 hardcodeado en header. Debería usar producto.emoji o ninguno, no todos los productos son pizza.",
+        "defaults_inconsistentes": "VariacionesPanel.svelte:133-134 — cuando variaciones/get falla (404), frontend asume permiteAnadir=true y maxExtras=10. Backend defaults son permiteAnadir=false y max=5. Comportamiento OPUESTO.",
+        "soft_fail_masivo": "VariacionesPanel.svelte:125 — mqttRequest('variaciones','get') con .catch(()=>null). Si producto no tiene config de variaciones (normal para productos nuevos), cae en defaults hardcodeados que contradicen al backend."
       }
     },
 
@@ -430,7 +441,7 @@
         "uiHandlers": ["generate", "list", "get", "health", "export"],
         "pipeline_uiHandlers": ["sharp.prepare-ocr", "pdfjs.info", "pdfjs.render", "google-vision.extract", "tesseract.extract", "scribe-ocr.extract", "document-processor.process"],
         "tools": {
-          "descripcion": "14 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
+          "descripcion": "15 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
           "lista": [
             { "name": "menu.generate", "handler": "toolGenerate", "desc": "Genera carta estructurada desde texto (OCR, lista, JSON)" },
             { "name": "menu.list_cartas", "handler": "toolListCartas", "desc": "Lista cartas generadas con resumen" },
@@ -440,6 +451,7 @@
             { "name": "menu.remove_product", "handler": "toolRemoveProduct", "desc": "Elimina producto de carta" },
             { "name": "menu.add_category", "handler": "toolAddCategory", "desc": "Añade categoría nueva a carta" },
             { "name": "menu.update_product", "handler": "toolUpdateProduct", "desc": "Actualiza nombre/precio/ingredientes/categoría" },
+            { "name": "menu.update_ingredient_prices", "handler": "toolUpdateIngredientPrices", "desc": "Actualiza precios extra de ingredientes: individuales por nombre, fijo por tipo, o porcentaje global" },
             { "name": "menu.search_products", "handler": "toolSearchProducts", "desc": "Busca productos por nombre o ingrediente" },
             { "name": "menu.stats", "handler": "toolStats", "desc": "Estadísticas: total, por categoría, precio medio, rango" },
             { "name": "menu.enrich_products", "handler": "toolEnrichProducts", "desc": "Enriquece productos con AI: descripciones atractivas, emojis, ingredientes clasificados" },
@@ -982,9 +994,11 @@
             "VariacionesPanel": {
               "estado": "IMPLEMENTADO",
               "funcion": "Selección de variaciones del producto (quitar/añadir ingredientes)",
-              "mqtt": "mqttRequest('ingredientes', 'list') + producto.variaciones",
-              "precio": "precio_base ± ajustes de variaciones",
-              "ui": "Grid de toggles con ingredientes agrupados"
+              "datos_ingredientes": "catalogoIngredientes prop (del store comandero, cargado via productos.carta_completa) — filtrado por grupo/categoria del producto",
+              "mqtt": "mqttRequest('variaciones', 'get', {producto_id}) — soft-fail, obtiene config: permite_quitar, permite_anadir, max_extras, grupo",
+              "precio": "precio_base + sum(precio_extra * cantidad) de ingredientes añadidos",
+              "ui": "Sección 1: ingredientes base (tap=quitar, rojo). Sección 2+: ingredientes del grupo por tipo con colores (tap=añadir). Resumen SIN/CON + total.",
+              "tipoConfig_hardcoded": "Tipos visuales (queso/verdura/carne/marisco/salsa/masa/otro) con emoji+color hardcodeados en frontend — ver variaciones.hardcodes_ui_a_revisar"
             },
             "CobroPanel": {
               "estado": "IMPLEMENTADO",

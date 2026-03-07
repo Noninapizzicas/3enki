@@ -102,9 +102,10 @@ class IngredientesModule {
     await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
     await this.eventBus.subscribe('producto.creado', this.onProductoCreado.bind(this));
     await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
+    await this.eventBus.subscribe('ingrediente.actualizado', this.onIngredienteActualizadoExterno.bind(this));
 
     this.logger.info('ingredientes.events.subscribed', {
-      events: ['menu.generado', 'producto.creado', 'project.activated']
+      events: ['menu.generado', 'producto.creado', 'project.activated', 'ingrediente.actualizado']
     });
   }
 
@@ -296,6 +297,41 @@ class IngredientesModule {
 
     if (changed) {
       await this.saveToDisk();
+    }
+  }
+
+  /**
+   * Recibe ingrediente.actualizado de fuentes externas (ej: menu-generator toolUpdateIngredientPrices).
+   * Aplica los cambios en memoria y persiste a disco.
+   * Evita loops: si el cambio ya está aplicado, no re-publica.
+   */
+  async onIngredienteActualizadoExterno(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { ingrediente_id, cambios } = eventData;
+
+    if (!ingrediente_id || !cambios) return;
+
+    const existente = this.ingredientes.get(ingrediente_id);
+    if (!existente) return;
+
+    let changed = false;
+    for (const [campo, valores] of Object.entries(cambios)) {
+      const nuevoValor = valores?.nuevo !== undefined ? valores.nuevo : valores;
+      if (existente[campo] !== nuevoValor) {
+        existente[campo] = nuevoValor;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      existente.updated_at = new Date().toISOString();
+      this.ingredientes.set(ingrediente_id, existente);
+      await this.saveToDisk();
+
+      this.logger.info('ingredientes.synced_from_external', {
+        ingrediente_id,
+        campos: Object.keys(cambios)
+      });
     }
   }
 

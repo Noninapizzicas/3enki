@@ -41,6 +41,11 @@
         "event": "project.activated",
         "description": "Proyecto activado - cargar ingredientes desde disco",
         "handler": "onProjectActivated"
+      },
+      {
+        "event": "ingrediente.actualizado",
+        "description": "Ingrediente actualizado externamente (menu-generator) - sincronizar en memoria",
+        "handler": "onIngredienteActualizadoExterno"
       }
     ]
   },

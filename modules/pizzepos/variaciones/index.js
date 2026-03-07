@@ -1,16 +1,17 @@
 /**
- * Módulo Variaciones v2.0
+ * Módulo Variaciones v3.0
  * Gestión de variaciones de productos (quitar/añadir ingredientes)
- * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ * Reglas por producto: qué se puede quitar, qué se puede añadir, máximo de extras.
+ * Calcula precio final consultando precios a ingredientes (fuente única).
  *
  * Emite: variacion.validada, variacion.rechazada
- * Consume: producto.creado, pedido.item_agregado
+ * Consume: producto.creado, comandero.item_agregado
  */
 
 class VariacionesModule {
   constructor() {
     this.name = 'variaciones';
-    this.version = '2.0.0';
+    this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -18,9 +19,8 @@ class VariacionesModule {
     this.metrics = null;
     this.uiHandler = null;
 
-    // Estado en memoria
+    // Estado en memoria — solo reglas por producto, NO precios de ingredientes
     this.configuraciones = new Map(); // producto_id -> variacion_config
-    this.ingredientesDisponibles = new Map(); // ingrediente_id -> {precio, disponible}
   }
 
   // ==========================================
@@ -52,7 +52,6 @@ class VariacionesModule {
     }
 
     this.configuraciones.clear();
-    this.ingredientesDisponibles.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -122,30 +121,6 @@ class VariacionesModule {
     };
 
     this.configuraciones.set(producto_id, config);
-
-    // Cargar precios de ingredientes_base (fuente: menu-generator → productos)
-    if (ingredientes_base) {
-      ingredientes_base.forEach(ing => {
-        if (ing.id && ing.precio_extra != null) {
-          this.ingredientesDisponibles.set(ing.id, {
-            precio: ing.precio_extra,
-            grupo: ing.grupo || categoria || 'otro',
-            disponible: true
-          });
-        }
-      });
-    }
-
-    // extras_sugeridos sobreescriben precios si existen (configuración específica del producto)
-    if (config.extras_sugeridos) {
-      config.extras_sugeridos.forEach(extra => {
-        this.ingredientesDisponibles.set(extra.ingrediente_id, {
-          precio: extra.precio_extra,
-          grupo: categoria || 'otro',
-          disponible: true
-        });
-      });
-    }
 
     this.metrics.gauge('variacion.productos_configurados.count', this.configuraciones.size);
 
@@ -249,13 +224,7 @@ class VariacionesModule {
     let precio_extras = 0;
 
     if (ingredientes_anadir && ingredientes_anadir.length > 0) {
-      ingredientes_anadir.forEach(item => {
-        const ingrediente = this.ingredientesDisponibles.get(item.ingrediente_id);
-        if (ingrediente) {
-          const cantidad = item.cantidad || 1;
-          precio_extras += ingrediente.precio * cantidad;
-        }
-      });
+      precio_extras = await this.calcularPrecioExtras(ingredientes_anadir, config);
     }
 
     return {
@@ -277,8 +246,7 @@ class VariacionesModule {
         module: this.name,
         version: this.version,
         catalogo: {
-          productos_configurados: this.configuraciones.size,
-          ingredientes_extras: this.ingredientesDisponibles.size
+          productos_configurados: this.configuraciones.size
         }
       }
     };
@@ -332,6 +300,43 @@ class VariacionesModule {
   // Business Logic
   // ==========================================
 
+  /**
+   * Obtiene precio_extra de un ingrediente consultando al módulo ingredientes.
+   * Si hay extras_sugeridos con precio específico para este producto, usa ese.
+   */
+  async getPrecioIngrediente(ingrediente_id, config) {
+    // extras_sugeridos sobreescribe precios (configuración específica del producto)
+    if (config && config.extras_sugeridos) {
+      const extra = config.extras_sugeridos.find(e => e.ingrediente_id === ingrediente_id);
+      if (extra && extra.precio_extra != null) {
+        return extra.precio_extra;
+      }
+    }
+
+    // Consultar al módulo ingredientes (fuente única)
+    const result = await this.uiHandler.handle('ingredientes', 'get_precio', { ingrediente_id });
+    if (result?.status === 200 && result?.data) {
+      return result.data.precio_extra || 0;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Calcula precio total de ingredientes extra.
+   */
+  async calcularPrecioExtras(ingredientes_anadir, config) {
+    let total = 0;
+
+    for (const item of ingredientes_anadir) {
+      const precio = await this.getPrecioIngrediente(item.ingrediente_id, config);
+      const cantidad = item.cantidad || 1;
+      total += precio * cantidad;
+    }
+
+    return total;
+  }
+
   async validarVariacion(request) {
     const { producto_id, ingredientes_quitar, ingredientes_anadir } = request;
 
@@ -375,16 +380,17 @@ class VariacionesModule {
         };
       }
 
+      // Verificar disponibilidad consultando al módulo ingredientes
       for (const item of ingredientes_anadir) {
-        const ingrediente = this.ingredientesDisponibles.get(item.ingrediente_id);
-        if (!ingrediente) {
+        const result = await this.uiHandler.handle('ingredientes', 'get', { id: item.ingrediente_id });
+        if (!result || result.status !== 200) {
           return {
             valida: false,
             producto_id,
             motivo_rechazo: `Ingrediente ${item.ingrediente_id} no disponible`
           };
         }
-        if (!ingrediente.disponible) {
+        if (result.data?.disponible === false) {
           return {
             valida: false,
             producto_id,
@@ -399,13 +405,7 @@ class VariacionesModule {
     let precio_extras = 0;
 
     if (ingredientes_anadir && ingredientes_anadir.length > 0) {
-      ingredientes_anadir.forEach(item => {
-        const ingrediente = this.ingredientesDisponibles.get(item.ingrediente_id);
-        if (ingrediente) {
-          const cantidad = item.cantidad || 1;
-          precio_extras += ingrediente.precio * cantidad;
-        }
-      });
+      precio_extras = await this.calcularPrecioExtras(ingredientes_anadir, config);
     }
 
     // Calcular ingredientes finales

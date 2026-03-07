@@ -1,6 +1,6 @@
 {
   "name": "ingredientes",
-  "version": "2.0.0",
+  "version": "4.0.0",
   "description": "Catálogo de ingredientes - Actualizado desde menús generados por IA",
   "author": "Pizzepos Team",
 
@@ -36,6 +36,11 @@
         "event": "producto.creado",
         "description": "Producto creado - registrar ingredientes",
         "handler": "onProductoCreado"
+      },
+      {
+        "event": "project.activated",
+        "description": "Proyecto activado - cargar ingredientes desde disco",
+        "handler": "onProjectActivated"
       }
     ]
   },

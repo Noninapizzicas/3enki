@@ -251,8 +251,8 @@ class GlovoStrategy {
         total: pedido.total,
         project_id: data.project_id,
         metadata: {
+          nombre: pedido.cliente_nombre,
           glovo_order_id,
-          cliente_nombre: cliente_nombre || 'Cliente Glovo',
           direccion_entrega: direccion_entrega || ''
         }
       });

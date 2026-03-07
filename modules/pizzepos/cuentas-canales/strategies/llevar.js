@@ -193,8 +193,8 @@ class LlevarStrategy {
         tipo: 'llevar',
         total: ticket.total,
         metadata: {
-          numero_ticket: ticket.numero_ticket,
-          cliente_nombre: ticket.cliente_nombre
+          nombre: ticket.cliente_nombre,
+          numero_ticket: ticket.numero_ticket
         }
       });
 

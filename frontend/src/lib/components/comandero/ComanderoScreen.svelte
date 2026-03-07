@@ -82,9 +82,13 @@
   let familiaRefs: Record<string, HTMLElement> = {};
   let familiaActiva: string | null = null;
 
-  // Agrupar productos por categoría
-  $: productosPorFamilia = $categorias.map(cat => ({
+  // Colores fijos por familia: amarillo, verde, azul, rojo, lila
+  const FAMILIA_COLORS = ['#eab308', '#22c55e', '#3b82f6', '#ef4444', '#a855f7'];
+
+  // Agrupar productos por categoría con color garantizado
+  $: productosPorFamilia = $categorias.map((cat, idx) => ({
     categoria: cat,
+    color: cat.color || FAMILIA_COLORS[idx % FAMILIA_COLORS.length],
     productos: $todosProductos.filter(p => p.categoria_id === cat.id || p.categoria === cat.id)
   })).filter(g => g.productos.length > 0);
 
@@ -646,7 +650,7 @@
         {#each productosPorFamilia as grupo (grupo.categoria.id)}
           <div
             class="familia-section"
-            style="--fam-color: {grupo.categoria.color || '#6366f1'}"
+            style="--fam-color: {grupo.color}"
             bind:this={familiaRefs[grupo.categoria.id]}
           >
             <div class="familia-header">
@@ -910,23 +914,23 @@
     overflow: hidden;
   }
 
-  /* Sidebar — solo acciones */
+  /* Sidebar — acciones accesibles desde arriba */
   .sidebar {
     display: flex;
     flex-direction: column;
-    width: 68px;
+    width: 72px;
     flex-shrink: 0;
     background: #0d0d0d;
     border-left: 1px solid #1a1a1a;
     order: 1; /* Right side */
-    justify-content: flex-end;
+    justify-content: flex-start;
   }
 
   .acciones {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 6px 5px;
+    gap: 8px;
+    padding: 8px 5px;
     flex-shrink: 0;
   }
 
@@ -941,11 +945,11 @@
     scroll-behavior: smooth;
   }
 
-  /* Secciones por familia */
+  /* Secciones por familia — fondo coloreado visible */
   .familia-section {
     padding: 6px 8px 10px;
-    background: color-mix(in srgb, var(--fam-color) 6%, #0a0a0a);
-    border-bottom: 2px solid color-mix(in srgb, var(--fam-color) 20%, #1a1a1a);
+    background: color-mix(in srgb, var(--fam-color) 16%, #0f0f0f);
+    border-bottom: 2px solid color-mix(in srgb, var(--fam-color) 40%, #1a1a1a);
     flex-shrink: 0;
   }
 
@@ -971,7 +975,7 @@
 
   .productos-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 6px;
     align-content: start;
   }
@@ -1044,19 +1048,19 @@
 
     /* Sidebar lateral también en móvil */
     .sidebar {
-      width: 54px;
+      width: 62px;
     }
 
     .acciones {
-      gap: 4px;
-      padding: 4px 3px;
+      gap: 6px;
+      padding: 6px 4px;
     }
 
     .familia-section { padding: 4px 5px 8px; }
     .familia-header { padding: 2px 2px 4px; gap: 4px; }
     .familia-icon { font-size: 0.75rem; }
     .familia-nombre { font-size: 0.6rem; }
-    .productos-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .productos-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
     .loading, .empty { min-height: 120px; font-size: 0.75rem; }
 
     .fab-pedido { width: 46px; height: 46px; bottom: 10px; right: 10px; }

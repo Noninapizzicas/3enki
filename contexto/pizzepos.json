@@ -743,14 +743,18 @@
       },
       "frontend": {
         "componentes": {
-          "CartaScreen.svelte": "Pantalla principal: header + categorías scroll + grid productos + carrito FAB",
+          "CartaScreen.svelte": "Pantalla principal: header + categorías scroll + grid productos + carrito FAB. Usa VariacionesPanel (importado de comandero/) para variaciones",
           "ProductoCard.svelte": "Tarjeta de producto: imagen/placeholder, nombre, ingredientes, precio, botón añadir",
           "ProductoDetalle.svelte": "Modal detalle: imagen grande, descripción, ingredientes tipados, tags, botón añadir",
           "CategoriaScroll.svelte": "Scroll horizontal de categorías con pill activa",
           "CarritoPanel.svelte": "Panel slide-up: items con qty +/-, variaciones visibles, total, botones vaciar/compartir/WhatsApp"
         },
         "store": "frontend/src/lib/stores/carta.ts — cartaStore con carrito, categorías, productos, WhatsApp URL builder",
-        "ruta": "/carta/:projectId (standalone, sin AppShell)"
+        "ruta": "/carta/:projectId (standalone, sin AppShell)",
+        "bugs_conocidos": {
+          "ingredientes_vacios_enriched": "Cuando carta-digital.carta-completa responde (endpoint enriquecido), carta.ts:154 setea ings=[] porque los ingredientes van embebidos en cada producto. Pero VariacionesPanel recibe catalogoIngredientes={$ingredientes} que es [] → NO se pueden añadir extras. Solo funciona en fallback (productos.carta_completa devuelve ingredientes separados).",
+          "nombre_negocio_hardcoded": "carta.ts:88 — DEFAULT_CONFIG.nombre_negocio='Pizzicas' hardcodeado como fallback"
+        }
       },
       "relacion_otros_modulos": {
         "menu-generator": "Provee los datos: carta enriquecida con descripciones AI, emojis, ingredientes clasificados, imágenes",

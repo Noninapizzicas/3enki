@@ -478,6 +478,21 @@
         "4. tipoConfig hardcodeado (queso/verdura/carne/etc) con colores — aceptable como UI config pero no extensible sin tocar código"
       ],
       "solucion_propuesta": "Alinear defaults del frontend con los del backend (permiteAnadir=false, maxExtras=5). Usar producto.emoji en header. Opcionalmente cargar tipoConfig desde backend."
+    },
+    {
+      "id": "carta-digital-ingredientes-vacios",
+      "titulo": "Carta Digital: VariacionesPanel sin ingredientes cuando usa endpoint enriquecido",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-07",
+      "descripcion": "Cuando carta.ts usa el endpoint enriquecido (carta-digital.carta-completa), los ingredientes se embeben dentro de cada producto pero el store $ingredientes queda vacío ([]). CartaScreen pasa catalogoIngredientes={$ingredientes} al VariacionesPanel → no hay ingredientes para añadir. El fallback (productos.carta_completa) sí funciona porque devuelve ingredientes como array separado.",
+      "archivos_afectados": [
+        "frontend/src/lib/stores/carta.ts:154 — ings = [] en path enriquecido",
+        "frontend/src/lib/components/carta/CartaScreen.svelte:179 — catalogoIngredientes={$ingredientes}",
+        "modules/pizzepos/carta-digital/index.js:1055-1077 — formatCartaDigitalResponse no devuelve ingredientes[]"
+      ],
+      "solucion_propuesta": "Opción A: carta-digital.carta-completa devuelve también ingredientes[] separados (como hace productos.carta_completa). Opción B: carta.ts extrae ingredientes únicos de todos los productos y los pone en el store. Opción A es más limpia.",
+      "hardcode_adicional": "carta.ts:88 — DEFAULT_CONFIG.nombre_negocio='Pizzicas' hardcodeado"
     }
   ]
 }

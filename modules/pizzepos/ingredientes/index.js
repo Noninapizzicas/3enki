@@ -1,21 +1,26 @@
 /**
- * Módulo Ingredientes v3.0
+ * Módulo Ingredientes v4.0
  * Catálogo de ingredientes organizado por GRUPO (categoría de producto).
+ * FUENTE ÚNICA de precios de ingredientes (precio_extra).
  *
  * Concepto clave:
  *   - Cada ingrediente pertenece a uno o más GRUPOS (= categorías de producto: pizzas, bocadillos, etc.)
  *   - Los ingredientes de un grupo solo se ofrecen a productos de ese grupo
  *   - El campo "tipo" (queso, carne, verdura...) es para agrupación visual en la UI
  *   - Precios los controla el jefe: por tipo, por grupo, individual, o por porcentaje
+ *   - Persiste a disco en {storagePath}/ingredientes.json
  *
  * Emite: ingrediente.creado, ingrediente.actualizado
- * Consume: menu.generado, producto.creado
+ * Consume: menu.generado, producto.creado, project.activated
  */
+
+const fs = require('fs').promises;
+const path = require('path');
 
 class IngredientesModule {
   constructor() {
     this.name = 'ingredientes';
-    this.version = '3.0.0';
+    this.version = '4.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -25,6 +30,10 @@ class IngredientesModule {
 
     // Estado en memoria
     this.ingredientes = new Map(); // ingrediente_id -> ingrediente
+
+    // Storage
+    this.storageSection = 'pizzepos';
+    this.storagePath = null; // resolved on project.activated
   }
 
   // ==========================================
@@ -49,7 +58,7 @@ class IngredientesModule {
     this.logger.info('module.unloading', { module: this.name });
 
     if (this.uiHandler) {
-      const actions = ['list', 'get', 'search', 'alergenos', 'update', 'update_precios', 'health', 'metrics'];
+      const actions = ['list', 'get', 'get_precio', 'search', 'alergenos', 'update', 'update_precios', 'health', 'metrics'];
       for (const action of actions) {
         this.uiHandler.unregister('ingredientes', action);
       }
@@ -72,6 +81,7 @@ class IngredientesModule {
 
     this.uiHandler.register('ingredientes', 'list', this.handleListIngredientes.bind(this));
     this.uiHandler.register('ingredientes', 'get', this.handleGetIngrediente.bind(this));
+    this.uiHandler.register('ingredientes', 'get_precio', this.handleGetPrecio.bind(this));
     this.uiHandler.register('ingredientes', 'search', this.handleSearchIngredientes.bind(this));
     this.uiHandler.register('ingredientes', 'alergenos', this.handleListAlergenos.bind(this));
     this.uiHandler.register('ingredientes', 'update', this.handleUpdateIngrediente.bind(this));
@@ -80,7 +90,7 @@ class IngredientesModule {
     this.uiHandler.register('ingredientes', 'metrics', this.handleGetMetrics.bind(this));
 
     this.logger.info('ingredientes.ui_handlers.registered', {
-      handlers: ['list', 'get', 'search', 'alergenos', 'update', 'update_precios', 'health', 'metrics']
+      handlers: ['list', 'get', 'get_precio', 'search', 'alergenos', 'update', 'update_precios', 'health', 'metrics']
     });
   }
 
@@ -91,9 +101,11 @@ class IngredientesModule {
   async subscribeToEvents() {
     await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
     await this.eventBus.subscribe('producto.creado', this.onProductoCreado.bind(this));
+    await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
+    await this.eventBus.subscribe('ingrediente.actualizado', this.onIngredienteActualizadoExterno.bind(this));
 
     this.logger.info('ingredientes.events.subscribed', {
-      events: ['menu.generado', 'producto.creado']
+      events: ['menu.generado', 'producto.creado', 'project.activated', 'ingrediente.actualizado']
     });
   }
 
@@ -101,73 +113,136 @@ class IngredientesModule {
   // Event Handlers
   // ==========================================
 
+  async onProjectActivated(event) {
+    const data = event?.data || event?.payload || event;
+    const { project_id, base_path } = data;
+
+    if (!base_path) return;
+
+    this.storagePath = path.join(base_path, 'storage', this.storageSection);
+
+    // Cargar ingredientes desde disco
+    try {
+      await this.loadFromDisk();
+      this.logger.info('ingredientes.loaded_from_disk', {
+        project_id,
+        total: this.ingredientes.size
+      });
+    } catch (err) {
+      this.logger.debug('ingredientes.no_disk_data', { project_id, error: err.message });
+    }
+  }
+
   async onMenuGenerado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { ingredientes_catalogo } = eventData;
-
-    if (!ingredientes_catalogo || ingredientes_catalogo.length === 0) {
-      return;
-    }
-
-    this.logger.info('menu.generado.received', {
-      ingredientes_count: ingredientes_catalogo.length,
-      correlation_id: correlationId
-    });
+    const { ingredientes_catalogo, productos, source } = eventData;
 
     const start_time = Date.now();
     let nuevos = 0;
     let actualizados = 0;
 
-    for (const ing of ingredientes_catalogo) {
-      const existente = this.ingredientes.get(ing.id);
+    // Procesar ingredientes_catalogo si viene
+    if (ingredientes_catalogo && ingredientes_catalogo.length > 0) {
+      this.logger.info('menu.generado.received', {
+        ingredientes_count: ingredientes_catalogo.length,
+        correlation_id: correlationId
+      });
 
-      if (!existente) {
-        const ingrediente = {
-          ...ing,
-          grupos: ing.grupos || [],
-          disponible: true,
-          precio_extra: ing.precio_extra || 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
+      for (const ing of ingredientes_catalogo) {
+        const existente = this.ingredientes.get(ing.id);
 
-        this.ingredientes.set(ing.id, ingrediente);
-        nuevos++;
+        if (!existente) {
+          const ingrediente = {
+            ...ing,
+            tipo: ing.tipo || this.clasificarIngrediente(ing.nombre),
+            grupos: ing.grupos || [],
+            disponible: true,
+            precio_extra: ing.precio_extra || 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
 
-        this.metrics.increment('ingrediente.creado.total');
-        await this.publishIngredienteCreado(ingrediente, correlationId);
+          this.ingredientes.set(ing.id, ingrediente);
+          nuevos++;
 
-      } else {
-        // Merge grupos: acumular sin duplicar
-        const gruposMerged = [...new Set([...(existente.grupos || []), ...(ing.grupos || [])])];
-        const actualizado = {
-          ...existente,
-          ...ing,
-          grupos: gruposMerged,
-          updated_at: new Date().toISOString()
-        };
+          this.metrics.increment('ingrediente.creado.total');
+          await this.publishIngredienteCreado(ingrediente, correlationId);
 
-        this.ingredientes.set(ing.id, actualizado);
-        actualizados++;
+        } else {
+          // Merge grupos: acumular sin duplicar
+          const gruposMerged = [...new Set([...(existente.grupos || []), ...(ing.grupos || [])])];
+          const actualizado = {
+            ...existente,
+            ...ing,
+            grupos: gruposMerged,
+            updated_at: new Date().toISOString()
+          };
 
-        await this.publishIngredienteActualizado(ing.id, { emoji: ing.emoji, grupos: gruposMerged }, correlationId);
+          this.ingredientes.set(ing.id, actualizado);
+          actualizados++;
+
+          await this.publishIngredienteActualizado(ing.id, { emoji: ing.emoji, grupos: gruposMerged }, correlationId);
+        }
       }
     }
 
-    this.metrics.gauge('ingrediente.total.count', this.ingredientes.size);
-    this.metrics.gauge('ingrediente.alergenos.count',
-      Array.from(this.ingredientes.values()).filter(i => i.es_alergeno).length
-    );
-    this.metrics.timing('ingrediente.sync.duration', Date.now() - start_time);
+    // Construir catálogo desde ingredientes_base de productos (disk_load o menus sin ingredientes_catalogo)
+    if (productos && productos.length > 0) {
+      for (const prod of productos) {
+        const grupo = prod.categoria || 'otro';
+        const base = prod.ingredientes_base || prod.ingredientes || [];
+        for (const ing of base) {
+          if (!ing.id && !ing.nombre) continue;
+          const id = ing.id || `ing_${this.slugify(ing.nombre)}`;
+          const existente = this.ingredientes.get(id);
+          if (!existente) {
+            const ingrediente = {
+              id,
+              nombre: ing.nombre,
+              emoji: ing.emoji || '',
+              tipo: ing.tipo || this.clasificarIngrediente(ing.nombre),
+              es_alergeno: false,
+              precio_extra: ing.precio_extra ?? 0,
+              grupos: [grupo],
+              disponible: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+            this.ingredientes.set(id, ingrediente);
+            nuevos++;
+            this.metrics.increment('ingrediente.creado.total');
+            await this.publishIngredienteCreado(ingrediente, correlationId);
+          } else {
+            if (!existente.grupos) existente.grupos = [];
+            if (!existente.grupos.includes(grupo)) {
+              existente.grupos.push(grupo);
+              existente.updated_at = new Date().toISOString();
+              this.ingredientes.set(id, existente);
+            }
+          }
+        }
+      }
+    }
 
-    this.logger.info('ingredientes.sincronizados', {
-      nuevos,
-      actualizados,
-      total: this.ingredientes.size,
-      correlation_id: correlationId,
-      duration: Date.now() - start_time
-    });
+    if (nuevos > 0 || actualizados > 0) {
+      this.metrics.gauge('ingrediente.total.count', this.ingredientes.size);
+      this.metrics.gauge('ingrediente.alergenos.count',
+        Array.from(this.ingredientes.values()).filter(i => i.es_alergeno).length
+      );
+      this.metrics.timing('ingrediente.sync.duration', Date.now() - start_time);
+
+      // Persistir a disco
+      await this.saveToDisk();
+
+      this.logger.info('ingredientes.sincronizados', {
+        nuevos,
+        actualizados,
+        total: this.ingredientes.size,
+        correlation_id: correlationId,
+        duration: Date.now() - start_time
+      });
+    }
   }
 
   async onProductoCreado(event) {
@@ -180,12 +255,14 @@ class IngredientesModule {
     }
 
     const grupo = categoria || 'otro';
+    let changed = false;
 
     for (const ing of ingredientes_base) {
       const existente = this.ingredientes.get(ing.id);
       if (!existente) {
         const ingrediente = {
           ...ing,
+          tipo: ing.tipo || this.clasificarIngrediente(ing.nombre),
           grupos: [grupo],
           disponible: true,
           precio_extra: ing.precio_extra ?? 0,
@@ -194,6 +271,7 @@ class IngredientesModule {
         };
 
         this.ingredientes.set(ing.id, ingrediente);
+        changed = true;
 
         this.metrics.increment('ingrediente.creado.total');
         await this.publishIngredienteCreado(ingrediente, correlationId);
@@ -212,8 +290,48 @@ class IngredientesModule {
           existente.grupos.push(grupo);
           existente.updated_at = new Date().toISOString();
           this.ingredientes.set(ing.id, existente);
+          changed = true;
         }
       }
+    }
+
+    if (changed) {
+      await this.saveToDisk();
+    }
+  }
+
+  /**
+   * Recibe ingrediente.actualizado de fuentes externas (ej: menu-generator toolUpdateIngredientPrices).
+   * Aplica los cambios en memoria y persiste a disco.
+   * Evita loops: si el cambio ya está aplicado, no re-publica.
+   */
+  async onIngredienteActualizadoExterno(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { ingrediente_id, cambios } = eventData;
+
+    if (!ingrediente_id || !cambios) return;
+
+    const existente = this.ingredientes.get(ingrediente_id);
+    if (!existente) return;
+
+    let changed = false;
+    for (const [campo, valores] of Object.entries(cambios)) {
+      const nuevoValor = valores?.nuevo !== undefined ? valores.nuevo : valores;
+      if (existente[campo] !== nuevoValor) {
+        existente[campo] = nuevoValor;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      existente.updated_at = new Date().toISOString();
+      this.ingredientes.set(ingrediente_id, existente);
+      await this.saveToDisk();
+
+      this.logger.info('ingredientes.synced_from_external', {
+        ingrediente_id,
+        campos: Object.keys(cambios)
+      });
     }
   }
 
@@ -224,7 +342,8 @@ class IngredientesModule {
   async handleListIngredientes(data) {
     const { tipo, grupo, alergeno } = data || {};
 
-    let ingredientes = Array.from(this.ingredientes.values());
+    let ingredientes = Array.from(this.ingredientes.values())
+      .filter(i => i.disponible !== false);
 
     // Filtrar por grupo (categoría de producto)
     if (grupo) {
@@ -263,6 +382,28 @@ class IngredientesModule {
     }
 
     return { status: 200, data: ingrediente };
+  }
+
+  /**
+   * Devuelve el precio_extra de un ingrediente por ID.
+   * Usado internamente por variaciones para calcular precios.
+   */
+  async handleGetPrecio(data) {
+    const { ingrediente_id } = data;
+    const ingrediente = this.ingredientes.get(ingrediente_id);
+
+    if (!ingrediente) {
+      return { status: 404, error: 'Ingrediente no encontrado' };
+    }
+
+    return {
+      status: 200,
+      data: {
+        ingrediente_id,
+        precio_extra: ingrediente.precio_extra || 0,
+        disponible: ingrediente.disponible !== false
+      }
+    };
   }
 
   async handleSearchIngredientes(data) {
@@ -333,6 +474,7 @@ class IngredientesModule {
 
     this.metrics.increment('ingrediente.actualizado.total');
     await this.publishIngredienteActualizado(id, cambios);
+    await this.saveToDisk();
 
     this.logger.info('ingrediente.actualizado', {
       ingrediente_id: id,
@@ -397,6 +539,9 @@ class IngredientesModule {
       });
     }
 
+    // Persistir cambios de precios a disco
+    await this.saveToDisk();
+
     this.logger.info('ingredientes.precios_actualizados', {
       filtro: { id, tipo, grupo, precio_extra, porcentaje },
       afectados: actualizados.length
@@ -442,6 +587,45 @@ class IngredientesModule {
   }
 
   // ==========================================
+  // Persistence
+  // ==========================================
+
+  async loadFromDisk() {
+    if (!this.storagePath) return;
+
+    const filePath = path.join(this.storagePath, 'ingredientes.json');
+    const data = await fs.readFile(filePath, 'utf8');
+    const json = JSON.parse(data);
+
+    if (json.ingredientes && json.ingredientes.length > 0) {
+      for (const ing of json.ingredientes) {
+        this.ingredientes.set(ing.id, { ...ing, disponible: ing.disponible !== false });
+      }
+      this.logger.info('ingredientes.disk.loaded', { count: json.ingredientes.length });
+    }
+  }
+
+  async saveToDisk() {
+    if (!this.storagePath) return;
+
+    try {
+      await fs.mkdir(this.storagePath, { recursive: true });
+
+      const filePath = path.join(this.storagePath, 'ingredientes.json');
+      const data = {
+        ingredientes: Array.from(this.ingredientes.values()),
+        updated_at: new Date().toISOString()
+      };
+
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+
+      this.logger.debug('ingredientes.disk.saved', { count: this.ingredientes.size });
+    } catch (err) {
+      this.logger.warn('ingredientes.disk.save_failed', { error: err.message });
+    }
+  }
+
+  // ==========================================
   // Event Publishers
   // ==========================================
 
@@ -473,6 +657,30 @@ class IngredientesModule {
   // ==========================================
   // Helper Methods
   // ==========================================
+
+  /**
+   * Clasifica un ingrediente por nombre (fallback para cartas sin tipo).
+   */
+  clasificarIngrediente(nombre) {
+    if (!nombre) return 'otro';
+    const n = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (/mozzarella|queso|mezcla de quesos|parmesano|gorgonzola|cheddar|emmental|brie|gouda|provolone|roquefort/.test(n)) return 'queso';
+    if (/bacon|pollo|ternera|carne|york|jamon|pepperoni|peperoni|salchich|chorizo|lomo|cerdo|pavo|salami|anchoa/.test(n)) return 'carne';
+    if (/gambas|langostino|atun|salmon|marisco|pulpo|calamar|mejillon|surimi/.test(n)) return 'marisco';
+    if (/salsa|nata|pesto|carbonara|ketchup|mayonesa|alioli|mostaza/.test(n)) return 'salsa';
+    if (/tomate|cebolla|pimiento|champi[nñ]on|seta|aceituna|oliva|alcachofa|esparrago|espinaca|rucula|albahaca|oregano|ajo|maiz|pi[nñ]a|jalape[nñ]o|pepino|lechuga|zanahoria|berenjena|calabacin/.test(n)) return 'verdura';
+    if (/masa|harina|levadura/.test(n)) return 'masa';
+    return 'otro';
+  }
+
+  slugify(text) {
+    if (!text) return 'sin_nombre';
+    return text.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      || 'sin_nombre';
+  }
 
   countByType() {
     const counts = {};

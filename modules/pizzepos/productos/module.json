@@ -52,11 +52,6 @@
         "handler": "onMenuValidado"
       },
       {
-        "event": "ingrediente.actualizado",
-        "description": "Ingrediente actualizado - sincronizar precio_extra en catálogo local",
-        "handler": "onIngredienteActualizado"
-      },
-      {
         "event": "project.activated",
         "description": "Cache base_path del proyecto para resolver rutas de cartas",
         "handler": "onProjectActivated"

@@ -175,6 +175,30 @@ class UIRequestHandler {
   }
 
   /**
+   * Internal module-to-module call (no MQTT, no request_id needed).
+   * Calls the registered handler directly and returns its result.
+   *
+   * @param {string} domain - Handler domain (e.g. 'ingredientes')
+   * @param {string} action - Handler action (e.g. 'list')
+   * @param {Object} data - Request data
+   * @returns {Promise<Object>} Handler result
+   *
+   * @example
+   * const result = await this.uiHandler.handle('ingredientes', 'list', { grupo: 'pizzas' });
+   * // result = { status: 200, data: { ingredientes: [...] } }
+   */
+  async handle(domain, action, data = {}) {
+    const key = `${domain}.${action}`;
+    const handler = this.handlers.get(key);
+
+    if (!handler) {
+      return { status: 404, error: `No handler registered for ${domain}/${action}` };
+    }
+
+    return await handler(data);
+  }
+
+  /**
    * Internal message handler
    * @private
    */

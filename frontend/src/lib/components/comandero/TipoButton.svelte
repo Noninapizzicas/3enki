@@ -11,7 +11,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import type { TipoCuenta } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta, createMesa } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta, createMesa, createLlevar } from '$lib/stores/cuentas';
   import { status as mqttStatus } from '$lib/ui-core';
 
   export let tipo: TipoCuenta;
@@ -43,8 +43,11 @@
       if (tipo === 'local') {
         // Mesa → usa cuentas-canales mesa strategy (auto-nombre)
         cuenta_id = await createMesa(projectId);
+      } else if (tipo === 'llevar') {
+        // Llevar → usa cuentas-canales llevar strategy (ticket con prefijo llevar_)
+        cuenta_id = await createLlevar(projectId);
       } else {
-        // Delivery/llevar → cuentas simple (por ahora)
+        // Delivery → cuentas simple (por ahora)
         const cuenta = await createCuenta(projectId, tipo);
         cuenta_id = cuenta?.id || null;
       }

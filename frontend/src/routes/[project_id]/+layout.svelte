@@ -7,6 +7,7 @@
    * La URL es la fuente de verdad para el proyecto activo.
    */
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { setContext } from 'svelte';
   import { writable } from 'svelte/store';
@@ -109,23 +110,37 @@
       const project = res.data;
       const hasCarta = project?.has_carta || project?.carta_activa;
 
+      // Usar siempre el UUID real del proyecto para los stores
+      const realId = project?.id || project_id;
+      const slug = project?.slug;
+
       projectStore.set({
-        id: project_id,
+        id: realId,
         name: project?.name || project_id,
         isPizzepos: hasCarta,
         loading: false,
         error: null
       });
 
-      // Sincronizar datos completos al workspace store
+      // Sincronizar datos completos al workspace store (con UUID real)
       if (project) {
         selectProject({
-          id: project.id || project_id,
+          id: realId,
           name: project.name || project_id,
           color: project.color || 'blue',
           icon: project.icon || '',
           workspaceType: project.workspaceType || 'general'
         });
+      }
+
+      // Sincronizar activeProjectId con el UUID real
+      saveWorkspace({ projectId: realId });
+
+      // Normalizar URL: si la URL tiene UUID y tenemos slug, redirigir al slug
+      if (slug && urlParam !== slug && isUUID(urlParam)) {
+        const currentPath = $page.url.pathname;
+        const newPath = currentPath.replace(`/${urlParam}`, `/${slug}`);
+        goto(newPath, { replaceState: true });
       }
 
       loaded = true;
@@ -145,6 +160,10 @@
 
       loaded = true;
     }
+  }
+
+  function isUUID(str: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   }
 </script>
 

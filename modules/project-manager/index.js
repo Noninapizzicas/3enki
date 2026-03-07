@@ -342,6 +342,14 @@ class ProjectManagerModule {
     const basePath = path.join(this.projectsBasePath, slug);
     await fs.promises.mkdir(path.join(basePath, 'db'), { recursive: true });
     await fs.promises.mkdir(path.join(basePath, 'storage'), { recursive: true });
+    // Persistencia: eventos, ventas, current, backups
+    const persistenciaBase = path.join(basePath, 'persistencia');
+    await fs.promises.mkdir(path.join(persistenciaBase, 'eventos'), { recursive: true });
+    await fs.promises.mkdir(path.join(persistenciaBase, 'ventas'), { recursive: true });
+    await fs.promises.mkdir(path.join(persistenciaBase, 'current'), { recursive: true });
+    await fs.promises.mkdir(path.join(persistenciaBase, 'backups'), { recursive: true });
+    // Contabilidad: cierres diarios y acumulados
+    await fs.promises.mkdir(path.join(basePath, 'contabilidad', 'cierres'), { recursive: true });
     return basePath;
   }
 

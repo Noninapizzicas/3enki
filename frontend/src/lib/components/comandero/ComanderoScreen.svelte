@@ -2,7 +2,7 @@
   /**
    * ComanderoScreen — Pantalla de pedido
    *
-   * Layout:
+   * Layout scroll completo:
    * ┌────────────────────────────────────────┐
    * │ Header: nombre cuenta                  │
    * ├────────────────────────────────────────┤
@@ -10,11 +10,18 @@
    * ├────────────────────────────────────────┤
    * │ Familias: [🍕Pizza][🥗Ensaladas][...]  │
    * ├──────────────────────────┬─────────────┤
-   * │ Grid productos 3 col    │ Sidebar     │
-   * │                         │ (acciones)  │
-   * ├─────────────────────────│ Enviar      │
-   * │ Pedido (scroll up)      │ Cobro...    │
+   * │ ┌── 🍕 Pizzas ────────┐ │ Sidebar     │
+   * │ │ [prod] [prod] [prod]│ │ (acciones)  │
+   * │ ├── 🥗 Ensaladas ─────┤ │ Enviar      │
+   * │ │ [prod] [prod]       │ │ Cobro       │
+   * │ ├── 🍰 Postres ───────┤ │ Cuenta      │
+   * │ │ [prod] [prod] [prod]│ │ Imprimir    │
+   * │ ├──────────────────────┤ │ Salir       │
+   * │ │ Pedido (scroll down) │ │             │
+   * │ └──────────────────────┘ │             │
    * └──────────────────────────┴─────────────┘
+   * Cada sección tiene color de fondo de su familia.
+   * Botones de familia hacen scroll-to-section.
    */
   import { onMount, onDestroy } from 'svelte';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
@@ -22,6 +29,7 @@
     comanderoStore,
     categorias,
     productos,
+    todosProductos,
     categoriaActiva,
     pedidoItems,
     pedidoTotal,
@@ -35,7 +43,8 @@
     resetComandero,
     initComanderoSubscriptions,
     ingredientes as ingredientesStore,
-    type Producto
+    type Producto,
+    type Categoria
   } from '$lib/stores/comandero';
   import { renameMesa, renameCuenta } from '$lib/stores/cuentas';
   import { imprimirComanda, type ComandaItem, type Canal } from '$lib/stores/impresion';
@@ -69,8 +78,49 @@
   let contentEl: HTMLElement;
   let pedidoSectionEl: HTMLElement;
 
+  // Refs para secciones de familia (scroll-to)
+  let familiaRefs: Record<string, HTMLElement> = {};
+  let familiaActiva: string | null = null;
+
+  // Agrupar productos por categoría
+  $: productosPorFamilia = $categorias.map(cat => ({
+    categoria: cat,
+    productos: $todosProductos.filter(p => p.categoria_id === cat.id || p.categoria === cat.id)
+  })).filter(g => g.productos.length > 0);
+
+  function scrollToFamilia(catId: string) {
+    familiaActiva = catId;
+    selectCategoria(catId);
+    const el = familiaRefs[catId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   function scrollToPedido() {
     pedidoSectionEl?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // Detectar familia visible al hacer scroll
+  function handleContentScroll() {
+    if (!contentEl) return;
+    const scrollTop = contentEl.scrollTop;
+    const offset = 60; // margen para considerar "visible"
+
+    for (const grupo of productosPorFamilia) {
+      const el = familiaRefs[grupo.categoria.id];
+      if (el) {
+        const top = el.offsetTop - contentEl.offsetTop;
+        const bottom = top + el.offsetHeight;
+        if (scrollTop + offset >= top && scrollTop + offset < bottom) {
+          if (familiaActiva !== grupo.categoria.id) {
+            familiaActiva = grupo.categoria.id;
+            selectCategoria(grupo.categoria.id);
+          }
+          break;
+        }
+      }
+    }
   }
 
   // Nombre editable de la cuenta (mesa y llevar)
@@ -216,7 +266,7 @@
 
   // Handlers
   function handleCategoriaSelect(e: CustomEvent<{ id: string }>) {
-    selectCategoria(e.detail.id);
+    scrollToFamilia(e.detail.id);
   }
 
   function handleProductoAdd(e: CustomEvent<{ producto: Producto }>) {
@@ -584,30 +634,41 @@
       </div>
     </aside>
 
-    <!-- Área principal: grid + pedido en scroll continuo -->
-    <main class="content" bind:this={contentEl}>
-      <!-- Grid de productos -->
-      <div class="productos-area">
-        {#if $comanderoLoading && $productos.length === 0}
-          <div class="loading">Cargando productos...</div>
-        {:else if $productos.length === 0}
-          <div class="empty">
-            <span>Selecciona una categoría</span>
+    <!-- Área principal: scroll continuo con todas las familias + pedido -->
+    <main class="content" bind:this={contentEl} on:scroll={handleContentScroll}>
+      {#if $comanderoLoading && $todosProductos.length === 0}
+        <div class="loading">Cargando productos...</div>
+      {:else if productosPorFamilia.length === 0}
+        <div class="empty">
+          <span>Sin productos</span>
+        </div>
+      {:else}
+        {#each productosPorFamilia as grupo (grupo.categoria.id)}
+          <div
+            class="familia-section"
+            style="--fam-color: {grupo.categoria.color || '#6366f1'}"
+            bind:this={familiaRefs[grupo.categoria.id]}
+          >
+            <div class="familia-header">
+              {#if grupo.categoria.icon}
+                <span class="familia-icon">{grupo.categoria.icon}</span>
+              {/if}
+              <span class="familia-nombre">{grupo.categoria.nombre}</span>
+            </div>
+            <div class="productos-grid">
+              {#each grupo.productos as producto (producto.id)}
+                <ProductoBtn
+                  {producto}
+                  on:add={handleProductoAdd}
+                  on:variaciones={handleProductoVariaciones}
+                />
+              {/each}
+            </div>
           </div>
-        {:else}
-          <div class="productos-grid">
-            {#each $productos as producto (producto.id)}
-              <ProductoBtn
-                {producto}
-                on:add={handleProductoAdd}
-                on:variaciones={handleProductoVariaciones}
-              />
-            {/each}
-          </div>
-        {/if}
-      </div>
+        {/each}
+      {/if}
 
-      <!-- Lista pedido (debajo de productos, dentro del scroll) -->
+      <!-- Lista pedido (debajo de todas las familias) -->
       <div class="pedido-section" bind:this={pedidoSectionEl}>
         <PedidoList
           items={$pedidoItems}
@@ -880,15 +941,38 @@
     scroll-behavior: smooth;
   }
 
-  .productos-area {
-    padding: 10px;
+  /* Secciones por familia */
+  .familia-section {
+    padding: 6px 8px 10px;
+    background: color-mix(in srgb, var(--fam-color) 6%, #0a0a0a);
+    border-bottom: 2px solid color-mix(in srgb, var(--fam-color) 20%, #1a1a1a);
     flex-shrink: 0;
+  }
+
+  .familia-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 6px;
+  }
+
+  .familia-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+
+  .familia-nombre {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: color-mix(in srgb, var(--fam-color) 70%, #ccc);
   }
 
   .productos-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: 6px;
     align-content: start;
   }
 
@@ -968,7 +1052,10 @@
       padding: 4px 3px;
     }
 
-    .productos-area { padding: 5px; }
+    .familia-section { padding: 4px 5px 8px; }
+    .familia-header { padding: 2px 2px 4px; gap: 4px; }
+    .familia-icon { font-size: 0.75rem; }
+    .familia-nombre { font-size: 0.6rem; }
     .productos-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
     .loading, .empty { min-height: 120px; font-size: 0.75rem; }
 

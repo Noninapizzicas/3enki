@@ -97,7 +97,7 @@ class CuentasModule {
 
     // Desregistrar UI handlers
     if (this.uiHandler) {
-      const actions = ['list', 'get', 'create', 'delete', 'marcar_entregado', 'stats', 'health', 'metrics'];
+      const actions = ['list', 'get', 'create', 'delete', 'marcar_entregado', 'rename', 'stats', 'health', 'metrics'];
       for (const action of actions) {
         this.uiHandler.unregister('cuenta', action);
       }
@@ -125,12 +125,13 @@ class CuentasModule {
     this.uiHandler.register('cuenta', 'create', this.handleCreateCuenta.bind(this));
     this.uiHandler.register('cuenta', 'delete', this.handleDeleteCuenta.bind(this));
     this.uiHandler.register('cuenta', 'marcar_entregado', this.handleMarcarEntregado.bind(this));
+    this.uiHandler.register('cuenta', 'rename', this.handleRenameCuenta.bind(this));
     this.uiHandler.register('cuenta', 'stats', this.handleGetStats.bind(this));
     this.uiHandler.register('cuenta', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('cuenta', 'metrics', this.handleGetMetrics.bind(this));
 
     this.logger.info('cuentas.ui_handlers.registered', {
-      handlers: ['list', 'get', 'create', 'delete', 'marcar_entregado', 'stats', 'health', 'metrics']
+      handlers: ['list', 'get', 'create', 'delete', 'marcar_entregado', 'rename', 'stats', 'health', 'metrics']
     });
   }
 
@@ -518,6 +519,7 @@ class CuentasModule {
       project_id: project_id || null,
       tipo: tipo || 'local',
       nombre: metadata?.nombre || tipo || 'Cuenta',
+      cliente_nombre: metadata?.cliente_nombre || null,
       estado: 'pendiente',
       pagado: false,
       hora,
@@ -743,6 +745,37 @@ class CuentasModule {
     return { status: 200, data: { message: 'Cuenta marcada como entregada' } };
   }
 
+  async handleRenameCuenta(data) {
+    const { project_id, id, nombre } = data;
+
+    if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
+      return { status: 400, error: 'nombre es requerido' };
+    }
+
+    const cuenta = this.cuentas.get(id);
+    if (!cuenta) {
+      return { status: 404, error: `Cuenta ${id} no encontrada` };
+    }
+
+    if (project_id && cuenta.project_id !== project_id) {
+      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
+    }
+
+    const nombre_anterior = cuenta.nombre;
+    cuenta.nombre = nombre.trim().slice(0, 50);
+    cuenta.updated_at = new Date().toISOString();
+
+    await this.publishCuentaActualizada(cuenta.project_id, id, {
+      nombre: cuenta.nombre
+    });
+
+    this.logger.info('cuenta.renombrada', {
+      cuenta_id: id, nombre_anterior, nombre_nuevo: cuenta.nombre
+    });
+
+    return { status: 200, data: { nombre_anterior, nombre_nuevo: cuenta.nombre } };
+  }
+
   async handleGetStats() {
     const total = this.cuentas.size;
     const por_tipo = { local: 0, delivery: 0, llevar: 0 };
@@ -889,7 +922,8 @@ class CuentasModule {
           id: cuenta_id,
           project_id: cp.project_id || null,
           tipo: cp.tipo || 'local',
-          nombre: cp.datos_especificos?.nombre || cp.tipo || 'Cuenta',
+          nombre: cp.datos_especificos?.nombre || cp.nombre || cp.tipo || 'Cuenta',
+          cliente_nombre: cp.datos_especificos?.cliente_nombre || cp.cliente_nombre || null,
           estado,
           pagado: cp.pagado || false,
           hora,

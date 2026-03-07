@@ -1,7 +1,12 @@
 /**
- * Módulo Persistencia Comandero v2.0
+ * Módulo Persistencia Comandero v3.0
  * Event sourcing local: guarda todos los eventos y genera registros de ventas
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ *
+ * v3.0: Persistencia multi-proyecto
+ *   - Datos globales en ./data/ (backward compatible)
+ *   - Datos por proyecto en data/projects/{project_id}/persistencia/
+ *   - Cierres archivados en data/projects/{project_id}/contabilidad/cierres/
  *
  * Emite: caja.cerrada, dia.iniciado
  * Consume: boton.pulsado, ui.accion, cuenta.creada, cuenta.cerrada, cobro.*, pedido.*, mesa.*, telefono.*, llevar.*
@@ -13,7 +18,7 @@ const path = require('path');
 class PersistenciaComanderoModule {
   constructor() {
     this.name = 'persistencia-comandero';
-    this.version = '2.0.0';
+    this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -22,14 +27,17 @@ class PersistenciaComanderoModule {
     this.uiHandler = null;
     this.config = {};
 
-    // Directorios (se configuran en onLoad)
+    // Directorios globales (se configuran en onLoad)
     this.dataDir = './data';
     this.eventosDir = './data/eventos';
     this.ventasDir = './data/ventas';
     this.currentDir = './data/current';
     this.backupDir = './data/backups';
 
-    // Cache en memoria
+    // Base para datos por proyecto
+    this.projectsBasePath = path.join(process.cwd(), 'data', 'projects');
+
+    // Cache en memoria (global - contiene datos de todos los proyectos)
     this.eventosCache = [];
     this.ventasCache = [];
     this.cuentasActivasCache = new Map();
@@ -149,6 +157,69 @@ class PersistenciaComanderoModule {
 
   // NOTE: Event subscriptions are auto-wired from module.json.
   // See module.json "subscribes" array for the complete list.
+
+  // ==========================================
+  // Per-Project Directory Helpers
+  // ==========================================
+
+  /**
+   * Devuelve los paths de persistencia para un proyecto.
+   * Crea los directorios si no existen.
+   */
+  async getProjectDirs(projectId) {
+    if (!projectId) return null;
+
+    const base = path.join(this.projectsBasePath, projectId, 'persistencia');
+    const dirs = {
+      base,
+      current: path.join(base, 'current'),
+      eventos: path.join(base, 'eventos'),
+      ventas: path.join(base, 'ventas'),
+      backups: path.join(base, 'backups'),
+      contabilidad: path.join(this.projectsBasePath, projectId, 'contabilidad', 'cierres')
+    };
+
+    // Crear dirs si no existen (lazy)
+    for (const dir of Object.values(dirs)) {
+      try {
+        await fs.mkdir(dir, { recursive: true });
+      } catch (error) {
+        // Silenciar - se reportara en la escritura si falla
+      }
+    }
+
+    return dirs;
+  }
+
+  /**
+   * Extrae project_id de un evento, buscando en el payload o en la cuenta asociada.
+   */
+  resolveProjectId(event) {
+    const eventData = event?.data || event?.payload || event;
+    if (eventData?.project_id) return eventData.project_id;
+    if (eventData?.cuenta_id) {
+      const cuenta = this.cuentasActivasCache.get(eventData.cuenta_id);
+      if (cuenta?.project_id) return cuenta.project_id;
+    }
+    return null;
+  }
+
+  /**
+   * Obtiene todos los project_ids activos en las caches.
+   */
+  getActiveProjectIds() {
+    const ids = new Set();
+    for (const cuenta of this.cuentasActivasCache.values()) {
+      if (cuenta.project_id) ids.add(cuenta.project_id);
+    }
+    for (const venta of this.ventasCache) {
+      if (venta.project_id) ids.add(venta.project_id);
+    }
+    for (const evento of this.eventosCache) {
+      if (evento.payload?.project_id) ids.add(evento.payload.project_id);
+    }
+    return ids;
+  }
 
   // ==========================================
   // Event Handlers
@@ -432,6 +503,7 @@ class PersistenciaComanderoModule {
 
   async guardarEventos() {
     return this._enqueueWrite('guardar_eventos', async () => {
+      // 1. Guardar global (backward compatible)
       const archivo = path.join(this.currentDir, 'eventos.json');
       const data = {
         fecha: this.fechaJornada,
@@ -440,11 +512,48 @@ class PersistenciaComanderoModule {
         ultima_actualizacion: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // 2. Guardar por proyecto
+      await this._guardarEventosPorProyecto();
     });
+  }
+
+  async _guardarEventosPorProyecto() {
+    const porProyecto = new Map();
+
+    for (const evento of this.eventosCache) {
+      const pid = evento.payload?.project_id;
+      if (!pid) continue;
+      if (!porProyecto.has(pid)) porProyecto.set(pid, []);
+      porProyecto.get(pid).push(evento);
+    }
+
+    for (const [projectId, eventos] of porProyecto) {
+      try {
+        const dirs = await this.getProjectDirs(projectId);
+        if (!dirs) continue;
+
+        const archivo = path.join(dirs.current, 'eventos.json');
+        const data = {
+          fecha: this.fechaJornada,
+          project_id: projectId,
+          eventos,
+          total_eventos: eventos.length,
+          ultima_actualizacion: new Date().toISOString()
+        };
+        await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+      } catch (error) {
+        this.logger.warn('persistencia.proyecto.eventos.error', {
+          project_id: projectId,
+          error: error.message
+        });
+      }
+    }
   }
 
   async guardarVentas() {
     return this._enqueueWrite('guardar_ventas', async () => {
+      // 1. Guardar global
       const archivo = path.join(this.currentDir, 'ventas.json');
       const resumen = this.calcularResumenDia();
       const data = {
@@ -454,11 +563,49 @@ class PersistenciaComanderoModule {
         ultima_actualizacion: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // 2. Guardar por proyecto
+      await this._guardarVentasPorProyecto();
     });
+  }
+
+  async _guardarVentasPorProyecto() {
+    const porProyecto = new Map();
+
+    for (const venta of this.ventasCache) {
+      const pid = venta.project_id;
+      if (!pid) continue;
+      if (!porProyecto.has(pid)) porProyecto.set(pid, []);
+      porProyecto.get(pid).push(venta);
+    }
+
+    for (const [projectId, ventas] of porProyecto) {
+      try {
+        const dirs = await this.getProjectDirs(projectId);
+        if (!dirs) continue;
+
+        const resumen = this.calcularResumenDia(ventas);
+        const archivo = path.join(dirs.current, 'ventas.json');
+        const data = {
+          fecha: this.fechaJornada,
+          project_id: projectId,
+          ventas,
+          resumen_dia: resumen,
+          ultima_actualizacion: new Date().toISOString()
+        };
+        await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+      } catch (error) {
+        this.logger.warn('persistencia.proyecto.ventas.error', {
+          project_id: projectId,
+          error: error.message
+        });
+      }
+    }
   }
 
   async guardarCuentasActivas() {
     return this._enqueueWrite('guardar_cuentas', async () => {
+      // 1. Guardar global
       const archivo = path.join(this.currentDir, 'cuentas_activas.json');
       const cuentasObj = {};
       for (const [cuenta_id, cuenta] of this.cuentasActivasCache.entries()) {
@@ -471,7 +618,48 @@ class PersistenciaComanderoModule {
         ultima_actualizacion: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // 2. Guardar por proyecto
+      await this._guardarCuentasActivasPorProyecto();
     });
+  }
+
+  async _guardarCuentasActivasPorProyecto() {
+    const porProyecto = new Map();
+
+    for (const [cuenta_id, cuenta] of this.cuentasActivasCache.entries()) {
+      const pid = cuenta.project_id;
+      if (!pid) continue;
+      if (!porProyecto.has(pid)) porProyecto.set(pid, new Map());
+      porProyecto.get(pid).set(cuenta_id, cuenta);
+    }
+
+    for (const [projectId, cuentasMap] of porProyecto) {
+      try {
+        const dirs = await this.getProjectDirs(projectId);
+        if (!dirs) continue;
+
+        const cuentasObj = {};
+        for (const [cuenta_id, cuenta] of cuentasMap.entries()) {
+          cuentasObj[cuenta_id] = cuenta;
+        }
+
+        const archivo = path.join(dirs.current, 'cuentas_activas.json');
+        const data = {
+          fecha: this.fechaJornada,
+          project_id: projectId,
+          cuentas: cuentasObj,
+          total_cuentas: cuentasMap.size,
+          ultima_actualizacion: new Date().toISOString()
+        };
+        await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+      } catch (error) {
+        this.logger.warn('persistencia.proyecto.cuentas.error', {
+          project_id: projectId,
+          error: error.message
+        });
+      }
+    }
   }
 
   /**
@@ -510,6 +698,18 @@ class PersistenciaComanderoModule {
         guardado_at: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // Guardar jornada en cada proyecto activo
+      for (const projectId of this.getActiveProjectIds()) {
+        try {
+          const dirs = await this.getProjectDirs(projectId);
+          if (!dirs) continue;
+          const archivoProj = path.join(dirs.current, 'jornada.json');
+          await fs.writeFile(archivoProj, JSON.stringify(data, null, 2), 'utf8');
+        } catch (error) {
+          // No critico
+        }
+      }
     });
   }
 
@@ -608,9 +808,23 @@ class PersistenciaComanderoModule {
   }
 
   async handleGetEventosFecha(data) {
-    const { fecha } = data;
+    const { fecha, project_id } = data;
 
     try {
+      // Si hay project_id, buscar primero en persistencia del proyecto
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          try {
+            const archivoProj = path.join(dirs.eventos, `${fecha}.json`);
+            const content = await fs.readFile(archivoProj, 'utf8');
+            return { status: 200, data: JSON.parse(content) };
+          } catch (e) {
+            // Fallback a global
+          }
+        }
+      }
+
       const archivo = path.join(this.eventosDir, `${fecha}.json`);
       const content = await fs.readFile(archivo, 'utf8');
       const eventos = JSON.parse(content);
@@ -646,9 +860,23 @@ class PersistenciaComanderoModule {
   }
 
   async handleGetVentasFecha(data) {
-    const { fecha } = data;
+    const { fecha, project_id } = data;
 
     try {
+      // Si hay project_id, buscar en persistencia del proyecto
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          try {
+            const archivoProj = path.join(dirs.ventas, `${fecha}.json`);
+            const content = await fs.readFile(archivoProj, 'utf8');
+            return { status: 200, data: JSON.parse(content) };
+          } catch (e) {
+            // Fallback a global
+          }
+        }
+      }
+
       const archivo = path.join(this.ventasDir, `${fecha}.json`);
       const content = await fs.readFile(archivo, 'utf8');
       const ventas = JSON.parse(content);
@@ -681,9 +909,24 @@ class PersistenciaComanderoModule {
   }
 
   async handleCuadreCajaFecha(data) {
-    const { fecha } = data;
+    const { fecha, project_id } = data;
 
     try {
+      // Si hay project_id, buscar en persistencia del proyecto
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          try {
+            const archivoProj = path.join(dirs.ventas, `${fecha}.json`);
+            const content = await fs.readFile(archivoProj, 'utf8');
+            const ventas = JSON.parse(content);
+            return { status: 200, data: { fecha, project_id, cuadre: ventas.resumen_dia || {} } };
+          } catch (e) {
+            // Fallback a global
+          }
+        }
+      }
+
       const archivo = path.join(this.ventasDir, `${fecha}.json`);
       const content = await fs.readFile(archivo, 'utf8');
       const ventas = JSON.parse(content);
@@ -698,15 +941,23 @@ class PersistenciaComanderoModule {
   }
 
   async handleCierreCaja(data) {
-    const { arqueo } = data;
+    const { arqueo, project_id } = data;
 
     if (!arqueo) {
       return { status: 400, error: 'Se requiere arqueo con el dinero contado' };
     }
 
     try {
+      // Filtrar cuentas y ventas por proyecto si se especifica
+      let cuentasAbiertas = Array.from(this.cuentasActivasCache.values());
+      let ventasParaCierre = this.ventasCache;
+
+      if (project_id) {
+        cuentasAbiertas = cuentasAbiertas.filter(c => c.project_id === project_id);
+        ventasParaCierre = ventasParaCierre.filter(v => v.project_id === project_id);
+      }
+
       // 1. Recopilar informe de cuentas abiertas antes de cerrarlas
-      const cuentasAbiertas = Array.from(this.cuentasActivasCache.values());
       const informeCuentasAbiertas = cuentasAbiertas.map(c => ({
         cuenta_id: c.cuenta_id || c.id,
         tipo: c.tipo,
@@ -721,7 +972,8 @@ class PersistenciaComanderoModule {
       // 2. Cerrar automáticamente cuentas abiertas
       if (cuentasAbiertas.length > 0) {
         this.logger.info('persistencia.cierre_caja.cerrando_cuentas', {
-          cuentas_abiertas: cuentasAbiertas.length
+          cuentas_abiertas: cuentasAbiertas.length,
+          project_id: project_id || 'global'
         });
 
         for (const cuenta of cuentasAbiertas) {
@@ -730,6 +982,7 @@ class PersistenciaComanderoModule {
           // Emitir evento de cierre forzado para cada cuenta
           await this.eventBus.publish('cuenta.cerrada_forzada', {
             cuenta_id: cuentaId,
+            project_id: cuenta.project_id,
             motivo: 'cierre_de_caja',
             cuenta_snapshot: cuenta
           });
@@ -741,8 +994,8 @@ class PersistenciaComanderoModule {
         await this.guardarCuentasActivas();
       }
 
-      // 3. Calcular resumen del día (incluye ventas cerradas normalmente)
-      const resumen = this.calcularResumenDia();
+      // 3. Calcular resumen del día
+      const resumen = this.calcularResumenDia(ventasParaCierre);
       const totalEsperadoEfectivo = resumen.por_metodo_pago.efectivo || 0;
       const totalArqueado = arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0));
       const diferencia = totalArqueado - totalEsperadoEfectivo;
@@ -750,6 +1003,7 @@ class PersistenciaComanderoModule {
       const horaCierre = new Date().toISOString();
       const cierre = {
         cierre_id: `cierre_${Date.now()}`,
+        project_id: project_id || null,
         fecha_jornada: this.fechaJornada,
         hora_inicio: this.horaInicioJornada,
         hora_cierre: horaCierre,
@@ -761,16 +1015,41 @@ class PersistenciaComanderoModule {
       };
 
       // 4. Generar informe detallado para envío
-      const informe = this.generarInformeCierre(cierre);
+      const informe = this.generarInformeCierre(cierre, ventasParaCierre);
 
+      // 5. Guardar cierre global
       const archivoCierre = path.join(this.ventasDir, `cierre_${this.fechaJornada}.json`);
       await fs.writeFile(archivoCierre, JSON.stringify(cierre, null, 2), 'utf8');
 
-      await this.archivarDia();
+      // 6. Guardar cierre en proyecto (persistencia + contabilidad)
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          // Cierre en persistencia/ventas/
+          const archivoCierreProj = path.join(dirs.ventas, `cierre_${this.fechaJornada}.json`);
+          await fs.writeFile(archivoCierreProj, JSON.stringify(cierre, null, 2), 'utf8');
 
-      // 5. Publicar evento con informe completo para notificación
+          // Cierre en contabilidad/cierres/
+          const archivoCierreContab = path.join(dirs.contabilidad, `cierre_${this.fechaJornada}.json`);
+          await fs.writeFile(archivoCierreContab, JSON.stringify({
+            ...cierre,
+            informe,
+            ventas: ventasParaCierre
+          }, null, 2), 'utf8');
+
+          this.logger.info('persistencia.cierre_proyecto.guardado', {
+            project_id,
+            contabilidad: archivoCierreContab
+          });
+        }
+      }
+
+      await this.archivarDia(project_id);
+
+      // 7. Publicar evento con informe completo para notificación
       await this.eventBus.publish('caja.cerrada', {
         fecha: this.fechaJornada,
+        project_id: project_id || null,
         arqueo,
         totales: resumen,
         diferencia,
@@ -780,6 +1059,7 @@ class PersistenciaComanderoModule {
 
       this.logger.info('persistencia.cierre_caja', {
         fecha: this.fechaJornada,
+        project_id: project_id || 'global',
         diferencia,
         estado: cierre.estado,
         cuentas_forzadas: informeCuentasAbiertas.length
@@ -796,13 +1076,14 @@ class PersistenciaComanderoModule {
   /**
    * Genera informe de cierre en texto plano para envío por mensajería.
    */
-  generarInformeCierre(cierre) {
-    const { fecha_jornada, hora_inicio, hora_cierre, totales, arqueo, diferencia, estado, cuentas_cerradas_forzadas } = cierre;
-    const ventas = this.ventasCache;
+  generarInformeCierre(cierre, ventasOverride = null) {
+    const { fecha_jornada, hora_inicio, hora_cierre, totales, arqueo, diferencia, estado, cuentas_cerradas_forzadas, project_id } = cierre;
+    const ventas = ventasOverride || this.ventasCache;
 
     const lineas = [];
     lineas.push(`📊 INFORME DE CIERRE DE CAJA`);
     lineas.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    if (project_id) lineas.push(`🏪 Proyecto: ${project_id}`);
     lineas.push(`📅 Jornada: ${fecha_jornada}`);
     lineas.push(`🕐 Inicio: ${hora_inicio ? new Date(hora_inicio).toLocaleTimeString('es-ES') : '—'}`);
     lineas.push(`🕐 Cierre: ${hora_cierre ? new Date(hora_cierre).toLocaleTimeString('es-ES') : '—'}`);
@@ -943,6 +1224,23 @@ class PersistenciaComanderoModule {
       const ventasActual = path.join(this.currentDir, 'ventas.json');
       await fs.copyFile(ventasActual, path.join(backupPath, 'ventas.json'));
 
+      // Backup por proyecto
+      for (const projectId of this.getActiveProjectIds()) {
+        try {
+          const dirs = await this.getProjectDirs(projectId);
+          if (!dirs) continue;
+          const projBackup = path.join(dirs.backups, backupName);
+          await fs.mkdir(projBackup, { recursive: true });
+
+          const evProj = path.join(dirs.current, 'eventos.json');
+          const vtProj = path.join(dirs.current, 'ventas.json');
+          try { await fs.copyFile(evProj, path.join(projBackup, 'eventos.json')); } catch (e) { /* ok */ }
+          try { await fs.copyFile(vtProj, path.join(projBackup, 'ventas.json')); } catch (e) { /* ok */ }
+        } catch (error) {
+          // No critico
+        }
+      }
+
       this.logger.info('persistencia.backup.creado', { backup_name: backupName });
 
       return {
@@ -970,7 +1268,8 @@ class PersistenciaComanderoModule {
         fecha_jornada: this.fechaJornada,
         eventos_cache: this.eventosCache.length,
         ventas_cache: this.ventasCache.length,
-        cuentas_activas: this.cuentasActivasCache.size
+        cuentas_activas: this.cuentasActivasCache.size,
+        proyectos_activos: [...this.getActiveProjectIds()]
       }
     };
   }
@@ -982,7 +1281,8 @@ class PersistenciaComanderoModule {
         ...this.internalMetrics,
         eventos_dia: this.eventosCache.length,
         ventas_dia: this.ventasCache.length,
-        cuentas_activas: this.cuentasActivasCache.size
+        cuentas_activas: this.cuentasActivasCache.size,
+        proyectos_activos: this.getActiveProjectIds().size
       }
     };
   }
@@ -991,8 +1291,9 @@ class PersistenciaComanderoModule {
   // Business Logic
   // ==========================================
 
-  async archivarDia() {
+  async archivarDia(projectId = null) {
     try {
+      // Archivar global
       const eventosActual = path.join(this.currentDir, 'eventos.json');
       const eventosArchivo = path.join(this.eventosDir, `${this.fechaJornada}.json`);
       await fs.copyFile(eventosActual, eventosArchivo);
@@ -1002,6 +1303,33 @@ class PersistenciaComanderoModule {
       await fs.copyFile(ventasActual, ventasArchivo);
 
       this.logger.info('persistencia.dia_archivado', { fecha: this.fechaJornada });
+
+      // Archivar por proyecto
+      const projectIds = projectId ? [projectId] : [...this.getActiveProjectIds()];
+      for (const pid of projectIds) {
+        try {
+          const dirs = await this.getProjectDirs(pid);
+          if (!dirs) continue;
+
+          const evCurrent = path.join(dirs.current, 'eventos.json');
+          const evArchivo = path.join(dirs.eventos, `${this.fechaJornada}.json`);
+          try { await fs.copyFile(evCurrent, evArchivo); } catch (e) { /* ok */ }
+
+          const vtCurrent = path.join(dirs.current, 'ventas.json');
+          const vtArchivo = path.join(dirs.ventas, `${this.fechaJornada}.json`);
+          try { await fs.copyFile(vtCurrent, vtArchivo); } catch (e) { /* ok */ }
+
+          this.logger.info('persistencia.proyecto.dia_archivado', {
+            project_id: pid,
+            fecha: this.fechaJornada
+          });
+        } catch (error) {
+          this.logger.warn('persistencia.proyecto.archivar.error', {
+            project_id: pid,
+            error: error.message
+          });
+        }
+      }
     } catch (error) {
       this.logger.error('persistencia.archivar_dia.error', { error: error.message });
     }

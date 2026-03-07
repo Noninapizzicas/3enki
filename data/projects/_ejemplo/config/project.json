@@ -12,5 +12,20 @@
   "paths": {
     "gmail": "data/gmail/mi-cuenta",
     "images": "data/gmail/mi-cuenta-images"
+  },
+  "notificaciones": {
+    "cierre_caja": {
+      "telegram": {
+        "chatId": "123456789",
+        "botName": "mi_bot"
+      },
+      "email": {
+        "to": "informe@ejemplo.com",
+        "account": "mi-cuenta-gmail"
+      },
+      "whatsapp": {
+        "to": "+34600000000"
+      }
+    }
   }
 }

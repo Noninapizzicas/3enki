@@ -2,16 +2,26 @@
   /**
    * ComanderoScreen — Pantalla de pedido
    *
-   * Layout 3 zonas:
-   * ┌──────────────────────────────┬──────────┐
-   * │ Barra superior (especiales)  │          │
-   * ├──────────────────────────────┤ Sidebar  │
-   * │                              │(cat+acc) │
-   * │  Grid productos 3 columnas   │          │
-   * │                              │          │
-   * ├──────────────────────────────┤          │
-   * │  Pedido actual (scroll up)   │          │
-   * └──────────────────────────────┴──────────┘
+   * Layout scroll completo:
+   * ┌────────────────────────────────────────┐
+   * │ Header: nombre cuenta                  │
+   * ├────────────────────────────────────────┤
+   * │ Especiales: Mitad | Al gusto | Menú    │
+   * ├────────────────────────────────────────┤
+   * │ Familias: [🍕Pizza][🥗Ensaladas][...]  │
+   * ├──────────────────────────┬─────────────┤
+   * │ ┌── 🍕 Pizzas ────────┐ │ Sidebar     │
+   * │ │ [prod] [prod] [prod]│ │ (acciones)  │
+   * │ ├── 🥗 Ensaladas ─────┤ │ Enviar      │
+   * │ │ [prod] [prod]       │ │ Cobro       │
+   * │ ├── 🍰 Postres ───────┤ │ Cuenta      │
+   * │ │ [prod] [prod] [prod]│ │ Imprimir    │
+   * │ ├──────────────────────┤ │ Salir       │
+   * │ │ Pedido (scroll down) │ │             │
+   * │ └──────────────────────┘ │             │
+   * └──────────────────────────┴─────────────┘
+   * Cada sección tiene color de fondo de su familia.
+   * Botones de familia hacen scroll-to-section.
    */
   import { onMount, onDestroy } from 'svelte';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
@@ -19,6 +29,7 @@
     comanderoStore,
     categorias,
     productos,
+    todosProductos,
     categoriaActiva,
     pedidoItems,
     pedidoTotal,
@@ -32,7 +43,8 @@
     resetComandero,
     initComanderoSubscriptions,
     ingredientes as ingredientesStore,
-    type Producto
+    type Producto,
+    type Categoria
   } from '$lib/stores/comandero';
   import { renameMesa, renameCuenta } from '$lib/stores/cuentas';
   import { imprimirComanda, type ComandaItem, type Canal } from '$lib/stores/impresion';
@@ -66,8 +78,49 @@
   let contentEl: HTMLElement;
   let pedidoSectionEl: HTMLElement;
 
+  // Refs para secciones de familia (scroll-to)
+  let familiaRefs: Record<string, HTMLElement> = {};
+  let familiaActiva: string | null = null;
+
+  // Agrupar productos por categoría
+  $: productosPorFamilia = $categorias.map(cat => ({
+    categoria: cat,
+    productos: $todosProductos.filter(p => p.categoria_id === cat.id || p.categoria === cat.id)
+  })).filter(g => g.productos.length > 0);
+
+  function scrollToFamilia(catId: string) {
+    familiaActiva = catId;
+    selectCategoria(catId);
+    const el = familiaRefs[catId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   function scrollToPedido() {
     pedidoSectionEl?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // Detectar familia visible al hacer scroll
+  function handleContentScroll() {
+    if (!contentEl) return;
+    const scrollTop = contentEl.scrollTop;
+    const offset = 60; // margen para considerar "visible"
+
+    for (const grupo of productosPorFamilia) {
+      const el = familiaRefs[grupo.categoria.id];
+      if (el) {
+        const top = el.offsetTop - contentEl.offsetTop;
+        const bottom = top + el.offsetHeight;
+        if (scrollTop + offset >= top && scrollTop + offset < bottom) {
+          if (familiaActiva !== grupo.categoria.id) {
+            familiaActiva = grupo.categoria.id;
+            selectCategoria(grupo.categoria.id);
+          }
+          break;
+        }
+      }
+    }
   }
 
   // Nombre editable de la cuenta (mesa y llevar)
@@ -213,7 +266,7 @@
 
   // Handlers
   function handleCategoriaSelect(e: CustomEvent<{ id: string }>) {
-    selectCategoria(e.detail.id);
+    scrollToFamilia(e.detail.id);
   }
 
   function handleProductoAdd(e: CustomEvent<{ producto: Producto }>) {
@@ -551,22 +604,23 @@
     {/each}
   </header>
 
-  <div class="main-body">
-    <!-- Sidebar: categorías + acciones -->
-    <aside class="sidebar">
-      <div class="categorias">
-        {#each $categorias as cat}
-          <CategoriaBtn
-            id={cat.id}
-            nombre={cat.nombre}
-            icon={cat.icon}
-            color={cat.color || '#6366f1'}
-            active={$categoriaActiva === cat.id}
-            on:select={handleCategoriaSelect}
-          />
-        {/each}
-      </div>
+  <!-- Barra de familias con colores identificativos -->
+  <div class="familias-bar">
+    {#each $categorias as cat}
+      <CategoriaBtn
+        id={cat.id}
+        nombre={cat.nombre}
+        icon={cat.icon}
+        color={cat.color || '#6366f1'}
+        active={$categoriaActiva === cat.id}
+        on:select={handleCategoriaSelect}
+      />
+    {/each}
+  </div>
 
+  <div class="main-body">
+    <!-- Sidebar: solo acciones -->
+    <aside class="sidebar">
       <div class="acciones">
         {#each acciones as acc}
           <AccionBtn
@@ -580,30 +634,41 @@
       </div>
     </aside>
 
-    <!-- Área principal: grid + pedido en scroll continuo -->
-    <main class="content" bind:this={contentEl}>
-      <!-- Grid de productos -->
-      <div class="productos-area">
-        {#if $comanderoLoading && $productos.length === 0}
-          <div class="loading">Cargando productos...</div>
-        {:else if $productos.length === 0}
-          <div class="empty">
-            <span>Selecciona una categoría</span>
+    <!-- Área principal: scroll continuo con todas las familias + pedido -->
+    <main class="content" bind:this={contentEl} on:scroll={handleContentScroll}>
+      {#if $comanderoLoading && $todosProductos.length === 0}
+        <div class="loading">Cargando productos...</div>
+      {:else if productosPorFamilia.length === 0}
+        <div class="empty">
+          <span>Sin productos</span>
+        </div>
+      {:else}
+        {#each productosPorFamilia as grupo (grupo.categoria.id)}
+          <div
+            class="familia-section"
+            style="--fam-color: {grupo.categoria.color || '#6366f1'}"
+            bind:this={familiaRefs[grupo.categoria.id]}
+          >
+            <div class="familia-header">
+              {#if grupo.categoria.icon}
+                <span class="familia-icon">{grupo.categoria.icon}</span>
+              {/if}
+              <span class="familia-nombre">{grupo.categoria.nombre}</span>
+            </div>
+            <div class="productos-grid">
+              {#each grupo.productos as producto (producto.id)}
+                <ProductoBtn
+                  {producto}
+                  on:add={handleProductoAdd}
+                  on:variaciones={handleProductoVariaciones}
+                />
+              {/each}
+            </div>
           </div>
-        {:else}
-          <div class="productos-grid">
-            {#each $productos as producto (producto.id)}
-              <ProductoBtn
-                {producto}
-                on:add={handleProductoAdd}
-                on:variaciones={handleProductoVariaciones}
-              />
-            {/each}
-          </div>
-        {/if}
-      </div>
+        {/each}
+      {/if}
 
-      <!-- Lista pedido (debajo de productos, dentro del scroll) -->
+      <!-- Lista pedido (debajo de todas las familias) -->
       <div class="pedido-section" bind:this={pedidoSectionEl}>
         <PedidoList
           items={$pedidoItems}
@@ -820,6 +885,23 @@
     display: none;
   }
 
+  /* Barra de familias */
+  .familias-bar {
+    display: flex;
+    gap: 6px;
+    padding: 5px 10px;
+    background: #0d0d0d;
+    border-bottom: 1px solid #222;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+
+  .familias-bar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Main body */
   .main-body {
     display: flex;
@@ -828,33 +910,23 @@
     overflow: hidden;
   }
 
-  /* Sidebar */
+  /* Sidebar — solo acciones */
   .sidebar {
     display: flex;
     flex-direction: column;
-    width: 80px;
+    width: 68px;
     flex-shrink: 0;
     background: #0d0d0d;
     border-left: 1px solid #1a1a1a;
     order: 1; /* Right side */
-  }
-
-  .categorias {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 6px;
-    overflow-y: auto;
-    overflow-x: hidden;
+    justify-content: flex-end;
   }
 
   .acciones {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 8px 6px;
-    border-top: 1px solid #222;
+    gap: 5px;
+    padding: 6px 5px;
     flex-shrink: 0;
   }
 
@@ -869,15 +941,38 @@
     scroll-behavior: smooth;
   }
 
-  .productos-area {
-    padding: 10px;
+  /* Secciones por familia */
+  .familia-section {
+    padding: 6px 8px 10px;
+    background: color-mix(in srgb, var(--fam-color) 6%, #0a0a0a);
+    border-bottom: 2px solid color-mix(in srgb, var(--fam-color) 20%, #1a1a1a);
     flex-shrink: 0;
+  }
+
+  .familia-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 6px;
+  }
+
+  .familia-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+
+  .familia-nombre {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: color-mix(in srgb, var(--fam-color) 70%, #ccc);
   }
 
   .productos-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: 6px;
     align-content: start;
   }
 
@@ -943,40 +1038,25 @@
     .name-input { font-size: 0.85rem; padding: 2px 6px; }
     .voice-btn { font-size: 0.9rem; padding: 2px 8px; min-width: 32px; border-radius: 6px; }
 
-    .top-bar { padding: 4px 8px; gap: 5px; }
+    .top-bar { padding: 3px 6px; gap: 4px; }
 
-    .main-body {
-      flex-direction: column;
-    }
+    .familias-bar { padding: 4px 6px; gap: 4px; }
 
+    /* Sidebar lateral también en móvil */
     .sidebar {
-      flex-direction: row;
-      width: 100%;
-      height: auto;
-      order: 0; /* Top */
-      border-left: none;
-      border-bottom: 1px solid #1a1a1a;
-    }
-
-    .categorias {
-      flex-direction: row;
-      flex: 1;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding: 4px;
-      gap: 4px;
+      width: 54px;
     }
 
     .acciones {
-      flex-direction: row;
-      border-top: none;
-      border-left: 1px solid #222;
-      padding: 4px;
       gap: 4px;
+      padding: 4px 3px;
     }
 
-    .productos-area { padding: 6px; }
-    .productos-grid { grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .familia-section { padding: 4px 5px 8px; }
+    .familia-header { padding: 2px 2px 4px; gap: 4px; }
+    .familia-icon { font-size: 0.75rem; }
+    .familia-nombre { font-size: 0.6rem; }
+    .productos-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
     .loading, .empty { min-height: 120px; font-size: 0.75rem; }
 
     .fab-pedido { width: 46px; height: 46px; bottom: 10px; right: 10px; }

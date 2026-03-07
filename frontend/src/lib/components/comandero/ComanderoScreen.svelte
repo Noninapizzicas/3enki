@@ -2,16 +2,19 @@
   /**
    * ComanderoScreen — Pantalla de pedido
    *
-   * Layout 3 zonas:
-   * ┌──────────────────────────────┬──────────┐
-   * │ Barra superior (especiales)  │          │
-   * ├──────────────────────────────┤ Sidebar  │
-   * │                              │(cat+acc) │
-   * │  Grid productos 3 columnas   │          │
-   * │                              │          │
-   * ├──────────────────────────────┤          │
-   * │  Pedido actual (scroll up)   │          │
-   * └──────────────────────────────┴──────────┘
+   * Layout:
+   * ┌────────────────────────────────────────┐
+   * │ Header: nombre cuenta                  │
+   * ├────────────────────────────────────────┤
+   * │ Especiales: Mitad | Al gusto | Menú    │
+   * ├────────────────────────────────────────┤
+   * │ Familias: [🍕Pizza][🥗Ensaladas][...]  │
+   * ├──────────────────────────┬─────────────┤
+   * │ Grid productos 3 col    │ Sidebar     │
+   * │                         │ (acciones)  │
+   * ├─────────────────────────│ Enviar      │
+   * │ Pedido (scroll up)      │ Cobro...    │
+   * └──────────────────────────┴─────────────┘
    */
   import { onMount, onDestroy } from 'svelte';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
@@ -551,22 +554,23 @@
     {/each}
   </header>
 
-  <div class="main-body">
-    <!-- Sidebar: categorías + acciones -->
-    <aside class="sidebar">
-      <div class="categorias">
-        {#each $categorias as cat}
-          <CategoriaBtn
-            id={cat.id}
-            nombre={cat.nombre}
-            icon={cat.icon}
-            color={cat.color || '#6366f1'}
-            active={$categoriaActiva === cat.id}
-            on:select={handleCategoriaSelect}
-          />
-        {/each}
-      </div>
+  <!-- Barra de familias con colores identificativos -->
+  <div class="familias-bar">
+    {#each $categorias as cat}
+      <CategoriaBtn
+        id={cat.id}
+        nombre={cat.nombre}
+        icon={cat.icon}
+        color={cat.color || '#6366f1'}
+        active={$categoriaActiva === cat.id}
+        on:select={handleCategoriaSelect}
+      />
+    {/each}
+  </div>
 
+  <div class="main-body">
+    <!-- Sidebar: solo acciones -->
+    <aside class="sidebar">
       <div class="acciones">
         {#each acciones as acc}
           <AccionBtn
@@ -820,6 +824,23 @@
     display: none;
   }
 
+  /* Barra de familias */
+  .familias-bar {
+    display: flex;
+    gap: 6px;
+    padding: 5px 10px;
+    background: #0d0d0d;
+    border-bottom: 1px solid #222;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+
+  .familias-bar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Main body */
   .main-body {
     display: flex;
@@ -828,33 +849,23 @@
     overflow: hidden;
   }
 
-  /* Sidebar */
+  /* Sidebar — solo acciones */
   .sidebar {
     display: flex;
     flex-direction: column;
-    width: 80px;
+    width: 68px;
     flex-shrink: 0;
     background: #0d0d0d;
     border-left: 1px solid #1a1a1a;
     order: 1; /* Right side */
-  }
-
-  .categorias {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 6px;
-    overflow-y: auto;
-    overflow-x: hidden;
+    justify-content: flex-end;
   }
 
   .acciones {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 8px 6px;
-    border-top: 1px solid #222;
+    gap: 5px;
+    padding: 6px 5px;
     flex-shrink: 0;
   }
 
@@ -943,40 +954,22 @@
     .name-input { font-size: 0.85rem; padding: 2px 6px; }
     .voice-btn { font-size: 0.9rem; padding: 2px 8px; min-width: 32px; border-radius: 6px; }
 
-    .top-bar { padding: 4px 8px; gap: 5px; }
+    .top-bar { padding: 3px 6px; gap: 4px; }
 
-    .main-body {
-      flex-direction: column;
-    }
+    .familias-bar { padding: 4px 6px; gap: 4px; }
 
+    /* Sidebar lateral también en móvil */
     .sidebar {
-      flex-direction: row;
-      width: 100%;
-      height: auto;
-      order: 0; /* Top */
-      border-left: none;
-      border-bottom: 1px solid #1a1a1a;
-    }
-
-    .categorias {
-      flex-direction: row;
-      flex: 1;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding: 4px;
-      gap: 4px;
+      width: 54px;
     }
 
     .acciones {
-      flex-direction: row;
-      border-top: none;
-      border-left: 1px solid #222;
-      padding: 4px;
       gap: 4px;
+      padding: 4px 3px;
     }
 
-    .productos-area { padding: 6px; }
-    .productos-grid { grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .productos-area { padding: 5px; }
+    .productos-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
     .loading, .empty { min-height: 120px; font-size: 0.75rem; }
 
     .fab-pedido { width: 46px; height: 46px; bottom: 10px; right: 10px; }

@@ -1014,7 +1014,9 @@ class PersistenciaComanderoModule {
         cuentas_cerradas_forzadas: informeCuentasAbiertas
       };
 
-      // 4. Generar informe detallado para envío
+      // 4. Calcular desglose de productos y generar informe
+      const desglose_productos = this.calcularDesgloseProductos(ventasParaCierre);
+      cierre.desglose_productos = desglose_productos;
       const informe = this.generarInformeCierre(cierre, ventasParaCierre);
 
       // 5. Guardar cierre global
@@ -1075,6 +1077,7 @@ class PersistenciaComanderoModule {
 
   /**
    * Genera informe de cierre en texto plano para envío por mensajería.
+   * Incluye desglose por método de pago, por familia/categoría y por producto individual.
    */
   generarInformeCierre(cierre, ventasOverride = null) {
     const { fecha_jornada, hora_inicio, hora_cierre, totales, arqueo, diferencia, estado, cuentas_cerradas_forzadas, project_id } = cierre;
@@ -1108,7 +1111,7 @@ class PersistenciaComanderoModule {
     lineas.push(``);
 
     // Por tipo de cuenta
-    lineas.push(`📋 POR TIPO`);
+    lineas.push(`📋 POR TIPO DE CUENTA`);
     lineas.push(`─────────────────────`);
     for (const [tipo, total] of Object.entries(totales.por_tipo_cuenta || {})) {
       if (Number(total) > 0) {
@@ -1116,6 +1119,36 @@ class PersistenciaComanderoModule {
       }
     }
     lineas.push(``);
+
+    // ==========================================
+    // DESGLOSE POR FAMILIA Y PRODUCTO
+    // ==========================================
+    const { porFamilia, porProducto, totalUnidades } = this.calcularDesgloseProductos(ventas);
+
+    if (totalUnidades > 0) {
+      lineas.push(`🍕 PRODUCTOS VENDIDOS (${totalUnidades} uds)`);
+      lineas.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+      // Por familia: total global de cada familia + detalle individual
+      const familiasOrdenadas = Object.entries(porFamilia)
+        .sort((a, b) => b[1].importe - a[1].importe);
+
+      for (const [familia, datosFamilia] of familiasOrdenadas) {
+        lineas.push(``);
+        lineas.push(`📦 ${familia} — ${datosFamilia.cantidad} uds | ${datosFamilia.importe.toFixed(2)} €`);
+        lineas.push(`─────────────────────`);
+
+        // Productos individuales de esta familia
+        const productosEnFamilia = Object.entries(porProducto)
+          .filter(([, p]) => p.familia === familia)
+          .sort((a, b) => b[1].cantidad - a[1].cantidad);
+
+        for (const [nombre, datos] of productosEnFamilia) {
+          lineas.push(`  ${nombre}: ${datos.cantidad} uds | ${datos.importe.toFixed(2)} €`);
+        }
+      }
+      lineas.push(``);
+    }
 
     // Arqueo
     lineas.push(`🔢 ARQUEO DE CAJA`);
@@ -1165,6 +1198,48 @@ class PersistenciaComanderoModule {
     lineas.push(`Generado: ${new Date().toLocaleString('es-ES')}`);
 
     return lineas.join('\n');
+  }
+
+  /**
+   * Calcula desglose de productos vendidos agrupados por familia/categoría.
+   * Recorre los items de todos los pedidos de las ventas del día.
+   * Devuelve totales por familia (global) y por producto (individual).
+   */
+  calcularDesgloseProductos(ventas = null) {
+    const ventasToProcess = ventas || this.ventasCache;
+
+    const porFamilia = {};   // { familia: { cantidad, importe } }
+    const porProducto = {};  // { nombre: { cantidad, importe, familia } }
+    let totalUnidades = 0;
+
+    for (const venta of ventasToProcess) {
+      for (const pedido of (venta.pedidos || [])) {
+        for (const item of (pedido.items || [])) {
+          const nombre = item.nombre || item.producto_id || 'Desconocido';
+          const familia = item.categoria || 'Sin categoría';
+          const cantidad = item.cantidad || 1;
+          const importe = item.subtotal || (item.precio || 0) * cantidad;
+
+          totalUnidades += cantidad;
+
+          // Acumular por familia
+          if (!porFamilia[familia]) {
+            porFamilia[familia] = { cantidad: 0, importe: 0 };
+          }
+          porFamilia[familia].cantidad += cantidad;
+          porFamilia[familia].importe += importe;
+
+          // Acumular por producto individual
+          if (!porProducto[nombre]) {
+            porProducto[nombre] = { cantidad: 0, importe: 0, familia };
+          }
+          porProducto[nombre].cantidad += cantidad;
+          porProducto[nombre].importe += importe;
+        }
+      }
+    }
+
+    return { porFamilia, porProducto, totalUnidades };
   }
 
   async handleIniciarDia() {

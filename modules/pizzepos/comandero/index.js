@@ -158,7 +158,8 @@ class ComanderoModule {
       if (producto.id && producto.precio !== undefined) {
         this.productosCache.set(producto.id, {
           nombre: producto.nombre || producto.id,
-          precio: producto.precio
+          precio: producto.precio,
+          categoria: producto.categoria || null
         });
       }
     }
@@ -170,10 +171,15 @@ class ComanderoModule {
 
   async onProductoActualizado(event) {
     const data = event?.data || event?.payload || event;
-    const { id, nombre, precio } = data;
+    const { id, nombre, precio, categoria } = data;
 
     if (id && precio !== undefined) {
-      this.productosCache.set(id, { nombre: nombre || id, precio });
+      const existing = this.productosCache.get(id);
+      this.productosCache.set(id, {
+        nombre: nombre || id,
+        precio,
+        categoria: categoria || existing?.categoria || null
+      });
     }
   }
 
@@ -236,6 +242,7 @@ class ComanderoModule {
       nombre: itemNombre,
       precio: itemPrecio,
       cantidad: itemCantidad,
+      categoria: cached?.categoria || null,
       variaciones: variaciones || [],
       notas: notas || '',
       subtotal: itemPrecio * itemCantidad,

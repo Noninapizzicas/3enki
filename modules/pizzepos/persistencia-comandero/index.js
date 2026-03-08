@@ -1216,9 +1216,9 @@ class PersistenciaComanderoModule {
       for (const pedido of (venta.pedidos || [])) {
         for (const item of (pedido.items || [])) {
           const nombre = item.nombre || item.producto_id || 'Desconocido';
-          const familia = item.categoria || 'Sin categoría';
+          const familia = item.categoria || item.familia || 'Sin categoría';
           const cantidad = item.cantidad || 1;
-          const importe = item.subtotal || (item.precio || 0) * cantidad;
+          const importe = item.precio_total || item.subtotal || (item.precio_unitario || item.precio || 0) * cantidad;
 
           totalUnidades += cantidad;
 

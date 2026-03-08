@@ -28,6 +28,7 @@
     getFileIcon,
     formatFileSize,
     uploadFiles,
+    downloadFile,
     type FileItem
   } from '$lib/stores/files';
 
@@ -366,6 +367,22 @@
                 {#if item.type === 'file'}
                   <span class="file-size">{formatFileSize(item.size)}</span>
                 {/if}
+                {#if item.type === 'file'}
+                  <button
+                    class="action-btn"
+                    on:click|stopPropagation={() => openFile(item.path)}
+                    title="Visualizar"
+                  >
+                    👁️
+                  </button>
+                  <button
+                    class="action-btn"
+                    on:click|stopPropagation={() => downloadFile(item.path)}
+                    title="Descargar"
+                  >
+                    ⬇️
+                  </button>
+                {/if}
                 <button
                   class="action-btn"
                   on:click|stopPropagation={() => handleStartMove(item.path)}
@@ -400,6 +417,7 @@
           {#if state.currentFile?.extension === 'html'}
             <button class="btn secondary small" on:click={() => setView('html')} title="Vista renderizada">🌐</button>
           {/if}
+          <button class="icon-btn" on:click={() => state.currentFilePath && downloadFile(state.currentFilePath)} title="Descargar">⬇️</button>
           <button class="btn secondary small" on:click={handleFormat} title="Formatear">📐</button>
           <button
             class="btn primary small"
@@ -440,6 +458,7 @@
       <div class="viewer-header">
         <button class="icon-btn" on:click={handleClose} title="Cerrar">⬅️</button>
         <span class="file-title">{state.currentFilePath}</span>
+        <button class="icon-btn" on:click={() => state.currentFilePath && downloadFile(state.currentFilePath)} title="Descargar">⬇️</button>
         <span class="file-size">{formatFileSize(state.currentFile?.size || 0)}</span>
       </div>
 
@@ -460,6 +479,7 @@
       <div class="viewer-header">
         <button class="icon-btn" on:click={handleClose} title="Cerrar">⬅️</button>
         <span class="file-title">{state.currentFilePath}</span>
+        <button class="icon-btn" on:click={() => state.currentFilePath && downloadFile(state.currentFilePath)} title="Descargar">⬇️</button>
         <span class="file-size">{formatFileSize(state.currentFile?.size || 0)}</span>
       </div>
 
@@ -486,6 +506,7 @@
           <button class="btn secondary small" on:click={() => setView('editor')} title="Ver código fuente">
             {'</>'}
           </button>
+          <button class="icon-btn" on:click={() => state.currentFilePath && downloadFile(state.currentFilePath)} title="Descargar">⬇️</button>
           <span class="file-size">{formatFileSize(state.currentFile?.size || 0)}</span>
         </div>
       </div>

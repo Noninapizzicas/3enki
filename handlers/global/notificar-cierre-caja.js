@@ -10,16 +10,19 @@
  *   - local.whatsapp.send.request (si hay config whatsapp)
  *   - local.gmail.send.request (si hay config email)
  *
- * Busca config en 2 sitios (por orden de prioridad):
+ * Busca config en orden de prioridad (Telegram):
  *
- * 1. Sección dedicada (en project.json o notificaciones.json del proyecto):
+ * 1. credential-manager (process.env): TELEGRAM_CHAT_ID_PROJECT_{projectId} + TELEGRAM_BOT_NAME_PROJECT_{projectId}
+ * 2. Sección dedicada (en project.json o notificaciones.json del proyecto):
  *    notificaciones.cierre_caja.telegram = { chatId, botName }
+ * 3. Config raíz del proyecto (project.json):
+ *    telegram = { botName, chatId }
+ * 4. credential-manager (process.env): TELEGRAM_CHAT_ID_GLOBAL + TELEGRAM_BOT_NAME_GLOBAL
+ * 5. Config global: telegram = { botName, chatId }
+ *
+ * Para email/whatsapp:
  *    notificaciones.cierre_caja.email    = { to, account }
  *    notificaciones.cierre_caja.whatsapp = { to }
- *
- * 2. Config raíz del proyecto (project.json):
- *    telegram = { botName, chatId }
- *    gmail    = { account }
  *
  * IMPORTANTE: Este handler es global, así que NO recibe la config del
  * proyecto automáticamente. Lee la config del proyecto usando el
@@ -57,7 +60,7 @@ module.exports = {
     // Resolver destinos de notificación:
     //   1. Sección dedicada: notificaciones.cierre_caja
     //   2. Fallback: config raíz (telegram, gmail)
-    const destinos = resolverDestinos(config);
+    const destinos = resolverDestinos(config, project_id);
 
     logger.info('notificar-cierre-caja.destinos', {
       fecha,
@@ -175,13 +178,18 @@ function cargarConfigProyecto(projectId, logger) {
 }
 
 /**
- * Resuelve los destinos de notificación buscando en:
- *   1. config.notificaciones.cierre_caja (sección dedicada)
- *   2. config.project.notificaciones.cierre_caja (dentro de project.json)
- *   3. config.project.telegram / config.project.gmail (raíz del project.json)
- *   4. config.telegram / config.gmail (config global)
+ * Resuelve los destinos de notificación buscando en orden de prioridad:
+ *
+ * Telegram:
+ *   1. credential-manager: TELEGRAM_CHAT_ID_PROJECT_{projectId} (process.env)
+ *   2. config.notificaciones.cierre_caja.telegram (sección dedicada JSON)
+ *   3. config.project.telegram (raíz del project.json)
+ *   4. credential-manager: TELEGRAM_CHAT_ID_GLOBAL (process.env)
+ *   5. config.telegram (config global)
+ *
+ * WhatsApp / Email: igual que antes (solo desde sección dedicada o config raíz)
  */
-function resolverDestinos(config) {
+function resolverDestinos(config, projectId) {
   // Intentar sección dedicada (archivo notificaciones.json o dentro de project.json)
   const dedicada =
     config?.notificaciones?.cierre_caja ||
@@ -190,17 +198,33 @@ function resolverDestinos(config) {
 
   const destinos = {};
 
-  // Telegram: dedicada > project.telegram > config.telegram
-  if (dedicada.telegram?.chatId) {
+  // Telegram: credential-manager PROJECT > dedicada JSON > config raíz > credential-manager GLOBAL > config global
+  const envChatIdProject = projectId ? process.env[`TELEGRAM_CHAT_ID_PROJECT_${projectId}`] : null;
+  const envBotNameProject = projectId ? process.env[`TELEGRAM_BOT_NAME_PROJECT_${projectId}`] : null;
+
+  if (envChatIdProject && envBotNameProject) {
+    // Prioridad 1: credential-manager a nivel PROJECT
+    destinos.telegram = { chatId: envChatIdProject, botName: envBotNameProject };
+  } else if (dedicada.telegram?.chatId) {
+    // Prioridad 2: sección dedicada en JSON
     destinos.telegram = {
       chatId: dedicada.telegram.chatId,
       botName: dedicada.telegram.botName || config?.project?.telegram?.botName || config?.telegram?.botName
     };
   } else {
-    // Fallback: config raíz del proyecto
+    // Prioridad 3: config raíz del proyecto JSON
     const tg = config?.project?.telegram || config?.telegram;
     if (tg?.chatId && tg?.botName) {
       destinos.telegram = { chatId: tg.chatId, botName: tg.botName };
+    }
+  }
+
+  // Fallback final: credential-manager GLOBAL (si no se resolvió por ningún otro medio)
+  if (!destinos.telegram) {
+    const envChatIdGlobal = process.env.TELEGRAM_CHAT_ID_GLOBAL;
+    const envBotNameGlobal = process.env.TELEGRAM_BOT_NAME_GLOBAL;
+    if (envChatIdGlobal && envBotNameGlobal) {
+      destinos.telegram = { chatId: envChatIdGlobal, botName: envBotNameGlobal };
     }
   }
 

@@ -149,6 +149,11 @@ class CredentialManagerModule {
             process.env[key] = value;
             this._unmanagedLines.push(trimmed);
           }
+          // Telegram notification config (chatId + botName por nivel)
+          else if (key.startsWith('TELEGRAM_CHAT_ID_') || key.startsWith('TELEGRAM_BOT_NAME_')) {
+            this.credentials.set(key, value);
+            process.env[key] = value;
+          }
           // Cualquier otra variable: preservar
           else {
             process.env[key] = value;
@@ -1963,6 +1968,143 @@ class CredentialManagerModule {
         hasSecret: !!clientSecret,
         chainId: chainId,
         configured: !!clientId && !!clientSecret && !!chainId
+      });
+    }
+
+    return configs;
+  }
+
+  // ==========================================
+  // Telegram Notification Config (chatId + botName)
+  // ==========================================
+
+  /**
+   * UI Handler: Guardar configuración de notificación Telegram
+   * Request: mqttRequest('credential', 'telegram.notif.save', { level, identifier?, chat_id, bot_name })
+   */
+  async handleUITelegramNotifSave(data, request) {
+    const { level, identifier, chat_id, bot_name } = data;
+
+    if (!chat_id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'chat_id es requerido (ID del chat o usuario de Telegram)' };
+    }
+    if (!bot_name) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'bot_name es requerido (nombre del bot de Telegram)' };
+    }
+
+    const validLevel = level || 'GLOBAL';
+    const suffix = validLevel === 'GLOBAL' ? '_GLOBAL' : `_${validLevel}_${identifier}`;
+
+    const keyChatId = `TELEGRAM_CHAT_ID${suffix}`;
+    const keyBotName = `TELEGRAM_BOT_NAME${suffix}`;
+
+    const isNew = !this.credentials.has(keyChatId);
+
+    // Guardar en memoria
+    this.credentials.set(keyChatId, chat_id);
+    this.credentials.set(keyBotName, bot_name);
+
+    // Guardar en process.env para uso inmediato
+    process.env[keyChatId] = chat_id;
+    process.env[keyBotName] = bot_name;
+
+    // Persistir en archivo .env
+    await this.saveEnvFile();
+    this.updateCredentialMetrics();
+
+    this.logger.info('telegram.notif.config.saved', {
+      level: validLevel,
+      identifier: identifier || null,
+      isNew
+    });
+
+    // Publicar estado actualizado
+    await this.publishState();
+
+    return {
+      level: validLevel,
+      identifier: identifier || null,
+      created: isNew,
+      updated: !isNew,
+      keys: [keyChatId, keyBotName]
+    };
+  }
+
+  /**
+   * UI Handler: Eliminar configuración de notificación Telegram
+   * Request: mqttRequest('credential', 'telegram.notif.delete', { level, identifier? })
+   */
+  async handleUITelegramNotifDelete(data, request) {
+    const { level, identifier } = data;
+
+    const validLevel = level || 'GLOBAL';
+    const suffix = validLevel === 'GLOBAL' ? '_GLOBAL' : `_${validLevel}_${identifier}`;
+
+    const keyChatId = `TELEGRAM_CHAT_ID${suffix}`;
+    const keyBotName = `TELEGRAM_BOT_NAME${suffix}`;
+
+    if (!this.credentials.has(keyChatId)) {
+      throw { status: 404, code: 'NOT_FOUND', message: `Configuración Telegram notificación no encontrada para nivel ${validLevel}` };
+    }
+
+    // Eliminar de memoria
+    this.credentials.delete(keyChatId);
+    this.credentials.delete(keyBotName);
+
+    // Eliminar de process.env
+    delete process.env[keyChatId];
+    delete process.env[keyBotName];
+
+    // Persistir
+    await this.saveEnvFile();
+    this.updateCredentialMetrics();
+
+    this.logger.info('telegram.notif.config.deleted', { level: validLevel, identifier: identifier || null });
+
+    // Publicar estado actualizado
+    await this.publishState();
+
+    return { level: validLevel, identifier: identifier || null, deleted: true };
+  }
+
+  /**
+   * Obtiene configuraciones de notificación Telegram desde credentials en memoria.
+   * Busca keys con patrón TELEGRAM_CHAT_ID_{LEVEL}[_{IDENTIFIER}]
+   */
+  getTelegramNotifConfigs() {
+    const configs = [];
+    const processed = new Set();
+
+    for (const key of this.credentials.keys()) {
+      if (!key.startsWith('TELEGRAM_CHAT_ID_')) continue;
+
+      // Extraer level e identifier del key: TELEGRAM_CHAT_ID_GLOBAL o TELEGRAM_CHAT_ID_PROJECT_xxx
+      const rest = key.replace('TELEGRAM_CHAT_ID_', '');
+      let level, identifier;
+
+      if (rest === 'GLOBAL') {
+        level = 'GLOBAL';
+        identifier = null;
+      } else {
+        const parts = rest.split('_');
+        level = parts[0]; // PROJECT, CLIENT, CUSTOM
+        identifier = parts.slice(1).join('_') || null;
+      }
+
+      const configKey = `${level}_${identifier || ''}`;
+      if (processed.has(configKey)) continue;
+      processed.add(configKey);
+
+      const suffix = level === 'GLOBAL' ? '_GLOBAL' : `_${level}_${identifier}`;
+      const chatId = this.credentials.get(`TELEGRAM_CHAT_ID${suffix}`) || '';
+      const botName = this.credentials.get(`TELEGRAM_BOT_NAME${suffix}`) || '';
+
+      configs.push({
+        level,
+        identifier,
+        chatId,
+        botName,
+        configured: !!chatId && !!botName
       });
     }
 

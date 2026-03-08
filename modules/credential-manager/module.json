@@ -126,7 +126,9 @@
     { "domain": "credential", "action": "oauth.config.save", "handler": "handleUIOAuthConfigSave" },
     { "domain": "credential", "action": "oauth.config.delete", "handler": "handleUIOAuthConfigDelete" },
     { "domain": "credential", "action": "glovo.save", "handler": "handleUIGlovoSave" },
-    { "domain": "credential", "action": "glovo.delete", "handler": "handleUIGlovoDelete" }
+    { "domain": "credential", "action": "glovo.delete", "handler": "handleUIGlovoDelete" },
+    { "domain": "credential", "action": "telegram.notif.save", "handler": "handleUITelegramNotifSave" },
+    { "domain": "credential", "action": "telegram.notif.delete", "handler": "handleUITelegramNotifDelete" }
   ],
 
   "ui": {

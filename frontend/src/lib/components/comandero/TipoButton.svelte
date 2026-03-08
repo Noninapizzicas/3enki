@@ -4,7 +4,8 @@
    *
    * Un toque: crea cuenta del tipo + abre comandero
    *   - local → mesa strategy (cuentas-canales): auto-nombre "Mesa 1", "Mesa 2"...
-   *   - delivery/llevar → cuentas simple (por ahora)
+   *   - llevar → llevar strategy (cuentas-canales): ticket numerado "llevar_20260308_001"
+   *   - delivery → cuentas genérico
    *
    * Colores identificativos por tipo
    * Scoped por proyecto
@@ -47,7 +48,7 @@
         // Llevar → usa cuentas-canales llevar strategy (ticket con prefijo llevar_)
         cuenta_id = await createLlevar(projectId);
       } else {
-        // Delivery → cuentas simple (por ahora)
+        // Delivery/otros → cuentas genérico
         const cuenta = await createCuenta(projectId, tipo);
         cuenta_id = cuenta?.id || null;
       }

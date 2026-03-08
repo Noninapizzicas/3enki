@@ -10,7 +10,7 @@
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { Cuenta, ItemDetalle } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta, marcarEntregado } from '$lib/stores/cuentas';
 
   export let cuenta: Cuenta;
   export let projectId: string = '';
@@ -110,10 +110,10 @@
   // Pendiente sin items = se puede borrar
   $: showDeleteBtn = cuenta.estado === 'pendiente' && cuenta.items === 0;
 
-  function handleEntregarAction() {
+  async function handleEntregarAction() {
     if (cuenta.pagado) {
-      // Pagado → eliminar cuenta (todo hecho)
-      handleDelete();
+      // Pagado → marcar entregado (cierra la cuenta via strategy)
+      await marcarEntregado(projectId, cuenta.id);
     } else {
       // No pagado → abrir cobros
       handleRightTap();

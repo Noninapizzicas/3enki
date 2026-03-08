@@ -83,8 +83,9 @@ class LlevarStrategy {
       estado: ticket.estado
     });
 
-    // Cerrar la cuenta al procesar cobro (igual que mesa)
-    await this.cerrarTicket(cuenta_id, correlationId);
+    // Llevar NO cierra al cobrar (a diferencia de mesa).
+    // El ticket se mantiene visible hasta que se entregue al cliente.
+    // Solo marcamos pagado y esperamos a que se llame a entregar.
   }
 
   getHealth() {
@@ -404,13 +405,16 @@ class LlevarStrategy {
       hora_entrega: ticket.hora_entrega
     }, { correlationId });
 
-    // Si ya pagado, la cuenta ya fue cerrada por onCobroProcesado
+    // Entregar siempre cierra el ticket (es el fin del ciclo de llevar).
+    // Si no está pagado, queda pendiente de cobro pero ya no es cuenta activa.
     if (!ticket.pagado) {
       this.modulo.logger.info('llevar.ticket_entregado_pendiente_pago', {
         correlation_id: correlationId,
         numero_ticket: ticket.numero_ticket
       });
     }
+
+    await this.cerrarTicket(cuenta_id, correlationId);
   }
 
   async cerrarTicket(cuenta_id, correlationId) {

@@ -1,0 +1,19 @@
+{
+  "name": "Nonina Pizzería",
+  "description": "Proyecto principal - Pizzería Nonina",
+  "telegram": {
+    "botName": "Noninacloset",
+    "chatId": "1934798567"
+  },
+  "gmail": {
+    "account": "Nonina"
+  },
+  "notificaciones": {
+    "cierre_caja": {
+      "telegram": {
+        "chatId": "1934798567",
+        "botName": "Noninacloset"
+      }
+    }
+  }
+}

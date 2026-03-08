@@ -447,6 +447,10 @@ class CuentasModule {
       estado: cuenta.estado
     });
 
+    // Llevar: el cobro no cierra la cuenta, se mantiene hasta que se entregue.
+    // La strategy de llevar gestiona el cierre vía llevar/entregar.
+    if (cuenta.tipo === 'llevar') return;
+
     // Transicionar a cobrado usando la máquina de estados formal
     await this.cerrarCuentaCobrada(cuenta_id);
   }

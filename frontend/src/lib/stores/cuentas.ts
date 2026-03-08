@@ -221,7 +221,12 @@ export async function deleteCuenta(projectId: string, id: string): Promise<boole
 
 export async function marcarEntregado(projectId: string, id: string): Promise<boolean> {
   try {
-    await mqttRequest<any>('cuenta', 'marcar_entregado', { project_id: projectId, id });
+    // Llevar usa su propia strategy (llevar/entregar) que cierra el ticket
+    if (id.startsWith('llevar_')) {
+      await mqttRequest<any>('llevar', 'entregar', { project_id: projectId, cuenta_id: id });
+    } else {
+      await mqttRequest<any>('cuenta', 'marcar_entregado', { project_id: projectId, id });
+    }
     return true;
   } catch (err: any) {
     cuentasStore.update(s => ({ ...s, error: err.message || 'Error al marcar entregado' }));

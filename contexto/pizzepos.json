@@ -1,10 +1,22 @@
 {
   "_VERSION": "5.0.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-03-07",
+  "_UPDATED": "2026-03-08",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "5.1.0": {
+      "fecha": "2026-03-08",
+      "cambios": [
+        "FIX: llevar strategy — handleCrearTicket ahora extrae project_id de data y lo pasa a publishCuentaCreada (antes se guardaba con project_id: null → invisible en pantalla de cuentas)",
+        "FIX: llevar strategy — onCobroProcesado ya NO cierra el ticket. Solo marca pagado=true. El ticket persiste visible hasta que se llame a entregar",
+        "FIX: llevar strategy — marcarEntregado ahora llama a cerrarTicket() — la ENTREGA es el cierre real del ciclo de llevar (no el cobro)",
+        "FIX: cuentas v2.3 — onCobroProcesado tiene excepción para tipo=llevar: marca pagado pero NO transiciona a cobrado ni programa auto-eliminación",
+        "FIX: frontend — marcarEntregado() rutea cuentas llevar_ a llevar/entregar (strategy) en vez del handler genérico",
+        "FIX: frontend — CuentaCardMesa acción entregar llama a marcarEntregado en vez de deleteCuenta",
+        "PRINCIPIO: llevar tiene ciclo de vida diferente a mesa — cobro puede ocurrir en cualquier momento pero NO cierra la cuenta. Solo entregar cierra."
+      ]
+    },
     "5.0.0": {
       "fecha": "2026-03-06",
       "cambios": [
@@ -182,7 +194,7 @@
       "6. impresion → recibe pedido.enviado_cocina → genera comanda ESC/POS → imprime ticket",
       "7. cobros → procesa pago (efectivo/tarjeta/bizum/transferencia/mixto/link/qr) → cobro.procesado",
       "8. cuentas → escucha todos los eventos y transiciona estado: pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado (publica cuenta.estado_cambiado)",
-      "9. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada",
+      "9. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada (EXCEPTO llevar: solo marca pagado, cierra al entregar)",
       "10. persistencia-comandero → graba TODOS los eventos y reconstruye ventas",
       "11. cierre de caja → persistencia-comandero auto-cierra cuentas abiertas (cuenta.cerrada_forzada) → genera informe → publica caja.cerrada con informe",
       "12. handler notificar-cierre-caja → escucha caja.cerrada → envía informe por Telegram/WhatsApp según config"
@@ -227,33 +239,40 @@
       }
     },
     "ciclo_vida_cuenta": {
-      "descripcion": "El módulo cuentas (v2.2) ahora refleja el ciclo de vida completo escuchando eventos de otros módulos",
-      "estados": ["pendiente", "con_pedido", "en_preparacion", "listo", "para_cobrar", "cobrado"],
+      "descripcion": "El módulo cuentas (v2.3) refleja el ciclo de vida completo escuchando eventos de otros módulos",
+      "estados": ["pendiente", "con_pedido", "en_preparacion", "listo", "entregado", "para_cobrar", "cobrado"],
       "transiciones": {
         "pendiente→con_pedido": "comandero.item_agregado (primer item añadido)",
         "con_pedido→en_preparacion": "comandero.enviar_cocina (items enviados a cocina)",
-        "con_pedido→cobrado": "cobro.procesado (pago rápido sin enviar a cocina)",
+        "con_pedido→cobrado": "cobro.procesado (pago rápido sin enviar a cocina) — NO aplica a llevar",
         "en_preparacion→listo": "cocina.pedido_listo (todos los items preparados)",
-        "en_preparacion→cobrado": "cobro.procesado (pago mientras cocina prepara)",
+        "en_preparacion→cobrado": "cobro.procesado (pago mientras cocina prepara) — NO aplica a llevar",
         "listo→para_cobrar": "cobro.iniciado (camarero abre cobro)",
-        "listo→cobrado": "cobro.procesado (pago directo)",
-        "para_cobrar→cobrado": "cobro.procesado (pago confirmado)",
+        "listo→cobrado": "cobro.procesado (pago directo) — NO aplica a llevar",
+        "listo→entregado": "llevar/entregar o cuenta/marcar_entregado",
+        "para_cobrar→cobrado": "cobro.procesado (pago confirmado) — NO aplica a llevar",
         "listo→en_preparacion": "comandero.enviar_cocina (cliente pide más tras primer pedido listo)",
         "con_pedido→pendiente": "comandero.item_eliminado (último item eliminado sin enviar)"
       },
       "evento_publicado": "cuenta.estado_cambiado {cuenta_id, estado_anterior, estado_nuevo}",
-      "alerta": "Timer de 30 min en estado pendiente — activa alerta visual en tarjeta de cuenta"
+      "alerta": "Timer de 30 min en estado pendiente — activa alerta visual en tarjeta de cuenta",
+      "excepcion_llevar": {
+        "CRITICO": "Llevar NO transiciona a cobrado al recibir cobro.procesado. Solo marca pagado=true. La cuenta permanece visible hasta que se llame a entregar (llevar/entregar). El cierre lo gestiona LlevarStrategy.marcarEntregado() → cerrarTicket() → cuenta.cerrada.",
+        "razon": "El cliente paga (a veces antes) pero el pedido se queda visible hasta que lo recoja. Cobrar ≠ cerrar para llevar.",
+        "flujo_llevar": "crear → items → cocina → listo → cobrar (pagado=true, sigue visible) → entregar (cierra cuenta)"
+      }
     },
     "evento_critico": {
       "nombre": "cobro.procesado",
-      "flujo": "cobros publica → cuentas-canales detecta canal por prefijo de cuenta_id → cierra cuenta automáticamente",
+      "flujo": "cobros publica → cuentas-canales detecta canal por prefijo de cuenta_id → cierra cuenta automáticamente (EXCEPTO llevar — solo marca pagado)",
       "prefijos": {
-        "mesa_": "MesaStrategy",
-        "tel_": "TelefonoStrategy",
-        "llevar_": "LlevarStrategy",
-        "glovo_": "GlovoStrategy",
-        "wa_": "WhatsAppStrategy"
-      }
+        "mesa_": "MesaStrategy — cierra mesa inmediatamente",
+        "tel_": "TelefonoStrategy — cierra pedido telefónico",
+        "llevar_": "LlevarStrategy — solo marca pagado=true, NO cierra (espera a entregar)",
+        "glovo_": "GlovoStrategy — cierra pedido Glovo",
+        "wa_": "WhatsAppStrategy — cierra pedido WhatsApp"
+      },
+      "excepcion_llevar_en_cuentas": "cuentas/index.js: onCobroProcesado() tiene if (cuenta.tipo === 'llevar') return; — no transiciona a cobrado ni programa auto-eliminación"
     }
   },
 
@@ -314,7 +333,7 @@
       "uiHandlers": ["create", "list", "get", "confirm", "refund", "payment-methods", "health", "metrics"],
       "eventos_publica": ["cobro.iniciado", "cobro.procesado", "cobro.reembolsado"],
       "eventos_suscribe": ["pedido.completado"],
-      "nota": "cobro.procesado es el evento que dispara el cierre automático de cuenta en cuentas-canales. NOTA: module.json documenta cobro.completado y cobro.fallido pero el código real publica cobro.procesado y cobro.reembolsado."
+      "nota": "cobro.procesado es el evento que dispara el cierre automático de cuenta en cuentas-canales (EXCEPTO llevar — solo marca pagado). NOTA: module.json documenta cobro.completado y cobro.fallido pero el código real publica cobro.procesado y cobro.reembolsado."
     },
 
     "cocina": {
@@ -611,7 +630,7 @@
     },
 
     "persistencia-comandero": {
-      "version": "2.0.0",
+      "version": "3.0.0",
       "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas. FUENTE DE VERDAD para cuentas activas.",
       "ui_domain": "persistencia",
       "uiHandlers": ["cuentas_activas", "eventos", "eventos_fecha", "ventas", "ventas_fecha", "cuadre", "cuadre_fecha", "cierre", "iniciar_dia", "backup", "health", "metrics"],
@@ -632,11 +651,15 @@
         "reconstruccion": "Al iniciar, lee cuentas_activas.json y restaura el cache",
         "estructura_cuenta_activa": {
           "cuenta_id": "string — ID único",
+          "project_id": "string — ID del proyecto (CRITICO: sin project_id la cuenta no aparece al filtrar)",
           "tipo": "mesa | telefono | llevar | delivery | glovo | whatsapp",
           "origen": "string — descripción del origen",
+          "estado": "string — estado actual (abierta, etc.)",
           "datos_especificos": "object — nombre, telefono, etc.",
           "pedidos": "array — lista de pedidos asociados",
           "total": "number — total acumulado",
+          "pagado": "boolean — marcado via cuenta.actualizada cuando cobro.procesado llega",
+          "servido": "boolean — marcado via cuenta.actualizada",
           "created_at": "ISO timestamp",
           "updated_at": "ISO timestamp"
         }
@@ -804,7 +827,7 @@
       "4_recepcion": "cocina recibe pedido.enviado_cocina (display digital) + impresion recibe pedido.enviado_cocina (ticket físico)",
       "5_cocina_prepara": "cocinero marca items → cocina publica cocina.item_preparado → cuando todos listos → cocina.pedido_listo",
       "6_notificacion": "cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican al cliente",
-      "7_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo → cuenta.cerrada",
+      "7_cobrar": "cobros publica cobro.procesado → cuentas-canales detecta canal por prefijo → mesa/telefono/glovo/whatsapp: cierra cuenta → cuenta.cerrada | llevar: solo marca pagado=true (cuenta sigue activa hasta entregar)",
       "8_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json",
       "9_cierre": "persistencia-comandero cierre → auto-cierra cuentas abiertas (cuenta.cerrada_forzada) → genera informe detallado → publica caja.cerrada con informe",
       "10_notificacion_cierre": "handler notificar-cierre-caja escucha caja.cerrada → envía informe por Telegram (telegram.send_message.request) y/o WhatsApp (local.whatsapp.send.request)"
@@ -1096,7 +1119,10 @@
         "ubicacion": "frontend/src/lib/stores/cuentas.ts",
         "descripcion": "Store principal de cuentas — INTEGRADO CON PERSISTENCIA como fuente de verdad",
         "funciones_api": {
-          "createCuenta": "Crea cuenta nueva via cuenta.create",
+          "createCuenta": "Crea cuenta nueva via cuenta.create (genérica)",
+          "createMesa": "Crea mesa via mesa.abrir (MesaStrategy)",
+          "createLlevar": "Crea ticket llevar via llevar.crear (LlevarStrategy)",
+          "marcarEntregado": "Marca entregado — rutea llevar_ a llevar/entregar (strategy), resto a cuenta/marcar_entregado",
           "listCuentas": "Lista cuentas via cuenta.list",
           "getCuenta": "Obtiene cuenta via cuenta.get",
           "deleteCuenta": "Elimina cuenta via cuenta.delete",

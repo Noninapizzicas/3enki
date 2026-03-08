@@ -52,6 +52,11 @@
         "handler": "onMenuValidado"
       },
       {
+        "event": "carta.generada",
+        "description": "Carta modificada por menu-generator — auto-sync al catálogo",
+        "handler": "onCartaGenerada"
+      },
+      {
         "event": "project.activated",
         "description": "Cache base_path del proyecto para resolver rutas de cartas",
         "handler": "onProjectActivated"

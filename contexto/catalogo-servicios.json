@@ -1,20 +1,23 @@
 {
   "_VERSION": "1.1.0",
   "_CREATED": "2026-01-17",
-  "_UPDATED": "2026-02-16",
+  "_UPDATED": "2026-03-05",
   "_DESCRIPTION": "Catálogo completo de servicios, módulos, utilidades y acciones del sistema Event-Core",
 
   "resumen": {
-    "total_modulos": "40 (28 core + 12 pizzepos)",
-    "total_active": 34,
-    "total_disabled": 6,
+    "total_modulos": "51 (34 core + 15 pizzepos + 2 facturacion)",
+    "total_active": 43,
+    "total_disabled": 8,
     "total_providers": 34,
     "total_provider_functions": 119,
     "total_apis": 282,
     "total_eventos": "201 publicados, 159 suscritos",
     "total_tools_modulos": 61,
     "total_ui_handlers": 110,
-    "verticales": ["pizzepos (POS pizzería, 12 módulos, 5 canales de venta)"]
+    "verticales": [
+      "pizzepos (POS pizzería, 12 módulos, 5 canales de venta)",
+      "facturacion (procesamiento contable, 2 módulos: asesoria, fuentes)"
+    ]
   },
 
   "modulos": {
@@ -55,6 +58,18 @@
         "apis": ["GET /all", "GET /counters", "GET /gauges", "GET /timings", "GET /events", "POST /reset"],
         "eventos_publica": ["metricas.snapshot", "metricas.alerta"],
         "intervalo_snapshot": "10s"
+      }
+    },
+
+    "seguridad": {
+      "certificate-authority": {
+        "version": "1.0.0",
+        "descripcion": "CA interna con autenticación mTLS — certificados para clientes y dispositivos",
+        "routeCode": "3333",
+        "apis": ["GET /status", "GET /ca-cert", "POST /issue", "POST /revoke", "POST /renew", "GET /list", "POST /verify", "GET /crl", "GET /download-p12", "GET /nginx-config"],
+        "eventos_publica": ["certificate.issued", "certificate.revoked", "certificate.renewed", "certificate.expired"],
+        "tipos_certificado": ["client (Portal Clientes)", "device (Dispositivos)"],
+        "caracteristicas": ["CA raíz auto-firmada RSA 2048", "Emisión/revocación/renovación", "CRL", "Bundles P12", "Middleware mTLS (proxy/native)", "UI de gestión"]
       }
     },
 
@@ -355,6 +370,30 @@
       }
     },
 
+    "facturacion": {
+      "_nota": "Ver contexto/facturas.json para documentación completa",
+      "_ubicacion": "modules/facturacion/",
+      "asesoria": {
+        "version": "1.0.0",
+        "descripcion": "Genera paquetes CSV+ZIP con facturas procesadas para asesoría contable",
+        "ui_handlers": ["generar-paquete", "historial", "descargar", "preview"],
+        "tools": ["asesoria.generar-paquete", "asesoria.historial"],
+        "eventos_publica": ["asesoria.paquete.generado", "asesoria.paquete.error"],
+        "eventos_suscribe": ["project.activated"],
+        "servicios_consume": ["local.facturas-db (lectura)", "local.zip (createFromFiles)"],
+        "persistencia": "Filesystem — sin DB propia, historial de ZIPs en export/asesoria/"
+      },
+      "fuentes": {
+        "version": "1.0.0",
+        "descripcion": "Adaptadores de entrada para facturas — patrón Strategy (como cuentas-canales)",
+        "ui_handlers": ["status", "check-gmail"],
+        "eventos_publica": ["factura.entrada"],
+        "eventos_suscribe": ["project.activated", "telegram.photo.received", "telegram.document.received"],
+        "strategies": ["telegram (auto — escucha eventos bot)", "gmail (bajo demanda — check-gmail)", "manual (upload directo)"],
+        "config_por_proyecto": "fuentes.telegram.botName, fuentes.gmail.account, fuentes.manual.enabled"
+      }
+    },
+
     "pizzepos": {
       "_nota": "Ver contexto/pizzepos.json para documentación completa",
       "_ubicacion": "modules/pizzepos/",
@@ -386,9 +425,11 @@
         "uiHandlers": 8
       },
       "comandero": {
-        "version": "2.0.0",
-        "descripcion": "Interfaz del camarero para tomar pedidos",
-        "uiHandlers": 5
+        "version": "2.2.0",
+        "descripcion": "Interfaz del camarero para tomar pedidos — buffer por cuenta, add/remove/update items, enviar cocina",
+        "eventos_publica": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "comandero.enviar_cocina"],
+        "eventos_suscribe": ["cuenta.actualizada", "caja.cerrada", "dia.iniciado", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
+        "uiHandlers": 7
       },
       "productos": {
         "version": "2.1.0",
@@ -402,11 +443,12 @@
       "menu-generator": { "version": "2.0.0", "descripcion": "Genera menús digitales desde fotos via AI", "uiHandlers": 6 },
       "persistencia-comandero": {
         "version": "2.0.0",
-        "descripcion": "Event sourcing — graba todos los eventos, reconstruye ventas",
+        "descripcion": "Event sourcing — graba todos los eventos, reconstruye ventas. Cierre auto-cierra cuentas abiertas y genera informe.",
         "uiHandlers": 12,
-        "caracteristicas": ["Rotación diaria", "Archivado", "Backup", "Cuadre de caja", "Cierre del día"]
+        "eventos_publica": ["caja.cerrada", "cuenta.cerrada_forzada", "dia.iniciado"],
+        "caracteristicas": ["Rotación diaria", "Archivado", "Backup", "Cuadre de caja", "Cierre del día con auto-cierre e informe"]
       },
-      "cuentas": { "version": "2.2.0", "descripcion": "Módulo base de cuentas — ciclo de vida completo (pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado)", "uiHandlers": 7, "eventos_suscribe": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina", "cocina.pedido_listo", "cobro.iniciado", "cobro.procesado"], "eventos_publica": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"] }
+      "cuentas": { "version": "2.2.0", "descripcion": "Módulo base de cuentas — ciclo de vida completo (pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado)", "uiHandlers": 7, "eventos_suscribe": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "comandero.enviar_cocina", "cocina.pedido_listo", "cobro.iniciado", "cobro.procesado"], "eventos_publica": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"] }
     }
   },
 
@@ -722,6 +764,10 @@
       "prompt.render",
       "prompt.compose",
       "prompt.get_context"
+    ],
+    "asesoria": [
+      "asesoria.generar-paquete",
+      "asesoria.historial"
     ],
     "scheduler": [
       "scheduler.list_jobs",

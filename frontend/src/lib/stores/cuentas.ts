@@ -21,7 +21,18 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 // =============================================================================
 
 export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo';
-export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'para_cobrar' | 'cobrado';
+export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'entregado' | 'para_cobrar' | 'cobrado';
+export type EstadoCocinaItem = 'en_cocina' | 'preparando' | 'listo';
+
+export interface ItemDetalle {
+  item_id: string;
+  producto_id: string;
+  nombre: string;
+  cantidad: number;
+  precio: number;
+  estado_cocina: EstadoCocinaItem;
+  listo_at?: string;
+}
 
 export interface Cuenta {
   id: string;
@@ -32,8 +43,15 @@ export interface Cuenta {
   items: number;
   total: number;
   alerta: boolean;
+  pagado: boolean;
+  servido: boolean;
   created_at: string;
   updated_at: string;
+  itemsDetalle?: ItemDetalle[];
+  /** Hora estimada de recogida (ISO string o HH:MM) */
+  hora_recogida?: string;
+  /** Tiempo estimado en minutos para preparación */
+  tiempo_estimado?: number;
 }
 
 export interface CuentasState {
@@ -54,10 +72,10 @@ export const TIPO_COLORS: Record<TipoCuenta, string> = {
 };
 
 export const TIPO_ICONS: Record<TipoCuenta, string> = {
-  local: '\uD83C\uDFE0',
-  delivery: '\uD83D\uDEF5',
-  llevar: '\uD83D\uDCE6',
-  glovo: '\uD83D\uDEF5'
+  local: '🍕',
+  delivery: '🛵',
+  llevar: '🥡',
+  glovo: '🛵'
 };
 
 export const TIPO_LABELS: Record<TipoCuenta, string> = {
@@ -78,16 +96,39 @@ const TIPO_MAP: Record<string, TipoCuenta> = {
   glovo: 'glovo'
 };
 
+// Orden de progresión de estados (índice mayor = más avanzado)
+const ESTADO_ORDER: EstadoCuenta[] = ['pendiente', 'con_pedido', 'en_preparacion', 'listo', 'entregado', 'para_cobrar', 'cobrado'];
+
+// Estados válidos del dominio
+const ESTADOS_VALIDOS = new Set<EstadoCuenta>(ESTADO_ORDER);
+
 // Mapeo de estado de persistencia a EstadoCuenta
 function mapEstadoPersistencia(cuenta: any): EstadoCuenta {
+  // Si persistencia tiene un estado real del dominio, usarlo directamente
+  if (cuenta.estado && ESTADOS_VALIDOS.has(cuenta.estado as EstadoCuenta)) {
+    return cuenta.estado as EstadoCuenta;
+  }
+  // Legacy: persistencia solo decía "abierta" — inferir desde pedidos
   if (cuenta.estado === 'abierta') {
     if (!cuenta.pedidos || cuenta.pedidos.length === 0) return 'pendiente';
-    // Glovo con pedidos = en preparación en cocina
     if (cuenta.tipo === 'glovo') return 'en_preparacion';
-    // Si tiene pedidos, verificar si están enviados a cocina
     return 'con_pedido';
   }
   return 'pendiente';
+}
+
+/** Merge estado: persistencia es fuente de verdad si tiene estado real.
+ *  Solo preserva store si persistencia devuelve un estado inferido (legacy "abierta"). */
+function mergeEstado(fromPersistencia: EstadoCuenta, fromStore: EstadoCuenta | undefined, rawEstado: string): EstadoCuenta {
+  // Si persistencia tiene estado real del dominio, confiar en él
+  if (ESTADOS_VALIDOS.has(rawEstado as EstadoCuenta)) {
+    return fromPersistencia;
+  }
+  // Legacy fallback: persistencia dijo "abierta", preservar store si más avanzado
+  if (!fromStore) return fromPersistencia;
+  const iPers = ESTADO_ORDER.indexOf(fromPersistencia);
+  const iStore = ESTADO_ORDER.indexOf(fromStore);
+  return iStore > iPers ? fromStore : fromPersistencia;
 }
 
 // =============================================================================
@@ -178,6 +219,16 @@ export async function deleteCuenta(projectId: string, id: string): Promise<boole
   }
 }
 
+export async function marcarEntregado(projectId: string, id: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('cuenta', 'marcar_entregado', { project_id: projectId, id });
+    return true;
+  } catch (err: any) {
+    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al marcar entregado' }));
+    return false;
+  }
+}
+
 export async function getStats(projectId: string): Promise<any> {
   try {
     const res = await mqttRequest<any>('cuenta', 'stats', { project_id: projectId });
@@ -225,8 +276,8 @@ export async function createMesa(projectId: string, nombre?: string, comensales?
 }
 
 /**
- * Crea un ticket de llevar via cuentas-canales → llevar strategy
- * Devuelve el cuenta_id generado (ej: llevar_20260308_001)
+ * Crea un ticket de llevar via llevar strategy (llevar/crear).
+ * Genera cuenta_id con prefijo llevar_{fecha}_{seq}.
  */
 export async function createLlevar(projectId: string, clienteNombre?: string): Promise<string | null> {
   try {
@@ -234,11 +285,11 @@ export async function createLlevar(projectId: string, clienteNombre?: string): P
       project_id: projectId,
       cliente_nombre: clienteNombre || undefined
     });
-    const data = res?.data?.cuenta_id ? res.data : res?.data?.data;
+    const data = res?.data?.cuenta_id ? res.data : res?.data?.data || res?.data;
     return data?.cuenta_id || null;
   } catch (err: any) {
     console.error('[Cuentas] createLlevar error:', err);
-    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al crear ticket llevar' }));
+    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al crear llevar' }));
     return null;
   }
 }
@@ -257,6 +308,23 @@ export async function renameMesa(projectId: string, cuenta_id: string, nombre: s
     return res?.status === 200;
   } catch (err: any) {
     console.error('[Cuentas] renameMesa error:', err);
+    return false;
+  }
+}
+
+/**
+ * Renombra cualquier cuenta (llevar, delivery, etc.) via cuenta/rename.
+ */
+export async function renameCuenta(projectId: string, cuenta_id: string, nombre: string): Promise<boolean> {
+  try {
+    const res = await mqttRequest<any>('cuenta', 'rename', {
+      project_id: projectId,
+      id: cuenta_id,
+      nombre
+    });
+    return res?.status === 200;
+  } catch (err: any) {
+    console.error('[Cuentas] renameCuenta error:', err);
     return false;
   }
 }
@@ -283,6 +351,13 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
     if (res?.status === 200 && pData?.cuentas) {
       const cuentasPersistencia = pData.cuentas;
 
+      // Snapshot del store actual para preservar estados de cocina durante reload
+      const currentState = get(cuentasStore);
+      const currentCuentasMap = new Map<string, Cuenta>();
+      for (const c of currentState.cuentas) {
+        currentCuentasMap.set(c.id, c);
+      }
+
       // Convertir formato persistencia → formato store
       const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => {
         const mappedTipo = TIPO_MAP[cp.tipo] || 'local';
@@ -299,17 +374,53 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           if (num > 0) nombre = `Glovo #${num}`;
         }
 
+        // Preservar estados de cocina del store actual (evita que reload borre preparando/listo)
+        const existingCuenta = currentCuentasMap.get(cp.cuenta_id);
+        const existingItemsMap = new Map<string, ItemDetalle>();
+        if (existingCuenta?.itemsDetalle) {
+          for (const item of existingCuenta.itemsDetalle) {
+            existingItemsMap.set(item.item_id, item);
+          }
+        }
+
+        // Extraer items detallados de pedidos (para tarjeta mesa)
+        const itemsDetalle: ItemDetalle[] = [];
+        if (cp.pedidos && Array.isArray(cp.pedidos)) {
+          for (const pedido of cp.pedidos) {
+            if (pedido.items && Array.isArray(pedido.items)) {
+              for (const item of pedido.items) {
+                const itemId = item.item_id || item.id || '';
+                const existing = existingItemsMap.get(itemId);
+                itemsDetalle.push({
+                  item_id: itemId,
+                  producto_id: item.producto_id || '',
+                  nombre: item.nombre || '',
+                  cantidad: item.cantidad || 1,
+                  precio: item.precio || item.precio_unitario || item.subtotal || 0,
+                  estado_cocina: existing?.estado_cocina || 'en_cocina',
+                  ...(existing?.listo_at && { listo_at: existing.listo_at })
+                });
+              }
+            }
+          }
+        }
+
         return {
           id: cp.cuenta_id,
           tipo: mappedTipo,
           nombre,
-          estado: mapEstadoPersistencia(cp),
+          estado: mergeEstado(mapEstadoPersistencia(cp), existingCuenta?.estado, cp.estado || ''),
           hora: formatHora(cp.created_at),
           items: countItems(cp.pedidos),
           total: cp.total || 0,
-          alerta: checkAlerta(cp),
+          alerta: existingCuenta?.alerta || checkAlerta(cp),
+          pagado: cp.pagado || existingCuenta?.pagado || false,
+          servido: cp.servido || existingCuenta?.servido || existingCuenta?.estado === 'entregado' || false,
           created_at: cp.created_at,
-          updated_at: cp.updated_at
+          updated_at: cp.updated_at,
+          itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined,
+          hora_recogida: cp.datos_especificos?.hora_recogida || existingCuenta?.hora_recogida,
+          tiempo_estimado: cp.datos_especificos?.tiempo_estimado || existingCuenta?.tiempo_estimado
         };
       });
 
@@ -321,15 +432,15 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
 
       console.log('[Cuentas] Loaded from persistencia:', cuentas.length, 'project:', projectId);
 
-      // Merge buffer totals: el buffer del comandero tiene items no enviados
-      // que no están en persistencia aún. Usamos el máximo entre buffer y persistencia.
+      // Merge buffer: el buffer del comandero tiene items no enviados a cocina
+      // que no están en persistencia. Mergear totales + itemsDetalle.
       try {
         const bufRes = await mqttRequest<any>('comandero', 'buffers', {});
         const bufData = bufRes?.data?.buffers || bufRes?.data?.data?.buffers || [];
         if (bufData.length > 0) {
-          const bufferMap = new Map<string, { total: number; items_count: number }>();
+          const bufferMap = new Map<string, { total: number; items_count: number; items: any[] }>();
           for (const b of bufData) {
-            bufferMap.set(b.cuenta_id, { total: b.total, items_count: b.items_count });
+            bufferMap.set(b.cuenta_id, { total: b.total, items_count: b.items_count, items: b.items || [] });
           }
 
           cuentasStore.update(s => ({
@@ -337,18 +448,31 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
             cuentas: s.cuentas.map(c => {
               const buf = bufferMap.get(c.id);
               if (!buf) return c;
-              // Buffer total incluye items enviados + no enviados = total real
-              // Persistencia total solo tiene pedidos formales (enviados)
-              // Usamos el mayor de los dos como total real
+
+              // Construir itemsDetalle desde buffer (items no enviados a cocina)
+              const bufferItems: ItemDetalle[] = buf.items.map((bi: any) => ({
+                item_id: bi.item_id || '',
+                producto_id: bi.producto_id || '',
+                nombre: bi.nombre || '',
+                cantidad: bi.cantidad || 1,
+                precio: bi.precio || 0,
+                estado_cocina: 'en_cocina' as EstadoCocinaItem
+              }));
+
+              // Combinar: items de persistencia (enviados) + buffer (no enviados)
+              const persistenciaItems = c.itemsDetalle || [];
+              const allItems = [...persistenciaItems, ...bufferItems];
+
               return {
                 ...c,
                 total: Math.max(c.total, buf.total),
                 items: Math.max(c.items, buf.items_count),
+                itemsDetalle: allItems.length > 0 ? allItems : undefined,
                 estado: (buf.items_count > 0 && c.estado === 'pendiente' ? 'con_pedido' : c.estado) as EstadoCuenta
               };
             })
           }));
-          console.log('[Cuentas] Buffer totals merged for', bufData.length, 'cuentas');
+          console.log('[Cuentas] Buffer merged (items + totals) for', bufData.length, 'cuentas');
         }
       } catch (bufErr) {
         // No pasa nada si falla — persistencia sola es suficiente
@@ -454,7 +578,13 @@ export function initCuentasSubscriptions(projectId: string): () => void {
         ...s,
         cuentas: s.cuentas.map(c =>
           c.id === data.cuenta_id
-            ? { ...c, ...data.cambios, updated_at: data.updated_at || c.updated_at }
+            ? {
+                ...c,
+                ...data.cambios,
+                pagado: data.cambios?.pagado ?? c.pagado,
+                servido: data.cambios?.servido ?? c.servido,
+                updated_at: data.updated_at || c.updated_at
+              }
             : c
         )
       }));
@@ -489,7 +619,13 @@ export function initCuentasSubscriptions(projectId: string): () => void {
         ...s,
         cuentas: s.cuentas.map(c =>
           c.id === data.cuenta_id
-            ? { ...c, estado: nuevoEstado as EstadoCuenta, alerta: false, updated_at: data.changed_at || new Date().toISOString() }
+            ? {
+                ...c,
+                estado: nuevoEstado as EstadoCuenta,
+                alerta: false,
+                servido: nuevoEstado === 'entregado' || c.servido,
+                updated_at: data.changed_at || new Date().toISOString()
+              }
             : c
         )
       }));
@@ -540,6 +676,16 @@ export function initCuentasSubscriptions(projectId: string): () => void {
     })
   );
 
+  // cobro.procesado → recargar tras breve delay (belt-and-suspenders con cuenta.cerrada)
+  cleanups.push(
+    mqttSubscribe('cobro.procesado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      // Dar tiempo a que persistencia procese cuenta.cerrada
+      setTimeout(() => loadCuentasFromPersistencia(projectId), 2000);
+    })
+  );
+
   // comandero.item_agregado → actualizar card en vivo (antes de enviar cocina)
   cleanups.push(
     mqttSubscribe('comandero.item_agregado', (event: any) => {
@@ -547,11 +693,28 @@ export function initCuentasSubscriptions(projectId: string): () => void {
       if (!data?.cuenta_id) return;
       cuentasStore.update(s => ({
         ...s,
-        cuentas: s.cuentas.map(c =>
-          c.id === data.cuenta_id
-            ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: (data.pedido_items > 0 ? 'con_pedido' : c.estado) as EstadoCuenta }
-            : c
-        )
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id) return c;
+
+          // Añadir item a itemsDetalle para que la tarjeta muestre nombre
+          const newItem: ItemDetalle = {
+            item_id: data.item_id || '',
+            producto_id: data.producto_id || '',
+            nombre: data.nombre || '',
+            cantidad: data.cantidad || 1,
+            precio: data.precio_unitario || 0,
+            estado_cocina: 'en_cocina'
+          };
+          const currentItems = c.itemsDetalle || [];
+
+          return {
+            ...c,
+            total: data.pedido_total ?? c.total,
+            items: data.pedido_items ?? c.items,
+            itemsDetalle: [...currentItems, newItem],
+            estado: (data.pedido_items > 0 ? 'con_pedido' : c.estado) as EstadoCuenta
+          };
+        })
       }));
     })
   );
@@ -563,11 +726,94 @@ export function initCuentasSubscriptions(projectId: string): () => void {
       if (!data?.cuenta_id) return;
       cuentasStore.update(s => ({
         ...s,
-        cuentas: s.cuentas.map(c =>
-          c.id === data.cuenta_id
-            ? { ...c, total: data.pedido_total ?? c.total, items: data.pedido_items ?? c.items, estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta }
-            : c
-        )
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id) return c;
+
+          // Eliminar item de itemsDetalle
+          const updatedItems = (c.itemsDetalle || []).filter(i => i.item_id !== data.item_id);
+
+          return {
+            ...c,
+            total: data.pedido_total ?? c.total,
+            items: data.pedido_items ?? c.items,
+            itemsDetalle: updatedItems.length > 0 ? updatedItems : undefined,
+            estado: ((data.pedido_items ?? c.items) > 0 ? 'con_pedido' : 'pendiente') as EstadoCuenta
+          };
+        })
+      }));
+    })
+  );
+
+  // comandero.item_actualizado → cantidad cambiada (+/-), actualizar card
+  cleanups.push(
+    mqttSubscribe('comandero.item_actualizado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id) return c;
+
+          // Actualizar cantidad del item en itemsDetalle
+          const updatedItems = (c.itemsDetalle || []).map(i =>
+            i.item_id === data.item_id
+              ? { ...i, cantidad: data.cantidad_nueva }
+              : i
+          );
+
+          return {
+            ...c,
+            total: data.pedido_total ?? c.total,
+            items: data.pedido_items ?? c.items,
+            itemsDetalle: updatedItems.length > 0 ? updatedItems : undefined
+          };
+        })
+      }));
+    })
+  );
+
+  // cocina.item_preparando → cocinero empieza a preparar item, actualizar itemsDetalle
+  cleanups.push(
+    mqttSubscribe('cocina.item_preparando', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id || !data?.item_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id || !c.itemsDetalle) return c;
+          return {
+            ...c,
+            itemsDetalle: c.itemsDetalle.map(item =>
+              item.item_id === data.item_id
+                ? { ...item, estado_cocina: 'preparando' as EstadoCocinaItem }
+                : item
+            )
+          };
+        })
+      }));
+    })
+  );
+
+  // cocina.item_preparado → item individual listo en cocina, actualizar itemsDetalle
+  cleanups.push(
+    mqttSubscribe('cocina.item_preparado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id || !data?.item_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c => {
+          if (c.id !== data.cuenta_id || !c.itemsDetalle) return c;
+          return {
+            ...c,
+            itemsDetalle: c.itemsDetalle.map(item =>
+              item.item_id === data.item_id
+                ? { ...item, estado_cocina: 'listo' as EstadoCocinaItem, listo_at: data.preparado_at || new Date().toISOString() }
+                : item
+            )
+          };
+        })
       }));
     })
   );

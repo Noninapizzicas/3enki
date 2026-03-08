@@ -46,14 +46,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 1px;
     width: 100%;
-    padding: 10px 6px;
+    padding: 8px 4px;
     border: 2px solid var(--btn-color);
     border-radius: 8px;
     background: transparent;
     color: var(--btn-color);
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -88,5 +88,15 @@
 
   .label {
     line-height: 1;
+  }
+
+  @media (max-width: 600px) {
+    .accion-btn {
+      padding: 5px 2px;
+      border-radius: 5px;
+      border-width: 1.5px;
+      font-size: 0.5rem;
+    }
+    .icon { font-size: 0.8rem; }
   }
 </style>

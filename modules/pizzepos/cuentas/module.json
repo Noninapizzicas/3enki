@@ -1,6 +1,6 @@
 {
   "name": "cuentas",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Gestión de cuentas con ciclo de vida completo - 100% Event-Driven",
   "author": "Pizzepos Team",
 
@@ -60,6 +60,11 @@
         "handler": "onComanderoItemEliminado"
       },
       {
+        "event": "comandero.item_actualizado",
+        "description": "Item actualizado (cantidad +/-), ajustar items/total",
+        "handler": "onComanderoItemActualizado"
+      },
+      {
         "event": "comandero.enviar_cocina",
         "description": "Envío a cocina, transicionar a en_preparacion",
         "handler": "onComanderoEnviarCocina"
@@ -78,6 +83,16 @@
         "event": "cobro.procesado",
         "description": "Cobro procesado, transicionar a cobrado y auto-eliminar",
         "handler": "onCobroProcesado"
+      },
+      {
+        "event": "cuenta.creada",
+        "description": "Cuenta creada desde cualquier canal (cuentas-canales), registrar en Map si no existe",
+        "handler": "onCuentaExternaCreada"
+      },
+      {
+        "event": "cuenta.cerrada",
+        "description": "Cuenta cerrada desde canal externo, limpiar del Map y timers",
+        "handler": "onCuentaExternaCerrada"
       }
     ]
   },
@@ -118,6 +133,12 @@
       "path": "/cuentas/:id",
       "handler": "handleDeleteCuenta",
       "description": "Eliminar cuenta (publica evento cuenta.eliminada)"
+    },
+    {
+      "method": "POST",
+      "path": "/cuentas/:id/marcar_entregado",
+      "handler": "handleMarcarEntregado",
+      "description": "Marcar cuenta como entregada (listo → entregado)"
     },
     {
       "method": "GET",
@@ -254,6 +275,7 @@
         "cuenta.por_estado.con_pedido",
         "cuenta.por_estado.en_preparacion",
         "cuenta.por_estado.listo",
+        "cuenta.por_estado.entregado",
         "cuenta.por_estado.para_cobrar",
         "cuenta.por_estado.cobrado",
         "cuenta.alertas.count"

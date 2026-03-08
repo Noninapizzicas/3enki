@@ -45,6 +45,14 @@ class ModuleRegistry {
      * Map: hookName -> Set(moduleNames)
      */
     this.hookIndex = new Map();
+
+    /**
+     * Índice de códigos numéricos de ruta
+     * Map: routeCode -> moduleName
+     * Permite acceder a módulos via /{code}/{path} en vez de /modules/{name}/{path}
+     * Ej: /3333/status → /modules/certificate-authority/status
+     */
+    this.codeIndex = new Map();
   }
 
   /**
@@ -80,17 +88,37 @@ class ModuleRegistry {
 
     // Indexar APIs
     if (data.apis) {
+      // Detectar routeCode en manifest para rutas numéricas
+      const routeCode = data.manifest?.routeCode || data.manifest?.route_code;
+
       for (const api of data.apis) {
         const apiPath = `/modules/${moduleName}${api.path}`;
         // Use method + path as key to allow multiple HTTP methods on same path
         const apiKey = `${api.method}:${apiPath}`;
-        this.apiIndex.set(apiKey, {
+        const apiEntry = {
           moduleName,
           apiName: api.name,
           method: api.method,
           path: apiPath,
           handler: api.handler
-        });
+        };
+        this.apiIndex.set(apiKey, apiEntry);
+
+        // Si el módulo tiene routeCode, registrar también bajo /{code}/{path}
+        if (routeCode) {
+          const codePath = `/${routeCode}${api.path}`;
+          const codeKey = `${api.method}:${codePath}`;
+          this.apiIndex.set(codeKey, {
+            ...apiEntry,
+            path: codePath,
+            _originalPath: apiPath
+          });
+        }
+      }
+
+      // Registrar en codeIndex para resolución inversa
+      if (routeCode) {
+        this.codeIndex.set(String(routeCode), moduleName);
       }
     }
 
@@ -124,10 +152,17 @@ class ModuleRegistry {
       return;
     }
 
-    // Remover APIs del índice
+    // Remover APIs del índice (incluyendo rutas por código)
+    const routeCode = moduleData.manifest?.routeCode || moduleData.manifest?.route_code;
     for (const api of moduleData.apis) {
       const apiPath = `/modules/${moduleName}${api.path}`;
-      this.apiIndex.delete(apiPath);
+      this.apiIndex.delete(`${api.method}:${apiPath}`);
+      if (routeCode) {
+        this.apiIndex.delete(`${api.method}:/${routeCode}${api.path}`);
+      }
+    }
+    if (routeCode) {
+      this.codeIndex.delete(String(routeCode));
     }
 
     // Remover hooks del índice
@@ -299,8 +334,26 @@ class ModuleRegistry {
     return {
       total_modules: this.modules.size,
       total_apis: this.apiIndex.size,
-      total_hooks: this.hookIndex.size
+      total_hooks: this.hookIndex.size,
+      total_route_codes: this.codeIndex.size
     };
+  }
+
+  /**
+   * Obtiene el mapa de códigos de ruta numéricos
+   * @returns {Object} { code: moduleName }
+   */
+  getRouteCodes() {
+    return Object.fromEntries(this.codeIndex.entries());
+  }
+
+  /**
+   * Resuelve un código de ruta a nombre de módulo
+   * @param {string} code
+   * @returns {string|null}
+   */
+  resolveCode(code) {
+    return this.codeIndex.get(String(code)) || null;
   }
 }
 

@@ -80,7 +80,9 @@
       "pdf-viewer",
       "pizzepos",
       "telegram-service",
-      "text-editor"
+      "text-editor",
+      "asesoria",
+      "fuentes"
     ],
     "disabled": [
       "conversation-manager",

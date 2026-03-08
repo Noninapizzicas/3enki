@@ -1,11 +1,11 @@
 {
   "name": "persistencia-comandero",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Persistencia diaria del comandero - Eventos, cuentas y cierre de caja",
   "author": "Pizzepos Team",
 
   "provides": {
-    "events": ["caja.cerrada", "dia.iniciado"],
+    "events": ["caja.cerrada", "cuenta.cerrada_forzada", "dia.iniciado"],
     "queries": ["persistencia.eventos", "persistencia.ventas", "persistencia.cuadre_caja"]
   },
 
@@ -21,6 +21,18 @@
             "arqueo": { "type": "object" },
             "totales": { "type": "object" },
             "diferencia": { "type": "number" }
+          }
+        }
+      },
+      {
+        "event": "cuenta.cerrada_forzada",
+        "description": "Cuenta cerrada automáticamente durante cierre de caja",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "cuenta_id": { "type": "string" },
+            "motivo": { "type": "string" },
+            "cuenta_snapshot": { "type": "object" }
           }
         }
       },
@@ -56,6 +68,21 @@
         "event": "cuenta.cerrada",
         "description": "Guardar evento y crear venta",
         "handler": "onCuentaCerrada"
+      },
+      {
+        "event": "cuenta.eliminada",
+        "description": "Eliminar cuenta de cache cuando se elimina (safety net tras cobro)",
+        "handler": "onCuentaEliminada"
+      },
+      {
+        "event": "cuenta.estado_cambiado",
+        "description": "Actualizar estado real de cuenta activa en cache y disco",
+        "handler": "onCuentaEstadoCambiado"
+      },
+      {
+        "event": "cuenta.actualizada",
+        "description": "Actualizar campos de cuenta activa (pagado, servido, etc)",
+        "handler": "onCuentaActualizada"
       },
       {
         "event": "cobro.iniciado",

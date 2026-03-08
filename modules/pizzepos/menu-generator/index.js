@@ -85,7 +85,6 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
 
 {
   "nombre_carta": "Nombre del restaurante o carta detectado",
-  "precio_extra_default": 1.50,
   "categorias": [
     { "id": "categoria_slug", "nombre": "Nombre Original", "orden": 1 }
   ],
@@ -96,8 +95,8 @@ Tu trabajo es extraer y estructurar TODOS los productos en este formato JSON exa
       "categoria": "categoria_slug",
       "precio": 11.50,
       "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura", "precio_extra": 1.00 },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso", "precio_extra": 1.50 }
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura", "precio_extra": 0 },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso", "precio_extra": 0 }
       ]
     }
   ]
@@ -113,12 +112,11 @@ REGLAS OBLIGATORIAS:
    - "nombre": nombre del ingrediente tal cual
    - "emoji": el emoji más representativo
    - "tipo": clasificación obligatoria, uno de: "queso", "carne", "verdura", "salsa", "masa", "marisco", "otro"
-   - "precio_extra": precio en euros si se añade como extra a otro producto (número, ej: 1.50). Estima según tipo: carnes/mariscos ~2.00, quesos ~1.50, verduras ~1.00, salsas ~0.75
-7. "precio_extra_default": precio extra genérico para la carta (número, ej: 1.50). Se usa como fallback
-8. Mantén los nombres originales de productos tal cual aparecen
-9. Agrupa productos en categorías tal como aparecen en la carta
-10. Si no hay categorías claras, crea una categoría "general"
-11. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
+   - "precio_extra": SIEMPRE 0. Los precios de extras los configura el jefe manualmente después
+7. Mantén los nombres originales de productos tal cual aparecen
+8. Agrupa productos en categorías tal como aparecen en la carta
+9. Si no hay categorías claras, crea una categoría "general"
+10. Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin bloques de código`;
 
 class MenuGeneratorModule {
   constructor() {
@@ -244,8 +242,63 @@ class MenuGeneratorModule {
   }
 
   /**
+   * Save base64 media file to media/{subfolder}/ in the project storage.
+   * Used for product images, category images, branding, etc.
+   * Keeps media separate from the OCR pipeline (preprocesadas/).
+   * Returns { absolutePath, relativePath }.
+   */
+  async saveMediaFile(base64Data, prefix, projectId, subfolder = 'productos', ext = '.jpg') {
+    const paths = this.getPaths(projectId);
+    if (!paths) {
+      throw new Error(`No paths for project ${projectId} — cannot save media file`);
+    }
+
+    const dir = path.join(paths.featurePath, 'media', subfolder);
+    await fs.mkdir(dir, { recursive: true });
+
+    let buffer = Buffer.from(base64Data, 'base64');
+
+    // Auto-process product/category images: square crop + resize + compress
+    if (subfolder === 'productos' || subfolder === 'categorias') {
+      buffer = await this.processImageSquare(buffer);
+      ext = '.jpg'; // always output as JPEG after processing
+    }
+
+    const filename = `${prefix}_${Date.now().toString(36)}${ext}`;
+    const absolutePath = path.join(dir, filename);
+    await fs.writeFile(absolutePath, buffer);
+
+    const relativePath = '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
+    return { absolutePath, relativePath };
+  }
+
+  /**
+   * Process image for carta display: center-crop to square, resize to 600x600, JPEG q85.
+   * Falls back to original buffer if sharp fails (e.g. unsupported format).
+   */
+  async processImageSquare(buffer, size = 600, quality = 85) {
+    try {
+      const sharp = require('sharp');
+      const processed = await sharp(buffer)
+        .resize(size, size, {
+          fit: 'cover',       // crop to fill the square
+          position: 'centre'  // center the crop
+        })
+        .jpeg({ quality, mozjpeg: true })
+        .toBuffer();
+      return processed;
+    } catch (err) {
+      // If sharp fails, return original buffer unchanged
+      if (this.logger) {
+        this.logger.warn('menu.image.process_failed', { error: err.message });
+      }
+      return buffer;
+    }
+  }
+
+  /**
    * Save base64 image to the project's preprocesadas/ directory.
-   * Follows facturas pipeline convention (contexto/facturas.json → estructura_storage).
+   * Used exclusively for the OCR pipeline (PDF→Image→Prepare→OCR).
    * Returns { absolutePath, relativePath } where relativePath is for the frontend FilePicker.
    */
   async savePipelineFile(base64Data, prefix, projectId, ext = '.png') {
@@ -349,6 +402,30 @@ class MenuGeneratorModule {
       generadas: totalCartas,
       proyectos: this.cartasPerProject.size
     };
+  }
+
+  async handleEnrichProducts(data) {
+    const result = await this.toolEnrichProducts(data);
+    if (result.error) {
+      throw { status: result.status || 400, code: 'ENRICH_ERROR', message: result.error };
+    }
+    return result.data;
+  }
+
+  async handleSetProductImage(data) {
+    const result = await this.toolSetProductImage(data);
+    if (result.error) {
+      throw { status: result.status || 400, code: 'IMAGE_ERROR', message: result.error };
+    }
+    return result.data;
+  }
+
+  async handleSetCategoryImage(data) {
+    const result = await this.toolSetCategoryImage(data);
+    if (result.error) {
+      throw { status: result.status || 400, code: 'IMAGE_ERROR', message: result.error };
+    }
+    return result.data;
   }
 
   // ==========================================
@@ -700,6 +777,88 @@ class MenuGeneratorModule {
     return { status: 200, data: prod };
   }
 
+  async toolUpdateIngredientPrices({ carta_id, project_id, precios, porcentaje, tipo, precio_extra }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    if (!precios && porcentaje === undefined && precio_extra === undefined) {
+      return { status: 400, error: 'Se requiere "precios" (objeto {nombre: precio}), "precio_extra" (número fijo) o "porcentaje" (número)' };
+    }
+
+    const cambios = [];
+    const preciosNorm = {};
+    if (precios && typeof precios === 'object') {
+      for (const [nombre, precio] of Object.entries(precios)) {
+        preciosNorm[nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')] = Number(precio);
+      }
+    }
+
+    for (const prod of carta.productos) {
+      for (const ing of (prod.ingredientes || [])) {
+        const ingNorm = ing.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const anterior = ing.precio_extra ?? 0;
+
+        if (preciosNorm[ingNorm] !== undefined) {
+          // Precio individual por nombre
+          ing.precio_extra = preciosNorm[ingNorm];
+          if (ing.precio_extra !== anterior) {
+            cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: ing.precio_extra });
+          }
+        } else if (typeof precio_extra === 'number') {
+          // Precio fijo para todos o filtrado por tipo
+          if (tipo && ing.tipo !== tipo) continue;
+          ing.precio_extra = precio_extra;
+          if (precio_extra !== anterior) {
+            cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: precio_extra });
+          }
+        } else if (typeof porcentaje === 'number') {
+          // Porcentaje sobre precio actual
+          if (tipo && ing.tipo !== tipo) continue;
+          const nuevoP = Math.round(anterior * (1 + porcentaje / 100) * 100) / 100;
+          ing.precio_extra = nuevoP;
+          if (nuevoP !== anterior) {
+            cambios.push({ ingrediente: ing.nombre, producto: prod.nombre, anterior, nuevo: nuevoP });
+          }
+        }
+      }
+    }
+
+    if (cambios.length === 0) {
+      return { status: 200, data: { carta_id, cambios: [], message: 'No se encontraron ingredientes que modificar' } };
+    }
+
+    await this.saveCartaToDisk(carta, project_id);
+    this.metrics?.increment('menu.ingredient_prices.updated');
+
+    // Publicar cambios individuales para que ingredientes y productos actualicen en tiempo real
+    const ingredientesActualizados = new Map();
+    for (const c of cambios) {
+      const id = `ing_${this.slugify(c.ingrediente)}`;
+      if (!ingredientesActualizados.has(id)) {
+        ingredientesActualizados.set(id, { nombre: c.ingrediente, precio_extra: c.nuevo, anterior: c.anterior });
+      }
+    }
+
+    for (const [id, data] of ingredientesActualizados) {
+      await this.eventBus.publish('ingrediente.actualizado', {
+        ingrediente_id: id,
+        cambios: { precio_extra: { anterior: data.anterior, nuevo: data.precio_extra } },
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        ingredientes_actualizados: ingredientesActualizados.size,
+        cambios_en_productos: cambios.length,
+        cambios
+      }
+    };
+  }
+
   async toolSearchProducts({ carta_id, project_id, query }) {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     const carta = this.getCartas(project_id).get(carta_id);
@@ -765,7 +924,7 @@ class MenuGeneratorModule {
     if (!pendingData) return;
 
     this.pendingAI.delete(correlationId);
-    const { id: cartaId, nombre, project_id } = pendingData;
+    const { id: cartaId, nombre, project_id, _enrichment } = pendingData;
 
     if (!eventData.success && eventData.error) {
       this.logger.error('menu.generate.ai_error', { carta_id: cartaId, project_id, error: eventData.error });
@@ -781,6 +940,35 @@ class MenuGeneratorModule {
 
     try {
       const content = eventData.content || eventData.text || '';
+
+      // Enrichment response — apply to existing carta
+      if (_enrichment) {
+        const carta = this.getCartas(project_id).get(cartaId);
+        if (!carta) {
+          this.logger.warn('menu.enrich.carta_not_found', { carta_id: cartaId, project_id });
+          return;
+        }
+
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('La IA no devolvió un JSON válido para enrichment');
+
+        const enrichmentData = JSON.parse(jsonMatch[0]);
+        const enriched = this.applyEnrichment(carta, enrichmentData, project_id);
+
+        await this.saveCartaToDisk(carta, project_id);
+        this.metrics?.increment('menu.enrich.completed');
+
+        await this.eventBus.publish('carta.generada', carta, { correlationId });
+
+        this.logger.info('menu.enrich.completed', {
+          carta_id: cartaId,
+          project_id,
+          productos_enriched: enriched
+        });
+        return;
+      }
+
+      // Standard generation response
       const carta = this.parseAndStructure(cartaId, nombre, content);
 
       this.getCartas(project_id).set(cartaId, carta);
@@ -838,7 +1026,7 @@ class MenuGeneratorModule {
         id: cartaId,
         nombre: raw.nombre_carta || nombre,
         generado_desde: 'texto',
-        precio_extra_default: typeof raw.precio_extra_default === 'number' ? raw.precio_extra_default : 1.50,
+        // precio_extra siempre 0 por defecto — el jefe configura precios via chat
         created_at: new Date().toISOString()
       },
       categorias,
@@ -882,11 +1070,11 @@ class MenuGeneratorModule {
    * productos, categorias, and ingredientes modules.
    */
   transformCartaToPOS(carta, projectId) {
-    const precioDefault = carta.meta?.precio_extra_default ?? 1.50;
-
     // Build deduplicated ingredientes_catalogo from all products
+    // Cada ingrediente acumula grupos[] = categorías de producto donde aparece
     const ingredientesMap = new Map();
     for (const prod of carta.productos) {
+      const grupo = prod.categoria || 'otro';
       for (const ing of (prod.ingredientes || [])) {
         const id = `ing_${this.slugify(ing.nombre)}`;
         if (!ingredientesMap.has(id)) {
@@ -897,25 +1085,41 @@ class MenuGeneratorModule {
             emoji: ing.emoji || '',
             tipo,
             es_alergeno: false,
-            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, precioDefault)
+            precio_extra: ing.precio_extra ?? 0,
+            grupos: [grupo]
           });
+        } else {
+          // Ingrediente ya existe — añadir grupo si no está
+          const existing = ingredientesMap.get(id);
+          if (!existing.grupos.includes(grupo)) {
+            existing.grupos.push(grupo);
+          }
         }
       }
     }
 
     // Transform productos: ingredientes → ingredientes_base with IDs
-    const productos = carta.productos.map(p => ({
-      id: p.id,
-      nombre: p.nombre,
-      categoria: p.categoria,
-      precio: p.precio,
-      ingredientes_base: (p.ingredientes || []).map(ing => ({
-        id: `ing_${this.slugify(ing.nombre)}`,
-        nombre: ing.nombre,
-        emoji: ing.emoji || ''
-      })),
-      activo: true
-    }));
+    const productos = carta.productos.map(p => {
+      const grupo = p.categoria || 'otro';
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        categoria: p.categoria,
+        precio: p.precio,
+        ingredientes_base: (p.ingredientes || []).map(ing => {
+          const id = `ing_${this.slugify(ing.nombre)}`;
+          const catalogEntry = ingredientesMap.get(id);
+          return {
+            id,
+            nombre: ing.nombre,
+            emoji: ing.emoji || '',
+            precio_extra: catalogEntry?.precio_extra ?? ing.precio_extra ?? 0,
+            grupo
+          };
+        }),
+        activo: true
+      };
+    });
 
     return {
       menu_id: carta.meta.id,
@@ -1021,22 +1225,229 @@ class MenuGeneratorModule {
     return 'otro';
   }
 
+  // ==========================================
+  // Content Enrichment — tools para carta digital
+  // ==========================================
+
   /**
-   * Devuelve un precio extra estimado según el tipo de ingrediente.
-   * Usado como fallback cuando ni la IA ni la carta especifican precio.
+   * Enriquece productos de una carta con descripciones, emojis e ingredientes
+   * clasificados via AI. Guarda los datos enriquecidos directamente en la carta JSON.
    */
-  precioExtraPorTipo(tipo, precioDefault) {
-    const precios = {
-      carne: 2.00,
-      marisco: 2.50,
-      queso: 1.50,
-      verdura: 1.00,
-      salsa: 0.75,
-      masa: 0.50,
-      otro: precioDefault
+  async toolEnrichProducts({ carta_id, project_id, producto_ids, idioma }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const lang = idioma || 'es';
+    const targets = producto_ids
+      ? carta.productos.filter(p => producto_ids.includes(p.id))
+      : carta.productos;
+
+    if (targets.length === 0) {
+      return { status: 400, error: 'No hay productos para enriquecer' };
+    }
+
+    const requestId = crypto.randomUUID();
+
+    // Build AI prompt
+    const productosTexto = targets.map(p => {
+      const ings = (p.ingredientes || []).map(i => i.nombre).join(', ');
+      return `- ${p.id}: "${p.nombre}" (${p.precio}€) — Ingredientes: ${ings || 'N/A'}`;
+    }).join('\n');
+
+    const prompt = `Eres un copywriter gastronómico experto para cartas digitales de restaurantes.
+
+Para cada producto de la siguiente lista, genera:
+1. "descripcion": Una descripción atractiva y breve (máximo 2 frases, ~30 palabras). Destaca los sabores y la experiencia. No repitas el nombre del producto.
+2. "emoji": Un único emoji que mejor represente el producto (basándote en su ingrediente principal o personalidad).
+3. "tags": Array de 1-3 tags relevantes del producto. Opciones válidas: "picante", "vegetariano", "vegano", "sin_gluten", "popular", "nuevo", "especial", "clasico", "premium".
+4. "ingredientes_enriquecidos": Array con cada ingrediente del producto enriquecido:
+   - "nombre": nombre original
+   - "emoji": emoji representativo del ingrediente
+   - "tipo": uno de "queso", "carne", "verdura", "salsa", "masa", "marisco", "otro"
+
+PRODUCTOS:
+${productosTexto}
+
+Idioma de las descripciones: ${lang === 'es' ? 'español' : lang}
+
+Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
+{
+  "productos": [
+    {
+      "id": "producto_id",
+      "descripcion": "Descripción atractiva...",
+      "emoji": "🍕",
+      "tags": ["clasico"],
+      "ingredientes_enriquecidos": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" }
+      ]
+    }
+  ]
+}`;
+
+    this.pendingAI.set(requestId, {
+      id: carta_id,
+      project_id,
+      _enrichment: true,
+      targets: targets.map(t => t.id),
+      created_at: new Date().toISOString()
+    });
+
+    await this.eventBus.publish('ai.chat.request', {
+      request_id: requestId,
+      messages: [
+        { role: 'system', content: prompt }
+      ],
+      provider: 'auto',
+      temperature: 0.7,
+      max_tokens: 4000,
+      stream: false,
+      tools: false
+    }, { correlationId: requestId });
+
+    this.metrics?.increment('menu.enrich.requested');
+    this.logger.info('menu.enrich.requested', {
+      carta_id, project_id,
+      productos: targets.length
+    });
+
+    return {
+      status: 202,
+      data: {
+        carta_id,
+        productos_en_proceso: targets.length,
+        estado: 'enriqueciendo',
+        message: `Enriqueciendo ${targets.length} productos. Usa menu.get_carta para ver el resultado cuando termine.`
+      }
     };
-    return precios[tipo] ?? precioDefault;
   }
+
+  /**
+   * Apply AI enrichment results to carta products.
+   * Called from onAIChatResponse when the pending entry has _enrichment flag.
+   */
+  applyEnrichment(carta, enrichmentData, projectId) {
+    const productoMap = new Map(carta.productos.map(p => [p.id, p]));
+    let enriched = 0;
+
+    for (const item of (enrichmentData.productos || [])) {
+      const prod = productoMap.get(item.id);
+      if (!prod) continue;
+
+      if (item.descripcion) prod.descripcion = item.descripcion;
+      if (item.emoji) prod.emoji = item.emoji;
+      if (item.tags) prod.tags = item.tags;
+
+      // Merge enriched ingredient data back
+      if (item.ingredientes_enriquecidos && Array.isArray(item.ingredientes_enriquecidos)) {
+        const enrichedIngs = new Map(item.ingredientes_enriquecidos.map(i => [
+          i.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+          i
+        ]));
+
+        for (const ing of (prod.ingredientes || [])) {
+          const key = ing.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const enrichedIng = enrichedIngs.get(key);
+          if (enrichedIng) {
+            if (enrichedIng.emoji) ing.emoji = enrichedIng.emoji;
+            if (enrichedIng.tipo) ing.tipo = enrichedIng.tipo;
+          }
+        }
+      }
+
+      enriched++;
+    }
+
+    // Mark carta as enriched
+    if (!carta.meta.enrichment) carta.meta.enrichment = {};
+    carta.meta.enrichment.last_enriched_at = new Date().toISOString();
+    carta.meta.enrichment.productos_enriched = enriched;
+
+    return enriched;
+  }
+
+  /**
+   * Asocia una imagen a un producto de la carta.
+   * La imagen puede ser una ruta relativa al storage del proyecto,
+   * una ruta absoluta local, o una URL externa.
+   */
+  async toolSetProductImage({ carta_id, project_id, producto_id, imagen, imagen_base64 }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!producto_id) return { status: 400, error: 'Se requiere producto_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const prod = carta.productos.find(p => p.id === producto_id);
+    if (!prod) return { status: 404, error: `Producto "${producto_id}" no encontrado` };
+
+    // If base64 image provided, save it to disk
+    if (imagen_base64) {
+      try {
+        const { relativePath } = await this.saveMediaFile(
+          imagen_base64, `prod_${this.slugify(prod.nombre)}`, project_id, 'productos', '.jpg'
+        );
+        prod.imagen = relativePath;
+      } catch (err) {
+        return { status: 500, error: `Error guardando imagen: ${err.message}` };
+      }
+    } else if (imagen) {
+      prod.imagen = imagen;
+    } else {
+      return { status: 400, error: 'Se requiere "imagen" (ruta) o "imagen_base64" (base64)' };
+    }
+
+    await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', carta);
+
+    this.logger.info('menu.product_image.set', {
+      carta_id, project_id, producto_id,
+      imagen: prod.imagen
+    });
+
+    return {
+      status: 200,
+      data: {
+        producto_id,
+        imagen: prod.imagen,
+        message: `Imagen asignada a "${prod.nombre}"`
+      }
+    };
+  }
+
+  /**
+   * Asocia una imagen a una categoría de la carta.
+   */
+  async toolSetCategoryImage({ carta_id, project_id, categoria_id, imagen, imagen_base64, icon }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const cat = carta.categorias.find(c => c.id === categoria_id);
+    if (!cat) return { status: 404, error: `Categoría "${categoria_id}" no encontrada` };
+
+    if (imagen_base64) {
+      try {
+        const { relativePath } = await this.saveMediaFile(
+          imagen_base64, `cat_${this.slugify(cat.nombre)}`, project_id, 'categorias', '.jpg'
+        );
+        cat.imagen = relativePath;
+      } catch (err) {
+        return { status: 500, error: `Error guardando imagen: ${err.message}` };
+      }
+    } else if (imagen) {
+      cat.imagen = imagen;
+    }
+    if (icon) cat.icon = icon;
+
+    await this.saveCartaToDisk(carta, project_id);
+
+    return {
+      status: 200,
+      data: { categoria_id, imagen: cat.imagen, icon: cat.icon }
+    };
+  }
+
 }
 
 module.exports = MenuGeneratorModule;

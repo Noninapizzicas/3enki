@@ -33,7 +33,7 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "GROQ", "GEMINI", "OLLAMA", "GOOGLE", "GMAIL"],
+            "enum": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "GROQ", "GEMINI", "OLLAMA", "GOOGLE", "GMAIL", "GLOVO", "CLOUDFLARE"],
             "description": "Filtrar por proveedor (opcional)"
           }
         },
@@ -124,7 +124,9 @@
     { "domain": "credential", "action": "oauth.status", "handler": "handleUIOAuthStatus" },
     { "domain": "credential", "action": "oauth.config.list", "handler": "handleUIOAuthConfigList" },
     { "domain": "credential", "action": "oauth.config.save", "handler": "handleUIOAuthConfigSave" },
-    { "domain": "credential", "action": "oauth.config.delete", "handler": "handleUIOAuthConfigDelete" }
+    { "domain": "credential", "action": "oauth.config.delete", "handler": "handleUIOAuthConfigDelete" },
+    { "domain": "credential", "action": "glovo.save", "handler": "handleUIGlovoSave" },
+    { "domain": "credential", "action": "glovo.delete", "handler": "handleUIGlovoDelete" }
   ],
 
   "ui": {
@@ -202,7 +204,8 @@
                     "DEEPSEEK": "info",
                     "ANTHROPIC": "success",
                     "OLLAMA": "warning",
-                    "GMAIL": "danger"
+                    "GMAIL": "danger",
+                    "CLOUDFLARE": "info"
                   }
                 },
                 {
@@ -297,6 +300,11 @@
                     "label": "Gmail",
                     "value": "OAuth2 (3 keys)",
                     "icon": "📧"
+                  },
+                  {
+                    "label": "Cloudflare",
+                    "value": "Workers, Pages",
+                    "icon": "☁️"
                   }
                 ]
               }
@@ -325,7 +333,8 @@
                 { "value": "ANTHROPIC", "label": "🧠 Anthropic" },
                 { "value": "OLLAMA", "label": "🦙 Ollama" },
                 { "value": "GOOGLE", "label": "☁️ Google Cloud" },
-                { "value": "GMAIL", "label": "📧 Gmail (OAuth2)" }
+                { "value": "GMAIL", "label": "📧 Gmail (OAuth2)" },
+                { "value": "CLOUDFLARE", "label": "☁️ Cloudflare" }
               ]
             },
             {
@@ -456,7 +465,7 @@
     "provider": {
       "type": "enum",
       "label": "Provider",
-      "enum": ["OPENAI", "ANTHROPIC", "DEEPSEEK", "GROQ", "GEMINI", "OLLAMA", "GMAIL", "CUSTOM"],
+      "enum": ["OPENAI", "ANTHROPIC", "DEEPSEEK", "GROQ", "GEMINI", "OLLAMA", "GMAIL", "CLOUDFLARE", "CUSTOM"],
       "required": true
     },
     "level": {

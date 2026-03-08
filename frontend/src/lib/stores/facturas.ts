@@ -382,11 +382,11 @@ export function initFacturasSubscriptions(): () => void {
 
   // Escuchar factura recibida
   cleanupFns.push(
-    mqttSubscribe('factura/recibida', (_topic, payload) => {
-      const data = payload as { projectId: string; id: number };
+    mqttSubscribe('factura.recibida', (event: any) => {
+      const data = event?.data || event?.payload || event;
       const project = get(activeProject);
 
-      if (data.projectId === project?.id) {
+      if (data?.projectId === project?.id) {
         console.log('[Facturas] Nueva factura recibida:', data.id);
         loadFacturas(); // Recargar lista
       }
@@ -395,18 +395,18 @@ export function initFacturasSubscriptions(): () => void {
 
   // Escuchar factura procesada
   cleanupFns.push(
-    mqttSubscribe('factura/procesada', (_topic, payload) => {
-      const data = payload as { projectId: string; id: number; datos: Partial<Factura> };
+    mqttSubscribe('factura.procesada', (event: any) => {
+      const data = event?.data || event?.payload || event;
       const project = get(activeProject);
 
-      if (data.projectId === project?.id) {
+      if (data?.projectId === project?.id) {
         console.log('[Facturas] Factura procesada:', data.id);
 
         // Actualizar en store local
         facturasStore.update(s => ({
           ...s,
           facturas: s.facturas.map(f =>
-            f.id === data.id ? { ...f, ...data.datos, estado: 'procesada' } : f
+            f.id === data.id ? { ...f, ...data.datos, estado: 'procesada' as FacturaEstado } : f
           )
         }));
 
@@ -417,17 +417,17 @@ export function initFacturasSubscriptions(): () => void {
 
   // Escuchar errores de procesamiento
   cleanupFns.push(
-    mqttSubscribe('factura/error', (_topic, payload) => {
-      const data = payload as { projectId: string; id: number; error: string };
+    mqttSubscribe('factura.error', (event: any) => {
+      const data = event?.data || event?.payload || event;
       const project = get(activeProject);
 
-      if (data.projectId === project?.id) {
+      if (data?.projectId === project?.id) {
         console.log('[Facturas] Error en factura:', data.id, data.error);
 
         facturasStore.update(s => ({
           ...s,
           facturas: s.facturas.map(f =>
-            f.id === data.id ? { ...f, estado: 'error', error_mensaje: data.error } : f
+            f.id === data.id ? { ...f, estado: 'error' as FacturaEstado, error_mensaje: data.error } : f
           )
         }));
 
@@ -438,11 +438,11 @@ export function initFacturasSubscriptions(): () => void {
 
   // Escuchar exportación completada
   cleanupFns.push(
-    mqttSubscribe('factura/exportada', (_topic, payload) => {
-      const data = payload as { projectId: string; total: number; archivo: string };
+    mqttSubscribe('factura.exportada', (event: any) => {
+      const data = event?.data || event?.payload || event;
       const project = get(activeProject);
 
-      if (data.projectId === project?.id) {
+      if (data?.projectId === project?.id) {
         console.log('[Facturas] Exportación completada:', data.total, 'facturas');
         loadFacturas();
       }

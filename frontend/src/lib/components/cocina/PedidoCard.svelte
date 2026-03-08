@@ -499,4 +499,31 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
+
+  /* ===== MOBILE COMPACT ===== */
+  @media (max-width: 600px) {
+    .pedido-card { border-radius: 8px; border-width: 1.5px; }
+    .card-header { padding: 6px 10px; min-height: 36px; }
+    .ref { font-size: 1.1rem; letter-spacing: 0.5px; }
+    .canal { font-size: 0.6rem; }
+    .progress-text { font-size: 0.75rem; }
+    .timer { font-size: 0.85rem; }
+    .header-right { gap: 8px; }
+    .progress-bar { height: 2px; }
+    .card-notas { padding: 6px 10px; gap: 6px; }
+    .notas-label { font-size: 0.6rem; }
+    .notas-text { font-size: 0.85rem; }
+    .glovo-badge { font-size: 0.55rem; padding: 1px 5px; }
+    .glovo-info { padding: 6px 10px; gap: 8px; }
+    .glovo-label { font-size: 0.5rem; }
+    .glovo-value { font-size: 0.85rem; }
+    .glovo-items-preview { padding: 6px 10px; }
+    .glovo-item-line { font-size: 0.8rem; }
+    .glovo-item-qty { min-width: 2em; }
+    .glovo-item-ings { font-size: 0.7rem; }
+    .glovo-item-nota { font-size: 0.7rem; }
+    .glovo-actions { padding: 8px 10px; gap: 6px; }
+    .glovo-btn { padding: 10px 12px; font-size: 0.9rem; border-radius: 6px; }
+    .glovo-btn-reject { font-size: 0.75rem; }
+  }
 </style>

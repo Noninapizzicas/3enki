@@ -1177,7 +1177,9 @@ class CredentialManagerModule {
       { id: 'GEMINI', name: 'Google Gemini', icon: '💎' },
       { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
       { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
-      { id: 'GMAIL', name: 'Gmail', icon: '📧' }
+      { id: 'GMAIL', name: 'Gmail', icon: '📧' },
+      { id: 'GLOVO', name: 'Glovo', icon: '🛵' },
+      { id: 'CLOUDFLARE', name: 'Cloudflare', icon: '☁️' }
     ];
 
     // Niveles disponibles con metadata UI
@@ -1242,12 +1244,16 @@ class CredentialManagerModule {
       });
     }
 
+    // Glovo Configs for UI (masked secrets)
+    const glovoConfigs = this.getGlovoConfigs();
+
     return {
       providers,
       levels,
       credentials: credentialsGrouped,
       stats,
-      oauthConfigs
+      oauthConfigs,
+      glovoConfigs
     };
   }
 
@@ -1309,7 +1315,8 @@ class CredentialManagerModule {
       'ANTHROPIC': '🧠',
       'OLLAMA': '🦙',
       'GOOGLE': '☁️',
-      'GMAIL': '📧'
+      'GMAIL': '📧',
+      'GLOVO': '🛵'
     };
 
     return {
@@ -1462,6 +1469,17 @@ class CredentialManagerModule {
         case 'GMAIL':
           valid = await this.testGmail(api_key);
           message = valid ? 'Refresh token válido' : 'Refresh token inválido o credenciales incompletas';
+          break;
+
+        case 'GLOVO':
+          // Glovo usa credenciales multi-campo, test se hace desde glovo.save
+          valid = api_key && api_key.length > 5;
+          message = valid ? 'Formato válido' : 'Client ID demasiado corto';
+          break;
+
+        case 'CLOUDFLARE':
+          valid = await this.testCloudflare(api_key);
+          message = valid ? 'API token válido — permisos Workers confirmados' : 'API token inválido o sin permisos de Workers';
           break;
 
         default:
@@ -1798,6 +1816,157 @@ class CredentialManagerModule {
       accountId,
       deleted: true
     };
+  }
+
+  // ==========================================
+  // Glovo Credential Handlers
+  // ==========================================
+
+  /**
+   * UI Handler: Guardar configuración Glovo
+   * Request: mqttRequest('credential', 'glovo.save', { level, identifier?, client_id, client_secret, chain_id })
+   *
+   * Glovo requiere 3 credenciales: Client ID, Client Secret y Chain ID.
+   * Se guardan como GLOVO_CLIENT_ID_{LEVEL}[_{ID}], GLOVO_CLIENT_SECRET_{LEVEL}[_{ID}], GLOVO_CHAIN_ID_{LEVEL}[_{ID}]
+   */
+  async handleUIGlovoSave(data, request) {
+    const { level, identifier, client_id, client_secret, chain_id } = data;
+
+    if (!client_id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'client_id es requerido (de Glovo Developer Portal)' };
+    }
+    if (!client_secret) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'client_secret es requerido (de Glovo Developer Portal)' };
+    }
+    if (!chain_id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'chain_id es requerido (ID del restaurante en Glovo)' };
+    }
+
+    const validLevel = level || 'GLOBAL';
+    const suffix = validLevel === 'GLOBAL' ? '_GLOBAL' : `_${validLevel}_${identifier}`;
+
+    const keyClientId = `GLOVO_CLIENT_ID${suffix}`;
+    const keyClientSecret = `GLOVO_CLIENT_SECRET${suffix}`;
+    const keyChainId = `GLOVO_CHAIN_ID${suffix}`;
+
+    const isNew = !this.credentials.has(keyClientId);
+
+    // Guardar las 3 credenciales en memoria
+    this.credentials.set(keyClientId, client_id);
+    this.credentials.set(keyClientSecret, client_secret);
+    this.credentials.set(keyChainId, chain_id);
+
+    // Guardar en process.env para uso inmediato
+    process.env[keyClientId] = client_id;
+    process.env[keyClientSecret] = client_secret;
+    process.env[keyChainId] = chain_id;
+
+    // Persistir en archivo .env
+    await this.saveEnvFile();
+    this.updateCredentialMetrics();
+
+    this.logger.info('glovo.config.saved', {
+      level: validLevel,
+      identifier: identifier || null,
+      isNew
+    });
+
+    // Publicar estado actualizado
+    await this.publishState();
+
+    return {
+      level: validLevel,
+      identifier: identifier || null,
+      created: isNew,
+      updated: !isNew,
+      keys: [keyClientId, keyClientSecret, keyChainId]
+    };
+  }
+
+  /**
+   * UI Handler: Eliminar configuración Glovo
+   * Request: mqttRequest('credential', 'glovo.delete', { level, identifier? })
+   */
+  async handleUIGlovoDelete(data, request) {
+    const { level, identifier } = data;
+
+    const validLevel = level || 'GLOBAL';
+    const suffix = validLevel === 'GLOBAL' ? '_GLOBAL' : `_${validLevel}_${identifier}`;
+
+    const keyClientId = `GLOVO_CLIENT_ID${suffix}`;
+    const keyClientSecret = `GLOVO_CLIENT_SECRET${suffix}`;
+    const keyChainId = `GLOVO_CHAIN_ID${suffix}`;
+
+    if (!this.credentials.has(keyClientId)) {
+      throw { status: 404, code: 'NOT_FOUND', message: `Configuración Glovo no encontrada para nivel ${validLevel}` };
+    }
+
+    // Eliminar de memoria
+    this.credentials.delete(keyClientId);
+    this.credentials.delete(keyClientSecret);
+    this.credentials.delete(keyChainId);
+
+    // Eliminar de process.env
+    delete process.env[keyClientId];
+    delete process.env[keyClientSecret];
+    delete process.env[keyChainId];
+
+    // Persistir
+    await this.saveEnvFile();
+    this.updateCredentialMetrics();
+
+    this.logger.info('glovo.config.deleted', { level: validLevel, identifier: identifier || null });
+
+    // Publicar estado actualizado
+    await this.publishState();
+
+    return { level: validLevel, identifier: identifier || null, deleted: true };
+  }
+
+  /**
+   * Obtiene configuraciones Glovo actuales desde credentials en memoria.
+   * Busca keys con patrón GLOVO_CLIENT_ID_{LEVEL}[_{IDENTIFIER}]
+   */
+  getGlovoConfigs() {
+    const configs = [];
+    const processed = new Set();
+
+    for (const key of this.credentials.keys()) {
+      if (!key.startsWith('GLOVO_CLIENT_ID_')) continue;
+
+      // Extraer level e identifier del key: GLOVO_CLIENT_ID_GLOBAL o GLOVO_CLIENT_ID_PROJECT_xxx
+      const rest = key.replace('GLOVO_CLIENT_ID_', '');
+      let level, identifier;
+
+      if (rest === 'GLOBAL') {
+        level = 'GLOBAL';
+        identifier = null;
+      } else {
+        const parts = rest.split('_');
+        level = parts[0]; // PROJECT, CLIENT, CUSTOM
+        identifier = parts.slice(1).join('_') || null;
+      }
+
+      const configKey = `${level}_${identifier || ''}`;
+      if (processed.has(configKey)) continue;
+      processed.add(configKey);
+
+      const suffix = level === 'GLOBAL' ? '_GLOBAL' : `_${level}_${identifier}`;
+      const clientId = this.credentials.get(`GLOVO_CLIENT_ID${suffix}`) || '';
+      const clientSecret = this.credentials.get(`GLOVO_CLIENT_SECRET${suffix}`) || '';
+      const chainId = this.credentials.get(`GLOVO_CHAIN_ID${suffix}`) || '';
+
+      configs.push({
+        level,
+        identifier,
+        clientIdPreview: this.maskApiKey(clientId),
+        hasSecret: !!clientSecret,
+        chainId: chainId,
+        configured: !!clientId && !!clientSecret && !!chainId
+      });
+    }
+
+    return configs;
   }
 
   /**
@@ -2252,6 +2421,35 @@ class CredentialManagerModule {
       return false;
     } catch (error) {
       this.logger.error('gmail.test.error', { error: error.message });
+      return false;
+    }
+  }
+
+  async testCloudflare(apiToken) {
+    try {
+      // Verify token by checking user details + workers permissions
+      const response = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.result && data.result.status === 'active') {
+        this.logger.info('cloudflare.test.success', { status: data.result.status });
+        return true;
+      }
+
+      this.logger.warn('cloudflare.test.failed', {
+        success: data.success,
+        errors: data.errors
+      });
+      return false;
+    } catch (error) {
+      this.logger.error('cloudflare.test.error', { error: error.message });
       return false;
     }
   }

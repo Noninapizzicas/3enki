@@ -70,6 +70,7 @@ Thumbs.db
 dist/
 build/
 *.tgz
+carta-static-output/
 
 # Temporary files
 tmp/

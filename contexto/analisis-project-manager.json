@@ -1,7 +1,7 @@
 {
   "title": "Análisis Honesto del Project-Manager",
   "date": "2026-02-08",
-  "updated": "2026-02-09",
+  "updated": "2026-03-02",
   "version_analyzed": "2.0.0 (module.json) / 1.0.0 (constructor)",
 
   "resumen": {
@@ -166,6 +166,21 @@
       "Frontend unificado a mqttRequest (sin fire-and-forget duplicado)",
       "Project lifecycle caching en chat-ai-bridge y chat-session"
     ]
+  },
+
+  "hallazgos_2026_03_02": {
+    "boot_sequence": "En el arranque, loadExistingProjects() carga proyectos de DB a memoria pero NO emite project.activated. Los módulos NO reciben notificación de proyectos activos al iniciar. Esto implica que tras reinicio, los módulos pizzepos no tienen projectPaths configurados hasta que alguien active explícitamente un proyecto.",
+    "multi_active": "El código usa Set para activeProjectIds — permite múltiples proyectos activos simultáneamente. El README dice 'solo 1 activo' pero la implementación es multi-tenant.",
+    "base_path_pattern": "createProject → slugify nombre → data/projects/{slug}/ con subdirs: config/, storage/, db/, handlers/",
+    "storage_pattern_pizzepos": "Módulos pizzepos usan: path.join(base_path, 'storage', 'pizzepos') — por tanto: data/projects/{slug}/storage/pizzepos/cartas/",
+    "evento_activation": {
+      "event": "project.activated",
+      "payload": "{ project_id, name, base_path, metadata, activated_at }",
+      "consumidores_pizzepos": ["menu-generator", "productos", "carta-digital", "carta-impresion"],
+      "resultado": "Cada módulo cachea projectPaths y carga config/datos de disco"
+    },
+    "directories_creadas": "createProjectDirectories() crea: {slug}/config/, {slug}/storage/, {slug}/db/",
+    "db_query_pattern": "Event-driven RPC: eventBus.publish('db.query.request') → subscribe('db.query.response') con correlationId + timeout 10s"
   },
 
   "recomendaciones": [

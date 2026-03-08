@@ -81,6 +81,14 @@ class MesaStrategy {
   }
 
   async onCobroProcesado(cuenta_id, correlationId, project_id) {
+    // Guardia de idempotencia: si la mesa ya no está activa, ignorar
+    if (!this.mesasActivas.has(cuenta_id)) {
+      this.modulo.logger.warn('canal.mesa.cobro_procesado.mesa_ya_cerrada', {
+        correlation_id: correlationId,
+        cuenta_id
+      });
+      return;
+    }
     await this.cerrarMesa(cuenta_id, correlationId, project_id);
   }
 

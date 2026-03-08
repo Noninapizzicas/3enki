@@ -252,6 +252,8 @@ class CocinaModule {
       itemEncontrado.estado = 'preparando';
       itemEncontrado.preparando_at = now;
 
+      await this.publishItemPreparando(pedidoEncontrado, itemEncontrado);
+
       this.broadcastSSE({
         type: 'item_preparando',
         data: { pedido_id: pedidoEncontrado.pedido_id, item_id }
@@ -419,8 +421,14 @@ class CocinaModule {
       if (!datos.cuentas) return;
 
       let restaurados = 0;
+      // Estados que indican que el pedido ya salió de cocina
+      const ESTADOS_POST_COCINA = new Set(['listo', 'entregado', 'para_cobrar', 'cobrado']);
+
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
         if (!cuenta.pedidos || cuenta.pedidos.length === 0) continue;
+
+        // Si la cuenta ya pasó por cocina, no restaurar sus pedidos
+        if (ESTADOS_POST_COCINA.has(cuenta.estado)) continue;
 
         for (const pedidoData of cuenta.pedidos) {
           const pedido_id = pedidoData.pedido_id;
@@ -544,6 +552,19 @@ class CocinaModule {
   // ==========================================
   // Event Publishers
   // ==========================================
+
+  async publishItemPreparando(pedidoCocina, item) {
+    await this.eventBus.publish('cocina.item_preparando', {
+      pedido_id: pedidoCocina.pedido_id,
+      cuenta_id: pedidoCocina.cuenta_id,
+      canal: pedidoCocina.canal || null,
+      item_id: item.item_id,
+      producto_id: item.producto_id,
+      nombre: item.nombre,
+      cantidad: item.cantidad,
+      preparando_at: item.preparando_at
+    });
+  }
 
   async publishItemPreparado(pedidoCocina, item) {
     await this.eventBus.publish('cocina.item_preparado', {

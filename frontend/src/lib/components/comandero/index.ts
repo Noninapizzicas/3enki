@@ -1,6 +1,7 @@
 // Pantalla Cuentas
 export { default as CuentasScreen } from './CuentasScreen.svelte';
 export { default as CuentaCard } from './CuentaCard.svelte';
+export { default as CuentaCardMesa } from './CuentaCardMesa.svelte';
 export { default as TipoButton } from './TipoButton.svelte';
 
 // Pantalla Comandero
@@ -15,5 +16,6 @@ export { default as PedidoItem } from './PedidoItem.svelte';
 // Flotantes
 export { default as VariacionesPanel } from './VariacionesPanel.svelte';
 export { default as CobroPanel } from './CobroPanel.svelte';
+export { default as CierreCajaPanel } from './CierreCajaPanel.svelte';
 export { default as MitadMitadPanel } from './MitadMitadPanel.svelte';
 export { default as AlGustoPanel } from './AlGustoPanel.svelte';

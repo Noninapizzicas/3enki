@@ -36,23 +36,24 @@
       "tier_2_platform": ["plugin-manager", "prompt-manager", "prompt-composer", "scheduler"],
       "tier_3_core": ["project-manager", "composition-manager", "context-manager", "system-inspector", "ai-gateway", "ai-agent-framework", "agent-manager"],
       "tier_4_features": ["calling-generator", "bot-manager", "chat-ai-bridge", "chat-session", "code-executor"],
-      "tier_5_domain": ["cuentas", "cuentas-canales", "pedidos", "cobros", "cocina", "comandero", "productos", "categorias", "ingredientes", "variaciones", "persistencia-comandero", "impresion"],
-      "tier_6_ui": ["admin-panel", "pdf-viewer", "telegram-service", "text-editor", "menu-generator"]
+      "tier_5_domain_pizzepos": ["cuentas", "cuentas-canales", "pedidos", "cobros", "cocina", "comandero", "productos", "categorias", "ingredientes", "variaciones", "persistencia-comandero", "impresion"],
+      "tier_5_domain_facturacion": ["asesoria", "fuentes"],
+      "tier_6_ui": ["admin-panel", "pdf-viewer", "telegram-service", "text-editor", "menu-generator", "carta-digital", "carta-impresion"]
     },
     "razon": "credential-manager y database-manager deben cargar primero porque otros módulos (prompt-manager, project-manager) los necesitan durante su onLoad para consultas a DB y resolución de credenciales",
-    "disabled": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer"]
+    "disabled": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager"]
   },
 
   "directories": {
     "core": "Core framework code (EventBus, ServiceExecutor, HandlerLoader, etc)",
-    "modules": "Loadable modules (30 core [24 active + 6 disabled] + 13 pizzepos = 43 total, 37 active)",
+    "modules": "Loadable modules (34 core [26 active + 8 disabled] + 15 pizzepos + 2 facturacion = 51 total, 43 active)",
     "handlers": "Global event handlers (JavaScript directo)",
     "frontend": "SvelteKit 2 + Svelte 5 + TypeScript app",
     "data": "Runtime data (projects, logs, scheduler, etc)",
     "data/projects/{id}": "Datos de un proyecto específico (handlers, storage, config, handler-store)",
     "data/scheduler": "Jobs del scheduler (jobs.json)",
     "services/providers": "Service providers (local.*, google.*, etc)",
-    "contexto": "AI context files (28 archivos: 27 JSON + 1 MD)",
+    "contexto": "AI context files (29 archivos: 28 JSON + 1 MD)",
     "docs": "Human documentation (35+ archivos)",
     "prompts": "AI prompts and tutorials (15 especializados)",
     "plugins": "JSON-based plugins (github, slack, weather, http-utils)",

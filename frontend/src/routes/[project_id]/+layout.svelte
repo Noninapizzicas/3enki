@@ -68,7 +68,7 @@
     projectStore.set({
       id: project_id,
       name: project_id,
-      isPizzepos: true,
+      isPizzepos: false,
       loading: false,
       error: null
     });
@@ -95,7 +95,7 @@
     projectStore.set({
       id: urlParam,
       name: urlParam,
-      isPizzepos: true,
+      isPizzepos: false,
       loading: false,
       error: null
     });
@@ -107,8 +107,9 @@
 
     try {
       const res = await mqttRequest<any>('project', 'get', { id: project_id });
-      const project = res.data;
-      const hasCarta = project?.has_carta || project?.carta_activa;
+      const project = res.data?.project || res.data;
+      const features: string[] = project?.metadata?.features || [];
+      const isPizzepos = features.includes('pizzepos') || project?.metadata?.workspaceType === 'pizzepos';
 
       // Usar siempre el UUID real del proyecto para los stores
       const realId = project?.id || project_id;
@@ -117,7 +118,7 @@
       projectStore.set({
         id: realId,
         name: project?.name || project_id,
-        isPizzepos: hasCarta,
+        isPizzepos,
         loading: false,
         error: null
       });

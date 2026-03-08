@@ -301,6 +301,65 @@ export async function rechazarGlovo(cuentaId: string, motivo: string): Promise<b
 }
 
 // =============================================================================
+// NOTIFICATIONS — Web Notification API para pedidos en background
+// =============================================================================
+
+let notificationsPermission: NotificationPermission = 'default';
+
+/**
+ * Solicita permiso de notificaciones al usuario.
+ * Llamar tras gesto de usuario (click/tap).
+ */
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (!('Notification' in window)) return false;
+  try {
+    notificationsPermission = await Notification.requestPermission();
+    return notificationsPermission === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+function sendNotification(title: string, body: string, tag?: string) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  // Solo notificar si la pestaña NO está visible (en background)
+  if (document.visibilityState === 'visible') return;
+
+  try {
+    const n = new Notification(title, {
+      body,
+      icon: '/favicon.png',
+      tag: tag || 'cocina-pedido',
+      renotify: true,
+      vibrate: [200, 100, 200, 100, 300]
+    });
+    // Auto-cerrar después de 10s
+    setTimeout(() => n.close(), 10000);
+    // Click en la notificación = enfocar la pestaña
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch {
+    // Notifications not supported in this context
+  }
+}
+
+/**
+ * Vibrar el dispositivo (móvil) — patrón corto de alerta
+ */
+function vibrateDevice(pattern: number[] = [200, 100, 200]) {
+  try {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+  } catch {
+    // Vibration not available
+  }
+}
+
+// =============================================================================
 // SOUND — Campana de cocina (triple ding ascendente, audible en ambiente ruidoso)
 // =============================================================================
 
@@ -470,8 +529,13 @@ export function initCocinaSubscriptions(): () => void {
       // Sonido diferenciado: Glovo = alarma doble grave, resto = campana triple
       if (isGlovo) {
         playGlovoAlertSound();
+        sendNotification('GLOVO', `Nuevo pedido Glovo${data.metadata?.cliente_nombre ? ` — ${data.metadata.cliente_nombre}` : ''}`, `glovo-${data.pedido_id}`);
+        vibrateDevice([200, 100, 200, 100, 300]);
       } else {
         playNewOrderSound();
+        const ref = data.cuenta_id ? extractRef(data.cuenta_id) : 'Nuevo pedido';
+        sendNotification('COCINA', `${ref} — ${(data.items || []).length} items`, `pedido-${data.pedido_id}`);
+        vibrateDevice([200, 100, 200]);
       }
     })
   );
@@ -570,6 +634,16 @@ export function initCocinaSubscriptions(): () => void {
   });
   cleanups.push(unsubReconnect);
 
+  // Recargar cuando la pestaña vuelve a ser visible (usuario vuelve del background)
+  function onVisibilityChange() {
+    if (document.visibilityState === 'visible') {
+      console.log('[Cocina] Tab visible — recargando pedidos');
+      loadPedidosActivos();
+      loadMetrics();
+    }
+  }
+  document.addEventListener('visibilitychange', onVisibilityChange);
+
   // Carga inicial
   loadPedidosActivos();
   loadMetrics();
@@ -580,5 +654,6 @@ export function initCocinaSubscriptions(): () => void {
   return () => {
     for (const cleanup of cleanups) cleanup();
     clearInterval(metricsInterval);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   };
 }

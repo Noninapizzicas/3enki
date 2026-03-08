@@ -45,7 +45,7 @@
         // Mesa → usa cuentas-canales mesa strategy (auto-nombre)
         cuenta_id = await createMesa(projectId);
       } else if (tipo === 'llevar') {
-        // Llevar → usa cuentas-canales llevar strategy (ticket numerado)
+        // Llevar → usa cuentas-canales llevar strategy (ticket con prefijo llevar_)
         cuenta_id = await createLlevar(projectId);
       } else {
         // Delivery/otros → cuentas genérico
@@ -147,5 +147,17 @@
   @keyframes pulse-create {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+  }
+
+  @media (max-width: 600px) {
+    .tipo-btn {
+      flex-direction: row;
+      padding: 8px 10px;
+      gap: 5px;
+      border-radius: 8px;
+      border-width: 1.5px;
+    }
+    .icon { font-size: 1.1rem; }
+    .label { font-size: 0.6rem; }
   }
 </style>

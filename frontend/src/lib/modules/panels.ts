@@ -131,6 +131,60 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/menu-cartas/CartasPanel.svelte')
   },
 
+  // === WORK BAR — Carta Digital ===
+  'carta-config-panel': {
+    id: 'carta-config-panel',
+    title: 'Configuración de Carta Digital',
+    icon: '⚙️',
+    size: 'md',
+    position: 'top',
+    zone: 'work-bar',
+    order: 1,
+    loader: () => import('$lib/modules/carta-config/CartaConfigPanel.svelte')
+  },
+  'carta-preview-panel': {
+    id: 'carta-preview-panel',
+    title: 'Vista Previa de la Carta',
+    icon: '👁️',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 2,
+    loader: () => import('$lib/modules/carta-preview/CartaPreviewPanel.svelte')
+  },
+  'carta-export-panel': {
+    id: 'carta-export-panel',
+    title: 'Exportar Carta Digital',
+    icon: '📤',
+    size: 'md',
+    position: 'top',
+    zone: 'work-bar',
+    order: 3,
+    loader: () => import('$lib/modules/carta-export/CartaExportPanel.svelte')
+  },
+  'carta-stats-panel': {
+    id: 'carta-stats-panel',
+    title: 'Estadísticas de Carta Digital',
+    icon: '📊',
+    size: 'md',
+    position: 'top',
+    zone: 'work-bar',
+    order: 4,
+    loader: () => import('$lib/modules/carta-stats/CartaStatsPanel.svelte')
+  },
+
+  // === WORK BAR — Facturas ===
+  'facturas-panel': {
+    id: 'facturas-panel',
+    title: 'Facturas',
+    icon: '🧾',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 9,
+    loader: () => import('$lib/modules/facturas/FacturasPanel.svelte')
+  },
+
   // === WORK BAR — Impresion (comandas de cocina) ===
   'impresion-panel': {
     id: 'impresion-panel',

@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-02-26",
+  "_updated": "2026-03-07",
   "mejoras": [
     {
       "id": "pantallas-cocina",
@@ -17,6 +17,96 @@
         "fase_3": "Firmware ESP32-P4 kiosko — WebView fullscreen (PENDIENTE)",
         "fase_4": "Alertas sonoras implementadas (triple ding). Tiempos y métricas avanzadas (PENDIENTE)"
       }
+    },
+    {
+      "id": "sistema-impresion-multi-destino",
+      "titulo": "Sistema de impresión multi-destino con ESP32 como proxy local",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-05",
+      "descripcion": "Ampliar el módulo impresion para soportar múltiples impresoras (cocina, caja, barra) con routing por tipo de documento. ESP32 como proxy local entre VPS y impresoras en red local de la pizzería.",
+      "contexto": {
+        "problema": "El VPS no tiene acceso directo a las impresoras de la red local. Se necesita un puente.",
+        "solucion": "ESP32 conectado al WiFi local se suscribe por MQTT al VPS y reenvía ESC/POS a impresoras por TCP o Bluetooth.",
+        "alternativas_descartadas": {
+          "raspberry_pi": "Funciona pero más caro (~20-40€) y más complejo (SO Linux, SD card). ESP32 es suficiente.",
+          "webBluetooth": "HTTPS bloquea conexiones HTTP a IPs locales (mixed content). Solo sirve para BT, no TCP.",
+          "impresoras_cloud": "Epson Connect / Star CloudPRNT — impresoras caras (300€+), dependencia fabricante.",
+          "tailscale_vpn": "Viable pero añade dependencia externa y complejidad de red."
+        }
+      },
+      "componentes": {
+        "1_multi_destino_backend": {
+          "que": "Ampliar config del módulo impresion para registrar N impresoras con nombre y tipo de documento asignado",
+          "donde": "modules/pizzepos/impresion/",
+          "config_ejemplo": {
+            "impresoras": {
+              "cocina": { "tipo_docs": ["comanda"], "destino": "tcp:192.168.1.50:9100" },
+              "caja": { "tipo_docs": ["ticket_cliente", "cierre"], "destino": "tcp:192.168.1.51:9100" },
+              "barra": { "tipo_docs": ["comanda_barra"], "destino": "bt:AA:BB:CC:DD:EE:FF" }
+            }
+          }
+        },
+        "2_ticket_cliente_escpos": {
+          "que": "Nuevo formateador ESC/POS para ticket de cliente: items con precios, subtotal, IVA, propina, total, método de pago, logo",
+          "donde": "modules/pizzepos/impresion/",
+          "trigger": "cobro.procesado → genera ticket → envía a impresora 'caja'",
+          "contenido": ["Logo/nombre negocio", "Fecha/hora", "Items con precio unitario y cantidad", "Subtotal", "IVA desglosado", "Propina", "Total", "Método de pago", "Mensaje de despedida"]
+        },
+        "3_routing_tipo_documento": {
+          "que": "Router que asigna tipo de documento a impresora destino según config",
+          "tipos_documento": ["comanda (cocina)", "ticket_cliente (caja)", "cierre (caja)", "comanda_barra (barra)"],
+          "donde": "modules/pizzepos/impresion/"
+        },
+        "4_publicacion_mqtt": {
+          "que": "Publicar ESC/POS en topic MQTT con destino para que el ESP32 lo reciba",
+          "topic": "impresion/{proyecto}/print",
+          "payload": { "destino": "cocina|caja|barra", "data": "base64 ESC/POS" },
+          "ack": "impresion/{proyecto}/printed",
+          "nota": "Ya existe impresion.raw — ampliar para incluir destino"
+        },
+        "5_firmware_esp32": {
+          "que": "Firmware ESP32 — MQTT→TCP/BT bridge",
+          "funciones": [
+            "Conectar WiFi local",
+            "Conectar MQTT broker del VPS (WSS con TLS)",
+            "Suscribirse a impresion/{proyecto}/print",
+            "Al recibir mensaje: decodificar base64, enviar por TCP o BT según destino",
+            "Publicar ACK en impresion/{proyecto}/printed"
+          ],
+          "lenguaje": "MicroPython o C/Arduino (lo de menos)",
+          "hardware": "ESP32 estándar (~5€), WiFi+BT integrado",
+          "limitacion_usb": "ESP32 NO soporta USB Host — no puede imprimir por USB. Usar impresoras WiFi/TCP o BT.",
+          "coste_estimado": "ESP32 ~5€ + impresora WiFi 80mm ~60€ + impresora WiFi 58mm ~35€"
+        },
+        "6_config_destinos": {
+          "que": "UI o JSON para configurar impresoras: nombre → IP:puerto o MAC BT",
+          "donde": "Ampliar ImpresionPanel.svelte o nuevo panel de configuración"
+        }
+      },
+      "conexiones_soportadas": {
+        "wifi_tcp": { "esp32": true, "nota": "Impresora conectada a la red, puerto 9100. Trivial." },
+        "bluetooth": { "esp32": true, "nota": "ESP32 tiene Bluetooth Classic con SPP. Funciona con térmicas BT." },
+        "usb": { "esp32": false, "nota": "ESP32 no tiene USB Host. Comprar versión WiFi/BT de la impresora (~10-15€ más)." }
+      },
+      "arquitectura_red": {
+        "diagrama": "VPS (event-core) ←MQTT/WSS→ ESP32 (red local) ←TCP/BT→ Impresoras",
+        "flujo": [
+          "1. Evento en VPS (pedido.enviado_cocina, cobro.procesado, caja.cerrada)",
+          "2. Módulo impresion genera ESC/POS + determina destino",
+          "3. Publica en MQTT topic impresion/{proyecto}/print con destino + data base64",
+          "4. ESP32 recibe, decodifica, envía por TCP o BT a la impresora correcta",
+          "5. ESP32 publica ACK en impresion/{proyecto}/printed"
+        ]
+      },
+      "orden_implementacion": [
+        "1. Multi-destino en config del módulo impresion (backend)",
+        "2. Ticket cliente ESC/POS (formateador nuevo)",
+        "3. Routing por tipo de documento",
+        "4. Publicación MQTT con destino",
+        "5. Firmware ESP32 (proxy MQTT→TCP/BT)",
+        "6. UI de configuración de impresoras"
+      ]
     },
     {
       "id": "refactor-ai-gateway",
@@ -297,6 +387,182 @@
         "frontend/src/lib/modules/provider/ProviderPanel.svelte"
       ],
       "nota": "Los comentarios en cada fichero documentan la fuente de verdad para futuras actualizaciones"
+    },
+    {
+      "id": "integrar-discovery-startup",
+      "titulo": "Integrar módulo Discovery en la secuencia de inicio",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-02-28",
+      "descripcion": "El módulo Discovery (core/discovery/) está completo en código pero NO está integrado en la secuencia de inicio de index.js. Permite descubrimiento automático entre múltiples instancias de event-core via MQTT retained messages. Publica estado en core/{coreId}/status, detecta cores nuevos/offline, y mantiene registro de cores activos.",
+      "componentes": {
+        "Discovery": "core/discovery/index.js — lógica principal de publicación/suscripción MQTT",
+        "CoreStatus": "core/discovery/core-status.js — modelo de datos de cada core remoto"
+      },
+      "funcionalidad": [
+        "Heartbeat cada 30s (republica estado propio como MQTT retained)",
+        "Alive check cada 30s (detecta cores offline)",
+        "Eventos: core:discovered, core:updated, core:offline, core:dead",
+        "updateModules() y updateCapabilities() para re-publicar estado"
+      ],
+      "implementacion": {
+        "donde": "index.js — añadir paso en la secuencia de inicio (después de EventBus, antes de HTTPGateway)",
+        "como": "Instanciar Discovery con mqttClient y eventBus, llamar start(), integrar en graceful shutdown con stop()"
+      },
+      "cuando_implementar": "Cuando se desplieguen múltiples instancias de event-core (multi-core)"
+    },
+    {
+      "id": "fix-version-inconsistency",
+      "titulo": "Unificar número de versión del proyecto",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "Existen 3 versiones distintas declaradas: package.json dice v0.2.0, README.md dice v0.5.0, index.js dice v0.1.0. Deben unificarse en una sola fuente de verdad (package.json) y el resto leer de ahí.",
+      "archivos_afectados": ["package.json", "README.md", "index.js"],
+      "cuando_implementar": "Próxima sesión de limpieza o antes de un release"
+    },
+    {
+      "id": "eliminar-flow-engine-legacy",
+      "titulo": "Eliminar código muerto de FlowEngine (core/flow/)",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "core/flow/ contiene el motor de flujos original que fue reemplazado por el sistema de handlers. Es código muerto que no se usa en ningún sitio. Eliminarlo reduce confusión y tamaño del proyecto.",
+      "archivos_afectados": ["core/flow/"],
+      "cuando_implementar": "Próxima sesión de limpieza"
+    },
+    {
+      "id": "actualizar-test-coverage",
+      "titulo": "Actualizar test coverage y scripts de test",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "package.json referencia tests para módulos que han cambiado. Faltan tests para módulos nuevos/modificados (pizzepos, chat-ai-bridge, ai-agent-framework). Cobertura actual: hooks, observability, gateway, conversation, security, cli, integration.",
+      "beneficios": ["Prevenir regresiones en módulos críticos", "Validar flujos de tools end-to-end", "Cobertura para los 14 módulos pizzepos"],
+      "cuando_implementar": "Antes de un release o cuando se modifiquen módulos sin tests"
+    },
+    {
+      "id": "sincronizar-inventario-sistema",
+      "titulo": "Sincronizar INVENTARIO-SISTEMA.json con módulos reales",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "INVENTARIO-SISTEMA.json lista solo 24 módulos pero hay 46+ en el sistema (32 core + 14 pizzepos). Falta documentar más de la mitad de los módulos. Este archivo debería generarse automáticamente desde los module.json.",
+      "implementacion": {
+        "propuesto": "Script que recorra modules/**/module.json y genere el inventario automáticamente",
+        "ubicacion": "scripts/generate-inventory.js"
+      },
+      "cuando_implementar": "Próxima auditoría de documentación o via context-sync skill"
+    },
+    {
+      "id": "evaluar-modulos-deshabilitados",
+      "titulo": "Evaluar módulos deshabilitados: eliminar o reactivar",
+      "prioridad": "baja",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-03",
+      "descripcion": "6 módulos están deshabilitados en config.json sin una decisión clara sobre su futuro: dashboard, metricas, notas, scratch-designer, ui-designer, y conversation-manager. Evaluar cuáles tienen valor para reactivar y cuáles son código muerto a eliminar.",
+      "modulos_afectados": ["dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "conversation-manager"],
+      "cuando_implementar": "Próxima revisión de arquitectura"
+    },
+    {
+      "id": "variaciones-panel-hardcodes",
+      "titulo": "VariacionesPanel: defaults hardcodeados contradicen al backend",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-07",
+      "descripcion": "VariacionesPanel.svelte tiene defaults que contradicen al módulo variaciones del backend cuando variaciones/get falla o devuelve 404 (producto sin config). Frontend asume permiteAnadir=true y maxExtras=10, backend tiene permiteAnadir=false y max=5. También hay emoji 🍕 hardcodeado en header para todos los productos.",
+      "issues": [
+        "1. permiteAnadir default: frontend=true vs backend=false — comportamiento opuesto",
+        "2. maxExtras default: frontend=10 vs backend=5 — inconsistencia",
+        "3. Emoji 🍕 hardcodeado en línea 264 — debería usar producto.emoji o nada",
+        "4. tipoConfig hardcodeado (queso/verdura/carne/etc) con colores — aceptable como UI config pero no extensible sin tocar código"
+      ],
+      "solucion_propuesta": "Alinear defaults del frontend con los del backend (permiteAnadir=false, maxExtras=5). Usar producto.emoji en header. Opcionalmente cargar tipoConfig desde backend."
+    },
+    {
+      "id": "carta-digital-ingredientes-vacios",
+      "titulo": "Carta Digital: VariacionesPanel sin ingredientes cuando usa endpoint enriquecido",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-07",
+      "descripcion": "Cuando carta.ts usa el endpoint enriquecido (carta-digital.carta-completa), los ingredientes se embeben dentro de cada producto pero el store $ingredientes queda vacío ([]). CartaScreen pasa catalogoIngredientes={$ingredientes} al VariacionesPanel → no hay ingredientes para añadir. El fallback (productos.carta_completa) sí funciona porque devuelve ingredientes como array separado.",
+      "archivos_afectados": [
+        "frontend/src/lib/stores/carta.ts:154 — ings = [] en path enriquecido",
+        "frontend/src/lib/components/carta/CartaScreen.svelte:179 — catalogoIngredientes={$ingredientes}",
+        "modules/pizzepos/carta-digital/index.js:1055-1077 — formatCartaDigitalResponse no devuelve ingredientes[]"
+      ],
+      "solucion_propuesta": "Opción A: carta-digital.carta-completa devuelve también ingredientes[] separados (como hace productos.carta_completa). Opción B: carta.ts extrae ingredientes únicos de todos los productos y los pone en el store. Opción A es más limpia.",
+      "hardcode_adicional": "carta.ts:88 — DEFAULT_CONFIG.nombre_negocio='Pizzicas' hardcodeado"
+    },
+    {
+      "id": "portal-cliente-pwa",
+      "titulo": "PWA portal cliente — acceso externo a facturación por proyecto",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-05",
+      "descripcion": "App web progresiva (PWA) para que clientes/negocios externos accedan a su facturación: ver facturas, subir documentos, descargar paquetes de asesoría. Reutiliza toda la infraestructura existente (facturas-db, fuentes, asesoria). Si funciona bien internamente, se puede ofrecer como servicio a otros negocios.",
+      "vision": "Si la herramienta de facturación funciona bien para Nonina, empaquetarla como servicio para otros negocios con un portal web sencillo por cliente",
+      "fases": {
+        "fase_1_backend": {
+          "titulo": "Módulo portal-cliente (backend)",
+          "estado": "pendiente",
+          "tareas": [
+            "Crear modules/facturacion/portal-cliente/ con module.json",
+            "Endpoint de lectura: listar facturas del proyecto (proxy de facturas-db.listar con campos filtrados)",
+            "Endpoint de subida: recibir archivo → emitir factura.entrada (reutiliza fuentes.manual)",
+            "Endpoint de descarga: paquetes de asesoría (proxy de asesoria.descargar)",
+            "Endpoint de estadísticas: resumen del mes (totales, num facturas, pendientes)",
+            "Endpoint de estado: ver estado de procesamiento de facturas subidas"
+          ],
+          "principio": "Solo expone un subconjunto de datos — NO da acceso directo a facturas-db"
+        },
+        "fase_2_frontend": {
+          "titulo": "Frontend PWA",
+          "estado": "pendiente",
+          "tareas": [
+            "Ruta /portal/[project_id] en SvelteKit (separada del admin)",
+            "Pantalla dashboard: resumen mensual, últimas facturas, estado",
+            "Pantalla listado: facturas procesadas con filtros (mes, estado, proveedor)",
+            "Pantalla subir: drag&drop de PDF/imagen → fuentes.manual → feedback en tiempo real via MQTT",
+            "Pantalla descargas: paquetes de asesoría disponibles para descargar",
+            "manifest.json + service worker para PWA instalable",
+            "Diseño responsive mobile-first (los clientes usarán móvil)"
+          ]
+        },
+        "fase_3_seguridad": {
+          "titulo": "Autenticación y control de acceso",
+          "estado": "pendiente",
+          "nota": "Se aborda después de validar que el flujo funciona",
+          "tareas": [
+            "Usar certificate-authority (módulo existente) para autenticación mTLS por proyecto",
+            "Emitir certificado cliente por proyecto — el certificado identifica al cliente/proyecto",
+            "Middleware mTLS ya implementado — activar mtls_enabled en config",
+            "Rate limiting por cliente",
+            "CORS configurado para dominios específicos",
+            "Logs de acceso"
+          ],
+          "nota": "El módulo certificate-authority (routeCode 3333) ya implementa CA interna con mTLS. Emite certificados tipo 'client' con identifier=projectId. Solo falta activar y configurar."
+        },
+        "fase_4_multi_tenant": {
+          "titulo": "Multi-tenant para otros negocios",
+          "estado": "futuro",
+          "tareas": [
+            "Onboarding: crear proyecto + credenciales de portal automáticamente",
+            "Subdominio o ruta por negocio (negocio.tudominio.com o /portal/negocio)",
+            "Panel admin para gestionar clientes/proyectos",
+            "Branding básico configurable por proyecto (logo, colores)"
+          ]
+        }
+      },
+      "reutiliza_existente": {
+        "facturas-db": "Lectura de facturas (listar, obtener, estadísticas)",
+        "fuentes.manual": "Subida de documentos → factura.entrada",
+        "asesoria": "Descarga de paquetes ZIP (historial, descargar)",
+        "mqtt": "Feedback en tiempo real del estado de procesamiento",
+        "project-manager": "Scoping por projectId (multi-tenant nativo)"
+      },
+      "no_toca": "Cero cambios en módulos existentes — es puramente aditivo",
+      "cuando_implementar": "Cuando el sistema de facturación esté estable y validado con uso real en Nonina"
     }
   ]
 }

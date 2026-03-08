@@ -57,8 +57,8 @@
 <style>
   .producto-btn {
     display: flex;
-    min-height: 70px;
-    border-radius: 10px;
+    min-height: 54px;
+    border-radius: 8px;
     overflow: hidden;
     background: #1a1a1a;
     border: 1px solid #2a2a2a;
@@ -74,8 +74,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 8px 6px;
+    gap: 2px;
+    padding: 6px 5px;
     border: none;
     background: transparent;
     color: #e5e5e5;
@@ -109,7 +109,7 @@
   }
 
   .nombre {
-    font-size: 0.78rem;
+    font-size: 0.73rem;
     font-weight: 600;
     text-align: center;
     line-height: 1.2;
@@ -121,7 +121,7 @@
   }
 
   .precio {
-    font-size: 0.72rem;
+    font-size: 0.67rem;
     font-weight: 500;
     color: #888;
     font-variant-numeric: tabular-nums;
@@ -131,5 +131,14 @@
     font-size: 0.8rem;
     font-weight: 700;
     color: #6366f1;
+  }
+
+  @media (max-width: 600px) {
+    .producto-btn { min-height: 40px; border-radius: 6px; }
+    .zone { padding: 4px 3px; gap: 1px; }
+    .zone-right { width: 32px; }
+    .nombre { font-size: 0.68rem; }
+    .precio { font-size: 0.6rem; }
+    .var-icon { font-size: 0.7rem; }
   }
 </style>

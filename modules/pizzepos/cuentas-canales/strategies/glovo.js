@@ -35,7 +35,7 @@ class GlovoStrategy {
 
     this.modulo = null;
     this._uiActions = [
-      'recibir', 'aceptar', 'rechazar', 'marcar_listo',
+      'recibir', 'aceptar', 'rechazar', 'marcar_listo', 'marcar_recogido',
       'activos', 'get', 'historial', 'poll', 'health', 'metrics'
     ];
 
@@ -63,6 +63,7 @@ class GlovoStrategy {
     uiHandler.register('glovo', 'aceptar', this.handleAceptarPedido.bind(this));
     uiHandler.register('glovo', 'rechazar', this.handleRechazarPedido.bind(this));
     uiHandler.register('glovo', 'marcar_listo', this.handleMarcarListo.bind(this));
+    uiHandler.register('glovo', 'marcar_recogido', this.handleMarcarRecogido.bind(this));
     uiHandler.register('glovo', 'activos', this.handleGetActivos.bind(this));
     uiHandler.register('glovo', 'get', this.handleGetPedido.bind(this));
     uiHandler.register('glovo', 'historial', this.handleGetHistorial.bind(this));
@@ -106,7 +107,20 @@ class GlovoStrategy {
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
-    await this.marcarRecogido(cuenta_id, correlationId);
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) return;
+
+    pedido.pagado = true;
+    pedido.hora_pago = new Date().toISOString();
+
+    this.modulo.logger.info('glovo.pedido_pagado', {
+      correlation_id: correlationId,
+      cuenta_id,
+      estado: pedido.estado
+    });
+
+    // Cerrar la cuenta al procesar cobro (igual que mesa)
+    await this.cerrarCuentaGlovo(cuenta_id, correlationId);
   }
 
   getHealth() {
@@ -201,6 +215,7 @@ class GlovoStrategy {
         numero_pedido: secuencial,
         plataforma: 'glovo',
         estado: 'recibido',
+        pagado: false,
         items: items || [],
         total: total || 0,
         cliente_nombre: cliente_nombre || 'Cliente Glovo',
@@ -226,6 +241,20 @@ class GlovoStrategy {
         items: pedido.items,
         cliente_nombre: pedido.cliente_nombre,
         hora_recibido: pedido.hora_recibido
+      });
+
+      // Publicar cuenta.creada ANTES de enviar a cocina, para que el módulo
+      // cuentas registre la cuenta y el tracking de _pedidosEnCocina funcione.
+      await this.modulo.publishCuentaCreada({
+        cuenta_id: pedido.cuenta_id,
+        tipo: 'glovo',
+        total: pedido.total,
+        project_id: data.project_id,
+        metadata: {
+          nombre: pedido.cliente_nombre,
+          glovo_order_id,
+          direccion_entrega: direccion_entrega || ''
+        }
       });
 
       // Auto-enviar a cocina — el pedido entra directo a la cola de cocina
@@ -305,16 +334,7 @@ class GlovoStrategy {
         hora_aceptado: pedido.hora_aceptado
       });
 
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'glovo',
-        total: pedido.total,
-        metadata: {
-          glovo_order_id: pedido.glovo_order_id,
-          cliente_nombre: pedido.cliente_nombre,
-          direccion_entrega: pedido.direccion_entrega
-        }
-      });
+      // cuenta.creada ya se publicó en handleRecibirPedido (dedup en cuentas)
 
       await this.notificarGlovoAPI('accept', pedido);
 
@@ -384,6 +404,18 @@ class GlovoStrategy {
       return { status: 200, data: { message: 'Pedido Glovo marcado como listo para rider' } };
     } catch (error) {
       this.modulo.logger.error('canal.glovo.marcar_listo.error', { error: error.message });
+      return { status: 500, error: error.message };
+    }
+  }
+
+  async handleMarcarRecogido(data) {
+    const { cuenta_id } = data;
+
+    try {
+      await this.marcarRecogido(cuenta_id);
+      return { status: 200, data: { message: 'Pedido Glovo marcado como recogido por rider' } };
+    } catch (error) {
+      this.modulo.logger.error('canal.glovo.marcar_recogido.error', { error: error.message });
       return { status: 500, error: error.message };
     }
   }
@@ -553,6 +585,7 @@ class GlovoStrategy {
           numero_pedido: seq,
           plataforma: 'glovo',
           estado: 'aceptado',
+          pagado: false,
           items: [],
           total: cuenta.total || 0,
           cliente_nombre: cuenta.datos_especificos?.cliente_nombre || 'Cliente Glovo',
@@ -645,6 +678,27 @@ class GlovoStrategy {
       hora_recogido: pedido.hora_recogido
     }, { correlationId });
 
+    this.modulo.logger.info('glovo.pedido_recogido', {
+      correlation_id: correlationId,
+      cuenta_id,
+      glovo_order_id: pedido.glovo_order_id,
+      pagado: pedido.pagado
+    });
+
+    // Si ya pagado, la cuenta ya fue cerrada por onCobroProcesado
+    if (!pedido.pagado) {
+      this.modulo.logger.info('glovo.pedido_recogido_pendiente_pago', {
+        correlation_id: correlationId,
+        cuenta_id,
+        glovo_order_id: pedido.glovo_order_id
+      });
+    }
+  }
+
+  async cerrarCuentaGlovo(cuenta_id, correlationId) {
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) return;
+
     await this.modulo.publishCuentaCerrada({
       cuenta_id: pedido.cuenta_id,
       tipo: 'glovo',
@@ -659,7 +713,7 @@ class GlovoStrategy {
     this.pedidosActivos.delete(cuenta_id);
     this.externalOrderMap.delete(pedido.glovo_order_id);
 
-    this.modulo.logger.info('glovo.pedido_recogido', {
+    this.modulo.logger.info('glovo.cuenta_cerrada', {
       correlation_id: correlationId,
       cuenta_id,
       glovo_order_id: pedido.glovo_order_id,

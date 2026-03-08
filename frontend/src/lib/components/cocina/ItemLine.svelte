@@ -449,14 +449,14 @@
 
   .base-item {
     font-size: 1.35rem;
-    color: #94a3b8;
+    color: #e2e8f0;
     line-height: 1.3;
     padding: 2px 0;
   }
 
   .base-item::before {
     content: '\2022  ';
-    color: #475569;
+    color: #94a3b8;
     font-weight: 800;
   }
 
@@ -509,7 +509,7 @@
 
   .mitad-ing-item {
     font-size: 1.2rem;
-    color: #94a3b8;
+    color: #e2e8f0;
     line-height: 1.3;
   }
 
@@ -660,17 +660,55 @@
     to { transform: rotate(360deg); }
   }
 
-  /* ===== Mobile ===== */
+  /* ===== Mobile Compact ===== */
   @media (max-width: 600px) {
-    .qty { font-size: 1.5rem; }
-    .name { font-size: 1.2rem; }
-    .item-line.expanded .qty { font-size: 2.8rem; }
-    .item-line.expanded .name { font-size: 2rem; }
-    .base-item { font-size: 1.1rem; }
-    .mitad-name { font-size: 1.3rem; }
-    .mitad-ing-item { font-size: 1rem; }
-    .algusto-ing { font-size: 1.1rem; }
-    .var-line { font-size: 1.1rem; }
-    .nota-text { font-size: 1.1rem; }
+    /* Base item line — compact */
+    .item-line { min-height: 38px; padding: 5px 10px; gap: 8px; }
+    .item-state { width: 22px; height: 22px; margin-top: 1px; }
+    .check { font-size: 1rem; }
+    .fire { font-size: 0.9rem; }
+    .dot { font-size: 0.6rem; }
+
+    /* Main line — readable but compact */
+    .qty { font-size: 1rem; }
+    .name { font-size: 0.9rem; }
+    .item-main { gap: 5px; }
+    .tipo-badge { font-size: 0.6rem; padding: 1px 5px; }
+
+    /* Compact summary (pendiente/listo) */
+    .compact-summary { gap: 3px 5px; margin-top: 1px; }
+    .compact-var { font-size: 0.7rem; padding: 0 4px; }
+    .compact-nota { font-size: 0.7rem; }
+    .compact-nota-label { font-size: 0.6rem; }
+
+    /* Expanded state (preparando) — still prominent but fits mobile */
+    .item-line.expanded { padding: 10px 12px 12px; border-left-width: 5px; }
+    .item-line.expanded .item-state { width: 32px; height: 32px; }
+    .item-line.expanded .fire { font-size: 1.3rem; }
+    .item-line.expanded .qty { font-size: 1.6rem; }
+    .item-line.expanded .name { font-size: 1.3rem; }
+    .item-line.expanded .tipo-badge { font-size: 0.7rem; padding: 2px 8px; }
+
+    /* Expanded details — tighter */
+    .expanded-details { gap: 8px; margin-top: 8px; }
+    .detail-section { padding-left: 0; }
+    .section-label { font-size: 0.75rem; margin-bottom: 2px; }
+    .base-section { padding: 6px 8px; border-radius: 6px; border-left-width: 3px; }
+    .base-item { font-size: 0.9rem; padding: 1px 0; }
+    .base-list { gap: 2px; }
+    .mitad-section { padding: 6px 8px; border-radius: 6px; border-left-width: 3px; gap: 6px; }
+    .mitad-name { font-size: 1rem; }
+    .mitad-arrow { font-size: 0.85rem; }
+    .mitad-ing-list { padding-left: 18px; gap: 1px; }
+    .mitad-ing-item { font-size: 0.8rem; }
+    .algusto-section { padding: 6px 8px; border-radius: 6px; border-left-width: 3px; }
+    .algusto-list { gap: 2px; }
+    .algusto-ing { font-size: 0.9rem; padding: 1px 0; }
+    .variaciones-section { gap: 3px; }
+    .var-line { font-size: 0.9rem; padding: 2px 0; gap: 5px; }
+    .var-icon { width: 16px; font-size: 0.85rem; }
+    .notas-section { padding: 6px 8px; border-radius: 6px; border-left-width: 3px; }
+    .nota-label { font-size: 0.65rem; }
+    .nota-text { font-size: 0.9rem; }
   }
 </style>

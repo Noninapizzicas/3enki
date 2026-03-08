@@ -100,9 +100,9 @@
   },
   "stores": {
     "location": "frontend/src/lib/stores/",
-    "total_files": 19,
+    "total_files": 23,
     "pattern": "Svelte writable stores + async functions",
-    "all_stores": ["attachments.ts", "chat.ts", "cocina.ts", "comandero.ts", "conversations.ts", "credentials.ts", "cuentas.ts", "facturas.ts", "files.ts", "impresion.ts", "index.ts", "menu-generator.ts", "page-context.ts", "persistence.ts", "projects.ts", "prompts.ts", "theme.ts", "ui.ts", "workspace.ts"],
+    "all_stores": ["attachments.ts", "carta.ts", "certificate-authority.ts", "chat.ts", "cocina.ts", "comandero.ts", "conversations.ts", "credentials.ts", "cuentas.ts", "facturas.ts", "files.ts", "html-preview.ts", "impresion.ts", "index.ts", "menu-generator.ts", "page-context.ts", "persistence.ts", "projects.ts", "prompts.ts", "staff.ts", "theme.ts", "ui.ts", "workspace.ts"],
     "examples": {
       "projects.ts": {
         "store": "projectsStore",
@@ -123,6 +123,20 @@
           "stream_end_handler": "conversation/stream/end solo finaliza el contenido del mensaje (quita flag streaming), NO toca isStreaming",
           "addMessage_logic": "Si llega assistant message y ya hay un assistant como último mensaje: actualiza (streaming chunk o mensaje final). Si no: añade nuevo",
           "safety_net": "sendMessage espera mqttRequest response. Si streaming ya añadió el mensaje, lo actualiza con datos del server. Si no, lo añade"
+        }
+      },
+      "files.ts": {
+        "store": "filesStore",
+        "functions": ["listFiles()", "openFile()", "saveFile()", "createFile()", "deleteFile()", "moveFile()", "uploadFiles()", "downloadFile()", "searchFiles()", "formatContent()"],
+        "note": "Explorador de archivos con vistas adaptativas (explorer, editor, pdf, image, html). downloadFile() descarga via blob. Incluye project_id en todas las peticiones MQTT."
+      },
+      "menu-generator.ts": {
+        "store": "menuGeneratorStore",
+        "functions": ["generateMenu()", "loadCartas()", "getCarta()", "renderCartaHtml()", "loadHealth()"],
+        "init": "initMenuGeneratorSubscriptions() - escucha carta.generada y menu.error",
+        "important_patterns": {
+          "project_id_injection": "Todas las funciones obtienen activeProjectId via get(activeProjectId) y lo envían en cada mqttRequest. generateMenu() valida que haya proyecto activo antes de generar.",
+          "ai_vs_ui": "Las herramientas IA (menu.generate, etc.) reciben project_id inyectado por ai-gateway automáticamente. Las peticiones UI (mqttRequest) deben enviarlo explícitamente."
         }
       },
       "conversations.ts": {

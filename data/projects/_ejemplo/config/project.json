@@ -12,5 +12,21 @@
   "paths": {
     "gmail": "data/gmail/mi-cuenta",
     "images": "data/gmail/mi-cuenta-images"
+  },
+  "_NOTA_NOTIFICACIONES": "chatId y botName de Telegram se pueden gestionar via credential-manager: mqttRequest('credential', 'telegram.notif.save', { level: 'PROJECT', identifier: 'mi-proyecto', chat_id: '123456789', bot_name: 'mi_bot' }). Si se configura en credential-manager, tiene prioridad sobre esta sección JSON.",
+  "notificaciones": {
+    "cierre_caja": {
+      "telegram": {
+        "chatId": "123456789",
+        "botName": "mi_bot"
+      },
+      "email": {
+        "to": "informe@ejemplo.com",
+        "account": "mi-cuenta-gmail"
+      },
+      "whatsapp": {
+        "to": "+34600000000"
+      }
+    }
   }
 }

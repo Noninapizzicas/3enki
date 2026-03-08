@@ -6,21 +6,33 @@
  *
  * ENTRADA: caja.cerrada
  * SALIDA:
- *   - telegram.send_message.request (si config.notificaciones.telegram)
- *   - local.whatsapp.send.request (si config.notificaciones.whatsapp)
- *   - local.gmail.send.request (si config.notificaciones.email)
+ *   - telegram.send_message.request (si hay config telegram)
+ *   - local.whatsapp.send.request (si hay config whatsapp)
+ *   - local.gmail.send.request (si hay config email)
  *
- * Config esperada en config.json del proyecto:
- *   notificaciones: {
- *     cierre_caja: {
- *       telegram: { chatId: "...", botName: "..." },
- *       whatsapp: { to: "+34..." },
- *       email: { to: "user@example.com", account: "mi-cuenta-gmail" }
- *     }
- *   }
+ * Busca config en orden de prioridad (Telegram):
  *
- * @version 2.0.0
+ * 1. credential-manager (process.env): TELEGRAM_CHAT_ID_PROJECT_{projectId} + TELEGRAM_BOT_NAME_PROJECT_{projectId}
+ * 2. Sección dedicada (en project.json o notificaciones.json del proyecto):
+ *    notificaciones.cierre_caja.telegram = { chatId, botName }
+ * 3. Config raíz del proyecto (project.json):
+ *    telegram = { botName, chatId }
+ * 4. credential-manager (process.env): TELEGRAM_CHAT_ID_GLOBAL + TELEGRAM_BOT_NAME_GLOBAL
+ * 5. Config global: telegram = { botName, chatId }
+ *
+ * Para email/whatsapp:
+ *    notificaciones.cierre_caja.email    = { to, account }
+ *    notificaciones.cierre_caja.whatsapp = { to }
+ *
+ * IMPORTANTE: Este handler es global, así que NO recibe la config del
+ * proyecto automáticamente. Lee la config del proyecto usando el
+ * project_id que viene en el evento caja.cerrada.
+ *
+ * @version 3.0.0
  */
+
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
   name: 'notificar-cierre-caja',
@@ -28,7 +40,7 @@ module.exports = {
   trigger: 'caja.cerrada',
   enabled: true,
 
-  async handle(event, { logger, emit, config }) {
+  async handle(event, { logger, emit, config: globalConfig }) {
     const data = event.data || event;
     const { fecha, informe, cierre, project_id } = data;
 
@@ -37,37 +49,52 @@ module.exports = {
       return { success: false, reason: 'sin informe' };
     }
 
-    const destinos = config?.notificaciones?.cierre_caja || {};
+    // Cargar config del proyecto (si hay project_id)
+    const projectConfig = project_id
+      ? cargarConfigProyecto(project_id, logger)
+      : {};
+
+    // Merge: project config tiene prioridad sobre global config
+    const config = { ...globalConfig, ...projectConfig };
+
+    // Resolver destinos de notificación:
+    //   1. Sección dedicada: notificaciones.cierre_caja
+    //   2. Fallback: config raíz (telegram, gmail)
+    const destinos = resolverDestinos(config, project_id);
+
+    logger.info('notificar-cierre-caja.destinos', {
+      fecha,
+      project_id: project_id || 'global',
+      telegram: !!destinos.telegram,
+      whatsapp: !!destinos.whatsapp,
+      email: !!destinos.email
+    });
+
     let enviado = false;
 
     // --- Telegram ---
-    const tg = destinos.telegram;
-    if (tg?.chatId) {
-      const botName = tg.botName || config?.telegram?.botName;
-      if (botName) {
-        logger.info('notificar-cierre-caja.telegram', { chatId: tg.chatId, fecha });
+    if (destinos.telegram?.chatId && destinos.telegram?.botName) {
+      const { chatId, botName } = destinos.telegram;
+      logger.info('notificar-cierre-caja.telegram.enviando', { chatId, botName, fecha });
 
-        // Telegram tiene límite de 4096 chars por mensaje
-        const partes = dividirMensaje(informe, 4000);
-        for (const parte of partes) {
-          emit('telegram.send_message.request', {
-            botName,
-            chatId: tg.chatId,
-            text: parte,
-            parse_mode: 'HTML'
-          });
-        }
-        enviado = true;
+      // Telegram tiene límite de 4096 chars por mensaje
+      const partes = dividirMensaje(informe, 4000);
+      for (const parte of partes) {
+        emit('telegram.send_message.request', {
+          botName,
+          chatId,
+          text: parte
+        });
       }
+      enviado = true;
     }
 
     // --- WhatsApp ---
-    const wa = destinos.whatsapp;
-    if (wa?.to) {
-      logger.info('notificar-cierre-caja.whatsapp', { to: wa.to, fecha });
+    if (destinos.whatsapp?.to) {
+      logger.info('notificar-cierre-caja.whatsapp.enviando', { to: destinos.whatsapp.to, fecha });
 
       emit('local.whatsapp.send.request', {
-        to: wa.to,
+        to: destinos.whatsapp.to,
         type: 'text',
         text: informe
       });
@@ -75,17 +102,14 @@ module.exports = {
     }
 
     // --- Email (Gmail) ---
-    const email = destinos.email;
-    if (email?.to) {
-      const to = email.to;
-      const account = email.account || config?.gmail?.account;
-      const projectName = project_id || config?.name || 'Sistema';
+    if (destinos.email?.to) {
+      const { to, account } = destinos.email;
+      const projectName = config?.project?.name || config?.name || project_id || 'Sistema';
       const subject = `Cierre de caja - ${fecha} - ${projectName}`;
 
-      // Generar versión HTML del informe para email
       const htmlBody = generarInformeHTML(informe, cierre);
 
-      logger.info('notificar-cierre-caja.email', { to, fecha, account: account || 'default' });
+      logger.info('notificar-cierre-caja.email.enviando', { to, account: account || 'default', fecha });
 
       emit('local.gmail.send.request', {
         account: account || undefined,
@@ -98,12 +122,127 @@ module.exports = {
     }
 
     if (!enviado) {
-      logger.info('notificar-cierre-caja.sin-destinos', { fecha });
+      logger.warn('notificar-cierre-caja.sin-destinos', {
+        fecha,
+        project_id: project_id || 'global',
+        hint: 'Configura notificaciones en data/projects/{id}/config/project.json'
+      });
     }
 
-    return { success: true, enviado, fecha };
+    return { success: enviado, enviado, fecha, project_id };
   }
 };
+
+/**
+ * Carga la config del proyecto leyendo todos los .json de su directorio config/.
+ * Devuelve un objeto con cada archivo como clave (ej: { project: {...}, notificaciones: {...} }).
+ */
+function cargarConfigProyecto(projectId, logger) {
+  const configDir = path.join(process.cwd(), 'data', 'projects', projectId, 'config');
+  const config = {};
+
+  try {
+    if (!fs.existsSync(configDir)) {
+      logger.debug('notificar-cierre-caja.config.no-dir', { projectId, configDir });
+      return config;
+    }
+
+    const files = fs.readdirSync(configDir).filter(f => f.endsWith('.json'));
+
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(path.join(configDir, file), 'utf-8');
+        const name = file.replace('.json', '');
+        config[name] = JSON.parse(content);
+      } catch (error) {
+        logger.warn('notificar-cierre-caja.config.file.error', {
+          projectId,
+          file,
+          error: error.message
+        });
+      }
+    }
+
+    logger.debug('notificar-cierre-caja.config.loaded', {
+      projectId,
+      files: Object.keys(config)
+    });
+  } catch (error) {
+    logger.warn('notificar-cierre-caja.config.error', {
+      projectId,
+      error: error.message
+    });
+  }
+
+  return config;
+}
+
+/**
+ * Resuelve los destinos de notificación buscando en orden de prioridad:
+ *
+ * Telegram:
+ *   1. credential-manager: TELEGRAM_CHAT_ID_PROJECT_{projectId} (process.env)
+ *   2. config.notificaciones.cierre_caja.telegram (sección dedicada JSON)
+ *   3. config.project.telegram (raíz del project.json)
+ *   4. credential-manager: TELEGRAM_CHAT_ID_GLOBAL (process.env)
+ *   5. config.telegram (config global)
+ *
+ * WhatsApp / Email: igual que antes (solo desde sección dedicada o config raíz)
+ */
+function resolverDestinos(config, projectId) {
+  // Intentar sección dedicada (archivo notificaciones.json o dentro de project.json)
+  const dedicada =
+    config?.notificaciones?.cierre_caja ||
+    config?.project?.notificaciones?.cierre_caja ||
+    {};
+
+  const destinos = {};
+
+  // Telegram: credential-manager PROJECT > dedicada JSON > config raíz > credential-manager GLOBAL > config global
+  const envChatIdProject = projectId ? process.env[`TELEGRAM_CHAT_ID_PROJECT_${projectId}`] : null;
+  const envBotNameProject = projectId ? process.env[`TELEGRAM_BOT_NAME_PROJECT_${projectId}`] : null;
+
+  if (envChatIdProject && envBotNameProject) {
+    // Prioridad 1: credential-manager a nivel PROJECT
+    destinos.telegram = { chatId: envChatIdProject, botName: envBotNameProject };
+  } else if (dedicada.telegram?.chatId) {
+    // Prioridad 2: sección dedicada en JSON
+    destinos.telegram = {
+      chatId: dedicada.telegram.chatId,
+      botName: dedicada.telegram.botName || config?.project?.telegram?.botName || config?.telegram?.botName
+    };
+  } else {
+    // Prioridad 3: config raíz del proyecto JSON
+    const tg = config?.project?.telegram || config?.telegram;
+    if (tg?.chatId && tg?.botName) {
+      destinos.telegram = { chatId: tg.chatId, botName: tg.botName };
+    }
+  }
+
+  // Fallback final: credential-manager GLOBAL (si no se resolvió por ningún otro medio)
+  if (!destinos.telegram) {
+    const envChatIdGlobal = process.env.TELEGRAM_CHAT_ID_GLOBAL;
+    const envBotNameGlobal = process.env.TELEGRAM_BOT_NAME_GLOBAL;
+    if (envChatIdGlobal && envBotNameGlobal) {
+      destinos.telegram = { chatId: envChatIdGlobal, botName: envBotNameGlobal };
+    }
+  }
+
+  // WhatsApp: solo desde sección dedicada
+  if (dedicada.whatsapp?.to) {
+    destinos.whatsapp = { to: dedicada.whatsapp.to };
+  }
+
+  // Email: dedicada > fallback gmail account
+  if (dedicada.email?.to) {
+    destinos.email = {
+      to: dedicada.email.to,
+      account: dedicada.email.account || config?.project?.gmail?.account || config?.gmail?.account
+    };
+  }
+
+  return destinos;
+}
 
 /**
  * Divide un mensaje largo en partes respetando saltos de línea.

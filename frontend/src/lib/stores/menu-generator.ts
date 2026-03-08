@@ -9,6 +9,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
+import { activeProjectId } from '$lib/stores/projects';
 import {
   mqttRequest,
   MqttTimeoutError,
@@ -130,10 +131,16 @@ export const menuGeneratorStore = writable<MenuGeneratorState>(initialState);
  * Genera una carta desde texto
  */
 export async function generateMenu(texto: string, nombre?: string, provider?: string): Promise<boolean> {
+  const project_id = get(activeProjectId);
+  if (!project_id) {
+    menuGeneratorStore.update(s => ({ ...s, generating: false, error: 'No hay proyecto activo. Selecciona un proyecto primero.' }));
+    return false;
+  }
+
   menuGeneratorStore.update(s => ({ ...s, generating: true, error: null }));
 
   try {
-    const data: Record<string, string> = { texto };
+    const data: Record<string, string> = { texto, project_id };
     if (nombre) data.nombre = nombre;
     if (provider && provider !== 'auto') data.provider = provider;
 
@@ -173,7 +180,8 @@ export async function loadCartas(): Promise<void> {
   menuGeneratorStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const response = await mqttRequest<ListResponse>('menu', 'list');
+    const project_id = get(activeProjectId);
+    const response = await mqttRequest<ListResponse>('menu', 'list', { project_id });
 
     menuGeneratorStore.update(s => ({
       ...s,
@@ -197,7 +205,8 @@ export async function getCarta(id: string): Promise<Carta | null> {
   menuGeneratorStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const response = await mqttRequest<GetResponse>('menu', 'get', { id });
+    const project_id = get(activeProjectId);
+    const response = await mqttRequest<GetResponse>('menu', 'get', { id, project_id });
 
     // response.data IS the carta object (meta, categorias, productos)
     const carta = response.data as Carta;
@@ -246,7 +255,8 @@ export async function renderCartaHtml(
   cartaId: string,
   plantillaId: string = 'a4-clasica'
 ): Promise<void> {
-  await mqttRequest('carta', 'render', { carta_id: cartaId, plantilla_id: plantillaId });
+  const project_id = get(activeProjectId);
+  await mqttRequest('carta', 'render', { carta_id: cartaId, plantilla_id: plantillaId, project_id });
 }
 
 // =============================================================================

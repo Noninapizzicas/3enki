@@ -362,15 +362,7 @@ class ProductosModule {
       return;
     }
 
-    // Determinar project_id: la carta puede venir con project_id explícito
-    // o buscamos el primero activo que tenga path configurado
-    let project_id = carta.project_id;
-    if (!project_id) {
-      for (const [pid] of this.projectPaths) {
-        project_id = pid;
-        break;
-      }
-    }
+    const project_id = carta.project_id;
     if (!project_id) {
       this.logger.warn('carta.generada.no_project', { carta_id: carta.meta.id });
       return;

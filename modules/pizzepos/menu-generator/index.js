@@ -672,7 +672,7 @@ class MenuGeneratorModule {
     this.metrics?.increment('menu.prices.updated');
     await this.saveCartaToDisk(carta, project_id);
 
-    await this.eventBus.publish('carta.generada', carta);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return {
       status: 200,
@@ -712,7 +712,7 @@ class MenuGeneratorModule {
     this.metrics?.increment('menu.product.added');
     await this.saveCartaToDisk(carta, project_id);
 
-    await this.eventBus.publish('carta.generada', carta);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return { status: 201, data: producto };
   }
@@ -729,7 +729,7 @@ class MenuGeneratorModule {
     this.metrics?.increment('menu.product.removed');
     await this.saveCartaToDisk(carta, project_id);
 
-    await this.eventBus.publish('carta.generada', carta);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return { status: 200, data: { removed: removed.nombre, productos_restantes: carta.productos.length } };
   }
@@ -772,7 +772,7 @@ class MenuGeneratorModule {
     }
 
     await this.saveCartaToDisk(carta, project_id);
-    await this.eventBus.publish('carta.generada', carta);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return { status: 200, data: prod };
   }
@@ -958,7 +958,7 @@ class MenuGeneratorModule {
         await this.saveCartaToDisk(carta, project_id);
         this.metrics?.increment('menu.enrich.completed');
 
-        await this.eventBus.publish('carta.generada', carta, { correlationId });
+        await this.eventBus.publish('carta.generada', { ...carta, project_id }, { correlationId });
 
         this.logger.info('menu.enrich.completed', {
           carta_id: cartaId,
@@ -975,7 +975,7 @@ class MenuGeneratorModule {
       await this.saveCartaToDisk(carta, project_id);
       this.metrics?.increment('menu.generate.completed');
 
-      await this.eventBus.publish('carta.generada', carta, { correlationId });
+      await this.eventBus.publish('carta.generada', { ...carta, project_id }, { correlationId });
 
       this.logger.info('menu.generate.completed', {
         carta_id: cartaId,
@@ -1398,7 +1398,7 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     }
 
     await this.saveCartaToDisk(carta, project_id);
-    await this.eventBus.publish('carta.generada', carta);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     this.logger.info('menu.product_image.set', {
       carta_id, project_id, producto_id,

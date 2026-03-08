@@ -63,6 +63,14 @@ export interface GlovoConfig {
   configured: boolean;
 }
 
+export interface TelegramNotifConfig {
+  level: string;
+  identifier: string | null;
+  chatId: string;
+  botName: string;
+  configured: boolean;
+}
+
 export interface CredentialsState {
   providers: ProviderOption[];
   levels: LevelOption[];
@@ -78,6 +86,7 @@ export interface CredentialsState {
   };
   oauthConfigs: OAuthConfig[];
   glovoConfigs: GlovoConfig[];
+  telegramNotifConfigs: TelegramNotifConfig[];
   loading: boolean;
   error: string | null;
   selectedKey: string | null;
@@ -177,6 +186,7 @@ const initialState: CredentialsState = {
   stats: { total: 0, byLevel: {} },
   oauthConfigs: [],
   glovoConfigs: [],
+  telegramNotifConfigs: [],
   loading: false,
   error: null,
   selectedKey: null,
@@ -218,6 +228,7 @@ export async function loadCredentials(): Promise<void> {
       stats: response.data.stats || { total: 0, byLevel: {} },
       oauthConfigs: response.data.oauthConfigs || [],
       glovoConfigs: response.data.glovoConfigs || [],
+      telegramNotifConfigs: (response.data as any).telegramNotifConfigs || [],
       loading: false,
       error: null
     }));
@@ -492,6 +503,59 @@ export async function deleteGlovoConfig(level: string, identifier: string | null
 }
 
 /**
+ * Guarda configuración de notificación Telegram (Chat ID + Bot Name)
+ */
+export async function saveTelegramNotifConfig(
+  level: string,
+  identifier: string | null,
+  chatId: string,
+  botName: string
+): Promise<any> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const response = await mqttRequest<any>('credential', 'telegram.notif.save', {
+      level,
+      identifier,
+      chat_id: chatId,
+      bot_name: botName
+    });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] Telegram notif config saved:', response.data?.level);
+    return response.data;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Telegram notif config save failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
+ * Elimina configuración de notificación Telegram
+ */
+export async function deleteTelegramNotifConfig(level: string, identifier: string | null): Promise<void> {
+  credentialsStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    await mqttRequest<any>('credential', 'telegram.notif.delete', { level, identifier });
+
+    // Recargar lista para tener estado actualizado
+    await loadCredentials();
+
+    console.log('[Credentials] Telegram notif config deleted:', level);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Credentials] Telegram notif config delete failed:', errorMessage);
+    throw error;
+  }
+}
+
+/**
  * Inicia flujo OAuth2 para Gmail/Google
  * Retorna URL de autorización para abrir en popup/redirect
  */
@@ -595,6 +659,9 @@ export const hasOAuthConfig = derived(credentialsStore, $s => $s.oauthConfigs.le
 
 /** Configuraciones de Glovo (multi-campo) */
 export const glovoConfigs = derived(credentialsStore, $s => $s.glovoConfigs);
+
+/** Configuraciones de notificación Telegram (chatId + botName por nivel) */
+export const telegramNotifConfigs = derived(credentialsStore, $s => $s.telegramNotifConfigs);
 
 /** Credencial seleccionada actual */
 export const selectedCredential = derived(

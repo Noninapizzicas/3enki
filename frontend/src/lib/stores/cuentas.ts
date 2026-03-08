@@ -225,6 +225,25 @@ export async function createMesa(projectId: string, nombre?: string, comensales?
 }
 
 /**
+ * Crea un ticket de llevar via cuentas-canales → llevar strategy
+ * Devuelve el cuenta_id generado (ej: llevar_20260308_001)
+ */
+export async function createLlevar(projectId: string, clienteNombre?: string): Promise<string | null> {
+  try {
+    const res = await mqttRequest<any>('llevar', 'crear', {
+      project_id: projectId,
+      cliente_nombre: clienteNombre || undefined
+    });
+    const data = res?.data?.cuenta_id ? res.data : res?.data?.data;
+    return data?.cuenta_id || null;
+  } catch (err: any) {
+    console.error('[Cuentas] createLlevar error:', err);
+    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al crear ticket llevar' }));
+    return null;
+  }
+}
+
+/**
  * Renombra una mesa activa
  * Nombre libre: "Mesa de Manolo", "Terraza 3", lo que sea
  */

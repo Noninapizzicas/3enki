@@ -4,14 +4,15 @@
    *
    * Un toque: crea cuenta del tipo + abre comandero
    *   - local → mesa strategy (cuentas-canales): auto-nombre "Mesa 1", "Mesa 2"...
-   *   - delivery/llevar → cuentas simple (por ahora)
+   *   - llevar → llevar strategy (cuentas-canales): ticket numerado "llevar_20260308_001"
+   *   - delivery → cuentas genérico
    *
    * Colores identificativos por tipo
    * Scoped por proyecto
    */
   import { createEventDispatcher } from 'svelte';
   import type { TipoCuenta } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta, createMesa } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta, createMesa, createLlevar } from '$lib/stores/cuentas';
   import { status as mqttStatus } from '$lib/ui-core';
 
   export let tipo: TipoCuenta;
@@ -43,8 +44,11 @@
       if (tipo === 'local') {
         // Mesa → usa cuentas-canales mesa strategy (auto-nombre)
         cuenta_id = await createMesa(projectId);
+      } else if (tipo === 'llevar') {
+        // Llevar → usa cuentas-canales llevar strategy (ticket numerado)
+        cuenta_id = await createLlevar(projectId);
       } else {
-        // Delivery/llevar → cuentas simple (por ahora)
+        // Delivery/otros → cuentas genérico
         const cuenta = await createCuenta(projectId, tipo);
         cuenta_id = cuenta?.id || null;
       }

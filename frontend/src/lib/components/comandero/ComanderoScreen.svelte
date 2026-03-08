@@ -892,12 +892,18 @@
   /* Barra de familias */
   .familias-bar {
     display: flex;
-    flex-wrap: wrap;
     gap: 6px;
     padding: 5px 10px;
     background: #0d0d0d;
     border-bottom: 1px solid #222;
+    overflow-x: auto;
+    overflow-y: hidden;
     flex-shrink: 0;
+    scrollbar-width: none;
+  }
+
+  .familias-bar::-webkit-scrollbar {
+    display: none;
   }
 
   /* Main body */

@@ -156,7 +156,7 @@ class LlevarStrategy {
         return { status: 400, error: 'Request inválido', details: validate.errors };
       }
 
-      const { cliente_nombre, notas } = data;
+      const { cliente_nombre, notas, project_id } = data;
 
       this.modulo.verificarReseoDiario();
 
@@ -185,13 +185,15 @@ class LlevarStrategy {
         cuenta_id: ticket.cuenta_id,
         numero_ticket: ticket.numero_ticket,
         cliente_nombre: ticket.cliente_nombre,
-        hora_creacion: ticket.hora_creacion
+        hora_creacion: ticket.hora_creacion,
+        project_id
       });
 
       await this.modulo.publishCuentaCreada({
         cuenta_id: ticket.cuenta_id,
         tipo: 'llevar',
         total: ticket.total,
+        project_id,
         metadata: {
           nombre: String(numero_ticket).padStart(3, '0'),
           cliente_nombre: ticket.cliente_nombre,

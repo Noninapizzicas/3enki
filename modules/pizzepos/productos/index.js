@@ -6,7 +6,7 @@
  * Persiste cambios a disco en cartas JSON
  *
  * Emite: producto.creado, producto.actualizado, producto.eliminado, catalogo.actualizado
- * Consume: menu.generado, menu.validado
+ * Consume: carta.generada, menu.generado, menu.validado
  */
 
 const fs = require('fs').promises;
@@ -168,7 +168,7 @@ class ProductosModule {
         if (result.productos > 0) {
           const productos = Array.from(this.getProductos(project_id).values())
             .filter(p => p.activo !== false)
-            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio }));
+            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null }));
 
           await this.eventBus.publish('catalogo.actualizado', {
             project_id,
@@ -345,6 +345,104 @@ class ProductosModule {
     }
   }
 
+
+  // ==========================================
+  // carta.generada auto-sync
+  // ==========================================
+
+  /**
+   * Recibe carta.generada del menu-generator (cambios incrementales:
+   * precios, productos, ingredientes) y sincroniza directamente al catálogo.
+   * Esto cierra la brecha: antes solo toolExportToPOS propagaba cambios.
+   */
+  async onCartaGenerada(event) {
+    const carta = event?.data || event?.payload || event;
+    if (!carta?.meta?.id || !carta?.productos) {
+      this.logger.debug('carta.generada.ignored', { reason: 'no meta.id or productos' });
+      return;
+    }
+
+    // Determinar project_id: la carta puede venir con project_id explícito
+    // o buscamos el primero activo que tenga path configurado
+    let project_id = carta.project_id;
+    if (!project_id) {
+      for (const [pid] of this.projectPaths) {
+        project_id = pid;
+        break;
+      }
+    }
+    if (!project_id) {
+      this.logger.warn('carta.generada.no_project', { carta_id: carta.meta.id });
+      return;
+    }
+
+    const correlationId = event?.metadata?.correlationId || crypto.randomUUID();
+    const start_time = Date.now();
+
+    this.logger.info('carta.generada.received', {
+      carta_id: carta.meta.id,
+      project_id,
+      productos_count: carta.productos.length,
+      categorias_count: carta.categorias?.length || 0,
+      correlation_id: correlationId
+    });
+
+    try {
+      // Transformar carta RAW a formato POS (ingredientes → ingredientes_base con IDs)
+      const productos = carta.productos.map(p => {
+        const prod = {
+          id: p.id,
+          nombre: p.nombre,
+          categoria: p.categoria,
+          precio: p.precio,
+          activo: true
+        };
+        if (p.ingredientes_base) {
+          prod.ingredientes_base = p.ingredientes_base;
+        } else if (p.ingredientes && p.ingredientes.length > 0) {
+          prod.ingredientes_base = p.ingredientes.map(ing => ({
+            id: ing.id || `ing_${this.slugify(ing.nombre)}`,
+            nombre: ing.nombre,
+            emoji: ing.emoji || '',
+            precio_extra: ing.precio_extra ?? 0,
+            grupo: p.categoria || 'otro'
+          }));
+        }
+        if (p.imagen) prod.imagen = p.imagen;
+        if (p.descripcion) prod.descripcion = p.descripcion;
+        return prod;
+      });
+
+      const categorias = (carta.categorias || []).map(c => ({
+        ...c,
+        activa: true
+      }));
+
+      // Sincronizar directamente al catálogo en memoria
+      const stats = await this.syncCatalogo(project_id, carta.meta.id, productos, categorias, correlationId);
+
+      // Publicar catalogo.actualizado para que comandero refresque su cache
+      await this.publishCatalogoActualizado(project_id, carta.meta.id, stats, Date.now() - start_time, correlationId);
+
+      // Persistir a disco
+      await this.persistCatalog(project_id);
+
+      this.logger.info('carta.generada.synced', {
+        carta_id: carta.meta.id,
+        project_id,
+        estadisticas: stats,
+        correlation_id: correlationId,
+        duration: Date.now() - start_time
+      });
+    } catch (error) {
+      this.logger.error('carta.generada.sync_error', {
+        carta_id: carta.meta.id,
+        project_id,
+        error: error.message,
+        correlation_id: correlationId
+      });
+    }
+  }
 
   // ==========================================
   // UI Handlers (MQTT Request/Response)
@@ -843,7 +941,7 @@ class ProductosModule {
   async publishCatalogoActualizado(project_id, menu_id, estadisticas, sync_duration, correlation_id) {
     const productos = Array.from(this.getProductos(project_id).values())
       .filter(p => p.activo !== false)
-      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio }));
+      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null }));
 
     await this.eventBus.publish('catalogo.actualizado', {
       project_id,

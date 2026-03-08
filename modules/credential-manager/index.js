@@ -1252,13 +1252,17 @@ class CredentialManagerModule {
     // Glovo Configs for UI (masked secrets)
     const glovoConfigs = this.getGlovoConfigs();
 
+    // Telegram Notification Configs for UI (chatId + botName por nivel)
+    const telegramNotifConfigs = this.getTelegramNotifConfigs();
+
     return {
       providers,
       levels,
       credentials: credentialsGrouped,
       stats,
       oauthConfigs,
-      glovoConfigs
+      glovoConfigs,
+      telegramNotifConfigs
     };
   }
 

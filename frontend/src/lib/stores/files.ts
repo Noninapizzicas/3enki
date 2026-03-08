@@ -761,6 +761,81 @@ export async function formatContent(): Promise<void> {
 }
 
 // =============================================================================
+// ACTIONS - Download
+// =============================================================================
+
+/**
+ * Downloads a file to the user's device
+ * Reads file content via MQTT and triggers browser download
+ */
+export async function downloadFile(filePath: string): Promise<void> {
+  try {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    const fileName = filePath.split('/').pop() || 'download';
+    let blob: Blob;
+
+    if (ext === PDF_EXTENSION) {
+      const response = await mqttRequest<{
+        file_path: string;
+        content: string;
+        content_type: string;
+        size: number;
+        modified: string;
+      }>('pdf', 'view', { file_path: filePath });
+
+      const binary = atob(response.data.content);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      blob = new Blob([bytes], { type: response.data.content_type || 'application/pdf' });
+
+    } else if (IMAGE_EXTENSIONS.includes(ext)) {
+      const response = await mqttRequest<{
+        file_path: string;
+        content: string;
+        content_type: string;
+        size: number;
+        modified: string;
+      }>('fs', 'read', { file_path: filePath });
+
+      const binary = atob(response.data.content);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      blob = new Blob([bytes], { type: response.data.content_type || 'application/octet-stream' });
+
+    } else {
+      const response = await mqttRequest<{
+        path: string;
+        content: string;
+        encoding: string;
+        size: number;
+        modified: string;
+        type: string;
+      }>('fs', 'read', { path: filePath });
+
+      blob = new Blob([response.data.content], { type: 'text/plain;charset=utf-8' });
+    }
+
+    // Trigger browser download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log('[Files] Downloaded:', filePath);
+  } catch (error) {
+    console.error('[Files] Download failed:', getErrorMessage(error));
+  }
+}
+
+// =============================================================================
 // ACTIONS - View
 // =============================================================================
 

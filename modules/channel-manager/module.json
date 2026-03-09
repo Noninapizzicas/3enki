@@ -42,15 +42,15 @@
         "schema": { "$ref": "./schemas/events.json#/definitions/channel_resolved" }
       },
       {
-        "event": "channel.resolve.response",
-        "description": "Respuesta a channel.resolve.request",
+        "event": "channel-manager.resolve.response",
+        "description": "Respuesta a channel-manager.resolve.request (patron ServiceExecutor)",
         "schema": { "$ref": "./schemas/events.json#/definitions/channel_resolve_response" }
       }
     ],
     "subscribes": [
       {
-        "event": "channel.resolve.request",
-        "description": "Otro modulo pide resolver un identificador externo a proyecto+proposito",
+        "event": "channel-manager.resolve.request",
+        "description": "Otro modulo pide resolver un identificador externo via services.call('channel-manager', 'resolve', ...)",
         "handler": "onResolveRequest"
       }
     ]

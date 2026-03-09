@@ -308,7 +308,7 @@ class ChannelManagerModule {
 
   async onResolveRequest(event) {
     const data = event.data || event;
-    const { channel_type, external_id, correlationId } = data;
+    const { channel_type, external_id, request_id } = data;
 
     const start = Date.now();
     const result = this.resolve(channel_type, external_id);
@@ -316,14 +316,14 @@ class ChannelManagerModule {
 
     if (result) {
       this.eventBus.publish('channel.resolved', {
-        ...result, correlationId, duration
+        ...result, duration
       });
-      this.eventBus.publish('channel.resolve.response', {
-        found: true, ...result, correlationId
+      this.eventBus.publish('channel-manager.resolve.response', {
+        request_id, success: true, found: true, ...result
       });
     } else {
-      this.eventBus.publish('channel.resolve.response', {
-        found: false, channel_type, external_id, correlationId
+      this.eventBus.publish('channel-manager.resolve.response', {
+        request_id, success: true, found: false, channel_type, external_id
       });
       this.logger.debug('channel-manager.resolve.miss', { channel_type, external_id });
     }

@@ -13,7 +13,6 @@
  */
 
 const path = require('path');
-const crypto = require('crypto');
 
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp', 'image/tiff'];
 const TIPOS_DOCUMENTO = ['application/pdf'];
@@ -138,31 +137,21 @@ class TelegramStrategy {
 
   /**
    * Resuelve botName → { project_id, purpose } via channel-manager.
-   * Usa el eventBus request/response pattern.
+   * Patron ServiceExecutor: channel-manager.resolve.request → .response
    */
   async resolveProject(botName) {
-    return new Promise((resolve) => {
-      const correlationId = `fuentes_tg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const timeout = setTimeout(() => {
-        this.modulo.eventBus.unsubscribe('channel.resolve.response', handler);
-        resolve(null);
-      }, 3000);
-
-      const handler = (event) => {
-        const data = event.data || event;
-        if (data.correlationId !== correlationId) return;
-        this.modulo.eventBus.unsubscribe('channel.resolve.response', handler);
-        clearTimeout(timeout);
-        resolve(data.found ? data : null);
-      };
-
-      this.modulo.eventBus.subscribe('channel.resolve.response', handler);
-      this.modulo.eventBus.publish('channel.resolve.request', {
-        channel_type: 'telegram',
-        external_id: botName,
-        correlationId
-      });
-    });
+    try {
+      const result = await this.modulo.services.call(
+        'channel-manager', 'resolve',
+        { channel_type: 'telegram', external_id: botName },
+        { timeout: 3000 }
+      );
+      const data = result.data || result;
+      return data.found ? data : null;
+    } catch (e) {
+      this.modulo.logger.debug('fuentes.telegram.resolve-error', { botName, error: e.message });
+      return null;
+    }
   }
 
   // ==========================================
@@ -185,9 +174,6 @@ class TelegramStrategy {
     const destPath = path.join(destDir, `${Date.now()}_${safeName}`);
 
     try {
-      // Request file download via telegram-service event pattern
-      const requestId = crypto.randomUUID();
-
       const result = await this.modulo.services.call(
         'telegram', 'get_file',
         { botName, fileId, download: true, destPath },

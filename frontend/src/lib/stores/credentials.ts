@@ -43,7 +43,7 @@ export interface LevelOption {
   requiresIdentifier: boolean;
 }
 
-export type ServiceType = 'providers' | 'telegram';
+export type ServiceType = 'providers' | 'telegram' | 'canales';
 
 export interface OAuthConfig {
   accountId: string;

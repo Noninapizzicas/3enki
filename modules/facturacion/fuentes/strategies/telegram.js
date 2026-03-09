@@ -13,7 +13,6 @@
  */
 
 const path = require('path');
-const crypto = require('crypto');
 
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp', 'image/tiff'];
 const TIPOS_DOCUMENTO = ['application/pdf'];
@@ -47,12 +46,13 @@ class TelegramStrategy {
 
     if (!botName || !fileId) return;
 
-    // Detectar proyecto por botName
-    const projectId = this.modulo.findProjectByBotName(botName);
-    if (!projectId) {
+    // Resolver proyecto via channel-manager
+    const resolved = await this.resolveProject(botName);
+    if (!resolved) {
       this.modulo.logger.debug('fuentes.telegram.bot-sin-proyecto', { botName });
       return;
     }
+    const projectId = resolved.project_id;
 
     // Evitar duplicados
     if (this.pendingDownloads.has(fileId)) return;
@@ -96,12 +96,13 @@ class TelegramStrategy {
       return;
     }
 
-    // Detectar proyecto
-    const projectId = this.modulo.findProjectByBotName(botName);
-    if (!projectId) {
+    // Resolver proyecto via channel-manager
+    const resolved = await this.resolveProject(botName);
+    if (!resolved) {
       this.modulo.logger.debug('fuentes.telegram.bot-sin-proyecto', { botName });
       return;
     }
+    const projectId = resolved.project_id;
 
     // Evitar duplicados
     if (this.pendingDownloads.has(fileId)) return;
@@ -131,6 +132,29 @@ class TelegramStrategy {
   }
 
   // ==========================================
+  // Channel resolution via channel-manager
+  // ==========================================
+
+  /**
+   * Resuelve botName → { project_id, purpose } via channel-manager.
+   * Patron ServiceExecutor: channel-manager.resolve.request → .response
+   */
+  async resolveProject(botName) {
+    try {
+      const result = await this.modulo.services.call(
+        'channel-manager', 'resolve',
+        { channel_type: 'telegram', external_id: botName },
+        { timeout: 3000 }
+      );
+      const data = result.data || result;
+      return data.found ? data : null;
+    } catch (e) {
+      this.modulo.logger.debug('fuentes.telegram.resolve-error', { botName, error: e.message });
+      return null;
+    }
+  }
+
+  // ==========================================
   // File download via telegram-service events
   // ==========================================
 
@@ -150,9 +174,6 @@ class TelegramStrategy {
     const destPath = path.join(destDir, `${Date.now()}_${safeName}`);
 
     try {
-      // Request file download via telegram-service event pattern
-      const requestId = crypto.randomUUID();
-
       const result = await this.modulo.services.call(
         'telegram', 'get_file',
         { botName, fileId, download: true, destPath },

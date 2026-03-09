@@ -150,18 +150,19 @@
     "pizzepos/impresion",
     "facturacion/asesoria",
     "facturacion/fuentes",
-    "certificate-authority"
+    "certificate-authority",
+    "channel-manager"
   ],
   "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager"],
   "module_count": {
-    "_updated": "2026-03-05",
-    "core": 34,
-    "core_active": 26,
+    "_updated": "2026-03-09",
+    "core": 35,
+    "core_active": 27,
     "core_disabled": 8,
     "pizzepos": 15,
     "facturacion": 2,
-    "total_discovered": 51,
-    "total_active": 43,
+    "total_discovered": 52,
+    "total_active": 44,
     "disabled": 8
   },
   "module_categories": {
@@ -187,7 +188,7 @@
     },
     "storage": {
       "description": "Módulos de almacenamiento",
-      "modules": ["database-manager", "filesystem", "credential-manager"]
+      "modules": ["database-manager", "filesystem", "credential-manager", "channel-manager"]
     },
     "ui": {
       "description": "Módulos de interfaz de usuario",

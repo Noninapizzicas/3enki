@@ -116,31 +116,6 @@ class FuentesModule {
   // ==========================================
 
   /**
-   * Busca qué proyecto tiene configurado un botName específico.
-   * Busca en todos los projectConfigs cargados.
-   */
-  findProjectByBotName(botName) {
-    for (const [projectId, config] of this.projectConfigs) {
-      if (config.fuentes?.telegram?.botName === botName) {
-        return projectId;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Busca qué proyecto tiene configurada una cuenta Gmail.
-   */
-  findProjectByGmailAccount(account) {
-    for (const [projectId, config] of this.projectConfigs) {
-      if (config.fuentes?.gmail?.account === account) {
-        return projectId;
-      }
-    }
-    return null;
-  }
-
-  /**
    * Obtiene la config de fuentes de un proyecto.
    * Si no está cacheada, intenta cargarla del project config.
    */

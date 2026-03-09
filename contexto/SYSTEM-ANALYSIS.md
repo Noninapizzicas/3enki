@@ -52,7 +52,7 @@ No hay una única fuente de verdad para la versión del sistema.
 |--------|------|----------|-------|
 | `index.json` | 30 | 15 | 45 |
 | `modules.json` | 30 (24 active) | 13 | 43 discovered, 37 active |
-| **Realidad (module.json)** | **32** | **15** | **47** |
+| **Realidad (module.json)** | **35** | **15** | **52** |
 
 Módulos reales no listados en docs: `security-p2p`, `staff-manager` (existen pero están disabled).
 Módulos en `config.json` disabled pero no documentados como tal: `security-p2p`, `staff-manager`.
@@ -269,10 +269,10 @@ El README clama "100+ tests" y "60+ unit tests + 18 integration tests." La reali
 | Archivos JS (backend) | 251 |
 | Archivos Svelte | 90 (docs decía 68) |
 | Archivos TS | 61 (docs decía 48) |
-| Módulos con module.json | 47 |
-| Módulos activos (config.json enabled) | 34 |
+| Módulos con module.json | 52 |
+| Módulos activos (config.json enabled) | 36 |
 | Módulos disabled | 8 |
-| Módulos sin listar en config | 5 |
+| Módulos sin listar en config | 8 |
 | Archivos de test | 8 (4 rotos) |
 | Stores frontend | 24 |
 | node_modules instalado | No |
@@ -286,7 +286,7 @@ El README clama "100+ tests" y "60+ unit tests + 18 integration tests." La reali
 3. **EventBus híbrido** — EventEmitter + MQTT bridge real
 4. **HTTP Gateway nativo** — Node.js `http` module, sin Express
 5. **MQTT broker embebido** — Aedes con fallback automático
-6. **47 módulos** con auto-descubrimiento y hot-reload
+6. **52 módulos** con auto-descubrimiento y hot-reload
 7. **PizzePOS** — 15 módulos con flujo de eventos completo
 8. **AI Gateway** — 6 providers LLM con function calling y streaming
 9. **Tool system unificado** — module tools + provider tools en un solo registry

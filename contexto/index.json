@@ -35,8 +35,8 @@
     "name": "event-core",
     "version": "0.5.0",
     "description": "Meta-Core Event-Driven Framework",
-    "last_context_update": "2026-03-05",
-    "module_count": { "core": 34, "pizzepos": 15, "facturacion": 2, "total": 51 }
+    "last_context_update": "2026-03-09",
+    "module_count": { "core": 35, "pizzepos": 15, "facturacion": 2, "total": 52 }
   },
 
   "context_files": [

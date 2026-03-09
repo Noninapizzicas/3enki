@@ -47,12 +47,13 @@ class TelegramStrategy {
 
     if (!botName || !fileId) return;
 
-    // Detectar proyecto por botName
-    const projectId = this.modulo.findProjectByBotName(botName);
-    if (!projectId) {
+    // Resolver proyecto via channel-manager
+    const resolved = await this.resolveProject(botName);
+    if (!resolved) {
       this.modulo.logger.debug('fuentes.telegram.bot-sin-proyecto', { botName });
       return;
     }
+    const projectId = resolved.project_id;
 
     // Evitar duplicados
     if (this.pendingDownloads.has(fileId)) return;
@@ -96,12 +97,13 @@ class TelegramStrategy {
       return;
     }
 
-    // Detectar proyecto
-    const projectId = this.modulo.findProjectByBotName(botName);
-    if (!projectId) {
+    // Resolver proyecto via channel-manager
+    const resolved = await this.resolveProject(botName);
+    if (!resolved) {
       this.modulo.logger.debug('fuentes.telegram.bot-sin-proyecto', { botName });
       return;
     }
+    const projectId = resolved.project_id;
 
     // Evitar duplicados
     if (this.pendingDownloads.has(fileId)) return;
@@ -128,6 +130,39 @@ class TelegramStrategy {
     } finally {
       this.pendingDownloads.delete(fileId);
     }
+  }
+
+  // ==========================================
+  // Channel resolution via channel-manager
+  // ==========================================
+
+  /**
+   * Resuelve botName → { project_id, purpose } via channel-manager.
+   * Usa el eventBus request/response pattern.
+   */
+  async resolveProject(botName) {
+    return new Promise((resolve) => {
+      const correlationId = `fuentes_tg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const timeout = setTimeout(() => {
+        this.modulo.eventBus.unsubscribe('channel.resolve.response', handler);
+        resolve(null);
+      }, 3000);
+
+      const handler = (event) => {
+        const data = event.data || event;
+        if (data.correlationId !== correlationId) return;
+        this.modulo.eventBus.unsubscribe('channel.resolve.response', handler);
+        clearTimeout(timeout);
+        resolve(data.found ? data : null);
+      };
+
+      this.modulo.eventBus.subscribe('channel.resolve.response', handler);
+      this.modulo.eventBus.publish('channel.resolve.request', {
+        channel_type: 'telegram',
+        external_id: botName,
+        correlationId
+      });
+    });
   }
 
   // ==========================================

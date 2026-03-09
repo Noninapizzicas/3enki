@@ -60,6 +60,11 @@
         "handler": "onComanderoItemEliminado"
       },
       {
+        "event": "comandero.item_actualizado",
+        "description": "Item actualizado (cantidad +/-), ajustar items/total",
+        "handler": "onComanderoItemActualizado"
+      },
+      {
         "event": "comandero.enviar_cocina",
         "description": "Envío a cocina, transicionar a en_preparacion",
         "handler": "onComanderoEnviarCocina"

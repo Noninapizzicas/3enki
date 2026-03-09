@@ -1,10 +1,80 @@
 {
-  "_VERSION": "4.0.0",
+  "_VERSION": "5.0.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-03-02",
+  "_UPDATED": "2026-03-08",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "5.1.0": {
+      "fecha": "2026-03-08",
+      "cambios": [
+        "FIX: llevar strategy — handleCrearTicket ahora extrae project_id de data y lo pasa a publishCuentaCreada (antes se guardaba con project_id: null → invisible en pantalla de cuentas)",
+        "FIX: llevar strategy — onCobroProcesado ya NO cierra el ticket. Solo marca pagado=true. El ticket persiste visible hasta que se llame a entregar",
+        "FIX: llevar strategy — marcarEntregado ahora llama a cerrarTicket() — la ENTREGA es el cierre real del ciclo de llevar (no el cobro)",
+        "FIX: cuentas v2.3 — onCobroProcesado tiene excepción para tipo=llevar: marca pagado pero NO transiciona a cobrado ni programa auto-eliminación",
+        "FIX: frontend — marcarEntregado() rutea cuentas llevar_ a llevar/entregar (strategy) en vez del handler genérico",
+        "FIX: frontend — CuentaCardMesa acción entregar llama a marcarEntregado en vez de deleteCuenta",
+        "PRINCIPIO: llevar tiene ciclo de vida diferente a mesa — cobro puede ocurrir en cualquier momento pero NO cierra la cuenta. Solo entregar cierra."
+      ]
+    },
+    "5.0.0": {
+      "fecha": "2026-03-06",
+      "cambios": [
+        "REFACTOR: ingredientes ahora pertenecen a GRUPOS (= categoría de producto: pizzas, bocadillos, etc.)",
+        "REFACTOR: menu-generator — transformCartaToPOS() asigna grupo a cada ingrediente en ingredientes_catalogo y ingredientes_base",
+        "REFACTOR: ingredientes v3.0 — almacena grupos[] por ingrediente, filtro por grupo, nuevo handler update_precios",
+        "REFACTOR: productos — buildIngredientesCatalogo() propaga grupo (categoría) a cada ingrediente",
+        "REFACTOR: variaciones — almacena grupo del producto, ingredientesDisponibles incluye grupo",
+        "REFACTOR: VariacionesPanel v3.0 — filtra ingredientes por grupo del producto, organiza por tipo con colores",
+        "FEAT: ingredientes.update_precios — cambiar precios por tipo, grupo, individual, o porcentaje",
+        "FEAT: VariacionesPanel — secciones por tipo con colores (queso=amarillo, carne=rojo, verdura=verde, marisco=azul, salsa=naranja)",
+        "PRINCIPIO: ingredientes de un grupo NO se mezclan con otros. Quitar = solo los del producto. Añadir = solo los del grupo.",
+        "PRINCIPIO: precios los controla el jefe — la IA pregunta política de precios, el jefe decide"
+      ]
+    },
+    "4.3.0": {
+      "fecha": "2026-03-06",
+      "cambios": [
+        "FIX: menu-generator — transformCartaToPOS() ahora incluye precio_extra en ingredientes_base de cada producto (antes solo estaba en ingredientes_catalogo separado)",
+        "FIX: ingredientes — onProductoCreado() ahora usa ing.precio_extra del ingredientes_base en vez de hardcodear 0",
+        "FIX: variaciones — onProductoCreado() ahora carga precios desde ingredientes_base (antes solo usaba extras_sugeridos)",
+        "PRINCIPIO: precio_extra fluye desde AI → menu-generator → ingredientes_base → todos los módulos. UNA sola fuente de verdad."
+      ]
+    },
+    "4.2.0": {
+      "fecha": "2026-03-06",
+      "cambios": [
+        "FIX: persistencia — onPedidoCreado sumaba total OTRA VEZ (ya acumulado via onCuentaActualizada) — precio duplicado al enviar a cocina",
+        "FIX: comandero — handleListBuffers solo devolvía items_count, ahora devuelve items[] con nombre/precio/cantidad para que frontend muestre nombres",
+        "FIX: comandero — handleListBuffers filtra items ya enviados (enviado=true) — evita duplicar items que ya están en persistencia.pedidos[]",
+        "FIX: comandero — handleUpdateItem no emitía eventos al cambiar cantidad (+/-). Nuevo evento comandero.item_actualizado con diff_cantidad/diff_precio",
+        "FIX: comandero — item_eliminado ahora incluye cantidad del item eliminado",
+        "FIX: cuentas — cuenta.items += 1 ignoraba cantidad del item. Ahora suma cantidad real (e.g. 3 pizzas = +3)",
+        "FIX: cuentas — nuevo handler onComanderoItemActualizado para ajustar items/total cuando cambia cantidad",
+        "FIX: cuentas — TRANSICIONES_VALIDAS ampliadas: cobrado accesible desde con_pedido y en_preparacion (pago rápido)",
+        "FIX: cuentas — publishCuentaCreada incluye origen y metadata.nombre para que persistencia guarde el nombre",
+        "FIX: cuentas — onComanderoItemAgregado siempre publica items/total (antes se perdían en primer item por transición)",
+        "FIX: persistencia — onCuentaActualizada ahora persiste cambios.items y cambios.nombre",
+        "FIX: frontend — RT handler comandero.item_agregado ahora añade item a itemsDetalle (nombre visible en tarjeta)",
+        "FIX: frontend — RT handler comandero.item_eliminado ahora elimina item de itemsDetalle",
+        "FIX: frontend — nuevo RT handler comandero.item_actualizado actualiza cantidad en itemsDetalle",
+        "FIX: frontend — buffer merge construye itemsDetalle desde items del buffer (no solo count)",
+        "FEAT: cuentas — generateNombre produce solo 3 dígitos (001, 002...) — emoji se renderiza desde TIPO_ICONS",
+        "FEAT: frontend — TIPO_ICONS actualizados: 🍕 local, 🛵 delivery, 🥡 llevar"
+      ]
+    },
+    "4.1.0": {
+      "fecha": "2026-03-05",
+      "cambios": [
+        "FEAT: persistencia-comandero — cierre de caja ahora auto-cierra cuentas abiertas (cuenta.cerrada_forzada)",
+        "FEAT: persistencia-comandero — genera informe detallado al cierre (ventas, métodos pago, arqueo, cuentas forzadas, por camarero)",
+        "FEAT: persistencia-comandero — nuevo evento publicado: cuenta.cerrada_forzada",
+        "FEAT: handler notificar-cierre-caja — envía informe de cierre por Telegram y/o WhatsApp según config",
+        "FEAT: CierreCajaPanel — cierre ciego: usuario solo cuenta billetes/monedas con +/−, sin ver datos de ventas",
+        "FEAT: CierreCajaPanel — muestra cuentas cerradas automáticamente en resultado",
+        "CONFIG: notificaciones.cierre_caja.telegram: { chatId, botName } / whatsapp: { to }"
+      ]
+    },
     "4.0.0": {
       "fecha": "2026-03-02",
       "cambios": [
@@ -124,39 +194,85 @@
       "6. impresion → recibe pedido.enviado_cocina → genera comanda ESC/POS → imprime ticket",
       "7. cobros → procesa pago (efectivo/tarjeta/bizum/transferencia/mixto/link/qr) → cobro.procesado",
       "8. cuentas → escucha todos los eventos y transiciona estado: pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado (publica cuenta.estado_cambiado)",
-      "9. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada",
-      "10. persistencia-comandero → graba TODOS los eventos y reconstruye ventas"
+      "9. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada (EXCEPTO llevar: solo marca pagado, cierra al entregar)",
+      "10. persistencia-comandero → graba TODOS los eventos y reconstruye ventas",
+      "11. cierre de caja → persistencia-comandero auto-cierra cuentas abiertas (cuenta.cerrada_forzada) → genera informe → publica caja.cerrada con informe",
+      "12. handler notificar-cierre-caja → escucha caja.cerrada → envía informe por Telegram/WhatsApp según config"
     ],
     "separacion_comandero_pedidos": {
       "principio": "Comandero es la UI del camarero (buffer de items). Pedidos gestiona el ciclo de vida formal (crear, enviar cocina, completar, cancelar).",
       "cadena_eventos": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina → cocina e impresión reciben",
       "estado_actual": "Ambos módulos implementados y operativos. Comandero maneja el buffer, pedidos maneja el ciclo de vida."
     },
+    "flujo_item_detallado": {
+      "descripcion": "Flujo completo de un item desde el botón del camarero hasta la tarjeta visual. VERIFICADO 2026-03-06.",
+      "CRITICO_NO_MODIFICAR": "Este flujo fue depurado con múltiples bugs interconectados. Cualquier cambio debe verificar toda la cadena.",
+      "cadena_agregar": [
+        "1. Frontend: ProductoBtn click → addItem(producto_id, cantidad, variaciones, metadata)",
+        "2. Frontend: addItem resuelve nombre/precio desde todosProductos, envía mqttRequest('comandero', 'add-item', {nombre, precio, cantidad})",
+        "3. Backend comandero: handleAddItem → crea item {id, nombre, precio, cantidad, subtotal: precio*cantidad} → push al buffer → publica comandero.item_agregado {precio_total: subtotal, cantidad, nombre, pedido_total, pedido_items}",
+        "4. Backend cuentas: onComanderoItemAgregado → cuenta.items += cantidad (NO +1), cuenta.total += precio_total → publica cuenta.actualizada {items, total}",
+        "5. Backend persistencia: onCuentaActualizada → guarda cambios.items y cambios.total en cuentasActivasCache",
+        "6. Frontend RT: comandero.item_agregado → añade item a itemsDetalle[] con nombre (visible en tarjeta)",
+        "7. Frontend RT: cuenta.actualizada → actualiza items/total del store"
+      ],
+      "cadena_cantidad_plus_minus": [
+        "1. Frontend: handleItemIncrement/Decrement → updateItem(item_id, {cantidad: nueva})",
+        "2. Backend comandero: handleUpdateItem → actualiza item.cantidad y item.subtotal → publica comandero.item_actualizado {diff_cantidad, diff_precio, pedido_total, pedido_items}",
+        "3. Backend cuentas: onComanderoItemActualizado → cuenta.items += diff_cantidad, cuenta.total += diff_precio → publica cuenta.actualizada",
+        "4. Frontend RT: comandero.item_actualizado → actualiza cantidad en itemsDetalle"
+      ],
+      "cadena_enviar_cocina": [
+        "1. Frontend: enviarCocina() → mqttRequest('comandero', 'send-kitchen')",
+        "2. Backend comandero: handleEnviarCocina → filtra items con enviado=false → marca enviado=true → publica comandero.enviar_cocina con items enviados",
+        "3. Backend pedidos: onComanderoEnviarCocina → crea pedido formal → publica pedido.creado {items[], total}",
+        "4. Backend persistencia: onPedidoCreado → guarda en cuenta.pedidos[] (items con nombre/precio). NO suma total (ya acumulado via onCuentaActualizada)",
+        "5. Backend cuentas: onComanderoEnviarCocina → transiciona a en_preparacion",
+        "6. Frontend: recarga desde persistencia → itemsDetalle se construye desde pedidos[] (items enviados)",
+        "7. Buffer: handleListBuffers SOLO devuelve items con enviado=false — evita duplicar items ya en persistencia.pedidos[]"
+      ],
+      "trampas_conocidas": {
+        "doble_conteo_total": "persistencia.onPedidoCreado NO debe sumar total — ya se acumula via onCuentaActualizada en cada item_agregado",
+        "items_count_vs_cantidad": "cuenta.items debe sumar item.cantidad (no +1 por add-item call). 3 pizzas en un add-item = +3",
+        "buffer_duplicacion": "handleListBuffers debe filtrar items con enviado=true — sino se duplican con los de persistencia.pedidos[]",
+        "itemsDetalle_source": "Antes de enviar cocina: viene del buffer merge. Después de enviar: viene de persistencia.pedidos[]. Ambas fuentes se combinan sin duplicar."
+      }
+    },
     "ciclo_vida_cuenta": {
-      "descripcion": "El módulo cuentas (v2.2) ahora refleja el ciclo de vida completo escuchando eventos de otros módulos",
-      "estados": ["pendiente", "con_pedido", "en_preparacion", "listo", "para_cobrar", "cobrado"],
+      "descripcion": "El módulo cuentas (v2.3) refleja el ciclo de vida completo escuchando eventos de otros módulos",
+      "estados": ["pendiente", "con_pedido", "en_preparacion", "listo", "entregado", "para_cobrar", "cobrado"],
       "transiciones": {
         "pendiente→con_pedido": "comandero.item_agregado (primer item añadido)",
         "con_pedido→en_preparacion": "comandero.enviar_cocina (items enviados a cocina)",
+        "con_pedido→cobrado": "cobro.procesado (pago rápido sin enviar a cocina) — NO aplica a llevar",
         "en_preparacion→listo": "cocina.pedido_listo (todos los items preparados)",
+        "en_preparacion→cobrado": "cobro.procesado (pago mientras cocina prepara) — NO aplica a llevar",
         "listo→para_cobrar": "cobro.iniciado (camarero abre cobro)",
-        "para_cobrar→cobrado": "cobro.procesado (pago confirmado)",
+        "listo→cobrado": "cobro.procesado (pago directo) — NO aplica a llevar",
+        "listo→entregado": "llevar/entregar o cuenta/marcar_entregado",
+        "para_cobrar→cobrado": "cobro.procesado (pago confirmado) — NO aplica a llevar",
         "listo→en_preparacion": "comandero.enviar_cocina (cliente pide más tras primer pedido listo)",
         "con_pedido→pendiente": "comandero.item_eliminado (último item eliminado sin enviar)"
       },
       "evento_publicado": "cuenta.estado_cambiado {cuenta_id, estado_anterior, estado_nuevo}",
-      "alerta": "Timer de 30 min en estado pendiente — activa alerta visual en tarjeta de cuenta"
+      "alerta": "Timer de 30 min en estado pendiente — activa alerta visual en tarjeta de cuenta",
+      "excepcion_llevar": {
+        "CRITICO": "Llevar NO transiciona a cobrado al recibir cobro.procesado. Solo marca pagado=true. La cuenta permanece visible hasta que se llame a entregar (llevar/entregar). El cierre lo gestiona LlevarStrategy.marcarEntregado() → cerrarTicket() → cuenta.cerrada.",
+        "razon": "El cliente paga (a veces antes) pero el pedido se queda visible hasta que lo recoja. Cobrar ≠ cerrar para llevar.",
+        "flujo_llevar": "crear → items → cocina → listo → cobrar (pagado=true, sigue visible) → entregar (cierra cuenta)"
+      }
     },
     "evento_critico": {
       "nombre": "cobro.procesado",
-      "flujo": "cobros publica → cuentas-canales detecta canal por prefijo de cuenta_id → cierra cuenta automáticamente",
+      "flujo": "cobros publica → cuentas-canales detecta canal por prefijo de cuenta_id → cierra cuenta automáticamente (EXCEPTO llevar — solo marca pagado)",
       "prefijos": {
-        "mesa_": "MesaStrategy",
-        "tel_": "TelefonoStrategy",
-        "llevar_": "LlevarStrategy",
-        "glovo_": "GlovoStrategy",
-        "wa_": "WhatsAppStrategy"
-      }
+        "mesa_": "MesaStrategy — cierra mesa inmediatamente",
+        "tel_": "TelefonoStrategy — cierra pedido telefónico",
+        "llevar_": "LlevarStrategy — solo marca pagado=true, NO cierra (espera a entregar)",
+        "glovo_": "GlovoStrategy — cierra pedido Glovo",
+        "wa_": "WhatsAppStrategy — cierra pedido WhatsApp"
+      },
+      "excepcion_llevar_en_cuentas": "cuentas/index.js: onCobroProcesado() tiene if (cuenta.tipo === 'llevar') return; — no transiciona a cobrado ni programa auto-eliminación"
     }
   },
 
@@ -217,7 +333,7 @@
       "uiHandlers": ["create", "list", "get", "confirm", "refund", "payment-methods", "health", "metrics"],
       "eventos_publica": ["cobro.iniciado", "cobro.procesado", "cobro.reembolsado"],
       "eventos_suscribe": ["pedido.completado"],
-      "nota": "cobro.procesado es el evento que dispara el cierre automático de cuenta en cuentas-canales. NOTA: module.json documenta cobro.completado y cobro.fallido pero el código real publica cobro.procesado y cobro.reembolsado."
+      "nota": "cobro.procesado es el evento que dispara el cierre automático de cuenta en cuentas-canales (EXCEPTO llevar — solo marca pagado). NOTA: module.json documenta cobro.completado y cobro.fallido pero el código real publica cobro.procesado y cobro.reembolsado."
     },
 
     "cocina": {
@@ -239,7 +355,7 @@
       "descripcion": "Interfaz del camarero — puerta de entrada para tomar pedidos. Buffer por cuenta, add/remove items, enviar cocina.",
       "ui_domain": "comandero",
       "uiHandlers": ["get", "add-item", "remove-item", "update-item", "send-kitchen", "health", "buffers"],
-      "eventos_publica": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina"],
+      "eventos_publica": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "comandero.enviar_cocina"],
       "eventos_suscribe": ["cuenta.actualizada", "caja.cerrada", "dia.iniciado", "catalogo.actualizado", "producto.creado", "producto.actualizado"],
       "nota_eventos": "IMPORTANTE: comandero publica comandero.* (NO pedido.*). El módulo pedidos escucha comandero.enviar_cocina y es quien publica pedido.creado/enviado_cocina.",
       "productosCache": "Se sincroniza via catalogo.actualizado (array completo) y producto.creado/actualizado (individual). Resuelve nombre/precio al añadir items.",
@@ -248,6 +364,17 @@
         "flujo": "filtrar items no enviados → generar pedido_id → marcar items → publicar pedido.creado + pedido.enviado_cocina (solo items nuevos) → devolver pedido actualizado",
         "segunda_ronda": "El camarero puede añadir más items después de enviar. Al enviar de nuevo, solo van los nuevos.",
         "evento_payload": "comandero.item_agregado incluye: variaciones (objeto canónico), ingredientes_base (string[]), ingredientes, tipo, pizza_izquierda, pizza_derecha en el payload del evento"
+      },
+      "handleListBuffers": {
+        "descripcion": "Devuelve items NO enviados a cocina de cada buffer activo",
+        "filtra": "Solo items con enviado=false — los enviados ya están en persistencia.pedidos[]",
+        "payload": "{ cuenta_id, total, items_count, items: [{item_id, producto_id, nombre, cantidad, precio, subtotal}] }",
+        "uso_frontend": "cuentas.ts mergea estos items como itemsDetalle en las tarjetas — así se ven nombres antes de enviar a cocina"
+      },
+      "handleUpdateItem": {
+        "descripcion": "Cambia cantidad o notas de un item en el buffer",
+        "evento": "Emite comandero.item_actualizado con diff_cantidad/diff_precio para que cuentas ajuste totales",
+        "eliminacion": "Si cantidad <= 0, emite comandero.item_eliminado en su lugar"
       },
       "addItem_overrides": {
         "nombre_override": "MitadMitad y AlGusto envían nombre compuesto (ej: '½ Country / ½ R&B'). addItem() lo usa como nombre del item.",
@@ -283,13 +410,14 @@
     },
 
     "ingredientes": {
-      "version": "2.0.0",
-      "version_module_json": "2.0.0",
-      "descripcion": "Catálogo de ingredientes sincronizado desde menús AI y creación de productos. Ingredientes se cargan en initComandero() via carta_completa y se pasan como prop catalogoIngredientes a VariacionesPanel/AlGustoPanel — sin request MQTT adicional.",
+      "version": "3.0.0",
+      "version_module_json": "3.0.0",
+      "descripcion": "Catálogo de ingredientes organizado por GRUPO (= categoría de producto). Cada ingrediente tiene grupos[], tipo, precio_extra. Precios los controla el jefe via update_precios. Se cargan en initComandero() via carta_completa con grupos[].",
       "ui_domain": "ingredientes",
-      "uiHandlers": ["list", "get", "search", "alergenos", "update", "health", "metrics"],
+      "uiHandlers": ["list", "get", "search", "alergenos", "update", "update_precios", "health", "metrics"],
       "eventos_publica": ["ingrediente.creado", "ingrediente.actualizado"],
-      "eventos_suscribe": ["menu.generado", "producto.creado"]
+      "eventos_suscribe": ["menu.generado", "producto.creado"],
+      "campos_ingrediente": ["id", "nombre", "emoji", "tipo", "grupos[]", "precio_extra", "disponible", "es_alergeno"]
     },
 
     "variaciones": {
@@ -308,6 +436,17 @@
           "ingredientes_anadir": "[{nombre, cantidad?, precio_extra?}] — ingredientes extra"
         },
         "nota": "Frontend (PedidoItem, ItemLine) soporta ambos formatos (objeto canónico + array legacy) para backward compat. Backend almacena tal cual llega."
+      },
+      "defaults_backend": {
+        "permite_anadir": false,
+        "max_ingredientes_extra": 5,
+        "nota": "onProductoCreado() defaults: permite_anadir=false, max=5. Solo se activa si producto.variaciones lo indica explícitamente."
+      },
+      "hardcodes_ui_a_revisar": {
+        "tipoConfig": "VariacionesPanel.svelte:42-50 — mapa hardcodeado de tipos (queso/verdura/carne/marisco/salsa/masa/otro) con emojis, colores y orden. Aceptable como config visual, pero si se añade un tipo nuevo hay que tocar frontend.",
+        "emoji_pizza": "VariacionesPanel.svelte:264 — emoji 🍕 hardcodeado en header. Debería usar producto.emoji o ninguno, no todos los productos son pizza.",
+        "defaults_inconsistentes": "VariacionesPanel.svelte:133-134 — cuando variaciones/get falla (404), frontend asume permiteAnadir=true y maxExtras=10. Backend defaults son permiteAnadir=false y max=5. Comportamiento OPUESTO.",
+        "soft_fail_masivo": "VariacionesPanel.svelte:125 — mqttRequest('variaciones','get') con .catch(()=>null). Si producto no tiene config de variaciones (normal para productos nuevos), cae en defaults hardcodeados que contradicen al backend."
       }
     },
 
@@ -321,7 +460,7 @@
         "uiHandlers": ["generate", "list", "get", "health", "export"],
         "pipeline_uiHandlers": ["sharp.prepare-ocr", "pdfjs.info", "pdfjs.render", "google-vision.extract", "tesseract.extract", "scribe-ocr.extract", "document-processor.process"],
         "tools": {
-          "descripcion": "14 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
+          "descripcion": "15 herramientas expuestas al LLM via toolsRegistry para el agentic loop del chat",
           "lista": [
             { "name": "menu.generate", "handler": "toolGenerate", "desc": "Genera carta estructurada desde texto (OCR, lista, JSON)" },
             { "name": "menu.list_cartas", "handler": "toolListCartas", "desc": "Lista cartas generadas con resumen" },
@@ -331,6 +470,7 @@
             { "name": "menu.remove_product", "handler": "toolRemoveProduct", "desc": "Elimina producto de carta" },
             { "name": "menu.add_category", "handler": "toolAddCategory", "desc": "Añade categoría nueva a carta" },
             { "name": "menu.update_product", "handler": "toolUpdateProduct", "desc": "Actualiza nombre/precio/ingredientes/categoría" },
+            { "name": "menu.update_ingredient_prices", "handler": "toolUpdateIngredientPrices", "desc": "Actualiza precios extra de ingredientes: individuales por nombre, fijo por tipo, o porcentaje global" },
             { "name": "menu.search_products", "handler": "toolSearchProducts", "desc": "Busca productos por nombre o ingrediente" },
             { "name": "menu.stats", "handler": "toolStats", "desc": "Estadísticas: total, por categoría, precio medio, rango" },
             { "name": "menu.enrich_products", "handler": "toolEnrichProducts", "desc": "Enriquece productos con AI: descripciones atractivas, emojis, ingredientes clasificados" },
@@ -354,7 +494,7 @@
         },
         "output_schema": "schemas/carta-output.json",
         "output_formato": {
-          "meta": "{ id, nombre, generado_desde, precio_extra_default, created_at }",
+          "meta": "{ id, nombre, generado_desde, created_at }",
           "categorias": "[{ id, nombre, orden }]",
           "productos": "[{ id, nombre, categoria, precio, ingredientes: [{ nombre, emoji, tipo, precio_extra }] }]"
         },
@@ -364,10 +504,9 @@
             "nombre": "Nombre original (obligatorio)",
             "emoji": "Emoji representativo (obligatorio)",
             "tipo": "Clasificación: queso|carne|verdura|salsa|masa|marisco|otro (IA lo da, fallback por nombre)",
-            "precio_extra": "Precio en € si se añade como extra (IA estima, fallback por tipo: carne 2€, queso 1.50€, verdura 1€, salsa 0.75€)"
+            "precio_extra": "SIEMPRE 0 por defecto. El jefe configura precios manualmente via chat (herramienta menu.update_ingredient_prices)"
           },
-          "precio_extra_default": "En carta.meta — fallback global por carta (default 1.50€)",
-          "fallback_clasificacion": "clasificarIngrediente(nombre) — regex sobre nombres comunes de pizzería. Mismo código en menu-generator y productos."
+          "fallback_clasificacion": "clasificarIngrediente(nombre) — regex sobre nombres comunes de pizzería"
         },
         "tests": {
           "test-generate.js": "40/40 — datos reales Pizzicas (30 productos, 2 categorías)",
@@ -491,12 +630,13 @@
     },
 
     "persistencia-comandero": {
-      "version": "2.0.0",
+      "version": "3.0.0",
       "descripcion": "Event sourcing — graba TODOS los eventos del sistema y reconstruye registros de ventas. FUENTE DE VERDAD para cuentas activas.",
       "ui_domain": "persistencia",
       "uiHandlers": ["cuentas_activas", "eventos", "eventos_fecha", "ventas", "ventas_fecha", "cuadre", "cuadre_fecha", "cierre", "iniciar_dia", "backup", "health", "metrics"],
-      "eventos_suscribe": ["boton.pulsado", "ui.accion", "cuenta.creada", "cuenta.cerrada", "cobro.iniciado", "cobro.procesado", "cobro.reembolsado", "pedido.creado", "pedido.item_agregado", "pedido.item_eliminado", "pedido.enviado_cocina", "pedido.completado", "catalogo.actualizado", "mesa.abierta", "mesa.cerrada", "telefono.pedido_creado", "llevar.ticket_creado"],
-      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día", "Cola de escritura (_enqueueWrite) — serializa writes sin perder eventos"],
+      "eventos_publica": ["caja.cerrada", "cuenta.cerrada_forzada", "dia.iniciado"],
+      "eventos_suscribe": ["boton.pulsado", "ui.accion", "cuenta.creada", "cuenta.cerrada", "cuenta.eliminada", "cuenta.estado_cambiado", "cuenta.actualizada", "cobro.iniciado", "cobro.procesado", "cobro.reembolsado", "pedido.creado", "pedido.enviado_cocina", "pedido.completado", "mesa.abierta", "mesa.cerrada", "mesa.renombrada", "telefono.pedido_creado", "llevar.ticket_creado", "comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina", "catalogo.actualizado"],
+      "caracteristicas": ["Rotación diaria automática", "Archivado de días anteriores", "Backup", "Cuadre de caja", "Cierre del día con auto-cierre de cuentas abiertas", "Informe detallado de cierre para envío por mensajería", "Cola de escritura (_enqueueWrite) — serializa writes sin perder eventos"],
       "arquitectura_event_sourcing": {
         "patron": "Event Sourcing — estado reconstruido desde stream de eventos",
         "cache_principal": "cuentasActivasCache — Map en memoria con todas las cuentas abiertas",
@@ -507,14 +647,19 @@
           "3. Se actualiza cuentasActivasCache",
           "4. Se persiste cuentas_activas.json"
         ],
+        "CRITICO_total": "El total se acumula SOLO via onCuentaActualizada (en cada item_agregado). onPedidoCreado NO suma total — solo guarda items en pedidos[].",
         "reconstruccion": "Al iniciar, lee cuentas_activas.json y restaura el cache",
         "estructura_cuenta_activa": {
           "cuenta_id": "string — ID único",
+          "project_id": "string — ID del proyecto (CRITICO: sin project_id la cuenta no aparece al filtrar)",
           "tipo": "mesa | telefono | llevar | delivery | glovo | whatsapp",
           "origen": "string — descripción del origen",
+          "estado": "string — estado actual (abierta, etc.)",
           "datos_especificos": "object — nombre, telefono, etc.",
           "pedidos": "array — lista de pedidos asociados",
           "total": "number — total acumulado",
+          "pagado": "boolean — marcado via cuenta.actualizada cuando cobro.procesado llega",
+          "servido": "boolean — marcado via cuenta.actualizada",
           "created_at": "ISO timestamp",
           "updated_at": "ISO timestamp"
         }
@@ -621,14 +766,18 @@
       },
       "frontend": {
         "componentes": {
-          "CartaScreen.svelte": "Pantalla principal: header + categorías scroll + grid productos + carrito FAB",
+          "CartaScreen.svelte": "Pantalla principal: header + categorías scroll + grid productos + carrito FAB. Usa VariacionesPanel (importado de comandero/) para variaciones",
           "ProductoCard.svelte": "Tarjeta de producto: imagen/placeholder, nombre, ingredientes, precio, botón añadir",
           "ProductoDetalle.svelte": "Modal detalle: imagen grande, descripción, ingredientes tipados, tags, botón añadir",
           "CategoriaScroll.svelte": "Scroll horizontal de categorías con pill activa",
           "CarritoPanel.svelte": "Panel slide-up: items con qty +/-, variaciones visibles, total, botones vaciar/compartir/WhatsApp"
         },
         "store": "frontend/src/lib/stores/carta.ts — cartaStore con carrito, categorías, productos, WhatsApp URL builder",
-        "ruta": "/carta/:projectId (standalone, sin AppShell)"
+        "ruta": "/carta/:projectId (standalone, sin AppShell)",
+        "bugs_conocidos": {
+          "ingredientes_vacios_enriched": "Cuando carta-digital.carta-completa responde (endpoint enriquecido), carta.ts:154 setea ings=[] porque los ingredientes van embebidos en cada producto. Pero VariacionesPanel recibe catalogoIngredientes={$ingredientes} que es [] → NO se pueden añadir extras. Solo funciona en fallback (productos.carta_completa devuelve ingredientes separados).",
+          "nombre_negocio_hardcoded": "carta.ts:88 — DEFAULT_CONFIG.nombre_negocio='Pizzicas' hardcodeado como fallback"
+        }
       },
       "relacion_otros_modulos": {
         "menu-generator": "Provee los datos: carta enriquecida con descripciones AI, emojis, ingredientes clasificados, imágenes",
@@ -673,13 +822,15 @@
     "descripcion": "Flujo de eventos entre módulos — quién publica qué y quién consume. VERIFICADO 2026-02-25.",
     "flujo_pedido_completo": {
       "1_crear_cuenta": "cuentas-canales publica cuenta.creada → cuentas actualiza → persistencia registra cuenta activa",
-      "2_añadir_items": "comandero publica comandero.item_agregado / comandero.item_eliminado → cuentas actualiza totales → persistencia graba",
+      "2_añadir_items": "comandero publica comandero.item_agregado / item_eliminado / item_actualizado → cuentas actualiza items+total (por cantidad real) → persistencia graba",
       "3_enviar_cocina": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina",
       "4_recepcion": "cocina recibe pedido.enviado_cocina (display digital) + impresion recibe pedido.enviado_cocina (ticket físico)",
       "5_cocina_prepara": "cocinero marca items → cocina publica cocina.item_preparado → cuando todos listos → cocina.pedido_listo",
       "6_notificacion": "cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican al cliente",
-      "7_cobrar": "cobros publica cobro.procesado → cuentas-canales cierra cuenta por prefijo → cuenta.cerrada",
-      "8_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json"
+      "7_cobrar": "cobros publica cobro.procesado → cuentas-canales detecta canal por prefijo → mesa/telefono/glovo/whatsapp: cierra cuenta → cuenta.cerrada | llevar: solo marca pagado=true (cuenta sigue activa hasta entregar)",
+      "8_venta": "persistencia-comandero recibe cuenta.cerrada → construye venta con pedidos+cobro → guarda en ventas.json",
+      "9_cierre": "persistencia-comandero cierre → auto-cierra cuentas abiertas (cuenta.cerrada_forzada) → genera informe detallado → publica caja.cerrada con informe",
+      "10_notificacion_cierre": "handler notificar-cierre-caja escucha caja.cerrada → envía informe por Telegram (telegram.send_message.request) y/o WhatsApp (local.whatsapp.send.request)"
     },
     "flujo_catalogo": {
       "1_generar": "menu-generator publica menu.generado (con ingredientes_catalogo enriquecidos: tipo, precio_extra) → productos guarda draft",
@@ -687,6 +838,48 @@
       "3_notificar": "productos publica catalogo.actualizado (con array productos[]) → comandero sincroniza productosCache de golpe",
       "4_individual": "productos publica producto.creado/actualizado (con id, nombre, precio) → comandero actualiza cache individual",
       "5_ingredientes": "productos.buildIngredientesCatalogo() crea catálogo global con tipo/precio_extra (de IA o fallback por nombre) → frontend consulta via productos/ingredientes"
+    },
+    "flujo_ingredientes_v3": {
+      "CRITICO_NO_MODIFICAR": "Sistema de ingredientes por GRUPO. Cada ingrediente pertenece a una o más categorías de producto. No se mezclan entre grupos.",
+      "concepto": {
+        "grupo": "= categoría de producto (pizzas, bocadillos, entrantes...). Los ingredientes de un grupo solo se ofrecen a productos de ese grupo.",
+        "tipo": "= clasificación visual (queso, carne, verdura, salsa...). Para agrupar en la UI con colores, NO para filtrar disponibilidad.",
+        "quitar": "Solo ingredientes que lleva el producto (ingredientes_base)",
+        "anadir": "Solo ingredientes del mismo grupo (misma categoría)"
+      },
+      "cadena": {
+        "1_AI": "AI genera ingredientes con precio_extra y tipo",
+        "2_menu_generator": "transformCartaToPOS() asigna grupo=categoria a cada ingrediente. ingredientes_catalogo tiene grupos[]. ingredientes_base tiene grupo.",
+        "3_ingredientes": "v3.0: almacena grupos[] por ingrediente. Merge de grupos si ingrediente ya existe. Filtro por grupo en handleListIngredientes.",
+        "4_productos": "buildIngredientesCatalogo() asigna grupo=prod.categoria. handleCartaCompleta devuelve ingredientes con grupos[].",
+        "5_variaciones": "onProductoCreado() guarda grupo del producto en config. ingredientesDisponibles incluye grupo.",
+        "6_frontend": "VariacionesPanel filtra catalogoIngredientes por grupo=producto.categoria. Organiza por tipo con colores."
+      },
+      "precios": {
+        "fuente": "La IA pregunta política de precios al jefe. El jefe decide.",
+        "cambiar_precios": "ingredientes.update_precios — por tipo, por grupo, individual, o porcentaje",
+        "ejemplos": [
+          "{ tipo: 'carne', precio_extra: 2.50 } → todos los de carne a 2.50€",
+          "{ tipo: 'verdura', porcentaje: -5 } → verduras bajan 5%",
+          "{ id: 'ing_champinon', precio_extra: 0.80 } → individual",
+          "{ grupo: 'pizzas', tipo: 'queso', precio_extra: 1.50 } → quesos de pizzas a 1.50€"
+        ]
+      },
+      "ui_colores": {
+        "queso": "#facc15 (amarillo)",
+        "verdura": "#22c55e (verde)",
+        "carne": "#ef4444 (rojo)",
+        "marisco": "#3b82f6 (azul)",
+        "salsa": "#f59e0b (naranja)",
+        "masa": "#a78bfa (lila)",
+        "otro": "#888 (gris)"
+      },
+      "trampas_conocidas": [
+        "NO mezclar ingredientes entre grupos — pizza no ofrece ingredientes de bocadillo",
+        "grupos[] es array porque un ingrediente puede estar en varios grupos (ej: tomate en pizzas y bocadillos)",
+        "El campo tipo es SOLO visual — NO usar para filtrar disponibilidad, para eso está grupo",
+        "precio_extra siempre 0 por defecto — el jefe configura precios via chat con menu.update_ingredient_prices"
+      ]
     }
   },
 
@@ -828,9 +1021,11 @@
             "VariacionesPanel": {
               "estado": "IMPLEMENTADO",
               "funcion": "Selección de variaciones del producto (quitar/añadir ingredientes)",
-              "mqtt": "mqttRequest('ingredientes', 'list') + producto.variaciones",
-              "precio": "precio_base ± ajustes de variaciones",
-              "ui": "Grid de toggles con ingredientes agrupados"
+              "datos_ingredientes": "catalogoIngredientes prop (del store comandero, cargado via productos.carta_completa) — filtrado por grupo/categoria del producto",
+              "mqtt": "mqttRequest('variaciones', 'get', {producto_id}) — soft-fail, obtiene config: permite_quitar, permite_anadir, max_extras, grupo",
+              "precio": "precio_base + sum(precio_extra * cantidad) de ingredientes añadidos",
+              "ui": "Sección 1: ingredientes base (tap=quitar, rojo). Sección 2+: ingredientes del grupo por tipo con colores (tap=añadir). Resumen SIN/CON + total.",
+              "tipoConfig_hardcoded": "Tipos visuales (queso/verdura/carne/marisco/salsa/masa/otro) con emoji+color hardcodeados en frontend — ver variaciones.hardcodes_ui_a_revisar"
             },
             "CobroPanel": {
               "estado": "IMPLEMENTADO",
@@ -924,7 +1119,10 @@
         "ubicacion": "frontend/src/lib/stores/cuentas.ts",
         "descripcion": "Store principal de cuentas — INTEGRADO CON PERSISTENCIA como fuente de verdad",
         "funciones_api": {
-          "createCuenta": "Crea cuenta nueva via cuenta.create",
+          "createCuenta": "Crea cuenta nueva via cuenta.create (genérica)",
+          "createMesa": "Crea mesa via mesa.abrir (MesaStrategy)",
+          "createLlevar": "Crea ticket llevar via llevar.crear (LlevarStrategy)",
+          "marcarEntregado": "Marca entregado — rutea llevar_ a llevar/entregar (strategy), resto a cuenta/marcar_entregado",
           "listCuentas": "Lista cuentas via cuenta.list",
           "getCuenta": "Obtiene cuenta via cuenta.get",
           "deleteCuenta": "Elimina cuenta via cuenta.delete",
@@ -949,8 +1147,13 @@
           "checkAlerta": "Detecta cuentas inactivas >30 min",
           "mapEstadoPersistencia": "Mapea estado backend a frontend"
         },
-        "subscriptions": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
-        "comportamiento_subscriptions": "Al recibir evento → recargar desde persistencia para estado consistente"
+        "subscriptions": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado", "comandero.item_agregado", "comandero.item_eliminado", "comandero.item_actualizado", "cobro.procesado"],
+        "comportamiento_subscriptions": "cuenta.creada → recarga desde persistencia. comandero.item_* → actualiza itemsDetalle en vivo (nombres visibles en tarjeta). cuenta.actualizada → actualiza items/total.",
+        "buffer_merge": {
+          "descripcion": "Al cargar, mergea items del buffer del comandero (no enviados a cocina) como itemsDetalle",
+          "fuente": "mqttRequest('comandero', 'buffers') → devuelve items[] con nombre/precio/cantidad",
+          "resultado": "tarjeta muestra nombres de items ANTES de enviar a cocina, no solo un número"
+        }
       },
       "comandero": {
         "ubicacion": "frontend/src/lib/stores/comandero.ts",

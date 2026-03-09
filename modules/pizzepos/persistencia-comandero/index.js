@@ -1,7 +1,12 @@
 /**
- * Módulo Persistencia Comandero v2.0
+ * Módulo Persistencia Comandero v3.0
  * Event sourcing local: guarda todos los eventos y genera registros de ventas
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ *
+ * v3.0: Persistencia multi-proyecto
+ *   - Datos globales en ./data/ (backward compatible)
+ *   - Datos por proyecto en data/projects/{project_id}/persistencia/
+ *   - Cierres archivados en data/projects/{project_id}/contabilidad/cierres/
  *
  * Emite: caja.cerrada, dia.iniciado
  * Consume: boton.pulsado, ui.accion, cuenta.creada, cuenta.cerrada, cobro.*, pedido.*, mesa.*, telefono.*, llevar.*
@@ -13,7 +18,7 @@ const path = require('path');
 class PersistenciaComanderoModule {
   constructor() {
     this.name = 'persistencia-comandero';
-    this.version = '2.0.0';
+    this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -22,18 +27,22 @@ class PersistenciaComanderoModule {
     this.uiHandler = null;
     this.config = {};
 
-    // Directorios (se configuran en onLoad)
+    // Directorios globales (se configuran en onLoad)
     this.dataDir = './data';
     this.eventosDir = './data/eventos';
     this.ventasDir = './data/ventas';
     this.currentDir = './data/current';
     this.backupDir = './data/backups';
 
-    // Cache en memoria
+    // Base para datos por proyecto
+    this.projectsBasePath = path.join(process.cwd(), 'data', 'projects');
+
+    // Cache en memoria (global - contiene datos de todos los proyectos)
     this.eventosCache = [];
     this.ventasCache = [];
     this.cuentasActivasCache = new Map();
-    this.fechaActual = null;
+    this.fechaJornada = null;
+    this.horaInicioJornada = null;
 
     // Métricas internas
     this.internalMetrics = {
@@ -44,7 +53,6 @@ class PersistenciaComanderoModule {
 
     // Cola de escrituras (evita perder writes por lock booleano)
     this._writeQueue = Promise.resolve();
-    this._rotacionInterval = null;
   }
 
   // ==========================================
@@ -64,16 +72,14 @@ class PersistenciaComanderoModule {
     this.currentDir = this.config.current_dir || './data/current';
     this.backupDir = this.config.backup_dir || './data/backups';
 
-    this.fechaActual = this.getFechaActual();
-
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
     await this.crearDirectorios();
+    await this.cargarJornada();
     await this.cargarDatosActuales();
     // Event subscriptions are auto-wired from module.json by the loader.
     // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
-    this.iniciarRotacionDiaria();
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -85,11 +91,6 @@ class PersistenciaComanderoModule {
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
-
-    if (this._rotacionInterval) {
-      clearInterval(this._rotacionInterval);
-      this._rotacionInterval = null;
-    }
 
     if (this.uiHandler) {
       const actions = [
@@ -154,35 +155,70 @@ class PersistenciaComanderoModule {
     }
   }
 
-  async suscribirEventos() {
-    // Eventos de UI
-    await this.eventBus.subscribe('boton.pulsado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('ui.accion', this.onEvento.bind(this));
+  // NOTE: Event subscriptions are auto-wired from module.json.
+  // See module.json "subscribes" array for the complete list.
 
-    // Eventos de cuentas
-    await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
-    await this.eventBus.subscribe('cuenta.cerrada', this.onCuentaCerrada.bind(this));
+  // ==========================================
+  // Per-Project Directory Helpers
+  // ==========================================
 
-    // Eventos de cobros
-    await this.eventBus.subscribe('cobro.iniciado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('cobro.procesado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('cobro.reembolsado', this.onEvento.bind(this));
+  /**
+   * Devuelve los paths de persistencia para un proyecto.
+   * Crea los directorios si no existen.
+   */
+  async getProjectDirs(projectId) {
+    if (!projectId) return null;
 
-    // Eventos de pedidos
-    await this.eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));
-    await this.eventBus.subscribe('pedido.enviado_cocina', this.onEvento.bind(this));
-    await this.eventBus.subscribe('pedido.completado', this.onEvento.bind(this));
+    const base = path.join(this.projectsBasePath, projectId, 'persistencia');
+    const dirs = {
+      base,
+      current: path.join(base, 'current'),
+      eventos: path.join(base, 'eventos'),
+      ventas: path.join(base, 'ventas'),
+      backups: path.join(base, 'backups'),
+      contabilidad: path.join(this.projectsBasePath, projectId, 'contabilidad', 'cierres')
+    };
 
-    // Eventos específicos de canales
-    await this.eventBus.subscribe('mesa.abierta', this.onEvento.bind(this));
-    await this.eventBus.subscribe('mesa.cerrada', this.onEvento.bind(this));
-    await this.eventBus.subscribe('mesa.renombrada', this.onMesaRenombrada.bind(this));
-    await this.eventBus.subscribe('telefono.pedido_creado', this.onEvento.bind(this));
-    await this.eventBus.subscribe('llevar.ticket_creado', this.onEvento.bind(this));
+    // Crear dirs si no existen (lazy)
+    for (const dir of Object.values(dirs)) {
+      try {
+        await fs.mkdir(dir, { recursive: true });
+      } catch (error) {
+        // Silenciar - se reportara en la escritura si falla
+      }
+    }
 
-    this.logger.info('persistencia.events.subscribed', {
-      events_count: 14
-    });
+    return dirs;
+  }
+
+  /**
+   * Extrae project_id de un evento, buscando en el payload o en la cuenta asociada.
+   */
+  resolveProjectId(event) {
+    const eventData = event?.data || event?.payload || event;
+    if (eventData?.project_id) return eventData.project_id;
+    if (eventData?.cuenta_id) {
+      const cuenta = this.cuentasActivasCache.get(eventData.cuenta_id);
+      if (cuenta?.project_id) return cuenta.project_id;
+    }
+    return null;
+  }
+
+  /**
+   * Obtiene todos los project_ids activos en las caches.
+   */
+  getActiveProjectIds() {
+    const ids = new Set();
+    for (const cuenta of this.cuentasActivasCache.values()) {
+      if (cuenta.project_id) ids.add(cuenta.project_id);
+    }
+    for (const venta of this.ventasCache) {
+      if (venta.project_id) ids.add(venta.project_id);
+    }
+    for (const evento of this.eventosCache) {
+      if (evento.payload?.project_id) ids.add(evento.payload.project_id);
+    }
+    return ids;
   }
 
   // ==========================================
@@ -326,6 +362,55 @@ class PersistenciaComanderoModule {
     });
   }
 
+  async onCuentaEstadoCambiado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { cuenta_id, estado_nuevo } = eventData;
+    if (!cuenta_id || !estado_nuevo) return;
+
+    await this.onEvento(event);
+
+    const cuenta = this.cuentasActivasCache.get(cuenta_id);
+    if (cuenta) {
+      cuenta.estado = estado_nuevo;
+      cuenta.updated_at = eventData.changed_at || new Date().toISOString();
+      await this.guardarCuentasActivas();
+
+      this.logger.info('persistencia.cuenta_activa.estado_actualizado', {
+        cuenta_id,
+        estado: estado_nuevo
+      });
+    }
+  }
+
+  async onCuentaActualizada(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = eventData;
+    if (!cuenta_id || !cambios) return;
+
+    await this.onEvento(event);
+
+    const cuenta = this.cuentasActivasCache.get(cuenta_id);
+    if (cuenta) {
+      // Persistir campos relevantes: pagado, servido, total, items, estado, nombre
+      if (cambios.pagado !== undefined) cuenta.pagado = cambios.pagado;
+      if (cambios.servido !== undefined) cuenta.servido = cambios.servido;
+      if (cambios.total !== undefined) cuenta.total = cambios.total;
+      if (cambios.items !== undefined) cuenta.items = cambios.items;
+      if (cambios.estado !== undefined) cuenta.estado = cambios.estado;
+      if (cambios.nombre !== undefined) {
+        cuenta.datos_especificos = cuenta.datos_especificos || {};
+        cuenta.datos_especificos.nombre = cambios.nombre;
+      }
+      cuenta.updated_at = eventData.updated_at || new Date().toISOString();
+      await this.guardarCuentasActivas();
+
+      this.logger.info('persistencia.cuenta_activa.actualizada', {
+        cuenta_id,
+        cambios: Object.keys(cambios)
+      });
+    }
+  }
+
   async onCuentaEliminada(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
@@ -370,7 +455,8 @@ class PersistenciaComanderoModule {
       total: total || 0
     });
 
-    cuenta.total += total || 0;
+    // NO sumar total aquí — ya se acumula via onCuentaActualizada
+    // en cada comandero.item_agregado
     cuenta.updated_at = new Date().toISOString();
 
     await this.guardarCuentasActivas();
@@ -417,45 +503,213 @@ class PersistenciaComanderoModule {
 
   async guardarEventos() {
     return this._enqueueWrite('guardar_eventos', async () => {
+      // 1. Guardar global (backward compatible)
       const archivo = path.join(this.currentDir, 'eventos.json');
       const data = {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         eventos: this.eventosCache,
         total_eventos: this.eventosCache.length,
         ultima_actualizacion: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // 2. Guardar por proyecto
+      await this._guardarEventosPorProyecto();
     });
+  }
+
+  async _guardarEventosPorProyecto() {
+    const porProyecto = new Map();
+
+    for (const evento of this.eventosCache) {
+      const pid = evento.payload?.project_id;
+      if (!pid) continue;
+      if (!porProyecto.has(pid)) porProyecto.set(pid, []);
+      porProyecto.get(pid).push(evento);
+    }
+
+    for (const [projectId, eventos] of porProyecto) {
+      try {
+        const dirs = await this.getProjectDirs(projectId);
+        if (!dirs) continue;
+
+        const archivo = path.join(dirs.current, 'eventos.json');
+        const data = {
+          fecha: this.fechaJornada,
+          project_id: projectId,
+          eventos,
+          total_eventos: eventos.length,
+          ultima_actualizacion: new Date().toISOString()
+        };
+        await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+      } catch (error) {
+        this.logger.warn('persistencia.proyecto.eventos.error', {
+          project_id: projectId,
+          error: error.message
+        });
+      }
+    }
   }
 
   async guardarVentas() {
     return this._enqueueWrite('guardar_ventas', async () => {
+      // 1. Guardar global
       const archivo = path.join(this.currentDir, 'ventas.json');
       const resumen = this.calcularResumenDia();
       const data = {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         ventas: this.ventasCache,
         resumen_dia: resumen,
         ultima_actualizacion: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // 2. Guardar por proyecto
+      await this._guardarVentasPorProyecto();
     });
+  }
+
+  async _guardarVentasPorProyecto() {
+    const porProyecto = new Map();
+
+    for (const venta of this.ventasCache) {
+      const pid = venta.project_id;
+      if (!pid) continue;
+      if (!porProyecto.has(pid)) porProyecto.set(pid, []);
+      porProyecto.get(pid).push(venta);
+    }
+
+    for (const [projectId, ventas] of porProyecto) {
+      try {
+        const dirs = await this.getProjectDirs(projectId);
+        if (!dirs) continue;
+
+        const resumen = this.calcularResumenDia(ventas);
+        const archivo = path.join(dirs.current, 'ventas.json');
+        const data = {
+          fecha: this.fechaJornada,
+          project_id: projectId,
+          ventas,
+          resumen_dia: resumen,
+          ultima_actualizacion: new Date().toISOString()
+        };
+        await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+      } catch (error) {
+        this.logger.warn('persistencia.proyecto.ventas.error', {
+          project_id: projectId,
+          error: error.message
+        });
+      }
+    }
   }
 
   async guardarCuentasActivas() {
     return this._enqueueWrite('guardar_cuentas', async () => {
+      // 1. Guardar global
       const archivo = path.join(this.currentDir, 'cuentas_activas.json');
       const cuentasObj = {};
       for (const [cuenta_id, cuenta] of this.cuentasActivasCache.entries()) {
         cuentasObj[cuenta_id] = cuenta;
       }
       const data = {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         cuentas: cuentasObj,
         total_cuentas: this.cuentasActivasCache.size,
         ultima_actualizacion: new Date().toISOString()
       };
       await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // 2. Guardar por proyecto
+      await this._guardarCuentasActivasPorProyecto();
+    });
+  }
+
+  async _guardarCuentasActivasPorProyecto() {
+    const porProyecto = new Map();
+
+    for (const [cuenta_id, cuenta] of this.cuentasActivasCache.entries()) {
+      const pid = cuenta.project_id;
+      if (!pid) continue;
+      if (!porProyecto.has(pid)) porProyecto.set(pid, new Map());
+      porProyecto.get(pid).set(cuenta_id, cuenta);
+    }
+
+    for (const [projectId, cuentasMap] of porProyecto) {
+      try {
+        const dirs = await this.getProjectDirs(projectId);
+        if (!dirs) continue;
+
+        const cuentasObj = {};
+        for (const [cuenta_id, cuenta] of cuentasMap.entries()) {
+          cuentasObj[cuenta_id] = cuenta;
+        }
+
+        const archivo = path.join(dirs.current, 'cuentas_activas.json');
+        const data = {
+          fecha: this.fechaJornada,
+          project_id: projectId,
+          cuentas: cuentasObj,
+          total_cuentas: cuentasMap.size,
+          ultima_actualizacion: new Date().toISOString()
+        };
+        await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+      } catch (error) {
+        this.logger.warn('persistencia.proyecto.cuentas.error', {
+          project_id: projectId,
+          error: error.message
+        });
+      }
+    }
+  }
+
+  /**
+   * Carga la jornada activa desde disco.
+   * La jornada se fija al iniciar día y NO cambia hasta el cierre,
+   * aunque cruce medianoche (ej: jornada del martes de 18:00 a 00:30).
+   */
+  async cargarJornada() {
+    try {
+      const archivoJornada = path.join(this.currentDir, 'jornada.json');
+      const contenido = await fs.readFile(archivoJornada, 'utf8');
+      const datos = JSON.parse(contenido);
+      this.fechaJornada = datos.fecha_jornada;
+      this.horaInicioJornada = datos.hora_inicio || null;
+      this.logger.info('persistencia.jornada_cargada', {
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: this.horaInicioJornada
+      });
+    } catch (error) {
+      // Sin jornada previa: usar fecha calendario como primera jornada
+      this.fechaJornada = this.getFechaCalendario();
+      this.horaInicioJornada = new Date().toISOString();
+      await this.guardarJornada();
+      this.logger.info('persistencia.jornada_nueva', {
+        fecha_jornada: this.fechaJornada
+      });
+    }
+  }
+
+  async guardarJornada() {
+    return this._enqueueWrite('guardar_jornada', async () => {
+      const archivo = path.join(this.currentDir, 'jornada.json');
+      const data = {
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: this.horaInicioJornada,
+        guardado_at: new Date().toISOString()
+      };
+      await fs.writeFile(archivo, JSON.stringify(data, null, 2), 'utf8');
+
+      // Guardar jornada en cada proyecto activo
+      for (const projectId of this.getActiveProjectIds()) {
+        try {
+          const dirs = await this.getProjectDirs(projectId);
+          if (!dirs) continue;
+          const archivoProj = path.join(dirs.current, 'jornada.json');
+          await fs.writeFile(archivoProj, JSON.stringify(data, null, 2), 'utf8');
+        } catch (error) {
+          // No critico
+        }
+      }
     });
   }
 
@@ -500,49 +754,8 @@ class PersistenciaComanderoModule {
   // Rotación Diaria
   // ==========================================
 
-  async rotarArchivos() {
-    const fechaAnterior = this.fechaActual;
-    const nuevaFecha = this.getFechaActual();
-
-    if (fechaAnterior === nuevaFecha) {
-      return;
-    }
-
-    this.logger.info('persistencia.rotacion', {
-      fecha_anterior: fechaAnterior,
-      fecha_nueva: nuevaFecha
-    });
-
-    try {
-      const eventosActual = path.join(this.currentDir, 'eventos.json');
-      const eventosArchivo = path.join(this.eventosDir, `${fechaAnterior}.json`);
-      await fs.copyFile(eventosActual, eventosArchivo);
-
-      const ventasActual = path.join(this.currentDir, 'ventas.json');
-      const ventasArchivo = path.join(this.ventasDir, `${fechaAnterior}.json`);
-      await fs.copyFile(ventasActual, ventasArchivo);
-
-      this.eventosCache = [];
-      this.ventasCache = [];
-      this.fechaActual = nuevaFecha;
-
-      await this.guardarEventos();
-      await this.guardarVentas();
-
-      this.logger.info('persistencia.rotacion.completada', {
-        fecha_actual: this.fechaActual
-      });
-
-    } catch (error) {
-      this.logger.error('persistencia.rotacion.error', { error: error.message });
-    }
-  }
-
-  iniciarRotacionDiaria() {
-    this._rotacionInterval = setInterval(() => {
-      this.rotarArchivos();
-    }, 60 * 60 * 1000);
-  }
+  // Rotación automática eliminada: la jornada se controla manualmente
+  // con cierre_caja + iniciar_dia. No hay rotación a medianoche.
 
   // ==========================================
   // UI Handlers (MQTT Request/Response)
@@ -565,7 +778,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         cuentas,
         total: cuentas.length
@@ -586,7 +799,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         eventos,
         total: eventos.length
@@ -595,9 +808,23 @@ class PersistenciaComanderoModule {
   }
 
   async handleGetEventosFecha(data) {
-    const { fecha } = data;
+    const { fecha, project_id } = data;
 
     try {
+      // Si hay project_id, buscar primero en persistencia del proyecto
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          try {
+            const archivoProj = path.join(dirs.eventos, `${fecha}.json`);
+            const content = await fs.readFile(archivoProj, 'utf8');
+            return { status: 200, data: JSON.parse(content) };
+          } catch (e) {
+            // Fallback a global
+          }
+        }
+      }
+
       const archivo = path.join(this.eventosDir, `${fecha}.json`);
       const content = await fs.readFile(archivo, 'utf8');
       const eventos = JSON.parse(content);
@@ -623,7 +850,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         ventas,
         resumen_dia: resumen,
@@ -633,9 +860,23 @@ class PersistenciaComanderoModule {
   }
 
   async handleGetVentasFecha(data) {
-    const { fecha } = data;
+    const { fecha, project_id } = data;
 
     try {
+      // Si hay project_id, buscar en persistencia del proyecto
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          try {
+            const archivoProj = path.join(dirs.ventas, `${fecha}.json`);
+            const content = await fs.readFile(archivoProj, 'utf8');
+            return { status: 200, data: JSON.parse(content) };
+          } catch (e) {
+            // Fallback a global
+          }
+        }
+      }
+
       const archivo = path.join(this.ventasDir, `${fecha}.json`);
       const content = await fs.readFile(archivo, 'utf8');
       const ventas = JSON.parse(content);
@@ -659,7 +900,7 @@ class PersistenciaComanderoModule {
     return {
       status: 200,
       data: {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
         project_id: project_id || null,
         timestamp: new Date().toISOString(),
         cuadre: resumen
@@ -668,9 +909,24 @@ class PersistenciaComanderoModule {
   }
 
   async handleCuadreCajaFecha(data) {
-    const { fecha } = data;
+    const { fecha, project_id } = data;
 
     try {
+      // Si hay project_id, buscar en persistencia del proyecto
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          try {
+            const archivoProj = path.join(dirs.ventas, `${fecha}.json`);
+            const content = await fs.readFile(archivoProj, 'utf8');
+            const ventas = JSON.parse(content);
+            return { status: 200, data: { fecha, project_id, cuadre: ventas.resumen_dia || {} } };
+          } catch (e) {
+            // Fallback a global
+          }
+        }
+      }
+
       const archivo = path.join(this.ventasDir, `${fecha}.json`);
       const content = await fs.readFile(archivo, 'utf8');
       const ventas = JSON.parse(content);
@@ -685,52 +941,130 @@ class PersistenciaComanderoModule {
   }
 
   async handleCierreCaja(data) {
-    const { arqueo } = data;
+    const { arqueo, project_id } = data;
 
     if (!arqueo) {
       return { status: 400, error: 'Se requiere arqueo con el dinero contado' };
     }
 
-    if (this.cuentasActivasCache.size > 0) {
-      return {
-        status: 400,
-        error: 'Hay cuentas abiertas sin cerrar',
-        cuentas_abiertas: this.cuentasActivasCache.size
-      };
-    }
-
     try {
-      const resumen = this.calcularResumenDia();
+      // Filtrar cuentas y ventas por proyecto si se especifica
+      let cuentasAbiertas = Array.from(this.cuentasActivasCache.values());
+      let ventasParaCierre = this.ventasCache;
+
+      if (project_id) {
+        cuentasAbiertas = cuentasAbiertas.filter(c => c.project_id === project_id);
+        ventasParaCierre = ventasParaCierre.filter(v => v.project_id === project_id);
+      }
+
+      // 1. Recopilar informe de cuentas abiertas antes de cerrarlas
+      const informeCuentasAbiertas = cuentasAbiertas.map(c => ({
+        cuenta_id: c.cuenta_id || c.id,
+        tipo: c.tipo,
+        nombre: c.datos_especificos?.nombre || c.nombre || 'Sin nombre',
+        estado: c.estado,
+        total: c.total || 0,
+        items: c.items || 0,
+        hora_apertura: c.created_at,
+        pedidos: c.pedidos || []
+      }));
+
+      // 2. Cerrar automáticamente cuentas abiertas
+      if (cuentasAbiertas.length > 0) {
+        this.logger.info('persistencia.cierre_caja.cerrando_cuentas', {
+          cuentas_abiertas: cuentasAbiertas.length,
+          project_id: project_id || 'global'
+        });
+
+        for (const cuenta of cuentasAbiertas) {
+          const cuentaId = cuenta.cuenta_id || cuenta.id;
+
+          // Emitir evento de cierre forzado para cada cuenta
+          await this.eventBus.publish('cuenta.cerrada_forzada', {
+            cuenta_id: cuentaId,
+            project_id: cuenta.project_id,
+            motivo: 'cierre_de_caja',
+            cuenta_snapshot: cuenta
+          });
+
+          // Eliminar de cache
+          this.cuentasActivasCache.delete(cuentaId);
+        }
+
+        await this.guardarCuentasActivas();
+      }
+
+      // 3. Calcular resumen del día
+      const resumen = this.calcularResumenDia(ventasParaCierre);
       const totalEsperadoEfectivo = resumen.por_metodo_pago.efectivo || 0;
-      const totalArqueado = (arqueo.efectivo || 0) + (arqueo.monedas || 0);
+      const totalArqueado = arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0));
       const diferencia = totalArqueado - totalEsperadoEfectivo;
 
+      const horaCierre = new Date().toISOString();
       const cierre = {
         cierre_id: `cierre_${Date.now()}`,
-        fecha: this.fechaActual,
-        hora_cierre: new Date().toISOString(),
+        project_id: project_id || null,
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: this.horaInicioJornada,
+        hora_cierre: horaCierre,
         arqueo,
         totales: resumen,
         diferencia,
-        estado: diferencia === 0 ? 'cuadrado' : (diferencia > 0 ? 'sobrante' : 'faltante')
+        estado: diferencia === 0 ? 'cuadrado' : (diferencia > 0 ? 'sobrante' : 'faltante'),
+        cuentas_cerradas_forzadas: informeCuentasAbiertas
       };
 
-      const archivoCierre = path.join(this.ventasDir, `cierre_${this.fechaActual}.json`);
+      // 4. Calcular desglose de productos y generar informe
+      const desglose_productos = this.calcularDesgloseProductos(ventasParaCierre);
+      cierre.desglose_productos = desglose_productos;
+      const informe = this.generarInformeCierre(cierre, ventasParaCierre);
+
+      // 5. Guardar cierre global
+      const archivoCierre = path.join(this.ventasDir, `cierre_${this.fechaJornada}.json`);
       await fs.writeFile(archivoCierre, JSON.stringify(cierre, null, 2), 'utf8');
 
-      await this.archivarDia();
+      // 6. Guardar cierre en proyecto (persistencia + contabilidad)
+      if (project_id) {
+        const dirs = await this.getProjectDirs(project_id);
+        if (dirs) {
+          // Cierre en persistencia/ventas/
+          const archivoCierreProj = path.join(dirs.ventas, `cierre_${this.fechaJornada}.json`);
+          await fs.writeFile(archivoCierreProj, JSON.stringify(cierre, null, 2), 'utf8');
 
+          // Cierre en contabilidad/cierres/
+          const archivoCierreContab = path.join(dirs.contabilidad, `cierre_${this.fechaJornada}.json`);
+          await fs.writeFile(archivoCierreContab, JSON.stringify({
+            ...cierre,
+            informe,
+            ventas: ventasParaCierre
+          }, null, 2), 'utf8');
+
+          this.logger.info('persistencia.cierre_proyecto.guardado', {
+            project_id,
+            contabilidad: archivoCierreContab
+          });
+        }
+      }
+
+      await this.archivarDia(project_id);
+
+      // 7. Publicar evento con informe completo para notificación
       await this.eventBus.publish('caja.cerrada', {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
+        project_id: project_id || null,
         arqueo,
         totales: resumen,
-        diferencia
+        diferencia,
+        cierre,
+        informe
       });
 
       this.logger.info('persistencia.cierre_caja', {
-        fecha: this.fechaActual,
+        fecha: this.fechaJornada,
+        project_id: project_id || 'global',
         diferencia,
-        estado: cierre.estado
+        estado: cierre.estado,
+        cuentas_forzadas: informeCuentasAbiertas.length
       });
 
       return { status: 200, data: { message: 'Cierre de caja completado', cierre } };
@@ -741,30 +1075,207 @@ class PersistenciaComanderoModule {
     }
   }
 
+  /**
+   * Genera informe de cierre en texto plano para envío por mensajería.
+   * Incluye desglose por método de pago, por familia/categoría y por producto individual.
+   */
+  generarInformeCierre(cierre, ventasOverride = null) {
+    const { fecha_jornada, hora_inicio, hora_cierre, totales, arqueo, diferencia, estado, cuentas_cerradas_forzadas, project_id } = cierre;
+    const ventas = ventasOverride || this.ventasCache;
+
+    const lineas = [];
+    lineas.push(`📊 INFORME DE CIERRE DE CAJA`);
+    lineas.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    if (project_id) lineas.push(`🏪 Proyecto: ${project_id}`);
+    lineas.push(`📅 Jornada: ${fecha_jornada}`);
+    lineas.push(`🕐 Inicio: ${hora_inicio ? new Date(hora_inicio).toLocaleTimeString('es-ES') : '—'}`);
+    lineas.push(`🕐 Cierre: ${hora_cierre ? new Date(hora_cierre).toLocaleTimeString('es-ES') : '—'}`);
+    lineas.push(``);
+
+    // Resumen de ventas
+    lineas.push(`💰 RESUMEN DE VENTAS`);
+    lineas.push(`─────────────────────`);
+    lineas.push(`Total ventas: ${totales.total_ventas}`);
+    lineas.push(`Ingresos: ${(totales.total_ingresos || 0).toFixed(2)} €`);
+    lineas.push(`Propinas: ${(totales.total_propinas || 0).toFixed(2)} €`);
+    lineas.push(``);
+
+    // Por método de pago
+    lineas.push(`💳 POR MÉTODO DE PAGO`);
+    lineas.push(`─────────────────────`);
+    for (const [metodo, total] of Object.entries(totales.por_metodo_pago || {})) {
+      if (Number(total) > 0) {
+        lineas.push(`  ${metodo}: ${Number(total).toFixed(2)} €`);
+      }
+    }
+    lineas.push(``);
+
+    // Por tipo de cuenta
+    lineas.push(`📋 POR TIPO DE CUENTA`);
+    lineas.push(`─────────────────────`);
+    for (const [tipo, total] of Object.entries(totales.por_tipo_cuenta || {})) {
+      if (Number(total) > 0) {
+        lineas.push(`  ${tipo}: ${Number(total).toFixed(2)} €`);
+      }
+    }
+    lineas.push(``);
+
+    // ==========================================
+    // DESGLOSE POR FAMILIA Y PRODUCTO
+    // ==========================================
+    const { porFamilia, porProducto, totalUnidades } = this.calcularDesgloseProductos(ventas);
+
+    if (totalUnidades > 0) {
+      lineas.push(`🍕 PRODUCTOS VENDIDOS (${totalUnidades} uds)`);
+      lineas.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+      // Por familia: total global de cada familia + detalle individual
+      const familiasOrdenadas = Object.entries(porFamilia)
+        .sort((a, b) => b[1].importe - a[1].importe);
+
+      for (const [familia, datosFamilia] of familiasOrdenadas) {
+        lineas.push(``);
+        lineas.push(`📦 ${familia} — ${datosFamilia.cantidad} uds | ${datosFamilia.importe.toFixed(2)} €`);
+        lineas.push(`─────────────────────`);
+
+        // Productos individuales de esta familia
+        const productosEnFamilia = Object.entries(porProducto)
+          .filter(([, p]) => p.familia === familia)
+          .sort((a, b) => b[1].cantidad - a[1].cantidad);
+
+        for (const [nombre, datos] of productosEnFamilia) {
+          lineas.push(`  ${nombre}: ${datos.cantidad} uds | ${datos.importe.toFixed(2)} €`);
+        }
+      }
+      lineas.push(``);
+    }
+
+    // Arqueo
+    lineas.push(`🔢 ARQUEO DE CAJA`);
+    lineas.push(`─────────────────────`);
+    const totalContado = arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0));
+    lineas.push(`Efectivo contado: ${totalContado.toFixed(2)} €`);
+    lineas.push(`Efectivo esperado: ${(totales.por_metodo_pago?.efectivo || 0).toFixed(2)} €`);
+    lineas.push(`Diferencia: ${diferencia >= 0 ? '+' : ''}${diferencia.toFixed(2)} €`);
+    lineas.push(`Estado: ${estado === 'cuadrado' ? '✅ Cuadrado' : estado === 'sobrante' ? '⬆️ Sobrante' : '⬇️ Faltante'}`);
+    lineas.push(``);
+
+    // Detalle de ventas cerradas
+    if (ventas.length > 0) {
+      lineas.push(`📝 DETALLE DE VENTAS (${ventas.length})`);
+      lineas.push(`─────────────────────`);
+      for (const venta of ventas) {
+        const nombre = venta.cuenta?.nombre || venta.cuenta?.tipo || '—';
+        const metodo = venta.cobro?.metodo_pago || '—';
+        const total = (venta.resumen?.total_final || 0).toFixed(2);
+        const items = venta.pedidos?.reduce((sum, p) => sum + (p.items?.length || 0), 0) || 0;
+        lineas.push(`  • ${nombre} | ${items} items | ${total} € (${metodo})`);
+      }
+      lineas.push(``);
+    }
+
+    // Cuentas cerradas forzadamente
+    if (cuentas_cerradas_forzadas && cuentas_cerradas_forzadas.length > 0) {
+      lineas.push(`⚠️ CUENTAS CERRADAS AL CIERRE (${cuentas_cerradas_forzadas.length})`);
+      lineas.push(`─────────────────────`);
+      for (const c of cuentas_cerradas_forzadas) {
+        lineas.push(`  • ${c.nombre} | Estado: ${c.estado} | ${(c.total || 0).toFixed(2)} € | ${c.items} items`);
+      }
+      lineas.push(``);
+    }
+
+    // Por camarero
+    if (totales.por_camarero && Object.keys(totales.por_camarero).length > 0) {
+      lineas.push(`👤 POR CAMARERO`);
+      lineas.push(`─────────────────────`);
+      for (const [camarero, total] of Object.entries(totales.por_camarero)) {
+        lineas.push(`  ${camarero}: ${Number(total).toFixed(2)} €`);
+      }
+      lineas.push(``);
+    }
+
+    lineas.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lineas.push(`Generado: ${new Date().toLocaleString('es-ES')}`);
+
+    return lineas.join('\n');
+  }
+
+  /**
+   * Calcula desglose de productos vendidos agrupados por familia/categoría.
+   * Recorre los items de todos los pedidos de las ventas del día.
+   * Devuelve totales por familia (global) y por producto (individual).
+   */
+  calcularDesgloseProductos(ventas = null) {
+    const ventasToProcess = ventas || this.ventasCache;
+
+    const porFamilia = {};   // { familia: { cantidad, importe } }
+    const porProducto = {};  // { nombre: { cantidad, importe, familia } }
+    let totalUnidades = 0;
+
+    for (const venta of ventasToProcess) {
+      for (const pedido of (venta.pedidos || [])) {
+        for (const item of (pedido.items || [])) {
+          const nombre = item.nombre || item.producto_id || 'Desconocido';
+          const familia = item.categoria || item.familia || 'Sin categoría';
+          const cantidad = item.cantidad || 1;
+          const importe = item.precio_total || item.subtotal || (item.precio_unitario || item.precio || 0) * cantidad;
+
+          totalUnidades += cantidad;
+
+          // Acumular por familia
+          if (!porFamilia[familia]) {
+            porFamilia[familia] = { cantidad: 0, importe: 0 };
+          }
+          porFamilia[familia].cantidad += cantidad;
+          porFamilia[familia].importe += importe;
+
+          // Acumular por producto individual
+          if (!porProducto[nombre]) {
+            porProducto[nombre] = { cantidad: 0, importe: 0, familia };
+          }
+          porProducto[nombre].cantidad += cantidad;
+          porProducto[nombre].importe += importe;
+        }
+      }
+    }
+
+    return { porFamilia, porProducto, totalUnidades };
+  }
+
   async handleIniciarDia() {
     try {
+      // Fijar fecha de jornada = día calendario en que se inicia
+      // Esta fecha NO cambia aunque cruce medianoche
+      const horaInicio = new Date().toISOString();
+      this.fechaJornada = this.getFechaCalendario();
+      this.horaInicioJornada = horaInicio;
+
+      // Limpiar caches del día anterior
       this.eventosCache = [];
       this.ventasCache = [];
       this.cuentasActivasCache.clear();
-      this.fechaActual = this.getFechaActual();
 
+      await this.guardarJornada();
       await this.guardarEventos();
       await this.guardarVentas();
       await this.guardarCuentasActivas();
 
       await this.eventBus.publish('dia.iniciado', {
-        fecha: this.fechaActual,
-        hora_inicio: new Date().toISOString()
+        fecha: this.fechaJornada,
+        hora_inicio: horaInicio
       });
 
-      this.logger.info('persistencia.dia_iniciado', { fecha: this.fechaActual });
+      this.logger.info('persistencia.jornada_iniciada', {
+        fecha_jornada: this.fechaJornada,
+        hora_inicio: horaInicio
+      });
 
       return {
         status: 200,
         data: {
-          message: 'Nuevo día iniciado',
-          fecha: this.fechaActual,
-          hora_inicio: new Date().toISOString()
+          message: 'Jornada iniciada',
+          fecha_jornada: this.fechaJornada,
+          hora_inicio: horaInicio
         }
       };
 
@@ -777,7 +1288,7 @@ class PersistenciaComanderoModule {
   async handleBackup() {
     try {
       const timestamp = Date.now();
-      const backupName = `backup_${this.fechaActual}_${timestamp}`;
+      const backupName = `backup_${this.fechaJornada}_${timestamp}`;
       const backupPath = path.join(this.backupDir, backupName);
 
       await fs.mkdir(backupPath, { recursive: true });
@@ -787,6 +1298,23 @@ class PersistenciaComanderoModule {
 
       const ventasActual = path.join(this.currentDir, 'ventas.json');
       await fs.copyFile(ventasActual, path.join(backupPath, 'ventas.json'));
+
+      // Backup por proyecto
+      for (const projectId of this.getActiveProjectIds()) {
+        try {
+          const dirs = await this.getProjectDirs(projectId);
+          if (!dirs) continue;
+          const projBackup = path.join(dirs.backups, backupName);
+          await fs.mkdir(projBackup, { recursive: true });
+
+          const evProj = path.join(dirs.current, 'eventos.json');
+          const vtProj = path.join(dirs.current, 'ventas.json');
+          try { await fs.copyFile(evProj, path.join(projBackup, 'eventos.json')); } catch (e) { /* ok */ }
+          try { await fs.copyFile(vtProj, path.join(projBackup, 'ventas.json')); } catch (e) { /* ok */ }
+        } catch (error) {
+          // No critico
+        }
+      }
 
       this.logger.info('persistencia.backup.creado', { backup_name: backupName });
 
@@ -812,10 +1340,11 @@ class PersistenciaComanderoModule {
         status: 'healthy',
         module: this.name,
         version: this.version,
-        fecha_actual: this.fechaActual,
+        fecha_jornada: this.fechaJornada,
         eventos_cache: this.eventosCache.length,
         ventas_cache: this.ventasCache.length,
-        cuentas_activas: this.cuentasActivasCache.size
+        cuentas_activas: this.cuentasActivasCache.size,
+        proyectos_activos: [...this.getActiveProjectIds()]
       }
     };
   }
@@ -827,7 +1356,8 @@ class PersistenciaComanderoModule {
         ...this.internalMetrics,
         eventos_dia: this.eventosCache.length,
         ventas_dia: this.ventasCache.length,
-        cuentas_activas: this.cuentasActivasCache.size
+        cuentas_activas: this.cuentasActivasCache.size,
+        proyectos_activos: this.getActiveProjectIds().size
       }
     };
   }
@@ -836,17 +1366,45 @@ class PersistenciaComanderoModule {
   // Business Logic
   // ==========================================
 
-  async archivarDia() {
+  async archivarDia(projectId = null) {
     try {
+      // Archivar global
       const eventosActual = path.join(this.currentDir, 'eventos.json');
-      const eventosArchivo = path.join(this.eventosDir, `${this.fechaActual}.json`);
+      const eventosArchivo = path.join(this.eventosDir, `${this.fechaJornada}.json`);
       await fs.copyFile(eventosActual, eventosArchivo);
 
       const ventasActual = path.join(this.currentDir, 'ventas.json');
-      const ventasArchivo = path.join(this.ventasDir, `${this.fechaActual}.json`);
+      const ventasArchivo = path.join(this.ventasDir, `${this.fechaJornada}.json`);
       await fs.copyFile(ventasActual, ventasArchivo);
 
-      this.logger.info('persistencia.dia_archivado', { fecha: this.fechaActual });
+      this.logger.info('persistencia.dia_archivado', { fecha: this.fechaJornada });
+
+      // Archivar por proyecto
+      const projectIds = projectId ? [projectId] : [...this.getActiveProjectIds()];
+      for (const pid of projectIds) {
+        try {
+          const dirs = await this.getProjectDirs(pid);
+          if (!dirs) continue;
+
+          const evCurrent = path.join(dirs.current, 'eventos.json');
+          const evArchivo = path.join(dirs.eventos, `${this.fechaJornada}.json`);
+          try { await fs.copyFile(evCurrent, evArchivo); } catch (e) { /* ok */ }
+
+          const vtCurrent = path.join(dirs.current, 'ventas.json');
+          const vtArchivo = path.join(dirs.ventas, `${this.fechaJornada}.json`);
+          try { await fs.copyFile(vtCurrent, vtArchivo); } catch (e) { /* ok */ }
+
+          this.logger.info('persistencia.proyecto.dia_archivado', {
+            project_id: pid,
+            fecha: this.fechaJornada
+          });
+        } catch (error) {
+          this.logger.warn('persistencia.proyecto.archivar.error', {
+            project_id: pid,
+            error: error.message
+          });
+        }
+      }
     } catch (error) {
       this.logger.error('persistencia.archivar_dia.error', { error: error.message });
     }
@@ -903,7 +1461,7 @@ class PersistenciaComanderoModule {
   // Helper Methods
   // ==========================================
 
-  getFechaActual() {
+  getFechaCalendario() {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');

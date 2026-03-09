@@ -34,57 +34,57 @@
 <style>
   .categoria-btn {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: 4px;
-    width: 100%;
-    padding: 10px 6px;
+    padding: 6px 12px;
     border: none;
-    border-radius: 8px;
-    background: #1a1a1a;
-    color: #aaa;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--cat-color) 12%, #1a1a1a);
+    color: #bbb;
     font-size: 0.7rem;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-    border: 2px solid transparent;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+    border: 2px solid color-mix(in srgb, var(--cat-color) 25%, transparent);
     -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .categoria-btn:active {
-    background: #222;
+    background: color-mix(in srgb, var(--cat-color) 25%, #1a1a1a);
   }
 
   .categoria-btn.active {
-    background: color-mix(in srgb, var(--cat-color) 15%, #111);
-    color: var(--cat-color);
+    background: color-mix(in srgb, var(--cat-color) 30%, #111);
+    color: #fff;
     border-color: var(--cat-color);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--cat-color) 40%, transparent);
   }
 
   .icon {
-    font-size: 1.2rem;
+    font-size: 1rem;
     line-height: 1;
   }
 
   .nombre {
-    text-align: center;
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    white-space: nowrap;
+    max-width: 80px;
   }
 
   @media (max-width: 600px) {
     .categoria-btn {
-      padding: 6px 4px;
-      gap: 2px;
-      border-radius: 6px;
+      padding: 4px 8px;
+      gap: 3px;
+      border-radius: 5px;
       font-size: 0.6rem;
     }
-    .icon { font-size: 0.9rem; }
-    .nombre { -webkit-line-clamp: 1; }
+    .icon { font-size: 0.85rem; }
+    .nombre { max-width: 60px; }
   }
 </style>

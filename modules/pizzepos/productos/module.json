@@ -52,9 +52,9 @@
         "handler": "onMenuValidado"
       },
       {
-        "event": "ingrediente.actualizado",
-        "description": "Ingrediente actualizado - sincronizar precio_extra en catálogo local",
-        "handler": "onIngredienteActualizado"
+        "event": "carta.generada",
+        "description": "Carta modificada por menu-generator — auto-sync al catálogo",
+        "handler": "onCartaGenerada"
       },
       {
         "event": "project.activated",

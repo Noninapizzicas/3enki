@@ -130,6 +130,19 @@
     }
   },
   "gmail": {
-    "cuentas": {}
+    "cuentas": {},
+    "account": "Nonina"
+  },
+  "telegram": {
+    "botName": "Noninacloset",
+    "chatId": "1934798567"
+  },
+  "notificaciones": {
+    "cierre_caja": {
+      "telegram": {
+        "chatId": "1934798567",
+        "botName": "Noninacloset"
+      }
+    }
   }
 }

@@ -119,10 +119,8 @@ class GlovoStrategy {
       estado: pedido.estado
     });
 
-    // Si el rider ya recogió, cerrar la cuenta
-    if (pedido.estado === 'recogido') {
-      await this.cerrarCuentaGlovo(cuenta_id, correlationId);
-    }
+    // Cerrar la cuenta al procesar cobro (igual que mesa)
+    await this.cerrarCuentaGlovo(cuenta_id, correlationId);
   }
 
   getHealth() {
@@ -245,6 +243,20 @@ class GlovoStrategy {
         hora_recibido: pedido.hora_recibido
       });
 
+      // Publicar cuenta.creada ANTES de enviar a cocina, para que el módulo
+      // cuentas registre la cuenta y el tracking de _pedidosEnCocina funcione.
+      await this.modulo.publishCuentaCreada({
+        cuenta_id: pedido.cuenta_id,
+        tipo: 'glovo',
+        total: pedido.total,
+        project_id: data.project_id,
+        metadata: {
+          nombre: pedido.cliente_nombre,
+          glovo_order_id,
+          direccion_entrega: direccion_entrega || ''
+        }
+      });
+
       // Auto-enviar a cocina — el pedido entra directo a la cola de cocina
       const pedido_id = `ped_${cuenta_id}`;
       pedido.pedidos.push(pedido_id);
@@ -322,16 +334,7 @@ class GlovoStrategy {
         hora_aceptado: pedido.hora_aceptado
       });
 
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'glovo',
-        total: pedido.total,
-        metadata: {
-          glovo_order_id: pedido.glovo_order_id,
-          cliente_nombre: pedido.cliente_nombre,
-          direccion_entrega: pedido.direccion_entrega
-        }
-      });
+      // cuenta.creada ya se publicó en handleRecibirPedido (dedup en cuentas)
 
       await this.notificarGlovoAPI('accept', pedido);
 
@@ -682,9 +685,13 @@ class GlovoStrategy {
       pagado: pedido.pagado
     });
 
-    // Solo cerrar si ya pagado/liquidado; si no, esperar
-    if (pedido.pagado) {
-      await this.cerrarCuentaGlovo(cuenta_id, correlationId);
+    // Si ya pagado, la cuenta ya fue cerrada por onCobroProcesado
+    if (!pedido.pagado) {
+      this.modulo.logger.info('glovo.pedido_recogido_pendiente_pago', {
+        correlation_id: correlationId,
+        cuenta_id,
+        glovo_order_id: pedido.glovo_order_id
+      });
     }
   }
 

@@ -6,7 +6,7 @@
  * Persiste cambios a disco en cartas JSON
  *
  * Emite: producto.creado, producto.actualizado, producto.eliminado, catalogo.actualizado
- * Consume: menu.generado, menu.validado
+ * Consume: carta.generada, menu.generado, menu.validado
  */
 
 const fs = require('fs').promises;
@@ -28,7 +28,6 @@ class ProductosModule {
     // Estado en memoria - por proyecto
     this.productosPerProject = new Map(); // project_id -> Map<producto_id, producto>
     this.categoriasPerProject = new Map(); // project_id -> Map<categoria_id, categoria>
-    this.ingredientesPerProject = new Map(); // project_id -> Map<ingrediente_id, ingrediente>
     this.menusPendientes = new Map(); // menu_id -> { project_id, productos_draft }
 
     // Rutas de storage por proyecto (project_id -> base_path/storage/pizzepos)
@@ -50,13 +49,6 @@ class ProductosModule {
       this.categoriasPerProject.set(projectId, new Map());
     }
     return this.categoriasPerProject.get(projectId);
-  }
-
-  getIngredientes(projectId) {
-    if (!this.ingredientesPerProject.has(projectId)) {
-      this.ingredientesPerProject.set(projectId, new Map());
-    }
-    return this.ingredientesPerProject.get(projectId);
   }
 
   /**
@@ -117,7 +109,6 @@ class ProductosModule {
 
     this.productosPerProject.clear();
     this.categoriasPerProject.clear();
-    this.ingredientesPerProject.clear();
     this.menusPendientes.clear();
     this.projectPaths.clear();
     for (const [, pending] of this.pendingProjectRequests) {
@@ -177,7 +168,7 @@ class ProductosModule {
         if (result.productos > 0) {
           const productos = Array.from(this.getProductos(project_id).values())
             .filter(p => p.activo !== false)
-            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio }));
+            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null }));
 
           await this.eventBus.publish('catalogo.actualizado', {
             project_id,
@@ -269,7 +260,6 @@ class ProductosModule {
         project_id: project_id || null,
         productos: productos || [],
         categorias: categorias || [],
-        ingredientes: ingredientes_catalogo || [],
         received_at: new Date().toISOString()
       });
 
@@ -316,29 +306,13 @@ class ProductosModule {
         return;
       }
 
-      let { project_id, productos, categorias, ingredientes } = menuPendiente;
+      let { project_id, productos, categorias } = menuPendiente;
 
       if (correcciones && correcciones.length > 0) {
         productos = this.applyCorrections(productos, correcciones);
       }
 
       const stats = await this.syncCatalogo(project_id, menu_id, productos, categorias, correlationId);
-
-      if (ingredientes && ingredientes.length > 0) {
-        const ingredientesMap = this.getIngredientes(project_id);
-        stats.ingredientes_nuevos = 0;
-        for (const ing of ingredientes) {
-          if (!ingredientesMap.has(ing.id)) {
-            stats.ingredientes_nuevos++;
-          }
-          ingredientesMap.set(ing.id, {
-            ...ing,
-            activo: true,
-            menu_source_id: menu_id,
-            updated_at: new Date().toISOString()
-          });
-        }
-      }
 
       this.menusPendientes.delete(menu_id);
 
@@ -371,28 +345,93 @@ class ProductosModule {
     }
   }
 
-  async onIngredienteActualizado(event) {
-    const eventData = event?.data || event?.payload || event;
-    const { ingrediente_id, cambios } = eventData;
 
-    if (!ingrediente_id || !cambios) return;
+  // ==========================================
+  // carta.generada auto-sync
+  // ==========================================
 
-    // Actualizar en todos los proyectos que tengan este ingrediente
-    for (const [projectId, ingredientesMap] of this.ingredientesPerProject) {
-      const ing = ingredientesMap.get(ingrediente_id);
-      if (!ing) continue;
+  /**
+   * Recibe carta.generada del menu-generator (cambios incrementales:
+   * precios, productos, ingredientes) y sincroniza directamente al catálogo.
+   * Esto cierra la brecha: antes solo toolExportToPOS propagaba cambios.
+   */
+  async onCartaGenerada(event) {
+    const carta = event?.data || event?.payload || event;
+    if (!carta?.meta?.id || !carta?.productos) {
+      this.logger.debug('carta.generada.ignored', { reason: 'no meta.id or productos' });
+      return;
+    }
 
-      for (const [campo, valores] of Object.entries(cambios)) {
-        const nuevoValor = valores?.nuevo !== undefined ? valores.nuevo : valores;
-        ing[campo] = nuevoValor;
-      }
-      ing.updated_at = new Date().toISOString();
-      ingredientesMap.set(ingrediente_id, ing);
+    const project_id = carta.project_id;
+    if (!project_id) {
+      this.logger.warn('carta.generada.no_project', { carta_id: carta.meta.id });
+      return;
+    }
 
-      this.logger.info('productos.ingrediente.synced', {
-        project_id: projectId,
-        ingrediente_id,
-        campos: Object.keys(cambios)
+    const correlationId = event?.metadata?.correlationId || crypto.randomUUID();
+    const start_time = Date.now();
+
+    this.logger.info('carta.generada.received', {
+      carta_id: carta.meta.id,
+      project_id,
+      productos_count: carta.productos.length,
+      categorias_count: carta.categorias?.length || 0,
+      correlation_id: correlationId
+    });
+
+    try {
+      // Transformar carta RAW a formato POS (ingredientes → ingredientes_base con IDs)
+      const productos = carta.productos.map(p => {
+        const prod = {
+          id: p.id,
+          nombre: p.nombre,
+          categoria: p.categoria,
+          precio: p.precio,
+          activo: true
+        };
+        if (p.ingredientes_base) {
+          prod.ingredientes_base = p.ingredientes_base;
+        } else if (p.ingredientes && p.ingredientes.length > 0) {
+          prod.ingredientes_base = p.ingredientes.map(ing => ({
+            id: ing.id || `ing_${this.slugify(ing.nombre)}`,
+            nombre: ing.nombre,
+            emoji: ing.emoji || '',
+            precio_extra: ing.precio_extra ?? 0,
+            grupo: p.categoria || 'otro'
+          }));
+        }
+        if (p.imagen) prod.imagen = p.imagen;
+        if (p.descripcion) prod.descripcion = p.descripcion;
+        return prod;
+      });
+
+      const categorias = (carta.categorias || []).map(c => ({
+        ...c,
+        activa: true
+      }));
+
+      // Sincronizar directamente al catálogo en memoria
+      const stats = await this.syncCatalogo(project_id, carta.meta.id, productos, categorias, correlationId);
+
+      // Publicar catalogo.actualizado para que comandero refresque su cache
+      await this.publishCatalogoActualizado(project_id, carta.meta.id, stats, Date.now() - start_time, correlationId);
+
+      // Persistir a disco
+      await this.persistCatalog(project_id);
+
+      this.logger.info('carta.generada.synced', {
+        carta_id: carta.meta.id,
+        project_id,
+        estadisticas: stats,
+        correlation_id: correlationId,
+        duration: Date.now() - start_time
+      });
+    } catch (error) {
+      this.logger.error('carta.generada.sync_error', {
+        carta_id: carta.meta.id,
+        project_id,
+        error: error.message,
+        correlation_id: correlationId
       });
     }
   }
@@ -523,32 +562,19 @@ class ProductosModule {
     };
   }
 
+  /**
+   * Delega al módulo ingredientes (fuente única de ingredientes).
+   * Mantiene el endpoint productos/ingredientes por compatibilidad con el frontend.
+   */
   async handleListIngredientes(data) {
-    const { project_id: raw_pid, tipo } = data || {};
+    const { project_id: raw_pid, tipo, grupo } = data || {};
 
     if (!raw_pid) {
       return { status: 400, error: 'project_id es requerido' };
     }
 
-    const project_id = this.resolveToActiveProject(raw_pid);
-    let ingredientes = Array.from(this.getIngredientes(project_id).values())
-      .filter(i => i.activo !== false);
-
-    if (tipo) {
-      ingredientes = ingredientes.filter(i => i.tipo === tipo);
-    }
-
-    ingredientes.sort((a, b) => {
-      if ((a.tipo || '') !== (b.tipo || '')) {
-        return (a.tipo || '').localeCompare(b.tipo || '');
-      }
-      return (a.nombre || '').localeCompare(b.nombre || '');
-    });
-
-    return {
-      status: 200,
-      data: { project_id, ingredientes, total: ingredientes.length }
-    };
+    const result = await this.uiHandler.handle('ingredientes', 'list', { tipo, grupo });
+    return result;
   }
 
   async handleListPizzas(data) {
@@ -715,16 +741,12 @@ class ProductosModule {
   async handleHealthCheck() {
     let totalProductos = 0;
     let totalCategorias = 0;
-    let totalIngredientes = 0;
 
     for (const [, productos] of this.productosPerProject) {
       totalProductos += productos.size;
     }
     for (const [, categorias] of this.categoriasPerProject) {
       totalCategorias += categorias.size;
-    }
-    for (const [, ingredientes] of this.ingredientesPerProject) {
-      totalIngredientes += ingredientes.size;
     }
 
     return {
@@ -737,7 +759,6 @@ class ProductosModule {
           proyectos: this.productosPerProject.size,
           productos: totalProductos,
           categorias: totalCategorias,
-          ingredientes: totalIngredientes,
           menus_pendientes: this.menusPendientes.size
         }
       }
@@ -747,16 +768,12 @@ class ProductosModule {
   async handleGetMetrics() {
     let totalProductos = 0;
     let totalCategorias = 0;
-    let totalIngredientes = 0;
 
     for (const [, productos] of this.productosPerProject) {
       totalProductos += productos.size;
     }
     for (const [, categorias] of this.categoriasPerProject) {
       totalCategorias += categorias.size;
-    }
-    for (const [, ingredientes] of this.ingredientesPerProject) {
-      totalIngredientes += ingredientes.size;
     }
 
     return {
@@ -771,8 +788,7 @@ class ProductosModule {
         gauges: {
           'proyectos.count': this.productosPerProject.size,
           'producto.activos.count': totalProductos,
-          'categorias.count': totalCategorias,
-          'ingredientes.count': totalIngredientes
+          'categorias.count': totalCategorias
         }
       }
     };
@@ -796,7 +812,6 @@ class ProductosModule {
           project_id,
           productos: result.productos,
           categorias: result.categorias,
-          ingredientes: result.ingredientes,
           message: 'Carta cargada exitosamente'
         }
       };
@@ -834,7 +849,6 @@ class ProductosModule {
 
     const categoriasMap = this.categoriasPerProject.get(projectId) || new Map();
     const productosMap = this.productosPerProject.get(projectId) || new Map();
-    const ingredientesMap = this.ingredientesPerProject.get(projectId) || new Map();
 
     const categorias = Array.from(categoriasMap.values())
       .filter(c => c.activa !== false)
@@ -848,8 +862,12 @@ class ProductosModule {
                            (p.ingredientes_base && p.ingredientes_base.length > 0)
       }));
 
-    const ingredientes = Array.from(ingredientesMap.values())
-      .filter(i => i.activo !== false);
+    // Ingredientes: pedir al módulo ingredientes (fuente única)
+    let ingredientes = [];
+    const ingResult = await this.uiHandler.handle('ingredientes', 'list', {});
+    if (ingResult?.status === 200 && ingResult?.data?.ingredientes) {
+      ingredientes = ingResult.data.ingredientes;
+    }
 
     return {
       status: 200,
@@ -915,7 +933,7 @@ class ProductosModule {
   async publishCatalogoActualizado(project_id, menu_id, estadisticas, sync_duration, correlation_id) {
     const productos = Array.from(this.getProductos(project_id).values())
       .filter(p => p.activo !== false)
-      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio }));
+      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null }));
 
     await this.eventBus.publish('catalogo.actualizado', {
       project_id,
@@ -1059,36 +1077,17 @@ class ProductosModule {
       storagePath = await this.resolveStoragePath(project_id);
     } catch (err) {
       this.logger.warn('productos.resolve_path.failed', { project_id, error: err.message });
-      return { productos: 0, categorias: 0, ingredientes: 0 };
+      return { productos: 0, categorias: 0 };
     }
     const cartasDir = path.join(storagePath, 'cartas');
-    const ingredientesPath = path.join(storagePath, 'ingredientes.json');
 
     const result = {
       productos: 0,
-      categorias: 0,
-      ingredientes: 0
+      categorias: 0
     };
 
     try {
-      // Cargar ingredientes si existen
-      try {
-        const ingredientesData = await fs.readFile(ingredientesPath, 'utf8');
-        const ingredientesJson = JSON.parse(ingredientesData);
-        const ingredientesMap = this.getIngredientes(project_id);
-
-        if (ingredientesJson.ingredientes) {
-          for (const ing of ingredientesJson.ingredientes) {
-            ingredientesMap.set(ing.id, { ...ing, activo: true });
-            result.ingredientes++;
-          }
-        }
-      } catch (e) {
-        // No hay archivo de ingredientes, continuar
-      }
-
       // Cargar cartas
-      let precioExtraDefault = 1.50;
       try {
         const files = await fs.readdir(cartasDir);
         const jsonFiles = files.filter(f => f.endsWith('.json'));
@@ -1097,11 +1096,6 @@ class ProductosModule {
           const cartaPath = path.join(cartasDir, file);
           const cartaData = await fs.readFile(cartaPath, 'utf8');
           const carta = JSON.parse(cartaData);
-
-          // Leer precio_extra_default de la carta si existe
-          if (carta.meta?.precio_extra_default != null) {
-            precioExtraDefault = carta.meta.precio_extra_default;
-          }
 
           // Cargar categorías de la carta
           if (carta.categorias) {
@@ -1132,31 +1126,10 @@ class ProductosModule {
         this.logger.debug('productos.no_cartas_dir', { project_id, path: cartasDir });
       }
 
-      // Construir catálogo de ingredientes deduplicado desde ingredientes_base
-      if (result.productos > 0) {
-        const ingCount = this.buildIngredientesCatalogo(project_id, precioExtraDefault);
-        result.ingredientes = Math.max(result.ingredientes, ingCount);
-
-        // Persistir ingredientes para próximo reinicio
-        try {
-          const ingredientesMap = this.getIngredientes(project_id);
-          const ingredientesData = {
-            ingredientes: Array.from(ingredientesMap.values()),
-            updated_at: new Date().toISOString()
-          };
-          const storagePath = await this.resolveStoragePath(project_id);
-          const ingPath = path.join(storagePath, 'ingredientes.json');
-          await fs.writeFile(ingPath, JSON.stringify(ingredientesData, null, 2), 'utf-8');
-        } catch (e) {
-          this.logger.debug('productos.ingredientes_persist.skipped', { project_id, error: e.message });
-        }
-      }
-
       this.logger.info('productos.carta_loaded', {
         project_id,
         productos: result.productos,
-        categorias: result.categorias,
-        ingredientes: result.ingredientes
+        categorias: result.categorias
       });
 
       // Emit menu.generado so categorias module gets populated from disk data
@@ -1215,62 +1188,6 @@ class ProductosModule {
     });
 
     return prod;
-  }
-
-  /**
-   * Construye catálogo global de ingredientes deduplicado
-   * a partir de todos los productos cargados de un proyecto.
-   * Usa tipo/precio_extra del ingrediente si existen (del menu-generator),
-   * o aplica clasificación por nombre y precio estimado como fallback.
-   */
-  buildIngredientesCatalogo(projectId, precioExtraDefault) {
-    const ingredientesMap = this.getIngredientes(projectId);
-    const productosMap = this.getProductos(projectId);
-    const defaultPrice = precioExtraDefault ?? 1.50;
-
-    for (const prod of productosMap.values()) {
-      const base = prod.ingredientes_base || [];
-      for (const ing of base) {
-        if (ing.id && !ingredientesMap.has(ing.id)) {
-          const tipo = ing.tipo || this.clasificarIngrediente(ing.nombre);
-          ingredientesMap.set(ing.id, {
-            id: ing.id,
-            nombre: ing.nombre,
-            emoji: ing.emoji || '',
-            tipo,
-            es_alergeno: false,
-            precio_extra: ing.precio_extra ?? this.precioExtraPorTipo(tipo, defaultPrice),
-            activo: true
-          });
-        }
-      }
-    }
-
-    return ingredientesMap.size;
-  }
-
-  /**
-   * Clasifica un ingrediente por nombre (fallback para cartas sin tipo).
-   * Misma lógica que menu-generator para consistencia.
-   */
-  clasificarIngrediente(nombre) {
-    if (!nombre) return 'otro';
-    const n = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (/mozzarella|queso|mezcla de quesos|parmesano|gorgonzola|cheddar|emmental|brie|gouda|provolone|roquefort/.test(n)) return 'queso';
-    if (/bacon|pollo|ternera|carne|york|jamon|pepperoni|peperoni|salchich|chorizo|lomo|cerdo|pavo|salami|anchoa/.test(n)) return 'carne';
-    if (/gambas|langostino|atun|salmon|marisco|pulpo|calamar|mejillon|surimi/.test(n)) return 'marisco';
-    if (/salsa|nata|pesto|carbonara|ketchup|mayonesa|alioli|mostaza/.test(n)) return 'salsa';
-    if (/tomate|cebolla|pimiento|champi[nñ]on|seta|aceituna|oliva|alcachofa|esparrago|espinaca|rucula|albahaca|oregano|ajo|maiz|pi[nñ]a|jalape[nñ]o|pepino|lechuga|zanahoria|berenjena|calabacin/.test(n)) return 'verdura';
-    if (/masa|harina|levadura/.test(n)) return 'masa';
-    return 'otro';
-  }
-
-  /**
-   * Precio extra estimado por tipo de ingrediente (fallback).
-   */
-  precioExtraPorTipo(tipo, precioDefault) {
-    const precios = { carne: 2.00, marisco: 2.50, queso: 1.50, verdura: 1.00, salsa: 0.75, masa: 0.50, otro: precioDefault };
-    return precios[tipo] ?? precioDefault;
   }
 
   applyCorrections(productos, correcciones) {

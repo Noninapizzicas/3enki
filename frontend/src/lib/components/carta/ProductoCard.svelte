@@ -130,7 +130,7 @@
   .card-visual {
     position: relative;
     width: 100%;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 1 / 1;
     background: #1a1a1a;
     display: flex;
     align-items: center;

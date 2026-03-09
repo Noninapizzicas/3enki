@@ -83,10 +83,9 @@ class LlevarStrategy {
       estado: ticket.estado
     });
 
-    // Si ya fue entregado físicamente, cerrar la cuenta
-    if (ticket.estado === 'entregado') {
-      await this.cerrarTicket(cuenta_id, correlationId);
-    }
+    // Llevar NO cierra al cobrar (a diferencia de mesa).
+    // El ticket se mantiene visible hasta que se entregue al cliente.
+    // Solo marcamos pagado y esperamos a que se llame a entregar.
   }
 
   getHealth() {
@@ -158,7 +157,7 @@ class LlevarStrategy {
         return { status: 400, error: 'Request inválido', details: validate.errors };
       }
 
-      const { cliente_nombre, notas } = data;
+      const { cliente_nombre, notas, project_id } = data;
 
       this.modulo.verificarReseoDiario();
 
@@ -187,16 +186,19 @@ class LlevarStrategy {
         cuenta_id: ticket.cuenta_id,
         numero_ticket: ticket.numero_ticket,
         cliente_nombre: ticket.cliente_nombre,
-        hora_creacion: ticket.hora_creacion
+        hora_creacion: ticket.hora_creacion,
+        project_id
       });
 
       await this.modulo.publishCuentaCreada({
         cuenta_id: ticket.cuenta_id,
         tipo: 'llevar',
         total: ticket.total,
+        project_id,
         metadata: {
-          numero_ticket: ticket.numero_ticket,
-          cliente_nombre: ticket.cliente_nombre
+          nombre: String(numero_ticket).padStart(3, '0'),
+          cliente_nombre: ticket.cliente_nombre,
+          numero_ticket: ticket.numero_ticket
         }
       });
 
@@ -403,15 +405,16 @@ class LlevarStrategy {
       hora_entrega: ticket.hora_entrega
     }, { correlationId });
 
-    // Solo cerrar si ya pagado; si no, la cuenta sigue activa esperando pago
-    if (ticket.pagado) {
-      await this.cerrarTicket(cuenta_id, correlationId);
-    } else {
+    // Entregar siempre cierra el ticket (es el fin del ciclo de llevar).
+    // Si no está pagado, queda pendiente de cobro pero ya no es cuenta activa.
+    if (!ticket.pagado) {
       this.modulo.logger.info('llevar.ticket_entregado_pendiente_pago', {
         correlation_id: correlationId,
         numero_ticket: ticket.numero_ticket
       });
     }
+
+    await this.cerrarTicket(cuenta_id, correlationId);
   }
 
   async cerrarTicket(cuenta_id, correlationId) {

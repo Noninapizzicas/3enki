@@ -37,7 +37,16 @@
     { "domain": "carta-digital", "action": "stats", "handler": "handleGetStats" },
     { "domain": "carta-digital", "action": "health", "handler": "handleHealthCheck" },
     { "domain": "carta-digital", "action": "carta-completa", "handler": "handleCartaDigitalCompleta" },
-    { "domain": "carta-digital", "action": "export-static", "handler": "handleExportStatic" }
+    { "domain": "carta-digital", "action": "export-static", "handler": "handleExportStatic" },
+    { "domain": "carta-digital", "action": "deploy-cf-worker", "handler": "handleDeployCFWorker" },
+    { "domain": "carta-digital", "action": "ofertas", "handler": "handleGetOfertas" },
+    { "domain": "carta-digital", "action": "create-oferta", "handler": "handleCreateOferta" },
+    { "domain": "carta-digital", "action": "update-oferta", "handler": "handleUpdateOferta" },
+    { "domain": "carta-digital", "action": "delete-oferta", "handler": "handleDeleteOferta" },
+    { "domain": "carta-digital", "action": "track-event", "handler": "handleTrackEvent" },
+    { "domain": "carta-digital", "action": "funnel", "handler": "handleGetFunnel" },
+    { "domain": "carta-digital", "action": "resenas", "handler": "handleGetResenas" },
+    { "domain": "carta-digital", "action": "create-resena", "handler": "handleCreateResena" }
   ],
 
   "apis": [
@@ -94,6 +103,60 @@
       "path": "/export-static",
       "handler": "handleExportStatic",
       "description": "Genera sitio estático auto-contenido para desplegar en GitHub Pages / Netlify"
+    },
+    {
+      "method": "POST",
+      "path": "/deploy-cf-worker",
+      "handler": "handleDeployCFWorker",
+      "description": "Deploy del Cloudflare Worker como proxy IA para el chat de la carta digital"
+    },
+    {
+      "method": "GET",
+      "path": "/ofertas",
+      "handler": "handleGetOfertas",
+      "description": "Listar ofertas y combos activos"
+    },
+    {
+      "method": "POST",
+      "path": "/ofertas",
+      "handler": "handleCreateOferta",
+      "description": "Crear nueva oferta o combo"
+    },
+    {
+      "method": "PATCH",
+      "path": "/ofertas/:oferta_id",
+      "handler": "handleUpdateOferta",
+      "description": "Actualizar oferta existente"
+    },
+    {
+      "method": "DELETE",
+      "path": "/ofertas/:oferta_id",
+      "handler": "handleDeleteOferta",
+      "description": "Eliminar oferta"
+    },
+    {
+      "method": "POST",
+      "path": "/track",
+      "handler": "handleTrackEvent",
+      "description": "Registrar evento de tracking (funnel: page_view, product_view, add_to_cart, order_sent, chat_open)"
+    },
+    {
+      "method": "GET",
+      "path": "/funnel",
+      "handler": "handleGetFunnel",
+      "description": "Análisis del funnel de conversión con tasas y top productos"
+    },
+    {
+      "method": "GET",
+      "path": "/resenas",
+      "handler": "handleGetResenas",
+      "description": "Listar reseñas aprobadas con resumen (media, distribución)"
+    },
+    {
+      "method": "POST",
+      "path": "/resenas",
+      "handler": "handleCreateResena",
+      "description": "Crear nueva reseña (nombre, rating 1-5, comentario opcional)"
     }
   ],
 
@@ -108,7 +171,12 @@
       "counters": [
         "carta-digital.sesion.total",
         "carta-digital.pedido.total",
-        "carta-digital.producto_visto.total",
+        "carta-digital.page_view.total",
+        "carta-digital.product_view.total",
+        "carta-digital.add_to_cart.total",
+        "carta-digital.order_sent.total",
+        "carta-digital.chat_open.total",
+        "carta-digital.resena.total",
         "carta-digital.media.served",
         "carta-digital.export.completed"
       ],

@@ -29,6 +29,8 @@
     deleteOAuthConfig,
     saveGlovoConfig,
     deleteGlovoConfig,
+    saveTelegramNotifConfig,
+    deleteTelegramNotifConfig,
     startOAuth,
     globalCredentials,
     projectCredentials,
@@ -38,6 +40,7 @@
     selectedCredential,
     oauthConfigs,
     glovoConfigs,
+    telegramNotifConfigs,
     type ServiceType
   } from '$lib/stores/credentials';
   import {
@@ -87,6 +90,14 @@
     project_id: '',
     purpose: 'general',
     label: ''
+  };
+
+  // Form state for Telegram notification destination
+  let telegramNotifForm = {
+    level: 'PROJECT',
+    identifier: '',
+    chatId: '',
+    botName: ''
   };
 
   // Form state for "Config" tab
@@ -170,6 +181,12 @@
     : (newForm.provider && newForm.apiKey.length > 0 &&
        (!requiresIdentifier || newForm.identifier.length > 0));
   $: canSaveEdit = editApiKey.length > 0;
+
+  // Telegram notification form validation
+  $: telegramNotifLevel = levels.find(l => l.id === telegramNotifForm.level);
+  $: telegramNotifRequiresId = telegramNotifLevel?.requiresIdentifier ?? false;
+  $: canSaveTelegramNotif = telegramNotifForm.chatId.length > 0 && telegramNotifForm.botName.length > 0 &&
+     (!telegramNotifRequiresId || telegramNotifForm.identifier.length > 0);
 
   // ==========================================================================
   // LIFECYCLE
@@ -375,9 +392,43 @@
 
   function handleCancelTelegram() {
     telegramForm = { botName: '', token: '' };
+    telegramNotifForm = { level: 'PROJECT', identifier: '', chatId: '', botName: '' };
     clearTestResult();
     error = null;
     setActiveTab('lista');
+  }
+
+  async function handleSaveTelegramNotif() {
+    if (!canSaveTelegramNotif || saving) return;
+    saving = true;
+    error = null;
+    try {
+      const reqId = telegramNotifRequiresId ? telegramNotifForm.identifier : null;
+      await saveTelegramNotifConfig(
+        telegramNotifForm.level,
+        reqId,
+        telegramNotifForm.chatId,
+        telegramNotifForm.botName
+      );
+      telegramNotifForm = { level: 'PROJECT', identifier: '', chatId: '', botName: '' };
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al guardar destino de notificación';
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function handleDeleteTelegramNotif(level: string, identifier: string | null) {
+    if (!confirm(`Eliminar notificación Telegram ${level}${identifier ? ` (${identifier})` : ''}?`)) return;
+    deleting = true;
+    error = null;
+    try {
+      await deleteTelegramNotifConfig(level, identifier);
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al eliminar config Telegram';
+    } finally {
+      deleting = false;
+    }
   }
 
   // ==========================================================================
@@ -1029,6 +1080,131 @@
               disabled={!telegramForm.botName || !telegramForm.token || saving}
             >
               {saving ? '⏳...' : '💾 Guardar Bot'}
+            </button>
+          </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- TELEGRAM: Destino de Notificaciones         -->
+        <!-- ============================================ -->
+        <hr class="form-divider" />
+        <div class="form">
+          <h4 class="form-section-title">Destino de Notificaciones</h4>
+
+          <!-- Level -->
+          <fieldset class="field">
+            <legend class="label">Nivel</legend>
+            <div class="levels-grid" role="group">
+              {#each aiLevels as l (l.id)}
+                <button
+                  type="button"
+                  class="level-btn"
+                  class:active={telegramNotifForm.level === l.id}
+                  on:click={() => { telegramNotifForm.level = l.id; telegramNotifForm.identifier = ''; }}
+                >
+                  <span>{l.icon}</span>
+                  <span>{l.name}</span>
+                </button>
+              {/each}
+            </div>
+          </fieldset>
+
+          <!-- Identifier -->
+          {#if telegramNotifRequiresId}
+            <div class="field">
+              <label class="label" for="notif-identifier">Identificador</label>
+              <input
+                id="notif-identifier"
+                type="text"
+                class="input"
+                placeholder={telegramNotifForm.level === 'PROJECT' ? 'nonina' : 'identificador'}
+                bind:value={telegramNotifForm.identifier}
+              />
+              <span class="field-hint">Nombre del proyecto o identificador</span>
+            </div>
+          {/if}
+
+          <!-- Chat ID -->
+          <div class="field">
+            <label class="label" for="notif-chat-id">Chat ID</label>
+            <input
+              id="notif-chat-id"
+              type="text"
+              class="input"
+              placeholder="1934798567"
+              bind:value={telegramNotifForm.chatId}
+            />
+            <span class="field-hint">ID del chat o usuario de Telegram</span>
+          </div>
+
+          <!-- Bot Name -->
+          <div class="field">
+            <label class="label" for="notif-bot-name">Bot</label>
+            {#if telegramBots.length > 0}
+              <select
+                id="notif-bot-name"
+                class="input"
+                bind:value={telegramNotifForm.botName}
+              >
+                <option value="">Seleccionar bot...</option>
+                {#each telegramBots as bot (bot.key)}
+                  <option value={bot.identifier}>{bot.identifier}</option>
+                {/each}
+              </select>
+            {:else}
+              <input
+                id="notif-bot-name"
+                type="text"
+                class="input"
+                placeholder="Noninacloset"
+                bind:value={telegramNotifForm.botName}
+              />
+            {/if}
+            <span class="field-hint">Bot que enviará las notificaciones</span>
+          </div>
+
+          <!-- Configs existentes -->
+          {#if $telegramNotifConfigs.length > 0}
+            <div class="field">
+              <label class="label">Destinos configurados</label>
+              {#each $telegramNotifConfigs as tc}
+                <div class="notif-config-item">
+                  <span class="notif-config-info">
+                    <span class="cred-icon">📨</span>
+                    <span>{tc.level}{tc.identifier ? ` (${tc.identifier})` : ''}</span>
+                    <span class="cred-preview">{tc.chatId} → {tc.botName}</span>
+                    {#if tc.configured}
+                      <span title="Configurado">✅</span>
+                    {:else}
+                      <span title="Incompleto">⚠️</span>
+                    {/if}
+                  </span>
+                  <button
+                    class="btn danger small"
+                    on:click={() => handleDeleteTelegramNotif(tc.level, tc.identifier)}
+                    disabled={deleting}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {#if error}
+            <div class="error-msg">{error}</div>
+          {/if}
+
+          <div class="actions">
+            <button class="btn secondary" on:click={handleCancelTelegram} disabled={saving}>
+              Cancelar
+            </button>
+            <button
+              class="btn primary"
+              on:click={handleSaveTelegramNotif}
+              disabled={!canSaveTelegramNotif || saving}
+            >
+              {saving ? '⏳...' : '💾 Guardar Destino'}
             </button>
           </div>
         </div>
@@ -2321,6 +2497,36 @@
   .btn.small {
     padding: 0.2rem 0.4rem;
     font-size: 0.75rem;
+  }
+
+  .form-divider {
+    border: none;
+    border-top: 1px solid var(--_border, rgba(255,255,255,0.1));
+    margin: var(--_gap-lg, 1rem) 0;
+  }
+
+  .form-section-title {
+    font-size: 0.85rem;
+    color: var(--_text-secondary, rgba(255,255,255,0.6));
+    margin: 0 0 0.75rem 0;
+    font-weight: 500;
+  }
+
+  .notif-config-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.6rem;
+    background: var(--_bg-subtle, rgba(255,255,255,0.05));
+    border-radius: var(--_radius);
+    margin-bottom: 0.3rem;
+    font-size: 0.85rem;
+  }
+
+  .notif-config-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   /* ==========================================================================

@@ -52,8 +52,8 @@
     },
     {
       "file": "mqtt.json",
-      "purpose": "MQTT patterns, topics, request/response",
-      "when": "Questions about communication, events, handlers"
+      "purpose": "MQTT broker (Aedes), patrones de comunicación, 25 dominios UI con 201 actions, seguridad MQTT",
+      "when": "Questions about MQTT, broker, WebSocket, UI handlers inventory, auth MQTT"
     },
     {
       "file": "modules.json",

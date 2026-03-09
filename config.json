@@ -82,7 +82,16 @@
       "telegram-service",
       "text-editor",
       "asesoria",
-      "fuentes"
+      "fuentes",
+      "carta-digital",
+      "carta-impresion",
+      "certificate-authority",
+      "channel-manager",
+      "composition-manager",
+      "context-manager",
+      "facturas",
+      "impresion",
+      "menu-generator"
     ],
     "disabled": [
       "conversation-manager",

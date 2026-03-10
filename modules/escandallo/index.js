@@ -44,6 +44,17 @@ class EscandalloModule {
   }
 
   // ==========================================
+  // Project resolution
+  // ==========================================
+
+  resolveToActiveProject(projectId) {
+    if (projectId && this.cache.has(projectId)) return projectId;
+    if (projectId && this.projectPaths.has(projectId)) return projectId;
+    for (const [pid] of this.projectPaths) return pid;
+    return projectId;
+  }
+
+  // ==========================================
   // Data Access — reads from recetas storage
   // ==========================================
 
@@ -175,24 +186,28 @@ class EscandalloModule {
   // ==========================================
 
   async handleEscandalloReceta(data) {
-    const result = await this.toolEscandalloReceta(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolEscandalloReceta({ ...data, project_id });
     if (result.error) throw { status: result.status || 400, code: 'ESCANDALLO_ERROR', message: result.error };
     return result.data;
   }
 
   async handleEscandalloGlobal(data) {
-    const result = await this.toolEscandalloGlobal(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolEscandalloGlobal({ ...data, project_id });
     if (result.error) throw { status: result.status || 400, code: 'ESCANDALLO_ERROR', message: result.error };
     return result.data;
   }
 
   async handleComparativa(data) {
-    const result = await this.toolCompararPrecios(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolCompararPrecios({ ...data, project_id });
     return result.data;
   }
 
   async handleStats(data) {
-    const result = await this.toolEscandalloGlobal(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolEscandalloGlobal({ ...data, project_id });
     return result.data;
   }
 

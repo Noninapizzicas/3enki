@@ -91,7 +91,10 @@
       "context-manager",
       "facturas",
       "impresion",
-      "menu-generator"
+      "menu-generator",
+      "recetas",
+      "escandallo",
+      "viabilidad"
     ],
     "disabled": [
       "conversation-manager",

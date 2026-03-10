@@ -4,12 +4,13 @@
  * Estudio de viabilidad de negocio.
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import {
   mqttRequest,
   MqttTimeoutError,
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
+import { activeProjectId } from './projects';
 
 // =============================================================================
 // TYPES
@@ -117,7 +118,8 @@ export const viabilidadStore = writable<ViabilidadState>(initialState);
 export async function loadEstudio(params: Record<string, any>): Promise<void> {
   viabilidadStore.update(s => ({ ...s, loading: true, error: null }));
   try {
-    const response = await mqttRequest<Estudio>('viabilidad', 'estudio', params, { timeout: 15000 });
+    const pid = get(activeProjectId);
+    const response = await mqttRequest<Estudio>('viabilidad', 'estudio', { ...params, project_id: pid }, { timeout: 15000 });
     viabilidadStore.update(s => ({
       ...s,
       estudio: response.data,
@@ -131,7 +133,8 @@ export async function loadEstudio(params: Record<string, any>): Promise<void> {
 
 export async function loadConfig(): Promise<void> {
   try {
-    const response = await mqttRequest<NegocioConfig>('viabilidad', 'config', { action: 'get' });
+    const pid = get(activeProjectId);
+    const response = await mqttRequest<NegocioConfig>('viabilidad', 'config', { action: 'get', project_id: pid });
     viabilidadStore.update(s => ({ ...s, config: response.data || {} }));
   } catch (error) {
     console.error('[Viabilidad] Config load failed:', getErrorMessage(error));

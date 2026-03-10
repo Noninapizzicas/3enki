@@ -534,15 +534,14 @@
           "estado": "pendiente",
           "nota": "Se aborda después de validar que el flujo funciona",
           "tareas": [
-            "HTTP: Activar mtls_enabled en config → middleware mTLS ya implementado",
-            "HTTP: Emitir certificado cliente por proyecto — identifier=projectId",
-            "MQTT: Implementar Aedes authenticate hook vinculado a certificate-authority",
-            "MQTT: Autenticar WebSocket (puerto 9001) — el frontend se conecta sin auth",
+            "Usar certificate-authority (módulo existente) para autenticación mTLS por proyecto",
+            "Emitir certificado cliente por proyecto — el certificado identifica al cliente/proyecto",
+            "Middleware mTLS ya implementado — activar mtls_enabled en config",
             "Rate limiting por cliente",
             "CORS configurado para dominios específicos",
             "Logs de acceso"
           ],
-          "nota": "El módulo certificate-authority (routeCode 3333) ya implementa CA interna con mTLS para HTTP. MQTT broker (Aedes) aún NO tiene autenticación — ver contexto/mqtt.json sección security."
+          "nota": "El módulo certificate-authority (routeCode 3333) ya implementa CA interna con mTLS. Emite certificados tipo 'client' con identifier=projectId. Solo falta activar y configurar."
         },
         "fase_4_multi_tenant": {
           "titulo": "Multi-tenant para otros negocios",

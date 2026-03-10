@@ -1,8 +1,8 @@
 {
   "_meta": {
     "description": "Documentación del módulo Certificate Authority — CA interna con autenticación mTLS",
-    "updated": "2026-03-09",
-    "version": "1.1.0"
+    "updated": "2026-03-05",
+    "version": "1.0.0"
   },
 
   "overview": {
@@ -12,24 +12,7 @@
       "Dispositivos de trabajo — certificado por dispositivo"
     ],
     "architecture": "Mismo patrón que FNMT: CA propia → emite certificados → cliente los importa en navegador → mTLS autentica cada request",
-    "location": "modules/certificate-authority/",
-    "security_philosophy": {
-      "why_not_traditional_auth": "No hay usuarios, contraseñas, JWT, ni sesiones. Un certificado emitido = acceso. Certificado revocado = fuera.",
-      "advantages": [
-        "Sin phishing — el cert está en el dispositivo, no se puede robar con un formulario falso",
-        "Sin sesiones — cada request se autentica por el cert, no hay tokens que expiren/robar",
-        "Sin base de datos de usuarios — la CA es la fuente de verdad",
-        "Revocación inmediata — CRL en JSON, efecto instantáneo",
-        "Trazabilidad por dispositivo — un cert por device, mejor auditoría"
-      ],
-      "crypto_implementation": {
-        "algorithm": "RSA 2048 + SHA-256",
-        "format": "X.509 simplificado — JSON firmado envuelto en PEM (NO DER estándar)",
-        "note": "El formato es propietario: body JSON + firma base64 dentro de marcadores PEM. Funciona perfecto para el ecosistema cerrado Event Core. Los navegadores NO lo reconocen como X.509 estándar para mTLS nativo del browser.",
-        "deployment_pattern": "El proxy (Caddy/nginx) maneja el TLS real con certs estándar. El cert de cliente se pasa como header X-Client-Cert. El middleware lo verifica contra la CA interna.",
-        "p12_format": "PKCS#12 simplificado — cert + key cifrado con AES-256-GCM (passphrase via scrypt). NO es PKCS#12 estándar (requeriría node-forge u openssl)."
-      }
-    }
+    "location": "modules/certificate-authority/"
   },
 
   "files": {
@@ -71,18 +54,13 @@
         "native": "Node.js tls.createServer con requestCert (para desarrollo o standalone)"
       },
       "hook": "beforeRequest — se registra en core.hooks para interceptar cada request HTTP",
-      "exclude_paths_real": [
-        "/health", "/ready", "/stats",
-        "/modules/certificate-authority/ca-cert",
-        "/3333/ca-cert"
-      ],
       "flow": [
-        "1. Verifica si path está excluido (_isExcludedPath — soporta wildcards con *)",
-        "2. Extrae certificado del header X-Client-Cert (modo proxy) o context._tlsCertificate (modo native)",
-        "3. Si no hay cert: bloquea (return null → gateway devuelve 403) o permite según allowUnauthenticated",
-        "4. Verifica certificado contra CA: caManager.verifyCertificate() — firma + CRL + expiración",
-        "5. Si válido: enriquece context.auth con { authenticated, method, type, identifier, serialNumber, commonName, expiresAt }",
-        "6. Si inválido: return null (bloquea) + log mtls.invalid_certificate + metrics increment"
+        "1. Verifica si path está excluido (health, ready, etc.)",
+        "2. Extrae certificado del header X-Client-Cert (modo proxy) o del socket TLS (modo native)",
+        "3. Si no hay cert: bloquea (403) o permite según allowUnauthenticated",
+        "4. Verifica certificado contra CA (firma, revocación, expiración)",
+        "5. Si válido: enriquece context.auth con { authenticated, method, type, identifier, serialNumber }",
+        "6. Los handlers del módulo reciben context.auth y saben quién es el cliente/dispositivo"
       ],
       "context_auth_schema": {
         "authenticated": "boolean",
@@ -152,7 +130,7 @@
       "mtls_mode": "'proxy' | 'native' (default: proxy)",
       "cert_header": "Header con certificado en modo proxy (default: x-client-cert)",
       "allow_unauthenticated": "Permitir requests sin certificado (default: true en dev)",
-      "exclude_paths": "Array de paths excluidos de autenticación (default: [/health, /ready, /stats, /modules/certificate-authority/ca-cert, /3333/ca-cert])",
+      "exclude_paths": "Array de paths excluidos de autenticación",
       "ca_cn": "Common Name de la CA (default: Event Core Internal CA)",
       "ca_org": "Organización de la CA (default: Event Core)",
       "ca_validity_days": "Validez de la CA en días (default: 3650 = 10 años)",
@@ -186,60 +164,5 @@
       "MTLSMiddleware: exclusiones, autenticación, rechazo, modo permisivo, TLS options, nginx config",
       "Module: instanciación, carga con core mock"
     ]
-  },
-
-  "frontend": {
-    "store": "frontend/src/lib/stores/certificate-authority.ts",
-    "panel": "frontend/src/lib/modules/certificate-authority/CertificateAuthorityPanel.svelte",
-    "route": "frontend/src/routes/[project_id]/certificate-authority/+page.svelte",
-    "store_state": {
-      "certificates": "Certificate[]",
-      "crl": "CRLEntry[]",
-      "stats": "CAStats",
-      "selectedSerial": "string | null",
-      "filter": "{ type, status, search }",
-      "loading": "boolean",
-      "error": "string | null",
-      "activeTab": "'clients' | 'devices' | 'crl' | 'ca'"
-    },
-    "store_actions": [
-      "loadCertificates()", "loadStatus()", "loadCRL()",
-      "issueCertificate(opts)", "revokeCertificate(serial, reason)",
-      "renewCertificate(serial)", "downloadP12(serial)", "getCACert()"
-    ],
-    "realtime_subscriptions": [
-      "certificate.issued → auto-reload",
-      "certificate.revoked → auto-reload",
-      "certificate.renewed → auto-reload"
-    ],
-    "panel_tabs": ["Clients", "Devices", "CRL", "CA"]
-  },
-
-  "pending_security_coverage": {
-    "_updated": "2026-03-09",
-    "mqtt_auth": {
-      "current_state": "MQTT broker (Aedes) NO tiene autenticación. Cualquier cliente puede conectar y pub/sub.",
-      "impact": "mTLS protege HTTP pero el canal MQTT queda abierto. El frontend se conecta via WebSocket (puerto 9001) sin auth.",
-      "possible_approaches": [
-        "1. Aedes soporta authenticate hook → verificar cert o token en la conexión MQTT",
-        "2. Usar username/password MQTT derivado del serialNumber del certificado",
-        "3. wss:// con TLS en WebSocket + cert de cliente (más complejo)",
-        "4. Token emitido tras mTLS HTTP que se usa como password MQTT (token-based bridge)"
-      ],
-      "note": "El broker es embebido y local — en despliegue single-machine el riesgo es bajo. En multi-machine con MQTT expuesto es crítico."
-    },
-    "websocket_auth": {
-      "current_state": "WebSocket en puerto 9001 sin autenticación",
-      "impact": "El frontend se conecta directamente. En producción tras proxy, el proxy puede verificar cert antes de hacer upgrade a WS."
-    },
-    "p12_format_limitation": {
-      "current_state": "El bundle .p12 NO es PKCS#12 estándar — es JSON cifrado con AES-256-GCM",
-      "impact": "No se puede importar directamente en el almacén de certificados del navegador/OS",
-      "options": [
-        "Usar node-forge para generar PKCS#12 real (dependencia externa)",
-        "Usar child_process + openssl pkcs12 (requiere openssl instalado)",
-        "Mantener formato actual y usar como auth-token propietario en vez de mTLS real del browser"
-      ]
-    }
   }
 }

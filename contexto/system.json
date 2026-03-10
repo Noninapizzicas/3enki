@@ -25,7 +25,7 @@
     { "step": 6.5, "name": "Modules", "component": "Dynamic module loading (ordered by config.modules.enabled)" },
     { "step": 6.7, "name": "Handlers", "component": "Global handlers + project handlers" },
     { "step": 7, "name": "ServiceRegistry", "component": "Auto-allocated port" },
-    { "step": 8, "name": "HTTP", "component": "http.createServer nativo (sin Express)" }
+    { "step": 8, "name": "HTTP", "component": "Express server" }
   ],
 
   "module_load_order": {
@@ -46,7 +46,7 @@
 
   "directories": {
     "core": "Core framework code (EventBus, ServiceExecutor, HandlerLoader, etc)",
-    "modules": "Loadable modules (34 core [26 active + 8 disabled] + 15 pizzepos + 2 facturacion = 51 total, 37 en config.enabled + ~6 auto-descubiertos)",
+    "modules": "Loadable modules (34 core [26 active + 8 disabled] + 15 pizzepos + 2 facturacion = 51 total, 43 active)",
     "handlers": "Global event handlers (JavaScript directo)",
     "frontend": "SvelteKit 2 + Svelte 5 + TypeScript app",
     "data": "Runtime data (projects, logs, scheduler, etc)",
@@ -241,40 +241,9 @@
       "nota": "conversation-manager ya NO es facade, cada módulo declara sus propios handlers"
     },
     "loader_auto_wiring": {
-      "_updated": "2026-03-09",
-      "descripcion": "ModuleLoader (core/modules/loader.js, 1290 líneas) lee module.json y auto-conecta todo declarativamente",
-      "location": "core/modules/loader.js",
-      "class": "ModuleLoader",
-      "features": {
-        "auto_discovery": "Escanea modules/ recursivamente. Soporta agrupación por vertical (modules/pizzepos/*).",
-        "ordered_loading": "config.modules.enabled define orden. Módulos no listados van al final.",
-        "disabled_filtering": "config.modules.disabled excluye módulos del arranque.",
-        "event_subscriptions": "events.subscribes: [{ event, handler }] → eventBus.subscribe() con bind automático",
-        "ui_handlers": "ui_handlers: [{ domain, action, handler }] → uiHandler.register() con bind automático",
-        "tools_registry": "manifest.tools: [...] → toolsRegistry Map para AI (name, description, parameters, handler, confirmation)",
-        "provider_tools": "registerProviderTools(providerRegistry) → registra service providers como AI tools",
-        "hot_reload": "watch() observa module.json + index.js → debounce 500ms → reload()",
-        "auto_cleanup": "unload() auto-deshace: event unsubs + UI unregisters + tools unregister"
-      },
-      "manifest_normalization": {
-        "subscribes": ["root subscribes: [string|{event,handler}]", "nested events.subscribes: [string|{event,handler}]"],
-        "ui_handlers": ["ui_handlers: [{domain,action,handler}]", "uiActions: [{domain,action,handler}]", "handlers: [{domain,action,method}]"]
-      },
-      "tools_registry": {
-        "module_tools": "manifest.tools[] → toolsRegistry.set(tool.name, { handler: instance[handler].bind(instance) })",
-        "provider_tools": "registerProviderTools() → event-based handlers (publish request, subscribe response, 30s timeout)",
-        "tool_naming": "Providers: buildProviderToolName() → 'local.gmail' + 'send' = 'gmail_send'",
-        "api": ["getToolsForAI() → Array para LLM", "getTool(name)", "executeTool(name, args)", "toolRequiresConfirmation(name)"]
-      },
-      "load_sequence_per_module": [
-        "1. validateManifest() — name, version, description requeridos",
-        "2. require(index.js) + new ModuleClass()",
-        "3. wireEventSubscriptions() — BEFORE onLoad (módulos pueden pub/sub durante init)",
-        "4. instance.onLoad(coreContext + moduleLoader reference)",
-        "5. registry.register() — APIs, hooks, subscribes",
-        "6. registerToolsForAI() — si manifest tiene tools[]",
-        "7. wireUIHandlers() — auto-registra domain/action"
-      ],
+      "descripcion": "El ModuleLoader lee module.json y auto-conecta subscribes (con handler) y ui_handlers sin código imperativo",
+      "subscribes": "events.subscribes: [{ event, handler }] → loader llama eventBus.subscribe(event, module[handler].bind(module))",
+      "ui_handlers": "ui_handlers: [{ domain, action, handler }] → loader llama uiHandler.register(domain, action, module[handler].bind(module))",
       "cleanup": "El loader auto-unsubscribe y unregister en onUnload — módulos solo limpian estado propio",
       "excepciones": ["Wildcard subscriptions (e.g., agent.*.completed) — mantener imperativo", "Dynamic/runtime subscriptions — mantener imperativo"],
       "migrated_modules": "28/28 módulos core migrados (feb 2026)"

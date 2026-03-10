@@ -252,6 +252,22 @@ class EscandalloModule {
     result.insights = insights;
 
     await this.eventBus.publish('escandallo.calculado', result);
+
+    // Emit alert if food cost exceeds threshold
+    if (precio_venta) {
+      const fc = this.round((esc.coste_porcion / precio_venta) * 100);
+      if (fc > 35) {
+        await this.eventBus.publish('escandallo.alerta', {
+          tipo: 'food_cost_alto',
+          receta_id,
+          nombre: receta.nombre,
+          food_cost: fc,
+          umbral: 35,
+          mensaje: `Food cost de "${receta.nombre}" al ${fc}% (umbral: 35%)`
+        });
+      }
+    }
+
     this.metrics?.increment('escandallo.receta.calculated');
 
     return { status: 200, data: result };
@@ -366,12 +382,10 @@ class EscandalloModule {
 
     this.metrics?.increment('escandallo.comparativa.generated');
 
-    return {
-      status: 200,
-      data: {
-        con_precio_compra: comparativa,
-        sin_precio_compra: sinCompra.map(i => ({ nombre: i.nombre, precio_mercado: i.precio_mercado_kg, unidad: i.unidad_base })),
-        resumen: {
+    const resultData = {
+      con_precio_compra: comparativa,
+      sin_precio_compra: sinCompra.map(i => ({ nombre: i.nombre, precio_mercado: i.precio_mercado_kg, unidad: i.unidad_base })),
+      resumen: {
           total_ingredientes: ingredientes.length,
           con_compra: conCompra.length,
           sin_compra: sinCompra.length,
@@ -380,8 +394,11 @@ class EscandalloModule {
             ? `${sinCompra.length} ingredientes sin precio de compra real. Enlaza con facturas para obtener precios reales.`
             : 'Todos los ingredientes tienen precio de compra real.'
         }
-      }
     };
+
+    await this.eventBus.publish('escandallo.comparativa', resultData);
+
+    return { status: 200, data: resultData };
   }
 
   async toolSimularPrecio({ receta_id, precios, food_cost_objetivo, project_id }) {

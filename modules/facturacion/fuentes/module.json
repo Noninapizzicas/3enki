@@ -1,9 +1,10 @@
 {
   "name": "fuentes",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Adaptadores de fuentes de entrada para facturas: Telegram, Gmail, y extensible a más",
   "author": "Event-Core Team",
   "main": "index.js",
+  "dependencies": ["channel-manager"],
 
   "handlers": [
     { "domain": "fuentes", "action": "status", "method": "handleStatus" },

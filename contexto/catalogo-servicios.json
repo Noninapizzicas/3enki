@@ -5,15 +5,15 @@
   "_DESCRIPTION": "Catálogo completo de servicios, módulos, utilidades y acciones del sistema Event-Core",
 
   "resumen": {
-    "total_modulos": "54 (37 core + 15 pizzepos + 2 facturacion)",
-    "total_active": 46,
+    "total_modulos": "55 (38 core + 15 pizzepos + 2 facturacion)",
+    "total_active": 47,
     "total_disabled": 8,
     "total_providers": 34,
     "total_provider_functions": 119,
     "total_apis": 282,
-    "total_eventos": "209 publicados, 172 suscritos",
-    "total_tools_modulos": 86,
-    "total_ui_handlers": 124,
+    "total_eventos": "214 publicados, 173 suscritos",
+    "total_tools_modulos": 88,
+    "total_ui_handlers": 130,
     "verticales": [
       "pizzepos (POS pizzería, 12 módulos, 5 canales de venta)",
       "facturacion (procesamiento contable, 2 módulos: asesoria, fuentes)",
@@ -222,6 +222,19 @@
         "tools": ["credential.list (solo metadata, nunca valores)"],
         "providers_soportados": ["OPENAI", "DEEPSEEK", "ANTHROPIC", "GROQ", "GEMINI", "OLLAMA", "GOOGLE", "GMAIL"],
         "caracteristicas": ["OAuth2 para Gmail/Google", "Enmascaramiento de API keys"]
+      },
+      "channel-manager": {
+        "version": "1.0.0",
+        "descripcion": "Registry centralizado de canales externos — mapea identificadores (chat_id, email, telefono) a proyectos y propositos",
+        "apis": [],
+        "handlers": ["register", "update", "remove", "resolve", "list", "list-by-project"],
+        "tools": ["channel.resolve", "channel.list"],
+        "eventos_publica": ["channel.registered", "channel.updated", "channel.removed", "channel.resolved", "channel.resolve.response"],
+        "eventos_suscribe": ["channel.resolve.request"],
+        "storage": "SQLite via database-manager (tabla channels en proyecto system)",
+        "cache": "In-memory Map para resoluciones O(1)",
+        "diferencia_con_credential_manager": "credential-manager gestiona tokens/API keys (autenticacion). channel-manager gestiona routing (a donde va este mensaje)",
+        "channel_types": ["telegram", "gmail", "whatsapp", "glovo", "web"]
       },
       "filesystem": {
         "version": "1.0.0",

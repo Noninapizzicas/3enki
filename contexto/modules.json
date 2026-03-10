@@ -151,6 +151,7 @@
     "facturacion/asesoria",
     "facturacion/fuentes",
     "certificate-authority",
+    "channel-manager",
     "recetas",
     "escandallo",
     "viabilidad"
@@ -158,13 +159,13 @@
   "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager"],
   "module_count": {
     "_updated": "2026-03-10",
-    "core": 37,
-    "core_active": 29,
+    "core": 38,
+    "core_active": 30,
     "core_disabled": 8,
     "pizzepos": 15,
     "facturacion": 2,
-    "total_discovered": 54,
-    "total_active": 46,
+    "total_discovered": 55,
+    "total_active": 47,
     "disabled": 8
   },
   "module_categories": {
@@ -190,7 +191,7 @@
     },
     "storage": {
       "description": "Módulos de almacenamiento",
-      "modules": ["database-manager", "filesystem", "credential-manager"]
+      "modules": ["database-manager", "filesystem", "credential-manager", "channel-manager"]
     },
     "ui": {
       "description": "Módulos de interfaz de usuario",

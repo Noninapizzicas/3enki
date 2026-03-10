@@ -47,7 +47,7 @@
 
   "directories": {
     "core": "Core framework code (EventBus, ServiceExecutor, HandlerLoader, etc)",
-    "modules": "Loadable modules (37 core [29 active + 8 disabled] + 15 pizzepos + 2 facturacion = 54 total, 46 active)",
+    "modules": "Loadable modules (38 core [30 active + 8 disabled] + 15 pizzepos + 2 facturacion = 55 total, 47 active)",
     "handlers": "Global event handlers (JavaScript directo)",
     "frontend": "SvelteKit 2 + Svelte 5 + TypeScript app",
     "data": "Runtime data (projects, logs, scheduler, etc)",

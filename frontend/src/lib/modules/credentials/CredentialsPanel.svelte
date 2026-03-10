@@ -43,6 +43,22 @@
     telegramNotifConfigs,
     type ServiceType
   } from '$lib/stores/credentials';
+  import {
+    channelsStore,
+    loadChannels,
+    registerChannel,
+    updateChannel,
+    removeChannel,
+    selectChannel,
+    channels,
+    channelCount,
+    selectedChannel,
+    channelsByType,
+    CHANNEL_TYPES,
+    CHANNEL_PURPOSES,
+    getChannelTypeIcon,
+    getPurposeIcon
+  } from '$lib/stores/channels';
   import { closePanel } from '$lib/stores';
 
   export let _panelId: string;
@@ -65,6 +81,15 @@
   let telegramForm = {
     botName: '',
     token: ''
+  };
+
+  // Form state for "Nuevo" tab (Canales)
+  let channelForm = {
+    channel_type: 'telegram',
+    external_id: '',
+    project_id: '',
+    purpose: 'general',
+    label: ''
   };
 
   // Form state for Telegram notification destination
@@ -169,6 +194,7 @@
 
   onMount(() => {
     cleanup = initCredentialsSubscriptions();
+    loadChannels();
 
     // Set default provider
     if (providers.length > 0 && !newForm.provider) {
@@ -193,6 +219,9 @@
     setActiveService(service);
     error = null;
     clearTestResult();
+    if (service === 'canales') {
+      selectChannel(null);
+    }
   }
 
   // ==========================================================================
@@ -397,6 +426,64 @@
       await deleteTelegramNotifConfig(level, identifier);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error al eliminar config Telegram';
+    } finally {
+      deleting = false;
+    }
+  }
+
+  // ==========================================================================
+  // HANDLERS - CANALES
+  // ==========================================================================
+
+  async function handleSaveChannel() {
+    if (!channelForm.channel_type || !channelForm.external_id || !channelForm.project_id || saving) return;
+
+    saving = true;
+    error = null;
+
+    try {
+      await registerChannel(
+        channelForm.channel_type,
+        channelForm.external_id,
+        channelForm.project_id,
+        channelForm.purpose,
+        channelForm.label || undefined
+      );
+
+      channelForm = { channel_type: 'telegram', external_id: '', project_id: '', purpose: 'general', label: '' };
+      setActiveTab('lista');
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al registrar canal';
+    } finally {
+      saving = false;
+    }
+  }
+
+  function handleCancelChannel() {
+    channelForm = { channel_type: 'telegram', external_id: '', project_id: '', purpose: 'general', label: '' };
+    error = null;
+    setActiveTab('lista');
+  }
+
+  function handleEditChannel(channel: any) {
+    selectChannel(channel);
+    setActiveTab('config');
+    error = null;
+  }
+
+  async function handleDeleteChannel() {
+    const ch = $selectedChannel;
+    if (!ch || deleting) return;
+
+    deleting = true;
+    error = null;
+
+    try {
+      await removeChannel(ch.channel_type, ch.external_id);
+      selectChannel(null);
+      setActiveTab('lista');
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al eliminar canal';
     } finally {
       deleting = false;
     }
@@ -609,6 +696,16 @@
     >
       📱 Telegram
     </button>
+    <button
+      class="service-tab"
+      class:active={activeServiceValue === 'canales'}
+      on:click={() => { handleServiceChange('canales'); loadChannels(); }}
+    >
+      📡 Canales
+      {#if $channelCount > 0}
+        <span class="service-badge">{$channelCount}</span>
+      {/if}
+    </button>
   </div>
 
   <!-- Header with tabs -->
@@ -647,8 +744,10 @@
     <span class="stats">
       {#if activeServiceValue === 'providers'}
         {stats.total - telegramBots.length} credenciales
-      {:else}
+      {:else if activeServiceValue === 'telegram'}
         {telegramBots.length} bots
+      {:else if activeServiceValue === 'canales'}
+        {$channelCount} canales
       {/if}
     </span>
   </div>
@@ -703,6 +802,56 @@
                 {/each}
               </div>
             </div>
+          </div>
+        {/if}
+
+      <!-- CANALES LIST -->
+      {:else if activeServiceValue === 'canales'}
+        {#if $channels.length === 0}
+          <div class="empty">
+            <span class="empty-icon">📡</span>
+            <span class="empty-title">Sin canales</span>
+            <span class="empty-text">Registra tu primer canal externo</span>
+            <button class="btn primary" on:click={() => handleTabChange('nuevo')}>
+              ➕ Registrar Canal
+            </button>
+          </div>
+        {:else}
+          <div class="credentials-list">
+            {#each Object.entries($channelsByType) as [type, channelList] (type)}
+              <div class="group">
+                <button class="group-header" on:click={() => toggleGroup(type)}>
+                  <span class="group-icon">{expandedGroups[type] ? '▼' : '▶'}</span>
+                  <span class="group-level">{getChannelTypeIcon(type)} {type}</span>
+                  <span class="group-count">{channelList.length}</span>
+                </button>
+                {#if expandedGroups[type]}
+                  <div class="group-items">
+                    {#each channelList as ch (ch.channel_type + ':' + ch.external_id)}
+                      <div
+                        class="credential-item"
+                        class:selected={$selectedChannel?.external_id === ch.external_id && $selectedChannel?.channel_type === ch.channel_type}
+                      >
+                        <button class="cred-main" on:click={() => selectChannel(ch)}>
+                          <span class="cred-icon">{getPurposeIcon(ch.purpose)}</span>
+                          <div class="cred-info">
+                            <span class="cred-name">{ch.label || ch.external_id}</span>
+                            <span class="cred-preview">{ch.project_id} · {ch.purpose}</span>
+                          </div>
+                        </button>
+                        <button
+                          class="cred-edit"
+                          on:click|stopPropagation={() => handleEditChannel(ch)}
+                          title="Editar"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
           </div>
         {/if}
 
@@ -1060,6 +1209,95 @@
           </div>
         </div>
 
+      <!-- CANALES NEW FORM -->
+      {:else if activeServiceValue === 'canales'}
+        <div class="form">
+          <fieldset class="field">
+            <legend class="label">Tipo de Canal</legend>
+            <div class="providers-grid" role="group">
+              {#each CHANNEL_TYPES as ct (ct.id)}
+                <button
+                  type="button"
+                  class="provider-btn"
+                  class:active={channelForm.channel_type === ct.id}
+                  on:click={() => { channelForm.channel_type = ct.id; }}
+                >
+                  <span class="provider-icon">{ct.icon}</span>
+                  <span class="provider-name">{ct.name}</span>
+                </button>
+              {/each}
+            </div>
+          </fieldset>
+
+          <div class="field">
+            <label class="label" for="ch-external-id">Identificador Externo</label>
+            <input
+              id="ch-external-id"
+              type="text"
+              class="input"
+              placeholder="nonina_bot, facturas@empresa.com, +34600..."
+              bind:value={channelForm.external_id}
+            />
+            <span class="field-hint">El ID que identifica este canal (botName, email, telefono)</span>
+          </div>
+
+          <div class="field">
+            <label class="label" for="ch-project-id">Proyecto</label>
+            <input
+              id="ch-project-id"
+              type="text"
+              class="input"
+              placeholder="noninapizza"
+              bind:value={channelForm.project_id}
+            />
+          </div>
+
+          <fieldset class="field">
+            <legend class="label">Proposito</legend>
+            <div class="levels-grid" role="group">
+              {#each CHANNEL_PURPOSES as p (p.id)}
+                <button
+                  type="button"
+                  class="level-btn"
+                  class:active={channelForm.purpose === p.id}
+                  on:click={() => { channelForm.purpose = p.id; }}
+                >
+                  <span>{p.icon}</span>
+                  <span>{p.name}</span>
+                </button>
+              {/each}
+            </div>
+          </fieldset>
+
+          <div class="field">
+            <label class="label" for="ch-label">Etiqueta (opcional)</label>
+            <input
+              id="ch-label"
+              type="text"
+              class="input"
+              placeholder="Bot facturas Nonina"
+              bind:value={channelForm.label}
+            />
+          </div>
+
+          {#if error}
+            <div class="error-msg">{error}</div>
+          {/if}
+
+          <div class="actions">
+            <button class="btn secondary" on:click={handleCancelChannel} disabled={saving}>
+              Cancelar
+            </button>
+            <button
+              class="btn primary"
+              on:click={handleSaveChannel}
+              disabled={!channelForm.external_id || !channelForm.project_id || saving}
+            >
+              {saving ? '⏳...' : '📡 Registrar Canal'}
+            </button>
+          </div>
+        </div>
+
       <!-- AI PROVIDERS NEW FORM -->
       {:else}
         <div class="form">
@@ -1330,7 +1568,68 @@
     <!-- TAB: CONFIG -->
     <!-- ================================================================== -->
     {:else if activeTab === 'config'}
-      {#if selected}
+      <!-- CANALES CONFIG -->
+      {#if activeServiceValue === 'canales'}
+        {#if $selectedChannel}
+          <div class="form">
+            <div class="current-info">
+              <div class="info-row">
+                <span class="info-label">Tipo</span>
+                <span class="info-value">
+                  {getChannelTypeIcon($selectedChannel.channel_type)} {$selectedChannel.channel_type}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">ID Externo</span>
+                <span class="info-value mono">{$selectedChannel.external_id}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Proyecto</span>
+                <span class="info-value">{$selectedChannel.project_id}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Proposito</span>
+                <span class="info-value">
+                  {getPurposeIcon($selectedChannel.purpose)} {$selectedChannel.purpose}
+                </span>
+              </div>
+              {#if $selectedChannel.label}
+                <div class="info-row">
+                  <span class="info-label">Etiqueta</span>
+                  <span class="info-value">{$selectedChannel.label}</span>
+                </div>
+              {/if}
+            </div>
+
+            {#if error}
+              <div class="error-msg">{error}</div>
+            {/if}
+
+            <div class="actions">
+              <button
+                class="btn danger"
+                on:click={handleDeleteChannel}
+                disabled={deleting}
+              >
+                {deleting ? '⏳...' : '🗑️ Eliminar Canal'}
+              </button>
+              <button class="btn secondary" on:click={() => { selectChannel(null); setActiveTab('lista'); }}>
+                Volver
+              </button>
+            </div>
+          </div>
+        {:else}
+          <div class="empty">
+            <span class="empty-icon">📡</span>
+            <span class="empty-text">Selecciona un canal en Lista</span>
+            <button class="btn secondary" on:click={() => handleTabChange('lista')}>
+              Ir a Lista
+            </button>
+          </div>
+        {/if}
+
+      <!-- CREDENTIALS CONFIG -->
+      {:else if selected}
         <div class="form">
           <!-- Current credential info -->
           <div class="current-info">
@@ -1714,6 +2013,16 @@
   .service-tab.active {
     color: var(--_primary);
     border-bottom-color: var(--_primary);
+  }
+
+  .service-badge {
+    font-size: 0.65rem;
+    background: var(--_primary, #4a90d9);
+    color: var(--_bg, #1a1a2e);
+    border-radius: 8px;
+    padding: 0 5px;
+    margin-left: 4px;
+    font-weight: 600;
   }
 
   /* ==========================================================================

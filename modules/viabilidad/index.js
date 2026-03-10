@@ -121,6 +121,29 @@ class ViabilidadModule {
     await fs.writeFile(path.join(dir, filename), JSON.stringify(estudio, null, 2), 'utf-8');
   }
 
+  async loadEscenarios(projectId) {
+    const paths = this.projectPaths.get(projectId);
+    if (!paths) return [];
+    try {
+      const filePath = path.join(paths.storagePath, 'viabilidad', 'escenarios.json');
+      const content = await fs.readFile(filePath, 'utf-8');
+      const escenarios = JSON.parse(content);
+      this.escenarios.set(projectId, escenarios);
+      return escenarios;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async saveEscenarios(projectId) {
+    const paths = this.projectPaths.get(projectId);
+    if (!paths) return;
+    const lista = this.escenarios.get(projectId) || [];
+    const dir = path.join(paths.storagePath, 'viabilidad');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'escenarios.json'), JSON.stringify(lista, null, 2), 'utf-8');
+  }
+
   // ==========================================
   // Event Handlers
   // ==========================================
@@ -136,6 +159,7 @@ class ViabilidadModule {
     }
     await this.loadRecetasData(project_id);
     await this.loadConfig(project_id);
+    await this.loadEscenarios(project_id);
     this.logger.info('viabilidad.project.activated', { project_id });
   }
 
@@ -459,12 +483,13 @@ class ViabilidadModule {
       dias_operacion_mes: dias_operacion_mes || 25
     });
 
-    // Store scenario
+    // Store and persist scenario
     if (!this.escenarios.has(project_id)) this.escenarios.set(project_id, []);
     const lista = this.escenarios.get(project_id);
     const idx = lista.findIndex(e => e.nombre === nombre);
     if (idx >= 0) lista[idx] = result;
     else lista.push(result);
+    await this.saveEscenarios(project_id);
 
     await this.eventBus.publish('viabilidad.escenario.calculado', result);
     this.metrics?.increment('viabilidad.escenario.calculated');

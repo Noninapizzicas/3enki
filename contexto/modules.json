@@ -150,18 +150,21 @@
     "pizzepos/impresion",
     "facturacion/asesoria",
     "facturacion/fuentes",
-    "certificate-authority"
+    "certificate-authority",
+    "recetas",
+    "escandallo",
+    "viabilidad"
   ],
   "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager"],
   "module_count": {
-    "_updated": "2026-03-05",
-    "core": 34,
-    "core_active": 26,
+    "_updated": "2026-03-10",
+    "core": 37,
+    "core_active": 29,
     "core_disabled": 8,
     "pizzepos": 15,
     "facturacion": 2,
-    "total_discovered": 51,
-    "total_active": 43,
+    "total_discovered": 54,
+    "total_active": 46,
     "disabled": 8
   },
   "module_categories": {
@@ -214,6 +217,14 @@
         "pedidos", "cobros", "cocina", "comandero",
         "productos", "categorias", "ingredientes", "variaciones",
         "menu-generator", "persistencia-comandero", "impresion"
+      ]
+    },
+    "negocio_alimentario": {
+      "description": "Módulos de gestión de negocio alimentario — recetas, costes y viabilidad",
+      "modules": [
+        "recetas (gestión de recetas con ingredientes, cantidades y precios de mercado)",
+        "escandallo (análisis de costes y márgenes por receta)",
+        "viabilidad (estudio de viabilidad de negocio: escenarios, break-even, proyecciones)"
       ]
     },
     "facturacion": {

@@ -62,6 +62,16 @@ class RecetasModule {
   // Per-project data access
   // ==========================================
 
+  resolveToActiveProject(projectId) {
+    if (projectId && this.dataPerProject.has(projectId) && this.dataPerProject.get(projectId).recetas.size > 0) {
+      return projectId;
+    }
+    for (const [pid, data] of this.dataPerProject) {
+      if (data.recetas.size > 0) return pid;
+    }
+    return projectId;
+  }
+
   getData(projectId) {
     if (!this.dataPerProject.has(projectId)) {
       this.dataPerProject.set(projectId, {
@@ -296,41 +306,49 @@ class RecetasModule {
   // ==========================================
 
   async handleList(data) {
-    const result = await this.toolListar({ project_id: data?.project_id, categoria: data?.categoria });
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolListar({ project_id, categoria: data?.categoria });
+    if (result.error) throw { status: result.status || 400, code: 'LIST_ERROR', message: result.error };
     return result.data;
   }
 
   async handleGet(data) {
-    const result = await this.toolObtener({ receta_id: data.id || data.receta_id, project_id: data.project_id });
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolObtener({ receta_id: data.id || data.receta_id, project_id });
     if (result.error) throw { status: result.status || 404, code: 'NOT_FOUND', message: result.error };
     return result.data;
   }
 
   async handleCreate(data) {
-    const result = await this.toolCrear(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolCrear({ ...data, project_id });
     if (result.error) throw { status: result.status || 400, code: 'CREATE_ERROR', message: result.error };
     return result.data;
   }
 
   async handleUpdate(data) {
-    const result = await this.toolActualizar(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolActualizar({ ...data, project_id });
     if (result.error) throw { status: result.status || 400, code: 'UPDATE_ERROR', message: result.error };
     return result.data;
   }
 
   async handleDelete(data) {
-    const result = await this.toolEliminar(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolEliminar({ ...data, project_id });
     if (result.error) throw { status: result.status || 400, code: 'DELETE_ERROR', message: result.error };
     return result.data;
   }
 
   async handleIngredientes(data) {
-    const result = await this.toolIngredientes({ project_id: data?.project_id, categoria: data?.categoria });
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolIngredientes({ project_id, categoria: data?.categoria });
     return result.data;
   }
 
   async handleStats(data) {
-    const result = await this.toolResumen({ project_id: data?.project_id });
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolResumen({ project_id });
     return result.data;
   }
 

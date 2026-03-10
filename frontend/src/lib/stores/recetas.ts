@@ -6,13 +6,14 @@
  * - Real-time updates via receta.creada, receta.actualizada, receta.eliminada
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import {
   mqttRequest,
   MqttTimeoutError,
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
+import { activeProjectId } from './projects';
 
 // =============================================================================
 // TYPES
@@ -138,6 +139,8 @@ export async function loadRecetas(categoria?: string): Promise<void> {
 
   try {
     const data: Record<string, string> = {};
+    const pid = get(activeProjectId);
+    if (pid) data.project_id = pid;
     if (categoria) data.categoria = categoria;
 
     const response = await mqttRequest<ListResponse>('recetas', 'list', data);
@@ -160,7 +163,8 @@ export async function getReceta(id: string): Promise<Receta | null> {
   recetasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const response = await mqttRequest<Receta>('recetas', 'get', { id });
+    const pid = get(activeProjectId);
+    const response = await mqttRequest<Receta>('recetas', 'get', { id, project_id: pid });
     const receta = response.data as Receta;
 
     recetasStore.update(s => ({
@@ -185,6 +189,8 @@ export async function loadIngredientes(categoria?: string): Promise<void> {
 
   try {
     const data: Record<string, string> = {};
+    const pid = get(activeProjectId);
+    if (pid) data.project_id = pid;
     if (categoria) data.categoria = categoria;
 
     const response = await mqttRequest<IngredientesResponse>('recetas', 'ingredientes', data);
@@ -204,7 +210,8 @@ export async function loadIngredientes(categoria?: string): Promise<void> {
 
 export async function loadStats(): Promise<void> {
   try {
-    const response = await mqttRequest<RecetasStats>('recetas', 'stats');
+    const pid = get(activeProjectId);
+    const response = await mqttRequest<RecetasStats>('recetas', 'stats', { project_id: pid });
 
     recetasStore.update(s => ({
       ...s,

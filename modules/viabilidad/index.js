@@ -51,6 +51,14 @@ class ViabilidadModule {
   }
 
   // ==========================================
+  // Project resolution
+
+  resolveToActiveProject(projectId) {
+    if (projectId && this.projectPaths.has(projectId)) return projectId;
+    for (const [pid] of this.projectPaths) return pid;
+    return projectId;
+  }
+
   // Data Access
   // ==========================================
 
@@ -224,20 +232,23 @@ class ViabilidadModule {
   // ==========================================
 
   async handleEstudio(data) {
-    const result = await this.toolEstudio(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolEstudio({ ...data, project_id });
     if (result.error) throw { status: result.status || 400, code: 'VIABILIDAD_ERROR', message: result.error };
     return result.data;
   }
 
   async handleEscenario(data) {
-    const result = await this.toolEscenario(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    const result = await this.toolEscenario({ ...data, project_id });
     if (result.error) throw { status: result.status || 400, code: 'ESCENARIO_ERROR', message: result.error };
     return result.data;
   }
 
   async handleConfig(data) {
-    if (data.action === 'get') return this.getConfig(data.project_id);
-    const result = await this.toolGuardarConfig(data);
+    const project_id = this.resolveToActiveProject(data?.project_id);
+    if (data.action === 'get') return this.getConfig(project_id);
+    const result = await this.toolGuardarConfig({ ...data, project_id });
     return result.data;
   }
 

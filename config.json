@@ -82,7 +82,10 @@
       "telegram-service",
       "text-editor",
       "asesoria",
-      "fuentes"
+      "fuentes",
+      "recetas",
+      "escandallo",
+      "viabilidad"
     ],
     "disabled": [
       "conversation-manager",

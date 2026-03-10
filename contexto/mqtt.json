@@ -1,56 +1,14 @@
 {
-  "_meta": {
-    "description": "MQTT — Broker embebido, patrones de comunicación, UI handlers y seguridad",
-    "updated": "2026-03-09",
-    "version": "2.0.0"
-  },
-
   "broker": {
     "type": "Aedes (embedded)",
-    "location": "core/broker/embedded.js",
-    "class": "EmbeddedBroker extends EventEmitter",
     "ports": {
       "tcp": 1883,
       "websocket": 9001
-    },
-    "host": "0.0.0.0",
-    "configuration": {
-      "heartbeatInterval": "30s — detectar clientes inactivos",
-      "connectTimeout": "60s — timeout de conexión",
-      "ws_ping_interval": "25s — ping WebSocket para mantener conexión viva a través de proxies"
-    },
-    "lifecycle": {
-      "start": "Crea Aedes instance → net.createServer (TCP:1883) → ws.Server sobre http.createServer (WS:9001)",
-      "stop": "Cierra Aedes → cierra TCP server → cierra HTTP/WS server",
-      "fallback": "Si WebSocket no arranca, TCP sigue funcionando (warn, no error)"
-    },
-    "events_emitted": [
-      "started", "stopped",
-      "clientConnected", "clientDisconnected",
-      "publish", "subscribe", "unsubscribe",
-      "clientError"
-    ],
-    "stats": {
-      "tracked": ["clients (connected count)", "published", "subscribed", "unsubscribed"],
-      "method": "broker.getStats() → { clients, published, subscribed, unsubscribed, isRunning, port, host }"
-    },
-    "methods": {
-      "start()": "Arranca TCP + WebSocket",
-      "stop()": "Cierra todo limpiamente",
-      "publish(packet)": "Publica mensaje directamente desde el broker (topic, payload, qos, retain)",
-      "getStats()": "Estadísticas del broker",
-      "getClients()": "Lista de clientes conectados (id, connected, clean)"
-    },
-    "authentication": {
-      "current_state": "SIN AUTENTICACIÓN — cualquier cliente puede conectar y pub/sub",
-      "impact": "En despliegue single-machine el riesgo es bajo. En multi-machine con MQTT expuesto es CRÍTICO.",
-      "plan": "Integrar con certificate-authority module — ver sección 'security' abajo"
     }
   },
-
   "patterns": {
     "ui_request_response": {
-      "description": "Request/response garantizado para UI↔Backend. El frontend envía request con requestId, el backend responde en topic dedicado.",
+      "description": "Guaranteed request/response for UI↔Backend",
       "request_topic": "ui/request/{domain}/{action}",
       "response_topic": "ui/response/{request_id}",
       "timeout_ms": 10000,
@@ -63,105 +21,41 @@
       },
       "frontend_usage": {
         "import": "import { mqttRequest } from '$lib/ui-core/mqtt-request'",
-        "example": "const response = await mqttRequest<T>('domain', 'action', data)",
-        "file": "frontend/src/lib/ui-core/mqtt-request.ts"
+        "example": "const response = await mqttRequest<T>('domain', 'action', data)"
       },
       "backend_usage": {
-        "declarative": "module.json: ui_handlers: [{ domain, action, handler }] — auto-wired por ModuleLoader",
-        "legacy_imperative": "context.uiHandler.register('domain', 'action', handler) — ya NO se usa (28/28 migrados)",
+        "register": "context.uiHandler.register('domain', 'action', handler)",
         "handler_signature": "async handler(data, context) => { status, data?, error? }"
-      }
+      },
+      "actions": ["list", "get", "create", "update", "delete", "activate"]
     },
     "events": {
-      "description": "Eventos fire-and-forget para comunicación entre módulos",
+      "description": "Fire-and-forget events for module communication",
       "topic_pattern": "core/{coreId}/events/{module}/{event}",
       "examples": [
         "core/core-a/events/project/created",
-        "core/core-a/events/credential/state",
-        "core/core-a/events/certificate/issued"
+        "core/core-a/events/credential/state"
       ]
     },
     "broadcast": {
-      "description": "Notificaciones system-wide",
+      "description": "System-wide notifications",
       "topic_pattern": "system/{event}",
       "examples": ["system/shutdown", "system/config.changed"]
     }
   },
-
-  "ui_handlers_inventory": {
-    "_updated": "2026-03-09",
-    "_note": "Inventario completo de dominios y acciones registradas via module.json ui_handlers",
-    "total_domains": 25,
-    "total_actions": 201,
-    "domains": {
-      "project": ["list", "get", "create", "update", "delete", "activate", "deactivate", "add-features", "list-features", "addDependency", "removeDependency", "getDependencies", "getDependents", "getLinks", "getRelated", "link", "unlink", "restoreSession", "saveSession", "setAIConfig", "setLastConversation"],
-      "credential": ["list", "get", "create", "update", "delete", "test", "oauth.config.list", "oauth.config.save", "oauth.config.delete", "oauth.start", "oauth.status", "glovo.save", "glovo.delete", "telegram.notif.save", "telegram.notif.delete"],
-      "conversation": ["list", "get", "create", "update", "delete", "load", "send", "contextStats", "toggleContext"],
-      "session": ["list", "get", "create", "update", "delete", "messages", "save", "contextStats", "toggleContext"],
-      "prompt": ["list", "get", "create", "update", "delete", "compose", "context", "templates", "versions", "analytics"],
-      "scheduler": ["list", "get", "create", "update", "delete", "enable", "disable", "trigger", "triggers", "executions", "stats"],
-      "fs": ["list", "read", "write", "delete", "copy", "move", "mkdir", "info", "search", "cleanup", "stats", "getWorkDir", "setWorkDir"],
-      "certificate-authority": ["status", "ca-cert", "issue", "revoke", "renew", "list", "verify", "crl", "download-p12", "stats", "nginx-config", "health"],
-      "system": ["list", "get", "create", "update", "delete", "addProject", "removeProject", "getUnassigned"],
-      "menu": ["list", "get", "generate", "enrich", "export", "health", "set-category-image", "set-product-image"],
-      "carta-digital": ["config", "update-config", "carta-completa", "ofertas", "create-oferta", "update-oferta", "delete-oferta", "resenas", "create-resena", "create-session", "register-pedido", "track-event", "funnel", "stats", "export-static", "deploy-cf-worker", "health"],
-      "facturas": ["listar", "obtener", "subir", "procesar", "reprocesar", "actualizar", "exportar", "estadisticas"],
-      "impresion": ["ticket", "estado", "conectar", "health", "historial", "metrics"],
-      "editor": ["open", "save", "format", "validate"],
-      "pdf": ["list", "view", "metadata"],
-      "pdfjs": ["info", "render"],
-      "chat-bridge": ["send", "status"],
-      "composer": ["render"],
-      "context": ["getFull", "getShared", "getExported", "getSources", "import", "remove"],
-      "preset": ["list", "get", "create", "delete", "apply"],
-      "document-processor": ["process"],
-      "google-vision": ["extract"],
-      "scribe-ocr": ["extract"],
-      "sharp": ["prepare-ocr"],
-      "tesseract": ["extract"]
+  "current_handlers": {
+    "project-manager": {
+      "domain": "project",
+      "actions": ["list", "get", "create", "update", "delete", "activate"]
+    },
+    "credential-manager": {
+      "domain": "credential",
+      "actions": ["list", "get", "create", "update", "delete"]
     }
   },
-
   "error_classes": {
-    "location": "frontend/src/lib/ui-core/mqtt-request.ts",
-    "classes": {
-      "MqttTimeoutError": "Backend no respondió dentro del timeout (10s default)",
-      "MqttRequestError": "Backend retornó status de error (400, 404, 500)",
-      "MqttNotConnectedError": "Cliente MQTT no conectado"
-    }
-  },
-
-  "frontend_mqtt": {
-    "client_file": "frontend/src/lib/ui-core/mqtt-request.ts",
-    "connection": "WebSocket a ws://host:9001 (sin TLS)",
-    "pattern": "publishRaw() para enviar, suscripción temporal a ui/response/{requestId} para recibir",
-    "dead_code": "getMqttClient() — definido pero nunca llamado (usar publishRaw en su lugar)",
-    "reference_counting": "Los stores Svelte usan lazy loading con ref counting para cargar módulos frontend solo cuando se necesitan"
-  },
-
-  "security": {
-    "_updated": "2026-03-09",
-    "http_gateway": {
-      "state": "Protegible via certificate-authority module (mTLS middleware como hook beforeRequest)",
-      "config": "mtls_enabled: true en config.json → activa hook",
-      "modes": ["proxy (nginx pasa cert en header)", "native (Node.js TLS directo)"]
-    },
-    "mqtt_broker": {
-      "state": "SIN AUTENTICACIÓN",
-      "tcp_port_1883": "Abierto — sin authenticate hook en Aedes",
-      "ws_port_9001": "Abierto — sin auth en WebSocket upgrade",
-      "aedes_supports": "authenticate hook, authorizePublish hook, authorizeSubscribe hook — disponibles pero NO implementados",
-      "plan_approaches": [
-        "1. Aedes authenticate hook → verificar cert/token en conexión MQTT",
-        "2. Username=serialNumber + Password=token derivado del cert",
-        "3. WSS con TLS + cert de cliente en WebSocket",
-        "4. Token bridge: mTLS HTTP emite token → se usa como password MQTT"
-      ]
-    },
-    "relationship_with_certificate_authority": {
-      "current": "certificate-authority protege HTTP gateway pero NO MQTT",
-      "goal": "Que un dispositivo/cliente con cert válido pueda también autenticarse en MQTT",
-      "benefit": "Un solo sistema de identidad (certs) para ambos canales (HTTP + MQTT)"
-    }
+    "MqttTimeoutError": "Backend did not respond within timeout",
+    "MqttRequestError": "Backend returned error status",
+    "MqttNotConnectedError": "MQTT client not connected"
   }
 }

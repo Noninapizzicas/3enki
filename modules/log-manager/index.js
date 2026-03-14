@@ -398,14 +398,16 @@ class LogManagerModule {
   async addLog(req) {
     const body = req.body || {};
 
-    if (!body.level || !body.module || !body.msg) {
+    const msg = body.msg || body.message;
+    if (!body.level || !body.module || !msg) {
       return {
         success: false,
-        error: 'Missing required fields: level, module, msg'
+        error: 'Missing required fields: level, module, msg (or message)'
       };
     }
 
-    const result = this.collector.addFromHttp(body);
+    const normalized = { ...body, msg };
+    const result = this.collector.addFromHttp(normalized);
     return result;
   }
 

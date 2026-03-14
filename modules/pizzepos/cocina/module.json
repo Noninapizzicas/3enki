@@ -3,6 +3,7 @@
   "version": "2.1.0",
   "description": "Display de cocina en tiempo real - Sistema de preparación de pedidos",
   "author": "Pizzepos Team",
+  "routes": ["/cocina"],
 
   "provides": {
     "events": [
@@ -88,12 +89,6 @@
       "path": "/cocina/pedidos/:pedido_id/listo",
       "handler": "handleMarcarListo",
       "description": "Marcar pedido completo como listo"
-    },
-    {
-      "method": "GET",
-      "path": "/cocina/stream",
-      "handler": "handleSSEStream",
-      "description": "SSE stream para actualizaciones en tiempo real"
     },
     {
       "method": "GET",

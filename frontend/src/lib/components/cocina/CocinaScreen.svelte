@@ -26,12 +26,17 @@
     initCocinaSubscriptions,
     resumeAudioContext,
     requestNotificationPermission,
-    isGlovoConfirmado
+    isGlovoConfirmado,
+    filtrosActivos,
+    itemPassesFilter
   } from '$lib/stores/cocina';
   import type { PedidoCocina } from '$lib/stores/cocina';
 
   import CocinaHeader from './CocinaHeader.svelte';
   import PedidoCard from './PedidoCard.svelte';
+  import CocinaConfigPanel from './CocinaConfigPanel.svelte';
+
+  let showConfig = false;
 
   let cleanupSubs: (() => void) | null = null;
   let audioUnlocked = false;
@@ -68,7 +73,7 @@
   }
 
   onMount(() => {
-    connect().then(() => {
+    connect().then(async () => {
       cleanupSubs = initCocinaSubscriptions();
     }).catch((err) => {
       console.error('[CocinaScreen] MQTT connection failed', err);
@@ -100,7 +105,7 @@
 </svelte:head>
 
 <div class="cocina-screen">
-  <CocinaHeader />
+  <CocinaHeader on:configOpen={() => showConfig = true} />
 
   <main class="cocina-grid-area">
     {#if $cocinaLoading && $pedidosCount === 0}
@@ -117,11 +122,15 @@
     {:else}
       <div class="pedidos-grid">
         {#each pedidosOrdenados as pedido (pedido.pedido_id)}
-          <PedidoCard {pedido} />
+          <PedidoCard {pedido} filtros={$filtrosActivos} />
         {/each}
       </div>
     {/if}
   </main>
+
+  {#if showConfig}
+    <CocinaConfigPanel on:close={() => showConfig = false} />
+  {/if}
 </div>
 
 <style>

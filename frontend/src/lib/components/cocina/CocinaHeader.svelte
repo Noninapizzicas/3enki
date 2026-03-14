@@ -1,10 +1,17 @@
 <script lang="ts">
   /**
-   * CocinaHeader — Barra superior fija (80px)
+   * CocinaHeader — Barra superior fija
    * Info: estacion, reloj HH:MM:SS, pedidos activos, items pendientes, tiempo promedio, MQTT
+   * Multi-device: filtros por familia (chips toggleables) + indicador de color del dispositivo
    */
   import { ConnectionStatus } from '$lib/components/base';
-  import { pedidosCount, itemsPendientes, itemsPreparando, cocinaMetrics, loadPedidosActivos, loadMetrics } from '$lib/stores/cocina';
+  import {
+    pedidosCount, itemsPendientes, itemsPreparando, cocinaMetrics,
+    pedidosCocina, loadPedidosActivos, loadMetrics,
+    myDeviceColor, myDeviceNombre, filtrosActivos, cocinaDevices,
+    toggleFiltro, clearFiltros
+  } from '$lib/stores/cocina';
+  import type { ItemCocina } from '$lib/stores/cocina';
 
   let refreshing = false;
 
@@ -23,7 +30,9 @@
     clock = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
-  import { onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+
+  const dispatch = createEventDispatcher();
 
   onMount(() => {
     updateClock();
@@ -37,6 +46,16 @@
   $: avgTime = $cocinaMetrics?.tiempo_promedio_preparacion
     ? `${Math.floor($cocinaMetrics.tiempo_promedio_preparacion / 60)}:${String($cocinaMetrics.tiempo_promedio_preparacion % 60).padStart(2, '0')}`
     : '--:--';
+
+  // Extraer familias/categorías únicas de los items activos
+  $: allItems = $pedidosCocina.flatMap(p => p.items) as (ItemCocina & { categoria?: string; familia?: string })[];
+  $: availableFamilias = [...new Set(
+    allItems
+      .map(i => i.categoria || i.familia || '')
+      .filter(Boolean)
+  )].sort();
+
+  $: hasFilters = $filtrosActivos.length > 0;
 </script>
 
 <header class="cocina-header">
@@ -67,6 +86,26 @@
   </div>
 
   <div class="header-section right">
+    <!-- Device color indicator -->
+    {#if $myDeviceColor}
+      <div class="device-indicator" title="{$myDeviceNombre || 'Este dispositivo'}">
+        <span class="device-dot" style="background: {$myDeviceColor}"></span>
+        {#if $myDeviceNombre}
+          <span class="device-name">{$myDeviceNombre}</span>
+        {/if}
+      </div>
+    {/if}
+    <!-- Other connected devices -->
+    {#if $cocinaDevices.length > 1}
+      <div class="device-peers">
+        {#each $cocinaDevices as dev}
+          <span class="peer-dot" style="background: {dev.color}" title="{dev.nombre}"></span>
+        {/each}
+      </div>
+    {/if}
+    <button class="config-btn" on:click={() => dispatch('configOpen')} title="Configuración de estación">
+      &#x2699;
+    </button>
     <button class="refresh-btn" class:spinning={refreshing} on:click={handleRefresh} title="Recargar pedidos">
       &#x21bb;
     </button>
@@ -74,6 +113,24 @@
     <span class="clock">{clock}</span>
   </div>
 </header>
+
+<!-- Filter chips row -->
+{#if availableFamilias.length > 0}
+  <div class="filter-bar">
+    <button
+      class="filter-chip"
+      class:active={!hasFilters}
+      on:click={clearFiltros}
+    >TODO</button>
+    {#each availableFamilias as familia}
+      <button
+        class="filter-chip"
+        class:active={$filtrosActivos.includes(familia)}
+        on:click={() => toggleFiltro(familia)}
+      >{familia.toUpperCase()}</button>
+    {/each}
+  </div>
+{/if}
 
 <style>
   .cocina-header {
@@ -156,6 +213,27 @@
     font-family: 'SF Mono', 'Fira Code', monospace;
   }
 
+  .config-btn {
+    background: none;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 1.4rem;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+
+  .config-btn:active {
+    color: #f8fafc;
+    border-color: #60a5fa;
+  }
+
   .refresh-btn {
     background: none;
     border: 1px solid #334155;
@@ -187,6 +265,89 @@
     to { transform: rotate(360deg); }
   }
 
+  /* ===== Device indicator ===== */
+  .device-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .device-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px currentColor;
+  }
+
+  .device-name {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 600;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .device-peers {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .peer-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  /* ===== Filter bar ===== */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 20px;
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+    overflow-x: auto;
+    flex-shrink: 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-chip {
+    padding: 6px 16px;
+    border: 1px solid #334155;
+    border-radius: 20px;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .filter-chip:active {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .filter-chip.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+
   @media (max-width: 600px) {
     .cocina-header {
       height: 44px;
@@ -202,6 +363,13 @@
     .metric-label { font-size: 0.5rem; letter-spacing: 0.5px; }
     .metric-divider { height: 24px; }
     .clock { font-size: 0.8rem; }
+    .config-btn { width: 32px; height: 32px; font-size: 1.1rem; border-radius: 6px; }
     .refresh-btn { width: 32px; height: 32px; font-size: 1.1rem; border-radius: 6px; }
+    .device-indicator { gap: 4px; }
+    .device-dot { width: 10px; height: 10px; }
+    .device-name { font-size: 0.6rem; max-width: 50px; }
+    .peer-dot { width: 6px; height: 6px; }
+    .filter-bar { padding: 4px 8px; gap: 6px; }
+    .filter-chip { padding: 4px 10px; font-size: 0.65rem; border-radius: 14px; }
   }
 </style>

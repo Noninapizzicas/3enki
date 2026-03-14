@@ -1,31 +1,51 @@
 /**
- * Módulo Cocina v2.1
+ * Módulo Cocina v2.2
  * Display de cocina en tiempo real con tracking item a item
  * Estados item: pendiente → preparando → listo
+ *
+ * Multi-dispositivo:
+ *   - Cada dispositivo se registra con register-device y recibe un color único
+ *   - Cada dispositivo puede filtrar por familias/categorías (client-side)
+ *   - Al preparar un item, se registra device_id → color en el item
+ *   - Todos los dispositivos ven el pedido completo para coordinación
+ *
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
 class CocinaModule {
   constructor() {
     this.name = 'cocina';
-    this.version = '2.1.0';
+    this.version = '2.2.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
     this.uiHandler = null;
+    this.validator = null;
 
     // Estado en memoria
     this.pedidosActivos = new Map(); // pedido_id -> pedido_cocina
     this.historial = []; // últimos 50 pedidos completados
     this.maxHistorial = 50;
 
-    // SSE clients
-    this.sseClients = new Set();
-
     // Rolling average tiempos preparación (últimos 100)
     this.tiemposPreparacion = [];
+
+    // Dispositivos de cocina registrados: device_id -> { nombre, color, filtros, connected_at, last_seen }
+    this.devices = new Map();
+
+    // Paleta de colores para dispositivos (alta visibilidad sobre fondo oscuro)
+    this.DEVICE_COLORS = [
+      '#3b82f6', // blue
+      '#f97316', // orange
+      '#a855f7', // purple
+      '#14b8a6', // teal
+      '#f43f5e', // rose
+      '#84cc16', // lime
+      '#06b6d4', // cyan
+      '#e879f9', // fuchsia
+    ];
   }
 
   // ==========================================
@@ -37,8 +57,12 @@ class CocinaModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.validator = core.validationManager || null;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
+
+    // Registrar schemas de validación
+    this.registerSchemas();
 
     // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
@@ -52,19 +76,12 @@ class CocinaModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    // Cerrar clientes SSE
-    for (const client of this.sseClients) {
-      try {
-        if (client.close) client.close();
-      } catch (_) { /* ignore */ }
-    }
-    this.sseClients.clear();
-
     // Desregistrar UI handlers
     if (this.uiHandler) {
       const actions = [
         'list-active', 'get', 'history', 'prepare-item',
-        'mark-ready', 'stream', 'health', 'metrics'
+        'mark-ready', 'health', 'metrics',
+        'register-device', 'unregister-device', 'list-devices'
       ];
       for (const action of actions) {
         this.uiHandler.unregister('cocina', action);
@@ -75,8 +92,68 @@ class CocinaModule {
     this.pedidosActivos.clear();
     this.historial = [];
     this.tiemposPreparacion = [];
+    this.devices.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // Validation Schemas
+  // ==========================================
+
+  registerSchemas() {
+    if (!this.validator) return;
+
+    this.validator.registerSchema('cocina.register-device', {
+      type: 'object',
+      required: ['device_id'],
+      properties: {
+        device_id: { type: 'string', minLength: 1 },
+        nombre: { type: 'string' },
+        filtros: {
+          type: 'object',
+          properties: {
+            familias: { type: 'array', items: { type: 'string' } }
+          }
+        }
+      }
+    });
+
+    this.validator.registerSchema('cocina.prepare-item', {
+      type: 'object',
+      required: ['item_id'],
+      properties: {
+        item_id: { type: 'string', minLength: 1 },
+        device_id: { type: 'string' }
+      }
+    });
+
+    this.validator.registerSchema('cocina.mark-ready', {
+      type: 'object',
+      required: ['pedido_id'],
+      properties: {
+        pedido_id: { type: 'string', minLength: 1 }
+      }
+    });
+
+    this.validator.registerSchema('cocina.get', {
+      type: 'object',
+      required: ['pedido_id'],
+      properties: {
+        pedido_id: { type: 'string', minLength: 1 }
+      }
+    });
+
+    this.logger.info('cocina.schemas.registered', { count: 4 });
+  }
+
+  validateInput(schemaId, data) {
+    if (!this.validator) return null;
+    const result = this.validator.validate(schemaId, data);
+    if (!result.valid) {
+      return { status: 400, error: 'Validación fallida', validation_errors: result.errors };
+    }
+    return null;
   }
 
   // ==========================================
@@ -94,12 +171,14 @@ class CocinaModule {
     this.uiHandler.register('cocina', 'history', this.handleGetHistorial.bind(this));
     this.uiHandler.register('cocina', 'prepare-item', this.handlePrepararItem.bind(this));
     this.uiHandler.register('cocina', 'mark-ready', this.handleMarcarListo.bind(this));
-    this.uiHandler.register('cocina', 'stream', this.handleSSEStream.bind(this));
     this.uiHandler.register('cocina', 'health', this.handleHealthCheck.bind(this));
     this.uiHandler.register('cocina', 'metrics', this.handleGetMetrics.bind(this));
+    this.uiHandler.register('cocina', 'register-device', this.handleRegisterDevice.bind(this));
+    this.uiHandler.register('cocina', 'unregister-device', this.handleUnregisterDevice.bind(this));
+    this.uiHandler.register('cocina', 'list-devices', this.handleListDevices.bind(this));
 
     this.logger.info('cocina.ui_handlers.registered', {
-      handlers: ['list-active', 'get', 'history', 'prepare-item', 'mark-ready', 'stream', 'health', 'metrics']
+      handlers: ['list-active', 'get', 'history', 'prepare-item', 'mark-ready', 'health', 'metrics', 'register-device', 'unregister-device', 'list-devices']
     });
   }
 
@@ -128,6 +207,7 @@ class CocinaModule {
           item_id: item.item_id,
           producto_id: item.producto_id,
           nombre: item.nombre,
+          categoria: item.categoria || null,
           cantidad: item.cantidad,
           variaciones: item.variaciones || null,
           notas: item.notas || '',
@@ -151,8 +231,6 @@ class CocinaModule {
 
     this.metrics?.increment?.('cocina.pedido_recibido.total');
     this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
-
-    this.broadcastSSE({ type: 'nuevo_pedido', data: pedidoCocina });
   }
 
   async onPedidoCancelado(event) {
@@ -165,8 +243,6 @@ class CocinaModule {
 
     this.metrics?.increment?.('cocina.pedido_cancelado.total');
     this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
-
-    this.broadcastSSE({ type: 'pedido_cancelado', data: { pedido_id } });
 
     this.logger.info('cocina.pedido.cancelado', { pedido_id });
   }
@@ -190,7 +266,7 @@ class CocinaModule {
 
     return {
       status: 200,
-      data: { pedidos: activos, total: activos.length, items_pendientes: itemsPendientes, items_preparando: itemsPreparando }
+      data: { pedidos: activos, total: activos.length, items_pendientes: itemsPendientes, items_preparando: itemsPreparando, devices: this.getDeviceList() }
     };
   }
 
@@ -205,6 +281,9 @@ class CocinaModule {
   }
 
   async handleGetPedido(data) {
+    const invalid = this.validateInput('cocina.get', data);
+    if (invalid) return invalid;
+
     const { pedido_id } = data;
     const pedido = this.pedidosActivos.get(pedido_id);
 
@@ -222,7 +301,14 @@ class CocinaModule {
    * Si todos los items quedan listo → auto-completa el pedido.
    */
   async handlePrepararItem(data) {
-    const { item_id } = data;
+    const invalid = this.validateInput('cocina.prepare-item', data);
+    if (invalid) return invalid;
+
+    const { item_id, device_id } = data;
+
+    // Resolver color del dispositivo si lo hay
+    const device = device_id ? this.devices.get(device_id) : null;
+    if (device) device.last_seen = new Date().toISOString();
 
     // Buscar item en pedidos activos
     let pedidoEncontrado = null;
@@ -251,16 +337,16 @@ class CocinaModule {
       // Primer tap: empezar a preparar
       itemEncontrado.estado = 'preparando';
       itemEncontrado.preparando_at = now;
+      if (device) {
+        itemEncontrado.device_id = device_id;
+        itemEncontrado.device_color = device.color;
+        itemEncontrado.device_nombre = device.nombre;
+      }
 
       await this.publishItemPreparando(pedidoEncontrado, itemEncontrado);
 
-      this.broadcastSSE({
-        type: 'item_preparando',
-        data: { pedido_id: pedidoEncontrado.pedido_id, item_id }
-      });
-
       this.logger.info('cocina.item.preparando', {
-        pedido_id: pedidoEncontrado.pedido_id, item_id
+        pedido_id: pedidoEncontrado.pedido_id, item_id, device_id: device_id || null
       });
 
       return {
@@ -277,11 +363,6 @@ class CocinaModule {
 
     await this.publishItemPreparado(pedidoEncontrado, itemEncontrado);
 
-    this.broadcastSSE({
-      type: 'item_preparado',
-      data: { pedido_id: pedidoEncontrado.pedido_id, item_id }
-    });
-
     // Auto-completar si todos listos
     const todosListos = pedidoEncontrado.items.every(i => i.estado === 'listo');
     if (todosListos) {
@@ -289,7 +370,7 @@ class CocinaModule {
     }
 
     this.logger.info('cocina.item.preparado', {
-      pedido_id: pedidoEncontrado.pedido_id, item_id, pedido_completo: todosListos
+      pedido_id: pedidoEncontrado.pedido_id, item_id, device_id: device_id || null, pedido_completo: todosListos
     });
 
     return {
@@ -303,6 +384,9 @@ class CocinaModule {
    * Todos los items pendientes/preparando pasan a listo.
    */
   async handleMarcarListo(data) {
+    const invalid = this.validateInput('cocina.mark-ready', data);
+    if (invalid) return invalid;
+
     const { pedido_id } = data;
 
     const pedido = this.pedidosActivos.get(pedido_id);
@@ -324,44 +408,105 @@ class CocinaModule {
     return { status: 200, data: pedido };
   }
 
+  // ==========================================
+  // Device Management
+  // ==========================================
+
   /**
-   * Registra un cliente SSE y devuelve estado inicial.
-   * El cliente se pasa en data.client (inyectado por el core/ui SSE handler).
-   * Si no hay client (ej. MQTT request), solo devuelve estado.
+   * Registra un dispositivo de cocina. Asigna color único automáticamente.
+   * Si el device_id ya existe, actualiza sus datos (re-connect).
    */
-  async handleSSEStream(data) {
-    const { client } = data || {};
+  async handleRegisterDevice(data) {
+    const invalid = this.validateInput('cocina.register-device', data);
+    if (invalid) return invalid;
 
-    if (client) {
-      this.sseClients.add(client);
+    const { device_id, nombre, filtros } = data;
+    const existing = this.devices.get(device_id);
 
-      // Auto-cleanup cuando el cliente se desconecta
-      const onClose = () => {
-        this.sseClients.delete(client);
-        this.logger.info('cocina.sse.client_disconnected', {
-          clientes_sse: this.sseClients.size
-        });
-      };
+    if (existing) {
+      // Re-registro: actualizar filtros y nombre, mantener color
+      existing.nombre = nombre || existing.nombre;
+      existing.filtros = filtros || existing.filtros;
+      existing.last_seen = new Date().toISOString();
 
-      if (client.on) client.on('close', onClose);
-      else if (client.onclose) client.onclose = onClose;
-
-      this.logger.info('cocina.sse.client_connected', {
-        clientes_sse: this.sseClients.size
+      await this.eventBus.publish('cocina.device_updated', {
+        device_id, nombre: existing.nombre, color: existing.color, filtros: existing.filtros
       });
+
+      return {
+        status: 200,
+        data: {
+          device_id,
+          color: existing.color,
+          nombre: existing.nombre,
+          filtros: existing.filtros,
+          devices: this.getDeviceList()
+        }
+      };
     }
 
-    const activos = Array.from(this.pedidosActivos.values());
-    activos.sort((a, b) => new Date(a.recibido_at) - new Date(b.recibido_at));
+    // Nuevo dispositivo: asignar color
+    const colorIndex = this.devices.size % this.DEVICE_COLORS.length;
+    const color = this.DEVICE_COLORS[colorIndex];
+
+    const device = {
+      device_id,
+      nombre: nombre || `Estación ${this.devices.size + 1}`,
+      color,
+      filtros: filtros || { familias: [] },
+      connected_at: new Date().toISOString(),
+      last_seen: new Date().toISOString()
+    };
+
+    this.devices.set(device_id, device);
+
+    await this.eventBus.publish('cocina.device_registered', {
+      device_id, nombre: device.nombre, color, filtros: device.filtros
+    });
+
+    this.logger.info('cocina.device.registered', {
+      device_id, nombre: device.nombre, color, total_devices: this.devices.size
+    });
 
     return {
-      status: 200,
+      status: 201,
       data: {
-        type: 'connected',
-        pedidos_activos: activos,
-        clientes_sse: this.sseClients.size
+        device_id,
+        color,
+        nombre: device.nombre,
+        filtros: device.filtros,
+        devices: this.getDeviceList()
       }
     };
+  }
+
+  async handleUnregisterDevice(data) {
+    const { device_id } = data;
+    if (!device_id) return { status: 400, error: 'device_id requerido' };
+
+    const existed = this.devices.delete(device_id);
+
+    if (existed) {
+      await this.eventBus.publish('cocina.device_unregistered', { device_id });
+      this.logger.info('cocina.device.unregistered', { device_id, total_devices: this.devices.size });
+    }
+
+    return { status: 200, data: { removed: existed, devices: this.getDeviceList() } };
+  }
+
+  async handleListDevices() {
+    return { status: 200, data: { devices: this.getDeviceList() } };
+  }
+
+  getDeviceList() {
+    return Array.from(this.devices.values()).map(d => ({
+      device_id: d.device_id,
+      nombre: d.nombre,
+      color: d.color,
+      filtros: d.filtros,
+      connected_at: d.connected_at,
+      last_seen: d.last_seen
+    }));
   }
 
   async handleHealthCheck() {
@@ -372,7 +517,7 @@ class CocinaModule {
         module: this.name,
         version: this.version,
         pedidos_activos: this.pedidosActivos.size,
-        clientes_sse: this.sseClients.size
+        devices_count: this.devices.size
       }
     };
   }
@@ -395,7 +540,6 @@ class CocinaModule {
         items_preparando: itemsPreparando,
         historial_count: this.historial.length,
         tiempo_promedio_preparacion: Math.round(tiempoPromedio),
-        clientes_sse: this.sseClients.size,
         timestamp: new Date().toISOString()
       }
     };
@@ -523,15 +667,6 @@ class CocinaModule {
 
     await this.publishPedidoListo(pedido);
 
-    this.broadcastSSE({
-      type: 'pedido_listo',
-      data: {
-        pedido_id: pedido.pedido_id,
-        canal: pedido.canal || null,
-        tiempo_preparacion: tiempoPreparacion
-      }
-    });
-
     this.logger.info('cocina.pedido.listo', {
       pedido_id: pedido.pedido_id,
       canal: pedido.canal || null,
@@ -539,22 +674,12 @@ class CocinaModule {
     });
   }
 
-  broadcastSSE(message) {
-    for (const client of this.sseClients) {
-      try {
-        client.send(message);
-      } catch (error) {
-        this.sseClients.delete(client);
-      }
-    }
-  }
-
   // ==========================================
   // Event Publishers
   // ==========================================
 
   async publishItemPreparando(pedidoCocina, item) {
-    await this.eventBus.publish('cocina.item_preparando', {
+    const payload = {
       pedido_id: pedidoCocina.pedido_id,
       cuenta_id: pedidoCocina.cuenta_id,
       canal: pedidoCocina.canal || null,
@@ -563,11 +688,15 @@ class CocinaModule {
       nombre: item.nombre,
       cantidad: item.cantidad,
       preparando_at: item.preparando_at
-    });
+    };
+    if (item.device_id) payload.device_id = item.device_id;
+    if (item.device_color) payload.device_color = item.device_color;
+    if (item.device_nombre) payload.device_nombre = item.device_nombre;
+    await this.eventBus.publish('cocina.item_preparando', payload);
   }
 
   async publishItemPreparado(pedidoCocina, item) {
-    await this.eventBus.publish('cocina.item_preparado', {
+    const payload = {
       pedido_id: pedidoCocina.pedido_id,
       cuenta_id: pedidoCocina.cuenta_id,
       canal: pedidoCocina.canal || null,
@@ -576,7 +705,11 @@ class CocinaModule {
       nombre: item.nombre,
       cantidad: item.cantidad,
       preparado_at: item.preparado_at
-    });
+    };
+    if (item.device_id) payload.device_id = item.device_id;
+    if (item.device_color) payload.device_color = item.device_color;
+    if (item.device_nombre) payload.device_nombre = item.device_nombre;
+    await this.eventBus.publish('cocina.item_preparado', payload);
   }
 
   async publishPedidoListo(pedido) {

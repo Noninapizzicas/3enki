@@ -51,10 +51,8 @@ class CredentialManagerModule {
 
     this.activity?.action('module.loading', {});
 
-    // Load module config from module.json
-    const moduleJsonPath = path.join(__dirname, 'module.json');
-    const moduleJson = JSON.parse(await fs.readFile(moduleJsonPath, 'utf-8'));
-    this.config = moduleJson.config || {};
+    // Load config from loader-injected moduleConfig
+    this.config = core.moduleConfig || {};
 
     this.logger.info('module.loading', {
       module: this.name,

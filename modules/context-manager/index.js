@@ -10,8 +10,6 @@
  * Table owned: shared_context
  */
 
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 
 class ContextManagerModule {
@@ -33,13 +31,8 @@ class ContextManagerModule {
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
 
-    try {
-      const moduleJsonPath = path.join(__dirname, 'module.json');
-      const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
-      this.config = { ...(moduleJson.config || {}), ...(core.config || {}) };
-    } catch (err) {
-      this.config = core.config || {};
-    }
+    // Load config from loader-injected moduleConfig
+    this.config = core.moduleConfig || {};
 
     this.logger.info('context-manager.loading');
 

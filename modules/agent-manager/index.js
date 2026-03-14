@@ -8,8 +8,6 @@
  * Publica: agent.execute.request, pipeline.*
  */
 
-const path = require('path');
-const fs = require('fs').promises;
 const TriggerRegistry = require('./services/trigger-registry');
 const ContextBuilder = require('./services/context-builder');
 const PipelineExecutor = require('./services/pipeline-executor');
@@ -41,10 +39,8 @@ class AgentManagerModule {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
 
-    // Load config
-    const moduleJsonPath = path.join(__dirname, 'module.json');
-    const moduleJson = JSON.parse(await fs.readFile(moduleJsonPath, 'utf-8'));
-    this.config = moduleJson.config || {};
+    // Load config from loader-injected moduleConfig
+    this.config = context.moduleConfig || {};
 
     this.logger.info('agent-manager.loading', {
       version: this.version

@@ -48,8 +48,8 @@ class CertificateAuthorityModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
 
-    // Leer configuración del módulo
-    const config = core.config?.modules?.['certificate-authority'] || {};
+    // Leer configuración del módulo (inyectada por el loader desde module.json)
+    const config = core.moduleConfig || {};
 
     // Inicializar CA Manager
     this.caManager = new CAManager({

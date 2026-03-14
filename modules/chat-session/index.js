@@ -51,7 +51,7 @@ class ChatSessionModule {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
     this.uiHandler = context.uiHandler;
-    this.config = context.config || {};
+    this.config = context.moduleConfig || {};
 
     this.logger.info('chat-session.loaded', {
       module: this.name,

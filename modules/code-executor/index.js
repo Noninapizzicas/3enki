@@ -5,7 +5,6 @@
 
 const { spawn, exec } = require('child_process');
 const path = require('path');
-const fs = require('fs').promises;
 const fsSync = require('fs');
 
 class CodeExecutorModule {
@@ -30,10 +29,8 @@ class CodeExecutorModule {
     this.logger = core.logger;
     this.eventBus = core.eventBus;
 
-    // Load config from module.json
-    const moduleJsonPath = path.join(__dirname, 'module.json');
-    const moduleJson = JSON.parse(fsSync.readFileSync(moduleJsonPath, 'utf-8'));
-    this.config = { ...moduleJson.config, ...(core.config || {}) };
+    // Load config from loader-injected moduleConfig
+    this.config = core.moduleConfig || {};
 
     // Compile blocked patterns to RegExp
     this.blockedPatterns = (this.config.blockedPatterns || []).map(p => new RegExp(p, 'i'));

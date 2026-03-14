@@ -34,7 +34,7 @@ class AdminPanelModule {
     this.core = core;
     this.logger = core.logger;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
+    this.config = core.moduleConfig || {};
     this.coreConfig = core.config || {};
 
     this.logger.info('admin-panel.loading', {

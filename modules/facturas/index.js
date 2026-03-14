@@ -121,9 +121,9 @@ class FacturasModule {
     // Create service executor for calling providers
     this.services = new ServiceExecutor(this.eventBus, this.logger);
 
-    // Merge config from module.json if provided
-    if (context.config?.facturas) {
-      Object.assign(this.config, context.config.facturas);
+    // Merge config from loader-injected moduleConfig
+    if (context.moduleConfig && Object.keys(context.moduleConfig).length > 0) {
+      Object.assign(this.config, context.moduleConfig);
     }
 
     this.logger.info('facturas.loaded');

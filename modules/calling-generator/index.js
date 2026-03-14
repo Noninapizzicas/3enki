@@ -33,7 +33,7 @@ class CallingGenerator {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
+    this.config = core.moduleConfig || {};
     this.moduleManager = core.moduleManager;
     this.moduleLoader = core.moduleLoader; // Para registrar tools
     this.activity = core.activity?.forModule('calling-generator');

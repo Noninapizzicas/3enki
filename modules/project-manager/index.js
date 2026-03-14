@@ -39,19 +39,8 @@ class ProjectManagerModule {
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
 
-    try {
-      const moduleJsonPath = path.join(__dirname, 'module.json');
-      const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
-      const moduleConfig = moduleJson.config || {};
-      const coreConfig = core.config || {};
-      this.config = { ...moduleConfig };
-      for (const [key, value] of Object.entries(coreConfig)) {
-        if (value !== undefined && value !== null) this.config[key] = value;
-      }
-    } catch (err) {
-      this.logger.warn('project-manager.config.load.error', { error: err.message });
-      this.config = core.config || {};
-    }
+    // Load config from loader-injected moduleConfig
+    this.config = core.moduleConfig || {};
 
     this.logger.info('project-manager.loading', { module: this.name });
 

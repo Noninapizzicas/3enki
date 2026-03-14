@@ -9,8 +9,6 @@
  * Tables owned: systems, system_members, project_links, project_dependencies
  */
 
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 
 class CompositionManagerModule {
@@ -31,13 +29,8 @@ class CompositionManagerModule {
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
 
-    try {
-      const moduleJsonPath = path.join(__dirname, 'module.json');
-      const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
-      this.config = { ...(moduleJson.config || {}), ...(core.config || {}) };
-    } catch (err) {
-      this.config = core.config || {};
-    }
+    // Load config from loader-injected moduleConfig
+    this.config = core.moduleConfig || {};
 
     this.logger.info('composition-manager.loading');
 

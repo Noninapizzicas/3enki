@@ -29,7 +29,7 @@ class PdfViewerModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
+    this.config = core.moduleConfig || {};
     this.uiHandler = core.uiHandler;
 
     this.logger.info('pdf-viewer.loading', { module: this.name });

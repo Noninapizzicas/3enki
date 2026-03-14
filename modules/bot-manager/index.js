@@ -7,8 +7,6 @@
  * Publica: bot.file.stored, bot.message.received, bot.command.received
  */
 
-const path = require('path');
-const fs = require('fs').promises;
 const BotRegistry = require('./services/bot-registry');
 const DownloadManager = require('./services/download-manager');
 const AutoResponder = require('./services/auto-responder');
@@ -37,10 +35,8 @@ class BotManagerModule {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
 
-    // Load config from module.json
-    const moduleJsonPath = path.join(__dirname, 'module.json');
-    const moduleJson = JSON.parse(await fs.readFile(moduleJsonPath, 'utf-8'));
-    this.config = moduleJson.config || {};
+    // Load config from loader-injected moduleConfig
+    this.config = context.moduleConfig || {};
 
     this.logger.info('bot-manager.loading', {
       version: this.version

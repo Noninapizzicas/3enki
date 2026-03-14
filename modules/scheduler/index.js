@@ -14,8 +14,6 @@
  */
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 
 const JobManager = require('./services/job-manager');
 const TriggerManager = require('./services/trigger-manager');
@@ -65,8 +63,8 @@ class SchedulerModule {
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
 
-    // Load config
-    this.config = this.loadConfig(core.config);
+    // Load config from loader-injected moduleConfig
+    this.config = this.loadConfig(core.moduleConfig);
 
     this.logger.info('scheduler.loading', {
       module: this.name,
@@ -127,7 +125,7 @@ class SchedulerModule {
     this.logger.info('scheduler.unloaded');
   }
 
-  loadConfig(coreConfig) {
+  loadConfig(moduleConfig) {
     const defaults = {
       jobsPath: './data/scheduler/jobs.json',
       autoSave: true,
@@ -139,13 +137,7 @@ class SchedulerModule {
       defaultRetryDelay: 5000
     };
 
-    try {
-      const moduleJsonPath = path.join(__dirname, 'module.json');
-      const moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf-8'));
-      return { ...defaults, ...moduleJson.config, ...coreConfig };
-    } catch {
-      return { ...defaults, ...coreConfig };
-    }
+    return { ...defaults, ...(moduleConfig || {}) };
   }
 
   // ==================== INITIALIZATION ====================

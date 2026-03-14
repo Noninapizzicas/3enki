@@ -1,5 +1,3 @@
-const fs = require('fs').promises;
-const path = require('path');
 const DeepSeekProvider = require('./providers/deepseek-provider');
 const AnthropicProvider = require('./providers/anthropic-provider');
 const OpenAIProvider = require('./providers/openai-provider');
@@ -128,10 +126,8 @@ class AIGatewayModule {
 
     this.activity?.action('module.loading', {});
 
-    // Load config from module.json
-    const moduleJsonPath = path.join(__dirname, 'module.json');
-    const moduleJson = JSON.parse(await fs.readFile(moduleJsonPath, 'utf-8'));
-    this.config = moduleJson.config || {};
+    // Load config from loader-injected moduleConfig
+    this.config = context.moduleConfig || {};
 
     // Initialize providers
     await this.initializeProviders();

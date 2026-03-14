@@ -107,7 +107,7 @@ class SystemInspectorModule {
    * Carga configuración del módulo
    */
   _loadConfig() {
-    const moduleConfig = this.core.config?.modules?.['system-inspector'] || {};
+    const moduleConfig = this.core.moduleConfig || {};
 
     return {
       buffer_size: moduleConfig.buffer_size || 500,

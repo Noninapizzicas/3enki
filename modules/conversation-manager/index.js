@@ -43,7 +43,7 @@ class ConversationManagerModule {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
     this.uiHandler = context.uiHandler;
-    this.config = context.config || {};
+    this.config = context.moduleConfig || {};
 
     this.logger.info('conversation-manager.loading', {
       module: this.name,

@@ -23,7 +23,7 @@ class TextEditorModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};  // Config viene del manifest
+    this.config = core.moduleConfig || {};
     this.uiHandler = core.uiHandler;
 
     this.logger.info('text-editor.loading', { module: this.name });

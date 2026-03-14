@@ -23,9 +23,6 @@
  * @version 1.0.0
  */
 
-const path = require('path');
-const fsSync = require('fs');
-
 class ChannelManagerModule {
   constructor() {
     this.name = 'channel-manager';
@@ -48,14 +45,8 @@ class ChannelManagerModule {
     this.logger = core.logger;
     this.eventBus = core.eventBus;
 
-    // Load config from module.json
-    try {
-      const moduleJsonPath = path.join(__dirname, 'module.json');
-      const moduleJson = JSON.parse(fsSync.readFileSync(moduleJsonPath, 'utf-8'));
-      this.config = { ...(moduleJson.config || {}), ...(core.config || {}) };
-    } catch (err) {
-      this.config = core.config || { db_project_id: 'system', table_name: 'channels' };
-    }
+    // Load config from loader-injected moduleConfig
+    this.config = core.moduleConfig || {};
 
     // Initialize schema in database-manager
     await this.initSchema();

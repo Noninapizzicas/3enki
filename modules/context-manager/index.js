@@ -253,6 +253,60 @@ class ContextManagerModule {
     }
   }
 
+  // ==================== Parent Chain Resolution ====================
+
+  /**
+   * Walk up parent_project_id chain to build project hierarchy.
+   * Returns [{id, name, description, metadata}, ...] from immediate parent to root.
+   */
+  async getParentChain(entityId, correlationId) {
+    const chain = [];
+    const visited = new Set();
+    const MAX_DEPTH = 10;
+    let currentId = entityId;
+
+    while (currentId && chain.length < MAX_DEPTH) {
+      if (visited.has(currentId)) break;
+      visited.add(currentId);
+
+      try {
+        const rows = await this.queryDatabase(
+          'SELECT id, name, description, parent_project_id, metadata FROM projects WHERE id = ?',
+          [currentId], true, correlationId
+        );
+        if (rows.length === 0) break;
+
+        const row = rows[0];
+        if (!row.parent_project_id) break;
+
+        // Fetch parent
+        const parentRows = await this.queryDatabase(
+          'SELECT id, name, description, parent_project_id, metadata FROM projects WHERE id = ?',
+          [row.parent_project_id], true, correlationId
+        );
+        if (parentRows.length === 0) break;
+
+        const parent = parentRows[0];
+        let metadata = {};
+        try { metadata = parent.metadata ? JSON.parse(parent.metadata) : {}; } catch (_) {}
+
+        chain.push({
+          id: parent.id,
+          name: parent.name,
+          description: parent.description,
+          metadata
+        });
+
+        currentId = parent.id;
+      } catch (err) {
+        this.logger.warn('context-manager.parent-chain.error', { entityId: currentId, error: err.message });
+        break;
+      }
+    }
+
+    return chain;
+  }
+
   // ==================== Context Discovery ====================
 
   async getAvailableContextSources(entityId, correlationId) {
@@ -329,11 +383,12 @@ class ContextManagerModule {
   async getFullEntityContext(entityId, correlationId) {
     const sharedContext = await this.getSharedContext(entityId, correlationId);
 
-    // Fetch relationship data from composition-manager in parallel
-    const [deps, related, systemInfo] = await Promise.all([
+    // Fetch relationship data from composition-manager + parent chain in parallel
+    const [deps, related, systemInfo, parentChain] = await Promise.all([
       this.requestComposition('deps.get', { entity_id: entityId }).catch(() => []),
       this.requestComposition('related.get', { entity_id: entityId }).catch(() => []),
-      this.requestComposition('entity.system', { entity_id: entityId }).catch(() => null)
+      this.requestComposition('entity.system', { entity_id: entityId }).catch(() => null),
+      this.getParentChain(entityId, correlationId).catch(() => [])
     ]);
 
     // Collect all entity IDs that need name resolution
@@ -366,6 +421,7 @@ class ContextManagerModule {
 
     return {
       project: { id: entityId, name: entityInfo.name, description: entityInfo.description },
+      parentChain,
       system: systemSection,
       dependencies: (deps || []).map(d => {
         const info = names.get(d.dependsOnId) || {};

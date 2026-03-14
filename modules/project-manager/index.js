@@ -435,28 +435,60 @@ class ProjectManagerModule {
     }
 
     const basePath = await this.createProjectDirectories(projectId, name);
-    const { provider = null, model = null, prompt_id = null } = options;
+    const { provider = null, model = null, prompt_id = null, parent_project_id = null } = options;
+
+    // Validate parent exists and resolve its system_id
+    let parentSystemId = null;
+    if (parent_project_id) {
+      const parent = this.projects.get(parent_project_id);
+      if (!parent) {
+        const error = new Error(`Parent project not found: ${parent_project_id}`);
+        error.code = 'PARENT_NOT_FOUND';
+        throw error;
+      }
+      parentSystemId = parent.system_id || null;
+    }
 
     await this.queryDatabase(`
       INSERT INTO projects (
         id, name, description, created_at, updated_at, is_active, metadata,
-        last_conversation_id, provider, model, prompt_id, base_path, session_state
-      ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+        last_conversation_id, provider, model, prompt_id, base_path, session_state,
+        parent_project_id, system_id
+      ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       projectId, name, description, now, now,
-      JSON.stringify(metadata), null, provider, model, prompt_id, basePath, JSON.stringify({})
+      JSON.stringify(metadata), null, provider, model, prompt_id, basePath, JSON.stringify({}),
+      parent_project_id, parentSystemId
     ], false, correlationId);
 
     const project = {
       id: projectId, name, description, created_at: now, updated_at: now,
       is_active: false, metadata, last_conversation_id: null,
-      provider, model, prompt_id, base_path: basePath, session_state: {}
+      provider, model, prompt_id, base_path: basePath, session_state: {},
+      parent_project_id: parent_project_id || null,
+      system_id: parentSystemId, system_role: null
     };
     this.projects.set(projectId, project);
 
+    // Join parent's composition system if available
+    if (parentSystemId) {
+      try {
+        await this.requestComposition('entity.join', {
+          system_id: parentSystemId, entity_id: projectId, role: 'member'
+        });
+        project.system_role = 'member';
+        await this.queryDatabase(
+          'UPDATE projects SET system_role = ? WHERE id = ?',
+          ['member', projectId], false, correlationId
+        );
+      } catch (err) {
+        this.logger.warn('project-manager.create.system-join-failed', { projectId, parentSystemId, error: err.message });
+      }
+    }
+
     await this.initializeProjectSchema(projectId, correlationId);
     await this.eventBus.publish(EVENTS.PROJECT.CREATED, {
-      project_id: projectId, name, description, created_at: now
+      project_id: projectId, name, description, parent_project_id: parent_project_id || null, created_at: now
     });
 
     return project;
@@ -863,10 +895,10 @@ class ProjectManagerModule {
 
   async handleCreateProject(req, context) {
     const correlationId = context?.correlationId || crypto.randomUUID();
-    const { name, description, metadata } = req.body || {};
+    const { name, description, metadata, parent_project_id } = req.body || {};
     if (!name || name.trim().length === 0) return { status: 400, data: { success: false, error: 'Project name is required' } };
     try {
-      const project = await this.createProject(name, description, metadata, correlationId);
+      const project = await this.createProject(name, description, metadata, correlationId, { parent_project_id });
       return { status: 201, data: { success: true, project } };
     } catch (error) {
       return { status: 500, data: { success: false, error: error.message } };
@@ -994,11 +1026,12 @@ class ProjectManagerModule {
   }
 
   async handleUICreate(data) {
-    const { name, description, color, icon, workspaceType } = data;
+    const { name, description, color, icon, workspaceType, parentProjectId } = data;
     if (!name || name.trim().length === 0) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project name is required' };
 
     const project = await this.createProject(name.trim(), description?.trim() || '',
-      { color: color || 'blue', icon: icon || '📁', workspaceType: workspaceType || 'general' }, crypto.randomUUID()
+      { color: color || 'blue', icon: icon || '📁', workspaceType: workspaceType || 'general' }, crypto.randomUUID(),
+      { parent_project_id: parentProjectId || null }
     );
 
     const basePath = project.base_path;

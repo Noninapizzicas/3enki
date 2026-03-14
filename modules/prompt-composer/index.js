@@ -709,7 +709,13 @@ Fecha actual: {{date}}`,
       // Inherited context variables (Phase 5)
       system_name: inheritedContext?.system?.name || '',
       related_projects_count: inheritedContext?.relatedProjects?.length || 0,
-      inherited_context_count: inheritedContext?.inheritedContextCount || 0
+      inherited_context_count: inheritedContext?.inheritedContextCount || 0,
+      // Parent chain variables
+      parent_name: inheritedContext?.parentChain?.[0]?.name || '',
+      root_project_name: inheritedContext?.parentChain?.length > 0
+        ? inheritedContext.parentChain[inheritedContext.parentChain.length - 1].name
+        : '',
+      hierarchy_depth: inheritedContext?.parentChain?.length || 0
     };
 
     // Substitute template variables {{variable_name}}
@@ -800,6 +806,22 @@ Fecha actual: {{date}}`,
 
     const lines = [];
     let hasContent = false;
+
+    // Parent project hierarchy (root → immediate parent)
+    if (inheritedContext.parentChain?.length > 0) {
+      hasContent = true;
+      const chain = [...inheritedContext.parentChain].reverse(); // root first
+      lines.push('## Project Hierarchy');
+      lines.push('This project inherits context from:');
+      for (let i = 0; i < chain.length; i++) {
+        const parent = chain[i];
+        const indent = '  '.repeat(i);
+        const tag = i === 0 ? ' (root)' : '';
+        const desc = parent.description ? `: ${parent.description}` : '';
+        lines.push(`${indent}- **${parent.name}**${tag}${desc}`);
+      }
+      lines.push('');
+    }
 
     // System membership
     if (inheritedContext.system) {

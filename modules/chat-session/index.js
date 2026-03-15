@@ -320,16 +320,62 @@ class ChatSessionModule {
     return conversation;
   }
 
-  async getConversation(conversationId, correlationId) {
+  async getConversation(conversationId, correlationId, projectId) {
     // Check cache first
     if (this.conversations.has(conversationId)) {
       return this.conversations.get(conversationId);
     }
 
-    // Not in cache - need project_id to query
-    // This is a limitation - we'd need to store project mapping or require project_id
-    this.logger.warn({ correlationId, conversationId }, 'Conversation not in cache');
-    return null;
+    // Not in cache - query DB using provided projectId or activeProjectId
+    const projId = projectId || this.activeProjectId;
+    if (!projId) {
+      this.logger.warn({ correlationId, conversationId }, 'Conversation not in cache and no activeProjectId');
+      return null;
+    }
+
+    this.logger.info({ correlationId, conversationId, projectId: projId }, 'Conversation cache miss - querying DB');
+
+    try {
+      await this.ensureProjectSchema(projId, correlationId);
+      const rows = await this.queryDatabase(projId,
+        'SELECT * FROM conversations WHERE id = ? LIMIT 1',
+        [conversationId],
+        true,
+        correlationId
+      );
+
+      if (rows.length === 0) {
+        this.logger.warn({ correlationId, conversationId }, 'Conversation not found in DB');
+        return null;
+      }
+
+      const row = rows[0];
+      const conversation = {
+        id: row.id,
+        project_id: row.project_id || projId,
+        user_id: row.user_id,
+        title: row.title,
+        system_prompt: row.system_prompt,
+        model: row.model,
+        provider: row.provider,
+        temperature: row.temperature,
+        max_tokens: row.max_tokens,
+        context_window: row.context_window,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        message_count: row.message_count,
+        metadata: row.metadata ? JSON.parse(row.metadata) : {}
+      };
+
+      // Populate cache for future lookups
+      this.conversations.set(conversationId, conversation);
+      this.logger.info({ correlationId, conversationId }, 'Conversation loaded from DB into cache');
+
+      return conversation;
+    } catch (error) {
+      this.logger.error({ correlationId, conversationId, error: error.message }, 'Failed to load conversation from DB');
+      return null;
+    }
   }
 
   async listConversations(projectId, limit = 20, correlationId) {
@@ -368,9 +414,12 @@ class ChatSessionModule {
   }
 
   async updateConversation(conversationId, updates, correlationId) {
-    const conversation = this.conversations.get(conversationId);
+    let conversation = this.conversations.get(conversationId);
     if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
+      conversation = await this.getConversation(conversationId, correlationId);
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
     }
 
     const now = new Date().toISOString();
@@ -418,9 +467,12 @@ class ChatSessionModule {
   }
 
   async deleteConversation(conversationId, correlationId) {
-    const conversation = this.conversations.get(conversationId);
+    let conversation = this.conversations.get(conversationId);
     if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
+      conversation = await this.getConversation(conversationId, correlationId);
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
     }
 
     await this.queryDatabase(conversation.project_id,
@@ -456,9 +508,12 @@ class ChatSessionModule {
   // ==========================================
 
   async saveMessage(conversationId, message, correlationId) {
-    const conversation = this.conversations.get(conversationId);
+    let conversation = this.conversations.get(conversationId);
     if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
+      conversation = await this.getConversation(conversationId, correlationId);
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
     }
 
     const messageId = message.id || crypto.randomUUID();
@@ -521,9 +576,13 @@ class ChatSessionModule {
   }
 
   async getMessages(conversationId, inContextOnly = false, correlationId) {
-    const conversation = this.conversations.get(conversationId);
+    let conversation = this.conversations.get(conversationId);
     if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
+      // Try to load from DB before giving up
+      conversation = await this.getConversation(conversationId, correlationId);
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
     }
 
     const query = inContextOnly
@@ -553,9 +612,13 @@ class ChatSessionModule {
   }
 
   async loadConversationContext(conversationId, correlationId) {
-    const conversation = this.conversations.get(conversationId);
+    let conversation = this.conversations.get(conversationId);
     if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
+      // Try to load from DB before giving up
+      conversation = await this.getConversation(conversationId, correlationId);
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
     }
 
     const contextWindow = conversation.context_window || this.config.contextWindow || 20;

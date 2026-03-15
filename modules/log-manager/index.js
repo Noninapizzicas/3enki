@@ -406,9 +406,17 @@ class LogManagerModule {
       };
     }
 
-    const normalized = { ...body, msg };
-    const result = this.collector.addFromHttp(normalized);
-    return result;
+    if (!this.collector) {
+      return { success: false, error: 'Log collector not initialized' };
+    }
+
+    try {
+      const normalized = { ...body, msg };
+      const result = this.collector.addFromHttp(normalized);
+      return result;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   }
 
   /**

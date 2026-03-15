@@ -225,10 +225,15 @@ Fecha actual: {{date}}`,
         }
       }
 
-      // Try to load from prompt-manager if prompt_name provided or usePromptManager enabled
-      if (prompt_name || (this.config.usePromptManager !== false && !effectiveBasePrompt)) {
+      // Try to load from prompt-manager:
+      // Priority: explicit prompt_name > project's prompt_id > default prompt name
+      const resolvedPromptRef = prompt_name
+        || projectContext?.prompt_id
+        || this.config.defaultPromptName;
+
+      if (resolvedPromptRef || (this.config.usePromptManager !== false && !effectiveBasePrompt)) {
         const managedPrompt = await this.loadPromptFromManager(
-          prompt_name || this.config.defaultPromptName,
+          resolvedPromptRef,
           projectContext,
           correlation_id
         );
@@ -398,11 +403,15 @@ Fecha actual: {{date}}`,
    * @param {string} correlationId - Correlation ID for tracing
    * @returns {string|null} Rendered prompt content or null if not found
    */
-  async loadPromptFromManager(promptName, projectContext, correlationId) {
-    if (!promptName) return null;
+  async loadPromptFromManager(promptRef, projectContext, correlationId) {
+    if (!promptRef) return null;
+
+    // Determine if promptRef is an ID (UUID) or a name
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(promptRef);
 
     this.logger.debug('prompt-composer.loadFromManager', {
-      promptName,
+      promptRef,
+      isUUID,
       correlation_id: correlationId
     });
 
@@ -412,24 +421,24 @@ Fecha actual: {{date}}`,
     const promise = new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.pendingPromptManagerRequests.delete(requestId);
-        this.logger.warn('prompt-composer.loadFromManager.timeout', { promptName });
+        this.logger.warn('prompt-composer.loadFromManager.timeout', { promptRef });
         resolve(null); // Don't fail - use defaults
       }, timeout);
 
       this.pendingPromptManagerRequests.set(requestId, { resolve, timeout: timeoutId });
     });
 
-    // Request prompt from prompt-manager
+    // Request prompt from prompt-manager (supports both id and name lookup)
     await this.eventBus.publish('prompt.get.request', {
       request_id: requestId,
-      name: promptName,
+      ...(isUUID ? { id: promptRef } : { name: promptRef }),
       correlation_id: correlationId
     });
 
     const prompt = await promise;
 
     if (!prompt) {
-      this.logger.debug('prompt-composer.loadFromManager.not_found', { promptName });
+      this.logger.debug('prompt-composer.loadFromManager.not_found', { promptRef });
       return null;
     }
 
@@ -446,7 +455,7 @@ Fecha actual: {{date}}`,
     const renderedContent = this.substituteVariables(prompt.content, variables);
 
     this.logger.debug('prompt-composer.loadFromManager.success', {
-      promptName,
+      promptRef,
       promptId: prompt.id,
       contentLength: renderedContent.length
     });
@@ -585,6 +594,9 @@ Fecha actual: {{date}}`,
       project_id: projectId,
       project_name: projectData?.name || 'Unknown Project',
       project_description: projectData?.description || '',
+      prompt_id: projectData?.prompt_id || null,
+      provider: projectData?.provider || null,
+      model: projectData?.model || null,
       storage_info: storageInfo,
       metadata: projectData?.metadata || {},
       _ts: Date.now()
@@ -1270,8 +1282,9 @@ Fecha actual: {{date}}`,
       // Determine base prompt: from prompt_name (prompt-manager) or base_prompt
       let effectiveBasePrompt = base_prompt;
 
-      if (prompt_name) {
-        const managedPrompt = await this.loadPromptFromManager(prompt_name, projectContext, correlationId);
+      const resolvedRef = prompt_name || projectContext?.prompt_id;
+      if (resolvedRef) {
+        const managedPrompt = await this.loadPromptFromManager(resolvedRef, projectContext, correlationId);
         if (managedPrompt) {
           effectiveBasePrompt = managedPrompt;
         }

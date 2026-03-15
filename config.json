@@ -49,7 +49,6 @@
     "enabled": [
       "credential-manager",
       "database-manager",
-      "log-manager",
       "filesystem",
       "plugin-manager",
       "prompt-manager",
@@ -97,6 +96,7 @@
       "viabilidad"
     ],
     "disabled": [
+      "log-manager",
       "conversation-manager",
       "scratch-designer",
       "ui-designer",

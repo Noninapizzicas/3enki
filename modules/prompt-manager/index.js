@@ -1596,6 +1596,89 @@ class PromptManagerModule {
     };
   }
 
+  // ==========================================
+  // Event Bus Handlers (inter-module communication)
+  // ==========================================
+
+  /**
+   * Handle prompt.get.request from other modules (e.g. prompt-composer).
+   * Responds with prompt.get.response containing the prompt data.
+   */
+  async onPromptGetRequest(event) {
+    const data = event.data || event;
+    const { request_id, name, id, correlation_id } = data;
+
+    let prompt = null;
+
+    if (id) {
+      prompt = this.prompts.get(id);
+    } else if (name) {
+      const nameLower = name.toLowerCase();
+      for (const p of this.prompts.values()) {
+        if (p.name.toLowerCase() === nameLower) {
+          prompt = p;
+          break;
+        }
+      }
+    }
+
+    if (prompt) {
+      await this.eventBus.publish('prompt.get.response', {
+        request_id,
+        success: true,
+        data: {
+          prompt: {
+            id: prompt.id,
+            name: prompt.name,
+            title: prompt.title,
+            description: prompt.description,
+            content: prompt.content,
+            slot_type: prompt.slot_type,
+            variables: prompt.variables,
+            tags: prompt.tags,
+            level: prompt.level || 'GLOBAL',
+            current_version: prompt.current_version
+          }
+        },
+        correlation_id
+      });
+    } else {
+      await this.eventBus.publish('prompt.get.response', {
+        request_id,
+        success: false,
+        error: `Prompt not found: ${id || name}`,
+        correlation_id
+      });
+    }
+  }
+
+  /**
+   * Handle prompt.list.request from other modules (e.g. prompt-composer).
+   * Responds with prompt.list.response containing all prompts.
+   */
+  async onPromptListRequest(event) {
+    const data = event.data || event;
+    const { request_id, correlation_id } = data;
+
+    const prompts = Array.from(this.prompts.values()).map(p => ({
+      id: p.id,
+      name: p.name,
+      title: p.title,
+      description: p.description,
+      slot_type: p.slot_type,
+      tags: p.tags,
+      level: p.level || 'GLOBAL',
+      current_version: p.current_version
+    }));
+
+    await this.eventBus.publish('prompt.list.response', {
+      request_id,
+      success: true,
+      data: { prompts },
+      correlation_id
+    });
+  }
+
   async handleGetMetrics(req, context) {
     return {
       status: 200,

@@ -778,7 +778,9 @@ class ChatAiBridgeModule {
         if (data.request_id === requestId) {
           clearTimeout(timeout);
           unsub();
-          const projectId = data.active_project_id || null;
+          const projectId = data.active_project_id
+            || (Array.isArray(data.active_project_ids) && data.active_project_ids[0])
+            || null;
           // Cache for next time
           if (projectId) {
             this.activeProjectId = projectId;

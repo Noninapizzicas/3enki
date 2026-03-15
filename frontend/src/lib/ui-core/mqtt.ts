@@ -177,14 +177,14 @@ const LOG_BATCH_MAX_SIZE = 50; // Enviar si hay más de 50 logs pendientes
  * @internal
  */
 async function flushLogs(): Promise<void> {
-  if (pendingLogs.length === 0) return;
+  if (!logCollectorEnabled || pendingLogs.length === 0) return;
 
   const batch = [...pendingLogs];
   pendingLogs = [];
   logFlushTimeout = null;
 
   try {
-    await fetch(LOG_ENDPOINT, {
+    const res = await fetch(LOG_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -198,8 +198,11 @@ async function flushLogs(): Promise<void> {
         }
       })
     });
+    if (!res.ok) {
+      logCollectorEnabled = false;
+    }
   } catch {
-    // Silenciar errores de logging
+    logCollectorEnabled = false;
   }
 }
 

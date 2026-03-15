@@ -5,6 +5,7 @@ import { browser } from '$app/environment';
 
 const timers: Map<string, number> = new Map();
 const LOG_ENDPOINT = '/modules/log-manager/logs';
+let logEnabled = true;
 
 /**
  * Start a performance timer
@@ -36,8 +37,7 @@ export function perfEnd(label: string): number {
  * Log a performance measurement to file
  */
 export function logPerf(label: string, durationMs: number): void {
-  // Only log in browser environment (not during SSR)
-  if (!browser) return;
+  if (!browser || !logEnabled) return;
 
   const entry = {
     level: 'info',
@@ -51,20 +51,19 @@ export function logPerf(label: string, durationMs: number): void {
     }
   };
 
-  // Send to log-manager (fire and forget)
   fetch(LOG_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry)
-  }).catch(() => {});
+  }).then(res => { if (!res.ok) logEnabled = false; })
+    .catch(() => { logEnabled = false; });
 }
 
 /**
  * Log a simple message to file
  */
 export function logMsg(msg: string, ctx: Record<string, unknown> = {}): void {
-  // Only log in browser environment (not during SSR)
-  if (!browser) return;
+  if (!browser || !logEnabled) return;
 
   fetch(LOG_ENDPOINT, {
     method: 'POST',
@@ -76,5 +75,6 @@ export function logMsg(msg: string, ctx: Record<string, unknown> = {}): void {
       msg,
       ctx: { ...ctx, timestamp: new Date().toISOString() }
     })
-  }).catch(() => {});
+  }).then(res => { if (!res.ok) logEnabled = false; })
+    .catch(() => { logEnabled = false; });
 }

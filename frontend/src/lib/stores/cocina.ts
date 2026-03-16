@@ -915,13 +915,13 @@ export function initCocinaSubscriptions(): () => void {
                 i.item_id === data.item_id
                   ? {
                     ...i,
-                    estado: 'pendiente' as EstadoItem,
+                    estado: (data.estado || 'pendiente') as EstadoItem,
                     estacion_actual: data.a_estacion,
                     estaciones_completadas: data.estaciones_completadas || [],
                     device_id: undefined,
                     device_color: undefined,
                     device_nombre: undefined,
-                    preparando_at: undefined
+                    preparando_at: data.preparando_at || undefined
                   }
                   : i
               )

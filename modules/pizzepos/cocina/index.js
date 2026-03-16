@@ -909,6 +909,8 @@ class CocinaModule {
       nombre: item.nombre,
       cantidad: item.cantidad,
       categoria: item.categoria || null,
+      estado: item.estado,
+      preparando_at: item.preparando_at || null,
       desde_estacion: estacionAnterior,
       a_estacion: item.estacion_actual,
       estaciones: item.estaciones,

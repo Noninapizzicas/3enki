@@ -162,22 +162,22 @@
       {
         "event": "cocina.item_preparando",
         "description": "Item empieza a prepararse en una estación",
-        "handler": "onEventoCocina"
+        "handler": "onEvento"
       },
       {
         "event": "cocina.item_preparado",
         "description": "Item terminado en su estación final",
-        "handler": "onEventoCocina"
+        "handler": "onEvento"
       },
       {
         "event": "cocina.item_avanzado",
         "description": "Item avanza de una estación a otra",
-        "handler": "onEventoCocina"
+        "handler": "onEvento"
       },
       {
         "event": "cocina.pedido_listo",
         "description": "Pedido completado en cocina",
-        "handler": "onEventoCocina"
+        "handler": "onEvento"
       }
     ]
   },

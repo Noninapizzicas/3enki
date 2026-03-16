@@ -249,63 +249,6 @@ class PersistenciaComanderoModule {
     });
   }
 
-  /**
-   * Eventos de cocina — solo datos de referencia, lo justo para trazabilidad.
-   * pedido_id + item_id + estacion + device_id + timestamp
-   */
-  async onEventoCocina(event) {
-    const data = event?.data || event?.payload || event;
-    const eventType = event?.type || event?.event_type || 'unknown';
-
-    // Payload lean: solo referencias, sin nombre/ingredientes/categoria
-    const lean = { pedido_id: data.pedido_id, cuenta_id: data.cuenta_id };
-
-    if (data.item_id) lean.item_id = data.item_id;
-    if (data.device_id) lean.device_id = data.device_id;
-    if (data.estacion) lean.estacion = data.estacion;
-
-    // Transiciones de estación
-    if (data.desde_estacion) lean.desde_estacion = data.desde_estacion;
-    if (data.a_estacion) lean.a_estacion = data.a_estacion;
-    if (data.estacion_actual) lean.estacion_actual = data.estacion_actual;
-    if (data.estaciones_completadas?.length) lean.estaciones_completadas = data.estaciones_completadas;
-
-    // Timestamps relevantes
-    if (data.preparando_at) lean.preparando_at = data.preparando_at;
-    if (data.preparado_at) lean.preparado_at = data.preparado_at;
-    if (data.listo_at) lean.listo_at = data.listo_at;
-    if (data.tiempo_preparacion) lean.tiempo_preparacion = data.tiempo_preparacion;
-
-    // Fases completas solo en item_preparado (historial de trabajo del item)
-    if (eventType === 'cocina.item_preparado' && data.fases?.length) {
-      lean.fases = data.fases.map(f => ({
-        estacion: f.estacion,
-        device_id: f.device_id,
-        inicio: f.inicio,
-        fin: f.fin,
-        duracion_seg: f.duracion_seg
-      }));
-    }
-
-    const eventoRegistro = {
-      timestamp: new Date().toISOString(),
-      event_type: eventType,
-      payload: lean
-    };
-
-    this.eventosCache.push(eventoRegistro);
-    this.internalMetrics.eventos_guardados++;
-    this.metrics.increment('persistencia.eventos.total');
-
-    await this.guardarEventos();
-
-    this.logger.debug('persistencia.evento_cocina.guardado', {
-      event_type: eventType,
-      pedido_id: data.pedido_id,
-      item_id: data.item_id
-    });
-  }
-
   async onCuentaCerrada(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;

@@ -19,7 +19,7 @@
 #include <PubSubClient.h>
 #include <NimBLEDevice.h>
 #include <ArduinoJson.h>
-#include <base64.h>
+#include "mbedtls/base64.h"
 #include "config.h"
 
 #if USE_WIFI_MANAGER
@@ -311,18 +311,24 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  // Decodificar base64
-  int b64len = strlen(b64data);
-  int decodedLen = base64_dec_len((char*)b64data, b64len);
+  // Decodificar base64 (mbedtls incluido en ESP-IDF)
+  size_t b64len = strlen(b64data);
+  size_t decodedLen = 0;
 
-  if (decodedLen > MAX_PAYLOAD_SIZE) {
-    Serial.printf("[MQTT] Payload demasiado grande: %d bytes\n", decodedLen);
+  int ret = mbedtls_base64_decode(payloadBuffer, MAX_PAYLOAD_SIZE, &decodedLen,
+                                   (const unsigned char*)b64data, b64len);
+  if (ret == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+    Serial.printf("[MQTT] Payload demasiado grande\n");
     errorCount++;
     publishResult(jobId, false, "Payload too large");
     return;
   }
-
-  base64_decode((char*)payloadBuffer, (char*)b64data, b64len);
+  if (ret != 0) {
+    Serial.printf("[MQTT] Error decodificando base64: %d\n", ret);
+    errorCount++;
+    publishResult(jobId, false, "Base64 decode error");
+    return;
+  }
 
   // Reconectar impresora si se desconecto
   if (!printerReady || !bleClient || !bleClient->isConnected()) {

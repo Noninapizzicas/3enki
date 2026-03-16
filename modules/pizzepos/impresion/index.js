@@ -112,7 +112,7 @@ class ImpresionModule {
     this.doubleSep = '='.repeat(this.lineWidth);
 
     // Inicializar transporte Bluetooth
-    this.transporte = new TransporteBluetooth(this.config.transporte, this.logger);
+    this.transporte = new TransporteBluetooth(this.config.transporte, this.logger, this.eventBus);
 
     try {
       await this.transporte.conectar();
@@ -336,7 +336,7 @@ class ImpresionModule {
       if (this.transporte) {
         await this.transporte.desconectar();
       }
-      this.transporte = new TransporteBluetooth(this.config.transporte, this.logger);
+      this.transporte = new TransporteBluetooth(this.config.transporte, this.logger, this.eventBus);
     }
 
     try {

@@ -28,16 +28,20 @@ const ESTADO = {
 class TransporteBluetooth {
   /**
    * @param {Object} config
-   * @param {string} config.modo          - "dispositivo" | "comando" | "tcp"
+   * @param {string} config.modo          - "dispositivo" | "comando" | "tcp" | "mqtt"
    * @param {string} config.mac           - MAC del dispositivo BT (AA:BB:CC:DD:EE:FF)
    * @param {string} config.dispositivo   - ruta al device file (default: /dev/rfcomm0)
    * @param {number} config.rfcomm_canal  - canal RFCOMM (default: 1)
    * @param {string} config.comando       - comando shell para modo "comando"
    * @param {string} config.tcp_host      - host para modo TCP (default: 127.0.0.1)
    * @param {number} config.tcp_puerto    - puerto para modo TCP
+   * @param {string} config.mqtt_device   - ID del ESP32 destino (modo mqtt)
+   * @param {string} config.mqtt_project  - project_id para topics (modo mqtt)
+   * @param {number} config.mqtt_timeout  - timeout ACK en ms (default: 10000)
    * @param {Object} logger
+   * @param {Object} eventBus             - EventBus para modo MQTT (opcional)
    */
-  constructor(config, logger) {
+  constructor(config, logger, eventBus) {
     this.config = {
       modo: 'dispositivo',
       mac: null,
@@ -46,11 +50,16 @@ class TransporteBluetooth {
       comando: null,
       tcp_host: '127.0.0.1',
       tcp_puerto: 9100,
+      mqtt_device: null,
+      mqtt_project: null,
+      mqtt_timeout: 10000,
       ...config
     };
     this.logger = logger;
+    this.eventBus = eventBus;
     this.estado = ESTADO.DESCONECTADO;
     this.tcpSocket = null;
+    this._mqttAckResolvers = new Map();
   }
 
   // ==========================================
@@ -72,6 +81,8 @@ class TransporteBluetooth {
         await this._prepararRfcomm();
       } else if (modo === 'tcp') {
         await this._conectarTcp();
+      } else if (modo === 'mqtt') {
+        await this._prepararMqtt();
       }
       // modo "comando" no necesita conexión previa
 
@@ -88,6 +99,9 @@ class TransporteBluetooth {
     if (this.tcpSocket) {
       this.tcpSocket.destroy();
       this.tcpSocket = null;
+    }
+    if (this.config.modo === 'mqtt') {
+      await this.desconectarMqtt();
     }
     this.estado = ESTADO.DESCONECTADO;
     this.logger.info('transporte.desconectado');
@@ -114,6 +128,8 @@ class TransporteBluetooth {
         return this._enviarComando(buffer);
       case 'tcp':
         return this._enviarTcp(buffer);
+      case 'mqtt':
+        return this._enviarMqtt(buffer);
       default:
         throw new Error(`Modo de transporte desconocido: ${modo}`);
     }
@@ -278,6 +294,80 @@ class TransporteBluetooth {
   }
 
   // ==========================================
+  // Modo: MQTT (ESP32 print proxy)
+  // ==========================================
+
+  async _prepararMqtt() {
+    const { mqtt_device, mqtt_project } = this.config;
+
+    if (!mqtt_device) {
+      throw new Error('Falta mqtt_device (ID del ESP32 destino)');
+    }
+    if (!mqtt_project) {
+      throw new Error('Falta mqtt_project (project_id)');
+    }
+    if (!this.eventBus) {
+      throw new Error('Se necesita eventBus para modo MQTT');
+    }
+
+    // Suscribirse al ACK del ESP32
+    const ackTopic = `impresion/${mqtt_project}/printed/${mqtt_device}`;
+    this.eventBus.subscribe(ackTopic, (event) => {
+      const data = event.data || event;
+      const jobId = data.job_id;
+      if (jobId && this._mqttAckResolvers.has(jobId)) {
+        const { resolve, reject, timer } = this._mqttAckResolvers.get(jobId);
+        clearTimeout(timer);
+        this._mqttAckResolvers.delete(jobId);
+        if (data.success) {
+          resolve();
+        } else {
+          reject(new Error(data.error || 'ESP32 reportó error'));
+        }
+      }
+    });
+
+    this.logger.info('transporte.mqtt.preparado', {
+      device: mqtt_device,
+      project: mqtt_project,
+      ack_topic: ackTopic
+    });
+  }
+
+  async _enviarMqtt(buffer) {
+    const { mqtt_device, mqtt_project, mqtt_timeout } = this.config;
+    const printTopic = `impresion/${mqtt_project}/print/${mqtt_device}`;
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // Codificar ESC/POS en base64
+    const b64data = buffer.toString('base64');
+
+    // Publicar y esperar ACK con timeout
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._mqttAckResolvers.delete(jobId);
+        reject(new Error(`Timeout esperando ACK del ESP32 '${mqtt_device}' (${mqtt_timeout}ms)`));
+      }, mqtt_timeout);
+
+      this._mqttAckResolvers.set(jobId, { resolve, reject, timer });
+
+      this.eventBus.publish(printTopic, {
+        job_id: jobId,
+        data: b64data,
+        device_id: mqtt_device,
+        timestamp: Date.now()
+      });
+
+      this.logger.debug('transporte.mqtt.enviado', {
+        job_id: jobId,
+        device: mqtt_device,
+        bytes: buffer.length,
+        b64_bytes: b64data.length
+      });
+    });
+  }
+
+  // ==========================================
   // Utilidades
   // ==========================================
 
@@ -289,8 +379,20 @@ class TransporteBluetooth {
       mac: this.config.mac || null,
       tcp: this.config.modo === 'tcp'
         ? `${this.config.tcp_host}:${this.config.tcp_puerto}`
+        : undefined,
+      mqtt: this.config.modo === 'mqtt'
+        ? { device: this.config.mqtt_device, project: this.config.mqtt_project }
         : undefined
     };
+  }
+
+  async desconectarMqtt() {
+    // Limpiar resolvers pendientes
+    for (const [jobId, { reject, timer }] of this._mqttAckResolvers) {
+      clearTimeout(timer);
+      reject(new Error('Transporte desconectado'));
+    }
+    this._mqttAckResolvers.clear();
   }
 }
 

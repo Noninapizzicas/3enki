@@ -1,22 +1,21 @@
 #!/bin/bash
 # =============================================================================
-# Event Core (Enki) - Setup para VPS con Caddy
+# Event Core (Enki) - Setup para VPS
 #
 # Este script instala y configura:
 #   1. Node.js 20 LTS
-#   2. Caddy (reverse proxy con HTTPS automático)
-#   3. Event Core como servicio systemd
+#   2. Caddy (reverse proxy con HTTPS automático o HTTP para IP)
+#   3. Event Core + Frontend como servicios systemd
 #
 # Uso:
-#   chmod +x vps-setup.sh
-#   sudo ./vps-setup.sh
+#   sudo ./vps-setup.sh                    # Modo IP (sin dominio, HTTP en puerto 80)
+#   sudo ./vps-setup.sh pizzepos.es        # Modo dominio (HTTPS automático)
 #
-# Dominio: pizzepos.es (DNS debe apuntar a la IP del VPS antes de ejecutar)
 # =============================================================================
 
 set -euo pipefail
 
-DOMAIN="pizzepos.es"
+DOMAIN="${1:-}"
 INSTALL_DIR="/opt/enki"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NODE_VERSION="20"
@@ -32,19 +31,37 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 err()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Verificar root
-[[ $EUID -ne 0 ]] && err "Ejecutar con sudo: sudo ./vps-setup.sh"
+[[ $EUID -ne 0 ]] && err "Ejecutar con sudo: sudo ./vps-setup.sh [dominio]"
+
+# Determinar modo
+if [ -n "$DOMAIN" ]; then
+    MODE="domain"
+    ORIGIN="https://${DOMAIN}"
+else
+    MODE="ip"
+    # Detectar IP pública
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    ORIGIN="http://${SERVER_IP}"
+fi
 
 echo ""
 echo "============================================"
-echo "  Event Core (Enki) - Setup VPS"
-echo "  Dominio: ${DOMAIN}"
+if [ "$MODE" = "domain" ]; then
+    echo "  Event Core (Enki) - Setup VPS"
+    echo "  Dominio: ${DOMAIN}"
+    echo "  Modo: HTTPS automático (Let's Encrypt)"
+else
+    echo "  Event Core (Enki) - Setup VPS"
+    echo "  IP: ${SERVER_IP}"
+    echo "  Modo: HTTP (sin dominio)"
+fi
 echo "============================================"
 echo ""
 
 # ---- 1. Dependencias del sistema ----
 log "Actualizando sistema..."
 apt-get update -qq
-apt-get install -y -qq curl git build-essential > /dev/null
+apt-get install -y -qq curl git build-essential rsync > /dev/null
 
 # ---- 2. Node.js ----
 if command -v node &> /dev/null && node -v | grep -q "v${NODE_VERSION}"; then
@@ -69,8 +86,8 @@ else
     log "Caddy instalado: $(caddy version)"
 fi
 
-# Asegurar que caddy.service existe (si se instaló como binario sin paquete)
-if ! systemctl list-unit-files caddy.service &>/dev/null || ! systemctl list-unit-files caddy.service 2>/dev/null | grep -q caddy; then
+# Asegurar que caddy.service existe
+if ! systemctl list-unit-files 2>/dev/null | grep -q 'caddy.service'; then
     log "Creando servicio systemd para Caddy..."
     cat > /etc/systemd/system/caddy.service << 'CADDYUNIT'
 [Unit]
@@ -95,7 +112,6 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 [Install]
 WantedBy=multi-user.target
 CADDYUNIT
-    # Crear usuario caddy si no existe
     id -u caddy &>/dev/null || useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy
     mkdir -p /var/lib/caddy/.config/caddy /var/lib/caddy/.local/share/caddy
     chown -R caddy:caddy /var/lib/caddy
@@ -106,32 +122,79 @@ fi
 log "Instalando Event Core en ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
 
-# Copiar archivos del proyecto (excluyendo node_modules y .git)
 rsync -a --delete \
     --exclude='node_modules' \
     --exclude='.git' \
     --exclude='deployment' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
 
-# Instalar dependencias
+# Instalar dependencias backend
 cd "${INSTALL_DIR}"
 npm install --production --silent 2>/dev/null
-log "Dependencias instaladas"
+log "Dependencias backend instaladas"
 
 # Build del frontend (SvelteKit con adapter-node)
 if [ -f "${INSTALL_DIR}/frontend/package.json" ]; then
     log "Construyendo frontend..."
     cd "${INSTALL_DIR}/frontend"
     npm install --silent 2>/dev/null
-    npm run build 2>&1 || warn "Frontend build falló (puede que ya esté buildeado)"
+    npm run build 2>&1 || warn "Frontend build falló"
     log "Frontend construido en frontend/build/"
     cd "${INSTALL_DIR}"
 fi
 
 # ---- 5. Configurar Caddy ----
-log "Configurando Caddy para ${DOMAIN}..."
-mkdir -p /var/log/caddy
-cp "${REPO_DIR}/deployment/caddy/Caddyfile.vps" /etc/caddy/Caddyfile
+mkdir -p /etc/caddy /var/log/caddy
+chown caddy:caddy /var/log/caddy 2>/dev/null || true
+
+if [ "$MODE" = "domain" ]; then
+    log "Configurando Caddy para ${DOMAIN} (HTTPS)..."
+    cp "${REPO_DIR}/deployment/caddy/Caddyfile.vps" /etc/caddy/Caddyfile
+else
+    log "Configurando Caddy para ${SERVER_IP} (HTTP)..."
+    cat > /etc/caddy/Caddyfile << CADDYCONF
+# Event Core - Modo IP (sin dominio, HTTP)
+:80 {
+	# API REST
+	handle /modules/* {
+		reverse_proxy localhost:3000
+	}
+
+	handle /health {
+		reverse_proxy localhost:3000
+	}
+
+	handle /stats {
+		reverse_proxy localhost:3000
+	}
+
+	handle /ui/* {
+		reverse_proxy localhost:3000
+	}
+
+	# MQTT WebSocket
+	handle /mqtt {
+		reverse_proxy localhost:9001
+	}
+
+	# Frontend SvelteKit
+	handle {
+		reverse_proxy localhost:3001
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+	}
+
+	log {
+		output file /var/log/caddy/enki.log
+		format json
+	}
+}
+CADDYCONF
+fi
+
 caddy fmt --overwrite /etc/caddy/Caddyfile
 
 # ---- 6. Crear servicio systemd para Event Core ----
@@ -163,9 +226,9 @@ ReadWritePaths=/opt/enki/data /opt/enki/modules
 WantedBy=multi-user.target
 UNIT
 
-# ---- 6b. Crear servicio systemd para Frontend (SvelteKit adapter-node) ----
+# ---- 6b. Crear servicio systemd para Frontend ----
 log "Creando servicio systemd para Frontend..."
-cat > /etc/systemd/system/enki-frontend.service << 'UNIT'
+cat > /etc/systemd/system/enki-frontend.service << UNIT
 [Unit]
 Description=Enki Frontend (SvelteKit)
 After=network.target enki.service
@@ -180,7 +243,7 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=3001
-Environment=ORIGIN=https://pizzepos.es
+Environment=ORIGIN=${ORIGIN}
 
 # Seguridad
 NoNewPrivileges=true
@@ -191,7 +254,7 @@ ReadWritePaths=/opt/enki/frontend
 WantedBy=multi-user.target
 UNIT
 
-# Crear directorio de datos
+# Crear directorio de datos y asignar permisos
 mkdir -p "${INSTALL_DIR}/data"
 chown -R www-data:www-data "${INSTALL_DIR}"
 
@@ -242,13 +305,23 @@ echo ""
 echo "  Servicios:"
 echo "    enki           → node index.js (localhost:3000)"
 echo "    enki-frontend  → SvelteKit (localhost:3001)"
-echo "    caddy          → reverse proxy (${DOMAIN})"
+echo "    caddy          → reverse proxy"
 echo ""
-echo "  URLs:"
-echo "    https://${DOMAIN}          → Frontend"
-echo "    https://${DOMAIN}/health   → Health check"
-echo "    https://${DOMAIN}/modules  → API REST"
-echo "    wss://${DOMAIN}/mqtt       → MQTT WebSocket"
+
+if [ "$MODE" = "domain" ]; then
+    echo "  URLs:"
+    echo "    https://${DOMAIN}          → Frontend"
+    echo "    https://${DOMAIN}/health   → Health check"
+    echo "    https://${DOMAIN}/modules  → API REST"
+    echo "    wss://${DOMAIN}/mqtt       → MQTT WebSocket"
+else
+    echo "  URLs:"
+    echo "    http://${SERVER_IP}          → Frontend"
+    echo "    http://${SERVER_IP}/health   → Health check"
+    echo "    http://${SERVER_IP}/modules  → API REST"
+    echo "    ws://${SERVER_IP}/mqtt       → MQTT WebSocket"
+fi
+
 echo ""
 echo "  Comandos útiles:"
 echo "    sudo systemctl status enki"
@@ -256,11 +329,16 @@ echo "    sudo systemctl status enki-frontend"
 echo "    sudo systemctl status caddy"
 echo "    sudo journalctl -u enki -f"
 echo "    sudo journalctl -u enki-frontend -f"
-echo "    sudo journalctl -u caddy -f"
 echo ""
 echo "  MQTT directo (LAN/interno):"
-echo "    mqtt://IP_DEL_VPS:1883"
+echo "    mqtt://$(hostname -I | awk '{print $1}'):1883"
 echo ""
-echo "  Nota: Caddy obtiene el certificado SSL automáticamente."
-echo "        La primera vez puede tardar ~30 segundos."
+
+if [ "$MODE" = "domain" ]; then
+    echo "  Nota: Caddy obtiene el certificado SSL automáticamente."
+    echo "        La primera vez puede tardar ~30 segundos."
+else
+    echo "  Nota: Modo HTTP sin dominio. Para HTTPS, ejecutar:"
+    echo "        sudo ./vps-setup.sh tu-dominio.com"
+fi
 echo ""

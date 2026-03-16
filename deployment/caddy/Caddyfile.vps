@@ -1,0 +1,58 @@
+# Event Core - Caddyfile para VPS con dominio pizzepos.es
+#
+# Caddy obtiene certificados HTTPS automáticamente via Let's Encrypt.
+# Event-core corre en localhost con Node.js, Caddy hace TLS termination.
+#
+# Instalación:
+#   sudo cp Caddyfile.vps /etc/caddy/Caddyfile
+#   sudo systemctl restart caddy
+#
+# Requisitos:
+#   - DNS de pizzepos.es apuntando a la IP del VPS
+#   - Puertos 80 y 443 abiertos (firewall)
+#   - Event Core corriendo en localhost:3000 (node index.js)
+
+pizzepos.es {
+	# API REST → event-core HTTP gateway
+	handle /modules/* {
+		reverse_proxy localhost:3000
+	}
+
+	handle /health {
+		reverse_proxy localhost:3000
+	}
+
+	handle /stats {
+		reverse_proxy localhost:3000
+	}
+
+	handle /ui/* {
+		reverse_proxy localhost:3000
+	}
+
+	# MQTT WebSocket → broker Aedes
+	# El frontend conecta a wss://pizzepos.es/mqtt automáticamente
+	handle /mqtt {
+		reverse_proxy localhost:9001
+	}
+
+	# Frontend - archivos estáticos del build de SvelteKit
+	root * /opt/enki/frontend/build
+	file_server
+
+	# SPA fallback: rutas que no matchean archivos → index.html
+	try_files {path} /index.html
+
+	# Headers de seguridad
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	# Logs
+	log {
+		output file /var/log/caddy/pizzepos.log
+		format json
+	}
+}

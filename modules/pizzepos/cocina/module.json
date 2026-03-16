@@ -1,6 +1,6 @@
 {
   "name": "cocina",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "description": "Display de cocina en tiempo real - Sistema de preparación de pedidos",
   "author": "Pizzepos Team",
   "routes": ["/cocina"],
@@ -9,7 +9,8 @@
     "events": [
       "cocina.item_preparando",
       "cocina.item_preparado",
-      "cocina.pedido_listo"
+      "cocina.pedido_listo",
+      "cocina.item_ticket"
     ],
     "queries": ["cocina.activos", "cocina.historial"]
   },
@@ -42,6 +43,24 @@
         "description": "Pedido completamente preparado y listo para servir",
         "schema": {
           "$ref": "./schemas/events.json#/definitions/cocina_pedido_listo"
+        }
+      },
+      {
+        "event": "cocina.item_ticket",
+        "description": "Ticket de pieza individual — se imprime al completar item en estación con impresión configurada",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "pedido_id": { "type": "string" },
+            "cuenta_id": { "type": "string" },
+            "canal": { "type": "string" },
+            "item_id": { "type": "string" },
+            "nombre": { "type": "string" },
+            "cantidad": { "type": "number" },
+            "categoria": { "type": "string" },
+            "estacion": { "type": "string" },
+            "fases": { "type": "array" }
+          }
         }
       }
     ],

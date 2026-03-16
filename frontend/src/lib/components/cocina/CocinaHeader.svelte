@@ -8,7 +8,7 @@
   import {
     pedidosCount, itemsPendientes, itemsPreparando, cocinaMetrics,
     pedidosCocina, loadPedidosActivos, loadMetrics,
-    myDeviceColor, myDeviceNombre, filtrosActivos, cocinaDevices,
+    myDeviceColor, myDeviceNombre, myEstacion, filtrosActivos, cocinaDevices,
     toggleFiltro, clearFiltros
   } from '$lib/stores/cocina';
   import type { ItemCocina } from '$lib/stores/cocina';
@@ -60,7 +60,7 @@
 
 <header class="cocina-header">
   <div class="header-section">
-    <h1 class="station-name">COCINA</h1>
+    <h1 class="station-name">{$myEstacion ? $myEstacion.toUpperCase() : 'COCINA'}</h1>
   </div>
 
   <div class="header-metrics">

@@ -86,11 +86,22 @@ export interface CocinaMetrics {
   tiempo_promedio_preparacion: number;
 }
 
+export interface TipoEstacionInfo {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  comportamientos: {
+    imprime_al_completar: boolean;
+  };
+}
+
 export interface CocinaDevice {
   device_id: string;
   nombre: string;
+  estacion: string | null;
   color: string;
   filtros: { familias: string[] };
+  tipo_estacion: string;
   connected_at: string;
   last_seen: string;
 }
@@ -104,7 +115,11 @@ export interface CocinaState {
   myDeviceId: string | null;
   myColor: string | null;
   myNombre: string | null;
+  myEstacion: string | null;
   filtrosActivos: string[]; // familias/categorías activas (vacío = todo)
+  tipoEstacion: string; // tipo de estación: 'general', 'horno', 'montaje', etc.
+  tipoEstacionInfo: TipoEstacionInfo | null; // info completa del tipo seleccionado
+  tiposDisponibles: TipoEstacionInfo[]; // tipos cargados del backend
   devices: CocinaDevice[];
 }
 
@@ -149,7 +164,11 @@ export const cocinaStore = writable<CocinaState>({
   myDeviceId: null,
   myColor: null,
   myNombre: null,
+  myEstacion: null,
   filtrosActivos: [],
+  tipoEstacion: 'general',
+  tipoEstacionInfo: null,
+  tiposDisponibles: [],
   devices: []
 });
 
@@ -164,7 +183,11 @@ export const cocinaMetrics = derived(cocinaStore, $s => $s.metrics);
 export const pedidosCount = derived(cocinaStore, $s => $s.pedidos.length);
 export const myDeviceColor = derived(cocinaStore, $s => $s.myColor);
 export const myDeviceNombre = derived(cocinaStore, $s => $s.myNombre);
+export const myEstacion = derived(cocinaStore, $s => $s.myEstacion);
 export const filtrosActivos = derived(cocinaStore, $s => $s.filtrosActivos);
+export const tipoEstacion = derived(cocinaStore, $s => $s.tipoEstacion);
+export const tipoEstacionInfo = derived(cocinaStore, $s => $s.tipoEstacionInfo);
+export const tiposDisponibles = derived(cocinaStore, $s => $s.tiposDisponibles);
 export const cocinaDevices = derived(cocinaStore, $s => $s.devices);
 
 export const itemsPendientes = derived(cocinaStore, $s =>
@@ -317,7 +340,9 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
     const res = await mqttRequest<any>('cocina', 'register-device', {
       device_id: deviceId,
       nombre: nombre || undefined,
-      filtros: state.filtrosActivos.length > 0 ? { familias: state.filtrosActivos } : undefined
+      estacion: state.myEstacion || undefined,
+      filtros: state.filtrosActivos.length > 0 ? { familias: state.filtrosActivos } : undefined,
+      tipo_estacion: state.tipoEstacion || 'general'
     });
 
     const data = res?.data?.color ? res.data : res?.data?.data;
@@ -327,6 +352,9 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
         myDeviceId: deviceId,
         myColor: data.color,
         myNombre: data.nombre,
+        myEstacion: data.estacion || s.myEstacion,
+        tipoEstacion: data.tipo_estacion || s.tipoEstacion,
+        tipoEstacionInfo: data.tipo_estacion_info || s.tipoEstacionInfo,
         devices: data.devices || s.devices
       }));
     }
@@ -403,11 +431,75 @@ export async function updateDeviceName(nombre: string): Promise<boolean> {
     await mqttRequest('cocina', 'register-device', {
       device_id: state.myDeviceId,
       nombre,
-      filtros: { familias: state.filtrosActivos }
+      estacion: state.myEstacion || undefined,
+      filtros: { familias: state.filtrosActivos },
+      tipo_estacion: state.tipoEstacion || 'general'
     });
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Establece el nombre de estación del dispositivo.
+ */
+export async function updateEstacion(estacion: string): Promise<boolean> {
+  const state = get(cocinaStore);
+  if (!state.myDeviceId) return false;
+
+  cocinaStore.update(s => ({ ...s, myEstacion: estacion }));
+
+  try {
+    await mqttRequest('cocina', 'register-device', {
+      device_id: state.myDeviceId,
+      estacion,
+      filtros: { familias: state.filtrosActivos },
+      tipo_estacion: state.tipoEstacion || 'general'
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Establece el tipo de estación del dispositivo.
+ * El tipo determina los comportamientos (imprime_al_completar, etc.).
+ */
+export async function setTipoEstacion(tipo: string): Promise<boolean> {
+  const state = get(cocinaStore);
+  const tipoInfo = state.tiposDisponibles.find(t => t.id === tipo) || null;
+
+  cocinaStore.update(s => ({ ...s, tipoEstacion: tipo, tipoEstacionInfo: tipoInfo }));
+
+  if (state.myDeviceId) {
+    try {
+      await mqttRequest('cocina', 'register-device', {
+        device_id: state.myDeviceId,
+        tipo_estacion: tipo,
+        filtros: { familias: state.filtrosActivos }
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Carga los tipos de estación disponibles desde el backend.
+ */
+export async function loadTiposEstacion(): Promise<void> {
+  try {
+    const res = await mqttRequest<any>('cocina', 'list-station-types', {});
+    const tipos = res?.data?.tipos || res?.data?.data?.tipos || [];
+    if (tipos.length > 0) {
+      cocinaStore.update(s => ({ ...s, tiposDisponibles: tipos }));
+    }
+  } catch {
+    // Non-critical
   }
 }
 
@@ -869,9 +961,10 @@ export function initCocinaSubscriptions(): () => void {
   }
   document.addEventListener('visibilitychange', onVisibilityChange);
 
-  // Carga inicial + register device
+  // Carga inicial + register device + tipos estación
   loadPedidosActivos();
   loadMetrics();
+  loadTiposEstacion();
   registerDevice();
 
   // Refrescar métricas cada 30s

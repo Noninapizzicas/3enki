@@ -38,6 +38,11 @@
         "event": "pedido.enviado_cocina",
         "description": "Generar e imprimir comanda cuando pedido se envia a cocina",
         "handler": "onPedidoEnviadoCocina"
+      },
+      {
+        "event": "cocina.item_ticket",
+        "description": "Imprimir ticket de pieza individual al completar item en estación con impresión",
+        "handler": "onItemTicket"
       }
     ]
   },

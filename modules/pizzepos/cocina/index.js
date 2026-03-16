@@ -31,9 +31,10 @@ const TIPOS_ESTACION = {
   horno: {
     id: 'horno',
     nombre: 'Horno',
-    descripcion: 'Horneado — imprime ticket de pieza al sacar del horno',
+    descripcion: 'Horneado — auto-inicia al recibir, imprime ticket al sacar',
     comportamientos: {
-      imprime_al_completar: true
+      imprime_al_completar: true,
+      auto_preparar: true
     }
   },
   montaje: {
@@ -473,14 +474,29 @@ class CocinaModule {
     const siguienteEstacion = estacionesRequeridas.find(est => !completadas.includes(est));
 
     if (siguienteEstacion) {
-      // Avanzar a la siguiente estación requerida: reset a pendiente
-      itemEncontrado.estado = 'pendiente';
+      // Avanzar a la siguiente estación requerida
       itemEncontrado.estacion_actual = siguienteEstacion;
       // Limpiar device info de la estación anterior
       delete itemEncontrado.device_id;
       delete itemEncontrado.device_color;
       delete itemEncontrado.device_nombre;
       delete itemEncontrado.preparando_at;
+
+      // ¿La estación destino tiene auto_preparar? (ej: horno)
+      const tipoDestino = this.tiposEstacion[siguienteEstacion];
+      if (tipoDestino?.comportamientos?.auto_preparar) {
+        itemEncontrado.estado = 'preparando';
+        itemEncontrado.preparando_at = now;
+        itemEncontrado.fases.push({
+          estacion: siguienteEstacion,
+          device_id: null,
+          device_nombre: null,
+          inicio: now,
+          fin: null
+        });
+      } else {
+        itemEncontrado.estado = 'pendiente';
+      }
 
       this.metrics?.increment?.('cocina.item_avanzado.total');
 
@@ -490,6 +506,7 @@ class CocinaModule {
         pedido_id: pedidoEncontrado.pedido_id, item_id,
         desde_estacion: estacion,
         a_estacion: siguienteEstacion,
+        auto_preparar: !!tipoDestino?.comportamientos?.auto_preparar,
         estaciones_completadas: completadas
       });
 

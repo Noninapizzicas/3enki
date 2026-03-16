@@ -538,11 +538,12 @@ export function itemPassesFilter(item: ItemCocina, filtros: string[]): boolean {
 export function itemMatchesStation(item: ItemCocina, tipoEstacion: string): boolean {
   // Dispositivo general = ver todo
   if (!tipoEstacion || tipoEstacion === 'general') return true;
-  // Item sin estaciones requeridas = visible en todas
+  // Item sin estaciones requeridas
   if (!item.estaciones || item.estaciones.length === 0) {
-    // Pero si estacion_actual es null, visible para estaciones normales
-    // Si es una estación específica (horno, freidora...) solo ver items que le tocan
-    return !item.estacion_actual || item.estacion_actual === tipoEstacion;
+    // Si no tiene estacion_actual, solo visible en estaciones generales (no en horno/freidora/etc)
+    if (!item.estacion_actual) return false;
+    // Si tiene estacion_actual, solo visible en esa estación
+    return item.estacion_actual === tipoEstacion;
   }
   // Item con estacion_actual null = está en preparación inicial
   // Solo visible para estaciones que NO están en su lista de requeridas

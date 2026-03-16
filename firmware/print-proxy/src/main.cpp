@@ -1,56 +1,105 @@
 /**
- * ESP32 Print Proxy — MQTT ←→ BLE thermal printer bridge
+ * ESP32 Print Proxy v2.0 — MQTT ←→ BLE thermal printer bridge
  *
- * Funcion:
- *   1. Conecta WiFi (portal cautivo o credenciales fijas)
- *   2. Conecta MQTT al VPS (event-core)
- *   3. Escanea y conecta impresora Netum Mini por BLE
- *   4. Recibe ESC/POS en base64 por MQTT → decodifica → envia por BLE
- *   5. Publica ACK y estado periodicamente
+ * Flujo:
+ *   1. WiFi via WiFiManager (portal cautivo desde el movil)
+ *   2. Portal web en http://<ip>/ para configurar MQTT, impresora, etc.
+ *   3. Conecta MQTT al VPS (event-core)
+ *   4. Escanea y conecta impresora BLE
+ *   5. Recibe ESC/POS en base64 por MQTT → decodifica → envia por BLE
+ *   6. Publica ACK y estado periodicamente
  *
- * Topics MQTT:
- *   SUB: impresion/{project}/print/{device}   → payload base64 ESC/POS
- *   PUB: impresion/{project}/printed/{device} → ACK con resultado
- *   PUB: impresion/{project}/status/{device}  → estado periodico
+ * Toda la config se gestiona desde el portal web y se guarda en NVS (flash).
+ * No necesitas editar codigo para cada instalacion.
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
+#include <WebServer.h>
+#include <Preferences.h>
 #include <PubSubClient.h>
 #include <NimBLEDevice.h>
 #include <ArduinoJson.h>
 #include "mbedtls/base64.h"
 #include "config.h"
-
-#if USE_WIFI_MANAGER
-#include <WiFiManager.h>
-#endif
+#include "portal.h"
 
 // ============================================
 // Estado global
 // ============================================
 
-WiFiClient   wifiClient;
+PrintProxyConfig cfg;
+Preferences prefs;
+WebServer webServer(CONFIG_PORTAL_PORT);
+WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
-NimBLEClient*              bleClient     = nullptr;
-NimBLERemoteCharacteristic* printChar    = nullptr;
-bool                        printerReady = false;
+NimBLEClient*               bleClient     = nullptr;
+NimBLERemoteCharacteristic* printChar     = nullptr;
+bool                        printerReady  = false;
 
-// Topics construidos en setup()
-char topicPrint[80];    // impresion/{project}/print/{device}
-char topicPrinted[80];  // impresion/{project}/printed/{device}
-char topicStatus[80];   // impresion/{project}/status/{device}
+char topicPrint[80];
+char topicPrinted[80];
+char topicStatus[80];
 
 unsigned long lastStatusMs    = 0;
 unsigned long lastReconnectMs = 0;
 uint32_t     printCount       = 0;
 uint32_t     errorCount       = 0;
 
-// Buffer para mensajes MQTT grandes
-// Una comanda tipica en base64 son ~1KB, maximo ~4KB
-#define MAX_PAYLOAD_SIZE 4096
 uint8_t payloadBuffer[MAX_PAYLOAD_SIZE];
+
+// ============================================
+// Config — Load / Save NVS
+// ============================================
+
+void configLoad() {
+  prefs.begin(NVS_NAMESPACE, true);  // read-only
+  strlcpy(cfg.deviceId,       prefs.getString("deviceId",    DEFAULT_DEVICE_ID).c_str(),    sizeof(cfg.deviceId));
+  strlcpy(cfg.projectId,      prefs.getString("projectId",   DEFAULT_PROJECT_ID).c_str(),   sizeof(cfg.projectId));
+  strlcpy(cfg.mqttHost,       prefs.getString("mqttHost",    DEFAULT_MQTT_HOST).c_str(),    sizeof(cfg.mqttHost));
+  cfg.mqttPort =               prefs.getUShort("mqttPort",   DEFAULT_MQTT_PORT);
+  strlcpy(cfg.mqttUser,       prefs.getString("mqttUser",    DEFAULT_MQTT_USER).c_str(),    sizeof(cfg.mqttUser));
+  strlcpy(cfg.mqttPass,       prefs.getString("mqttPass",    DEFAULT_MQTT_PASS).c_str(),    sizeof(cfg.mqttPass));
+  strlcpy(cfg.printerName,    prefs.getString("printerName", DEFAULT_PRINTER_NAME).c_str(), sizeof(cfg.printerName));
+  strlcpy(cfg.printerSvcUuid, prefs.getString("printerSvc",  DEFAULT_PRINTER_SVC).c_str(),  sizeof(cfg.printerSvcUuid));
+  strlcpy(cfg.printerCharUuid,prefs.getString("printerChar", DEFAULT_PRINTER_CHAR).c_str(), sizeof(cfg.printerCharUuid));
+  prefs.end();
+
+  cfg.configured = (strlen(cfg.mqttHost) > 0 && strlen(cfg.printerName) > 0);
+
+  Serial.printf("[CFG] device=%s project=%s mqtt=%s:%d printer=%s configured=%s\n",
+    cfg.deviceId, cfg.projectId, cfg.mqttHost, cfg.mqttPort,
+    cfg.printerName, cfg.configured ? "SI" : "NO");
+}
+
+void configSave() {
+  prefs.begin(NVS_NAMESPACE, false);  // read-write
+  prefs.putString("deviceId",    cfg.deviceId);
+  prefs.putString("projectId",   cfg.projectId);
+  prefs.putString("mqttHost",    cfg.mqttHost);
+  prefs.putUShort("mqttPort",    cfg.mqttPort);
+  prefs.putString("mqttUser",    cfg.mqttUser);
+  prefs.putString("mqttPass",    cfg.mqttPass);
+  prefs.putString("printerName", cfg.printerName);
+  prefs.putString("printerSvc",  cfg.printerSvcUuid);
+  prefs.putString("printerChar", cfg.printerCharUuid);
+  prefs.end();
+
+  cfg.configured = (strlen(cfg.mqttHost) > 0 && strlen(cfg.printerName) > 0);
+  Serial.println("[CFG] Guardado en NVS");
+}
+
+// ============================================
+// Rebuild MQTT topics from config
+// ============================================
+
+void buildTopics() {
+  snprintf(topicPrint,   sizeof(topicPrint),   "impresion/%s/print/%s",   cfg.projectId, cfg.deviceId);
+  snprintf(topicPrinted, sizeof(topicPrinted), "impresion/%s/printed/%s", cfg.projectId, cfg.deviceId);
+  snprintf(topicStatus,  sizeof(topicStatus),  "impresion/%s/status/%s",  cfg.projectId, cfg.deviceId);
+}
 
 // ============================================
 // LED feedback
@@ -70,31 +119,14 @@ void ledBlink(int times, int ms = 100) {
 // ============================================
 
 void setupWiFi() {
-  Serial.println("[WiFi] Conectando...");
-
-#if USE_WIFI_MANAGER
+  Serial.println("[WiFi] Iniciando WiFiManager...");
   WiFiManager wm;
-  wm.setConfigPortalTimeout(180); // 3 min portal
-  // Nombre del AP: PrintProxy-XXXX (ultimos 4 del MAC)
+  wm.setConfigPortalTimeout(180);
   String apName = "PrintProxy-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
   if (!wm.autoConnect(apName.c_str())) {
     Serial.println("[WiFi] Fallo portal cautivo, reiniciando...");
     ESP.restart();
   }
-#else
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\n[WiFi] No se pudo conectar, reiniciando...");
-    ESP.restart();
-  }
-#endif
-
   Serial.printf("[WiFi] Conectado — IP: %s\n", WiFi.localIP().toString().c_str());
   ledBlink(2);
 }
@@ -103,12 +135,13 @@ void setupWiFi() {
 // BLE — Conexion con impresora
 // ============================================
 
-/**
- * Escanea BLE buscando la impresora por nombre.
- * Retorna true si la encuentra y conecta.
- */
 bool connectPrinter() {
-  Serial.printf("[BLE] Escaneando '%s' (%d seg)...\n", PRINTER_BT_NAME, BLE_SCAN_SECONDS);
+  if (strlen(cfg.printerName) == 0) {
+    Serial.println("[BLE] No hay impresora configurada. Configura desde el portal web.");
+    return false;
+  }
+
+  Serial.printf("[BLE] Escaneando '%s' (%d seg)...\n", cfg.printerName, BLE_SCAN_SECONDS);
   printerReady = false;
 
   NimBLEScan* scan = NimBLEDevice::getScan();
@@ -120,8 +153,7 @@ bool connectPrinter() {
     NimBLEAdvertisedDevice dev = results.getDevice(i);
     Serial.printf("[BLE]   Encontrado: %s (%s)\n",
       dev.getName().c_str(), dev.getAddress().toString().c_str());
-
-    if (dev.getName() == PRINTER_BT_NAME) {
+    if (dev.getName() == cfg.printerName) {
       printer = new NimBLEAdvertisedDevice(dev);
       break;
     }
@@ -129,19 +161,14 @@ bool connectPrinter() {
   scan->clearResults();
 
   if (!printer) {
-    Serial.printf("[BLE] Impresora '%s' no encontrada\n", PRINTER_BT_NAME);
+    Serial.printf("[BLE] Impresora '%s' no encontrada\n", cfg.printerName);
     return false;
   }
 
   Serial.printf("[BLE] Conectando a %s...\n", printer->getAddress().toString().c_str());
 
-  // Desconectar cliente anterior si existe
-  if (bleClient && bleClient->isConnected()) {
-    bleClient->disconnect();
-  }
-  if (bleClient) {
-    NimBLEDevice::deleteClient(bleClient);
-  }
+  if (bleClient && bleClient->isConnected()) bleClient->disconnect();
+  if (bleClient) NimBLEDevice::deleteClient(bleClient);
 
   bleClient = NimBLEDevice::createClient();
   if (!bleClient->connect(printer)) {
@@ -151,25 +178,21 @@ bool connectPrinter() {
   }
   delete printer;
 
-  Serial.println("[BLE] Conectado. Buscando servicio de impresion...");
+  Serial.println("[BLE] Conectado. Buscando servicio...");
 
-  // Buscar el servicio y la characteristic de escritura
-  NimBLERemoteService* svc = bleClient->getService(PRINTER_SERVICE_UUID);
+  NimBLERemoteService* svc = bleClient->getService(cfg.printerSvcUuid);
   if (!svc) {
-    Serial.printf("[BLE] Servicio %s no encontrado. Listando servicios:\n", PRINTER_SERVICE_UUID);
-    // Debug: listar todos los servicios para diagnostico
+    Serial.printf("[BLE] Servicio %s no encontrado. Servicios disponibles:\n", cfg.printerSvcUuid);
     auto* svcs = bleClient->getServices(true);
     if (svcs) {
       for (auto& s : *svcs) {
-        Serial.printf("[BLE]   Service: %s\n", s->getUUID().toString().c_str());
+        Serial.printf("[BLE]   Svc: %s\n", s->getUUID().toString().c_str());
         auto chars = s->getCharacteristics(true);
         if (chars) {
           for (auto& c : *chars) {
             Serial.printf("[BLE]     Char: %s [%s%s%s]\n",
               c->getUUID().toString().c_str(),
-              c->canRead()   ? "R" : "",
-              c->canWrite()  ? "W" : "",
-              c->canNotify() ? "N" : "");
+              c->canRead() ? "R" : "", c->canWrite() ? "W" : "", c->canNotify() ? "N" : "");
           }
         }
       }
@@ -178,9 +201,9 @@ bool connectPrinter() {
     return false;
   }
 
-  printChar = svc->getCharacteristic(PRINTER_CHAR_UUID);
+  printChar = svc->getCharacteristic(cfg.printerCharUuid);
   if (!printChar) {
-    Serial.printf("[BLE] Characteristic %s no encontrada\n", PRINTER_CHAR_UUID);
+    Serial.printf("[BLE] Characteristic %s no encontrada\n", cfg.printerCharUuid);
     bleClient->disconnect();
     return false;
   }
@@ -198,10 +221,6 @@ bool connectPrinter() {
   return true;
 }
 
-/**
- * Envia buffer ESC/POS a la impresora en chunks BLE.
- * Retorna true si todo se envio OK.
- */
 bool sendToPrinter(const uint8_t* data, size_t len) {
   if (!printerReady || !bleClient || !bleClient->isConnected() || !printChar) {
     Serial.println("[BLE] Impresora no conectada");
@@ -216,24 +235,14 @@ bool sendToPrinter(const uint8_t* data, size_t len) {
 
   while (sent < len) {
     size_t chunkLen = min((size_t)BLE_CHUNK_SIZE, len - sent);
-
-    bool ok;
-    if (useNoResponse) {
-      ok = printChar->writeValue(data + sent, chunkLen, false);
-    } else {
-      ok = printChar->writeValue(data + sent, chunkLen, true);
-    }
-
+    bool ok = printChar->writeValue(data + sent, chunkLen, !useNoResponse);
     if (!ok) {
       Serial.printf("[BLE] Error escribiendo en offset %d\n", sent);
       ledOff();
       return false;
     }
-
     sent += chunkLen;
-    if (sent < len) {
-      delay(BLE_CHUNK_DELAY);
-    }
+    if (sent < len) delay(BLE_CHUNK_DELAY);
   }
 
   ledOff();
@@ -245,15 +254,12 @@ bool sendToPrinter(const uint8_t* data, size_t len) {
 // MQTT
 // ============================================
 
-/**
- * Publica ACK o error como respuesta a un print job.
- */
 void publishResult(const char* jobId, bool success, const char* error = nullptr) {
   JsonDocument doc;
-  doc["device_id"]  = DEVICE_ID;
-  doc["job_id"]     = jobId;
-  doc["success"]    = success;
-  doc["timestamp"]  = millis();
+  doc["device_id"]   = cfg.deviceId;
+  doc["job_id"]      = jobId;
+  doc["success"]     = success;
+  doc["timestamp"]   = millis();
   doc["print_count"] = printCount;
   if (error) doc["error"] = error;
 
@@ -262,16 +268,13 @@ void publishResult(const char* jobId, bool success, const char* error = nullptr)
   mqtt.publish(topicPrinted, buf);
 }
 
-/**
- * Publica estado periodico del dispositivo.
- */
 void publishStatus() {
   JsonDocument doc;
-  doc["device_id"]      = DEVICE_ID;
-  doc["project_id"]     = PROJECT_ID;
+  doc["device_id"]      = cfg.deviceId;
+  doc["project_id"]     = cfg.projectId;
   doc["online"]         = true;
   doc["printer_ready"]  = printerReady;
-  doc["printer_name"]   = PRINTER_BT_NAME;
+  doc["printer_name"]   = cfg.printerName;
   doc["wifi_rssi"]      = WiFi.RSSI();
   doc["ip"]             = WiFi.localIP().toString();
   doc["uptime_sec"]     = millis() / 1000;
@@ -284,14 +287,9 @@ void publishStatus() {
   mqtt.publish(topicStatus, buf);
 }
 
-/**
- * Callback MQTT — recibe print jobs.
- * Payload esperado: JSON { "job_id": "xxx", "data": "<base64 ESC/POS>" }
- */
 void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   Serial.printf("[MQTT] Mensaje recibido (%d bytes) en %s\n", length, topic);
 
-  // Parsear JSON
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, payload, length);
   if (err) {
@@ -305,34 +303,29 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   const char* b64data = doc["data"];
 
   if (!b64data) {
-    Serial.println("[MQTT] Falta campo 'data' (base64 ESC/POS)");
     errorCount++;
     publishResult(jobId, false, "Missing 'data' field");
     return;
   }
 
-  // Decodificar base64 (mbedtls incluido en ESP-IDF)
   size_t b64len = strlen(b64data);
   size_t decodedLen = 0;
 
   int ret = mbedtls_base64_decode(payloadBuffer, MAX_PAYLOAD_SIZE, &decodedLen,
                                    (const unsigned char*)b64data, b64len);
   if (ret == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
-    Serial.printf("[MQTT] Payload demasiado grande\n");
     errorCount++;
     publishResult(jobId, false, "Payload too large");
     return;
   }
   if (ret != 0) {
-    Serial.printf("[MQTT] Error decodificando base64: %d\n", ret);
     errorCount++;
     publishResult(jobId, false, "Base64 decode error");
     return;
   }
 
-  // Reconectar impresora si se desconecto
   if (!printerReady || !bleClient || !bleClient->isConnected()) {
-    Serial.println("[MQTT] Impresora desconectada, intentando reconectar...");
+    Serial.println("[MQTT] Impresora desconectada, reconectando...");
     if (!connectPrinter()) {
       errorCount++;
       publishResult(jobId, false, "Printer not connected");
@@ -340,29 +333,29 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     }
   }
 
-  // Enviar a impresora
   bool ok = sendToPrinter(payloadBuffer, decodedLen);
   if (ok) {
     printCount++;
     publishResult(jobId, true);
-    Serial.printf("[PRINT] Job %s completado (#%d)\n", jobId, printCount);
+    Serial.printf("[PRINT] Job %s OK (#%d)\n", jobId, printCount);
   } else {
     errorCount++;
-    printerReady = false; // forzar reconexion en proximo intento
+    printerReady = false;
     publishResult(jobId, false, "BLE write failed");
   }
 }
 
 void connectMQTT() {
   if (mqtt.connected()) return;
+  if (strlen(cfg.mqttHost) == 0) return;  // no configurado aun
 
-  Serial.printf("[MQTT] Conectando a %s:%d...\n", MQTT_HOST, MQTT_PORT);
+  Serial.printf("[MQTT] Conectando a %s:%d...\n", cfg.mqttHost, cfg.mqttPort);
 
-  String clientId = "print-proxy-" + String(DEVICE_ID);
+  String clientId = "print-proxy-" + String(cfg.deviceId);
 
   bool connected;
-  if (strlen(MQTT_USER) > 0) {
-    connected = mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS);
+  if (strlen(cfg.mqttUser) > 0) {
+    connected = mqtt.connect(clientId.c_str(), cfg.mqttUser, cfg.mqttPass);
   } else {
     connected = mqtt.connect(clientId.c_str());
   }
@@ -378,6 +371,157 @@ void connectMQTT() {
   }
 }
 
+// Reconnect MQTT + rebuild topics (llamado tras guardar config)
+void reconnectServices() {
+  if (mqtt.connected()) mqtt.disconnect();
+  buildTopics();
+  mqtt.setServer(cfg.mqttHost, cfg.mqttPort);
+  connectMQTT();
+
+  // Intentar conectar impresora si cambio el nombre
+  if (strlen(cfg.printerName) > 0 && !printerReady) {
+    connectPrinter();
+  }
+}
+
+// ============================================
+// Portal web — API endpoints
+// ============================================
+
+void portalSetup(WebServer& server) {
+  // Pagina principal
+  server.on("/", HTTP_GET, [&server]() {
+    server.send_P(200, "text/html", PORTAL_HTML);
+  });
+
+  // GET /api/config — devuelve config actual
+  server.on("/api/config", HTTP_GET, [&server]() {
+    JsonDocument doc;
+    doc["device_id"]    = cfg.deviceId;
+    doc["project_id"]   = cfg.projectId;
+    doc["mqtt_host"]    = cfg.mqttHost;
+    doc["mqtt_port"]    = cfg.mqttPort;
+    doc["mqtt_user"]    = cfg.mqttUser;
+    doc["mqtt_pass"]    = cfg.mqttPass;
+    doc["printer_name"] = cfg.printerName;
+    doc["printer_svc"]  = cfg.printerSvcUuid;
+    doc["printer_char"] = cfg.printerCharUuid;
+    doc["ip"]           = WiFi.localIP().toString();
+    unsigned long up = millis() / 1000;
+    char upStr[32];
+    snprintf(upStr, sizeof(upStr), "%luh %lum", up / 3600, (up % 3600) / 60);
+    doc["uptime"] = upStr;
+
+    char buf[512];
+    serializeJson(doc, buf, sizeof(buf));
+    server.send(200, "application/json", buf);
+  });
+
+  // POST /api/config — guardar config
+  server.on("/api/config", HTTP_POST, [&server]() {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, server.arg("plain"));
+    if (err) {
+      server.send(400, "application/json", "{\"ok\":false,\"error\":\"JSON invalido\"}");
+      return;
+    }
+
+    if (doc["device_id"].is<const char*>())    strlcpy(cfg.deviceId,        doc["device_id"],    sizeof(cfg.deviceId));
+    if (doc["project_id"].is<const char*>())   strlcpy(cfg.projectId,       doc["project_id"],   sizeof(cfg.projectId));
+    if (doc["mqtt_host"].is<const char*>())    strlcpy(cfg.mqttHost,        doc["mqtt_host"],    sizeof(cfg.mqttHost));
+    if (doc["mqtt_port"].is<int>())            cfg.mqttPort = doc["mqtt_port"];
+    if (doc["mqtt_user"].is<const char*>())    strlcpy(cfg.mqttUser,        doc["mqtt_user"],    sizeof(cfg.mqttUser));
+    if (doc["mqtt_pass"].is<const char*>())    strlcpy(cfg.mqttPass,        doc["mqtt_pass"],    sizeof(cfg.mqttPass));
+    if (doc["printer_name"].is<const char*>()) strlcpy(cfg.printerName,     doc["printer_name"], sizeof(cfg.printerName));
+    if (doc["printer_svc"].is<const char*>())  strlcpy(cfg.printerSvcUuid,  doc["printer_svc"],  sizeof(cfg.printerSvcUuid));
+    if (doc["printer_char"].is<const char*>()) strlcpy(cfg.printerCharUuid, doc["printer_char"], sizeof(cfg.printerCharUuid));
+
+    configSave();
+    reconnectServices();
+
+    server.send(200, "application/json", "{\"ok\":true}");
+  });
+
+  // GET /api/status
+  server.on("/api/status", HTTP_GET, [&server]() {
+    JsonDocument doc;
+    doc["wifi"]    = (WiFi.status() == WL_CONNECTED);
+    doc["mqtt"]    = mqtt.connected();
+    doc["printer"] = printerReady;
+
+    char buf[128];
+    serializeJson(doc, buf, sizeof(buf));
+    server.send(200, "application/json", buf);
+  });
+
+  // GET /api/scan — escanea BLE y devuelve impresoras encontradas
+  server.on("/api/scan", HTTP_GET, [&server]() {
+    NimBLEScan* scan = NimBLEDevice::getScan();
+    scan->setActiveScan(true);
+    NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
+
+    JsonDocument doc;
+    auto arr = doc.to<JsonArray>();
+
+    for (int i = 0; i < results.getCount(); i++) {
+      NimBLEAdvertisedDevice dev = results.getDevice(i);
+      String name = dev.getName().c_str();
+      if (name.length() == 0) continue;  // ignorar dispositivos sin nombre
+
+      JsonObject obj = arr.add<JsonObject>();
+      obj["name"] = name;
+      obj["addr"] = dev.getAddress().toString().c_str();
+      obj["rssi"] = dev.getRSSI();
+    }
+    scan->clearResults();
+
+    char buf[1024];
+    serializeJson(doc, buf, sizeof(buf));
+    server.send(200, "application/json", buf);
+  });
+
+  // POST /api/test-print — envia un ticket de prueba
+  server.on("/api/test-print", HTTP_POST, [&server]() {
+    if (!printerReady || !bleClient || !bleClient->isConnected()) {
+      if (!connectPrinter()) {
+        server.send(200, "application/json", "{\"ok\":false,\"error\":\"Impresora no conectada\"}");
+        return;
+      }
+    }
+
+    // ESC/POS test: inicializar + centrar + negrita + "TEST OK" + corte
+    uint8_t testData[] = {
+      0x1B, 0x40,             // ESC @ — inicializar
+      0x1B, 0x61, 0x01,       // ESC a 1 — centrar
+      0x1B, 0x45, 0x01,       // ESC E 1 — negrita on
+      'P','R','I','N','T',' ','P','R','O','X','Y', 0x0A,
+      0x1B, 0x45, 0x00,       // ESC E 0 — negrita off
+      '-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-', 0x0A,
+      'T','e','s','t',' ','O','K', 0x0A,
+      0x0A, 0x0A, 0x0A,       // 3 lineas en blanco
+      0x1D, 0x56, 0x00        // GS V 0 — corte total
+    };
+
+    bool ok = sendToPrinter(testData, sizeof(testData));
+    if (ok) {
+      printCount++;
+      server.send(200, "application/json", "{\"ok\":true}");
+    } else {
+      server.send(200, "application/json", "{\"ok\":false,\"error\":\"Error BLE write\"}");
+    }
+  });
+
+  // POST /api/reset — borrar toda la config y reiniciar
+  server.on("/api/reset", HTTP_POST, [&server]() {
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.clear();
+    prefs.end();
+    server.send(200, "application/json", "{\"ok\":true}");
+    delay(1000);
+    ESP.restart();
+  });
+}
+
 // ============================================
 // Setup & Loop
 // ============================================
@@ -388,55 +532,65 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
 
   Serial.println("\n========================================");
-  Serial.println("  ESP32 Print Proxy v1.0.0");
-  Serial.printf("  Device: %s / Project: %s\n", DEVICE_ID, PROJECT_ID);
+  Serial.println("  ESP32 Print Proxy v2.0");
   Serial.println("========================================\n");
 
-  // Construir topics MQTT
-  snprintf(topicPrint,   sizeof(topicPrint),   "impresion/%s/print/%s",   PROJECT_ID, DEVICE_ID);
-  snprintf(topicPrinted, sizeof(topicPrinted), "impresion/%s/printed/%s", PROJECT_ID, DEVICE_ID);
-  snprintf(topicStatus,  sizeof(topicStatus),  "impresion/%s/status/%s",  PROJECT_ID, DEVICE_ID);
+  // 1. Cargar config de NVS
+  configLoad();
+  buildTopics();
 
-  // 1. WiFi
+  // 2. WiFi (portal cautivo si no hay credenciales guardadas)
   setupWiFi();
 
-  // 2. MQTT
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
-  mqtt.setCallback(onMqttMessage);
-  mqtt.setBufferSize(MAX_PAYLOAD_SIZE + 256); // payload + JSON wrapper
-  connectMQTT();
-
-  // 3. BLE
+  // 3. Portal web de configuracion
   NimBLEDevice::init("PrintProxy");
-  // Intentar conectar impresora (no es fatal si falla)
-  if (!connectPrinter()) {
-    Serial.println("[BLE] Impresora no disponible. Reintentara al recibir print job.");
+  portalSetup(webServer);
+  webServer.begin();
+  Serial.printf("[WEB] Portal en http://%s/\n", WiFi.localIP().toString().c_str());
+
+  // 4. MQTT (solo si esta configurado)
+  mqtt.setCallback(onMqttMessage);
+  mqtt.setBufferSize(MAX_PAYLOAD_SIZE + 256);
+  if (cfg.configured) {
+    mqtt.setServer(cfg.mqttHost, cfg.mqttPort);
+    connectMQTT();
+
+    // 5. Impresora BLE
+    if (!connectPrinter()) {
+      Serial.println("[BLE] Impresora no disponible. Configura desde el portal web.");
+    }
+  } else {
+    Serial.println("\n[!] No configurado. Abre el portal web para configurar:");
+    Serial.printf("    http://%s/\n\n", WiFi.localIP().toString().c_str());
   }
 
-  Serial.println("\n[READY] Print Proxy operativo\n");
+  Serial.println("[READY] Print Proxy operativo\n");
 }
 
 void loop() {
-  // Mantener MQTT vivo
-  if (!mqtt.connected()) {
+  // Servir portal web
+  webServer.handleClient();
+
+  // MQTT
+  if (cfg.configured) {
+    if (!mqtt.connected()) {
+      unsigned long now = millis();
+      if (now - lastReconnectMs > 5000) {
+        lastReconnectMs = now;
+        connectMQTT();
+      }
+    }
+    mqtt.loop();
+
+    // Status periodico
     unsigned long now = millis();
-    if (now - lastReconnectMs > 5000) {
-      lastReconnectMs = now;
-      connectMQTT();
-    }
-  }
-  mqtt.loop();
-
-  // Publicar status periodicamente
-  unsigned long now = millis();
-  if (now - lastStatusMs > STATUS_INTERVAL_MS) {
-    lastStatusMs = now;
-    if (mqtt.connected()) {
-      publishStatus();
+    if (now - lastStatusMs > STATUS_INTERVAL_MS) {
+      lastStatusMs = now;
+      if (mqtt.connected()) publishStatus();
     }
   }
 
-  // Check BLE connection
+  // Check BLE
   if (printerReady && bleClient && !bleClient->isConnected()) {
     Serial.println("[BLE] Impresora desconectada");
     printerReady = false;

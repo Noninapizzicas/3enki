@@ -4,59 +4,32 @@
 // ============================================
 // CONFIGURACION DEL PRINT PROXY ESP32
 // ============================================
-// Editar estos valores antes de flashear.
-// En futuro se pueden mover a WiFiManager
-// para configurar desde el movil.
+// Estos son valores por DEFECTO.
+// Una vez arrancado, todo se configura desde el portal web
+// en http://<ip-del-esp32>/ y se guarda en flash (NVS).
+// No necesitas editar este archivo para cada instalacion.
 // ============================================
 
-// --- WiFi ---
-// Si USE_WIFI_MANAGER es true, ignora SSID/PASS
-// y lanza portal cautivo para configurar desde movil.
-// Si es false, usa credenciales hardcodeadas.
-#define USE_WIFI_MANAGER   1
-#define WIFI_SSID          "PizzeriaNonina"
-#define WIFI_PASS          "tu_password_wifi"
+// --- Defaults (se usan solo si no hay config guardada en NVS) ---
+#define DEFAULT_DEVICE_ID       "cocina-1"
+#define DEFAULT_PROJECT_ID      "nonina"
+#define DEFAULT_MQTT_HOST       ""
+#define DEFAULT_MQTT_PORT       1883
+#define DEFAULT_MQTT_USER       ""
+#define DEFAULT_MQTT_PASS       ""
+#define DEFAULT_PRINTER_NAME    ""
+#define DEFAULT_PRINTER_SVC     "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+#define DEFAULT_PRINTER_CHAR    "49535343-8841-43f4-a8d4-ecbe34729bb3"
 
-// --- MQTT ---
-// Broker del VPS (event-core)
-#define MQTT_HOST          "tu-vps.com"
-#define MQTT_PORT          1883         // 1883 plano, 8883 TLS
-#define MQTT_USE_TLS       0            // 1 para produccion
-#define MQTT_USER          ""           // vacio si no hay auth
-#define MQTT_PASS          ""
+// --- Constantes hardware (no configurables desde portal) ---
+#define BLE_CHUNK_SIZE          20      // bytes por write BLE (MTU default)
+#define BLE_CHUNK_DELAY         20      // ms entre chunks
+#define BLE_SCAN_SECONDS        10      // duracion del escaneo BLE
+#define STATUS_INTERVAL_MS      30000   // cada 30s publica status
+#define LED_PIN                 2       // LED integrado del ESP32
+#define MAX_PAYLOAD_SIZE        4096    // buffer ESC/POS maximo
 
-// --- Identidad ---
-// Cada ESP32 tiene un ID unico. Determina sus topics MQTT.
-#define DEVICE_ID          "cocina-1"
-#define PROJECT_ID         "nonina"
-
-// --- Topics MQTT ---
-// El ESP32 se suscribe a: impresion/{PROJECT_ID}/print/{DEVICE_ID}
-// Y publica ACK en:      impresion/{PROJECT_ID}/printed/{DEVICE_ID}
-// Y status en:           impresion/{PROJECT_ID}/status/{DEVICE_ID}
-
-// --- Impresora BLE ---
-// Nombre BT que anuncia la Netum (verificar con nRF Connect)
-#define PRINTER_BT_NAME    "NT-1809"
-
-// UUIDs tipicos de impresoras termicas chinas 58mm
-// Si no funcionan, escanear con nRF Connect y actualizar
-#define PRINTER_SERVICE_UUID    "49535343-fe7d-4ae5-8fa9-9fafd205e455"
-#define PRINTER_CHAR_UUID       "49535343-8841-43f4-a8d4-ecbe34729bb3"
-
-// UUIDs alternativos (descomentar si los de arriba no funcionan)
-// #define PRINTER_SERVICE_UUID "18f0"
-// #define PRINTER_CHAR_UUID    "2af1"
-
-// --- BLE ---
-#define BLE_CHUNK_SIZE     20     // bytes por write BLE (MTU default)
-#define BLE_CHUNK_DELAY    20     // ms entre chunks (evita overflow)
-#define BLE_SCAN_SECONDS   10     // duracion del escaneo BLE
-#define BLE_RECONNECT_MS   5000   // espera antes de reconectar
-
-// --- Comportamiento ---
-#define STATUS_INTERVAL_MS 30000  // cada 30s publica status
-#define WATCHDOG_TIMEOUT   30     // segundos sin actividad → reinicio WDT
-#define LED_PIN            2      // LED integrado del ESP32 (feedback visual)
+// --- NVS ---
+#define NVS_NAMESPACE           "printproxy"
 
 #endif // CONFIG_H

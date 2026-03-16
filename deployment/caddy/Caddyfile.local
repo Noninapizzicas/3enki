@@ -7,10 +7,6 @@
 #   caddy run --config Caddyfile.local
 
 :8080 {
-	# Frontend
-	root * /srv/event-core/frontend/build
-	file_server
-
 	# API REST
 	handle /modules/* {
 		reverse_proxy localhost:3000
@@ -20,11 +16,17 @@
 		reverse_proxy localhost:3000
 	}
 
+	handle /stats {
+		reverse_proxy localhost:3000
+	}
+
 	# MQTT WebSocket
 	handle /mqtt {
 		reverse_proxy localhost:9001
 	}
 
-	# SPA fallback
-	try_files {path} /index.html
+	# Frontend SvelteKit (adapter-node en puerto 3001)
+	handle {
+		reverse_proxy localhost:3001
+	}
 }

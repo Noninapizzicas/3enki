@@ -277,10 +277,12 @@ class CocinaModule {
           variaciones: item.variaciones || null,
           notas: item.notas || '',
           estado: 'pendiente',
-          // Ruta de estaciones: el item avanza por cada estación en orden
+          // Estaciones requeridas: set de estaciones que el item necesita visitar
+          // estacion_actual null = visible para estaciones normales (filtro por categoría)
+          // estacion_actual 'horno' = solo visible para dispositivos tipo horno
           estaciones: estaciones,
-          estacion_idx: 0,
-          estacion_actual: (estaciones && estaciones.length > 0) ? estaciones[0] : null
+          estacion_actual: null,
+          estaciones_completadas: []
         };
         // Metadata especial: mitad-mitad, al gusto, ingredientes_base, etc.
         if (item.tipo) cocinaItem.tipo = item.tipo;
@@ -453,16 +455,27 @@ class CocinaModule {
       }
     }
 
-    // Comprobar si el item tiene más estaciones en su ruta
-    const tieneRuta = itemEncontrado.estaciones && itemEncontrado.estaciones.length > 0;
-    const siguienteIdx = (itemEncontrado.estacion_idx || 0) + 1;
-    const hayMasEstaciones = tieneRuta && siguienteIdx < itemEncontrado.estaciones.length;
+    // Registrar estación completada
+    const completadas = itemEncontrado.estaciones_completadas || [];
+    if (estacion && !completadas.includes(estacion)) {
+      completadas.push(estacion);
+      itemEncontrado.estaciones_completadas = completadas;
+    }
+    // También registrar por tipo de estación del device
+    const tipoEstDevice = device?.tipo_estacion;
+    if (tipoEstDevice && tipoEstDevice !== 'general' && !completadas.includes(tipoEstDevice)) {
+      completadas.push(tipoEstDevice);
+      itemEncontrado.estaciones_completadas = completadas;
+    }
 
-    if (hayMasEstaciones) {
-      // Avanzar a la siguiente estación: reset a pendiente
+    // Comprobar si el item necesita pasar por más estaciones
+    const estacionesRequeridas = itemEncontrado.estaciones || [];
+    const siguienteEstacion = estacionesRequeridas.find(est => !completadas.includes(est));
+
+    if (siguienteEstacion) {
+      // Avanzar a la siguiente estación requerida: reset a pendiente
       itemEncontrado.estado = 'pendiente';
-      itemEncontrado.estacion_idx = siguienteIdx;
-      itemEncontrado.estacion_actual = itemEncontrado.estaciones[siguienteIdx];
+      itemEncontrado.estacion_actual = siguienteEstacion;
       // Limpiar device info de la estación anterior
       delete itemEncontrado.device_id;
       delete itemEncontrado.device_color;
@@ -476,8 +489,8 @@ class CocinaModule {
       this.logger.info('cocina.item.avanzado', {
         pedido_id: pedidoEncontrado.pedido_id, item_id,
         desde_estacion: estacion,
-        a_estacion: itemEncontrado.estacion_actual,
-        estacion_idx: siguienteIdx
+        a_estacion: siguienteEstacion,
+        estaciones_completadas: completadas
       });
 
       return {
@@ -486,7 +499,7 @@ class CocinaModule {
       };
     }
 
-    // Segundo tap (preparando → listo): última estación o sin ruta → terminar
+    // Todas las estaciones requeridas completadas (o no tiene) → terminar
     itemEncontrado.estado = 'listo';
     itemEncontrado.preparado_at = now;
 
@@ -754,8 +767,8 @@ class CocinaModule {
               notas: item.notas || '',
               estado: 'pendiente',
               estaciones: estaciones,
-              estacion_idx: 0,
-              estacion_actual: (estaciones && estaciones.length > 0) ? estaciones[0] : null
+              estacion_actual: null,
+              estaciones_completadas: []
             };
             if (item.tipo) cocinaItem.tipo = item.tipo;
             if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
@@ -859,8 +872,8 @@ class CocinaModule {
       categoria: item.categoria || null,
       estacion: estacion || null,
       estacion_actual: item.estacion_actual || null,
-      estacion_idx: item.estacion_idx ?? null,
       estaciones: item.estaciones || null,
+      estaciones_completadas: item.estaciones_completadas || [],
       preparando_at: item.preparando_at
     };
     if (item.device_id) payload.device_id = item.device_id;
@@ -881,8 +894,8 @@ class CocinaModule {
       categoria: item.categoria || null,
       desde_estacion: estacionAnterior,
       a_estacion: item.estacion_actual,
-      estacion_idx: item.estacion_idx,
-      estaciones: item.estaciones
+      estaciones: item.estaciones,
+      estaciones_completadas: item.estaciones_completadas || []
     });
   }
 

@@ -54,10 +54,10 @@ export interface ItemCocina {
   device_id?: string;
   device_color?: string;
   device_nombre?: string;
-  // Ruta de estaciones
+  // Estaciones requeridas (set, no ruta ordenada)
   estaciones?: string[] | null;
-  estacion_idx?: number;
   estacion_actual?: string | null;
+  estaciones_completadas?: string[];
 }
 
 export interface GlovoMetadata {
@@ -522,19 +522,35 @@ export function itemPassesFilter(item: ItemCocina, filtros: string[]): boolean {
 
 /**
  * Comprueba si un item debe mostrarse en una estación determinada.
- * Un item con ruta de estaciones solo se muestra en la estación que le toca.
- * Un item sin ruta se muestra en todas las estaciones (comportamiento legacy).
+ *
+ * Lógica abierta:
+ * - estacion_actual === null → el item está en su estación inicial (visible para
+ *   estaciones normales que filtran por categoría)
+ * - estacion_actual === 'horno' → el item ha completado su estación anterior y
+ *   necesita horno (solo visible para dispositivos tipo horno)
+ *
+ * Dispositivos tipo 'general' ven todo. Items sin estaciones requeridas también.
  *
  * @param item - El item de cocina
  * @param tipoEstacion - El tipo de estación del dispositivo ('horno', 'montaje', etc.)
  * @returns true si el item debe verse en esta estación
  */
 export function itemMatchesStation(item: ItemCocina, tipoEstacion: string): boolean {
-  // Sin ruta de estaciones = visible en todas (legacy)
-  if (!item.estaciones || item.estaciones.length === 0) return true;
-  // Sin tipo de estación en el dispositivo = ver todo (estación 'general')
+  // Dispositivo general = ver todo
   if (!tipoEstacion || tipoEstacion === 'general') return true;
-  // El item solo se muestra en la estación que le toca ahora
+  // Item sin estaciones requeridas = visible en todas
+  if (!item.estaciones || item.estaciones.length === 0) {
+    // Pero si estacion_actual es null, visible para estaciones normales
+    // Si es una estación específica (horno, freidora...) solo ver items que le tocan
+    return !item.estacion_actual || item.estacion_actual === tipoEstacion;
+  }
+  // Item con estacion_actual null = está en preparación inicial
+  // Solo visible para estaciones que NO están en su lista de requeridas
+  // (ej: montaje ve el item, horno NO lo ve aún)
+  if (!item.estacion_actual) {
+    return !item.estaciones.includes(tipoEstacion);
+  }
+  // Item enrutado a una estación específica = solo visible allí
   return item.estacion_actual === tipoEstacion;
 }
 
@@ -900,7 +916,7 @@ export function initCocinaSubscriptions(): () => void {
                     ...i,
                     estado: 'pendiente' as EstadoItem,
                     estacion_actual: data.a_estacion,
-                    estacion_idx: data.estacion_idx,
+                    estaciones_completadas: data.estaciones_completadas || [],
                     device_id: undefined,
                     device_color: undefined,
                     device_nombre: undefined,

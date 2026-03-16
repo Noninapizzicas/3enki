@@ -1,0 +1,182 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "1",
+  "ventas": [
+    {
+      "venta_id": "venta_1773469191087_t4fbqsmfw",
+      "timestamp": "2026-03-14T06:19:51.087Z",
+      "project_id": "1",
+      "cuenta": {
+        "cuenta_id": "mesa_2_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T06:14:20.403Z",
+        "hora_cierre": "2026-03-14T06:19:51.087Z",
+        "metadata": {
+          "nombre": "Mesa 2",
+          "tiempo_ocupada": 5,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "545ae46c-5dfc-4009-9807-113a40cc30f7",
+        "monto": 21,
+        "propina": 0,
+        "monto_total": 21,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_8a0205ac"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773468906916_12da270b",
+          "items": [
+            {
+              "item_id": "5fec5074-c669-4c33-b696-02e68a0798df",
+              "producto_id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T06:14:38.448Z",
+              "updated_at": "2026-03-14T06:15:06.917Z"
+            },
+            {
+              "item_id": "b0dccbee-63c0-4286-8dd5-ab532f37f806",
+              "producto_id": "pizzicas_chillout",
+              "nombre": "Chillout",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Atún",
+                "Cebolla"
+              ],
+              "created_at": "2026-03-14T06:15:05.334Z",
+              "updated_at": "2026-03-14T06:15:06.917Z"
+            }
+          ],
+          "total": 21
+        }
+      ],
+      "resumen": {
+        "subtotal": 21,
+        "propina": 0,
+        "total_final": 21
+      }
+    },
+    {
+      "venta_id": "venta_1773469191090_fojy93qye",
+      "timestamp": "2026-03-14T06:19:51.090Z",
+      "project_id": "1",
+      "cuenta": {
+        "cuenta_id": "mesa_2_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T06:14:20.403Z",
+        "hora_cierre": "2026-03-14T06:19:51.090Z",
+        "metadata": {
+          "nombre": "Mesa 2",
+          "tiempo_ocupada": 5,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "545ae46c-5dfc-4009-9807-113a40cc30f7",
+        "monto": 21,
+        "propina": 0,
+        "monto_total": 21,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_8a0205ac"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773468906916_12da270b",
+          "items": [
+            {
+              "item_id": "5fec5074-c669-4c33-b696-02e68a0798df",
+              "producto_id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T06:14:38.448Z",
+              "updated_at": "2026-03-14T06:15:06.917Z"
+            },
+            {
+              "item_id": "b0dccbee-63c0-4286-8dd5-ab532f37f806",
+              "producto_id": "pizzicas_chillout",
+              "nombre": "Chillout",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Atún",
+                "Cebolla"
+              ],
+              "created_at": "2026-03-14T06:15:05.334Z",
+              "updated_at": "2026-03-14T06:15:06.917Z"
+            }
+          ],
+          "total": 21
+        }
+      ],
+      "resumen": {
+        "subtotal": 21,
+        "propina": 0,
+        "total_final": 21
+      }
+    }
+  ],
+  "resumen_dia": {
+    "total_ventas": 2,
+    "total_ingresos": 42,
+    "total_propinas": 0,
+    "por_metodo_pago": {
+      "efectivo": 0,
+      "tarjeta": 42,
+      "bizum": 0,
+      "transferencia": 0
+    },
+    "por_tipo_cuenta": {
+      "mesa": 42,
+      "telefono": 0,
+      "llevar": 0
+    },
+    "por_camarero": {}
+  },
+  "ultima_actualizacion": "2026-03-14T16:01:03.705Z"
+}

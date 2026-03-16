@@ -1,0 +1,354 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "1",
+  "eventos": [
+    {
+      "timestamp": "2026-03-14T06:14:20.362Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_2_20260314_001",
+        "nombre": "Mesa 2",
+        "numero": 2,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T06:14:20.362Z",
+        "project_id": "1"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:14:20.403Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_2_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "1",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 2",
+          "numero": 2,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:14:38.448Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T06:14:38.448Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:14:38.490Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T06:14:38.490Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:14:38.532Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T06:14:38.531Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:15:05.335Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "items": 2,
+          "total": 21
+        },
+        "updated_at": "2026-03-14T06:15:05.335Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:15:06.917Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "mesa_2_20260314_001",
+        "pedido_id": "ped_1773468906916_12da270b",
+        "project_id": "1",
+        "items": [
+          {
+            "id": "5fec5074-c669-4c33-b696-02e68a0798df",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "Batucada",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T06:14:38.448Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Queso azul",
+              "Mezcla de quesos",
+              "Nata"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T06:15:06.916Z",
+            "pedido_id": "ped_1773468906916_12da270b"
+          },
+          {
+            "id": "b0dccbee-63c0-4286-8dd5-ab532f37f806",
+            "producto_id": "pizzicas_chillout",
+            "nombre": "Chillout",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T06:15:05.334Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Atún",
+              "Cebolla"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T06:15:06.916Z",
+            "pedido_id": "ped_1773468906916_12da270b"
+          }
+        ],
+        "total": 21,
+        "notas_generales": "",
+        "created_at": "2026-03-14T06:15:06.916Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:15:06.917Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T06:15:06.916Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:15:06.917Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773468906916_12da270b",
+        "cuenta_id": "mesa_2_20260314_001",
+        "canal": "mesa",
+        "project_id": "1",
+        "estado": "en_cocina",
+        "total": 21,
+        "items": [
+          {
+            "item_id": "5fec5074-c669-4c33-b696-02e68a0798df",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "Batucada",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Queso azul",
+              "Mezcla de quesos",
+              "Nata"
+            ],
+            "created_at": "2026-03-14T06:14:38.448Z",
+            "updated_at": "2026-03-14T06:15:06.917Z"
+          },
+          {
+            "item_id": "b0dccbee-63c0-4286-8dd5-ab532f37f806",
+            "producto_id": "pizzicas_chillout",
+            "nombre": "Chillout",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Atún",
+              "Cebolla"
+            ],
+            "created_at": "2026-03-14T06:15:05.334Z",
+            "updated_at": "2026-03-14T06:15:06.917Z"
+          }
+        ],
+        "created_at": "2026-03-14T06:15:06.916Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:15:06.958Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T06:15:06.958Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:30.083Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T06:19:30.082Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:30.125Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T06:19:30.125Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:50.960Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T06:19:50.960Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:51.000Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T06:19:51.000Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:51.042Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T06:19:51.042Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:51.083Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "estado_anterior": "para_cobrar",
+        "estado_nuevo": "cobrado",
+        "changed_at": "2026-03-14T06:19:51.082Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:51.083Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:19:51.124Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "cambios": {
+          "estado": "cobrado"
+        },
+        "updated_at": "2026-03-14T06:19:51.124Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:24:51.127Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "1",
+        "cuenta_id": "mesa_2_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cobro_completado"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T16:44:34.046Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_4_20260314_001",
+        "nombre": "Mesa 4",
+        "numero": 4,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T16:44:34.046Z",
+        "project_id": "1"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T16:44:34.087Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_4_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "1",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 4",
+          "numero": 4,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    }
+  ],
+  "total_eventos": 21,
+  "ultima_actualizacion": "2026-03-14T16:48:38.340Z"
+}

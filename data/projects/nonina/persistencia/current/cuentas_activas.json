@@ -1,0 +1,164 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "nonina",
+  "cuentas": {
+    "llevar_20260315_004": {
+      "cuenta_id": "llevar_20260315_004",
+      "project_id": "nonina",
+      "tipo": "llevar",
+      "origen": "cuentas-canales:llevar",
+      "estado": "listo",
+      "datos_especificos": {
+        "nombre": "004",
+        "cliente_nombre": "Cliente 4",
+        "numero_ticket": 4
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773605916357_0eec112a",
+          "items": [
+            {
+              "item_id": "55c361c7-7bde-4921-8bc3-4bb1839ed954",
+              "producto_id": "pizzicas_cumbia",
+              "nombre": "Cumbia",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Cebolla",
+                "Ternera",
+                "Mezcla de quesos",
+                "Piña",
+                "Salsa Vitorino"
+              ],
+              "created_at": "2026-03-15T20:18:33.365Z",
+              "updated_at": "2026-03-15T20:18:36.357Z"
+            },
+            {
+              "item_id": "6980f964-91b4-4612-b7c1-587700c958aa",
+              "producto_id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ],
+              "created_at": "2026-03-15T20:18:35.578Z",
+              "updated_at": "2026-03-15T20:18:36.357Z"
+            }
+          ],
+          "total": 21.5
+        }
+      ],
+      "total": 21.5,
+      "created_at": "2026-03-15T20:18:26.881Z",
+      "updated_at": "2026-03-15T20:24:39.944Z",
+      "items": 2
+    },
+    "llevar_20260315_005": {
+      "cuenta_id": "llevar_20260315_005",
+      "project_id": "nonina",
+      "tipo": "llevar",
+      "origen": "cuentas-canales:llevar",
+      "estado": "listo",
+      "datos_especificos": {
+        "nombre": "005",
+        "cliente_nombre": "Cliente 5",
+        "numero_ticket": 5
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773606561014_0ebd644a",
+          "items": [
+            {
+              "item_id": "0ade6048-536c-4d3e-952c-571243ab4038",
+              "producto_id": "pizzicas_soul",
+              "nombre": "Soul",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Queso"
+              ],
+              "created_at": "2026-03-15T20:29:20.231Z",
+              "updated_at": "2026-03-15T20:29:21.014Z"
+            }
+          ],
+          "total": 11
+        }
+      ],
+      "total": 11,
+      "created_at": "2026-03-15T20:29:16.401Z",
+      "updated_at": "2026-03-15T20:33:42.922Z",
+      "items": 1
+    },
+    "mesa_14_20260315_001": {
+      "cuenta_id": "mesa_14_20260315_001",
+      "project_id": "nonina",
+      "tipo": "mesa",
+      "origen": "cuentas-canales:mesa",
+      "estado": "listo",
+      "datos_especificos": {
+        "nombre": "Mesa 14",
+        "numero": 14,
+        "camarero": null,
+        "comensales": null
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773606810112_3e74e211",
+          "items": [
+            {
+              "item_id": "a211e141-b610-4a2b-b6e9-7cfeb82ca9b2",
+              "producto_id": "pizzicas_ranchera",
+              "nombre": "Ranchera",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Salsa BBQ"
+              ],
+              "created_at": "2026-03-15T20:33:29.205Z",
+              "updated_at": "2026-03-15T20:33:30.112Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "total": 10.5,
+      "created_at": "2026-03-15T20:33:24.512Z",
+      "updated_at": "2026-03-15T20:37:43.873Z",
+      "items": 1
+    }
+  },
+  "total_cuentas": 3,
+  "ultima_actualizacion": "2026-03-15T20:37:43.880Z"
+}

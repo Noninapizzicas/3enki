@@ -1,0 +1,6045 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "nonina",
+  "eventos": [
+    {
+      "timestamp": "2026-03-14T18:14:52.106Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_5_20260314_001",
+        "nombre": "Mesa 5",
+        "numero": 5,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T18:14:52.106Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T18:14:52.148Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_5_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 5",
+          "numero": 5,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T18:44:52.150Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "alerta": true
+        },
+        "updated_at": "2026-03-14T18:44:52.149Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:44.238Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "alerta": false
+        },
+        "updated_at": "2026-03-14T19:10:44.237Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:44.238Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T19:10:44.237Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:44.280Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T19:10:44.279Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:44.322Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T19:10:44.322Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:47.354Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "mesa_5_20260314_001",
+        "pedido_id": "ped_1773515447353_527021bb",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "89d16202-1e27-46de-8772-cd31f3c891f1",
+            "producto_id": "pizzicas_bachata",
+            "nombre": "Bachata",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T19:10:44.237Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Anchoas",
+              "Alcaparras",
+              "Cebolla",
+              "Olivas"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T19:10:47.353Z",
+            "pedido_id": "ped_1773515447353_527021bb"
+          }
+        ],
+        "total": 10.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T19:10:47.353Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:47.354Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T19:10:47.353Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:47.354Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773515447353_527021bb",
+        "cuenta_id": "mesa_5_20260314_001",
+        "canal": "mesa",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 10.5,
+        "items": [
+          {
+            "item_id": "89d16202-1e27-46de-8772-cd31f3c891f1",
+            "producto_id": "pizzicas_bachata",
+            "nombre": "Bachata",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Anchoas",
+              "Alcaparras",
+              "Cebolla",
+              "Olivas"
+            ],
+            "created_at": "2026-03-14T19:10:44.237Z",
+            "updated_at": "2026-03-14T19:10:47.354Z"
+          }
+        ],
+        "created_at": "2026-03-14T19:10:47.353Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:10:47.396Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T19:10:47.395Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:16:36.874Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_6_20260314_001",
+        "nombre": "Mesa 6",
+        "numero": 6,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T19:16:36.874Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:16:36.916Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_6_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 6",
+          "numero": 6,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:16:40.736Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T19:16:40.736Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:16:40.778Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T19:16:40.778Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:24:01.640Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T19:24:01.640Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:24:01.681Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T19:24:01.681Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:24:01.723Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T19:24:01.723Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:24:02.573Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "mesa_6_20260314_001",
+        "pedido_id": "ped_1773516242573_8abf758b",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "3a0a5c96-c28b-417c-8577-698b3b385f1e",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T19:24:01.639Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T19:24:02.573Z",
+            "pedido_id": "ped_1773516242573_8abf758b"
+          }
+        ],
+        "total": 10.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T19:24:02.573Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:24:02.573Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T19:24:02.573Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:24:02.574Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773516242573_8abf758b",
+        "cuenta_id": "mesa_6_20260314_001",
+        "canal": "mesa",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 10.5,
+        "items": [
+          {
+            "item_id": "3a0a5c96-c28b-417c-8577-698b3b385f1e",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "created_at": "2026-03-14T19:24:01.639Z",
+            "updated_at": "2026-03-14T19:24:02.573Z"
+          }
+        ],
+        "created_at": "2026-03-14T19:24:02.573Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:24:02.615Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T19:24:02.615Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:26:40.688Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_7_20260314_001",
+        "nombre": "Mesa 7",
+        "numero": 7,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T19:26:40.688Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:26:40.730Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_7_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 7",
+          "numero": 7,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:28:57.100Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T19:28:57.099Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:28:57.141Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T19:28:57.141Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:48:03.089Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_8_20260314_001",
+        "nombre": "Mesa 8",
+        "numero": 8,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T19:48:03.089Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:48:03.131Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_8_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 8",
+          "numero": 8,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:48:37.999Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T19:48:37.999Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:48:38.040Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T19:48:38.040Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:48:38.082Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T19:48:38.082Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:48:47.049Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "items": 2,
+          "total": 21
+        },
+        "updated_at": "2026-03-14T19:48:47.049Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:48:47.050Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "items": 3,
+          "total": 31.5
+        },
+        "updated_at": "2026-03-14T19:48:47.049Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:12.158Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "items": 4,
+          "total": 42.5
+        },
+        "updated_at": "2026-03-14T19:49:12.158Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:20.766Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "items": 3,
+          "total": 32
+        },
+        "updated_at": "2026-03-14T19:49:20.766Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:41.236Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "mesa_8_20260314_001",
+        "pedido_id": "ped_1773517781235_0ba7c2c7",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "cbde324f-97d7-420a-936d-657e08cc9e11",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T19:48:37.998Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T19:49:41.235Z",
+            "pedido_id": "ped_1773517781235_0ba7c2c7"
+          },
+          {
+            "id": "0a0c974e-04c9-4a8f-bf28-5c2cf90bdfa3",
+            "producto_id": "pizzicas_k_pop",
+            "nombre": "K-Pop",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T19:48:47.049Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Huevo"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T19:49:41.235Z",
+            "pedido_id": "ped_1773517781235_0ba7c2c7"
+          },
+          {
+            "id": "1f376801-8b8c-44e8-b259-dd171dba88a4",
+            "producto_id": "pizzicas_folk",
+            "nombre": "Folk",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T19:49:12.157Z",
+            "ingredientes_base": [
+              "Tomate seco",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Salsa de ajo asado y trufa",
+              "Anchoas"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T19:49:41.235Z",
+            "pedido_id": "ped_1773517781235_0ba7c2c7"
+          }
+        ],
+        "total": 32,
+        "notas_generales": "",
+        "created_at": "2026-03-14T19:49:41.235Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:41.236Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T19:49:41.236Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:41.236Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773517781235_0ba7c2c7",
+        "cuenta_id": "mesa_8_20260314_001",
+        "canal": "mesa",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 32,
+        "items": [
+          {
+            "item_id": "cbde324f-97d7-420a-936d-657e08cc9e11",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "created_at": "2026-03-14T19:48:37.998Z",
+            "updated_at": "2026-03-14T19:49:41.236Z"
+          },
+          {
+            "item_id": "0a0c974e-04c9-4a8f-bf28-5c2cf90bdfa3",
+            "producto_id": "pizzicas_k_pop",
+            "nombre": "K-Pop",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Huevo"
+            ],
+            "created_at": "2026-03-14T19:48:47.049Z",
+            "updated_at": "2026-03-14T19:49:41.236Z"
+          },
+          {
+            "item_id": "1f376801-8b8c-44e8-b259-dd171dba88a4",
+            "producto_id": "pizzicas_folk",
+            "nombre": "Folk",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate seco",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Salsa de ajo asado y trufa",
+              "Anchoas"
+            ],
+            "created_at": "2026-03-14T19:49:12.157Z",
+            "updated_at": "2026-03-14T19:49:41.236Z"
+          }
+        ],
+        "created_at": "2026-03-14T19:49:41.235Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:41.277Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T19:49:41.277Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:52.432Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_9_20260314_001",
+        "nombre": "Mesa 9",
+        "numero": 9,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T19:49:52.431Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:52.473Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_9_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 9",
+          "numero": 9,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:58.483Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T19:49:58.483Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:58.524Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T19:49:58.524Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:58.565Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T19:49:58.565Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:59.270Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "mesa_9_20260314_001",
+        "pedido_id": "ped_1773517799270_3e522f68",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "42699bc6-0813-42ee-b491-b505dc864558",
+            "producto_id": "pizzicas_vallenato",
+            "nombre": "Vallenato",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T19:49:58.482Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Piña"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T19:49:59.270Z",
+            "pedido_id": "ped_1773517799270_3e522f68"
+          }
+        ],
+        "total": 10.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T19:49:59.270Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:59.271Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T19:49:59.270Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:59.271Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773517799270_3e522f68",
+        "cuenta_id": "mesa_9_20260314_001",
+        "canal": "mesa",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 10.5,
+        "items": [
+          {
+            "item_id": "42699bc6-0813-42ee-b491-b505dc864558",
+            "producto_id": "pizzicas_vallenato",
+            "nombre": "Vallenato",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Piña"
+            ],
+            "created_at": "2026-03-14T19:49:58.482Z",
+            "updated_at": "2026-03-14T19:49:59.270Z"
+          }
+        ],
+        "created_at": "2026-03-14T19:49:59.270Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:49:59.312Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T19:49:59.312Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:53:35.648Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T19:53:35.648Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:53:35.690Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T19:53:35.690Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T19:56:40.732Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_7_20260314_001",
+        "cambios": {
+          "alerta": true
+        },
+        "updated_at": "2026-03-14T19:56:40.732Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:00:22.421Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T20:00:22.421Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:00:22.461Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T20:00:22.461Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:09:03.211Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_001",
+        "numero_ticket": 1,
+        "cliente_nombre": "Cliente 1",
+        "hora_creacion": "2026-03-14T20:09:03.211Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:09:03.252Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_001",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "001",
+          "cliente_nombre": "Cliente 1",
+          "numero_ticket": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:09:12.815Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T20:09:12.815Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:09:12.855Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T20:09:12.855Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:09:12.896Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T20:09:12.896Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:03.785Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "items": 2,
+          "total": 21.5
+        },
+        "updated_at": "2026-03-14T20:11:03.785Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:18.090Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "items": 3,
+          "total": 32.5
+        },
+        "updated_at": "2026-03-14T20:11:18.090Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:36.352Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "items": 4,
+          "total": 43
+        },
+        "updated_at": "2026-03-14T20:11:36.352Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:38.539Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "items": 3,
+          "total": 32
+        },
+        "updated_at": "2026-03-14T20:11:38.539Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:41.614Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_001",
+        "pedido_id": "ped_1773519101614_55c1b3dc",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "f0055561-219e-49af-99ec-0b3e768ede51",
+            "producto_id": "pizzicas_the_veggie_symphony",
+            "nombre": "The Veggie Symphony",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:09:12.815Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Calabacín",
+              "Espárragos",
+              "Pimiento verde"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:11:41.614Z",
+            "pedido_id": "ped_1773519101614_55c1b3dc"
+          },
+          {
+            "id": "f51959cf-4295-455b-84be-9e72169bea10",
+            "producto_id": "pizzicas_rb_rhythm_and_blues",
+            "nombre": "R&B (Rhythm and Blues)",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": {
+              "ingredientes_quitar": [
+                "Tomate"
+              ],
+              "ingredientes_anadir": []
+            },
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T20:11:18.090Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Carne de ternera",
+              "Bacon",
+              "Queso",
+              "Salsa BBQ"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:11:41.614Z",
+            "pedido_id": "ped_1773519101614_55c1b3dc"
+          },
+          {
+            "id": "4e1f2acb-5325-44c0-9734-506aee144c8f",
+            "producto_id": "pizzicas_chillout",
+            "nombre": "Chillout",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": {
+              "ingredientes_quitar": [
+                "Cebolla"
+              ],
+              "ingredientes_anadir": [
+                {
+                  "nombre": "Jamón York",
+                  "cantidad": 1,
+                  "precio_extra": 0
+                }
+              ]
+            },
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:11:36.351Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Atún",
+              "Cebolla"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:11:41.614Z",
+            "pedido_id": "ped_1773519101614_55c1b3dc"
+          }
+        ],
+        "total": 32,
+        "notas_generales": "",
+        "created_at": "2026-03-14T20:11:41.614Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:41.615Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T20:11:41.614Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:41.615Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773519101614_55c1b3dc",
+        "cuenta_id": "llevar_20260314_001",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 32,
+        "items": [
+          {
+            "item_id": "f0055561-219e-49af-99ec-0b3e768ede51",
+            "producto_id": "pizzicas_the_veggie_symphony",
+            "nombre": "The Veggie Symphony",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Calabacín",
+              "Espárragos",
+              "Pimiento verde"
+            ],
+            "created_at": "2026-03-14T20:09:12.815Z",
+            "updated_at": "2026-03-14T20:11:41.614Z"
+          },
+          {
+            "item_id": "f51959cf-4295-455b-84be-9e72169bea10",
+            "producto_id": "pizzicas_rb_rhythm_and_blues",
+            "nombre": "R&B (Rhythm and Blues)",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": {
+              "ingredientes_quitar": [
+                "Tomate"
+              ],
+              "ingredientes_anadir": []
+            },
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Carne de ternera",
+              "Bacon",
+              "Queso",
+              "Salsa BBQ"
+            ],
+            "created_at": "2026-03-14T20:11:18.090Z",
+            "updated_at": "2026-03-14T20:11:41.614Z"
+          },
+          {
+            "item_id": "4e1f2acb-5325-44c0-9734-506aee144c8f",
+            "producto_id": "pizzicas_chillout",
+            "nombre": "Chillout",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": {
+              "ingredientes_quitar": [
+                "Cebolla"
+              ],
+              "ingredientes_anadir": [
+                {
+                  "nombre": "Jamón York",
+                  "cantidad": 1,
+                  "precio_extra": 0
+                }
+              ]
+            },
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Atún",
+              "Cebolla"
+            ],
+            "created_at": "2026-03-14T20:11:36.351Z",
+            "updated_at": "2026-03-14T20:11:41.614Z"
+          }
+        ],
+        "created_at": "2026-03-14T20:11:41.614Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:11:41.656Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T20:11:41.656Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:20:59.495Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T20:20:59.495Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:20:59.536Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T20:20:59.536Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:20:59.620Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T20:20:59.619Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:20:59.661Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "estado_anterior": "para_cobrar",
+        "estado_nuevo": "cobrado",
+        "changed_at": "2026-03-14T20:20:59.661Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:20:59.661Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:20:59.703Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "cambios": {
+          "estado": "cobrado"
+        },
+        "updated_at": "2026-03-14T20:20:59.703Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:16.643Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T20:21:16.643Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:16.685Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T20:21:16.685Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:16.727Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T20:21:16.727Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:16.769Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "estado_anterior": "para_cobrar",
+        "estado_nuevo": "cobrado",
+        "changed_at": "2026-03-14T20:21:16.769Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:16.769Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:16.811Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "cambios": {
+          "estado": "cobrado"
+        },
+        "updated_at": "2026-03-14T20:21:16.811Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:18.170Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_7_20260314_001",
+        "tipo": "mesa",
+        "motivo": "eliminacion_manual"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:31.929Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_002",
+        "numero_ticket": 2,
+        "cliente_nombre": "Cliente 2",
+        "hora_creacion": "2026-03-14T20:21:31.929Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:31.971Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_002",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "002",
+          "cliente_nombre": "Cliente 2",
+          "numero_ticket": 2
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:35.101Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T20:21:35.101Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:35.142Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T20:21:35.142Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:35.183Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "cambios": {
+          "items": 1,
+          "total": 11
+        },
+        "updated_at": "2026-03-14T20:21:35.183Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:39.033Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_002",
+        "pedido_id": "ped_1773519699032_6639616f",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "ec95b607-3311-48d3-97cc-03ddc9bf360d",
+            "producto_id": "pizzicas_blues",
+            "nombre": "Blues",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T20:21:35.100Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso",
+              "Atún",
+              "Cebolla",
+              "Salsa de mostaza"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:21:39.032Z",
+            "pedido_id": "ped_1773519699032_6639616f"
+          }
+        ],
+        "total": 11,
+        "notas_generales": "",
+        "created_at": "2026-03-14T20:21:39.032Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:39.033Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T20:21:39.033Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:39.033Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773519699032_6639616f",
+        "cuenta_id": "llevar_20260314_002",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 11,
+        "items": [
+          {
+            "item_id": "ec95b607-3311-48d3-97cc-03ddc9bf360d",
+            "producto_id": "pizzicas_blues",
+            "nombre": "Blues",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso",
+              "Atún",
+              "Cebolla",
+              "Salsa de mostaza"
+            ],
+            "created_at": "2026-03-14T20:21:35.100Z",
+            "updated_at": "2026-03-14T20:21:39.033Z"
+          }
+        ],
+        "created_at": "2026-03-14T20:21:39.032Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:39.074Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T20:21:39.074Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:52.859Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_003",
+        "numero_ticket": 3,
+        "cliente_nombre": "Cliente 3",
+        "hora_creacion": "2026-03-14T20:21:52.859Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:21:52.901Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_003",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "003",
+          "cliente_nombre": "Cliente 3",
+          "numero_ticket": 3
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:03.443Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T20:22:03.443Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:03.484Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T20:22:03.484Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:03.527Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T20:22:03.527Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:29.640Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T20:22:29.640Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:29.681Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T20:22:29.681Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:29.723Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T20:22:29.723Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:29.764Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "estado_anterior": "para_cobrar",
+        "estado_nuevo": "cobrado",
+        "changed_at": "2026-03-14T20:22:29.764Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:29.764Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:29.806Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "cambios": {
+          "estado": "cobrado"
+        },
+        "updated_at": "2026-03-14T20:22:29.806Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:33.556Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T20:22:33.555Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:33.597Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T20:22:33.597Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:33.639Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T20:22:33.638Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:33.680Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "estado_anterior": "para_cobrar",
+        "estado_nuevo": "cobrado",
+        "changed_at": "2026-03-14T20:22:33.680Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:33.680Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:22:33.723Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "cambios": {
+          "estado": "cobrado"
+        },
+        "updated_at": "2026-03-14T20:22:33.723Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:23:46.398Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T20:23:46.398Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:23:46.439Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T20:23:46.439Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:25:59.705Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_5_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cobro_completado"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:26:16.813Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_6_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cobro_completado"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:27:29.808Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_8_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cobro_completado"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:27:33.726Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_9_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cobro_completado"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:30:44.740Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T20:30:44.740Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:30:44.782Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T20:30:44.782Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:25.998Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_004",
+        "numero_ticket": 4,
+        "cliente_nombre": "Cliente 4",
+        "hora_creacion": "2026-03-14T20:35:25.998Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:26.040Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_004",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "004",
+          "cliente_nombre": "Cliente 4",
+          "numero_ticket": 4
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:37.741Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T20:35:37.741Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:37.783Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T20:35:37.783Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:37.826Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T20:35:37.826Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:41.244Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "items": 2,
+          "total": 21
+        },
+        "updated_at": "2026-03-14T20:35:41.244Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:47.320Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "items": 3,
+          "total": 30.5
+        },
+        "updated_at": "2026-03-14T20:35:47.320Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:51.129Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_004",
+        "pedido_id": "ped_1773520551128_d0f9202c",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "957e5ec4-ec22-4dcd-bf6a-385197865418",
+            "producto_id": "pizzicas_the_veggie_symphony",
+            "nombre": "The Veggie Symphony",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:35:37.741Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Calabacín",
+              "Espárragos",
+              "Pimiento verde"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:35:51.128Z",
+            "pedido_id": "ped_1773520551128_d0f9202c"
+          },
+          {
+            "id": "91ef9833-7fca-4745-b0f8-601afb760eae",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:35:41.243Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:35:51.128Z",
+            "pedido_id": "ped_1773520551128_d0f9202c"
+          },
+          {
+            "id": "260e20c0-fa30-4c19-bb89-fac8207d3095",
+            "producto_id": "pizzicas_fandango",
+            "nombre": "Fandango",
+            "precio": 9.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 9.5,
+            "created_at": "2026-03-14T20:35:47.320Z",
+            "ingredientes_base": [
+              "Ajo",
+              "Mozzarella",
+              "Queso azul"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:35:51.128Z",
+            "pedido_id": "ped_1773520551128_d0f9202c"
+          }
+        ],
+        "total": 30.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T20:35:51.128Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:51.129Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T20:35:51.129Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:51.129Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773520551128_d0f9202c",
+        "cuenta_id": "llevar_20260314_004",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 30.5,
+        "items": [
+          {
+            "item_id": "957e5ec4-ec22-4dcd-bf6a-385197865418",
+            "producto_id": "pizzicas_the_veggie_symphony",
+            "nombre": "The Veggie Symphony",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Calabacín",
+              "Espárragos",
+              "Pimiento verde"
+            ],
+            "created_at": "2026-03-14T20:35:37.741Z",
+            "updated_at": "2026-03-14T20:35:51.129Z"
+          },
+          {
+            "item_id": "91ef9833-7fca-4745-b0f8-601afb760eae",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "created_at": "2026-03-14T20:35:41.243Z",
+            "updated_at": "2026-03-14T20:35:51.129Z"
+          },
+          {
+            "item_id": "260e20c0-fa30-4c19-bb89-fac8207d3095",
+            "producto_id": "pizzicas_fandango",
+            "nombre": "Fandango",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 9.5,
+            "precio_total": 9.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Ajo",
+              "Mozzarella",
+              "Queso azul"
+            ],
+            "created_at": "2026-03-14T20:35:47.320Z",
+            "updated_at": "2026-03-14T20:35:51.129Z"
+          }
+        ],
+        "created_at": "2026-03-14T20:35:51.128Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:35:51.170Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T20:35:51.170Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:39:41.389Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_10_20260314_001",
+        "nombre": "Mesa 10",
+        "numero": 10,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T20:39:41.388Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:39:41.430Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_10_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 10",
+          "numero": 10,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:41:47.317Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T20:41:47.317Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:41:47.358Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T20:41:47.358Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:41:47.400Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "items": 1,
+          "total": 11
+        },
+        "updated_at": "2026-03-14T20:41:47.400Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:42:00.957Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "items": 2,
+          "total": 22
+        },
+        "updated_at": "2026-03-14T20:42:00.957Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:42:10.911Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "items": 3,
+          "total": 33
+        },
+        "updated_at": "2026-03-14T20:42:10.911Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:42:39.864Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "items": 4,
+          "total": 43.5
+        },
+        "updated_at": "2026-03-14T20:42:39.864Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:42:57.535Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "items": 5,
+          "total": 54.5
+        },
+        "updated_at": "2026-03-14T20:42:57.535Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:43:00.163Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "items": 6,
+          "total": 65.5
+        },
+        "updated_at": "2026-03-14T20:43:00.163Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:43:04.876Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "items": 5,
+          "total": 54.5
+        },
+        "updated_at": "2026-03-14T20:43:04.876Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:43:07.425Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "mesa_10_20260314_001",
+        "pedido_id": "ped_1773520987424_6d85899e",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "0f09dac4-429e-4e38-b77b-3cd74a9d17e2",
+            "producto_id": "pizzicas_swing",
+            "nombre": "½ Swing + ½ Folk",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T20:42:00.957Z",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_swing",
+              "nombre": "Swing",
+              "ingredientes_base": [
+                "Crema de champiñones",
+                "Nata",
+                "Pimienta",
+                "Queso azul",
+                "York",
+                "Mezcla de quesos"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_folk",
+              "nombre": "Folk",
+              "ingredientes_base": [
+                "Tomate seco",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Salsa de ajo asado y trufa",
+                "Anchoas"
+              ]
+            },
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:43:07.424Z",
+            "pedido_id": "ped_1773520987424_6d85899e"
+          },
+          {
+            "id": "7c43490b-8bf0-47d8-8ec0-e0e3bf878662",
+            "producto_id": "pizzicas_folk",
+            "nombre": "½ Folk + ½ Rockabilly",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T20:42:10.911Z",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_folk",
+              "nombre": "Folk",
+              "ingredientes_base": [
+                "Tomate seco",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Salsa de ajo asado y trufa",
+                "Anchoas"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ]
+            },
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:43:07.424Z",
+            "pedido_id": "ped_1773520987424_6d85899e"
+          },
+          {
+            "id": "29230084-673a-428c-a59e-3d08d48a7d7e",
+            "producto_id": "pizzicas_merengue",
+            "nombre": "½ Merengue + ½ Bachata",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:42:39.863Z",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_merengue",
+              "nombre": "Merengue",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Bacon"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_bachata",
+              "nombre": "Bachata",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Anchoas",
+                "Alcaparras",
+                "Cebolla",
+                "Olivas"
+              ]
+            },
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:43:07.424Z",
+            "pedido_id": "ped_1773520987424_6d85899e"
+          },
+          {
+            "id": "57afffa7-6195-4557-8646-4663a8d5fefb",
+            "producto_id": "pizzicas_swing",
+            "nombre": "Swing",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T20:42:57.535Z",
+            "ingredientes_base": [
+              "Crema de champiñones",
+              "Nata",
+              "Pimienta",
+              "Queso azul",
+              "York",
+              "Mezcla de quesos"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:43:07.424Z",
+            "pedido_id": "ped_1773520987424_6d85899e"
+          },
+          {
+            "id": "dfc42600-b71f-474c-9abd-9da60b77cd75",
+            "producto_id": "pizzicas_soul",
+            "nombre": "Soul",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T20:43:00.163Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:43:07.424Z",
+            "pedido_id": "ped_1773520987424_6d85899e"
+          }
+        ],
+        "total": 54.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T20:43:07.424Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:43:07.425Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T20:43:07.425Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:43:07.425Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773520987424_6d85899e",
+        "cuenta_id": "mesa_10_20260314_001",
+        "canal": "mesa",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 54.5,
+        "items": [
+          {
+            "item_id": "0f09dac4-429e-4e38-b77b-3cd74a9d17e2",
+            "producto_id": "pizzicas_swing",
+            "nombre": "½ Swing + ½ Folk",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_swing",
+              "nombre": "Swing",
+              "ingredientes_base": [
+                "Crema de champiñones",
+                "Nata",
+                "Pimienta",
+                "Queso azul",
+                "York",
+                "Mezcla de quesos"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_folk",
+              "nombre": "Folk",
+              "ingredientes_base": [
+                "Tomate seco",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Salsa de ajo asado y trufa",
+                "Anchoas"
+              ]
+            },
+            "created_at": "2026-03-14T20:42:00.957Z",
+            "updated_at": "2026-03-14T20:43:07.425Z"
+          },
+          {
+            "item_id": "7c43490b-8bf0-47d8-8ec0-e0e3bf878662",
+            "producto_id": "pizzicas_folk",
+            "nombre": "½ Folk + ½ Rockabilly",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_folk",
+              "nombre": "Folk",
+              "ingredientes_base": [
+                "Tomate seco",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Salsa de ajo asado y trufa",
+                "Anchoas"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ]
+            },
+            "created_at": "2026-03-14T20:42:10.911Z",
+            "updated_at": "2026-03-14T20:43:07.425Z"
+          },
+          {
+            "item_id": "29230084-673a-428c-a59e-3d08d48a7d7e",
+            "producto_id": "pizzicas_merengue",
+            "nombre": "½ Merengue + ½ Bachata",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_merengue",
+              "nombre": "Merengue",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Bacon"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_bachata",
+              "nombre": "Bachata",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Anchoas",
+                "Alcaparras",
+                "Cebolla",
+                "Olivas"
+              ]
+            },
+            "created_at": "2026-03-14T20:42:39.863Z",
+            "updated_at": "2026-03-14T20:43:07.425Z"
+          },
+          {
+            "item_id": "57afffa7-6195-4557-8646-4663a8d5fefb",
+            "producto_id": "pizzicas_swing",
+            "nombre": "Swing",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Crema de champiñones",
+              "Nata",
+              "Pimienta",
+              "Queso azul",
+              "York",
+              "Mezcla de quesos"
+            ],
+            "created_at": "2026-03-14T20:42:57.535Z",
+            "updated_at": "2026-03-14T20:43:07.425Z"
+          },
+          {
+            "item_id": "dfc42600-b71f-474c-9abd-9da60b77cd75",
+            "producto_id": "pizzicas_soul",
+            "nombre": "Soul",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso"
+            ],
+            "created_at": "2026-03-14T20:43:00.163Z",
+            "updated_at": "2026-03-14T20:43:07.425Z"
+          }
+        ],
+        "created_at": "2026-03-14T20:43:07.424Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:43:07.466Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T20:43:07.466Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:19.944Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_005",
+        "numero_ticket": 5,
+        "cliente_nombre": "Cliente 5",
+        "hora_creacion": "2026-03-14T20:45:19.944Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:19.986Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_005",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "005",
+          "cliente_nombre": "Cliente 5",
+          "numero_ticket": 5
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:24.853Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T20:45:24.853Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:24.895Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T20:45:24.895Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:24.936Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T20:45:24.936Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:34.525Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "cambios": {
+          "items": 2,
+          "total": 21
+        },
+        "updated_at": "2026-03-14T20:45:34.525Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:41.155Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_005",
+        "pedido_id": "ped_1773521141155_803cb262",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "e33c8c63-8bf2-426b-b44a-4940b7a9493b",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:45:24.853Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:45:41.155Z",
+            "pedido_id": "ped_1773521141155_803cb262"
+          },
+          {
+            "id": "89539ec1-4812-4181-b554-1a1eab3a3966",
+            "producto_id": "pizzicas_ranchera",
+            "nombre": "Ranchera",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:45:34.525Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Salsa BBQ"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:45:41.155Z",
+            "pedido_id": "ped_1773521141155_803cb262"
+          }
+        ],
+        "total": 21,
+        "notas_generales": "",
+        "created_at": "2026-03-14T20:45:41.155Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:41.155Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T20:45:41.155Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:41.155Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773521141155_803cb262",
+        "cuenta_id": "llevar_20260314_005",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 21,
+        "items": [
+          {
+            "item_id": "e33c8c63-8bf2-426b-b44a-4940b7a9493b",
+            "producto_id": "pizzicas_rockabilly",
+            "nombre": "Rockabilly",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Nata"
+            ],
+            "created_at": "2026-03-14T20:45:24.853Z",
+            "updated_at": "2026-03-14T20:45:41.155Z"
+          },
+          {
+            "item_id": "89539ec1-4812-4181-b554-1a1eab3a3966",
+            "producto_id": "pizzicas_ranchera",
+            "nombre": "Ranchera",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Bacon",
+              "Cebolla",
+              "Salsa BBQ"
+            ],
+            "created_at": "2026-03-14T20:45:34.525Z",
+            "updated_at": "2026-03-14T20:45:41.155Z"
+          }
+        ],
+        "created_at": "2026-03-14T20:45:41.155Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:45:41.197Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T20:45:41.197Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:07.254Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T20:46:07.253Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:07.295Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T20:46:07.295Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:07.337Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T20:46:07.336Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:09.460Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_001",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:23.624Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T20:46:23.624Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:23.665Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T20:46:23.665Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:23.708Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T20:46:23.708Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:25.058Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_002",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:46:31.383Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T20:46:31.382Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:51:06.653Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T20:51:06.653Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:51:06.694Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T20:51:06.694Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:51.550Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_006",
+        "numero_ticket": 6,
+        "cliente_nombre": "Cliente 6",
+        "hora_creacion": "2026-03-14T20:53:51.550Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:51.591Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_006",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "006",
+          "cliente_nombre": "Cliente 6",
+          "numero_ticket": 6
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:57.365Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T20:53:57.365Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:57.406Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T20:53:57.405Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:57.447Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "cambios": {
+          "items": 1,
+          "total": 11
+        },
+        "updated_at": "2026-03-14T20:53:57.447Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:58.372Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_006",
+        "pedido_id": "ped_1773521638371_d2b301f2",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "e42da471-22d8-4033-81bd-58d19841a65d",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "½ Batucada + ½ Cumbia",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T20:53:57.365Z",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_cumbia",
+              "nombre": "Cumbia",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Cebolla",
+                "Ternera",
+                "Mezcla de quesos",
+                "Piña",
+                "Salsa Vitorino"
+              ]
+            },
+            "enviado": true,
+            "enviado_at": "2026-03-14T20:53:58.371Z",
+            "pedido_id": "ped_1773521638371_d2b301f2"
+          }
+        ],
+        "total": 11,
+        "notas_generales": "",
+        "created_at": "2026-03-14T20:53:58.371Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:58.372Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T20:53:58.371Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:58.372Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773521638371_d2b301f2",
+        "cuenta_id": "llevar_20260314_006",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 11,
+        "items": [
+          {
+            "item_id": "e42da471-22d8-4033-81bd-58d19841a65d",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "½ Batucada + ½ Cumbia",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_cumbia",
+              "nombre": "Cumbia",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Cebolla",
+                "Ternera",
+                "Mezcla de quesos",
+                "Piña",
+                "Salsa Vitorino"
+              ]
+            },
+            "created_at": "2026-03-14T20:53:57.365Z",
+            "updated_at": "2026-03-14T20:53:58.372Z"
+          }
+        ],
+        "created_at": "2026-03-14T20:53:58.371Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T20:53:58.413Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T20:53:58.413Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:00:20.158Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:00:20.158Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:00:20.200Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:00:20.200Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:06:42.235Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:06:42.235Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:06:42.277Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:06:42.277Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:29.752Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_007",
+        "numero_ticket": 7,
+        "cliente_nombre": "Cliente 7",
+        "hora_creacion": "2026-03-14T21:10:29.752Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:29.794Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_007",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "007",
+          "cliente_nombre": "Cliente 7",
+          "numero_ticket": 7
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:33.440Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T21:10:33.440Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:33.481Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T21:10:33.481Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:33.522Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T21:10:33.522Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:34.168Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_007",
+        "pedido_id": "ped_1773522634167_ccd783e6",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "71e486fe-2769-4312-acda-21c829d4dbe4",
+            "producto_id": "pizzicas_vallenato",
+            "nombre": "Vallenato",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T21:10:33.439Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Piña"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:10:34.167Z",
+            "pedido_id": "ped_1773522634167_ccd783e6"
+          }
+        ],
+        "total": 10.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T21:10:34.167Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:34.168Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T21:10:34.168Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:34.168Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773522634167_ccd783e6",
+        "cuenta_id": "llevar_20260314_007",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 10.5,
+        "items": [
+          {
+            "item_id": "71e486fe-2769-4312-acda-21c829d4dbe4",
+            "producto_id": "pizzicas_vallenato",
+            "nombre": "Vallenato",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Piña"
+            ],
+            "created_at": "2026-03-14T21:10:33.439Z",
+            "updated_at": "2026-03-14T21:10:34.168Z"
+          }
+        ],
+        "created_at": "2026-03-14T21:10:34.167Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:10:34.209Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T21:10:34.209Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:38.659Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_008",
+        "numero_ticket": 8,
+        "cliente_nombre": "Cliente 8",
+        "hora_creacion": "2026-03-14T21:13:38.659Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:38.701Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_008",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "008",
+          "cliente_nombre": "Cliente 8",
+          "numero_ticket": 8
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:40.338Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T21:13:40.338Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:40.378Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T21:13:40.378Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:40.420Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T21:13:40.420Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:44.055Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "cambios": {
+          "items": 2,
+          "total": 21
+        },
+        "updated_at": "2026-03-14T21:13:44.055Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:50.348Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_008",
+        "pedido_id": "ped_1773522830348_167891ff",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "ef03855d-30e6-4e80-ac9a-6af99549a891",
+            "producto_id": "pizzicas_the_veggie_symphony",
+            "nombre": "The Veggie Symphony",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T21:13:40.338Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Calabacín",
+              "Espárragos",
+              "Pimiento verde"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:13:50.348Z",
+            "pedido_id": "ped_1773522830348_167891ff"
+          },
+          {
+            "id": "2f822143-47be-4935-8fa3-0329fe82fdda",
+            "producto_id": "pizzicas_jazz",
+            "nombre": "Jazz",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T21:13:44.054Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso",
+              "Jamón York",
+              "Champiñones"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:13:50.348Z",
+            "pedido_id": "ped_1773522830348_167891ff"
+          }
+        ],
+        "total": 21,
+        "notas_generales": "",
+        "created_at": "2026-03-14T21:13:50.348Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:50.348Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T21:13:50.348Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:50.348Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773522830348_167891ff",
+        "cuenta_id": "llevar_20260314_008",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 21,
+        "items": [
+          {
+            "item_id": "ef03855d-30e6-4e80-ac9a-6af99549a891",
+            "producto_id": "pizzicas_the_veggie_symphony",
+            "nombre": "The Veggie Symphony",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Calabacín",
+              "Espárragos",
+              "Pimiento verde"
+            ],
+            "created_at": "2026-03-14T21:13:40.338Z",
+            "updated_at": "2026-03-14T21:13:50.348Z"
+          },
+          {
+            "item_id": "2f822143-47be-4935-8fa3-0329fe82fdda",
+            "producto_id": "pizzicas_jazz",
+            "nombre": "Jazz",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso",
+              "Jamón York",
+              "Champiñones"
+            ],
+            "created_at": "2026-03-14T21:13:44.054Z",
+            "updated_at": "2026-03-14T21:13:50.348Z"
+          }
+        ],
+        "created_at": "2026-03-14T21:13:50.348Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:13:50.388Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T21:13:50.388Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:15:42.960Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:15:42.960Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:15:43.001Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:15:43.000Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:18:16.324Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:18:16.324Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:18:16.366Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:18:16.366Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:21:28.659Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_009",
+        "numero_ticket": 9,
+        "cliente_nombre": "Cliente 9",
+        "hora_creacion": "2026-03-14T21:21:28.659Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:21:28.700Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_009",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "009",
+          "cliente_nombre": "Cliente 9",
+          "numero_ticket": 9
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:08.018Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_009",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T21:22:08.018Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:08.060Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_009",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T21:22:08.060Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:08.102Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_009",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T21:22:08.102Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:36.749Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_010",
+        "numero_ticket": 10,
+        "cliente_nombre": "Cliente 10",
+        "hora_creacion": "2026-03-14T21:22:36.749Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:36.791Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_010",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "010",
+          "cliente_nombre": "Cliente 10",
+          "numero_ticket": 10
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:40.639Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T21:22:40.639Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:40.680Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T21:22:40.680Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:40.723Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T21:22:40.723Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:41.264Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_010",
+        "pedido_id": "ped_1773523361264_0702ad9b",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "c1ead1c0-176c-4bdb-9bee-b6fe24b8c31d",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "Batucada",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T21:22:40.639Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Queso azul",
+              "Mezcla de quesos",
+              "Nata"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:22:41.264Z",
+            "pedido_id": "ped_1773523361264_0702ad9b"
+          }
+        ],
+        "total": 10.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T21:22:41.264Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:41.264Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T21:22:41.264Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:41.264Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773523361264_0702ad9b",
+        "cuenta_id": "llevar_20260314_010",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 10.5,
+        "items": [
+          {
+            "item_id": "c1ead1c0-176c-4bdb-9bee-b6fe24b8c31d",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "Batucada",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Queso azul",
+              "Mezcla de quesos",
+              "Nata"
+            ],
+            "created_at": "2026-03-14T21:22:40.639Z",
+            "updated_at": "2026-03-14T21:22:41.264Z"
+          }
+        ],
+        "created_at": "2026-03-14T21:22:41.264Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:22:41.305Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T21:22:41.305Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:28:33.827Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:28:33.827Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:28:33.869Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:28:33.869Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:29:56.910Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:29:56.910Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:29:56.951Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:29:56.950Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:06.883Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "items": 2,
+          "total": 22
+        },
+        "updated_at": "2026-03-14T21:31:06.883Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:07.365Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_003",
+        "pedido_id": "ped_1773523867365_066b3018",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "7bd844ea-684b-4485-ae2e-761661c80f7f",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "½ Batucada + ½ Ranchera",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T20:22:03.442Z",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_ranchera",
+              "nombre": "Ranchera",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Salsa BBQ"
+              ]
+            },
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:31:07.365Z",
+            "pedido_id": "ped_1773523867365_066b3018"
+          },
+          {
+            "id": "c00f72a5-65c6-4cf1-9da6-db1e62e6bbee",
+            "producto_id": "pizzicas_country",
+            "nombre": "Country",
+            "precio": 11.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11.5,
+            "created_at": "2026-03-14T21:31:06.883Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Salsa BBQ",
+              "Nata",
+              "Pollo",
+              "Mezcla de quesos",
+              "Cebolla",
+              "Bacon"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:31:07.365Z",
+            "pedido_id": "ped_1773523867365_066b3018"
+          }
+        ],
+        "total": 22,
+        "notas_generales": "",
+        "created_at": "2026-03-14T21:31:07.365Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:07.365Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T21:31:07.365Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:07.365Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773523867365_066b3018",
+        "cuenta_id": "llevar_20260314_003",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 22,
+        "items": [
+          {
+            "item_id": "7bd844ea-684b-4485-ae2e-761661c80f7f",
+            "producto_id": "pizzicas_batucada",
+            "nombre": "½ Batucada + ½ Ranchera",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "tipo": "mitad_mitad",
+            "pizza_izquierda": {
+              "id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ]
+            },
+            "pizza_derecha": {
+              "id": "pizzicas_ranchera",
+              "nombre": "Ranchera",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Salsa BBQ"
+              ]
+            },
+            "created_at": "2026-03-14T20:22:03.442Z",
+            "updated_at": "2026-03-14T21:31:07.365Z"
+          },
+          {
+            "item_id": "c00f72a5-65c6-4cf1-9da6-db1e62e6bbee",
+            "producto_id": "pizzicas_country",
+            "nombre": "Country",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11.5,
+            "precio_total": 11.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Salsa BBQ",
+              "Nata",
+              "Pollo",
+              "Mezcla de quesos",
+              "Cebolla",
+              "Bacon"
+            ],
+            "created_at": "2026-03-14T21:31:06.883Z",
+            "updated_at": "2026-03-14T21:31:07.365Z"
+          }
+        ],
+        "created_at": "2026-03-14T21:31:07.365Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:07.407Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T21:31:07.407Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:40.310Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T21:31:40.310Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:40.352Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T21:31:40.352Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:40.395Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T21:31:40.395Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:40.436Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "estado_anterior": "para_cobrar",
+        "estado_nuevo": "cobrado",
+        "changed_at": "2026-03-14T21:31:40.436Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:40.436Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:40.479Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "cambios": {
+          "estado": "cobrado"
+        },
+        "updated_at": "2026-03-14T21:31:40.479Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:53.543Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "items": 1,
+          "total": 11.5
+        },
+        "updated_at": "2026-03-14T21:31:53.543Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:31:54.239Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "items": 0,
+          "total": 0
+        },
+        "updated_at": "2026-03-14T21:31:54.239Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:44.365Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T21:32:44.365Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:44.405Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T21:32:44.405Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:44.447Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T21:32:44.447Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:50.639Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T21:32:50.639Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:50.680Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T21:32:50.680Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:50.763Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T21:32:50.763Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:53.647Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T21:32:53.647Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:53.689Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T21:32:53.689Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:53.731Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T21:32:53.731Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:55.372Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_006",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:55.901Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_005",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:32:56.349Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_004",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:00.987Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T21:33:00.987Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:01.028Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T21:33:01.028Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:01.069Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T21:33:01.069Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:04.671Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_007",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:09.447Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T21:33:09.447Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:09.487Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T21:33:09.487Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:09.530Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T21:33:09.529Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:10.694Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_010",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:29.187Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:33:29.187Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:29.228Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:33:29.228Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:39.053Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_003",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:54.200Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_009",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "pendiente",
+        "changed_at": "2026-03-14T21:33:54.200Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:54.242Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_009",
+        "cambios": {
+          "items": 0,
+          "total": 0
+        },
+        "updated_at": "2026-03-14T21:33:54.242Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:33:58.400Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_009",
+        "tipo": "llevar",
+        "motivo": "eliminacion_manual"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:23.515Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_011",
+        "numero_ticket": 11,
+        "cliente_nombre": "Cliente 11",
+        "hora_creacion": "2026-03-14T21:35:23.515Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:23.557Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_011",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "011",
+          "cliente_nombre": "Cliente 11",
+          "numero_ticket": 11
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:24.852Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T21:35:24.852Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:24.893Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T21:35:24.893Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:24.915Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 1,
+          "total": 11
+        },
+        "updated_at": "2026-03-14T21:35:24.915Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:25.077Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 2,
+          "total": 22
+        },
+        "updated_at": "2026-03-14T21:35:25.077Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:25.827Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 3,
+          "total": 32.5
+        },
+        "updated_at": "2026-03-14T21:35:25.827Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:26.010Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 4,
+          "total": 42.5
+        },
+        "updated_at": "2026-03-14T21:35:26.010Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:26.867Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 5,
+          "total": 53.5
+        },
+        "updated_at": "2026-03-14T21:35:26.867Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:27.082Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 6,
+          "total": 64
+        },
+        "updated_at": "2026-03-14T21:35:27.082Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:27.711Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_011",
+        "pedido_id": "ped_1773524127711_5c652e1f",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "3960d310-c774-4d91-848f-0a1eaeb3902e",
+            "producto_id": "pizzicas_trap",
+            "nombre": "Trap",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T21:35:24.852Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso",
+              "Peperoni",
+              "Nata",
+              "Maíz",
+              "Pimiento verde"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:27.711Z",
+            "pedido_id": "ped_1773524127711_5c652e1f"
+          },
+          {
+            "id": "3827b403-da12-43eb-8ff7-7764cd651867",
+            "producto_id": "pizzicas_folk",
+            "nombre": "Folk",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T21:35:25.077Z",
+            "ingredientes_base": [
+              "Tomate seco",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Salsa de ajo asado y trufa",
+              "Anchoas"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:27.711Z",
+            "pedido_id": "ped_1773524127711_5c652e1f"
+          },
+          {
+            "id": "d39755a1-d034-4265-8aba-4a42194ed521",
+            "producto_id": "pizzicas_indie",
+            "nombre": "Indie",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T21:35:25.827Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Pepperoni"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:27.711Z",
+            "pedido_id": "ped_1773524127711_5c652e1f"
+          },
+          {
+            "id": "46afa0c9-7406-425c-a29c-8161ef6014ec",
+            "producto_id": "pizzicas_milonga",
+            "nombre": "Milonga",
+            "precio": 10,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10,
+            "created_at": "2026-03-14T21:35:26.010Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:27.711Z",
+            "pedido_id": "ped_1773524127711_5c652e1f"
+          },
+          {
+            "id": "76e9ee80-e179-47a2-b95e-c429948b74f3",
+            "producto_id": "pizzicas_swing",
+            "nombre": "Swing",
+            "precio": 11,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 11,
+            "created_at": "2026-03-14T21:35:26.867Z",
+            "ingredientes_base": [
+              "Crema de champiñones",
+              "Nata",
+              "Pimienta",
+              "Queso azul",
+              "York",
+              "Mezcla de quesos"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:27.711Z",
+            "pedido_id": "ped_1773524127711_5c652e1f"
+          },
+          {
+            "id": "0d6d282c-c057-4a67-9535-c85f2fe36ebb",
+            "producto_id": "pizzicas_k_pop",
+            "nombre": "K-Pop",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T21:35:27.081Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Huevo"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:27.711Z",
+            "pedido_id": "ped_1773524127711_5c652e1f"
+          }
+        ],
+        "total": 64,
+        "notas_generales": "",
+        "created_at": "2026-03-14T21:35:27.711Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:27.711Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T21:35:27.711Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:27.711Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773524127711_5c652e1f",
+        "cuenta_id": "llevar_20260314_011",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 64,
+        "items": [
+          {
+            "item_id": "3960d310-c774-4d91-848f-0a1eaeb3902e",
+            "producto_id": "pizzicas_trap",
+            "nombre": "Trap",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Queso",
+              "Peperoni",
+              "Nata",
+              "Maíz",
+              "Pimiento verde"
+            ],
+            "created_at": "2026-03-14T21:35:24.852Z",
+            "updated_at": "2026-03-14T21:35:27.711Z"
+          },
+          {
+            "item_id": "3827b403-da12-43eb-8ff7-7764cd651867",
+            "producto_id": "pizzicas_folk",
+            "nombre": "Folk",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate seco",
+              "Mozzarella",
+              "Cebolla",
+              "Champiñón",
+              "Salsa de ajo asado y trufa",
+              "Anchoas"
+            ],
+            "created_at": "2026-03-14T21:35:25.077Z",
+            "updated_at": "2026-03-14T21:35:27.711Z"
+          },
+          {
+            "item_id": "d39755a1-d034-4265-8aba-4a42194ed521",
+            "producto_id": "pizzicas_indie",
+            "nombre": "Indie",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Pepperoni"
+            ],
+            "created_at": "2026-03-14T21:35:25.827Z",
+            "updated_at": "2026-03-14T21:35:27.711Z"
+          },
+          {
+            "item_id": "46afa0c9-7406-425c-a29c-8161ef6014ec",
+            "producto_id": "pizzicas_milonga",
+            "nombre": "Milonga",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10,
+            "precio_total": 10,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York"
+            ],
+            "created_at": "2026-03-14T21:35:26.010Z",
+            "updated_at": "2026-03-14T21:35:27.711Z"
+          },
+          {
+            "item_id": "76e9ee80-e179-47a2-b95e-c429948b74f3",
+            "producto_id": "pizzicas_swing",
+            "nombre": "Swing",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 11,
+            "precio_total": 11,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Crema de champiñones",
+              "Nata",
+              "Pimienta",
+              "Queso azul",
+              "York",
+              "Mezcla de quesos"
+            ],
+            "created_at": "2026-03-14T21:35:26.867Z",
+            "updated_at": "2026-03-14T21:35:27.711Z"
+          },
+          {
+            "item_id": "0d6d282c-c057-4a67-9535-c85f2fe36ebb",
+            "producto_id": "pizzicas_k_pop",
+            "nombre": "K-Pop",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "York",
+              "Huevo"
+            ],
+            "created_at": "2026-03-14T21:35:27.081Z",
+            "updated_at": "2026-03-14T21:35:27.711Z"
+          }
+        ],
+        "created_at": "2026-03-14T21:35:27.711Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:27.753Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T21:35:27.753Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:47.127Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 7,
+          "total": 67.5
+        },
+        "updated_at": "2026-03-14T21:35:47.127Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:47.365Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 8,
+          "total": 69.5
+        },
+        "updated_at": "2026-03-14T21:35:47.365Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:47.579Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 9,
+          "total": 74.5
+        },
+        "updated_at": "2026-03-14T21:35:47.579Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:49.768Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 10,
+          "total": 77.5
+        },
+        "updated_at": "2026-03-14T21:35:49.768Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:50.642Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 11,
+          "total": 82.5
+        },
+        "updated_at": "2026-03-14T21:35:50.642Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:50.806Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 12,
+          "total": 87.5
+        },
+        "updated_at": "2026-03-14T21:35:50.806Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:52.551Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 13,
+          "total": 91
+        },
+        "updated_at": "2026-03-14T21:35:52.551Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:52.817Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 14,
+          "total": 94
+        },
+        "updated_at": "2026-03-14T21:35:52.817Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:52.998Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 15,
+          "total": 97
+        },
+        "updated_at": "2026-03-14T21:35:52.998Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:53.127Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 16,
+          "total": 100
+        },
+        "updated_at": "2026-03-14T21:35:53.127Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:53.722Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_011",
+        "pedido_id": "ped_1773524153722_23ee0330",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "109c0129-958b-4412-bb66-16817e0fd256",
+            "producto_id": "entrantes_huevos_salseros",
+            "nombre": "Huevos Salseros",
+            "precio": 3.5,
+            "cantidad": 1,
+            "categoria": "entrantes",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 3.5,
+            "created_at": "2026-03-14T21:35:47.127Z",
+            "ingredientes_base": [
+              "Huevo",
+              "Salsa de ajo trufa y mayonesa"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "42688981-69ef-4d82-9e6d-98370b5c290d",
+            "producto_id": "bebidas_vermut",
+            "nombre": "Vermut",
+            "precio": 2,
+            "cantidad": 1,
+            "categoria": "bebidas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 2,
+            "created_at": "2026-03-14T21:35:47.365Z",
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "a0e7032a-e997-4569-90bd-4b665562a882",
+            "producto_id": "entrantes_patatas_fritas_con_nuestras_2_salsas",
+            "nombre": "Patatas fritas con nuestras 2 salsas",
+            "precio": 5,
+            "cantidad": 1,
+            "categoria": "entrantes",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 5,
+            "created_at": "2026-03-14T21:35:47.579Z",
+            "ingredientes_base": [
+              "Patatas fritas",
+              "Salsa especial 1",
+              "Salsa especial 2"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "b8dbff77-0590-476f-9ca1-7222326bf4e3",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "precio": 3,
+            "cantidad": 1,
+            "categoria": "porciones",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 3,
+            "created_at": "2026-03-14T21:35:49.768Z",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "2e58b102-eee7-491d-ada2-a774726c712d",
+            "producto_id": "pancitos_sweet_emotion",
+            "nombre": "\"Sweet Emotion\" (Aerosmith) - Dulce Emoción",
+            "precio": 5,
+            "cantidad": 1,
+            "categoria": "pancitos",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 5,
+            "created_at": "2026-03-14T21:35:50.641Z",
+            "ingredientes_base": [
+              "Atún",
+              "Cebolla cruda",
+              "Mostaza"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "ca957bfc-3bdc-4c17-a404-9b0f4c81f9d9",
+            "producto_id": "pancitos_sweet_emotion",
+            "nombre": "\"Sweet Emotion\" (Aerosmith) - Dulce Emoción",
+            "precio": 5,
+            "cantidad": 1,
+            "categoria": "pancitos",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 5,
+            "created_at": "2026-03-14T21:35:50.806Z",
+            "ingredientes_base": [
+              "Atún",
+              "Cebolla cruda",
+              "Mostaza"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "dcc26dde-4469-4d84-8fbe-df738dccc1b0",
+            "producto_id": "hot_dog_music_hot_dog_classic",
+            "nombre": "Hot Dog Classic",
+            "precio": 3.5,
+            "cantidad": 1,
+            "categoria": "hot_dog_music",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 3.5,
+            "created_at": "2026-03-14T21:35:52.551Z",
+            "ingredientes_base": [
+              "Salchicha",
+              "Pan",
+              "Queso"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "4ac0eb9d-05e1-42b5-b5c4-f64d365ceb79",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "precio": 3,
+            "cantidad": 1,
+            "categoria": "porciones",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 3,
+            "created_at": "2026-03-14T21:35:52.817Z",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "2d0bf5c1-b986-4c2a-8a25-7bd0113ad3f8",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "precio": 3,
+            "cantidad": 1,
+            "categoria": "porciones",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 3,
+            "created_at": "2026-03-14T21:35:52.998Z",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          },
+          {
+            "id": "c3467de4-8998-441d-a2d8-766ecb784d0b",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "precio": 3,
+            "cantidad": 1,
+            "categoria": "porciones",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 3,
+            "created_at": "2026-03-14T21:35:53.127Z",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:35:53.722Z",
+            "pedido_id": "ped_1773524153722_23ee0330"
+          }
+        ],
+        "total": 36,
+        "notas_generales": "",
+        "created_at": "2026-03-14T21:35:53.722Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:53.722Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T21:35:53.722Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:53.722Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773524153722_23ee0330",
+        "cuenta_id": "llevar_20260314_011",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 36,
+        "items": [
+          {
+            "item_id": "109c0129-958b-4412-bb66-16817e0fd256",
+            "producto_id": "entrantes_huevos_salseros",
+            "nombre": "Huevos Salseros",
+            "categoria": "entrantes",
+            "cantidad": 1,
+            "precio_unitario": 3.5,
+            "precio_total": 3.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Huevo",
+              "Salsa de ajo trufa y mayonesa"
+            ],
+            "created_at": "2026-03-14T21:35:47.127Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "42688981-69ef-4d82-9e6d-98370b5c290d",
+            "producto_id": "bebidas_vermut",
+            "nombre": "Vermut",
+            "categoria": "bebidas",
+            "cantidad": 1,
+            "precio_unitario": 2,
+            "precio_total": 2,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "created_at": "2026-03-14T21:35:47.365Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "a0e7032a-e997-4569-90bd-4b665562a882",
+            "producto_id": "entrantes_patatas_fritas_con_nuestras_2_salsas",
+            "nombre": "Patatas fritas con nuestras 2 salsas",
+            "categoria": "entrantes",
+            "cantidad": 1,
+            "precio_unitario": 5,
+            "precio_total": 5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Patatas fritas",
+              "Salsa especial 1",
+              "Salsa especial 2"
+            ],
+            "created_at": "2026-03-14T21:35:47.579Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "b8dbff77-0590-476f-9ca1-7222326bf4e3",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "categoria": "porciones",
+            "cantidad": 1,
+            "precio_unitario": 3,
+            "precio_total": 3,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "created_at": "2026-03-14T21:35:49.768Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "2e58b102-eee7-491d-ada2-a774726c712d",
+            "producto_id": "pancitos_sweet_emotion",
+            "nombre": "\"Sweet Emotion\" (Aerosmith) - Dulce Emoción",
+            "categoria": "pancitos",
+            "cantidad": 1,
+            "precio_unitario": 5,
+            "precio_total": 5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Atún",
+              "Cebolla cruda",
+              "Mostaza"
+            ],
+            "created_at": "2026-03-14T21:35:50.641Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "ca957bfc-3bdc-4c17-a404-9b0f4c81f9d9",
+            "producto_id": "pancitos_sweet_emotion",
+            "nombre": "\"Sweet Emotion\" (Aerosmith) - Dulce Emoción",
+            "categoria": "pancitos",
+            "cantidad": 1,
+            "precio_unitario": 5,
+            "precio_total": 5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Atún",
+              "Cebolla cruda",
+              "Mostaza"
+            ],
+            "created_at": "2026-03-14T21:35:50.806Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "dcc26dde-4469-4d84-8fbe-df738dccc1b0",
+            "producto_id": "hot_dog_music_hot_dog_classic",
+            "nombre": "Hot Dog Classic",
+            "categoria": "hot_dog_music",
+            "cantidad": 1,
+            "precio_unitario": 3.5,
+            "precio_total": 3.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Salchicha",
+              "Pan",
+              "Queso"
+            ],
+            "created_at": "2026-03-14T21:35:52.551Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "4ac0eb9d-05e1-42b5-b5c4-f64d365ceb79",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "categoria": "porciones",
+            "cantidad": 1,
+            "precio_unitario": 3,
+            "precio_total": 3,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "created_at": "2026-03-14T21:35:52.817Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "2d0bf5c1-b986-4c2a-8a25-7bd0113ad3f8",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "categoria": "porciones",
+            "cantidad": 1,
+            "precio_unitario": 3,
+            "precio_total": 3,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "created_at": "2026-03-14T21:35:52.998Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          },
+          {
+            "item_id": "c3467de4-8998-441d-a2d8-766ecb784d0b",
+            "producto_id": "porciones_porcion_de_pizza",
+            "nombre": "Porción de Pizza",
+            "categoria": "porciones",
+            "cantidad": 1,
+            "precio_unitario": 3,
+            "precio_total": 3,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Masa de pizza",
+              "Tomate",
+              "Queso"
+            ],
+            "created_at": "2026-03-14T21:35:53.127Z",
+            "updated_at": "2026-03-14T21:35:53.722Z"
+          }
+        ],
+        "created_at": "2026-03-14T21:35:53.722Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:35:53.764Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T21:35:53.764Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:40.481Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "mesa_10_20260314_001",
+        "tipo": "mesa",
+        "motivo": "cobro_completado"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:48.621Z",
+      "event_type": "llevar.ticket_creado",
+      "payload": {
+        "cuenta_id": "llevar_20260314_012",
+        "numero_ticket": 12,
+        "cliente_nombre": "Cliente 12",
+        "hora_creacion": "2026-03-14T21:36:48.621Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:48.663Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "llevar_20260314_012",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "012",
+          "cliente_nombre": "Cliente 12",
+          "numero_ticket": 12
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:53.113Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "estado_anterior": "pendiente",
+        "estado_nuevo": "con_pedido",
+        "changed_at": "2026-03-14T21:36:53.113Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:53.154Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "cambios": {
+          "estado": "con_pedido"
+        },
+        "updated_at": "2026-03-14T21:36:53.154Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:53.197Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "cambios": {
+          "items": 1,
+          "total": 10.5
+        },
+        "updated_at": "2026-03-14T21:36:53.197Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:55.018Z",
+      "event_type": "comandero.enviar_cocina",
+      "payload": {
+        "cuenta_id": "llevar_20260314_012",
+        "pedido_id": "ped_1773524215018_005cf882",
+        "project_id": "nonina",
+        "items": [
+          {
+            "id": "fecd856a-e74c-4801-9133-e39c77c5cd1e",
+            "producto_id": "pizzicas_flamenco",
+            "nombre": "Flamenco",
+            "precio": 10.5,
+            "cantidad": 1,
+            "categoria": "pizzicas",
+            "variaciones": [],
+            "notas": "",
+            "subtotal": 10.5,
+            "created_at": "2026-03-14T21:36:53.113Z",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Pepperoni",
+              "Cebolla",
+              "Pimiento verde",
+              "Huevo"
+            ],
+            "enviado": true,
+            "enviado_at": "2026-03-14T21:36:55.018Z",
+            "pedido_id": "ped_1773524215018_005cf882"
+          }
+        ],
+        "total": 10.5,
+        "notas_generales": "",
+        "created_at": "2026-03-14T21:36:55.018Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:55.018Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "estado_anterior": "con_pedido",
+        "estado_nuevo": "en_preparacion",
+        "changed_at": "2026-03-14T21:36:55.018Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:55.018Z",
+      "event_type": "pedido.creado",
+      "payload": {
+        "pedido_id": "ped_1773524215018_005cf882",
+        "cuenta_id": "llevar_20260314_012",
+        "canal": "llevar",
+        "project_id": "nonina",
+        "estado": "en_cocina",
+        "total": 10.5,
+        "items": [
+          {
+            "item_id": "fecd856a-e74c-4801-9133-e39c77c5cd1e",
+            "producto_id": "pizzicas_flamenco",
+            "nombre": "Flamenco",
+            "categoria": "pizzicas",
+            "cantidad": 1,
+            "precio_unitario": 10.5,
+            "precio_total": 10.5,
+            "variaciones": [],
+            "notas": null,
+            "estado": "en_cocina",
+            "ingredientes_base": [
+              "Tomate",
+              "Mozzarella",
+              "Pepperoni",
+              "Cebolla",
+              "Pimiento verde",
+              "Huevo"
+            ],
+            "created_at": "2026-03-14T21:36:53.113Z",
+            "updated_at": "2026-03-14T21:36:55.018Z"
+          }
+        ],
+        "created_at": "2026-03-14T21:36:55.018Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:36:55.060Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "cambios": {
+          "estado": "en_preparacion"
+        },
+        "updated_at": "2026-03-14T21:36:55.059Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:55:20.606Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T21:55:20.606Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T21:55:20.647Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T21:55:20.647Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:25.336Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T22:08:25.336Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:25.377Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T22:08:25.377Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:25.419Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T22:08:25.419Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:26.743Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_008",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:30.305Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T22:08:30.304Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:33.654Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "estado_anterior": "listo",
+        "estado_nuevo": "para_cobrar",
+        "changed_at": "2026-03-14T22:08:33.653Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:33.695Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "cambios": {
+          "estado": "para_cobrar"
+        },
+        "updated_at": "2026-03-14T22:08:33.695Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:33.738Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "cambios": {
+          "pagado": true
+        },
+        "updated_at": "2026-03-14T22:08:33.738Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:08:37.066Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_012",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:09:02.872Z",
+      "event_type": "cuenta.estado_cambiado",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "estado_anterior": "en_preparacion",
+        "estado_nuevo": "listo",
+        "changed_at": "2026-03-14T22:09:02.872Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:09:02.913Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "estado": "listo"
+        },
+        "updated_at": "2026-03-14T22:09:02.913Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:06.649Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 15,
+          "total": 97
+        },
+        "updated_at": "2026-03-14T22:49:06.648Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:07.248Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 14,
+          "total": 94
+        },
+        "updated_at": "2026-03-14T22:49:07.248Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:07.422Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 13,
+          "total": 91
+        },
+        "updated_at": "2026-03-14T22:49:07.422Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:09.208Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 12,
+          "total": 87.5
+        },
+        "updated_at": "2026-03-14T22:49:09.208Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:09.363Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 11,
+          "total": 82.5
+        },
+        "updated_at": "2026-03-14T22:49:09.363Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:09.512Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 10,
+          "total": 77.5
+        },
+        "updated_at": "2026-03-14T22:49:09.512Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:09.679Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 9,
+          "total": 74.5
+        },
+        "updated_at": "2026-03-14T22:49:09.679Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:09.974Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 8,
+          "total": 69.5
+        },
+        "updated_at": "2026-03-14T22:49:09.974Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:10.255Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 7,
+          "total": 67.5
+        },
+        "updated_at": "2026-03-14T22:49:10.255Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:10.387Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 6,
+          "total": 64
+        },
+        "updated_at": "2026-03-14T22:49:10.387Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:10.555Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 5,
+          "total": 53.5
+        },
+        "updated_at": "2026-03-14T22:49:10.555Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:10.700Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 4,
+          "total": 42.5
+        },
+        "updated_at": "2026-03-14T22:49:10.700Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:10.833Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 3,
+          "total": 32.5
+        },
+        "updated_at": "2026-03-14T22:49:10.833Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:10.981Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 2,
+          "total": 22
+        },
+        "updated_at": "2026-03-14T22:49:10.981Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:11.139Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 1,
+          "total": 11
+        },
+        "updated_at": "2026-03-14T22:49:11.139Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:11.294Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "cambios": {
+          "items": 0,
+          "total": 0
+        },
+        "updated_at": "2026-03-14T22:49:11.294Z"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:15.907Z",
+      "event_type": "cuenta.eliminada",
+      "payload": {
+        "project_id": "nonina",
+        "cuenta_id": "llevar_20260314_011",
+        "tipo": "llevar",
+        "motivo": "cuenta_cerrada_canal"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:24.197Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_11_20260314_001",
+        "nombre": "Mesa 11",
+        "numero": 11,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T22:49:24.197Z",
+        "project_id": "nonina"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T22:49:24.239Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_11_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "nonina",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 11",
+          "numero": 11,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    }
+  ],
+  "total_eventos": 323,
+  "ultima_actualizacion": "2026-03-14T22:49:24.241Z"
+}

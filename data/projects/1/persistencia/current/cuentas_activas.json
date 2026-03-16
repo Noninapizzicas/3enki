@@ -1,0 +1,25 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "1",
+  "cuentas": {
+    "mesa_4_20260314_001": {
+      "cuenta_id": "mesa_4_20260314_001",
+      "project_id": "1",
+      "tipo": "mesa",
+      "origen": "cuentas-canales:mesa",
+      "estado": "abierta",
+      "datos_especificos": {
+        "nombre": "Mesa 4",
+        "numero": 4,
+        "camarero": null,
+        "comensales": null
+      },
+      "pedidos": [],
+      "total": 0,
+      "created_at": "2026-03-14T16:44:34.092Z",
+      "updated_at": "2026-03-14T16:44:34.092Z"
+    }
+  },
+  "total_cuentas": 1,
+  "ultima_actualizacion": "2026-03-14T16:44:34.094Z"
+}

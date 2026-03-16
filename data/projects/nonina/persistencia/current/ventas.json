@@ -1,0 +1,409 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "nonina",
+  "ventas": [
+    {
+      "venta_id": "venta_1773604365567_43lnlojn8",
+      "timestamp": "2026-03-15T19:52:45.567Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260315_001",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-15T19:17:01.476Z",
+        "hora_cierre": "2026-03-15T19:52:45.567Z",
+        "metadata": {
+          "numero_ticket": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "ec887c0a-320f-4bde-96eb-d7eb36e8260a",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 9.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_31d2167f"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773602243810_e0c24e94",
+          "items": [
+            {
+              "item_id": "b2831c6c-6a89-4988-9b3b-dd89f7c5e09d",
+              "producto_id": "pizzicas_samba",
+              "nombre": "Samba",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 9.5,
+              "precio_total": 9.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Albahaca"
+              ],
+              "created_at": "2026-03-15T19:17:22.259Z",
+              "updated_at": "2026-03-15T19:17:23.811Z"
+            }
+          ],
+          "total": 9.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 9.5
+      }
+    },
+    {
+      "venta_id": "venta_1773604370930_59pzf6j8t",
+      "timestamp": "2026-03-15T19:52:50.930Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260315_002",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-15T19:18:21.950Z",
+        "hora_cierre": "2026-03-15T19:52:50.930Z",
+        "metadata": {
+          "numero_ticket": 2
+        }
+      },
+      "cobro": {
+        "cobro_id": "8277c3d0-36de-43fb-8620-9099a8941485",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_49bb54b5"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773602333188_9d618dd3",
+          "items": [
+            {
+              "item_id": "ebe2c368-0b80-4d06-9584-a3e1fd5844c3",
+              "producto_id": "pizzicas_jazz",
+              "nombre": "Jazz",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": {
+                "ingredientes_quitar": [],
+                "ingredientes_anadir": [
+                  {
+                    "nombre": "Champiñón",
+                    "cantidad": 1,
+                    "precio_extra": 0
+                  }
+                ]
+              },
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Queso",
+                "Jamón York",
+                "Champiñones"
+              ],
+              "created_at": "2026-03-15T19:18:40.933Z",
+              "updated_at": "2026-03-15T19:18:53.188Z"
+            }
+          ],
+          "total": 10.5
+        },
+        {
+          "pedido_id": "ped_1773602396873_5e1b78d1",
+          "items": [
+            {
+              "item_id": "9e7f5527-6db9-45ff-88fb-6379eb412a11",
+              "producto_id": "pizzicas_merengue",
+              "nombre": "Merengue",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": {
+                "ingredientes_quitar": [],
+                "ingredientes_anadir": [
+                  {
+                    "nombre": "Champiñón",
+                    "cantidad": 1,
+                    "precio_extra": 0
+                  }
+                ]
+              },
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Bacon"
+              ],
+              "created_at": "2026-03-15T19:19:54.722Z",
+              "updated_at": "2026-03-15T19:19:56.874Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773604786093_ae58josrf",
+      "timestamp": "2026-03-15T19:59:46.093Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_13_20260315_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-15T19:52:51.750Z",
+        "hora_cierre": "2026-03-15T19:59:46.093Z",
+        "metadata": {
+          "nombre": "Mesa 13",
+          "tiempo_ocupada": 6,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "b3af7f15-342c-443f-ae60-1d7f0a47744d",
+        "monto": 20.5,
+        "propina": 0,
+        "monto_total": 20.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_1bde9345"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773604383352_dad93b9c",
+          "items": [
+            {
+              "item_id": "4bf3f86a-0bca-4cdf-89a6-08ced84cfc08",
+              "producto_id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ],
+              "created_at": "2026-03-15T19:52:56.169Z",
+              "updated_at": "2026-03-15T19:53:03.352Z"
+            },
+            {
+              "item_id": "2fa7c4ad-747c-45d4-adb7-e1dc4c989991",
+              "producto_id": "pizzicas_milonga",
+              "nombre": "Milonga",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10,
+              "precio_total": 10,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York"
+              ],
+              "created_at": "2026-03-15T19:53:02.334Z",
+              "updated_at": "2026-03-15T19:53:03.352Z"
+            }
+          ],
+          "total": 20.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 20.5,
+        "propina": 0,
+        "total_final": 20.5
+      }
+    },
+    {
+      "venta_id": "venta_1773604786097_4lop51jr0",
+      "timestamp": "2026-03-15T19:59:46.097Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_13_20260315_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-15T19:52:51.750Z",
+        "hora_cierre": "2026-03-15T19:59:46.097Z",
+        "metadata": {
+          "nombre": "Mesa 13",
+          "tiempo_ocupada": 6,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "b3af7f15-342c-443f-ae60-1d7f0a47744d",
+        "monto": 20.5,
+        "propina": 0,
+        "monto_total": 20.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_1bde9345"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773604383352_dad93b9c",
+          "items": [
+            {
+              "item_id": "4bf3f86a-0bca-4cdf-89a6-08ced84cfc08",
+              "producto_id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ],
+              "created_at": "2026-03-15T19:52:56.169Z",
+              "updated_at": "2026-03-15T19:53:03.352Z"
+            },
+            {
+              "item_id": "2fa7c4ad-747c-45d4-adb7-e1dc4c989991",
+              "producto_id": "pizzicas_milonga",
+              "nombre": "Milonga",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10,
+              "precio_total": 10,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York"
+              ],
+              "created_at": "2026-03-15T19:53:02.334Z",
+              "updated_at": "2026-03-15T19:53:03.352Z"
+            }
+          ],
+          "total": 20.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 20.5,
+        "propina": 0,
+        "total_final": 20.5
+      }
+    },
+    {
+      "venta_id": "venta_1773606624999_0dfxtkq96",
+      "timestamp": "2026-03-15T20:30:24.999Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260315_003",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-15T20:17:15.457Z",
+        "hora_cierre": "2026-03-15T20:30:24.999Z",
+        "metadata": {
+          "numero_ticket": 3
+        }
+      },
+      "cobro": {
+        "cobro_id": "4b9ee33e-b907-415a-acf2-607a045f2f30",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 11,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_026915ec"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773605865468_d1d3f424",
+          "items": [
+            {
+              "item_id": "48eaae30-80b7-45b2-b09f-1f689cd37bc2",
+              "producto_id": "pizzicas_ranchera",
+              "nombre": "½ Ranchera + ½ Folk",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_ranchera",
+                "nombre": "Ranchera",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Bacon",
+                  "Cebolla",
+                  "Salsa BBQ"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_folk",
+                "nombre": "Folk",
+                "ingredientes_base": [
+                  "Tomate seco",
+                  "Mozzarella",
+                  "Cebolla",
+                  "Champiñón",
+                  "Salsa de ajo asado y trufa",
+                  "Anchoas"
+                ]
+              },
+              "created_at": "2026-03-15T20:17:44.575Z",
+              "updated_at": "2026-03-15T20:17:45.468Z"
+            }
+          ],
+          "total": 11
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 11
+      }
+    }
+  ],
+  "resumen_dia": {
+    "total_ventas": 5,
+    "total_ingresos": 72,
+    "total_propinas": 0,
+    "por_metodo_pago": {
+      "efectivo": 0,
+      "tarjeta": 72,
+      "bizum": 0,
+      "transferencia": 0
+    },
+    "por_tipo_cuenta": {
+      "mesa": 41,
+      "telefono": 0,
+      "llevar": 31
+    },
+    "por_camarero": {}
+  },
+  "ultima_actualizacion": "2026-03-15T20:30:25.003Z"
+}

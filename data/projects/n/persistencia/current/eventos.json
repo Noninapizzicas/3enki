@@ -1,0 +1,50 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "n",
+  "eventos": [
+    {
+      "timestamp": "2026-03-14T06:13:36.704Z",
+      "event_type": "mesa.abierta",
+      "payload": {
+        "cuenta_id": "mesa_1_20260314_001",
+        "nombre": "Mesa 1",
+        "numero": 1,
+        "comensales": null,
+        "camarero": null,
+        "hora_apertura": "2026-03-14T06:13:36.704Z",
+        "project_id": "n"
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:13:36.746Z",
+      "event_type": "cuenta.creada",
+      "payload": {
+        "cuenta_id": "mesa_1_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "project_id": "n",
+        "total": 0,
+        "metadata": {
+          "nombre": "Mesa 1",
+          "numero": 1,
+          "camarero": null,
+          "comensales": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-03-14T06:43:36.747Z",
+      "event_type": "cuenta.actualizada",
+      "payload": {
+        "project_id": "n",
+        "cuenta_id": "mesa_1_20260314_001",
+        "cambios": {
+          "alerta": true
+        },
+        "updated_at": "2026-03-14T06:43:36.747Z"
+      }
+    }
+  ],
+  "total_eventos": 3,
+  "ultima_actualizacion": "2026-03-14T16:48:38.337Z"
+}

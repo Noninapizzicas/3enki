@@ -1,0 +1,2086 @@
+{
+  "fecha": "2026-03-14",
+  "project_id": "nonina",
+  "ventas": [
+    {
+      "venta_id": "venta_1773519659664_4o35i9m42",
+      "timestamp": "2026-03-14T20:20:59.664Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_5_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T18:14:52.148Z",
+        "hora_cierre": "2026-03-14T20:20:59.664Z",
+        "metadata": {
+          "nombre": "Mesa 5",
+          "tiempo_ocupada": 126,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "bea5c8f1-0994-4a5a-a435-dff514f2863b",
+        "monto": 10.5,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_2e5b1521"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773515447353_527021bb",
+          "items": [
+            {
+              "item_id": "89d16202-1e27-46de-8772-cd31f3c891f1",
+              "producto_id": "pizzicas_bachata",
+              "nombre": "Bachata",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Anchoas",
+                "Alcaparras",
+                "Cebolla",
+                "Olivas"
+              ],
+              "created_at": "2026-03-14T19:10:44.237Z",
+              "updated_at": "2026-03-14T19:10:47.354Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 10.5,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773519659665_rx0qwrre6",
+      "timestamp": "2026-03-14T20:20:59.665Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_5_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T18:14:52.148Z",
+        "hora_cierre": "2026-03-14T20:20:59.665Z",
+        "metadata": {
+          "nombre": "Mesa 5",
+          "tiempo_ocupada": 126,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "bea5c8f1-0994-4a5a-a435-dff514f2863b",
+        "monto": 10.5,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_2e5b1521"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773515447353_527021bb",
+          "items": [
+            {
+              "item_id": "89d16202-1e27-46de-8772-cd31f3c891f1",
+              "producto_id": "pizzicas_bachata",
+              "nombre": "Bachata",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Anchoas",
+                "Alcaparras",
+                "Cebolla",
+                "Olivas"
+              ],
+              "created_at": "2026-03-14T19:10:44.237Z",
+              "updated_at": "2026-03-14T19:10:47.354Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 10.5,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773519676772_a80ru921h",
+      "timestamp": "2026-03-14T20:21:16.772Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_6_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T19:16:36.916Z",
+        "hora_cierre": "2026-03-14T20:21:16.772Z",
+        "metadata": {
+          "nombre": "Mesa 6",
+          "tiempo_ocupada": 64,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "e25625f6-a23d-489b-a440-86c7857ea39f",
+        "monto": 10.5,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_5180cb3c"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773516242573_8abf758b",
+          "items": [
+            {
+              "item_id": "3a0a5c96-c28b-417c-8577-698b3b385f1e",
+              "producto_id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T19:24:01.639Z",
+              "updated_at": "2026-03-14T19:24:02.573Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 10.5,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773519676773_uz0qkrr05",
+      "timestamp": "2026-03-14T20:21:16.773Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_6_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T19:16:36.916Z",
+        "hora_cierre": "2026-03-14T20:21:16.773Z",
+        "metadata": {
+          "nombre": "Mesa 6",
+          "tiempo_ocupada": 64,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "e25625f6-a23d-489b-a440-86c7857ea39f",
+        "monto": 10.5,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_5180cb3c"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773516242573_8abf758b",
+          "items": [
+            {
+              "item_id": "3a0a5c96-c28b-417c-8577-698b3b385f1e",
+              "producto_id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T19:24:01.639Z",
+              "updated_at": "2026-03-14T19:24:02.573Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 10.5,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773519749767_agusuocpv",
+      "timestamp": "2026-03-14T20:22:29.767Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_8_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T19:48:03.131Z",
+        "hora_cierre": "2026-03-14T20:22:29.767Z",
+        "metadata": {
+          "nombre": "Mesa 8",
+          "tiempo_ocupada": 34,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "4c6a6ef1-29f4-4dfc-babc-89d1202ca365",
+        "monto": 32,
+        "propina": 0,
+        "monto_total": 32,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_d5f6593e"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773517781235_0ba7c2c7",
+          "items": [
+            {
+              "item_id": "cbde324f-97d7-420a-936d-657e08cc9e11",
+              "producto_id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T19:48:37.998Z",
+              "updated_at": "2026-03-14T19:49:41.236Z"
+            },
+            {
+              "item_id": "0a0c974e-04c9-4a8f-bf28-5c2cf90bdfa3",
+              "producto_id": "pizzicas_k_pop",
+              "nombre": "K-Pop",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Huevo"
+              ],
+              "created_at": "2026-03-14T19:48:47.049Z",
+              "updated_at": "2026-03-14T19:49:41.236Z"
+            },
+            {
+              "item_id": "1f376801-8b8c-44e8-b259-dd171dba88a4",
+              "producto_id": "pizzicas_folk",
+              "nombre": "Folk",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate seco",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Salsa de ajo asado y trufa",
+                "Anchoas"
+              ],
+              "created_at": "2026-03-14T19:49:12.157Z",
+              "updated_at": "2026-03-14T19:49:41.236Z"
+            }
+          ],
+          "total": 32
+        }
+      ],
+      "resumen": {
+        "subtotal": 32,
+        "propina": 0,
+        "total_final": 32
+      }
+    },
+    {
+      "venta_id": "venta_1773519749769_7f4syee56",
+      "timestamp": "2026-03-14T20:22:29.769Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_8_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T19:48:03.131Z",
+        "hora_cierre": "2026-03-14T20:22:29.769Z",
+        "metadata": {
+          "nombre": "Mesa 8",
+          "tiempo_ocupada": 34,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "4c6a6ef1-29f4-4dfc-babc-89d1202ca365",
+        "monto": 32,
+        "propina": 0,
+        "monto_total": 32,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_d5f6593e"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773517781235_0ba7c2c7",
+          "items": [
+            {
+              "item_id": "cbde324f-97d7-420a-936d-657e08cc9e11",
+              "producto_id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T19:48:37.998Z",
+              "updated_at": "2026-03-14T19:49:41.236Z"
+            },
+            {
+              "item_id": "0a0c974e-04c9-4a8f-bf28-5c2cf90bdfa3",
+              "producto_id": "pizzicas_k_pop",
+              "nombre": "K-Pop",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Huevo"
+              ],
+              "created_at": "2026-03-14T19:48:47.049Z",
+              "updated_at": "2026-03-14T19:49:41.236Z"
+            },
+            {
+              "item_id": "1f376801-8b8c-44e8-b259-dd171dba88a4",
+              "producto_id": "pizzicas_folk",
+              "nombre": "Folk",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate seco",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Salsa de ajo asado y trufa",
+                "Anchoas"
+              ],
+              "created_at": "2026-03-14T19:49:12.157Z",
+              "updated_at": "2026-03-14T19:49:41.236Z"
+            }
+          ],
+          "total": 32
+        }
+      ],
+      "resumen": {
+        "subtotal": 32,
+        "propina": 0,
+        "total_final": 32
+      }
+    },
+    {
+      "venta_id": "venta_1773519753684_3iv7793cl",
+      "timestamp": "2026-03-14T20:22:33.684Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_9_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T19:49:52.473Z",
+        "hora_cierre": "2026-03-14T20:22:33.684Z",
+        "metadata": {
+          "nombre": "Mesa 9",
+          "tiempo_ocupada": 32,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "e52f2276-22d2-42ed-9592-3aa4aca35897",
+        "monto": 10.5,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_8a0ab267"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773517799270_3e522f68",
+          "items": [
+            {
+              "item_id": "42699bc6-0813-42ee-b491-b505dc864558",
+              "producto_id": "pizzicas_vallenato",
+              "nombre": "Vallenato",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Piña"
+              ],
+              "created_at": "2026-03-14T19:49:58.482Z",
+              "updated_at": "2026-03-14T19:49:59.270Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 10.5,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773519753686_6yt84a4qn",
+      "timestamp": "2026-03-14T20:22:33.686Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_9_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T19:49:52.473Z",
+        "hora_cierre": "2026-03-14T20:22:33.686Z",
+        "metadata": {
+          "nombre": "Mesa 9",
+          "tiempo_ocupada": 32,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "e52f2276-22d2-42ed-9592-3aa4aca35897",
+        "monto": 10.5,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_8a0ab267"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773517799270_3e522f68",
+          "items": [
+            {
+              "item_id": "42699bc6-0813-42ee-b491-b505dc864558",
+              "producto_id": "pizzicas_vallenato",
+              "nombre": "Vallenato",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Piña"
+              ],
+              "created_at": "2026-03-14T19:49:58.482Z",
+              "updated_at": "2026-03-14T19:49:59.270Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 10.5,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773521169463_szjvmocix",
+      "timestamp": "2026-03-14T20:46:09.463Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_001",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T20:09:03.252Z",
+        "hora_cierre": "2026-03-14T20:46:09.463Z",
+        "metadata": {
+          "numero_ticket": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "db23951e-d2fc-4cc1-932b-b76019e85cb4",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 32,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_88e60fb7"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773519101614_55c1b3dc",
+          "items": [
+            {
+              "item_id": "f0055561-219e-49af-99ec-0b3e768ede51",
+              "producto_id": "pizzicas_the_veggie_symphony",
+              "nombre": "The Veggie Symphony",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Calabacín",
+                "Espárragos",
+                "Pimiento verde"
+              ],
+              "created_at": "2026-03-14T20:09:12.815Z",
+              "updated_at": "2026-03-14T20:11:41.614Z"
+            },
+            {
+              "item_id": "f51959cf-4295-455b-84be-9e72169bea10",
+              "producto_id": "pizzicas_rb_rhythm_and_blues",
+              "nombre": "R&B (Rhythm and Blues)",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": {
+                "ingredientes_quitar": [
+                  "Tomate"
+                ],
+                "ingredientes_anadir": []
+              },
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Carne de ternera",
+                "Bacon",
+                "Queso",
+                "Salsa BBQ"
+              ],
+              "created_at": "2026-03-14T20:11:18.090Z",
+              "updated_at": "2026-03-14T20:11:41.614Z"
+            },
+            {
+              "item_id": "4e1f2acb-5325-44c0-9734-506aee144c8f",
+              "producto_id": "pizzicas_chillout",
+              "nombre": "Chillout",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": {
+                "ingredientes_quitar": [
+                  "Cebolla"
+                ],
+                "ingredientes_anadir": [
+                  {
+                    "nombre": "Jamón York",
+                    "cantidad": 1,
+                    "precio_extra": 0
+                  }
+                ]
+              },
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Atún",
+                "Cebolla"
+              ],
+              "created_at": "2026-03-14T20:11:36.351Z",
+              "updated_at": "2026-03-14T20:11:41.614Z"
+            }
+          ],
+          "total": 32
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 32
+      }
+    },
+    {
+      "venta_id": "venta_1773521185061_jvv6ynfc3",
+      "timestamp": "2026-03-14T20:46:25.061Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_002",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T20:21:31.971Z",
+        "hora_cierre": "2026-03-14T20:46:25.061Z",
+        "metadata": {
+          "numero_ticket": 2
+        }
+      },
+      "cobro": {
+        "cobro_id": "7fd67c79-a6d7-4f44-8ed7-f0579ee13b20",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 11,
+        "metodo_pago": "efectivo",
+        "referencia_pago": "REF_37721d60"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773519699032_6639616f",
+          "items": [
+            {
+              "item_id": "ec95b607-3311-48d3-97cc-03ddc9bf360d",
+              "producto_id": "pizzicas_blues",
+              "nombre": "Blues",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Queso",
+                "Atún",
+                "Cebolla",
+                "Salsa de mostaza"
+              ],
+              "created_at": "2026-03-14T20:21:35.100Z",
+              "updated_at": "2026-03-14T20:21:39.033Z"
+            }
+          ],
+          "total": 11
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 11
+      }
+    },
+    {
+      "venta_id": "venta_1773523900441_fmtqee2ut",
+      "timestamp": "2026-03-14T21:31:40.441Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_10_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T20:39:41.430Z",
+        "hora_cierre": "2026-03-14T21:31:40.441Z",
+        "metadata": {
+          "nombre": "Mesa 10",
+          "tiempo_ocupada": 51,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "c4613b7a-3fd8-4c0e-bf47-dfa706f1a43f",
+        "monto": 54.5,
+        "propina": 0,
+        "monto_total": 54.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_f123f2a4"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773520987424_6d85899e",
+          "items": [
+            {
+              "item_id": "0f09dac4-429e-4e38-b77b-3cd74a9d17e2",
+              "producto_id": "pizzicas_swing",
+              "nombre": "½ Swing + ½ Folk",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_swing",
+                "nombre": "Swing",
+                "ingredientes_base": [
+                  "Crema de champiñones",
+                  "Nata",
+                  "Pimienta",
+                  "Queso azul",
+                  "York",
+                  "Mezcla de quesos"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_folk",
+                "nombre": "Folk",
+                "ingredientes_base": [
+                  "Tomate seco",
+                  "Mozzarella",
+                  "Cebolla",
+                  "Champiñón",
+                  "Salsa de ajo asado y trufa",
+                  "Anchoas"
+                ]
+              },
+              "created_at": "2026-03-14T20:42:00.957Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "7c43490b-8bf0-47d8-8ec0-e0e3bf878662",
+              "producto_id": "pizzicas_folk",
+              "nombre": "½ Folk + ½ Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_folk",
+                "nombre": "Folk",
+                "ingredientes_base": [
+                  "Tomate seco",
+                  "Mozzarella",
+                  "Cebolla",
+                  "Champiñón",
+                  "Salsa de ajo asado y trufa",
+                  "Anchoas"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_rockabilly",
+                "nombre": "Rockabilly",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Bacon",
+                  "Cebolla",
+                  "Nata"
+                ]
+              },
+              "created_at": "2026-03-14T20:42:10.911Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "29230084-673a-428c-a59e-3d08d48a7d7e",
+              "producto_id": "pizzicas_merengue",
+              "nombre": "½ Merengue + ½ Bachata",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_merengue",
+                "nombre": "Merengue",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "York",
+                  "Bacon"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_bachata",
+                "nombre": "Bachata",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Anchoas",
+                  "Alcaparras",
+                  "Cebolla",
+                  "Olivas"
+                ]
+              },
+              "created_at": "2026-03-14T20:42:39.863Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "57afffa7-6195-4557-8646-4663a8d5fefb",
+              "producto_id": "pizzicas_swing",
+              "nombre": "Swing",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Crema de champiñones",
+                "Nata",
+                "Pimienta",
+                "Queso azul",
+                "York",
+                "Mezcla de quesos"
+              ],
+              "created_at": "2026-03-14T20:42:57.535Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "dfc42600-b71f-474c-9abd-9da60b77cd75",
+              "producto_id": "pizzicas_soul",
+              "nombre": "Soul",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Queso"
+              ],
+              "created_at": "2026-03-14T20:43:00.163Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            }
+          ],
+          "total": 54.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 54.5,
+        "propina": 0,
+        "total_final": 54.5
+      }
+    },
+    {
+      "venta_id": "venta_1773523900443_7viu6wkdy",
+      "timestamp": "2026-03-14T21:31:40.443Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "mesa_10_20260314_001",
+        "tipo": "mesa",
+        "origen": "cuentas-canales:mesa",
+        "hora_apertura": "2026-03-14T20:39:41.430Z",
+        "hora_cierre": "2026-03-14T21:31:40.443Z",
+        "metadata": {
+          "nombre": "Mesa 10",
+          "tiempo_ocupada": 51,
+          "pedidos_count": 1
+        }
+      },
+      "cobro": {
+        "cobro_id": "c4613b7a-3fd8-4c0e-bf47-dfa706f1a43f",
+        "monto": 54.5,
+        "propina": 0,
+        "monto_total": 54.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_f123f2a4"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773520987424_6d85899e",
+          "items": [
+            {
+              "item_id": "0f09dac4-429e-4e38-b77b-3cd74a9d17e2",
+              "producto_id": "pizzicas_swing",
+              "nombre": "½ Swing + ½ Folk",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_swing",
+                "nombre": "Swing",
+                "ingredientes_base": [
+                  "Crema de champiñones",
+                  "Nata",
+                  "Pimienta",
+                  "Queso azul",
+                  "York",
+                  "Mezcla de quesos"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_folk",
+                "nombre": "Folk",
+                "ingredientes_base": [
+                  "Tomate seco",
+                  "Mozzarella",
+                  "Cebolla",
+                  "Champiñón",
+                  "Salsa de ajo asado y trufa",
+                  "Anchoas"
+                ]
+              },
+              "created_at": "2026-03-14T20:42:00.957Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "7c43490b-8bf0-47d8-8ec0-e0e3bf878662",
+              "producto_id": "pizzicas_folk",
+              "nombre": "½ Folk + ½ Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_folk",
+                "nombre": "Folk",
+                "ingredientes_base": [
+                  "Tomate seco",
+                  "Mozzarella",
+                  "Cebolla",
+                  "Champiñón",
+                  "Salsa de ajo asado y trufa",
+                  "Anchoas"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_rockabilly",
+                "nombre": "Rockabilly",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Bacon",
+                  "Cebolla",
+                  "Nata"
+                ]
+              },
+              "created_at": "2026-03-14T20:42:10.911Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "29230084-673a-428c-a59e-3d08d48a7d7e",
+              "producto_id": "pizzicas_merengue",
+              "nombre": "½ Merengue + ½ Bachata",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_merengue",
+                "nombre": "Merengue",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "York",
+                  "Bacon"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_bachata",
+                "nombre": "Bachata",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Anchoas",
+                  "Alcaparras",
+                  "Cebolla",
+                  "Olivas"
+                ]
+              },
+              "created_at": "2026-03-14T20:42:39.863Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "57afffa7-6195-4557-8646-4663a8d5fefb",
+              "producto_id": "pizzicas_swing",
+              "nombre": "Swing",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Crema de champiñones",
+                "Nata",
+                "Pimienta",
+                "Queso azul",
+                "York",
+                "Mezcla de quesos"
+              ],
+              "created_at": "2026-03-14T20:42:57.535Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            },
+            {
+              "item_id": "dfc42600-b71f-474c-9abd-9da60b77cd75",
+              "producto_id": "pizzicas_soul",
+              "nombre": "Soul",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Queso"
+              ],
+              "created_at": "2026-03-14T20:43:00.163Z",
+              "updated_at": "2026-03-14T20:43:07.425Z"
+            }
+          ],
+          "total": 54.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 54.5,
+        "propina": 0,
+        "total_final": 54.5
+      }
+    },
+    {
+      "venta_id": "venta_1773523975376_b9fcj32fz",
+      "timestamp": "2026-03-14T21:32:55.376Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_006",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T20:53:51.591Z",
+        "hora_cierre": "2026-03-14T21:32:55.376Z",
+        "metadata": {
+          "numero_ticket": 6
+        }
+      },
+      "cobro": {
+        "cobro_id": "4ffef57c-a696-47bf-aec9-f4b73fa30dbc",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 11,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_897a3b7b"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773521638371_d2b301f2",
+          "items": [
+            {
+              "item_id": "e42da471-22d8-4033-81bd-58d19841a65d",
+              "producto_id": "pizzicas_batucada",
+              "nombre": "½ Batucada + ½ Cumbia",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_batucada",
+                "nombre": "Batucada",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Queso azul",
+                  "Mezcla de quesos",
+                  "Nata"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_cumbia",
+                "nombre": "Cumbia",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Cebolla",
+                  "Ternera",
+                  "Mezcla de quesos",
+                  "Piña",
+                  "Salsa Vitorino"
+                ]
+              },
+              "created_at": "2026-03-14T20:53:57.365Z",
+              "updated_at": "2026-03-14T20:53:58.372Z"
+            }
+          ],
+          "total": 11
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 11
+      }
+    },
+    {
+      "venta_id": "venta_1773523975904_gmr7hftss",
+      "timestamp": "2026-03-14T21:32:55.904Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_005",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T20:45:19.986Z",
+        "hora_cierre": "2026-03-14T21:32:55.904Z",
+        "metadata": {
+          "numero_ticket": 5
+        }
+      },
+      "cobro": {
+        "cobro_id": "0eb31b10-ca00-4e75-832f-5da7818f5da6",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 21,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_89545bfa"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773521141155_803cb262",
+          "items": [
+            {
+              "item_id": "e33c8c63-8bf2-426b-b44a-4940b7a9493b",
+              "producto_id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T20:45:24.853Z",
+              "updated_at": "2026-03-14T20:45:41.155Z"
+            },
+            {
+              "item_id": "89539ec1-4812-4181-b554-1a1eab3a3966",
+              "producto_id": "pizzicas_ranchera",
+              "nombre": "Ranchera",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Salsa BBQ"
+              ],
+              "created_at": "2026-03-14T20:45:34.525Z",
+              "updated_at": "2026-03-14T20:45:41.155Z"
+            }
+          ],
+          "total": 21
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 21
+      }
+    },
+    {
+      "venta_id": "venta_1773523976353_z9ge65zwu",
+      "timestamp": "2026-03-14T21:32:56.353Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_004",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T20:35:26.040Z",
+        "hora_cierre": "2026-03-14T21:32:56.353Z",
+        "metadata": {
+          "numero_ticket": 4
+        }
+      },
+      "cobro": {
+        "cobro_id": "c700bde5-8ffd-4aaf-9b77-37d764f28476",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 30.5,
+        "metodo_pago": "efectivo",
+        "referencia_pago": "REF_980905b0"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773520551128_d0f9202c",
+          "items": [
+            {
+              "item_id": "957e5ec4-ec22-4dcd-bf6a-385197865418",
+              "producto_id": "pizzicas_the_veggie_symphony",
+              "nombre": "The Veggie Symphony",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Calabacín",
+                "Espárragos",
+                "Pimiento verde"
+              ],
+              "created_at": "2026-03-14T20:35:37.741Z",
+              "updated_at": "2026-03-14T20:35:51.129Z"
+            },
+            {
+              "item_id": "91ef9833-7fca-4745-b0f8-601afb760eae",
+              "producto_id": "pizzicas_rockabilly",
+              "nombre": "Rockabilly",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Bacon",
+                "Cebolla",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T20:35:41.243Z",
+              "updated_at": "2026-03-14T20:35:51.129Z"
+            },
+            {
+              "item_id": "260e20c0-fa30-4c19-bb89-fac8207d3095",
+              "producto_id": "pizzicas_fandango",
+              "nombre": "Fandango",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 9.5,
+              "precio_total": 9.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Ajo",
+                "Mozzarella",
+                "Queso azul"
+              ],
+              "created_at": "2026-03-14T20:35:47.320Z",
+              "updated_at": "2026-03-14T20:35:51.129Z"
+            }
+          ],
+          "total": 30.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 30.5
+      }
+    },
+    {
+      "venta_id": "venta_1773523984675_7b15mp5ub",
+      "timestamp": "2026-03-14T21:33:04.675Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_007",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T21:10:29.794Z",
+        "hora_cierre": "2026-03-14T21:33:04.675Z",
+        "metadata": {
+          "numero_ticket": 7
+        }
+      },
+      "cobro": {
+        "cobro_id": "a26103ca-905c-4a49-a260-4570ecbfdcae",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_47cd7f68"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773522634167_ccd783e6",
+          "items": [
+            {
+              "item_id": "71e486fe-2769-4312-acda-21c829d4dbe4",
+              "producto_id": "pizzicas_vallenato",
+              "nombre": "Vallenato",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Piña"
+              ],
+              "created_at": "2026-03-14T21:10:33.439Z",
+              "updated_at": "2026-03-14T21:10:34.168Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773523990698_euuuv2d0p",
+      "timestamp": "2026-03-14T21:33:10.698Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_010",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T21:22:36.791Z",
+        "hora_cierre": "2026-03-14T21:33:10.698Z",
+        "metadata": {
+          "numero_ticket": 10
+        }
+      },
+      "cobro": {
+        "cobro_id": "3b300091-f3e7-43ba-82be-745fdbbd45ee",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_42001a54"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773523361264_0702ad9b",
+          "items": [
+            {
+              "item_id": "c1ead1c0-176c-4bdb-9bee-b6fe24b8c31d",
+              "producto_id": "pizzicas_batucada",
+              "nombre": "Batucada",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Queso azul",
+                "Mezcla de quesos",
+                "Nata"
+              ],
+              "created_at": "2026-03-14T21:22:40.639Z",
+              "updated_at": "2026-03-14T21:22:41.264Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773524019057_umxp680ls",
+      "timestamp": "2026-03-14T21:33:39.057Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_003",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T20:21:52.901Z",
+        "hora_cierre": "2026-03-14T21:33:39.057Z",
+        "metadata": {
+          "numero_ticket": 3
+        }
+      },
+      "cobro": {
+        "cobro_id": "5f68015c-a054-4b6b-9ef7-54702027004a",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "efectivo",
+        "referencia_pago": "REF_8778b8b8"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773523867365_066b3018",
+          "items": [
+            {
+              "item_id": "7bd844ea-684b-4485-ae2e-761661c80f7f",
+              "producto_id": "pizzicas_batucada",
+              "nombre": "½ Batucada + ½ Ranchera",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "tipo": "mitad_mitad",
+              "pizza_izquierda": {
+                "id": "pizzicas_batucada",
+                "nombre": "Batucada",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Queso azul",
+                  "Mezcla de quesos",
+                  "Nata"
+                ]
+              },
+              "pizza_derecha": {
+                "id": "pizzicas_ranchera",
+                "nombre": "Ranchera",
+                "ingredientes_base": [
+                  "Tomate",
+                  "Mozzarella",
+                  "Bacon",
+                  "Cebolla",
+                  "Salsa BBQ"
+                ]
+              },
+              "created_at": "2026-03-14T20:22:03.442Z",
+              "updated_at": "2026-03-14T21:31:07.365Z"
+            },
+            {
+              "item_id": "c00f72a5-65c6-4cf1-9da6-db1e62e6bbee",
+              "producto_id": "pizzicas_country",
+              "nombre": "Country",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11.5,
+              "precio_total": 11.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Salsa BBQ",
+                "Nata",
+                "Pollo",
+                "Mezcla de quesos",
+                "Cebolla",
+                "Bacon"
+              ],
+              "created_at": "2026-03-14T21:31:06.883Z",
+              "updated_at": "2026-03-14T21:31:07.365Z"
+            }
+          ],
+          "total": 22
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773526106748_d3elpr8sh",
+      "timestamp": "2026-03-14T22:08:26.748Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_008",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T21:13:38.701Z",
+        "hora_cierre": "2026-03-14T22:08:26.748Z",
+        "metadata": {
+          "numero_ticket": 8
+        }
+      },
+      "cobro": {
+        "cobro_id": "2d5e43c4-5b59-4649-83af-509043fcec8c",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 21,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_471150e2"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773522830348_167891ff",
+          "items": [
+            {
+              "item_id": "ef03855d-30e6-4e80-ac9a-6af99549a891",
+              "producto_id": "pizzicas_the_veggie_symphony",
+              "nombre": "The Veggie Symphony",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Calabacín",
+                "Espárragos",
+                "Pimiento verde"
+              ],
+              "created_at": "2026-03-14T21:13:40.338Z",
+              "updated_at": "2026-03-14T21:13:50.348Z"
+            },
+            {
+              "item_id": "2f822143-47be-4935-8fa3-0329fe82fdda",
+              "producto_id": "pizzicas_jazz",
+              "nombre": "Jazz",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Queso",
+                "Jamón York",
+                "Champiñones"
+              ],
+              "created_at": "2026-03-14T21:13:44.054Z",
+              "updated_at": "2026-03-14T21:13:50.348Z"
+            }
+          ],
+          "total": 21
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 21
+      }
+    },
+    {
+      "venta_id": "venta_1773526117070_i0hrjkpk9",
+      "timestamp": "2026-03-14T22:08:37.070Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_012",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T21:36:48.663Z",
+        "hora_cierre": "2026-03-14T22:08:37.070Z",
+        "metadata": {
+          "numero_ticket": 12
+        }
+      },
+      "cobro": {
+        "cobro_id": "bc1ba72b-a7b9-460e-abac-ba1f46b3a917",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 10.5,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_ada01c24"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773524215018_005cf882",
+          "items": [
+            {
+              "item_id": "fecd856a-e74c-4801-9133-e39c77c5cd1e",
+              "producto_id": "pizzicas_flamenco",
+              "nombre": "Flamenco",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "Pepperoni",
+                "Cebolla",
+                "Pimiento verde",
+                "Huevo"
+              ],
+              "created_at": "2026-03-14T21:36:53.113Z",
+              "updated_at": "2026-03-14T21:36:55.018Z"
+            }
+          ],
+          "total": 10.5
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 10.5
+      }
+    },
+    {
+      "venta_id": "venta_1773528555911_66wnmujvq",
+      "timestamp": "2026-03-14T22:49:15.911Z",
+      "project_id": "nonina",
+      "cuenta": {
+        "cuenta_id": "llevar_20260314_011",
+        "tipo": "llevar",
+        "origen": "cuentas-canales:llevar",
+        "hora_apertura": "2026-03-14T21:35:23.557Z",
+        "hora_cierre": "2026-03-14T22:49:15.911Z",
+        "metadata": {
+          "numero_ticket": 11
+        }
+      },
+      "cobro": {
+        "cobro_id": "16e7f62a-186f-4cea-85fb-bab18b557eff",
+        "monto": 0,
+        "propina": 0,
+        "monto_total": 100,
+        "metodo_pago": "tarjeta",
+        "referencia_pago": "REF_4687df3d"
+      },
+      "pedidos": [
+        {
+          "pedido_id": "ped_1773524127711_5c652e1f",
+          "items": [
+            {
+              "item_id": "3960d310-c774-4d91-848f-0a1eaeb3902e",
+              "producto_id": "pizzicas_trap",
+              "nombre": "Trap",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Queso",
+                "Peperoni",
+                "Nata",
+                "Maíz",
+                "Pimiento verde"
+              ],
+              "created_at": "2026-03-14T21:35:24.852Z",
+              "updated_at": "2026-03-14T21:35:27.711Z"
+            },
+            {
+              "item_id": "3827b403-da12-43eb-8ff7-7764cd651867",
+              "producto_id": "pizzicas_folk",
+              "nombre": "Folk",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate seco",
+                "Mozzarella",
+                "Cebolla",
+                "Champiñón",
+                "Salsa de ajo asado y trufa",
+                "Anchoas"
+              ],
+              "created_at": "2026-03-14T21:35:25.077Z",
+              "updated_at": "2026-03-14T21:35:27.711Z"
+            },
+            {
+              "item_id": "d39755a1-d034-4265-8aba-4a42194ed521",
+              "producto_id": "pizzicas_indie",
+              "nombre": "Indie",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Pepperoni"
+              ],
+              "created_at": "2026-03-14T21:35:25.827Z",
+              "updated_at": "2026-03-14T21:35:27.711Z"
+            },
+            {
+              "item_id": "46afa0c9-7406-425c-a29c-8161ef6014ec",
+              "producto_id": "pizzicas_milonga",
+              "nombre": "Milonga",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10,
+              "precio_total": 10,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York"
+              ],
+              "created_at": "2026-03-14T21:35:26.010Z",
+              "updated_at": "2026-03-14T21:35:27.711Z"
+            },
+            {
+              "item_id": "76e9ee80-e179-47a2-b95e-c429948b74f3",
+              "producto_id": "pizzicas_swing",
+              "nombre": "Swing",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 11,
+              "precio_total": 11,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Crema de champiñones",
+                "Nata",
+                "Pimienta",
+                "Queso azul",
+                "York",
+                "Mezcla de quesos"
+              ],
+              "created_at": "2026-03-14T21:35:26.867Z",
+              "updated_at": "2026-03-14T21:35:27.711Z"
+            },
+            {
+              "item_id": "0d6d282c-c057-4a67-9535-c85f2fe36ebb",
+              "producto_id": "pizzicas_k_pop",
+              "nombre": "K-Pop",
+              "categoria": "pizzicas",
+              "cantidad": 1,
+              "precio_unitario": 10.5,
+              "precio_total": 10.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Tomate",
+                "Mozzarella",
+                "York",
+                "Huevo"
+              ],
+              "created_at": "2026-03-14T21:35:27.081Z",
+              "updated_at": "2026-03-14T21:35:27.711Z"
+            }
+          ],
+          "total": 64
+        },
+        {
+          "pedido_id": "ped_1773524153722_23ee0330",
+          "items": [
+            {
+              "item_id": "109c0129-958b-4412-bb66-16817e0fd256",
+              "producto_id": "entrantes_huevos_salseros",
+              "nombre": "Huevos Salseros",
+              "categoria": "entrantes",
+              "cantidad": 1,
+              "precio_unitario": 3.5,
+              "precio_total": 3.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Huevo",
+                "Salsa de ajo trufa y mayonesa"
+              ],
+              "created_at": "2026-03-14T21:35:47.127Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "42688981-69ef-4d82-9e6d-98370b5c290d",
+              "producto_id": "bebidas_vermut",
+              "nombre": "Vermut",
+              "categoria": "bebidas",
+              "cantidad": 1,
+              "precio_unitario": 2,
+              "precio_total": 2,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "created_at": "2026-03-14T21:35:47.365Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "a0e7032a-e997-4569-90bd-4b665562a882",
+              "producto_id": "entrantes_patatas_fritas_con_nuestras_2_salsas",
+              "nombre": "Patatas fritas con nuestras 2 salsas",
+              "categoria": "entrantes",
+              "cantidad": 1,
+              "precio_unitario": 5,
+              "precio_total": 5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Patatas fritas",
+                "Salsa especial 1",
+                "Salsa especial 2"
+              ],
+              "created_at": "2026-03-14T21:35:47.579Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "b8dbff77-0590-476f-9ca1-7222326bf4e3",
+              "producto_id": "porciones_porcion_de_pizza",
+              "nombre": "Porción de Pizza",
+              "categoria": "porciones",
+              "cantidad": 1,
+              "precio_unitario": 3,
+              "precio_total": 3,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Masa de pizza",
+                "Tomate",
+                "Queso"
+              ],
+              "created_at": "2026-03-14T21:35:49.768Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "2e58b102-eee7-491d-ada2-a774726c712d",
+              "producto_id": "pancitos_sweet_emotion",
+              "nombre": "\"Sweet Emotion\" (Aerosmith) - Dulce Emoción",
+              "categoria": "pancitos",
+              "cantidad": 1,
+              "precio_unitario": 5,
+              "precio_total": 5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Atún",
+                "Cebolla cruda",
+                "Mostaza"
+              ],
+              "created_at": "2026-03-14T21:35:50.641Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "ca957bfc-3bdc-4c17-a404-9b0f4c81f9d9",
+              "producto_id": "pancitos_sweet_emotion",
+              "nombre": "\"Sweet Emotion\" (Aerosmith) - Dulce Emoción",
+              "categoria": "pancitos",
+              "cantidad": 1,
+              "precio_unitario": 5,
+              "precio_total": 5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Atún",
+                "Cebolla cruda",
+                "Mostaza"
+              ],
+              "created_at": "2026-03-14T21:35:50.806Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "dcc26dde-4469-4d84-8fbe-df738dccc1b0",
+              "producto_id": "hot_dog_music_hot_dog_classic",
+              "nombre": "Hot Dog Classic",
+              "categoria": "hot_dog_music",
+              "cantidad": 1,
+              "precio_unitario": 3.5,
+              "precio_total": 3.5,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Salchicha",
+                "Pan",
+                "Queso"
+              ],
+              "created_at": "2026-03-14T21:35:52.551Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "4ac0eb9d-05e1-42b5-b5c4-f64d365ceb79",
+              "producto_id": "porciones_porcion_de_pizza",
+              "nombre": "Porción de Pizza",
+              "categoria": "porciones",
+              "cantidad": 1,
+              "precio_unitario": 3,
+              "precio_total": 3,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Masa de pizza",
+                "Tomate",
+                "Queso"
+              ],
+              "created_at": "2026-03-14T21:35:52.817Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "2d0bf5c1-b986-4c2a-8a25-7bd0113ad3f8",
+              "producto_id": "porciones_porcion_de_pizza",
+              "nombre": "Porción de Pizza",
+              "categoria": "porciones",
+              "cantidad": 1,
+              "precio_unitario": 3,
+              "precio_total": 3,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Masa de pizza",
+                "Tomate",
+                "Queso"
+              ],
+              "created_at": "2026-03-14T21:35:52.998Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            },
+            {
+              "item_id": "c3467de4-8998-441d-a2d8-766ecb784d0b",
+              "producto_id": "porciones_porcion_de_pizza",
+              "nombre": "Porción de Pizza",
+              "categoria": "porciones",
+              "cantidad": 1,
+              "precio_unitario": 3,
+              "precio_total": 3,
+              "variaciones": [],
+              "notas": null,
+              "estado": "en_cocina",
+              "ingredientes_base": [
+                "Masa de pizza",
+                "Tomate",
+                "Queso"
+              ],
+              "created_at": "2026-03-14T21:35:53.127Z",
+              "updated_at": "2026-03-14T21:35:53.722Z"
+            }
+          ],
+          "total": 36
+        }
+      ],
+      "resumen": {
+        "subtotal": 0,
+        "propina": 0,
+        "total_final": 100
+      }
+    }
+  ],
+  "resumen_dia": {
+    "total_ventas": 21,
+    "total_ingresos": 504.5,
+    "total_propinas": 0,
+    "por_metodo_pago": {
+      "efectivo": 52,
+      "tarjeta": 452.5,
+      "bizum": 0,
+      "transferencia": 0
+    },
+    "por_tipo_cuenta": {
+      "mesa": 236,
+      "telefono": 0,
+      "llevar": 268.5
+    },
+    "por_camarero": {}
+  },
+  "ultima_actualizacion": "2026-03-14T22:49:15.915Z"
+}

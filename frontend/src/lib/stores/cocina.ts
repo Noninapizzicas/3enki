@@ -86,13 +86,22 @@ export interface CocinaMetrics {
   tiempo_promedio_preparacion: number;
 }
 
+export interface TipoEstacionInfo {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  comportamientos: {
+    imprime_al_completar: boolean;
+  };
+}
+
 export interface CocinaDevice {
   device_id: string;
   nombre: string;
   estacion: string | null;
   color: string;
   filtros: { familias: string[] };
-  familias_impresion: string[];
+  tipo_estacion: string;
   connected_at: string;
   last_seen: string;
 }
@@ -108,7 +117,9 @@ export interface CocinaState {
   myNombre: string | null;
   myEstacion: string | null;
   filtrosActivos: string[]; // familias/categorías activas (vacío = todo)
-  familiasImpresion: string[]; // familias que imprimen ticket al completar
+  tipoEstacion: string; // tipo de estación: 'general', 'horno', 'montaje', etc.
+  tipoEstacionInfo: TipoEstacionInfo | null; // info completa del tipo seleccionado
+  tiposDisponibles: TipoEstacionInfo[]; // tipos cargados del backend
   devices: CocinaDevice[];
 }
 
@@ -155,7 +166,9 @@ export const cocinaStore = writable<CocinaState>({
   myNombre: null,
   myEstacion: null,
   filtrosActivos: [],
-  familiasImpresion: [],
+  tipoEstacion: 'general',
+  tipoEstacionInfo: null,
+  tiposDisponibles: [],
   devices: []
 });
 
@@ -172,7 +185,9 @@ export const myDeviceColor = derived(cocinaStore, $s => $s.myColor);
 export const myDeviceNombre = derived(cocinaStore, $s => $s.myNombre);
 export const myEstacion = derived(cocinaStore, $s => $s.myEstacion);
 export const filtrosActivos = derived(cocinaStore, $s => $s.filtrosActivos);
-export const familiasImpresion = derived(cocinaStore, $s => $s.familiasImpresion);
+export const tipoEstacion = derived(cocinaStore, $s => $s.tipoEstacion);
+export const tipoEstacionInfo = derived(cocinaStore, $s => $s.tipoEstacionInfo);
+export const tiposDisponibles = derived(cocinaStore, $s => $s.tiposDisponibles);
 export const cocinaDevices = derived(cocinaStore, $s => $s.devices);
 
 export const itemsPendientes = derived(cocinaStore, $s =>
@@ -327,7 +342,7 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
       nombre: nombre || undefined,
       estacion: state.myEstacion || undefined,
       filtros: state.filtrosActivos.length > 0 ? { familias: state.filtrosActivos } : undefined,
-      familias_impresion: state.familiasImpresion.length > 0 ? state.familiasImpresion : undefined
+      tipo_estacion: state.tipoEstacion || 'general'
     });
 
     const data = res?.data?.color ? res.data : res?.data?.data;
@@ -338,7 +353,8 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
         myColor: data.color,
         myNombre: data.nombre,
         myEstacion: data.estacion || s.myEstacion,
-        familiasImpresion: data.familias_impresion || s.familiasImpresion,
+        tipoEstacion: data.tipo_estacion || s.tipoEstacion,
+        tipoEstacionInfo: data.tipo_estacion_info || s.tipoEstacionInfo,
         devices: data.devices || s.devices
       }));
     }
@@ -417,7 +433,7 @@ export async function updateDeviceName(nombre: string): Promise<boolean> {
       nombre,
       estacion: state.myEstacion || undefined,
       filtros: { familias: state.filtrosActivos },
-      familias_impresion: state.familiasImpresion.length > 0 ? state.familiasImpresion : undefined
+      tipo_estacion: state.tipoEstacion || 'general'
     });
     return true;
   } catch {
@@ -439,7 +455,7 @@ export async function updateEstacion(estacion: string): Promise<boolean> {
       device_id: state.myDeviceId,
       estacion,
       filtros: { familias: state.filtrosActivos },
-      familias_impresion: state.familiasImpresion
+      tipo_estacion: state.tipoEstacion || 'general'
     });
     return true;
   } catch {
@@ -448,39 +464,42 @@ export async function updateEstacion(estacion: string): Promise<boolean> {
 }
 
 /**
- * Establece qué familias imprimen ticket al completar un item en esta estación.
+ * Establece el tipo de estación del dispositivo.
+ * El tipo determina los comportamientos (imprime_al_completar, etc.).
  */
-export function setFamiliasImpresion(familias: string[]): void {
-  cocinaStore.update(s => ({ ...s, familiasImpresion: familias }));
-
+export async function setTipoEstacion(tipo: string): Promise<boolean> {
   const state = get(cocinaStore);
+  const tipoInfo = state.tiposDisponibles.find(t => t.id === tipo) || null;
+
+  cocinaStore.update(s => ({ ...s, tipoEstacion: tipo, tipoEstacionInfo: tipoInfo }));
+
   if (state.myDeviceId) {
-    mqttRequest('cocina', 'register-device', {
-      device_id: state.myDeviceId,
-      familias_impresion: familias,
-      filtros: { familias: state.filtrosActivos }
-    }).catch(() => {});
+    try {
+      await mqttRequest('cocina', 'register-device', {
+        device_id: state.myDeviceId,
+        tipo_estacion: tipo,
+        filtros: { familias: state.filtrosActivos }
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
+  return true;
 }
 
 /**
- * Toggle de familia de impresión (añadir/quitar de la lista).
+ * Carga los tipos de estación disponibles desde el backend.
  */
-export function toggleFamiliaImpresion(familia: string): void {
-  cocinaStore.update(s => {
-    const activas = s.familiasImpresion.includes(familia)
-      ? s.familiasImpresion.filter(f => f !== familia)
-      : [...s.familiasImpresion, familia];
-    return { ...s, familiasImpresion: activas };
-  });
-
-  const state = get(cocinaStore);
-  if (state.myDeviceId) {
-    mqttRequest('cocina', 'register-device', {
-      device_id: state.myDeviceId,
-      familias_impresion: state.familiasImpresion,
-      filtros: { familias: state.filtrosActivos }
-    }).catch(() => {});
+export async function loadTiposEstacion(): Promise<void> {
+  try {
+    const res = await mqttRequest<any>('cocina', 'list-station-types', {});
+    const tipos = res?.data?.tipos || res?.data?.data?.tipos || [];
+    if (tipos.length > 0) {
+      cocinaStore.update(s => ({ ...s, tiposDisponibles: tipos }));
+    }
+  } catch {
+    // Non-critical
   }
 }
 
@@ -942,9 +961,10 @@ export function initCocinaSubscriptions(): () => void {
   }
   document.addEventListener('visibilitychange', onVisibilityChange);
 
-  // Carga inicial + register device
+  // Carga inicial + register device + tipos estación
   loadPedidosActivos();
   loadMetrics();
+  loadTiposEstacion();
   registerDevice();
 
   // Refrescar métricas cada 30s

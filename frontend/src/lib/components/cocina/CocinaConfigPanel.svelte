@@ -19,11 +19,11 @@
   import {
     cocinaStore,
     myDeviceColor, myDeviceNombre, myEstacion, filtrosActivos,
-    familiasImpresion, cocinaDevices,
+    tipoEstacion, tiposDisponibles, cocinaDevices,
     pedidosCocina,
-    setFiltros, updateDeviceName, updateEstacion, setFamiliasImpresion
+    setFiltros, updateDeviceName, updateEstacion, setTipoEstacion
   } from '$lib/stores/cocina';
-  import type { ItemCocina } from '$lib/stores/cocina';
+  import type { ItemCocina, TipoEstacionInfo } from '$lib/stores/cocina';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
 
   const dispatch = createEventDispatcher();
@@ -32,7 +32,7 @@
   let editNombre = '';
   let editEstacion = '';
   let selectedFamilias: Set<string> = new Set();
-  let selectedImpresion: Set<string> = new Set();
+  let selectedTipoEstacion: string = 'general';
   let saving = false;
 
   // Categorías cargadas del catálogo
@@ -152,7 +152,7 @@
     editNombre = $myDeviceNombre || '';
     editEstacion = $myEstacion || '';
     selectedFamilias = new Set($filtrosActivos);
-    selectedImpresion = new Set($familiasImpresion);
+    selectedTipoEstacion = $tipoEstacion || 'general';
     loadCategorias();
   });
 
@@ -169,29 +169,19 @@
     selectedFamilias = new Set();
   }
 
-  function toggleImpresion(f: string) {
-    if (selectedImpresion.has(f)) {
-      selectedImpresion.delete(f);
-    } else {
-      selectedImpresion.add(f);
-    }
-    selectedImpresion = selectedImpresion;
-  }
-
-  function clearImpresion() {
-    selectedImpresion = new Set();
+  function selectTipo(tipoId: string) {
+    selectedTipoEstacion = tipoId;
   }
 
   async function handleSave() {
     saving = true;
     const familias = [...selectedFamilias];
-    const impresion = [...selectedImpresion];
 
     // Update filters
     setFiltros(familias);
 
-    // Update print families
-    setFamiliasImpresion(impresion);
+    // Update station type
+    await setTipoEstacion(selectedTipoEstacion);
 
     // Update name if changed
     const currentName = $myDeviceNombre || '';
@@ -303,31 +293,48 @@
         {/if}
       </section>
 
-      <!-- Print on complete -->
+      <!-- Station type selector -->
       <section class="config-section">
-        <h3>Imprimir al completar</h3>
-        <p class="section-hint">Familias que imprimen ticket de pieza al marcar un item como listo en esta estación.</p>
+        <h3>Tipo de estación</h3>
+        <p class="section-hint">El tipo determina los comportamientos automáticos (ej: imprimir ticket al completar).</p>
 
         <div class="familia-grid">
-          <button
-            class="familia-chip print-chip"
-            class:active={selectedImpresion.size === 0}
-            on:click={clearImpresion}
-          >
-            NINGUNA
-          </button>
-
-          {#each allFamilias as familia}
+          {#each $tiposDisponibles as tipo}
             <button
-              class="familia-chip print-chip"
-              class:active={selectedImpresion.has(familia.id)}
-              on:click={() => toggleImpresion(familia.id)}
+              class="familia-chip tipo-chip"
+              class:active={selectedTipoEstacion === tipo.id}
+              on:click={() => selectTipo(tipo.id)}
             >
-              {#if familia.emoji}<span class="familia-emoji">{familia.emoji}</span>{/if}
-              {familia.nombre.toUpperCase()}
+              {tipo.nombre.toUpperCase()}
             </button>
           {/each}
+
+          {#if $tiposDisponibles.length === 0}
+            <!-- Fallback si no se cargaron los tipos del backend -->
+            {#each ['general', 'horno', 'montaje', 'freidora', 'emplatado', 'plancha'] as tipoId}
+              <button
+                class="familia-chip tipo-chip"
+                class:active={selectedTipoEstacion === tipoId}
+                on:click={() => selectTipo(tipoId)}
+              >
+                {tipoId.toUpperCase()}
+              </button>
+            {/each}
+          {/if}
         </div>
+
+        <!-- Show selected type info -->
+        {#if selectedTipoEstacion}
+          {@const tipoInfo = $tiposDisponibles.find(t => t.id === selectedTipoEstacion)}
+          {#if tipoInfo}
+            <div class="tipo-info">
+              <p class="tipo-desc">{tipoInfo.descripcion}</p>
+              {#if tipoInfo.comportamientos.imprime_al_completar}
+                <span class="tipo-badge print">Imprime ticket al completar</span>
+              {/if}
+            </div>
+          {/if}
+        {/if}
       </section>
 
       <!-- Connected devices -->
@@ -345,11 +352,7 @@
                   {/if}
                 </div>
                 <span class="dev-filtros">
-                  {#if dev.filtros?.familias?.length > 0}
-                    {dev.filtros.familias.join(', ')}
-                  {:else}
-                    todo
-                  {/if}
+                  {dev.tipo_estacion || 'general'}
                 </span>
               </div>
             {/each}
@@ -546,10 +549,39 @@
     color: #fff;
   }
 
-  .familia-chip.print-chip.active {
-    background: #f97316;
-    border-color: #f97316;
+  .familia-chip.tipo-chip.active {
+    background: #8b5cf6;
+    border-color: #8b5cf6;
     color: #fff;
+  }
+
+  .tipo-info {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: #0f172a;
+    border-radius: 8px;
+  }
+
+  .tipo-desc {
+    margin: 0 0 6px;
+    font-size: 0.75rem;
+    color: #94a3b8;
+  }
+
+  .tipo-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .tipo-badge.print {
+    background: rgba(249, 115, 22, 0.2);
+    color: #f97316;
+    border: 1px solid rgba(249, 115, 22, 0.3);
   }
 
   .no-familias {

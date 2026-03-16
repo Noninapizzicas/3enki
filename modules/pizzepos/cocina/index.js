@@ -17,13 +17,15 @@
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
-// Tipos de estación: solo general y horno por ahora
+// Tipos de estación: el pase es un contador acumulativo del item, no de la estación.
+// Cada estación filtra por el pase mínimo que necesita para mostrar el item.
+// General: pase_minimo=0 (items nuevos), Horno: pase_minimo=1 (ya pasaron por general).
 const TIPOS_ESTACION = {
   general: {
     id: 'general',
     nombre: 'General',
-    descripcion: 'Preparación/montaje — pase 0',
-    pase: 0,
+    descripcion: 'Preparación/montaje — items nuevos (pase 0)',
+    pase_minimo: 0,
     comportamientos: {
       imprime_al_completar: false,
       auto_preparar: false
@@ -33,7 +35,7 @@ const TIPOS_ESTACION = {
     id: 'horno',
     nombre: 'Horno',
     descripcion: 'Horneado — auto-inicia, 1 tap imprime y completa',
-    pase: 1,
+    pase_minimo: 1,
     comportamientos: {
       imprime_al_completar: true,
       auto_preparar: true
@@ -425,8 +427,8 @@ class CocinaModule {
       }
     }
 
-    // ¿Hay siguiente estación para este pase?
-    const siguienteTipo = Object.values(this.tiposEstacion).find(t => t.pase === itemEncontrado.pase);
+    // ¿Hay siguiente estación cuyo pase_minimo coincida con el pase actual del item?
+    const siguienteTipo = Object.values(this.tiposEstacion).find(t => t.pase_minimo === itemEncontrado.pase);
 
     if (siguienteTipo) {
       // Limpiar device info de la estación anterior
@@ -500,7 +502,7 @@ class CocinaModule {
       return { status: 404, error: 'Pedido no encontrado en cocina' };
     }
 
-    const maxPase = Math.max(...Object.values(this.tiposEstacion).map(t => t.pase)) + 1;
+    const maxPase = Math.max(...Object.values(this.tiposEstacion).map(t => t.pase_minimo)) + 1;
     const now = new Date().toISOString();
     pedido.items.forEach(item => {
       if (item.estado !== 'listo') {

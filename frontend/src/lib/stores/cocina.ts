@@ -92,7 +92,7 @@ export interface TipoEstacionInfo {
   id: string;
   nombre: string;
   descripcion: string;
-  pase: number;
+  pase_minimo: number;
   comportamientos: {
     imprime_al_completar: boolean;
     auto_preparar: boolean;
@@ -526,19 +526,17 @@ export function itemPassesFilter(item: ItemCocina, filtros: string[]): boolean {
 }
 
 /**
- * Filtra items por pase según el tipo de estación del dispositivo.
- * general (pase 0) ve items con pase=0
- * horno (pase 1) ve items con pase=1
- * Si no hay tipo o es general, ve todo (backwards compat)
+ * Filtra items por pase acumulativo.
+ * El pase es un contador del item que se incrementa cada vez que pasa por una estación.
+ * Cada estación define pase_minimo: el pase que debe tener el item para mostrarse ahí.
+ * general (pase_minimo=0) ve items con pase=0
+ * horno (pase_minimo=1) ve items con pase=1
+ * Un futuro emplatado (pase_minimo=2) vería items con pase=2, etc.
  */
 export function itemMatchesStation(item: ItemCocina, tipoEstacion: string, tipoInfo?: TipoEstacionInfo | null): boolean {
-  if (!tipoEstacion || tipoEstacion === 'general') {
-    // General ve items en pase 0 (o sin pase definido)
-    return (item.pase ?? 0) === 0;
-  }
-  // Estación especializada: filtrar por su pase
-  const paseEstacion = tipoInfo?.pase ?? 1;
-  return (item.pase ?? 0) === paseEstacion;
+  const paseItem = item.pase ?? 0;
+  const paseMinimo = tipoInfo?.pase_minimo ?? 0;
+  return paseItem === paseMinimo;
 }
 
 // =============================================================================

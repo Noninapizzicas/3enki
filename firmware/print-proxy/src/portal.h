@@ -35,7 +35,7 @@ extern PrintProxyConfig cfg;
 
 void configLoad();
 void configSave();
-void portalSetup(WebServer& server);
+void portalSetup();
 
 // ============================================
 // HTML del portal (embebido en flash con PROGMEM)

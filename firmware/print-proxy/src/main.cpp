@@ -388,138 +388,140 @@ void reconnectServices() {
 // Portal web — API endpoints
 // ============================================
 
-void portalSetup(WebServer& server) {
-  // Pagina principal
-  server.on("/", HTTP_GET, [&server]() {
-    server.send_P(200, "text/html", PORTAL_HTML);
-  });
+// Handler functions (no lambdas — evita problemas con captures en ESP32)
 
-  // GET /api/config — devuelve config actual
-  server.on("/api/config", HTTP_GET, [&server]() {
-    JsonDocument doc;
-    doc["device_id"]    = cfg.deviceId;
-    doc["project_id"]   = cfg.projectId;
-    doc["mqtt_host"]    = cfg.mqttHost;
-    doc["mqtt_port"]    = cfg.mqttPort;
-    doc["mqtt_user"]    = cfg.mqttUser;
-    doc["mqtt_pass"]    = cfg.mqttPass;
-    doc["printer_name"] = cfg.printerName;
-    doc["printer_svc"]  = cfg.printerSvcUuid;
-    doc["printer_char"] = cfg.printerCharUuid;
-    doc["ip"]           = WiFi.localIP().toString();
-    unsigned long up = millis() / 1000;
-    char upStr[32];
-    snprintf(upStr, sizeof(upStr), "%luh %lum", up / 3600, (up % 3600) / 60);
-    doc["uptime"] = upStr;
+void handleRoot() {
+  webServer.send_P(200, "text/html", PORTAL_HTML);
+}
 
-    char buf[512];
-    serializeJson(doc, buf, sizeof(buf));
-    server.send(200, "application/json", buf);
-  });
+void handleGetConfig() {
+  JsonDocument doc;
+  doc["device_id"]    = cfg.deviceId;
+  doc["project_id"]   = cfg.projectId;
+  doc["mqtt_host"]    = cfg.mqttHost;
+  doc["mqtt_port"]    = cfg.mqttPort;
+  doc["mqtt_user"]    = cfg.mqttUser;
+  doc["mqtt_pass"]    = cfg.mqttPass;
+  doc["printer_name"] = cfg.printerName;
+  doc["printer_svc"]  = cfg.printerSvcUuid;
+  doc["printer_char"] = cfg.printerCharUuid;
+  doc["ip"]           = WiFi.localIP().toString();
+  unsigned long up = millis() / 1000;
+  char upStr[32];
+  snprintf(upStr, sizeof(upStr), "%luh %lum", up / 3600, (up % 3600) / 60);
+  doc["uptime"] = upStr;
 
-  // POST /api/config — guardar config
-  server.on("/api/config", HTTP_POST, [&server]() {
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, server.arg("plain"));
-    if (err) {
-      server.send(400, "application/json", "{\"ok\":false,\"error\":\"JSON invalido\"}");
+  char buf[512];
+  serializeJson(doc, buf, sizeof(buf));
+  webServer.send(200, "application/json", buf);
+}
+
+void handlePostConfig() {
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, webServer.arg("plain"));
+  if (err) {
+    webServer.send(400, "application/json", "{\"ok\":false,\"error\":\"JSON invalido\"}");
+    return;
+  }
+
+  if (doc["device_id"].is<const char*>())    strlcpy(cfg.deviceId,        doc["device_id"],    sizeof(cfg.deviceId));
+  if (doc["project_id"].is<const char*>())   strlcpy(cfg.projectId,       doc["project_id"],   sizeof(cfg.projectId));
+  if (doc["mqtt_host"].is<const char*>())    strlcpy(cfg.mqttHost,        doc["mqtt_host"],    sizeof(cfg.mqttHost));
+  if (doc["mqtt_port"].is<int>())            cfg.mqttPort = doc["mqtt_port"];
+  if (doc["mqtt_user"].is<const char*>())    strlcpy(cfg.mqttUser,        doc["mqtt_user"],    sizeof(cfg.mqttUser));
+  if (doc["mqtt_pass"].is<const char*>())    strlcpy(cfg.mqttPass,        doc["mqtt_pass"],    sizeof(cfg.mqttPass));
+  if (doc["printer_name"].is<const char*>()) strlcpy(cfg.printerName,     doc["printer_name"], sizeof(cfg.printerName));
+  if (doc["printer_svc"].is<const char*>())  strlcpy(cfg.printerSvcUuid,  doc["printer_svc"],  sizeof(cfg.printerSvcUuid));
+  if (doc["printer_char"].is<const char*>()) strlcpy(cfg.printerCharUuid, doc["printer_char"], sizeof(cfg.printerCharUuid));
+
+  configSave();
+  reconnectServices();
+
+  webServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleGetStatus() {
+  JsonDocument doc;
+  doc["wifi"]    = (WiFi.status() == WL_CONNECTED);
+  doc["mqtt"]    = mqtt.connected();
+  doc["printer"] = printerReady;
+
+  char buf[128];
+  serializeJson(doc, buf, sizeof(buf));
+  webServer.send(200, "application/json", buf);
+}
+
+void handleScan() {
+  NimBLEScan* scan = NimBLEDevice::getScan();
+  scan->setActiveScan(true);
+  NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
+
+  JsonDocument doc;
+  auto arr = doc.to<JsonArray>();
+
+  for (int i = 0; i < results.getCount(); i++) {
+    NimBLEAdvertisedDevice dev = results.getDevice(i);
+    String name = dev.getName().c_str();
+    if (name.length() == 0) continue;
+
+    JsonObject obj = arr.add<JsonObject>();
+    obj["name"] = name;
+    obj["addr"] = dev.getAddress().toString().c_str();
+    obj["rssi"] = dev.getRSSI();
+  }
+  scan->clearResults();
+
+  char buf[1024];
+  serializeJson(doc, buf, sizeof(buf));
+  webServer.send(200, "application/json", buf);
+}
+
+void handleTestPrint() {
+  if (!printerReady || !bleClient || !bleClient->isConnected()) {
+    if (!connectPrinter()) {
+      webServer.send(200, "application/json", "{\"ok\":false,\"error\":\"Impresora no conectada\"}");
       return;
     }
+  }
 
-    if (doc["device_id"].is<const char*>())    strlcpy(cfg.deviceId,        doc["device_id"],    sizeof(cfg.deviceId));
-    if (doc["project_id"].is<const char*>())   strlcpy(cfg.projectId,       doc["project_id"],   sizeof(cfg.projectId));
-    if (doc["mqtt_host"].is<const char*>())    strlcpy(cfg.mqttHost,        doc["mqtt_host"],    sizeof(cfg.mqttHost));
-    if (doc["mqtt_port"].is<int>())            cfg.mqttPort = doc["mqtt_port"];
-    if (doc["mqtt_user"].is<const char*>())    strlcpy(cfg.mqttUser,        doc["mqtt_user"],    sizeof(cfg.mqttUser));
-    if (doc["mqtt_pass"].is<const char*>())    strlcpy(cfg.mqttPass,        doc["mqtt_pass"],    sizeof(cfg.mqttPass));
-    if (doc["printer_name"].is<const char*>()) strlcpy(cfg.printerName,     doc["printer_name"], sizeof(cfg.printerName));
-    if (doc["printer_svc"].is<const char*>())  strlcpy(cfg.printerSvcUuid,  doc["printer_svc"],  sizeof(cfg.printerSvcUuid));
-    if (doc["printer_char"].is<const char*>()) strlcpy(cfg.printerCharUuid, doc["printer_char"], sizeof(cfg.printerCharUuid));
+  uint8_t testData[] = {
+    0x1B, 0x40,             // ESC @ — inicializar
+    0x1B, 0x61, 0x01,       // ESC a 1 — centrar
+    0x1B, 0x45, 0x01,       // ESC E 1 — negrita on
+    'P','R','I','N','T',' ','P','R','O','X','Y', 0x0A,
+    0x1B, 0x45, 0x00,       // ESC E 0 — negrita off
+    '-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-', 0x0A,
+    'T','e','s','t',' ','O','K', 0x0A,
+    0x0A, 0x0A, 0x0A,
+    0x1D, 0x56, 0x00        // GS V 0 — corte total
+  };
 
-    configSave();
-    reconnectServices();
+  bool ok = sendToPrinter(testData, sizeof(testData));
+  if (ok) {
+    printCount++;
+    webServer.send(200, "application/json", "{\"ok\":true}");
+  } else {
+    webServer.send(200, "application/json", "{\"ok\":false,\"error\":\"Error BLE write\"}");
+  }
+}
 
-    server.send(200, "application/json", "{\"ok\":true}");
-  });
+void handleReset() {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.clear();
+  prefs.end();
+  webServer.send(200, "application/json", "{\"ok\":true}");
+  delay(1000);
+  ESP.restart();
+}
 
-  // GET /api/status
-  server.on("/api/status", HTTP_GET, [&server]() {
-    JsonDocument doc;
-    doc["wifi"]    = (WiFi.status() == WL_CONNECTED);
-    doc["mqtt"]    = mqtt.connected();
-    doc["printer"] = printerReady;
-
-    char buf[128];
-    serializeJson(doc, buf, sizeof(buf));
-    server.send(200, "application/json", buf);
-  });
-
-  // GET /api/scan — escanea BLE y devuelve impresoras encontradas
-  server.on("/api/scan", HTTP_GET, [&server]() {
-    NimBLEScan* scan = NimBLEDevice::getScan();
-    scan->setActiveScan(true);
-    NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
-
-    JsonDocument doc;
-    auto arr = doc.to<JsonArray>();
-
-    for (int i = 0; i < results.getCount(); i++) {
-      NimBLEAdvertisedDevice dev = results.getDevice(i);
-      String name = dev.getName().c_str();
-      if (name.length() == 0) continue;  // ignorar dispositivos sin nombre
-
-      JsonObject obj = arr.add<JsonObject>();
-      obj["name"] = name;
-      obj["addr"] = dev.getAddress().toString().c_str();
-      obj["rssi"] = dev.getRSSI();
-    }
-    scan->clearResults();
-
-    char buf[1024];
-    serializeJson(doc, buf, sizeof(buf));
-    server.send(200, "application/json", buf);
-  });
-
-  // POST /api/test-print — envia un ticket de prueba
-  server.on("/api/test-print", HTTP_POST, [&server]() {
-    if (!printerReady || !bleClient || !bleClient->isConnected()) {
-      if (!connectPrinter()) {
-        server.send(200, "application/json", "{\"ok\":false,\"error\":\"Impresora no conectada\"}");
-        return;
-      }
-    }
-
-    // ESC/POS test: inicializar + centrar + negrita + "TEST OK" + corte
-    uint8_t testData[] = {
-      0x1B, 0x40,             // ESC @ — inicializar
-      0x1B, 0x61, 0x01,       // ESC a 1 — centrar
-      0x1B, 0x45, 0x01,       // ESC E 1 — negrita on
-      'P','R','I','N','T',' ','P','R','O','X','Y', 0x0A,
-      0x1B, 0x45, 0x00,       // ESC E 0 — negrita off
-      '-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-', 0x0A,
-      'T','e','s','t',' ','O','K', 0x0A,
-      0x0A, 0x0A, 0x0A,       // 3 lineas en blanco
-      0x1D, 0x56, 0x00        // GS V 0 — corte total
-    };
-
-    bool ok = sendToPrinter(testData, sizeof(testData));
-    if (ok) {
-      printCount++;
-      server.send(200, "application/json", "{\"ok\":true}");
-    } else {
-      server.send(200, "application/json", "{\"ok\":false,\"error\":\"Error BLE write\"}");
-    }
-  });
-
-  // POST /api/reset — borrar toda la config y reiniciar
-  server.on("/api/reset", HTTP_POST, [&server]() {
-    prefs.begin(NVS_NAMESPACE, false);
-    prefs.clear();
-    prefs.end();
-    server.send(200, "application/json", "{\"ok\":true}");
-    delay(1000);
-    ESP.restart();
-  });
+void portalSetup() {
+  webServer.on("/",                HTTP_GET,  handleRoot);
+  webServer.on("/api/config",      HTTP_GET,  handleGetConfig);
+  webServer.on("/api/config",      HTTP_POST, handlePostConfig);
+  webServer.on("/api/status",      HTTP_GET,  handleGetStatus);
+  webServer.on("/api/scan",        HTTP_GET,  handleScan);
+  webServer.on("/api/test-print",  HTTP_POST, handleTestPrint);
+  webServer.on("/api/reset",       HTTP_POST, handleReset);
 }
 
 // ============================================
@@ -544,7 +546,7 @@ void setup() {
 
   // 3. Portal web de configuracion
   NimBLEDevice::init("PrintProxy");
-  portalSetup(webServer);
+  portalSetup();
   webServer.begin();
   Serial.printf("[WEB] Portal en http://%s/\n", WiFi.localIP().toString().c_str());
 

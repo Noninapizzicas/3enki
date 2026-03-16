@@ -31,7 +31,7 @@
 
 PrintProxyConfig cfg;
 Preferences prefs;
-WebServer webServer(CONFIG_PORTAL_PORT);
+WebServer webServer(PORTAL_PORT);
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 

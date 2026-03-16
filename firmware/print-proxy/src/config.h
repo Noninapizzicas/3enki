@@ -26,6 +26,7 @@
 #define BLE_CHUNK_DELAY         20      // ms entre chunks
 #define BLE_SCAN_SECONDS        10      // duracion del escaneo BLE
 #define STATUS_INTERVAL_MS      30000   // cada 30s publica status
+#define PORTAL_PORT             80      // puerto del portal web
 #define LED_PIN                 2       // LED integrado del ESP32
 #define MAX_PAYLOAD_SIZE        4096    // buffer ESC/POS maximo
 

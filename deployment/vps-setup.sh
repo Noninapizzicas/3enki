@@ -69,6 +69,39 @@ else
     log "Caddy instalado: $(caddy version)"
 fi
 
+# Asegurar que caddy.service existe (si se instaló como binario sin paquete)
+if ! systemctl list-unit-files caddy.service &>/dev/null || ! systemctl list-unit-files caddy.service 2>/dev/null | grep -q caddy; then
+    log "Creando servicio systemd para Caddy..."
+    cat > /etc/systemd/system/caddy.service << 'CADDYUNIT'
+[Unit]
+Description=Caddy
+Documentation=https://caddyserver.com/docs/
+After=network.target network-online.target
+Requires=network-online.target
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile --force
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+LimitNPROC=512
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+CADDYUNIT
+    # Crear usuario caddy si no existe
+    id -u caddy &>/dev/null || useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy
+    mkdir -p /var/lib/caddy/.config/caddy /var/lib/caddy/.local/share/caddy
+    chown -R caddy:caddy /var/lib/caddy
+    systemctl daemon-reload
+fi
+
 # ---- 4. Copiar proyecto ----
 log "Instalando Event Core en ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
@@ -85,11 +118,13 @@ cd "${INSTALL_DIR}"
 npm install --production --silent 2>/dev/null
 log "Dependencias instaladas"
 
-# Build del frontend si tiene package.json
+# Build del frontend (SvelteKit con adapter-node)
 if [ -f "${INSTALL_DIR}/frontend/package.json" ]; then
+    log "Construyendo frontend..."
     cd "${INSTALL_DIR}/frontend"
     npm install --silent 2>/dev/null
-    npm run build --silent 2>/dev/null || warn "Frontend build falló (puede que ya esté buildeado)"
+    npm run build 2>&1 || warn "Frontend build falló (puede que ya esté buildeado)"
+    log "Frontend construido en frontend/build/"
     cd "${INSTALL_DIR}"
 fi
 
@@ -128,6 +163,34 @@ ReadWritePaths=/opt/enki/data /opt/enki/modules
 WantedBy=multi-user.target
 UNIT
 
+# ---- 6b. Crear servicio systemd para Frontend (SvelteKit adapter-node) ----
+log "Creando servicio systemd para Frontend..."
+cat > /etc/systemd/system/enki-frontend.service << 'UNIT'
+[Unit]
+Description=Enki Frontend (SvelteKit)
+After=network.target enki.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/enki/frontend
+ExecStart=/usr/bin/node build/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=ORIGIN=https://pizzepos.es
+
+# Seguridad
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/enki/frontend
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 # Crear directorio de datos
 mkdir -p "${INSTALL_DIR}/data"
 chown -R www-data:www-data "${INSTALL_DIR}"
@@ -136,6 +199,7 @@ chown -R www-data:www-data "${INSTALL_DIR}"
 log "Activando servicios..."
 systemctl daemon-reload
 systemctl enable enki
+systemctl enable enki-frontend
 systemctl enable caddy
 
 # ---- 8. Iniciar ----
@@ -147,6 +211,16 @@ if systemctl is-active --quiet enki; then
     log "Event Core corriendo OK"
 else
     warn "Event Core no arrancó. Revisar: journalctl -u enki -f"
+fi
+
+log "Iniciando Frontend..."
+systemctl restart enki-frontend
+sleep 2
+
+if systemctl is-active --quiet enki-frontend; then
+    log "Frontend corriendo OK en puerto 3001"
+else
+    warn "Frontend no arrancó. Revisar: journalctl -u enki-frontend -f"
 fi
 
 log "Iniciando Caddy..."
@@ -166,8 +240,9 @@ echo "  Setup completado"
 echo "============================================"
 echo ""
 echo "  Servicios:"
-echo "    enki  → node index.js (localhost:3000)"
-echo "    caddy → reverse proxy (${DOMAIN})"
+echo "    enki           → node index.js (localhost:3000)"
+echo "    enki-frontend  → SvelteKit (localhost:3001)"
+echo "    caddy          → reverse proxy (${DOMAIN})"
 echo ""
 echo "  URLs:"
 echo "    https://${DOMAIN}          → Frontend"
@@ -177,11 +252,11 @@ echo "    wss://${DOMAIN}/mqtt       → MQTT WebSocket"
 echo ""
 echo "  Comandos útiles:"
 echo "    sudo systemctl status enki"
+echo "    sudo systemctl status enki-frontend"
 echo "    sudo systemctl status caddy"
 echo "    sudo journalctl -u enki -f"
+echo "    sudo journalctl -u enki-frontend -f"
 echo "    sudo journalctl -u caddy -f"
-echo "    sudo systemctl restart enki"
-echo "    sudo systemctl restart caddy"
 echo ""
 echo "  MQTT directo (LAN/interno):"
 echo "    mqtt://IP_DEL_VPS:1883"

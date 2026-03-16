@@ -89,8 +89,10 @@ export interface CocinaMetrics {
 export interface CocinaDevice {
   device_id: string;
   nombre: string;
+  estacion: string | null;
   color: string;
   filtros: { familias: string[] };
+  familias_impresion: string[];
   connected_at: string;
   last_seen: string;
 }
@@ -104,7 +106,9 @@ export interface CocinaState {
   myDeviceId: string | null;
   myColor: string | null;
   myNombre: string | null;
+  myEstacion: string | null;
   filtrosActivos: string[]; // familias/categorías activas (vacío = todo)
+  familiasImpresion: string[]; // familias que imprimen ticket al completar
   devices: CocinaDevice[];
 }
 
@@ -149,7 +153,9 @@ export const cocinaStore = writable<CocinaState>({
   myDeviceId: null,
   myColor: null,
   myNombre: null,
+  myEstacion: null,
   filtrosActivos: [],
+  familiasImpresion: [],
   devices: []
 });
 
@@ -164,7 +170,9 @@ export const cocinaMetrics = derived(cocinaStore, $s => $s.metrics);
 export const pedidosCount = derived(cocinaStore, $s => $s.pedidos.length);
 export const myDeviceColor = derived(cocinaStore, $s => $s.myColor);
 export const myDeviceNombre = derived(cocinaStore, $s => $s.myNombre);
+export const myEstacion = derived(cocinaStore, $s => $s.myEstacion);
 export const filtrosActivos = derived(cocinaStore, $s => $s.filtrosActivos);
+export const familiasImpresion = derived(cocinaStore, $s => $s.familiasImpresion);
 export const cocinaDevices = derived(cocinaStore, $s => $s.devices);
 
 export const itemsPendientes = derived(cocinaStore, $s =>
@@ -317,7 +325,9 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
     const res = await mqttRequest<any>('cocina', 'register-device', {
       device_id: deviceId,
       nombre: nombre || undefined,
-      filtros: state.filtrosActivos.length > 0 ? { familias: state.filtrosActivos } : undefined
+      estacion: state.myEstacion || undefined,
+      filtros: state.filtrosActivos.length > 0 ? { familias: state.filtrosActivos } : undefined,
+      familias_impresion: state.familiasImpresion.length > 0 ? state.familiasImpresion : undefined
     });
 
     const data = res?.data?.color ? res.data : res?.data?.data;
@@ -327,6 +337,8 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
         myDeviceId: deviceId,
         myColor: data.color,
         myNombre: data.nombre,
+        myEstacion: data.estacion || s.myEstacion,
+        familiasImpresion: data.familias_impresion || s.familiasImpresion,
         devices: data.devices || s.devices
       }));
     }
@@ -403,11 +415,72 @@ export async function updateDeviceName(nombre: string): Promise<boolean> {
     await mqttRequest('cocina', 'register-device', {
       device_id: state.myDeviceId,
       nombre,
-      filtros: { familias: state.filtrosActivos }
+      estacion: state.myEstacion || undefined,
+      filtros: { familias: state.filtrosActivos },
+      familias_impresion: state.familiasImpresion.length > 0 ? state.familiasImpresion : undefined
     });
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Establece el nombre de estación del dispositivo.
+ */
+export async function updateEstacion(estacion: string): Promise<boolean> {
+  const state = get(cocinaStore);
+  if (!state.myDeviceId) return false;
+
+  cocinaStore.update(s => ({ ...s, myEstacion: estacion }));
+
+  try {
+    await mqttRequest('cocina', 'register-device', {
+      device_id: state.myDeviceId,
+      estacion,
+      filtros: { familias: state.filtrosActivos },
+      familias_impresion: state.familiasImpresion
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Establece qué familias imprimen ticket al completar un item en esta estación.
+ */
+export function setFamiliasImpresion(familias: string[]): void {
+  cocinaStore.update(s => ({ ...s, familiasImpresion: familias }));
+
+  const state = get(cocinaStore);
+  if (state.myDeviceId) {
+    mqttRequest('cocina', 'register-device', {
+      device_id: state.myDeviceId,
+      familias_impresion: familias,
+      filtros: { familias: state.filtrosActivos }
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Toggle de familia de impresión (añadir/quitar de la lista).
+ */
+export function toggleFamiliaImpresion(familia: string): void {
+  cocinaStore.update(s => {
+    const activas = s.familiasImpresion.includes(familia)
+      ? s.familiasImpresion.filter(f => f !== familia)
+      : [...s.familiasImpresion, familia];
+    return { ...s, familiasImpresion: activas };
+  });
+
+  const state = get(cocinaStore);
+  if (state.myDeviceId) {
+    mqttRequest('cocina', 'register-device', {
+      device_id: state.myDeviceId,
+      familias_impresion: state.familiasImpresion,
+      filtros: { familias: state.filtrosActivos }
+    }).catch(() => {});
   }
 }
 

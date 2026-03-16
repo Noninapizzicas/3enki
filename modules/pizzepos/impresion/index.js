@@ -212,6 +212,56 @@ class ImpresionModule {
   }
 
   // ==========================================
+  // Event Handler: cocina.item_ticket
+  // ==========================================
+
+  /**
+   * Ticket de pieza individual — imprime cuando un item sale de una estación
+   * con impresión configurada. Ticket mínimo: nombre, cantidad, pedido, mesa.
+   */
+  async onItemTicket(event) {
+    const data = event?.data || event?.payload || event;
+    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion } = data;
+
+    this.logger.info('impresion.ticket_pieza.generando', {
+      pedido_id, item_id, nombre, estacion
+    });
+
+    try {
+      const ticket = this.formatearTicketPieza({
+        pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion
+      });
+
+      await this.enviarImpresora(ticket);
+
+      const registro = {
+        comanda_id: `tkt_${crypto.randomUUID().slice(0, 8)}`,
+        tipo: 'ticket_pieza',
+        pedido_id,
+        cuenta_id,
+        item_id,
+        nombre,
+        estacion,
+        generada_at: new Date().toISOString()
+      };
+
+      this.guardarHistorial(registro);
+      this.internalMetrics.comandas_generadas++;
+
+      await this.eventBus.publish('impresion.ticket_pieza_generado', registro);
+
+      this.logger.info('impresion.ticket_pieza.enviado', {
+        pedido_id, item_id, nombre, estacion
+      });
+    } catch (error) {
+      this.internalMetrics.errores++;
+      this.logger.error('impresion.ticket_pieza.error', {
+        pedido_id, item_id, error: error.message
+      });
+    }
+  }
+
+  // ==========================================
   // UI Handlers
   // ==========================================
 
@@ -489,6 +539,58 @@ class ImpresionModule {
       lineas.push(this.truncar(` >> ${item.notas}`));
       lineas.push(CMD.UNDERLINE_OFF);
     }
+  }
+
+  /**
+   * Formatea ticket de pieza individual — ticket pequeño para identificar
+   * una pieza al salir de una estación (ej: pizza sale del horno → ticket con nombre + pedido).
+   */
+  formatearTicketPieza({ pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion }) {
+    const lineas = [];
+
+    lineas.push(CMD.INIT);
+
+    // Nombre del producto — grande, centrado
+    lineas.push(CMD.ALIGN_CENTER);
+    lineas.push(CMD.DOUBLE_ON);
+    lineas.push(CMD.BOLD_ON);
+    if (cantidad > 1) {
+      lineas.push(this.truncar(`${cantidad}x ${nombre}`));
+    } else {
+      lineas.push(this.truncar(nombre));
+    }
+    lineas.push(CMD.BOLD_OFF);
+    lineas.push(CMD.DOUBLE_OFF);
+
+    lineas.push(this.separator);
+
+    // Referencia: mesa/canal + pedido
+    const refMesa = this.extraerRefMesa(cuenta_id, canal);
+    if (refMesa) {
+      lineas.push(CMD.BOLD_ON);
+      lineas.push(CMD.DOUBLE_ON);
+      lineas.push(refMesa);
+      lineas.push(CMD.DOUBLE_OFF);
+      lineas.push(CMD.BOLD_OFF);
+    }
+
+    // Estación de salida + hora
+    lineas.push(CMD.ALIGN_LEFT);
+    lineas.push(CMD.FONT_SMALL);
+    const ahora = new Date();
+    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    if (estacion) {
+      lineas.push(`${estacion.toUpperCase()} ${hora}`);
+    } else {
+      lineas.push(hora);
+    }
+    lineas.push(CMD.FONT_NORMAL);
+
+    // Corte
+    lineas.push(CMD.FEED_3);
+    lineas.push(CMD.PARTIAL_CUT);
+
+    return lineas.join('\n');
   }
 
   /**

@@ -18,9 +18,10 @@
   import { page } from '$app/stores';
   import {
     cocinaStore,
-    myDeviceColor, myDeviceNombre, filtrosActivos, cocinaDevices,
+    myDeviceColor, myDeviceNombre, myEstacion, filtrosActivos,
+    familiasImpresion, cocinaDevices,
     pedidosCocina,
-    setFiltros, updateDeviceName
+    setFiltros, updateDeviceName, updateEstacion, setFamiliasImpresion
   } from '$lib/stores/cocina';
   import type { ItemCocina } from '$lib/stores/cocina';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
@@ -29,7 +30,9 @@
 
   // Local state for editing
   let editNombre = '';
+  let editEstacion = '';
   let selectedFamilias: Set<string> = new Set();
+  let selectedImpresion: Set<string> = new Set();
   let saving = false;
 
   // Categorías cargadas del catálogo
@@ -147,7 +150,9 @@
   // Init local state from store
   onMount(() => {
     editNombre = $myDeviceNombre || '';
+    editEstacion = $myEstacion || '';
     selectedFamilias = new Set($filtrosActivos);
+    selectedImpresion = new Set($familiasImpresion);
     loadCategorias();
   });
 
@@ -164,17 +169,40 @@
     selectedFamilias = new Set();
   }
 
+  function toggleImpresion(f: string) {
+    if (selectedImpresion.has(f)) {
+      selectedImpresion.delete(f);
+    } else {
+      selectedImpresion.add(f);
+    }
+    selectedImpresion = selectedImpresion;
+  }
+
+  function clearImpresion() {
+    selectedImpresion = new Set();
+  }
+
   async function handleSave() {
     saving = true;
     const familias = [...selectedFamilias];
+    const impresion = [...selectedImpresion];
 
     // Update filters
     setFiltros(familias);
+
+    // Update print families
+    setFamiliasImpresion(impresion);
 
     // Update name if changed
     const currentName = $myDeviceNombre || '';
     if (editNombre.trim() && editNombre.trim() !== currentName) {
       await updateDeviceName(editNombre.trim());
+    }
+
+    // Update station if changed
+    const currentEstacion = $myEstacion || '';
+    if (editEstacion.trim() !== currentEstacion) {
+      await updateEstacion(editEstacion.trim());
     }
 
     saving = false;
@@ -212,7 +240,7 @@
     <div class="panel-body">
       <!-- Device info -->
       <section class="config-section">
-        <h3>Estación</h3>
+        <h3>Dispositivo</h3>
         <div class="device-info">
           {#if $myDeviceColor}
             <span class="color-badge" style="background: {$myDeviceColor}"></span>
@@ -221,10 +249,23 @@
             class="name-input"
             type="text"
             bind:value={editNombre}
-            placeholder="Nombre de estación..."
+            placeholder="Nombre del dispositivo..."
             maxlength="20"
           />
         </div>
+      </section>
+
+      <!-- Station name -->
+      <section class="config-section">
+        <h3>Estación</h3>
+        <p class="section-hint">Nombre de la estación de trabajo (ej: HORNO, MONTAJE, FREIDORA).</p>
+        <input
+          class="name-input full-width"
+          type="text"
+          bind:value={editEstacion}
+          placeholder="Nombre de estación..."
+          maxlength="30"
+        />
       </section>
 
       <!-- Family filters -->
@@ -262,6 +303,33 @@
         {/if}
       </section>
 
+      <!-- Print on complete -->
+      <section class="config-section">
+        <h3>Imprimir al completar</h3>
+        <p class="section-hint">Familias que imprimen ticket de pieza al marcar un item como listo en esta estación.</p>
+
+        <div class="familia-grid">
+          <button
+            class="familia-chip print-chip"
+            class:active={selectedImpresion.size === 0}
+            on:click={clearImpresion}
+          >
+            NINGUNA
+          </button>
+
+          {#each allFamilias as familia}
+            <button
+              class="familia-chip print-chip"
+              class:active={selectedImpresion.has(familia.id)}
+              on:click={() => toggleImpresion(familia.id)}
+            >
+              {#if familia.emoji}<span class="familia-emoji">{familia.emoji}</span>{/if}
+              {familia.nombre.toUpperCase()}
+            </button>
+          {/each}
+        </div>
+      </section>
+
       <!-- Connected devices -->
       {#if peerDevices.length > 0}
         <section class="config-section">
@@ -270,7 +338,12 @@
             {#each peerDevices as dev}
               <div class="device-row">
                 <span class="dev-dot" style="background: {dev.color}"></span>
-                <span class="dev-name">{dev.nombre}</span>
+                <div class="dev-info">
+                  <span class="dev-name">{dev.nombre}</span>
+                  {#if dev.estacion}
+                    <span class="dev-estacion">{dev.estacion}</span>
+                  {/if}
+                </div>
                 <span class="dev-filtros">
                   {#if dev.filtros?.familias?.length > 0}
                     {dev.filtros.familias.join(', ')}
@@ -438,6 +511,10 @@
     color: #475569;
   }
 
+  .name-input.full-width {
+    width: 100%;
+  }
+
   /* Family chips */
   .familia-grid {
     display: flex;
@@ -466,6 +543,12 @@
   .familia-chip.active {
     background: #3b82f6;
     border-color: #3b82f6;
+    color: #fff;
+  }
+
+  .familia-chip.print-chip.active {
+    background: #f97316;
+    border-color: #f97316;
     color: #fff;
   }
 
@@ -508,11 +591,25 @@
     flex-shrink: 0;
   }
 
+  .dev-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .dev-name {
     font-size: 0.85rem;
     font-weight: 600;
     color: #e2e8f0;
-    flex: 1;
+  }
+
+  .dev-estacion {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #f97316;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .dev-filtros {

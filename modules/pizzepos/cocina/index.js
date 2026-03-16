@@ -1,72 +1,42 @@
 /**
- * Módulo Cocina v2.3
+ * Módulo Cocina v3.0
  * Display de cocina en tiempo real con tracking item a item
- * Estados item: pendiente → preparando → listo
  *
- * Estaciones con tipos y comportamientos:
- *   - Cada dispositivo tiene un tipo de estación (horno, montaje, freidora...)
- *   - Cada tipo define comportamientos: imprime_al_completar, etc.
- *   - Los comportamientos son de la estación, no del producto
- *   - Los tipos son configurables y extensibles
+ * Sistema de pases:
+ *   - Cada item tiene un contador 'pase' que empieza en 0
+ *   - General (pase 0): pendiente → preparando → completa pase (pase++)
+ *   - Horno (pase 1): item llega ya como preparando, 1 tap → listo (pase++), imprime ticket
+ *   - Cada estación filtra por pase: general ve pase=0, horno ve pase=1
+ *   - Sistema extensible: más estaciones = más pases
  *
  * Multi-dispositivo:
  *   - Cada dispositivo se registra con register-device y recibe un color único
  *   - Cada dispositivo puede filtrar por familias/categorías (client-side)
  *   - Al preparar un item, se registra device_id → color en el item
- *   - Todos los dispositivos ven el pedido completo para coordinación
  *
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
-// Tipos de estación predefinidos con sus comportamientos
+// Tipos de estación: solo general y horno por ahora
 const TIPOS_ESTACION = {
   general: {
     id: 'general',
     nombre: 'General',
-    descripcion: 'Estación genérica sin comportamientos especiales',
+    descripcion: 'Preparación/montaje — pase 0',
+    pase: 0,
     comportamientos: {
-      imprime_al_completar: false
+      imprime_al_completar: false,
+      auto_preparar: false
     }
   },
   horno: {
     id: 'horno',
     nombre: 'Horno',
-    descripcion: 'Horneado — auto-inicia al recibir, imprime ticket al sacar',
+    descripcion: 'Horneado — auto-inicia, 1 tap imprime y completa',
+    pase: 1,
     comportamientos: {
       imprime_al_completar: true,
       auto_preparar: true
-    }
-  },
-  montaje: {
-    id: 'montaje',
-    nombre: 'Montaje',
-    descripcion: 'Montaje/preparación — sin impresión, el item pasa a la siguiente estación',
-    comportamientos: {
-      imprime_al_completar: false
-    }
-  },
-  freidora: {
-    id: 'freidora',
-    nombre: 'Freidora',
-    descripcion: 'Fritura — imprime ticket de pieza al completar',
-    comportamientos: {
-      imprime_al_completar: true
-    }
-  },
-  emplatado: {
-    id: 'emplatado',
-    nombre: 'Emplatado',
-    descripcion: 'Emplatado final — sin impresión, marca como listo para servir',
-    comportamientos: {
-      imprime_al_completar: false
-    }
-  },
-  plancha: {
-    id: 'plancha',
-    nombre: 'Plancha',
-    descripcion: 'Plancha/grill — imprime ticket de pieza al completar',
-    comportamientos: {
-      imprime_al_completar: true
     }
   }
 };
@@ -74,7 +44,7 @@ const TIPOS_ESTACION = {
 class CocinaModule {
   constructor() {
     this.name = 'cocina';
-    this.version = '2.3.0';
+    this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -268,7 +238,6 @@ class CocinaModule {
       cuenta_id,
       canal: canal || null,
       items: (items || []).map(item => {
-        const estaciones = item.estaciones || null;
         const cocinaItem = {
           item_id: item.item_id,
           producto_id: item.producto_id,
@@ -278,12 +247,7 @@ class CocinaModule {
           variaciones: item.variaciones || null,
           notas: item.notas || '',
           estado: 'pendiente',
-          // Estaciones requeridas: set de estaciones que el item necesita visitar
-          // estacion_actual null = visible para estaciones normales (filtro por categoría)
-          // estacion_actual 'horno' = solo visible para dispositivos tipo horno
-          estaciones: estaciones,
-          estacion_actual: null,
-          estaciones_completadas: []
+          pase: 0
         };
         // Metadata especial: mitad-mitad, al gusto, ingredientes_base, etc.
         if (item.tipo) cocinaItem.tipo = item.tipo;
@@ -367,10 +331,16 @@ class CocinaModule {
   }
 
   /**
-   * Tap toggle para items:
-   *   pendiente → preparando (cocinero empieza a preparar)
-   *   preparando → listo (cocinero termina de preparar)
-   * Si todos los items quedan listo → auto-completa el pedido.
+   * Tap en item — sistema de pases:
+   *
+   * General (pase 0):
+   *   tap 1: pendiente → preparando
+   *   tap 2: preparando → pase++ (pase=1), item pasa a horno
+   *
+   * Horno (pase 1): item llega ya como 'preparando' (auto_preparar)
+   *   tap 1: pase++ (pase=2), imprime ticket, item listo
+   *
+   * Si todos los items del pedido están listo → auto-completa.
    */
   async handlePrepararItem(data) {
     const invalid = this.validateInput('cocina.prepare-item', data);
@@ -378,7 +348,6 @@ class CocinaModule {
 
     const { item_id, device_id } = data;
 
-    // Resolver color del dispositivo si lo hay
     const device = device_id ? this.devices.get(device_id) : null;
     if (device) device.last_seen = new Date().toISOString();
 
@@ -404,14 +373,12 @@ class CocinaModule {
     }
 
     const now = new Date().toISOString();
-
-    // Inicializar historial de fases si no existe
     if (!itemEncontrado.fases) itemEncontrado.fases = [];
-
     const estacion = device?.estacion || device?.nombre || null;
+    const tipoEstacion = device?.tipo_estacion || 'general';
 
+    // ── Tap 1: pendiente → preparando ──
     if (itemEncontrado.estado === 'pendiente') {
-      // Primer tap: empezar a preparar
       itemEncontrado.estado = 'preparando';
       itemEncontrado.preparando_at = now;
       if (device) {
@@ -420,7 +387,6 @@ class CocinaModule {
         itemEncontrado.device_nombre = device.nombre;
       }
 
-      // Registrar inicio de fase
       itemEncontrado.fases.push({
         estacion,
         device_id: device_id || null,
@@ -432,63 +398,49 @@ class CocinaModule {
       await this.publishItemPreparando(pedidoEncontrado, itemEncontrado, estacion);
 
       this.logger.info('cocina.item.preparando', {
-        pedido_id: pedidoEncontrado.pedido_id, item_id, device_id: device_id || null, estacion
+        pedido_id: pedidoEncontrado.pedido_id, item_id, pase: itemEncontrado.pase
       });
 
-      return {
-        status: 200,
-        data: { item: itemEncontrado, pedido_completo: false }
-      };
+      return { status: 200, data: { item: itemEncontrado, pedido_completo: false } };
     }
 
-    // Cerrar fase activa (la última sin fin)
+    // ── Tap 2: preparando → avanzar pase ──
+
+    // Cerrar fase activa
     const faseActiva = itemEncontrado.fases.find(f => !f.fin);
     if (faseActiva) {
       faseActiva.fin = now;
       faseActiva.duracion_seg = Math.round((new Date(now) - new Date(faseActiva.inicio)) / 1000);
     }
 
-    // Ticket de pieza: si el tipo de estación tiene comportamiento imprime_al_completar
+    // Incrementar pase
+    const paseAnterior = itemEncontrado.pase || 0;
+    itemEncontrado.pase = paseAnterior + 1;
+
+    // ¿Imprimir ticket? (horno imprime al completar)
     if (device) {
-      const tipoEst = this.tiposEstacion[device.tipo_estacion];
+      const tipoEst = this.tiposEstacion[tipoEstacion];
       if (tipoEst?.comportamientos?.imprime_al_completar) {
         await this.publishItemTicket(pedidoEncontrado, itemEncontrado, estacion);
       }
     }
 
-    // Registrar estación completada
-    const completadas = itemEncontrado.estaciones_completadas || [];
-    if (estacion && !completadas.includes(estacion)) {
-      completadas.push(estacion);
-      itemEncontrado.estaciones_completadas = completadas;
-    }
-    // También registrar por tipo de estación del device
-    const tipoEstDevice = device?.tipo_estacion;
-    if (tipoEstDevice && tipoEstDevice !== 'general' && !completadas.includes(tipoEstDevice)) {
-      completadas.push(tipoEstDevice);
-      itemEncontrado.estaciones_completadas = completadas;
-    }
+    // ¿Hay siguiente estación para este pase?
+    const siguienteTipo = Object.values(this.tiposEstacion).find(t => t.pase === itemEncontrado.pase);
 
-    // Comprobar si el item necesita pasar por más estaciones
-    const estacionesRequeridas = itemEncontrado.estaciones || [];
-    const siguienteEstacion = estacionesRequeridas.find(est => !completadas.includes(est));
-
-    if (siguienteEstacion) {
-      // Avanzar a la siguiente estación requerida
-      itemEncontrado.estacion_actual = siguienteEstacion;
+    if (siguienteTipo) {
       // Limpiar device info de la estación anterior
       delete itemEncontrado.device_id;
       delete itemEncontrado.device_color;
       delete itemEncontrado.device_nombre;
       delete itemEncontrado.preparando_at;
 
-      // ¿La estación destino tiene auto_preparar? (ej: horno)
-      const tipoDestino = this.tiposEstacion[siguienteEstacion];
-      if (tipoDestino?.comportamientos?.auto_preparar) {
+      // ¿Auto-preparar? (horno: item llega ya como preparando)
+      if (siguienteTipo.comportamientos?.auto_preparar) {
         itemEncontrado.estado = 'preparando';
         itemEncontrado.preparando_at = now;
         itemEncontrado.fases.push({
-          estacion: siguienteEstacion,
+          estacion: siguienteTipo.id,
           device_id: null,
           device_nombre: null,
           inicio: now,
@@ -504,19 +456,14 @@ class CocinaModule {
 
       this.logger.info('cocina.item.avanzado', {
         pedido_id: pedidoEncontrado.pedido_id, item_id,
-        desde_estacion: estacion,
-        a_estacion: siguienteEstacion,
-        auto_preparar: !!tipoDestino?.comportamientos?.auto_preparar,
-        estaciones_completadas: completadas
+        pase: itemEncontrado.pase,
+        siguiente: siguienteTipo.id
       });
 
-      return {
-        status: 200,
-        data: { item: itemEncontrado, pedido_completo: false, avanzado: true }
-      };
+      return { status: 200, data: { item: itemEncontrado, pedido_completo: false, avanzado: true } };
     }
 
-    // Todas las estaciones requeridas completadas (o no tiene) → terminar
+    // No hay más estaciones → item listo
     itemEncontrado.estado = 'listo';
     itemEncontrado.preparado_at = now;
 
@@ -531,14 +478,11 @@ class CocinaModule {
     }
 
     this.logger.info('cocina.item.preparado', {
-      pedido_id: pedidoEncontrado.pedido_id, item_id, device_id: device_id || null,
-      estacion, pedido_completo: todosListos
+      pedido_id: pedidoEncontrado.pedido_id, item_id, pase: itemEncontrado.pase,
+      pedido_completo: todosListos
     });
 
-    return {
-      status: 200,
-      data: { item: itemEncontrado, pedido_completo: todosListos }
-    };
+    return { status: 200, data: { item: itemEncontrado, pedido_completo: todosListos } };
   }
 
   /**
@@ -556,10 +500,12 @@ class CocinaModule {
       return { status: 404, error: 'Pedido no encontrado en cocina' };
     }
 
+    const maxPase = Math.max(...Object.values(this.tiposEstacion).map(t => t.pase)) + 1;
     const now = new Date().toISOString();
     pedido.items.forEach(item => {
       if (item.estado !== 'listo') {
         item.estado = 'listo';
+        item.pase = maxPase;
         item.preparado_at = now;
         this.metrics?.increment?.('cocina.item_preparado.total');
       }
@@ -774,7 +720,6 @@ class CocinaModule {
           if (!pedido_id || this.pedidosActivos.has(pedido_id)) continue;
 
           const items = (pedidoData.items || []).map((item, idx) => {
-            const estaciones = item.estaciones || null;
             const cocinaItem = {
               item_id: item.item_id || item.id || `${pedido_id}_item_${idx + 1}`,
               producto_id: item.producto_id,
@@ -783,9 +728,7 @@ class CocinaModule {
               variaciones: item.variaciones || null,
               notas: item.notas || '',
               estado: 'pendiente',
-              estaciones: estaciones,
-              estacion_actual: null,
-              estaciones_completadas: []
+              pase: 0
             };
             if (item.tipo) cocinaItem.tipo = item.tipo;
             if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
@@ -888,9 +831,7 @@ class CocinaModule {
       cantidad: item.cantidad,
       categoria: item.categoria || null,
       estacion: estacion || null,
-      estacion_actual: item.estacion_actual || null,
-      estaciones: item.estaciones || null,
-      estaciones_completadas: item.estaciones_completadas || [],
+      pase: item.pase || 0,
       preparando_at: item.preparando_at
     };
     if (item.device_id) payload.device_id = item.device_id;
@@ -910,11 +851,9 @@ class CocinaModule {
       cantidad: item.cantidad,
       categoria: item.categoria || null,
       estado: item.estado,
+      pase: item.pase,
       preparando_at: item.preparando_at || null,
-      desde_estacion: estacionAnterior,
-      a_estacion: item.estacion_actual,
-      estaciones: item.estaciones,
-      estaciones_completadas: item.estaciones_completadas || []
+      desde_estacion: estacionAnterior
     });
   }
 
@@ -929,6 +868,7 @@ class CocinaModule {
       cantidad: item.cantidad,
       categoria: item.categoria || null,
       estacion: estacion || null,
+      pase: item.pase || 0,
       fases: item.fases || [],
       preparado_at: item.preparado_at
     };

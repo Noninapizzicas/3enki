@@ -19,12 +19,14 @@
     confirmarGlovo, rechazarGlovo, isGlovoConfirmado,
     itemPassesFilter, itemMatchesStation
   } from '$lib/stores/cocina';
+  import type { TipoEstacionInfo } from '$lib/stores/cocina';
 
   import ItemLine from './ItemLine.svelte';
 
   export let pedido: PedidoCocina;
   export let filtros: string[] = [];
   export let tipoEstacion: string = 'general';
+  export let tipoEstacionInfo: TipoEstacionInfo | null = null;
 
   const dispatch = createEventDispatcher();
 
@@ -32,6 +34,9 @@
   let timerInterval: ReturnType<typeof setInterval>;
   let confirmando = false;
   let rechazando = false;
+
+  // Items recién completados en horno: se muestran verdes 10s antes de desaparecer
+  let completedItemIds: Set<string> = new Set();
 
   onMount(() => {
     updateTimer();
@@ -67,10 +72,16 @@
   // Split items by filter (categoría + estación)
   $: hasFilters = filtros.length > 0 || (tipoEstacion !== 'general');
   $: myItems = hasFilters
-    ? pedido.items.filter(i => itemPassesFilter(i, filtros) && itemMatchesStation(i, tipoEstacion))
+    ? pedido.items.filter(i =>
+        (itemPassesFilter(i, filtros) && itemMatchesStation(i, tipoEstacion, tipoEstacionInfo))
+        || completedItemIds.has(i.item_id)
+      )
     : pedido.items;
   $: otherItems = hasFilters
-    ? pedido.items.filter(i => !(itemPassesFilter(i, filtros) && itemMatchesStation(i, tipoEstacion)))
+    ? pedido.items.filter(i =>
+        !(itemPassesFilter(i, filtros) && itemMatchesStation(i, tipoEstacion, tipoEstacionInfo))
+        && !completedItemIds.has(i.item_id)
+      )
     : [];
 
   $: borderColor = isListo
@@ -92,7 +103,20 @@
 
   function handleItemTap(e: CustomEvent<{ item_id: string }>) {
     if (pendienteConfirmacion) return;
-    prepararItem(e.detail.item_id);
+    const itemId = e.detail.item_id;
+    const item = pedido.items.find(i => i.item_id === itemId);
+
+    // Horno: si el item está preparando, al tocar se completa → flash verde 10s
+    if (tipoEstacion === 'horno' && item?.estado === 'preparando') {
+      completedItemIds.add(itemId);
+      completedItemIds = completedItemIds; // trigger reactivity
+      setTimeout(() => {
+        completedItemIds.delete(itemId);
+        completedItemIds = completedItemIds;
+      }, 10000);
+    }
+
+    prepararItem(itemId);
   }
 
   async function handleConfirmarGlovo() {
@@ -197,7 +221,7 @@
       <div class="card-items-split">
         <div class="split-mine">
           {#each myItems as item (item.item_id)}
-            <ItemLine {item} on:tap={handleItemTap} />
+            <ItemLine {item} justCompleted={completedItemIds.has(item.item_id)} on:tap={handleItemTap} />
           {/each}
           {#if myItems.length === 0}
             <p class="split-empty">Sin items de tu estación</p>
@@ -217,7 +241,7 @@
       <!-- No filters: single column -->
       <div class="card-items">
         {#each pedido.items as item (item.item_id)}
-          <ItemLine {item} on:tap={handleItemTap} />
+          <ItemLine {item} justCompleted={completedItemIds.has(item.item_id)} on:tap={handleItemTap} />
         {/each}
       </div>
     {/if}

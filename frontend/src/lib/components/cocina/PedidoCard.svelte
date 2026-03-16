@@ -17,13 +17,14 @@
   import {
     extractRef, elapsed, prepararItem, marcarListo,
     confirmarGlovo, rechazarGlovo, isGlovoConfirmado,
-    itemPassesFilter
+    itemPassesFilter, itemMatchesStation
   } from '$lib/stores/cocina';
 
   import ItemLine from './ItemLine.svelte';
 
   export let pedido: PedidoCocina;
   export let filtros: string[] = [];
+  export let tipoEstacion: string = 'general';
 
   const dispatch = createEventDispatcher();
 
@@ -63,13 +64,13 @@
   $: elapsedSeconds = (Date.now() - new Date(pedido.recibido_at).getTime()) / 1000;
   $: isUrgent = elapsedSeconds > 600 && !isListo;
 
-  // Split items by filter
-  $: hasFilters = filtros.length > 0;
+  // Split items by filter (categoría + estación)
+  $: hasFilters = filtros.length > 0 || (tipoEstacion !== 'general');
   $: myItems = hasFilters
-    ? pedido.items.filter(i => itemPassesFilter(i, filtros))
+    ? pedido.items.filter(i => itemPassesFilter(i, filtros) && itemMatchesStation(i, tipoEstacion))
     : pedido.items;
   $: otherItems = hasFilters
-    ? pedido.items.filter(i => !itemPassesFilter(i, filtros))
+    ? pedido.items.filter(i => !(itemPassesFilter(i, filtros) && itemMatchesStation(i, tipoEstacion)))
     : [];
 
   $: borderColor = isListo

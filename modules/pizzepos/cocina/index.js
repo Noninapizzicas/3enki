@@ -267,6 +267,7 @@ class CocinaModule {
       cuenta_id,
       canal: canal || null,
       items: (items || []).map(item => {
+        const estaciones = item.estaciones || null;
         const cocinaItem = {
           item_id: item.item_id,
           producto_id: item.producto_id,
@@ -275,7 +276,11 @@ class CocinaModule {
           cantidad: item.cantidad,
           variaciones: item.variaciones || null,
           notas: item.notas || '',
-          estado: 'pendiente'
+          estado: 'pendiente',
+          // Ruta de estaciones: el item avanza por cada estación en orden
+          estaciones: estaciones,
+          estacion_idx: 0,
+          estacion_actual: (estaciones && estaciones.length > 0) ? estaciones[0] : null
         };
         // Metadata especial: mitad-mitad, al gusto, ingredientes_base, etc.
         if (item.tipo) cocinaItem.tipo = item.tipo;
@@ -433,20 +438,12 @@ class CocinaModule {
       };
     }
 
-    // Segundo tap (preparando → listo): terminar
-    itemEncontrado.estado = 'listo';
-    itemEncontrado.preparado_at = now;
-
     // Cerrar fase activa (la última sin fin)
     const faseActiva = itemEncontrado.fases.find(f => !f.fin);
     if (faseActiva) {
       faseActiva.fin = now;
       faseActiva.duracion_seg = Math.round((new Date(now) - new Date(faseActiva.inicio)) / 1000);
     }
-
-    this.metrics?.increment?.('cocina.item_preparado.total');
-
-    await this.publishItemPreparado(pedidoEncontrado, itemEncontrado, estacion);
 
     // Ticket de pieza: si el tipo de estación tiene comportamiento imprime_al_completar
     if (device) {
@@ -455,6 +452,47 @@ class CocinaModule {
         await this.publishItemTicket(pedidoEncontrado, itemEncontrado, estacion);
       }
     }
+
+    // Comprobar si el item tiene más estaciones en su ruta
+    const tieneRuta = itemEncontrado.estaciones && itemEncontrado.estaciones.length > 0;
+    const siguienteIdx = (itemEncontrado.estacion_idx || 0) + 1;
+    const hayMasEstaciones = tieneRuta && siguienteIdx < itemEncontrado.estaciones.length;
+
+    if (hayMasEstaciones) {
+      // Avanzar a la siguiente estación: reset a pendiente
+      itemEncontrado.estado = 'pendiente';
+      itemEncontrado.estacion_idx = siguienteIdx;
+      itemEncontrado.estacion_actual = itemEncontrado.estaciones[siguienteIdx];
+      // Limpiar device info de la estación anterior
+      delete itemEncontrado.device_id;
+      delete itemEncontrado.device_color;
+      delete itemEncontrado.device_nombre;
+      delete itemEncontrado.preparando_at;
+
+      this.metrics?.increment?.('cocina.item_avanzado.total');
+
+      await this.publishItemAvanzado(pedidoEncontrado, itemEncontrado, estacion);
+
+      this.logger.info('cocina.item.avanzado', {
+        pedido_id: pedidoEncontrado.pedido_id, item_id,
+        desde_estacion: estacion,
+        a_estacion: itemEncontrado.estacion_actual,
+        estacion_idx: siguienteIdx
+      });
+
+      return {
+        status: 200,
+        data: { item: itemEncontrado, pedido_completo: false, avanzado: true }
+      };
+    }
+
+    // Segundo tap (preparando → listo): última estación o sin ruta → terminar
+    itemEncontrado.estado = 'listo';
+    itemEncontrado.preparado_at = now;
+
+    this.metrics?.increment?.('cocina.item_preparado.total');
+
+    await this.publishItemPreparado(pedidoEncontrado, itemEncontrado, estacion);
 
     // Auto-completar si todos listos
     const todosListos = pedidoEncontrado.items.every(i => i.estado === 'listo');
@@ -706,6 +744,7 @@ class CocinaModule {
           if (!pedido_id || this.pedidosActivos.has(pedido_id)) continue;
 
           const items = (pedidoData.items || []).map((item, idx) => {
+            const estaciones = item.estaciones || null;
             const cocinaItem = {
               item_id: item.item_id || item.id || `${pedido_id}_item_${idx + 1}`,
               producto_id: item.producto_id,
@@ -713,7 +752,10 @@ class CocinaModule {
               cantidad: item.cantidad || 1,
               variaciones: item.variaciones || null,
               notas: item.notas || '',
-              estado: 'pendiente'
+              estado: 'pendiente',
+              estaciones: estaciones,
+              estacion_idx: 0,
+              estacion_actual: (estaciones && estaciones.length > 0) ? estaciones[0] : null
             };
             if (item.tipo) cocinaItem.tipo = item.tipo;
             if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
@@ -816,12 +858,32 @@ class CocinaModule {
       cantidad: item.cantidad,
       categoria: item.categoria || null,
       estacion: estacion || null,
+      estacion_actual: item.estacion_actual || null,
+      estacion_idx: item.estacion_idx ?? null,
+      estaciones: item.estaciones || null,
       preparando_at: item.preparando_at
     };
     if (item.device_id) payload.device_id = item.device_id;
     if (item.device_color) payload.device_color = item.device_color;
     if (item.device_nombre) payload.device_nombre = item.device_nombre;
     await this.eventBus.publish('cocina.item_preparando', payload);
+  }
+
+  async publishItemAvanzado(pedidoCocina, item, estacionAnterior) {
+    await this.eventBus.publish('cocina.item_avanzado', {
+      pedido_id: pedidoCocina.pedido_id,
+      cuenta_id: pedidoCocina.cuenta_id,
+      canal: pedidoCocina.canal || null,
+      item_id: item.item_id,
+      producto_id: item.producto_id,
+      nombre: item.nombre,
+      cantidad: item.cantidad,
+      categoria: item.categoria || null,
+      desde_estacion: estacionAnterior,
+      a_estacion: item.estacion_actual,
+      estacion_idx: item.estacion_idx,
+      estaciones: item.estaciones
+    });
   }
 
   async publishItemPreparado(pedidoCocina, item, estacion) {

@@ -197,6 +197,7 @@ class PedidosModule {
           producto_id: item.producto_id,
           nombre: item.nombre,
           categoria: item.categoria || null,
+          estaciones: item.estaciones || null,
           cantidad: item.cantidad || 1,
           precio_unitario: item.precio || 0,
           precio_total: item.subtotal || (item.precio || 0) * (item.cantidad || 1),
@@ -261,7 +262,8 @@ class PedidosModule {
         this.productosCache.set(producto.id, {
           nombre: producto.nombre || producto.id,
           precio: producto.precio,
-          categoria: producto.categoria
+          categoria: producto.categoria,
+          estaciones: producto.estaciones || null
         });
       }
     }
@@ -731,6 +733,7 @@ class PedidosModule {
           producto_id: item.producto_id,
           nombre: item.nombre,
           categoria: item.categoria || null,
+          estaciones: item.estaciones || null,
           cantidad: item.cantidad,
           variaciones: item.variaciones,
           notas: item.notas

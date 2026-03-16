@@ -84,6 +84,14 @@
             }
           }
         },
+        "estaciones": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["general", "horno", "montaje", "freidora", "emplatado", "plancha"]
+          },
+          "description": "Ruta de estaciones que el producto debe recorrer en orden (e.g. ['montaje', 'horno'])"
+        },
         "metadata": {
           "type": "object",
           "properties": {

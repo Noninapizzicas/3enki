@@ -168,7 +168,7 @@ class ProductosModule {
         if (result.productos > 0) {
           const productos = Array.from(this.getProductos(project_id).values())
             .filter(p => p.activo !== false)
-            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null }));
+            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null, estaciones: p.estaciones || null }));
 
           await this.eventBus.publish('catalogo.actualizado', {
             project_id,
@@ -933,7 +933,7 @@ class ProductosModule {
   async publishCatalogoActualizado(project_id, menu_id, estadisticas, sync_duration, correlation_id) {
     const productos = Array.from(this.getProductos(project_id).values())
       .filter(p => p.activo !== false)
-      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null }));
+      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null, estaciones: p.estaciones || null }));
 
     await this.eventBus.publish('catalogo.actualizado', {
       project_id,
@@ -1108,9 +1108,21 @@ class ProductosModule {
 
           // Cargar productos de la carta (normalizar RAW → POS si falta ingredientes_base)
           if (carta.productos) {
+            // Construir mapa de estaciones por categoría para herencia
+            const catEstacionesMap = {};
+            if (carta.categorias) {
+              for (const cat of carta.categorias) {
+                if (cat.estaciones) catEstacionesMap[cat.id] = cat.estaciones;
+              }
+            }
+
             const productosMap = this.getProductos(project_id);
             for (const prod of carta.productos) {
               this.normalizeProductoPOS(prod);
+              // Heredar estaciones de la categoría si el producto no define las suyas
+              if (!prod.estaciones && prod.categoria && catEstacionesMap[prod.categoria]) {
+                prod.estaciones = catEstacionesMap[prod.categoria];
+              }
               productosMap.set(prod.id, {
                 ...prod,
                 activo: true,

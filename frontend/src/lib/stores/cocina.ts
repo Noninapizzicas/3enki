@@ -54,6 +54,10 @@ export interface ItemCocina {
   device_id?: string;
   device_color?: string;
   device_nombre?: string;
+  // Ruta de estaciones
+  estaciones?: string[] | null;
+  estacion_idx?: number;
+  estacion_actual?: string | null;
 }
 
 export interface GlovoMetadata {
@@ -516,6 +520,24 @@ export function itemPassesFilter(item: ItemCocina, filtros: string[]): boolean {
   return filtros.includes(cat);
 }
 
+/**
+ * Comprueba si un item debe mostrarse en una estación determinada.
+ * Un item con ruta de estaciones solo se muestra en la estación que le toca.
+ * Un item sin ruta se muestra en todas las estaciones (comportamiento legacy).
+ *
+ * @param item - El item de cocina
+ * @param tipoEstacion - El tipo de estación del dispositivo ('horno', 'montaje', etc.)
+ * @returns true si el item debe verse en esta estación
+ */
+export function itemMatchesStation(item: ItemCocina, tipoEstacion: string): boolean {
+  // Sin ruta de estaciones = visible en todas (legacy)
+  if (!item.estaciones || item.estaciones.length === 0) return true;
+  // Sin tipo de estación en el dispositivo = ver todo (estación 'general')
+  if (!tipoEstacion || tipoEstacion === 'general') return true;
+  // El item solo se muestra en la estación que le toca ahora
+  return item.estacion_actual === tipoEstacion;
+}
+
 // =============================================================================
 // GLOVO OPERATIONS
 // =============================================================================
@@ -850,6 +872,39 @@ export function initCocinaSubscriptions(): () => void {
                     device_id: data.device_id || i.device_id,
                     device_color: data.device_color || i.device_color,
                     device_nombre: data.device_nombre || i.device_nombre
+                  }
+                  : i
+              )
+            }
+            : p
+        )
+      }));
+    })
+  );
+
+  // cocina.item_avanzado → item pasa a siguiente estación (reset a pendiente)
+  cleanups.push(
+    mqttSubscribe('cocina.item_avanzado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.item_id) return;
+
+      cocinaStore.update(s => ({
+        ...s,
+        pedidos: s.pedidos.map(p =>
+          p.pedido_id === data.pedido_id
+            ? {
+              ...p,
+              items: p.items.map(i =>
+                i.item_id === data.item_id
+                  ? {
+                    ...i,
+                    estado: 'pendiente' as EstadoItem,
+                    estacion_actual: data.a_estacion,
+                    estacion_idx: data.estacion_idx,
+                    device_id: undefined,
+                    device_color: undefined,
+                    device_nombre: undefined,
+                    preparando_at: undefined
                   }
                   : i
               )

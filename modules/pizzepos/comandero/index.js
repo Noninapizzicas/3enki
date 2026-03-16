@@ -231,7 +231,8 @@ class ComanderoModule {
         this.productosCache.set(producto.id, {
           nombre: producto.nombre || producto.id,
           precio: producto.precio,
-          categoria: producto.categoria || null
+          categoria: producto.categoria || null,
+          estaciones: producto.estaciones || null
         });
       }
     }
@@ -250,7 +251,8 @@ class ComanderoModule {
       this.productosCache.set(id, {
         nombre: nombre || id,
         precio,
-        categoria: categoria || existing?.categoria || null
+        categoria: categoria || existing?.categoria || null,
+        estaciones: existing?.estaciones || null
       });
     }
   }
@@ -311,6 +313,7 @@ class ComanderoModule {
       precio: itemPrecio,
       cantidad: itemCantidad,
       categoria: categoria || cached?.categoria || null,
+      estaciones: cached?.estaciones || null,
       variaciones: variaciones || [],
       notas: notas || '',
       subtotal: itemPrecio * itemCantidad,

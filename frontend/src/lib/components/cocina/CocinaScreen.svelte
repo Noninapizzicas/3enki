@@ -28,7 +28,9 @@
     requestNotificationPermission,
     isGlovoConfirmado,
     filtrosActivos,
-    itemPassesFilter
+    tipoEstacion,
+    itemPassesFilter,
+    itemMatchesStation
   } from '$lib/stores/cocina';
   import type { PedidoCocina } from '$lib/stores/cocina';
 
@@ -62,7 +64,16 @@
     });
   }
 
-  $: pedidosOrdenados = sortPedidos($pedidosCocina);
+  // Filtrar pedidos que no tienen ningún item para esta estación
+  $: pedidosFiltrados = $pedidosCocina.filter(p => {
+    // Si no hay filtros de estación ni categoría, mostrar todo
+    if ($filtrosActivos.length === 0 && $tipoEstacion === 'general') return true;
+    // Mostrar pedido si al menos un item pasa los filtros
+    return p.items.some(i =>
+      itemPassesFilter(i, $filtrosActivos) && itemMatchesStation(i, $tipoEstacion)
+    );
+  });
+  $: pedidosOrdenados = sortPedidos(pedidosFiltrados);
 
   function unlockAudio() {
     if (!audioUnlocked) {
@@ -108,12 +119,12 @@
   <CocinaHeader on:configOpen={() => showConfig = true} />
 
   <main class="cocina-grid-area">
-    {#if $cocinaLoading && $pedidosCount === 0}
+    {#if $cocinaLoading && pedidosOrdenados.length === 0}
       <div class="empty-state">
         <span class="empty-icon">...</span>
         <p>Conectando con cocina</p>
       </div>
-    {:else if $pedidosCount === 0}
+    {:else if pedidosOrdenados.length === 0}
       <div class="empty-state">
         <span class="empty-icon">&#10003;</span>
         <p class="empty-title">Sin pedidos</p>
@@ -122,7 +133,7 @@
     {:else}
       <div class="pedidos-grid">
         {#each pedidosOrdenados as pedido (pedido.pedido_id)}
-          <PedidoCard {pedido} filtros={$filtrosActivos} />
+          <PedidoCard {pedido} filtros={$filtrosActivos} tipoEstacion={$tipoEstacion} />
         {/each}
       </div>
     {/if}

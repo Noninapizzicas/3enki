@@ -54,6 +54,10 @@ export interface ItemCocina {
   device_id?: string;
   device_color?: string;
   device_nombre?: string;
+  // Estaciones requeridas (set, no ruta ordenada)
+  estaciones?: string[] | null;
+  estacion_actual?: string | null;
+  estaciones_completadas?: string[];
 }
 
 export interface GlovoMetadata {
@@ -516,6 +520,40 @@ export function itemPassesFilter(item: ItemCocina, filtros: string[]): boolean {
   return filtros.includes(cat);
 }
 
+/**
+ * Comprueba si un item debe mostrarse en una estación determinada.
+ *
+ * Lógica abierta:
+ * - estacion_actual === null → el item está en su estación inicial (visible para
+ *   estaciones normales que filtran por categoría)
+ * - estacion_actual === 'horno' → el item ha completado su estación anterior y
+ *   necesita horno (solo visible para dispositivos tipo horno)
+ *
+ * Dispositivos tipo 'general' ven todo. Items sin estaciones requeridas también.
+ *
+ * @param item - El item de cocina
+ * @param tipoEstacion - El tipo de estación del dispositivo ('horno', 'montaje', etc.)
+ * @returns true si el item debe verse en esta estación
+ */
+export function itemMatchesStation(item: ItemCocina, tipoEstacion: string): boolean {
+  // Dispositivo general = ver todo
+  if (!tipoEstacion || tipoEstacion === 'general') return true;
+  // Item sin estaciones requeridas = visible en todas
+  if (!item.estaciones || item.estaciones.length === 0) {
+    // Pero si estacion_actual es null, visible para estaciones normales
+    // Si es una estación específica (horno, freidora...) solo ver items que le tocan
+    return !item.estacion_actual || item.estacion_actual === tipoEstacion;
+  }
+  // Item con estacion_actual null = está en preparación inicial
+  // Solo visible para estaciones que NO están en su lista de requeridas
+  // (ej: montaje ve el item, horno NO lo ve aún)
+  if (!item.estacion_actual) {
+    return !item.estaciones.includes(tipoEstacion);
+  }
+  // Item enrutado a una estación específica = solo visible allí
+  return item.estacion_actual === tipoEstacion;
+}
+
 // =============================================================================
 // GLOVO OPERATIONS
 // =============================================================================
@@ -850,6 +888,39 @@ export function initCocinaSubscriptions(): () => void {
                     device_id: data.device_id || i.device_id,
                     device_color: data.device_color || i.device_color,
                     device_nombre: data.device_nombre || i.device_nombre
+                  }
+                  : i
+              )
+            }
+            : p
+        )
+      }));
+    })
+  );
+
+  // cocina.item_avanzado → item pasa a siguiente estación (reset a pendiente)
+  cleanups.push(
+    mqttSubscribe('cocina.item_avanzado', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.item_id) return;
+
+      cocinaStore.update(s => ({
+        ...s,
+        pedidos: s.pedidos.map(p =>
+          p.pedido_id === data.pedido_id
+            ? {
+              ...p,
+              items: p.items.map(i =>
+                i.item_id === data.item_id
+                  ? {
+                    ...i,
+                    estado: 'pendiente' as EstadoItem,
+                    estacion_actual: data.a_estacion,
+                    estaciones_completadas: data.estaciones_completadas || [],
+                    device_id: undefined,
+                    device_color: undefined,
+                    device_nombre: undefined,
+                    preparando_at: undefined
                   }
                   : i
               )

@@ -267,6 +267,7 @@ class CocinaModule {
       cuenta_id,
       canal: canal || null,
       items: (items || []).map(item => {
+        const estaciones = item.estaciones || null;
         const cocinaItem = {
           item_id: item.item_id,
           producto_id: item.producto_id,
@@ -275,7 +276,13 @@ class CocinaModule {
           cantidad: item.cantidad,
           variaciones: item.variaciones || null,
           notas: item.notas || '',
-          estado: 'pendiente'
+          estado: 'pendiente',
+          // Estaciones requeridas: set de estaciones que el item necesita visitar
+          // estacion_actual null = visible para estaciones normales (filtro por categoría)
+          // estacion_actual 'horno' = solo visible para dispositivos tipo horno
+          estaciones: estaciones,
+          estacion_actual: null,
+          estaciones_completadas: []
         };
         // Metadata especial: mitad-mitad, al gusto, ingredientes_base, etc.
         if (item.tipo) cocinaItem.tipo = item.tipo;
@@ -433,20 +440,12 @@ class CocinaModule {
       };
     }
 
-    // Segundo tap (preparando → listo): terminar
-    itemEncontrado.estado = 'listo';
-    itemEncontrado.preparado_at = now;
-
     // Cerrar fase activa (la última sin fin)
     const faseActiva = itemEncontrado.fases.find(f => !f.fin);
     if (faseActiva) {
       faseActiva.fin = now;
       faseActiva.duracion_seg = Math.round((new Date(now) - new Date(faseActiva.inicio)) / 1000);
     }
-
-    this.metrics?.increment?.('cocina.item_preparado.total');
-
-    await this.publishItemPreparado(pedidoEncontrado, itemEncontrado, estacion);
 
     // Ticket de pieza: si el tipo de estación tiene comportamiento imprime_al_completar
     if (device) {
@@ -455,6 +454,58 @@ class CocinaModule {
         await this.publishItemTicket(pedidoEncontrado, itemEncontrado, estacion);
       }
     }
+
+    // Registrar estación completada
+    const completadas = itemEncontrado.estaciones_completadas || [];
+    if (estacion && !completadas.includes(estacion)) {
+      completadas.push(estacion);
+      itemEncontrado.estaciones_completadas = completadas;
+    }
+    // También registrar por tipo de estación del device
+    const tipoEstDevice = device?.tipo_estacion;
+    if (tipoEstDevice && tipoEstDevice !== 'general' && !completadas.includes(tipoEstDevice)) {
+      completadas.push(tipoEstDevice);
+      itemEncontrado.estaciones_completadas = completadas;
+    }
+
+    // Comprobar si el item necesita pasar por más estaciones
+    const estacionesRequeridas = itemEncontrado.estaciones || [];
+    const siguienteEstacion = estacionesRequeridas.find(est => !completadas.includes(est));
+
+    if (siguienteEstacion) {
+      // Avanzar a la siguiente estación requerida: reset a pendiente
+      itemEncontrado.estado = 'pendiente';
+      itemEncontrado.estacion_actual = siguienteEstacion;
+      // Limpiar device info de la estación anterior
+      delete itemEncontrado.device_id;
+      delete itemEncontrado.device_color;
+      delete itemEncontrado.device_nombre;
+      delete itemEncontrado.preparando_at;
+
+      this.metrics?.increment?.('cocina.item_avanzado.total');
+
+      await this.publishItemAvanzado(pedidoEncontrado, itemEncontrado, estacion);
+
+      this.logger.info('cocina.item.avanzado', {
+        pedido_id: pedidoEncontrado.pedido_id, item_id,
+        desde_estacion: estacion,
+        a_estacion: siguienteEstacion,
+        estaciones_completadas: completadas
+      });
+
+      return {
+        status: 200,
+        data: { item: itemEncontrado, pedido_completo: false, avanzado: true }
+      };
+    }
+
+    // Todas las estaciones requeridas completadas (o no tiene) → terminar
+    itemEncontrado.estado = 'listo';
+    itemEncontrado.preparado_at = now;
+
+    this.metrics?.increment?.('cocina.item_preparado.total');
+
+    await this.publishItemPreparado(pedidoEncontrado, itemEncontrado, estacion);
 
     // Auto-completar si todos listos
     const todosListos = pedidoEncontrado.items.every(i => i.estado === 'listo');
@@ -706,6 +757,7 @@ class CocinaModule {
           if (!pedido_id || this.pedidosActivos.has(pedido_id)) continue;
 
           const items = (pedidoData.items || []).map((item, idx) => {
+            const estaciones = item.estaciones || null;
             const cocinaItem = {
               item_id: item.item_id || item.id || `${pedido_id}_item_${idx + 1}`,
               producto_id: item.producto_id,
@@ -713,7 +765,10 @@ class CocinaModule {
               cantidad: item.cantidad || 1,
               variaciones: item.variaciones || null,
               notas: item.notas || '',
-              estado: 'pendiente'
+              estado: 'pendiente',
+              estaciones: estaciones,
+              estacion_actual: null,
+              estaciones_completadas: []
             };
             if (item.tipo) cocinaItem.tipo = item.tipo;
             if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
@@ -816,12 +871,32 @@ class CocinaModule {
       cantidad: item.cantidad,
       categoria: item.categoria || null,
       estacion: estacion || null,
+      estacion_actual: item.estacion_actual || null,
+      estaciones: item.estaciones || null,
+      estaciones_completadas: item.estaciones_completadas || [],
       preparando_at: item.preparando_at
     };
     if (item.device_id) payload.device_id = item.device_id;
     if (item.device_color) payload.device_color = item.device_color;
     if (item.device_nombre) payload.device_nombre = item.device_nombre;
     await this.eventBus.publish('cocina.item_preparando', payload);
+  }
+
+  async publishItemAvanzado(pedidoCocina, item, estacionAnterior) {
+    await this.eventBus.publish('cocina.item_avanzado', {
+      pedido_id: pedidoCocina.pedido_id,
+      cuenta_id: pedidoCocina.cuenta_id,
+      canal: pedidoCocina.canal || null,
+      item_id: item.item_id,
+      producto_id: item.producto_id,
+      nombre: item.nombre,
+      cantidad: item.cantidad,
+      categoria: item.categoria || null,
+      desde_estacion: estacionAnterior,
+      a_estacion: item.estacion_actual,
+      estaciones: item.estaciones,
+      estaciones_completadas: item.estaciones_completadas || []
+    });
   }
 
   async publishItemPreparado(pedidoCocina, item, estacion) {

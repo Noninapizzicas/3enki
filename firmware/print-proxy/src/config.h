@@ -13,7 +13,7 @@
 // Si USE_WIFI_MANAGER es true, ignora SSID/PASS
 // y lanza portal cautivo para configurar desde movil.
 // Si es false, usa credenciales hardcodeadas.
-#define USE_WIFI_MANAGER   true
+#define USE_WIFI_MANAGER   1
 #define WIFI_SSID          "PizzeriaNonina"
 #define WIFI_PASS          "tu_password_wifi"
 
@@ -21,7 +21,7 @@
 // Broker del VPS (event-core)
 #define MQTT_HOST          "tu-vps.com"
 #define MQTT_PORT          1883         // 1883 plano, 8883 TLS
-#define MQTT_USE_TLS       false        // true para produccion
+#define MQTT_USE_TLS       0            // 1 para produccion
 #define MQTT_USER          ""           // vacio si no hay auth
 #define MQTT_PASS          ""
 

@@ -54,10 +54,8 @@ export interface ItemCocina {
   device_id?: string;
   device_color?: string;
   device_nombre?: string;
-  // Estaciones requeridas (set, no ruta ordenada)
-  estaciones?: string[] | null;
-  estacion_actual?: string | null;
-  estaciones_completadas?: string[];
+  // Sistema de pases: 0=general, 1=horno, 2=listo
+  pase: number;
 }
 
 export interface GlovoMetadata {
@@ -94,8 +92,10 @@ export interface TipoEstacionInfo {
   id: string;
   nombre: string;
   descripcion: string;
+  pase_minimo: number;
   comportamientos: {
     imprime_al_completar: boolean;
+    auto_preparar: boolean;
   };
 }
 
@@ -259,6 +259,7 @@ export async function prepararItem(itemId: string): Promise<boolean> {
   let pedidoIdx = -1;
   let itemIdx = -1;
   let estadoAnterior: EstadoItem = 'pendiente';
+  let paseAnterior = 0;
 
   for (let pi = 0; pi < state.pedidos.length; pi++) {
     const ii = state.pedidos[pi].items.findIndex(i => i.item_id === itemId);
@@ -266,6 +267,7 @@ export async function prepararItem(itemId: string): Promise<boolean> {
       pedidoIdx = pi;
       itemIdx = ii;
       estadoAnterior = state.pedidos[pi].items[ii].estado;
+      paseAnterior = state.pedidos[pi].items[ii].pase ?? 0;
       break;
     }
   }
@@ -273,12 +275,15 @@ export async function prepararItem(itemId: string): Promise<boolean> {
   if (pedidoIdx === -1 || estadoAnterior === 'listo') return false;
 
   // Optimistic: siguiente estado
+  // pendiente → preparando (mismo pase)
+  // preparando → pase++ (el backend decidirá el estado final)
   const nuevoEstado: EstadoItem = estadoAnterior === 'pendiente' ? 'preparando' : 'listo';
+  const nuevoPase = estadoAnterior === 'preparando' ? paseAnterior + 1 : paseAnterior;
 
   cocinaStore.update(s => {
     const pedidos = [...s.pedidos];
     const pedido = { ...pedidos[pedidoIdx], items: [...pedidos[pedidoIdx].items] };
-    pedido.items[itemIdx] = { ...pedido.items[itemIdx], estado: nuevoEstado };
+    pedido.items[itemIdx] = { ...pedido.items[itemIdx], estado: nuevoEstado, pase: nuevoPase };
     pedidos[pedidoIdx] = pedido;
     return { ...s, pedidos };
   });
@@ -521,38 +526,17 @@ export function itemPassesFilter(item: ItemCocina, filtros: string[]): boolean {
 }
 
 /**
- * Comprueba si un item debe mostrarse en una estación determinada.
- *
- * Lógica abierta:
- * - estacion_actual === null → el item está en su estación inicial (visible para
- *   estaciones normales que filtran por categoría)
- * - estacion_actual === 'horno' → el item ha completado su estación anterior y
- *   necesita horno (solo visible para dispositivos tipo horno)
- *
- * Dispositivos tipo 'general' ven todo. Items sin estaciones requeridas también.
- *
- * @param item - El item de cocina
- * @param tipoEstacion - El tipo de estación del dispositivo ('horno', 'montaje', etc.)
- * @returns true si el item debe verse en esta estación
+ * Filtra items por pase acumulativo.
+ * El pase es un contador del item que se incrementa cada vez que pasa por una estación.
+ * Cada estación define pase_minimo: el pase que debe tener el item para mostrarse ahí.
+ * general (pase_minimo=0) ve items con pase=0
+ * horno (pase_minimo=1) ve items con pase=1
+ * Un futuro emplatado (pase_minimo=2) vería items con pase=2, etc.
  */
-export function itemMatchesStation(item: ItemCocina, tipoEstacion: string): boolean {
-  // Dispositivo general = ver todo
-  if (!tipoEstacion || tipoEstacion === 'general') return true;
-  // Item sin estaciones requeridas
-  if (!item.estaciones || item.estaciones.length === 0) {
-    // Si no tiene estacion_actual, solo visible en estaciones generales (no en horno/freidora/etc)
-    if (!item.estacion_actual) return false;
-    // Si tiene estacion_actual, solo visible en esa estación
-    return item.estacion_actual === tipoEstacion;
-  }
-  // Item con estacion_actual null = está en preparación inicial
-  // Solo visible para estaciones que NO están en su lista de requeridas
-  // (ej: montaje ve el item, horno NO lo ve aún)
-  if (!item.estacion_actual) {
-    return !item.estaciones.includes(tipoEstacion);
-  }
-  // Item enrutado a una estación específica = solo visible allí
-  return item.estacion_actual === tipoEstacion;
+export function itemMatchesStation(item: ItemCocina, tipoEstacion: string, tipoInfo?: TipoEstacionInfo | null): boolean {
+  const paseItem = item.pase ?? 0;
+  const paseMinimo = tipoInfo?.pase_minimo ?? 0;
+  return paseItem === paseMinimo;
 }
 
 // =============================================================================
@@ -854,6 +838,7 @@ export function initCocinaSubscriptions(): () => void {
                   ? {
                     ...i,
                     estado: 'preparando' as EstadoItem,
+                    pase: data.pase ?? i.pase,
                     preparando_at: data.preparando_at,
                     device_id: data.device_id || i.device_id,
                     device_color: data.device_color || i.device_color,
@@ -885,6 +870,7 @@ export function initCocinaSubscriptions(): () => void {
                   ? {
                     ...i,
                     estado: 'listo' as EstadoItem,
+                    pase: data.pase ?? i.pase,
                     preparado_at: data.preparado_at,
                     device_id: data.device_id || i.device_id,
                     device_color: data.device_color || i.device_color,
@@ -916,8 +902,7 @@ export function initCocinaSubscriptions(): () => void {
                   ? {
                     ...i,
                     estado: (data.estado || 'pendiente') as EstadoItem,
-                    estacion_actual: data.a_estacion,
-                    estaciones_completadas: data.estaciones_completadas || [],
+                    pase: data.pase ?? i.pase,
                     device_id: undefined,
                     device_color: undefined,
                     device_nombre: undefined,

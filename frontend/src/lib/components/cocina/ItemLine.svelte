@@ -17,6 +17,7 @@
   import { ESTADO_ITEM_COLORS } from '$lib/stores/cocina';
 
   export let item: ItemCocina;
+  export let justCompleted: boolean = false;
 
   const dispatch = createEventDispatcher<{
     'tap': { item_id: string };
@@ -129,6 +130,7 @@
   class:listo={isListo}
   class:preparando={isPreparando}
   class:expanded
+  class:just-completed={justCompleted}
   style="--item-color: {color}"
   on:click={handleTap}
   disabled={isListo}
@@ -298,6 +300,29 @@
   .item-line.listo .item-main {
     text-decoration: line-through;
     text-decoration-color: #22c55e;
+  }
+
+  /* Horno: item recién completado — verde brillante 10s antes de desaparecer */
+  .item-line.just-completed {
+    opacity: 1 !important;
+    background: rgba(34, 197, 94, 0.25) !important;
+    border-left-color: #22c55e !important;
+    animation: horno-done-flash 10s ease-out forwards;
+  }
+
+  .item-line.just-completed .item-main {
+    text-decoration: none;
+    color: #22c55e;
+  }
+
+  .item-line.just-completed .qty {
+    color: #22c55e;
+  }
+
+  @keyframes horno-done-flash {
+    0% { background: rgba(34, 197, 94, 0.4); }
+    70% { background: rgba(34, 197, 94, 0.2); opacity: 1; }
+    100% { background: rgba(34, 197, 94, 0.05); opacity: 0.3; }
   }
 
   /* ===== EXPANDED STATE (preparando) — exagerado ===== */

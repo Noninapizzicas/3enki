@@ -29,6 +29,7 @@
     isGlovoConfirmado,
     filtrosActivos,
     tipoEstacion,
+    tipoEstacionInfo,
     itemPassesFilter,
     itemMatchesStation
   } from '$lib/stores/cocina';
@@ -66,11 +67,9 @@
 
   // Filtrar pedidos que no tienen ningún item para esta estación
   $: pedidosFiltrados = $pedidosCocina.filter(p => {
-    // Si no hay filtros de estación ni categoría, mostrar todo
-    if ($filtrosActivos.length === 0 && $tipoEstacion === 'general') return true;
-    // Mostrar pedido si al menos un item pasa los filtros
+    // Mostrar pedido si al menos un item pasa los filtros de esta estación
     return p.items.some(i =>
-      itemPassesFilter(i, $filtrosActivos) && itemMatchesStation(i, $tipoEstacion)
+      itemPassesFilter(i, $filtrosActivos) && itemMatchesStation(i, $tipoEstacion, $tipoEstacionInfo)
     );
   });
   $: pedidosOrdenados = sortPedidos(pedidosFiltrados);
@@ -133,7 +132,7 @@
     {:else}
       <div class="pedidos-grid">
         {#each pedidosOrdenados as pedido (pedido.pedido_id)}
-          <PedidoCard {pedido} filtros={$filtrosActivos} tipoEstacion={$tipoEstacion} />
+          <PedidoCard {pedido} filtros={$filtrosActivos} tipoEstacion={$tipoEstacion} tipoEstacionInfo={$tipoEstacionInfo} />
         {/each}
       </div>
     {/if}

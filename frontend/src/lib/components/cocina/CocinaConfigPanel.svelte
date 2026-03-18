@@ -406,23 +406,41 @@
               <p class="tipo-desc">Sin impresora configurada</p>
             </div>
           {/if}
-        {:else}
-          <p class="section-hint" style="color: #64748b; font-style: italic;">No hay impresoras registradas en periféricos.</p>
-        {/if}
 
-        <!-- ESP32 bridge ID (opcional, para transportes esp32-proxy) -->
-        {#if selectedImpresora}
-          {@const sel = impresorasDisponibles.find(i => i.nombre === selectedImpresora)}
-          {#if sel?.transporte_tipo === 'esp32-proxy'}
-            <div style="margin-top: 10px;">
-              <p class="section-hint">Device ID del ESP32 bridge (auto-detectado del registro).</p>
-              <input
-                class="name-input full-width"
-                type="text"
-                bind:value={editEsp32DeviceId}
-                placeholder="Device ID del ESP32 (ej: cocina-1)"
-                maxlength="30"
-              />
+          <!-- ESP32 bridge ID — solo si el transporte seleccionado es esp32-proxy -->
+          {#if selectedImpresora}
+            {@const sel = impresorasDisponibles.find(i => i.nombre === selectedImpresora)}
+            {#if sel?.transporte_tipo === 'esp32-proxy'}
+              <div style="margin-top: 10px;">
+                <p class="section-hint">Device ID del ESP32 bridge (auto-detectado del registro).</p>
+                <input
+                  class="name-input full-width"
+                  type="text"
+                  bind:value={editEsp32DeviceId}
+                  placeholder="Device ID del ESP32 (ej: cocina-1)"
+                  maxlength="30"
+                />
+              </div>
+            {/if}
+          {/if}
+        {:else}
+          <!-- Fallback: sin periféricos registrados, input manual de ESP32 -->
+          <input
+            class="name-input full-width"
+            type="text"
+            bind:value={editEsp32DeviceId}
+            placeholder="Device ID del ESP32 (ej: cocina-1)"
+            maxlength="30"
+          />
+
+          {#if editEsp32DeviceId.trim()}
+            <div class="tipo-info">
+              <p class="tipo-desc">ESP32: {editEsp32DeviceId.trim()}</p>
+              <span class="tipo-badge print">Activa</span>
+            </div>
+          {:else}
+            <div class="tipo-info">
+              <p class="tipo-desc">Sin impresora configurada</p>
             </div>
           {/if}
         {/if}

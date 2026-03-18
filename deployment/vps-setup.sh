@@ -126,6 +126,7 @@ rsync -a --delete \
     --exclude='node_modules' \
     --exclude='.git' \
     --exclude='deployment' \
+    --exclude='data' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
 
 # Instalar dependencias backend

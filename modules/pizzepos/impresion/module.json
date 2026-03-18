@@ -104,6 +104,7 @@
   ],
 
   "config": {
+    "project_id": null,
     "ancho": "58mm",
     "transporte": {
       "modo": "dispositivo",

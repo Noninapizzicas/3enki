@@ -60,6 +60,7 @@ class ImpresionModule {
     // Config (defaults para NETUM 58mm en Termux)
     this.config = {
       ancho: '58mm',
+      project_id: null, // se inyecta desde core.config o se pasa en impresora config
       transporte: {
         modo: 'dispositivo',
         mac: null,
@@ -107,6 +108,11 @@ class ImpresionModule {
       if (core.config.impresion.transporte) {
         this.config.transporte = { ...this.config.transporte, ...core.config.impresion.transporte };
       }
+    }
+
+    // Project ID: necesario para topic MQTT impresion/{project_id}/print
+    if (!this.config.project_id) {
+      this.config.project_id = core.config?.project_id || core.config?.projectId || null;
     }
 
     // Calcular ancho de línea
@@ -234,7 +240,7 @@ class ImpresionModule {
 
     this.logger.info('impresion.ticket_pieza.generando', {
       pedido_id, item_id, nombre, estacion,
-      impresora: impresora?.dispositivo || 'default'
+      impresora: impresora?.esp32_device_id || impresora?.dispositivo || 'default'
     });
 
     try {
@@ -849,11 +855,13 @@ class ImpresionModule {
   }
 
   /**
-   * Envía ESC/POS a la impresora vía transporte Bluetooth.
-   * Si el transporte no está conectado, intenta reconectar una vez.
-   * También publica impresion.raw al eventBus (para monitoreo/logging).
+   * Envía ESC/POS a la impresora.
+   * Soporta 2 modos:
+   *   1. ESP32 (MQTT) — si configImpresora.esp32_device_id, publica al topic del ESP32
+   *   2. Transporte directo (rfcomm/TCP/comando) — usa TransporteBluetooth
+   *
    * @param {string} contenido - datos ESC/POS
-   * @param {Object} [configImpresora] - config específica de impresora (opcional, para routing)
+   * @param {Object} [configImpresora] - config de impresora (esp32_device_id o dispositivo)
    */
   async enviarImpresora(contenido, configImpresora) {
     // Publicar al bus para monitoreo
@@ -863,7 +871,13 @@ class ImpresionModule {
       timestamp: new Date().toISOString()
     });
 
-    // Resolver transporte (específico del device o default)
+    // --- Modo ESP32: enviar via MQTT al bridge BLE ---
+    const esp32Id = configImpresora?.esp32_device_id;
+    if (esp32Id) {
+      return this.enviarViaEsp32(contenido, esp32Id);
+    }
+
+    // --- Modo directo: transporte Bluetooth/TCP/comando ---
     const transporte = this.obtenerTransporte(configImpresora);
 
     if (transporte) {
@@ -885,6 +899,45 @@ class ImpresionModule {
       }
     } else {
       this.logger.warn('impresion.sin_transporte', { bytes: contenido.length });
+    }
+  }
+
+  /**
+   * Envía datos ESC/POS a un ESP32 printer bridge via MQTT.
+   * Topic: impresion/{project_id}/print (el ESP32 se suscribe a este topic)
+   * Payload: { destino: esp32_device_id, data: base64, ts, id }
+   * Datos en base64 para evitar problemas con caracteres binarios ESC/POS.
+   */
+  async enviarViaEsp32(contenido, esp32DeviceId) {
+    const projectId = this.config.project_id;
+    const topic = projectId
+      ? `impresion/${projectId}/print`
+      : `esp32/${esp32DeviceId}/command`;
+
+    const buffer = Buffer.isBuffer(contenido) ? contenido : Buffer.from(contenido, 'binary');
+    const payload = {
+      cmd: 'print',
+      destino: esp32DeviceId,
+      data: buffer.toString('base64'),
+      ts: Date.now(),
+      id: `prt_${crypto.randomUUID().slice(0, 8)}`
+    };
+
+    try {
+      await this.eventBus.publish(topic, payload);
+
+      this.logger.info('impresion.esp32.enviado', {
+        esp32_device_id: esp32DeviceId,
+        bytes: buffer.length,
+        topic
+      });
+    } catch (error) {
+      this.internalMetrics.errores_transporte++;
+      this.logger.error('impresion.esp32.error', {
+        esp32_device_id: esp32DeviceId,
+        error: error.message
+      });
+      throw new Error(`esp32 ${esp32DeviceId}: ${error.message}`);
     }
   }
 

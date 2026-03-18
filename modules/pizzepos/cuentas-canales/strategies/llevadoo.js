@@ -189,7 +189,7 @@ class LlevadooStrategy {
 
   async handleCrearPedido(data) {
     try {
-      const { nombre_cliente, telefono_cliente, direccion, tiempo_preparacion, notas } = data || {};
+      const { project_id, nombre_cliente, telefono_cliente, direccion, tiempo_preparacion, notas } = data || {};
 
       this.modulo.verificarReseoDiario();
 
@@ -206,6 +206,7 @@ class LlevadooStrategy {
 
       const pedido = {
         cuenta_id,
+        project_id,
         numero_pedido,
         nombre_cliente: nombre_cliente || 'Llevadoo',
         telefono_cliente: telefono_cliente || '',
@@ -238,9 +239,11 @@ class LlevadooStrategy {
       await this.modulo.publishCuentaCreada({
         cuenta_id: pedido.cuenta_id,
         tipo: 'llevadoo',
+        project_id,
         total: pedido.total,
         metadata: {
           nombre: pedido.nombre_cliente,
+          nombre_cliente: pedido.nombre_cliente,
           direccion: pedido.direccion,
           hora_recogida_estimada: pedido.hora_recogida_estimada
         }
@@ -348,6 +351,7 @@ class LlevadooStrategy {
     await this.modulo.publishCuentaCerrada({
       cuenta_id: pedido.cuenta_id,
       tipo: 'llevadoo',
+      project_id: pedido.project_id,
       total: 0,
       metadata: { motivo: 'cancelado' }
     });
@@ -506,6 +510,7 @@ class LlevadooStrategy {
     await this.modulo.publishCuentaCerrada({
       cuenta_id: pedido.cuenta_id,
       tipo: 'llevadoo',
+      project_id: pedido.project_id,
       total: pedido.total,
       metadata: {
         numero_pedido: pedido.numero_pedido,

@@ -92,7 +92,7 @@
     }
   }
 
-  const tipos: TipoCuenta[] = ['local', 'delivery', 'llevar', 'llevadoo'];
+  const tipos: TipoCuenta[] = ['local', 'delivery', 'llevar'];
 
   onMount(() => {
     updateClock();

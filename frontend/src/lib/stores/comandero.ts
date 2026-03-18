@@ -144,30 +144,51 @@ export async function initComandero(project_id: string, cuenta_id: string): Prom
     let rawProductos: any[] = [];
     let rawIngredientes: any[] = [];
 
-    // Intentar carta_completa (un solo call, óptimo)
-    // Si falla (ej: backend sin reiniciar), fallback a calls individuales
-    try {
-      const cartaRes = await mqttRequest('productos', 'carta_completa', { project_id });
-      const cartaData = cartaRes?.data as any;
-      rawCategorias = cartaData?.categorias || [];
-      rawProductos = cartaData?.productos || [];
-      rawIngredientes = cartaData?.ingredientes || [];
-      console.log('[Comandero] carta_completa OK');
-    } catch {
-      console.warn('[Comandero] carta_completa no disponible, usando calls individuales');
-      // Fallback: categorias + productos por separado
-      const [catRes, prodRes] = await Promise.all([
-        mqttRequest('productos', 'categorias', { project_id }),
-        mqttRequest('productos', 'list', { project_id })
-      ]);
-      rawCategorias = (catRes?.data as any)?.categorias || [];
-      rawProductos = (prodRes?.data as any)?.productos || [];
+    // Llevadoo: usar carta_delivery (precios con recargo) en vez de carta_completa
+    const isLlevadoo = cuenta_id.startsWith('llevadoo_');
 
-      // Intentar ingredientes también
+    if (isLlevadoo) {
       try {
-        const ingRes = await mqttRequest('productos', 'ingredientes', { project_id });
-        rawIngredientes = (ingRes?.data as any)?.ingredientes || [];
-      } catch { /* sin ingredientes, no pasa nada */ }
+        const cartaRes = await mqttRequest('llevadoo', 'carta_delivery', { project_id });
+        const cartaData = cartaRes?.data as any;
+        rawCategorias = cartaData?.categorias || [];
+        rawProductos = cartaData?.productos || [];
+        rawIngredientes = cartaData?.ingredientes || [];
+        console.log('[Comandero] carta_delivery (llevadoo) OK');
+      } catch (err) {
+        console.warn('[Comandero] carta_delivery failed, fallback to carta_completa:', err);
+        await loadCartaCompleta();
+      }
+    } else {
+      await loadCartaCompleta();
+    }
+
+    async function loadCartaCompleta() {
+      // Intentar carta_completa (un solo call, óptimo)
+      // Si falla (ej: backend sin reiniciar), fallback a calls individuales
+      try {
+        const cartaRes = await mqttRequest('productos', 'carta_completa', { project_id });
+        const cartaData = cartaRes?.data as any;
+        rawCategorias = cartaData?.categorias || [];
+        rawProductos = cartaData?.productos || [];
+        rawIngredientes = cartaData?.ingredientes || [];
+        console.log('[Comandero] carta_completa OK');
+      } catch {
+        console.warn('[Comandero] carta_completa no disponible, usando calls individuales');
+        // Fallback: categorias + productos por separado
+        const [catRes, prodRes] = await Promise.all([
+          mqttRequest('productos', 'categorias', { project_id }),
+          mqttRequest('productos', 'list', { project_id })
+        ]);
+        rawCategorias = (catRes?.data as any)?.categorias || [];
+        rawProductos = (prodRes?.data as any)?.productos || [];
+
+        // Intentar ingredientes también
+        try {
+          const ingRes = await mqttRequest('productos', 'ingredientes', { project_id });
+          rawIngredientes = (ingRes?.data as any)?.ingredientes || [];
+        } catch { /* sin ingredientes, no pasa nada */ }
+      }
     }
 
     const categorias: Categoria[] = rawCategorias.map((c: any) => ({

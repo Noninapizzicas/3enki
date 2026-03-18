@@ -12,7 +12,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import type { TipoCuenta } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta, createMesa, createLlevar } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, TIPO_LABELS, createCuenta, createMesa, createLlevar, createLlevadoo } from '$lib/stores/cuentas';
   import { status as mqttStatus } from '$lib/ui-core';
 
   export let tipo: TipoCuenta;
@@ -47,6 +47,9 @@
       } else if (tipo === 'llevar') {
         // Llevar → usa cuentas-canales llevar strategy (ticket con prefijo llevar_)
         cuenta_id = await createLlevar(projectId);
+      } else if (tipo === 'llevadoo') {
+        // Llevadoo → usa cuentas-canales llevadoo strategy (delivery externo)
+        cuenta_id = await createLlevadoo(projectId);
       } else {
         // Delivery/otros → cuentas genérico
         const cuenta = await createCuenta(projectId, tipo);

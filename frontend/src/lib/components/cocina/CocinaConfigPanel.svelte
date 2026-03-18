@@ -35,16 +35,8 @@
   let selectedTipoEstacion: string = 'general';
   let saving = false;
 
-  // Impresora
-  let editImpresoraDispositivo = '';
-
-  // Opciones predefinidas de impresora (rfcomm devices típicos)
-  const IMPRESORAS_PREDEFINIDAS = [
-    { label: 'Sin impresora', dispositivo: '' },
-    { label: 'rfcomm0', dispositivo: '/dev/rfcomm0' },
-    { label: 'rfcomm1', dispositivo: '/dev/rfcomm1' },
-    { label: 'rfcomm2', dispositivo: '/dev/rfcomm2' }
-  ];
+  // Impresora ESP32
+  let editEsp32DeviceId = '';
 
   // Categorías cargadas del catálogo
   let catalogCategorias: { id: string; nombre: string; emoji?: string }[] = [];
@@ -164,7 +156,7 @@
     editEstacion = $myEstacion || '';
     selectedFamilias = new Set($filtrosActivos);
     selectedTipoEstacion = $tipoEstacion || 'general';
-    editImpresoraDispositivo = $myImpresora?.dispositivo || '';
+    editEsp32DeviceId = $myImpresora?.esp32_device_id || '';
     loadCategorias();
   });
 
@@ -195,9 +187,9 @@
     // Update station type
     await setTipoEstacion(selectedTipoEstacion);
 
-    // Update printer
-    const newImpresora = editImpresoraDispositivo
-      ? { dispositivo: editImpresoraDispositivo, modo: 'dispositivo' as const }
+    // Update printer (ESP32 bridge)
+    const newImpresora = editEsp32DeviceId.trim()
+      ? { esp32_device_id: editEsp32DeviceId.trim() }
       : null;
     await setImpresora(newImpresora);
 
@@ -355,27 +347,27 @@
         {/if}
       </section>
 
-      <!-- Printer selection -->
+      <!-- Printer selection (ESP32 bridge) -->
       <section class="config-section">
         <h3>Impresora</h3>
-        <p class="section-hint">Selecciona la impresora para este dispositivo (tickets de pieza).</p>
+        <p class="section-hint">Device ID del ESP32 que conecta con la impresora BLE (ej: cocina-1).</p>
 
-        <div class="familia-grid">
-          {#each IMPRESORAS_PREDEFINIDAS as opcion}
-            <button
-              class="familia-chip impresora-chip"
-              class:active={editImpresoraDispositivo === opcion.dispositivo}
-              on:click={() => editImpresoraDispositivo = opcion.dispositivo}
-            >
-              {opcion.label.toUpperCase()}
-            </button>
-          {/each}
-        </div>
+        <input
+          class="name-input full-width"
+          type="text"
+          bind:value={editEsp32DeviceId}
+          placeholder="Device ID del ESP32 (ej: cocina-1)"
+          maxlength="30"
+        />
 
-        {#if editImpresoraDispositivo}
+        {#if editEsp32DeviceId.trim()}
           <div class="tipo-info">
-            <p class="tipo-desc">{editImpresoraDispositivo}</p>
+            <p class="tipo-desc">ESP32: {editEsp32DeviceId.trim()}</p>
             <span class="tipo-badge print">Activa</span>
+          </div>
+        {:else}
+          <div class="tipo-info">
+            <p class="tipo-desc">Sin impresora configurada</p>
           </div>
         {/if}
       </section>
@@ -595,12 +587,6 @@
   .familia-chip.tipo-chip.active {
     background: #8b5cf6;
     border-color: #8b5cf6;
-    color: #fff;
-  }
-
-  .familia-chip.impresora-chip.active {
-    background: #f97316;
-    border-color: #f97316;
     color: #fff;
   }
 

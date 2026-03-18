@@ -100,9 +100,7 @@ export interface TipoEstacionInfo {
 }
 
 export interface ImpresoraConfig {
-  dispositivo: string;  // ej: "/dev/rfcomm0", "/dev/rfcomm1"
-  mac?: string;         // MAC Bluetooth
-  modo?: 'dispositivo' | 'tcp' | 'comando';
+  esp32_device_id: string;  // ID del ESP32 bridge BLE (ej: "cocina-1")
 }
 
 export interface CocinaDevice {

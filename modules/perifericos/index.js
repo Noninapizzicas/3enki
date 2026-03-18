@@ -34,7 +34,7 @@ const path = require('path');
 class PerifericosModule {
   constructor() {
     this.name = 'perifericos';
-    this.version = '1.1.0';
+    this.version = '1.2.0';
 
     this.core = null;
     this.logger = null;
@@ -87,16 +87,23 @@ class PerifericosModule {
       });
     }
 
+    // Auto-descubrimiento: escuchar ESP32 que se anuncian por MQTT
+    const autoDiscovery = core.config?.perifericos?.descubrimiento?.esp32_auto !== false;
+    if (autoDiscovery && this.provider) {
+      await this._iniciarAutoDescubrimiento();
+    }
+
     this.logger.info('module.loaded', {
       module: this.name,
       version: this.version,
-      dataPath: this.dataPath
+      dataPath: this.dataPath,
+      auto_discovery: autoDiscovery
     });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
-    // El provider limpia transportes internamente
+    this._detenerAutoDescubrimiento();
     this.logger.info('module.unloaded', { module: this.name });
   }
 
@@ -523,6 +530,135 @@ class PerifericosModule {
         total: dispositivos.length
       }
     };
+  }
+
+  // ==========================================
+  // Auto-descubrimiento ESP32
+  // ==========================================
+
+  /**
+   * Suscribe a topics MQTT de ESP32 para auto-registrar dispositivos.
+   *
+   * Escucha:
+   *   esp32/+/status           → ESP32 genéricos que publican su estado
+   *   periferico/+/status      → ESP32 proxy que publican como periférico
+   *
+   * Cuando un ESP32 se anuncia, se auto-registra en el registry con:
+   *   nombre: esp32_device_id (ej: "esp32-cocina-01")
+   *   tipo: inferido de capacidades declaradas o "impresora-termica" por defecto
+   *   transporte: esp32-proxy
+   */
+  async _iniciarAutoDescubrimiento() {
+    const mqtt = this.eventBus?.mqtt;
+    if (!mqtt || !mqtt.isConnected) {
+      this.logger.warn('perifericos.autodiscovery.sin_mqtt', {
+        nota: 'MQTT no disponible — auto-descubrimiento deshabilitado'
+      });
+      return;
+    }
+
+    this._onMqttMessage = this._handleDiscoveryMessage.bind(this);
+    mqtt.on('message', this._onMqttMessage);
+
+    try {
+      await mqtt.subscribe('esp32/+/status');
+      await mqtt.subscribe('periferico/+/status');
+      this.logger.info('perifericos.autodiscovery.iniciado', {
+        topics: ['esp32/+/status', 'periferico/+/status']
+      });
+    } catch (err) {
+      this.logger.warn('perifericos.autodiscovery.subscribe_error', {
+        error: err.message
+      });
+    }
+  }
+
+  _detenerAutoDescubrimiento() {
+    const mqtt = this.eventBus?.mqtt;
+    if (mqtt && this._onMqttMessage) {
+      mqtt.removeListener('message', this._onMqttMessage);
+      this._onMqttMessage = null;
+    }
+  }
+
+  /**
+   * Procesa mensajes MQTT de descubrimiento.
+   * Patterns:
+   *   esp32/{deviceId}/status     → { ip, firmware, capacidades?, tipo?, nombre? }
+   *   periferico/{deviceId}/status → { online, capacidades?, tipo? }
+   */
+  async _handleDiscoveryMessage(topic, payload) {
+    // Solo procesar topics de discovery
+    const esp32Match = topic.match(/^esp32\/([^/]+)\/status$/);
+    const perifMatch = topic.match(/^periferico\/([^/]+)\/status$/);
+
+    if (!esp32Match && !perifMatch) return;
+
+    const deviceId = (esp32Match || perifMatch)[1];
+    let data;
+
+    try {
+      data = typeof payload === 'string' ? JSON.parse(payload)
+           : Buffer.isBuffer(payload) ? JSON.parse(payload.toString())
+           : payload;
+    } catch {
+      return; // Payload no es JSON válido — ignorar
+    }
+
+    // Verificar si ya existe en registry
+    const registry = this.provider._getRegistry();
+    if (!registry) return;
+
+    const existente = registry.obtener(deviceId);
+
+    if (existente) {
+      // Ya registrado — actualizar estado a online
+      registry.actualizarEstado(deviceId, 'online');
+      return;
+    }
+
+    // Auto-registrar nuevo dispositivo
+    const capacidades = data.capacidades || data.capabilities || ['imprimir'];
+    const tipo = data.tipo || data.type || 'impresora-termica';
+    const nombre = data.nombre || data.name || deviceId;
+
+    this.logger.info('perifericos.autodiscovery.nuevo_dispositivo', {
+      deviceId, nombre, tipo, capacidades,
+      source: esp32Match ? 'esp32/status' : 'periferico/status'
+    });
+
+    try {
+      await this.provider.register({
+        nombre,
+        tipo,
+        capacidades,
+        transporte: {
+          tipo: 'esp32-proxy',
+          config: { esp32_device_id: deviceId }
+        },
+        metadata: {
+          ip: data.ip || null,
+          firmware: data.firmware || null,
+          auto_descubierto: true,
+          descubierto_at: new Date().toISOString()
+        },
+        _context: { logger: this.logger, eventBus: this.eventBus }
+      });
+
+      this.internalMetrics.registros_total++;
+
+      await this.eventBus.publish('periferico.dispositivo.registrado', {
+        nombre,
+        tipo,
+        capacidades,
+        auto_descubierto: true,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      this.logger.warn('perifericos.autodiscovery.registro_error', {
+        deviceId, error: err.message
+      });
+    }
   }
 
   // ==========================================

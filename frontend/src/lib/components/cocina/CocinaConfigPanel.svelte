@@ -366,7 +366,12 @@
 
       <!-- Printer selection -->
       <section class="config-section">
-        <h3>Impresora</h3>
+        <div class="section-header-row">
+          <h3>Impresora</h3>
+          <button class="refresh-btn" on:click={loadImpresoras} disabled={loadingImpresoras} title="Actualizar lista">
+            <span class="refresh-icon" class:spinning={loadingImpresoras}>&#x21bb;</span>
+          </button>
+        </div>
         <p class="section-hint">Selecciona la impresora destino para esta estación.</p>
 
         {#if loadingImpresoras}
@@ -406,23 +411,41 @@
               <p class="tipo-desc">Sin impresora configurada</p>
             </div>
           {/if}
-        {:else}
-          <p class="section-hint" style="color: #64748b; font-style: italic;">No hay impresoras registradas en periféricos.</p>
-        {/if}
 
-        <!-- ESP32 bridge ID (opcional, para transportes esp32-proxy) -->
-        {#if selectedImpresora}
-          {@const sel = impresorasDisponibles.find(i => i.nombre === selectedImpresora)}
-          {#if sel?.transporte_tipo === 'esp32-proxy'}
-            <div style="margin-top: 10px;">
-              <p class="section-hint">Device ID del ESP32 bridge (auto-detectado del registro).</p>
-              <input
-                class="name-input full-width"
-                type="text"
-                bind:value={editEsp32DeviceId}
-                placeholder="Device ID del ESP32 (ej: cocina-1)"
-                maxlength="30"
-              />
+          <!-- ESP32 bridge ID — solo si el transporte seleccionado es esp32-proxy -->
+          {#if selectedImpresora}
+            {@const sel = impresorasDisponibles.find(i => i.nombre === selectedImpresora)}
+            {#if sel?.transporte_tipo === 'esp32-proxy'}
+              <div style="margin-top: 10px;">
+                <p class="section-hint">Device ID del ESP32 bridge (auto-detectado del registro).</p>
+                <input
+                  class="name-input full-width"
+                  type="text"
+                  bind:value={editEsp32DeviceId}
+                  placeholder="Device ID del ESP32 (ej: cocina-1)"
+                  maxlength="30"
+                />
+              </div>
+            {/if}
+          {/if}
+        {:else}
+          <!-- Fallback: sin periféricos registrados, input manual de ESP32 -->
+          <input
+            class="name-input full-width"
+            type="text"
+            bind:value={editEsp32DeviceId}
+            placeholder="Device ID del ESP32 (ej: cocina-1)"
+            maxlength="30"
+          />
+
+          {#if editEsp32DeviceId.trim()}
+            <div class="tipo-info">
+              <p class="tipo-desc">ESP32: {editEsp32DeviceId.trim()}</p>
+              <span class="tipo-badge print">Activa</span>
+            </div>
+          {:else}
+            <div class="tipo-info">
+              <p class="tipo-desc">Sin impresora configurada</p>
             </div>
           {/if}
         {/if}
@@ -673,6 +696,52 @@
     background: rgba(249, 115, 22, 0.2);
     color: #f97316;
     border: 1px solid rgba(249, 115, 22, 0.3);
+  }
+
+  /* Section header with refresh */
+  .section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .section-header-row h3 {
+    margin: 0;
+  }
+
+  .refresh-btn {
+    background: none;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #94a3b8;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .refresh-btn:active {
+    color: #3b82f6;
+    border-color: #3b82f6;
+  }
+
+  .refresh-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .refresh-icon.spinning {
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   /* Impresora chips */

@@ -1,14 +1,13 @@
 {
   "name": "impresion",
-  "version": "1.1.0",
-  "description": "Impresion termica Bluetooth (58mm NETUM / 80mm). Comandas cocina, tickets pieza, tickets venta.",
+  "version": "2.0.0",
+  "description": "Formateo ESC/POS para impresión térmica (58mm/80mm). Comandas cocina, tickets pieza, tickets venta. Envío delegado a módulo perifericos.",
   "author": "Pizzepos Team",
 
   "provides": {
     "events": [
       "impresion.comanda_generada",
       "impresion.error",
-      "impresion.raw",
       "impresion.ticket_venta_generado"
     ]
   },
@@ -17,21 +16,21 @@
     "publishes": [
       {
         "event": "impresion.comanda_generada",
-        "description": "Comanda formateada y enviada a impresora",
+        "description": "Comanda formateada y enviada via periferico.imprimir",
         "schema": {
           "$ref": "./schemas/events.json#/definitions/impresion_comanda_generada"
         }
       },
       {
         "event": "impresion.error",
-        "description": "Error al generar o enviar comanda",
+        "description": "Error al generar comanda",
         "schema": {
           "$ref": "./schemas/events.json#/definitions/impresion_error"
         }
       },
       {
-        "event": "impresion.raw",
-        "description": "Datos ESC/POS raw enviados a impresora (para monitoreo)"
+        "event": "periferico.imprimir",
+        "description": "Datos ESC/POS enviados al servicio de periféricos para impresión"
       }
     ],
     "subscribes": [
@@ -51,7 +50,6 @@
   "ui_handlers": [
     { "domain": "impresion", "action": "ticket", "handler": "handleImprimirComanda" },
     { "domain": "impresion", "action": "ticket-venta", "handler": "handleImprimirTicketVenta" },
-    { "domain": "impresion", "action": "conectar", "handler": "handleConectar" },
     { "domain": "impresion", "action": "estado", "handler": "handleGetEstado" },
     { "domain": "impresion", "action": "historial", "handler": "handleGetHistorial" },
     { "domain": "impresion", "action": "health", "handler": "handleHealthCheck" },
@@ -63,7 +61,7 @@
       "method": "POST",
       "path": "/ticket",
       "handler": "handleImprimirComanda",
-      "description": "Reimprimir comanda manualmente"
+      "description": "Reimprimir comanda manualmente. Body: { cuenta_id, items, destino? }"
     },
     {
       "method": "POST",
@@ -72,16 +70,10 @@
       "description": "Imprimir ticket de venta (recibo cliente con precios, total, metodo pago)"
     },
     {
-      "method": "POST",
-      "path": "/conectar",
-      "handler": "handleConectar",
-      "description": "(Re)conectar impresora Bluetooth. Body: { mac?, modo?, dispositivo? }"
-    },
-    {
       "method": "GET",
       "path": "/estado",
       "handler": "handleGetEstado",
-      "description": "Estado actual de impresora y transporte"
+      "description": "Estado actual del módulo de impresión"
     },
     {
       "method": "GET",
@@ -104,17 +96,8 @@
   ],
 
   "config": {
-    "project_id": null,
     "ancho": "58mm",
-    "transporte": {
-      "modo": "dispositivo",
-      "mac": null,
-      "dispositivo": "/dev/rfcomm0",
-      "rfcomm_canal": 1,
-      "comando": null,
-      "tcp_host": "127.0.0.1",
-      "tcp_puerto": 9100
-    }
+    "destino_default": "cocina"
   },
 
   "observability": {
@@ -128,11 +111,7 @@
       "counters": [
         "impresion.comanda.total",
         "impresion.reimpresion.total",
-        "impresion.error.total",
-        "impresion.transporte.error.total"
-      ],
-      "gauges": [
-        "impresion.cola.count"
+        "impresion.error.total"
       ]
     }
   }

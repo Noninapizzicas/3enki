@@ -1,15 +1,21 @@
 /**
- * Módulo Impresión v1.1
- * Impresión de comandas de cocina: items, variaciones, ingredientes, mesa, hora
- * Sin precios — solo info relevante para cocina
- * Formato ESC/POS para impresora térmica Bluetooth (58mm NETUM / 80mm)
+ * Módulo Impresión v2.0
  *
- * Transporte: Bluetooth vía rfcomm, comando shell, o TCP
- * Entorno principal: Termux en Android
+ * Formatea ESC/POS para impresión de comandas de cocina, tickets de pieza
+ * y tickets de venta. El envío al hardware lo delega al servicio core
+ * de periféricos via evento periferico.imprimir.
+ *
+ * Este módulo SOLO se encarga de:
+ *   - Formatear datos ESC/POS (comandas, tickets pieza, tickets venta)
+ *   - Publicar periferico.imprimir con destino lógico + datos formateados
+ *   - Historial de impresiones
+ *
+ * NO gestiona:
+ *   - Conexión con hardware (eso es de modules/perifericos)
+ *   - Transportes BLE/TCP/ESP32 (eso es de services/providers/local/perifericos)
  */
 
 const crypto = require('crypto');
-const TransporteBluetooth = require('./transporte');
 
 // ==========================================
 // ESC/POS constants
@@ -43,33 +49,17 @@ const ANCHOS = {
 class ImpresionModule {
   constructor() {
     this.name = 'impresion';
-    this.version = '1.1.0';
+    this.version = '2.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
-    this.uiHandler = null;
 
-    // Transporte Bluetooth (default)
-    this.transporte = null;
-
-    // Pool de transportes por dispositivo (clave = "/dev/rfcommN" o "host:port")
-    this.transportes = new Map();
-
-    // Config (defaults para NETUM 58mm en Termux)
+    // Config
     this.config = {
       ancho: '58mm',
-      project_id: null, // se inyecta desde core.config o se pasa en impresora config
-      transporte: {
-        modo: 'dispositivo',
-        mac: null,
-        dispositivo: '/dev/rfcomm0',
-        rfcomm_canal: 1,
-        comando: null,
-        tcp_host: '127.0.0.1',
-        tcp_puerto: 9100
-      }
+      destino_default: 'cocina'   // nombre lógico en perifericos registry
     };
 
     // Ancho de línea calculado
@@ -85,8 +75,7 @@ class ImpresionModule {
     this.internalMetrics = {
       comandas_generadas: 0,
       reimpresiones: 0,
-      errores: 0,
-      errores_transporte: 0
+      errores: 0
     };
   }
 
@@ -98,21 +87,12 @@ class ImpresionModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.uiHandler = core.uiHandler;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
     // Merge config del módulo si existe
     if (core.config?.impresion) {
       this.config = { ...this.config, ...core.config.impresion };
-      if (core.config.impresion.transporte) {
-        this.config.transporte = { ...this.config.transporte, ...core.config.impresion.transporte };
-      }
-    }
-
-    // Project ID: necesario para topic MQTT impresion/{project_id}/print
-    if (!this.config.project_id) {
-      this.config.project_id = core.config?.project_id || core.config?.projectId || null;
     }
 
     // Calcular ancho de línea
@@ -120,44 +100,17 @@ class ImpresionModule {
     this.separator = '-'.repeat(this.lineWidth);
     this.doubleSep = '='.repeat(this.lineWidth);
 
-    // Inicializar transporte Bluetooth
-    this.transporte = new TransporteBluetooth(this.config.transporte, this.logger);
-
-    try {
-      await this.transporte.conectar();
-      this.logger.info('impresion.transporte.conectado', this.transporte.getEstado());
-    } catch (error) {
-      // No falla el módulo — permite arrancar sin impresora y conectar después
-      this.logger.warn('impresion.transporte.no_disponible', {
-        error: error.message,
-        nota: 'Módulo arrancado sin impresora. Usa POST /conectar para reintentar.'
-      });
-    }
-
-    // ui_handlers se registran declarativamente desde module.json (auto-wire del loader)
-
     this.logger.info('module.loaded', {
       module: this.name,
       version: this.version,
       ancho: this.config.ancho,
       chars: this.lineWidth,
-      transporte: this.transporte.getEstado()
+      destino_default: this.config.destino_default
     });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
-
-    if (this.transporte) {
-      await this.transporte.desconectar();
-    }
-
-    // Desconectar transportes del pool
-    for (const [clave, transporte] of this.transportes) {
-      try { await transporte.desconectar(); } catch {}
-    }
-    this.transportes.clear();
-
     this.historial = [];
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -187,7 +140,7 @@ class ImpresionModule {
         reimpresion: false
       });
 
-      await this.enviarImpresora(comanda);
+      await this.enviarPeriferico(comanda);
 
       const registro = {
         comanda_id: `cmd_${crypto.randomUUID().slice(0, 8)}`,
@@ -215,7 +168,7 @@ class ImpresionModule {
       await this.eventBus.publish('impresion.error', {
         error: error.message,
         pedido_id,
-        fase: error.message.includes('transporte') ? 'envio' : 'formato'
+        fase: 'formato'
       });
 
       this.logger.error('impresion.comanda.error', {
@@ -238,9 +191,11 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion, impresora } = data;
 
+    // Resolver destino: impresora.destino (nuevo) > destino_default
+    const destino = impresora?.destino || this.config.destino_default;
+
     this.logger.info('impresion.ticket_pieza.generando', {
-      pedido_id, item_id, nombre, estacion,
-      impresora: impresora?.esp32_device_id || impresora?.dispositivo || 'default'
+      pedido_id, item_id, nombre, estacion, destino
     });
 
     try {
@@ -248,7 +203,7 @@ class ImpresionModule {
         pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion
       });
 
-      await this.enviarImpresora(ticket, impresora);
+      await this.enviarPeriferico(ticket, destino);
 
       const registro = {
         comanda_id: `tkt_${crypto.randomUUID().slice(0, 8)}`,
@@ -258,6 +213,7 @@ class ImpresionModule {
         item_id,
         nombre,
         estacion,
+        destino,
         generada_at: new Date().toISOString()
       };
 
@@ -267,7 +223,7 @@ class ImpresionModule {
       await this.eventBus.publish('impresion.ticket_pieza_generado', registro);
 
       this.logger.info('impresion.ticket_pieza.enviado', {
-        pedido_id, item_id, nombre, estacion
+        pedido_id, item_id, nombre, estacion, destino
       });
     } catch (error) {
       this.internalMetrics.errores++;
@@ -284,10 +240,10 @@ class ImpresionModule {
   /**
    * POST /modules/impresion/ticket
    * Reimprimir comanda manualmente
-   * Body: { cuenta_id, pedido_id?, items, canal?, notas_generales? }
+   * Body: { cuenta_id, pedido_id?, items, canal?, notas_generales?, destino? }
    */
   async handleImprimirComanda(data) {
-    const { cuenta_id, pedido_id, items, canal, notas_generales } = data;
+    const { cuenta_id, pedido_id, items, canal, notas_generales, destino } = data;
 
     if (!cuenta_id && !pedido_id) {
       return { status: 400, error: 'Se requiere cuenta_id o pedido_id' };
@@ -307,7 +263,7 @@ class ImpresionModule {
         reimpresion: true
       });
 
-      await this.enviarImpresora(comanda);
+      await this.enviarPeriferico(comanda, destino);
 
       const registro = {
         comanda_id: `cmd_${crypto.randomUUID().slice(0, 8)}`,
@@ -316,6 +272,7 @@ class ImpresionModule {
         canal: canal || null,
         items_count: items.length,
         reimpresion: true,
+        destino: destino || this.config.destino_default,
         generada_at: new Date().toISOString()
       };
 
@@ -335,37 +292,8 @@ class ImpresionModule {
   }
 
   /**
-   * POST /modules/impresion/conectar
-   * (Re)conectar impresora Bluetooth
-   * Body: { mac?, modo?, dispositivo?, tcp_host?, tcp_puerto?, comando? }
-   */
-  async handleConectar(data) {
-    // Actualizar config si se pasan parámetros nuevos
-    if (data && Object.keys(data).length > 0) {
-      const campos = ['mac', 'modo', 'dispositivo', 'rfcomm_canal', 'comando', 'tcp_host', 'tcp_puerto'];
-      for (const campo of campos) {
-        if (data[campo] !== undefined) {
-          this.config.transporte[campo] = data[campo];
-        }
-      }
-      // Recrear transporte con nueva config
-      if (this.transporte) {
-        await this.transporte.desconectar();
-      }
-      this.transporte = new TransporteBluetooth(this.config.transporte, this.logger);
-    }
-
-    try {
-      await this.transporte.conectar();
-      return { status: 200, data: this.transporte.getEstado() };
-    } catch (error) {
-      return { status: 500, error: error.message, data: this.transporte.getEstado() };
-    }
-  }
-
-  /**
    * GET /modules/impresion/estado
-   * Estado actual del transporte e impresora
+   * Estado actual del módulo de impresión
    */
   async handleGetEstado() {
     return {
@@ -376,7 +304,8 @@ class ImpresionModule {
           ancho: this.config.ancho,
           chars_linea: this.lineWidth
         },
-        transporte: this.transporte ? this.transporte.getEstado() : { estado: 'no_inicializado' }
+        destino_default: this.config.destino_default,
+        nota: 'Gestión de dispositivos e impresoras via módulo perifericos'
       }
     };
   }
@@ -390,14 +319,14 @@ class ImpresionModule {
   }
 
   async handleHealthCheck() {
-    const transporteEstado = this.transporte ? this.transporte.getEstado() : null;
     return {
       status: 200,
       data: {
-        status: transporteEstado?.estado === 'conectado' ? 'healthy' : 'degraded',
+        status: 'healthy',
         module: this.name,
         version: this.version,
-        transporte: transporteEstado
+        destino_default: this.config.destino_default,
+        nota: 'Estado de impresoras gestionado por módulo perifericos'
       }
     };
   }
@@ -407,8 +336,7 @@ class ImpresionModule {
       status: 200,
       data: {
         ...this.internalMetrics,
-        historial_size: this.historial.length,
-        transporte_estado: this.transporte ? this.transporte.estado : 'n/a'
+        historial_size: this.historial.length
       }
     };
   }
@@ -417,10 +345,10 @@ class ImpresionModule {
    * POST /modules/impresion/ticket-venta
    * Imprime ticket de venta (recibo para el cliente) con precios, total, método de pago.
    * Body: { cuenta_id, items: [{ nombre, cantidad, precio_unitario, precio_total }],
-   *         subtotal, iva?, total, metodo_pago, propina?, referencia_pago?, datos_negocio? }
+   *         subtotal, iva?, total, metodo_pago, propina?, referencia_pago?, datos_negocio?, destino? }
    */
   async handleImprimirTicketVenta(data) {
-    const { cuenta_id, items, total, metodo_pago } = data;
+    const { cuenta_id, items, total, metodo_pago, destino } = data;
 
     if (!cuenta_id) {
       return { status: 400, error: 'Se requiere cuenta_id' };
@@ -434,7 +362,7 @@ class ImpresionModule {
 
     try {
       const ticket = this.formatearTicketVenta(data);
-      await this.enviarImpresora(ticket);
+      await this.enviarPeriferico(ticket, destino);
 
       const registro = {
         comanda_id: `vta_${crypto.randomUUID().slice(0, 8)}`,
@@ -443,6 +371,7 @@ class ImpresionModule {
         items_count: items.length,
         total,
         metodo_pago: metodo_pago || null,
+        destino: destino || this.config.destino_default,
         generada_at: new Date().toISOString()
       };
 
@@ -823,122 +752,31 @@ class ImpresionModule {
   }
 
   // ==========================================
-  // Envío a impresora
+  // Envío via periféricos
   // ==========================================
 
   /**
-   * Obtiene o crea un transporte para una impresora específica.
-   * Si no se pasa configImpresora, devuelve el transporte default.
-   * @param {Object} configImpresora - { dispositivo, mac, modo, tcp_host, tcp_puerto, comando }
-   */
-  obtenerTransporte(configImpresora) {
-    if (!configImpresora || !configImpresora.dispositivo) {
-      return this.transporte;
-    }
-
-    const clave = configImpresora.dispositivo;
-
-    if (this.transportes.has(clave)) {
-      return this.transportes.get(clave);
-    }
-
-    // Crear nuevo transporte con la config del dispositivo
-    const transporteConfig = {
-      ...this.config.transporte,
-      ...configImpresora
-    };
-    const nuevoTransporte = new TransporteBluetooth(transporteConfig, this.logger);
-    this.transportes.set(clave, nuevoTransporte);
-
-    this.logger.info('impresion.transporte.pool.nuevo', { clave, modo: transporteConfig.modo });
-    return nuevoTransporte;
-  }
-
-  /**
-   * Envía ESC/POS a la impresora.
-   * Soporta 2 modos:
-   *   1. ESP32 (MQTT) — si configImpresora.esp32_device_id, publica al topic del ESP32
-   *   2. Transporte directo (rfcomm/TCP/comando) — usa TransporteBluetooth
+   * Publica periferico.imprimir con datos ESC/POS formateados.
+   * El módulo perifericos resuelve destino → transporte → hardware.
    *
-   * @param {string} contenido - datos ESC/POS
-   * @param {Object} [configImpresora] - config de impresora (esp32_device_id o dispositivo)
+   * @param {string} contenido - datos ESC/POS formateados
+   * @param {string} [destino] - nombre lógico del dispositivo (default: config.destino_default)
    */
-  async enviarImpresora(contenido, configImpresora) {
-    // Publicar al bus para monitoreo
-    await this.eventBus.publish('impresion.raw', {
-      tipo: 'comanda',
-      contenido,
-      timestamp: new Date().toISOString()
+  async enviarPeriferico(contenido, destino) {
+    const destinoFinal = destino || this.config.destino_default;
+
+    await this.eventBus.publish('periferico.imprimir', {
+      destino: destinoFinal,
+      data: contenido,
+      formato: 'escpos',
+      prioridad: 3,
+      opciones: { cortar: true }
     });
 
-    // --- Modo ESP32: enviar via MQTT al bridge BLE ---
-    const esp32Id = configImpresora?.esp32_device_id;
-    if (esp32Id) {
-      return this.enviarViaEsp32(contenido, esp32Id);
-    }
-
-    // --- Modo directo: transporte Bluetooth/TCP/comando ---
-    const transporte = this.obtenerTransporte(configImpresora);
-
-    if (transporte) {
-      try {
-        if (transporte.estado !== 'conectado') {
-          this.logger.info('impresion.transporte.reconectando', {
-            dispositivo: configImpresora?.dispositivo || 'default'
-          });
-          await transporte.conectar();
-        }
-        await transporte.enviar(contenido);
-      } catch (error) {
-        this.internalMetrics.errores_transporte++;
-        this.logger.error('impresion.transporte.envio_fallido', {
-          error: error.message,
-          dispositivo: configImpresora?.dispositivo || 'default'
-        });
-        throw new Error(`transporte: ${error.message}`);
-      }
-    } else {
-      this.logger.warn('impresion.sin_transporte', { bytes: contenido.length });
-    }
-  }
-
-  /**
-   * Envía datos ESC/POS a un ESP32 printer bridge via MQTT.
-   * Topic: impresion/{project_id}/print (el ESP32 se suscribe a este topic)
-   * Payload: { destino: esp32_device_id, data: base64, ts, id }
-   * Datos en base64 para evitar problemas con caracteres binarios ESC/POS.
-   */
-  async enviarViaEsp32(contenido, esp32DeviceId) {
-    const projectId = this.config.project_id;
-    const topic = projectId
-      ? `impresion/${projectId}/print`
-      : `esp32/${esp32DeviceId}/command`;
-
-    const buffer = Buffer.isBuffer(contenido) ? contenido : Buffer.from(contenido, 'binary');
-    const payload = {
-      cmd: 'print',
-      destino: esp32DeviceId,
-      data: buffer.toString('base64'),
-      ts: Date.now(),
-      id: `prt_${crypto.randomUUID().slice(0, 8)}`
-    };
-
-    try {
-      await this.eventBus.publish(topic, payload);
-
-      this.logger.info('impresion.esp32.enviado', {
-        esp32_device_id: esp32DeviceId,
-        bytes: buffer.length,
-        topic
-      });
-    } catch (error) {
-      this.internalMetrics.errores_transporte++;
-      this.logger.error('impresion.esp32.error', {
-        esp32_device_id: esp32DeviceId,
-        error: error.message
-      });
-      throw new Error(`esp32 ${esp32DeviceId}: ${error.message}`);
-    }
+    this.logger.debug('impresion.periferico.publicado', {
+      destino: destinoFinal,
+      bytes: contenido.length
+    });
   }
 
   // ==========================================

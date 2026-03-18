@@ -1,14 +1,15 @@
 {
   "name": "impresion",
   "version": "1.1.0",
-  "description": "Comandas de cocina via impresora termica Bluetooth (58mm NETUM / 80mm). Sin precios.",
+  "description": "Impresion termica Bluetooth (58mm NETUM / 80mm). Comandas cocina, tickets pieza, tickets venta.",
   "author": "Pizzepos Team",
 
   "provides": {
     "events": [
       "impresion.comanda_generada",
       "impresion.error",
-      "impresion.raw"
+      "impresion.raw",
+      "impresion.ticket_venta_generado"
     ]
   },
 
@@ -49,6 +50,7 @@
 
   "ui_handlers": [
     { "domain": "impresion", "action": "ticket", "handler": "handleImprimirComanda" },
+    { "domain": "impresion", "action": "ticket-venta", "handler": "handleImprimirTicketVenta" },
     { "domain": "impresion", "action": "conectar", "handler": "handleConectar" },
     { "domain": "impresion", "action": "estado", "handler": "handleGetEstado" },
     { "domain": "impresion", "action": "historial", "handler": "handleGetHistorial" },
@@ -62,6 +64,12 @@
       "path": "/ticket",
       "handler": "handleImprimirComanda",
       "description": "Reimprimir comanda manualmente"
+    },
+    {
+      "method": "POST",
+      "path": "/ticket-venta",
+      "handler": "handleImprimirTicketVenta",
+      "description": "Imprimir ticket de venta (recibo cliente con precios, total, metodo pago)"
     },
     {
       "method": "POST",

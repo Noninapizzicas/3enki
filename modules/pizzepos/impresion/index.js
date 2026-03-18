@@ -51,8 +51,11 @@ class ImpresionModule {
     this.metrics = null;
     this.uiHandler = null;
 
-    // Transporte Bluetooth
+    // Transporte Bluetooth (default)
     this.transporte = null;
+
+    // Pool de transportes por dispositivo (clave = "/dev/rfcommN" o "host:port")
+    this.transportes = new Map();
 
     // Config (defaults para NETUM 58mm en Termux)
     this.config = {
@@ -143,6 +146,12 @@ class ImpresionModule {
       await this.transporte.desconectar();
     }
 
+    // Desconectar transportes del pool
+    for (const [clave, transporte] of this.transportes) {
+      try { await transporte.desconectar(); } catch {}
+    }
+    this.transportes.clear();
+
     this.historial = [];
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -221,10 +230,11 @@ class ImpresionModule {
    */
   async onItemTicket(event) {
     const data = event?.data || event?.payload || event;
-    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion } = data;
+    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion, impresora } = data;
 
     this.logger.info('impresion.ticket_pieza.generando', {
-      pedido_id, item_id, nombre, estacion
+      pedido_id, item_id, nombre, estacion,
+      impresora: impresora?.dispositivo || 'default'
     });
 
     try {
@@ -232,7 +242,7 @@ class ImpresionModule {
         pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion
       });
 
-      await this.enviarImpresora(ticket);
+      await this.enviarImpresora(ticket, impresora);
 
       const registro = {
         comanda_id: `tkt_${crypto.randomUUID().slice(0, 8)}`,
@@ -395,6 +405,54 @@ class ImpresionModule {
         transporte_estado: this.transporte ? this.transporte.estado : 'n/a'
       }
     };
+  }
+
+  /**
+   * POST /modules/impresion/ticket-venta
+   * Imprime ticket de venta (recibo para el cliente) con precios, total, método de pago.
+   * Body: { cuenta_id, items: [{ nombre, cantidad, precio_unitario, precio_total }],
+   *         subtotal, iva?, total, metodo_pago, propina?, referencia_pago?, datos_negocio? }
+   */
+  async handleImprimirTicketVenta(data) {
+    const { cuenta_id, items, total, metodo_pago } = data;
+
+    if (!cuenta_id) {
+      return { status: 400, error: 'Se requiere cuenta_id' };
+    }
+    if (!items || items.length === 0) {
+      return { status: 400, error: 'Se requiere al menos un item' };
+    }
+    if (total === undefined || total === null) {
+      return { status: 400, error: 'Se requiere total' };
+    }
+
+    try {
+      const ticket = this.formatearTicketVenta(data);
+      await this.enviarImpresora(ticket);
+
+      const registro = {
+        comanda_id: `vta_${crypto.randomUUID().slice(0, 8)}`,
+        tipo: 'ticket_venta',
+        cuenta_id,
+        items_count: items.length,
+        total,
+        metodo_pago: metodo_pago || null,
+        generada_at: new Date().toISOString()
+      };
+
+      this.guardarHistorial(registro);
+      this.internalMetrics.comandas_generadas++;
+
+      await this.eventBus.publish('impresion.ticket_venta_generado', registro);
+
+      return { status: 200, data: registro };
+    } catch (error) {
+      this.internalMetrics.errores++;
+      this.logger.error('impresion.ticket_venta.error', {
+        cuenta_id, error: error.message
+      });
+      return { status: 500, error: error.message };
+    }
   }
 
   // ==========================================
@@ -593,6 +651,143 @@ class ImpresionModule {
     return lineas.join('\n');
   }
 
+  // ==========================================
+  // Formateador de Ticket de Venta (ESC/POS)
+  // ==========================================
+
+  /**
+   * Genera ticket de venta (recibo para el cliente).
+   * Incluye: datos negocio, items con precios, subtotal, IVA, total, método pago.
+   */
+  formatearTicketVenta({ cuenta_id, canal, items, subtotal, iva, total, metodo_pago, propina, referencia_pago, datos_negocio }) {
+    const lineas = [];
+    const w = this.lineWidth;
+
+    lineas.push(CMD.INIT);
+
+    // -- Header: datos del negocio
+    lineas.push(CMD.ALIGN_CENTER);
+    if (datos_negocio?.nombre) {
+      lineas.push(CMD.DOUBLE_ON);
+      lineas.push(CMD.BOLD_ON);
+      lineas.push(datos_negocio.nombre);
+      lineas.push(CMD.BOLD_OFF);
+      lineas.push(CMD.DOUBLE_OFF);
+    }
+    if (datos_negocio?.direccion) lineas.push(datos_negocio.direccion);
+    if (datos_negocio?.telefono) lineas.push(`Tel: ${datos_negocio.telefono}`);
+    if (datos_negocio?.nif) lineas.push(`NIF: ${datos_negocio.nif}`);
+
+    lineas.push(this.doubleSep);
+
+    // -- Referencia y fecha
+    lineas.push(CMD.ALIGN_LEFT);
+    const refMesa = this.extraerRefMesa(cuenta_id, canal);
+    const ahora = new Date();
+    const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+    if (refMesa) {
+      lineas.push(CMD.BOLD_ON);
+      lineas.push(refMesa);
+      lineas.push(CMD.BOLD_OFF);
+    }
+    lineas.push(`${fecha} ${hora}`);
+    lineas.push(this.separator);
+
+    // -- Items con precios
+    // Header de columnas
+    lineas.push(CMD.BOLD_ON);
+    lineas.push(this.lineaColumnas('PRODUCTO', 'EUR', w));
+    lineas.push(CMD.BOLD_OFF);
+    lineas.push(this.separator);
+
+    for (const item of items) {
+      const qty = item.cantidad > 1 ? `${item.cantidad}x ` : '';
+      const nombre = `${qty}${item.nombre}`;
+      const precio = this.formatPrecio(item.precio_total ?? (item.precio_unitario * item.cantidad));
+      lineas.push(this.lineaColumnas(nombre, precio, w));
+
+      // Si qty > 1 mostrar precio unitario
+      if (item.cantidad > 1 && item.precio_unitario) {
+        lineas.push(CMD.FONT_SMALL);
+        lineas.push(`  ${item.precio_unitario.toFixed(2)} x ${item.cantidad}`);
+        lineas.push(CMD.FONT_NORMAL);
+      }
+    }
+
+    lineas.push(this.separator);
+
+    // -- Subtotal / IVA / Propina / Total
+    if (subtotal !== undefined && subtotal !== null) {
+      lineas.push(this.lineaColumnas('Subtotal', this.formatPrecio(subtotal), w));
+    }
+    if (iva !== undefined && iva !== null) {
+      const ivaLabel = typeof iva === 'object' ? `IVA ${iva.porcentaje || ''}%` : 'IVA';
+      const ivaImporte = typeof iva === 'object' ? iva.importe : iva;
+      lineas.push(this.lineaColumnas(ivaLabel, this.formatPrecio(ivaImporte), w));
+    }
+    if (propina && propina > 0) {
+      lineas.push(this.lineaColumnas('Propina', this.formatPrecio(propina), w));
+    }
+
+    lineas.push(this.doubleSep);
+    lineas.push(CMD.DOUBLE_ON);
+    lineas.push(CMD.BOLD_ON);
+    lineas.push(this.lineaColumnas('TOTAL', this.formatPrecio(total), w));
+    lineas.push(CMD.BOLD_OFF);
+    lineas.push(CMD.DOUBLE_OFF);
+
+    // -- Método de pago
+    if (metodo_pago) {
+      lineas.push(this.separator);
+      const metodos = {
+        efectivo: 'EFECTIVO',
+        tarjeta: 'TARJETA',
+        bizum: 'BIZUM',
+        transferencia: 'TRANSFERENCIA',
+        mixto: 'PAGO MIXTO',
+        link_pago: 'LINK DE PAGO',
+        qr: 'QR'
+      };
+      lineas.push(`Pago: ${metodos[metodo_pago] || metodo_pago.toUpperCase()}`);
+      if (referencia_pago) {
+        lineas.push(CMD.FONT_SMALL);
+        lineas.push(`Ref: ${referencia_pago}`);
+        lineas.push(CMD.FONT_NORMAL);
+      }
+    }
+
+    // -- Footer
+    lineas.push(CMD.FEED_3);
+    lineas.push(CMD.ALIGN_CENTER);
+    lineas.push(CMD.FONT_SMALL);
+    lineas.push('Gracias por su visita');
+    lineas.push(CMD.FONT_NORMAL);
+
+    // -- Corte
+    lineas.push(CMD.FEED_5);
+    lineas.push(CMD.PARTIAL_CUT);
+
+    return lineas.join('\n');
+  }
+
+  /** Formatea precio con 2 decimales y símbolo */
+  formatPrecio(valor) {
+    if (valor === undefined || valor === null) return '0.00';
+    return Number(valor).toFixed(2);
+  }
+
+  /** Alinea nombre a la izquierda y precio a la derecha en una línea */
+  lineaColumnas(izq, der, ancho) {
+    const espacio = ancho - izq.length - der.length;
+    if (espacio < 1) {
+      // Nombre demasiado largo: dos líneas
+      return `${this.truncar(izq)}\n${' '.repeat(ancho - der.length)}${der}`;
+    }
+    return `${izq}${' '.repeat(espacio)}${der}`;
+  }
+
   /**
    * Extrae referencia de mesa del cuenta_id o canal.
    */
@@ -626,11 +821,41 @@ class ImpresionModule {
   // ==========================================
 
   /**
+   * Obtiene o crea un transporte para una impresora específica.
+   * Si no se pasa configImpresora, devuelve el transporte default.
+   * @param {Object} configImpresora - { dispositivo, mac, modo, tcp_host, tcp_puerto, comando }
+   */
+  obtenerTransporte(configImpresora) {
+    if (!configImpresora || !configImpresora.dispositivo) {
+      return this.transporte;
+    }
+
+    const clave = configImpresora.dispositivo;
+
+    if (this.transportes.has(clave)) {
+      return this.transportes.get(clave);
+    }
+
+    // Crear nuevo transporte con la config del dispositivo
+    const transporteConfig = {
+      ...this.config.transporte,
+      ...configImpresora
+    };
+    const nuevoTransporte = new TransporteBluetooth(transporteConfig, this.logger);
+    this.transportes.set(clave, nuevoTransporte);
+
+    this.logger.info('impresion.transporte.pool.nuevo', { clave, modo: transporteConfig.modo });
+    return nuevoTransporte;
+  }
+
+  /**
    * Envía ESC/POS a la impresora vía transporte Bluetooth.
    * Si el transporte no está conectado, intenta reconectar una vez.
    * También publica impresion.raw al eventBus (para monitoreo/logging).
+   * @param {string} contenido - datos ESC/POS
+   * @param {Object} [configImpresora] - config específica de impresora (opcional, para routing)
    */
-  async enviarImpresora(contenido) {
+  async enviarImpresora(contenido, configImpresora) {
     // Publicar al bus para monitoreo
     await this.eventBus.publish('impresion.raw', {
       tipo: 'comanda',
@@ -638,17 +863,24 @@ class ImpresionModule {
       timestamp: new Date().toISOString()
     });
 
-    // Enviar por transporte Bluetooth
-    if (this.transporte) {
+    // Resolver transporte (específico del device o default)
+    const transporte = this.obtenerTransporte(configImpresora);
+
+    if (transporte) {
       try {
-        if (this.transporte.estado !== 'conectado') {
-          this.logger.info('impresion.transporte.reconectando');
-          await this.transporte.conectar();
+        if (transporte.estado !== 'conectado') {
+          this.logger.info('impresion.transporte.reconectando', {
+            dispositivo: configImpresora?.dispositivo || 'default'
+          });
+          await transporte.conectar();
         }
-        await this.transporte.enviar(contenido);
+        await transporte.enviar(contenido);
       } catch (error) {
         this.internalMetrics.errores_transporte++;
-        this.logger.error('impresion.transporte.envio_fallido', { error: error.message });
+        this.logger.error('impresion.transporte.envio_fallido', {
+          error: error.message,
+          dispositivo: configImpresora?.dispositivo || 'default'
+        });
         throw new Error(`transporte: ${error.message}`);
       }
     } else {

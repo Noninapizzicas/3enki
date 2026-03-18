@@ -487,6 +487,40 @@ class CobrosModule {
     }
   }
 
+  /**
+   * GET /modules/cobros/cajones
+   * Lista dispositivos con capacidad 'abrir-cajon' para selección.
+   * Response: { cajones: [{ nombre, tipo, estado, conectado, metadata }], cajon_default }
+   */
+  async handleListarCajones() {
+    try {
+      const result = await this.eventBus.request('perifericos', 'listar-por-capacidad', {
+        capacidad: 'abrir-cajon'
+      });
+
+      const cajones = result?.data?.dispositivos || [];
+      return {
+        status: 200,
+        data: {
+          cajones,
+          total: cajones.length,
+          cajon_default: this.config?.cobros?.cajon_destino || 'caja'
+        }
+      };
+    } catch (err) {
+      this.logger.warn('cobros.listar_cajones.error', { error: err.message });
+      return {
+        status: 200,
+        data: {
+          cajones: [],
+          total: 0,
+          cajon_default: this.config?.cobros?.cajon_destino || 'caja',
+          nota: 'No se pudo consultar perifericos'
+        }
+      };
+    }
+  }
+
   // ==========================================
   // Helpers
   // ==========================================

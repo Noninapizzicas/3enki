@@ -342,6 +342,42 @@ class ImpresionModule {
   }
 
   /**
+   * GET /modules/impresion/impresoras
+   * Lista impresoras disponibles para selección de destino.
+   * Consulta perifericos por capacidad 'imprimir'.
+   *
+   * Response: { impresoras: [{ nombre, tipo, estado, conectado, metadata }], destino_default }
+   */
+  async handleListarImpresoras() {
+    try {
+      const result = await this.eventBus.request('perifericos', 'listar-por-capacidad', {
+        capacidad: 'imprimir'
+      });
+
+      const impresoras = result?.data?.dispositivos || [];
+      return {
+        status: 200,
+        data: {
+          impresoras,
+          total: impresoras.length,
+          destino_default: this.config.destino_default
+        }
+      };
+    } catch (err) {
+      this.logger.warn('impresion.listar_impresoras.error', { error: err.message });
+      return {
+        status: 200,
+        data: {
+          impresoras: [],
+          total: 0,
+          destino_default: this.config.destino_default,
+          nota: 'No se pudo consultar perifericos — usando destino_default'
+        }
+      };
+    }
+  }
+
+  /**
    * POST /modules/impresion/ticket-venta
    * Imprime ticket de venta (recibo para el cliente) con precios, total, método de pago.
    * Body: { cuenta_id, items: [{ nombre, cantidad, precio_unitario, precio_total }],

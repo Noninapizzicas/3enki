@@ -53,7 +53,8 @@
     { "domain": "impresion", "action": "estado", "handler": "handleGetEstado" },
     { "domain": "impresion", "action": "historial", "handler": "handleGetHistorial" },
     { "domain": "impresion", "action": "health", "handler": "handleHealthCheck" },
-    { "domain": "impresion", "action": "metrics", "handler": "handleGetMetrics" }
+    { "domain": "impresion", "action": "metrics", "handler": "handleGetMetrics" },
+    { "domain": "impresion", "action": "impresoras", "handler": "handleListarImpresoras" }
   ],
 
   "apis": [
@@ -92,6 +93,12 @@
       "path": "/metrics",
       "handler": "handleGetMetrics",
       "description": "Metricas del modulo"
+    },
+    {
+      "method": "GET",
+      "path": "/impresoras",
+      "handler": "handleListarImpresoras",
+      "description": "Lista impresoras disponibles para seleccionar destino"
     }
   ],
 

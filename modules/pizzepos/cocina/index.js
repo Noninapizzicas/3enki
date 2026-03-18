@@ -115,7 +115,8 @@ class CocinaModule {
       const actions = [
         'list-active', 'get', 'history', 'prepare-item',
         'mark-ready', 'health', 'metrics',
-        'register-device', 'unregister-device', 'list-devices', 'list-station-types'
+        'register-device', 'unregister-device', 'list-devices', 'list-station-types',
+        'list-displays'
       ];
       for (const action of actions) {
         this.uiHandler.unregister('cocina', action);
@@ -213,9 +214,10 @@ class CocinaModule {
     this.uiHandler.register('cocina', 'unregister-device', this.handleUnregisterDevice.bind(this));
     this.uiHandler.register('cocina', 'list-devices', this.handleListDevices.bind(this));
     this.uiHandler.register('cocina', 'list-station-types', this.handleListTiposEstacion.bind(this));
+    this.uiHandler.register('cocina', 'list-displays', this.handleListarDisplays.bind(this));
 
     this.logger.info('cocina.ui_handlers.registered', {
-      handlers: ['list-active', 'get', 'history', 'prepare-item', 'mark-ready', 'health', 'metrics', 'register-device', 'unregister-device', 'list-devices', 'list-station-types']
+      handlers: ['list-active', 'get', 'history', 'prepare-item', 'mark-ready', 'health', 'metrics', 'register-device', 'unregister-device', 'list-devices', 'list-station-types', 'list-displays']
     });
   }
 
@@ -945,6 +947,42 @@ class CocinaModule {
   }
 
   /**
+   * GET /modules/cocina/list-displays
+   * Lista displays disponibles para selección de destino.
+   * Consulta perifericos por capacidad 'display'.
+   *
+   * Response: { displays: [{ nombre, tipo, estado, conectado, metadata }], display_default }
+   */
+  async handleListarDisplays() {
+    try {
+      const result = await this.eventBus.request('perifericos', 'listar-por-capacidad', {
+        capacidad: 'display'
+      });
+
+      const displays = result?.data?.dispositivos || [];
+      return {
+        status: 200,
+        data: {
+          displays,
+          total: displays.length,
+          display_default: this.config?.display_destino || 'display-cocina'
+        }
+      };
+    } catch (err) {
+      this.logger.warn('cocina.listar_displays.error', { error: err.message });
+      return {
+        status: 200,
+        data: {
+          displays: [],
+          total: 0,
+          display_default: this.config?.display_destino || 'display-cocina',
+          nota: 'No se pudo consultar perifericos'
+        }
+      };
+    }
+  }
+
+  /**
    * Publica periferico.display para pantallas externas de cocina.
    * Acciones: 'nuevo_pedido', 'pedido_listo', 'actualizar'.
    * El display externo (TV, LED, tablet fija) consume esto via perifericos.
@@ -954,8 +992,9 @@ class CocinaModule {
    */
   async publishDisplayCocina(accion, contenido) {
     try {
+      const destino = this.config?.display_destino || 'display-cocina';
       await this.eventBus.publish('periferico.display', {
-        destino: 'display-cocina',
+        destino,
         data: {
           accion,
           modulo: 'cocina',

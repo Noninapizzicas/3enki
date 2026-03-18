@@ -1,0 +1,384 @@
+/**
+ * Módulo Periféricos v1.0.0
+ *
+ * Servicio core de periféricos a nivel de plataforma.
+ * Descubre dispositivos, los registra con nombres lógicos,
+ * y los expone como capacidades genéricas via eventos.
+ *
+ * Los módulos de dominio (pizzepos/impresion, cnc, etc.) publican
+ * eventos de CAPACIDAD (periferico.imprimir, periferico.cortar)
+ * y este módulo resuelve: nombre lógico → dispositivo físico → transporte.
+ *
+ * Tier: tier_2_platform (carga antes que módulos de dominio)
+ *
+ * Eventos consumidos:
+ *   periferico.imprimir    → enviar datos a un dispositivo
+ *   periferico.estado      → consultar estado
+ *   periferico.listar      → listar dispositivos
+ *   periferico.registrar   → registrar nuevo dispositivo
+ *   periferico.desregistrar → eliminar dispositivo
+ *
+ * Eventos emitidos:
+ *   periferico.impreso     → envío exitoso
+ *   periferico.error       → error en envío/conexión
+ *   periferico.dispositivo.registrado
+ *   periferico.dispositivo.desregistrado
+ *   periferico.estado.respuesta
+ *   periferico.listado
+ */
+
+const path = require('path');
+
+class PerifericosModule {
+  constructor() {
+    this.name = 'perifericos';
+    this.version = '1.0.0';
+
+    this.core = null;
+    this.logger = null;
+    this.eventBus = null;
+    this.metrics = null;
+    this.provider = null;
+    this.dataPath = path.resolve('./data/perifericos');
+
+    this.internalMetrics = {
+      envios_total: 0,
+      envios_ok: 0,
+      envios_error: 0,
+      registros_total: 0
+    };
+  }
+
+  // ==========================================
+  // Lifecycle
+  // ==========================================
+
+  async onLoad(core) {
+    this.core = core;
+    this.logger = core.logger;
+    this.eventBus = core.eventBus;
+    this.metrics = core.metrics;
+
+    if (core.config?.perifericos?.dataPath) {
+      this.dataPath = path.resolve(core.config.perifericos.dataPath);
+    }
+
+    // Cargar el provider local.perifericos y inicializarlo
+    this.provider = this._loadProvider();
+
+    if (this.provider) {
+      const dispositivosConfig = core.config?.perifericos?.dispositivos || [];
+      await this.provider._initialize({
+        dataPath: this.dataPath,
+        logger: this.logger,
+        dispositivosConfig,
+        eventBus: this.eventBus
+      });
+
+      this.logger.info('perifericos.provider.inicializado', {
+        dispositivos_config: dispositivosConfig.length,
+        dispositivos_total: this.provider._getRegistry()?.listar()?.length || 0
+      });
+    } else {
+      this.logger.warn('perifericos.provider.no_encontrado', {
+        nota: 'Módulo funciona sin provider — el registro estará vacío'
+      });
+    }
+
+    this.logger.info('module.loaded', {
+      module: this.name,
+      version: this.version,
+      dataPath: this.dataPath
+    });
+  }
+
+  async onUnload() {
+    this.logger.info('module.unloading', { module: this.name });
+    // El provider limpia transportes internamente
+    this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // Event Handlers
+  // ==========================================
+
+  /**
+   * periferico.imprimir — Envía datos a un dispositivo destino.
+   * El nombre es genérico ("imprimir") pero funciona para cualquier tipo de envío.
+   *
+   * Payload:
+   *   destino: string — nombre lógico del dispositivo
+   *   data: string|Buffer — datos raw (ESC/POS, gcode, texto)
+   *   formato: string — 'escpos' | 'texto' | 'imagen' | 'gcode' (default: 'escpos')
+   *   prioridad: number — 1 (urgente) a 5 (normal), default 3
+   *   opciones: { cortar, copias, ... }
+   */
+  async onImprimir(event) {
+    const data = event?.data || event?.payload || event;
+    const { destino, formato, prioridad, opciones } = data;
+    let contenido = data.data;
+
+    if (!destino) {
+      await this._emitError('destino es requerido', data);
+      return;
+    }
+    if (!contenido) {
+      await this._emitError('data es requerido', data);
+      return;
+    }
+
+    this.internalMetrics.envios_total++;
+
+    this.logger.info('perifericos.enviando', {
+      destino,
+      formato: formato || 'escpos',
+      prioridad: prioridad || 3,
+      bytes: typeof contenido === 'string' ? contenido.length : contenido?.length
+    });
+
+    // Enviar copias si se solicita
+    const copias = opciones?.copias || 1;
+    for (let i = 0; i < copias; i++) {
+      const result = await this.provider.send({
+        destino,
+        data: contenido,
+        formato,
+        opciones,
+        _context: { logger: this.logger, eventBus: this.eventBus }
+      });
+
+      if (!result.success) {
+        this.internalMetrics.envios_error++;
+        await this._emitError(result.error, { destino, copia: i + 1 });
+        return;
+      }
+    }
+
+    this.internalMetrics.envios_ok++;
+
+    await this.eventBus.publish('periferico.impreso', {
+      destino,
+      formato: formato || 'escpos',
+      copias,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * periferico.estado — Consulta estado de un dispositivo.
+   */
+  async onEstado(event) {
+    const data = event?.data || event?.payload || event;
+    const { nombre } = data;
+
+    if (!nombre) {
+      await this.eventBus.publish('periferico.estado.respuesta', {
+        error: 'nombre es requerido'
+      });
+      return;
+    }
+
+    const result = await this.provider.status({
+      nombre,
+      _context: { logger: this.logger }
+    });
+
+    await this.eventBus.publish('periferico.estado.respuesta', {
+      nombre,
+      ...result.data,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * periferico.listar — Lista todos los dispositivos registrados.
+   */
+  async onListar(event) {
+    const data = event?.data || event?.payload || event || {};
+    const { tipo, capacidad } = data;
+
+    const result = await this.provider.list({
+      tipo,
+      capacidad,
+      _context: { logger: this.logger }
+    });
+
+    await this.eventBus.publish('periferico.listado', {
+      ...result.data,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * periferico.registrar — Registra un nuevo dispositivo.
+   */
+  async onRegistrar(event) {
+    const data = event?.data || event?.payload || event;
+
+    const result = await this.provider.register({
+      ...data,
+      _context: { logger: this.logger, eventBus: this.eventBus }
+    });
+
+    if (result.success) {
+      this.internalMetrics.registros_total++;
+      await this.eventBus.publish('periferico.dispositivo.registrado', {
+        dispositivo: result.data.dispositivo,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      await this._emitError(result.error, data);
+    }
+  }
+
+  /**
+   * periferico.desregistrar — Elimina un dispositivo del registro.
+   */
+  async onDesregistrar(event) {
+    const data = event?.data || event?.payload || event;
+    const { nombre } = data;
+
+    const result = await this.provider.unregister({
+      nombre,
+      _context: { logger: this.logger }
+    });
+
+    if (result.success && result.data.removed) {
+      await this.eventBus.publish('periferico.dispositivo.desregistrado', {
+        nombre,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  // ==========================================
+  // UI Handlers
+  // ==========================================
+
+  async handleListar(data) {
+    const result = await this.provider.list({
+      tipo: data?.tipo,
+      capacidad: data?.capacidad,
+      _context: { logger: this.logger }
+    });
+
+    return { status: 200, data: result.data };
+  }
+
+  async handleGet(data) {
+    if (!data?.nombre) return { status: 400, error: 'nombre requerido' };
+
+    const result = await this.provider.status({
+      nombre: data.nombre,
+      _context: { logger: this.logger }
+    });
+
+    if (!result.success) return { status: 404, error: result.error };
+    return { status: 200, data: result.data };
+  }
+
+  async handleRegistrar(data) {
+    if (!data?.nombre) return { status: 400, error: 'nombre requerido' };
+    if (!data?.transporte?.tipo) return { status: 400, error: 'transporte.tipo requerido' };
+
+    const result = await this.provider.register({
+      ...data,
+      _context: { logger: this.logger, eventBus: this.eventBus }
+    });
+
+    if (!result.success) return { status: 400, error: result.error };
+
+    this.internalMetrics.registros_total++;
+    await this.eventBus.publish('periferico.dispositivo.registrado', {
+      dispositivo: result.data.dispositivo,
+      timestamp: new Date().toISOString()
+    });
+
+    return { status: 201, data: result.data };
+  }
+
+  async handleActualizar(data) {
+    if (!data?.nombre) return { status: 400, error: 'nombre requerido' };
+
+    try {
+      const registry = this.provider._getRegistry();
+      const dispositivo = registry.actualizar(data.nombre, data);
+      return { status: 200, data: { dispositivo } };
+    } catch (err) {
+      return { status: err.message.includes('no encontrado') ? 404 : 400, error: err.message };
+    }
+  }
+
+  async handleDesregistrar(data) {
+    if (!data?.nombre) return { status: 400, error: 'nombre requerido' };
+
+    const result = await this.provider.unregister({
+      nombre: data.nombre,
+      _context: { logger: this.logger }
+    });
+
+    if (result.data?.removed) {
+      await this.eventBus.publish('periferico.dispositivo.desregistrado', {
+        nombre: data.nombre,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return { status: 200, data: { removed: result.data?.removed || false } };
+  }
+
+  /**
+   * Test de envío a un dispositivo — envía un mensaje de prueba.
+   */
+  async handleTestDispositivo(data) {
+    if (!data?.nombre) return { status: 400, error: 'nombre requerido' };
+
+    const testData = data.data || 'TEST PERIFERICO\n\n\n';
+
+    const result = await this.provider.send({
+      destino: data.nombre,
+      data: testData,
+      formato: 'texto',
+      _context: { logger: this.logger, eventBus: this.eventBus }
+    });
+
+    if (!result.success) return { status: 500, error: result.error };
+    return { status: 200, data: { ok: true, destino: data.nombre, bytes: result.data?.bytes } };
+  }
+
+  async handleEstado(data) {
+    if (!data?.nombre) return { status: 400, error: 'nombre requerido' };
+
+    const result = await this.provider.status({
+      nombre: data.nombre,
+      _context: { logger: this.logger }
+    });
+
+    if (!result.success) return { status: 404, error: result.error };
+    return { status: 200, data: result.data };
+  }
+
+  // ==========================================
+  // Internal
+  // ==========================================
+
+  _loadProvider() {
+    try {
+      return require('../../services/providers/local/perifericos');
+    } catch (err) {
+      this.logger.error('perifericos.provider.load_error', { error: err.message });
+      return null;
+    }
+  }
+
+  async _emitError(error, contexto) {
+    this.logger.error('perifericos.error', { error, ...contexto });
+    await this.eventBus.publish('periferico.error', {
+      error,
+      contexto,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+module.exports = PerifericosModule;

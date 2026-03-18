@@ -1,0 +1,116 @@
+{
+  "name": "perifericos",
+  "version": "1.0.0",
+  "description": "Servicio core de periféricos — descubrimiento, registro y routing de dispositivos hardware",
+  "author": "Event Core Team",
+  "tier": "tier_2_platform",
+
+  "provides": {
+    "events": [
+      "periferico.impreso",
+      "periferico.error",
+      "periferico.dispositivo.registrado",
+      "periferico.dispositivo.desregistrado",
+      "periferico.dispositivo.online",
+      "periferico.dispositivo.offline",
+      "periferico.estado.respuesta",
+      "periferico.listado"
+    ]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "periferico.impreso",
+        "description": "Datos enviados exitosamente a un dispositivo"
+      },
+      {
+        "event": "periferico.error",
+        "description": "Error al enviar datos o conectar con dispositivo"
+      },
+      {
+        "event": "periferico.dispositivo.registrado",
+        "description": "Nuevo dispositivo registrado en el sistema"
+      },
+      {
+        "event": "periferico.dispositivo.desregistrado",
+        "description": "Dispositivo eliminado del registro"
+      },
+      {
+        "event": "periferico.dispositivo.online",
+        "description": "Dispositivo cambió a estado online"
+      },
+      {
+        "event": "periferico.dispositivo.offline",
+        "description": "Dispositivo cambió a estado offline"
+      },
+      {
+        "event": "periferico.estado.respuesta",
+        "description": "Respuesta a consulta de estado de un dispositivo"
+      },
+      {
+        "event": "periferico.listado",
+        "description": "Respuesta a consulta de listado de dispositivos"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "periferico.imprimir",
+        "handler": "onImprimir",
+        "description": "Envía datos a un dispositivo destino (genérico: imprimir, cortar, etc.)"
+      },
+      {
+        "event": "periferico.estado",
+        "handler": "onEstado",
+        "description": "Consulta estado de un dispositivo por nombre lógico"
+      },
+      {
+        "event": "periferico.listar",
+        "handler": "onListar",
+        "description": "Lista todos los dispositivos registrados"
+      },
+      {
+        "event": "periferico.registrar",
+        "handler": "onRegistrar",
+        "description": "Registra un nuevo dispositivo"
+      },
+      {
+        "event": "periferico.desregistrar",
+        "handler": "onDesregistrar",
+        "description": "Elimina un dispositivo del registro"
+      }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "perifericos", "action": "list", "handler": "handleListar" },
+    { "domain": "perifericos", "action": "get", "handler": "handleGet" },
+    { "domain": "perifericos", "action": "create", "handler": "handleRegistrar" },
+    { "domain": "perifericos", "action": "update", "handler": "handleActualizar" },
+    { "domain": "perifericos", "action": "delete", "handler": "handleDesregistrar" },
+    { "domain": "perifericos", "action": "test", "handler": "handleTestDispositivo" },
+    { "domain": "perifericos", "action": "status", "handler": "handleEstado" }
+  ],
+
+  "config": {
+    "dataPath": "./data/perifericos",
+    "dispositivos": [],
+    "health_check_interval_ms": 30000
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "perifericos.envios.total",
+        "perifericos.envios.ok",
+        "perifericos.envios.error",
+        "perifericos.registros.total"
+      ]
+    }
+  }
+}

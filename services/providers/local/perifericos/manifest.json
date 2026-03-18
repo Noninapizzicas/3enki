@@ -1,0 +1,74 @@
+{
+  "$schema": "provider-manifest-v1",
+  "name": "local.perifericos",
+  "version": "1.0.0",
+  "description": "Servicio core de periféricos — registro de dispositivos, routing a transportes (BLE, TCP, ESP32-proxy, comando)",
+  "type": "local",
+  "requires": {
+    "npm": [],
+    "credentials": []
+  },
+  "functions": {
+    "register": {
+      "event": "local.perifericos.register.request",
+      "description": "Registra un nuevo dispositivo periférico",
+      "input": {
+        "nombre": { "type": "string", "required": true, "description": "Nombre lógico único del dispositivo" },
+        "tipo": { "type": "string", "required": true, "description": "Tipo: impresora-termica, impresora-etiquetas, cnc, escaner, display" },
+        "capacidades": { "type": "array", "required": false, "description": "Capacidades: imprimir, cortar-papel, escanear, etc." },
+        "transporte": { "type": "object", "required": true, "description": "{ tipo: 'ble-directo|tcp|esp32-proxy|comando', config: {} }" },
+        "metadata": { "type": "object", "required": false, "description": "Metadatos: marca, modelo, ancho, firmware" }
+      },
+      "output": {
+        "dispositivo": { "type": "object", "description": "Dispositivo registrado con ID generado" }
+      }
+    },
+    "unregister": {
+      "event": "local.perifericos.unregister.request",
+      "description": "Desregistra un dispositivo por nombre o ID",
+      "input": {
+        "nombre": { "type": "string", "required": true, "description": "Nombre lógico o ID del dispositivo" }
+      },
+      "output": {
+        "removed": { "type": "boolean", "description": "Si se eliminó correctamente" }
+      }
+    },
+    "send": {
+      "event": "local.perifericos.send.request",
+      "description": "Envía datos a un dispositivo periférico",
+      "input": {
+        "destino": { "type": "string", "required": true, "description": "Nombre lógico del dispositivo destino" },
+        "data": { "type": "string", "required": true, "description": "Datos a enviar (raw o base64)" },
+        "formato": { "type": "string", "required": false, "description": "Formato: escpos, texto, imagen, gcode (default: escpos)" },
+        "opciones": { "type": "object", "required": false, "description": "Opciones adicionales de envío" }
+      },
+      "output": {
+        "ok": { "type": "boolean", "description": "Si se envió correctamente" },
+        "bytes": { "type": "number", "description": "Bytes enviados" }
+      }
+    },
+    "status": {
+      "event": "local.perifericos.status.request",
+      "description": "Consulta el estado de un dispositivo",
+      "input": {
+        "nombre": { "type": "string", "required": true, "description": "Nombre lógico del dispositivo" }
+      },
+      "output": {
+        "dispositivo": { "type": "object", "description": "Datos del dispositivo con estado actual" },
+        "transporte": { "type": "object", "description": "Estado del transporte" }
+      }
+    },
+    "list": {
+      "event": "local.perifericos.list.request",
+      "description": "Lista todos los dispositivos registrados",
+      "input": {
+        "tipo": { "type": "string", "required": false, "description": "Filtrar por tipo de dispositivo" },
+        "capacidad": { "type": "string", "required": false, "description": "Filtrar por capacidad" }
+      },
+      "output": {
+        "dispositivos": { "type": "array", "description": "Lista de dispositivos" },
+        "total": { "type": "number", "description": "Total de dispositivos" }
+      }
+    }
+  }
+}

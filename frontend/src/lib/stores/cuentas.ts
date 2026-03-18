@@ -20,7 +20,7 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 // TYPES
 // =============================================================================
 
-export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo';
+export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo' | 'llevadoo';
 export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'entregado' | 'para_cobrar' | 'cobrado';
 export type EstadoCocinaItem = 'en_cocina' | 'preparando' | 'listo';
 
@@ -68,21 +68,24 @@ export const TIPO_COLORS: Record<TipoCuenta, string> = {
   local: '#3b82f6',
   delivery: '#f59e0b',
   llevar: '#22c55e',
-  glovo: '#FF6B00'
+  glovo: '#FF6B00',
+  llevadoo: '#f59e0b'
 };
 
 export const TIPO_ICONS: Record<TipoCuenta, string> = {
   local: '🍕',
   delivery: '🛵',
   llevar: '🥡',
-  glovo: '🛵'
+  glovo: '🛵',
+  llevadoo: '🛵'
 };
 
 export const TIPO_LABELS: Record<TipoCuenta, string> = {
   local: 'Local',
   delivery: 'Delivery',
   llevar: 'Llevar',
-  glovo: 'Glovo'
+  glovo: 'Glovo',
+  llevadoo: 'Llevadoo'
 };
 
 // Mapeo de tipos de persistencia a tipos del store
@@ -93,7 +96,8 @@ const TIPO_MAP: Record<string, TipoCuenta> = {
   delivery: 'delivery',
   llevar: 'llevar',
   recoger: 'llevar',
-  glovo: 'glovo'
+  glovo: 'glovo',
+  llevadoo: 'llevadoo'
 };
 
 // Orden de progresión de estados (índice mayor = más avanzado)
@@ -300,6 +304,25 @@ export async function createLlevar(projectId: string, clienteNombre?: string): P
 }
 
 /**
+ * Crea un pedido Llevadoo via llevadoo strategy (llevadoo/crear_pedido).
+ * Genera cuenta_id con prefijo llevadoo_{fecha}_{seq}.
+ */
+export async function createLlevadoo(projectId: string, nombreCliente?: string): Promise<string | null> {
+  try {
+    const res = await mqttRequest<any>('llevadoo', 'crear_pedido', {
+      project_id: projectId,
+      nombre_cliente: nombreCliente || undefined
+    });
+    const data = res?.data?.cuenta_id ? res.data : res?.data?.data || res?.data;
+    return data?.cuenta_id || null;
+  } catch (err: any) {
+    console.error('[Cuentas] createLlevadoo error:', err);
+    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al crear pedido Llevadoo' }));
+    return null;
+  }
+}
+
+/**
  * Renombra una mesa activa
  * Nombre libre: "Mesa de Manolo", "Terraza 3", lo que sea
  */
@@ -377,6 +400,11 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           const seqMatch = cp.cuenta_id?.match(/_(\d+)$/);
           const num = seqMatch ? parseInt(seqMatch[1], 10) : 0;
           if (num > 0) nombre = `Glovo #${num}`;
+        }
+        if (cp.tipo === 'llevadoo') {
+          const seqMatch = cp.cuenta_id?.match(/_(\d+)$/);
+          const num = seqMatch ? parseInt(seqMatch[1], 10) : 0;
+          if (num > 0) nombre = cp.datos_especificos?.nombre_cliente || `Llevadoo #${num}`;
         }
 
         // Preservar estados de cocina del store actual (evita que reload borre preparando/listo)
@@ -854,6 +882,30 @@ export function initCuentasSubscriptions(projectId: string): () => void {
             : c
         )
       }));
+    })
+  );
+
+  // llevadoo.pedido_listo → pedido Llevadoo listo para recoger
+  cleanups.push(
+    mqttSubscribe('llevadoo.pedido_listo', (event: any) => {
+      const data = event?.data || event?.payload || event;
+      if (!data?.cuenta_id) return;
+
+      cuentasStore.update(s => ({
+        ...s,
+        cuentas: s.cuentas.map(c =>
+          c.id === data.cuenta_id
+            ? { ...c, estado: 'listo' as EstadoCuenta, alerta: true, updated_at: new Date().toISOString() }
+            : c
+        )
+      }));
+    })
+  );
+
+  // llevadoo.pedido_recogido → pedido Llevadoo recogido, recargar
+  cleanups.push(
+    mqttSubscribe('llevadoo.pedido_recogido', (event: any) => {
+      loadCuentasFromPersistencia(projectId);
     })
   );
 

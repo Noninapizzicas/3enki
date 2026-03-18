@@ -21,9 +21,10 @@
     myDeviceColor, myDeviceNombre, myEstacion, filtrosActivos,
     tipoEstacion, tiposDisponibles, cocinaDevices, myImpresora,
     pedidosCocina,
-    setFiltros, updateDeviceName, updateEstacion, setTipoEstacion, setImpresora
+    setFiltros, updateDeviceName, updateEstacion, setTipoEstacion, setImpresora,
+    loadImpresorasDisponibles
   } from '$lib/stores/cocina';
-  import type { ItemCocina, TipoEstacionInfo, ImpresoraConfig } from '$lib/stores/cocina';
+  import type { ItemCocina, TipoEstacionInfo, ImpresoraConfig, ImpresoraDisponible } from '$lib/stores/cocina';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
 
   const dispatch = createEventDispatcher();
@@ -35,8 +36,11 @@
   let selectedTipoEstacion: string = 'general';
   let saving = false;
 
-  // Impresora ESP32
+  // Impresora — selector de periféricos
   let editEsp32DeviceId = '';
+  let selectedImpresora = '';  // nombre lógico del dispositivo seleccionado
+  let impresorasDisponibles: ImpresoraDisponible[] = [];
+  let loadingImpresoras = false;
 
   // Categorías cargadas del catálogo
   let catalogCategorias: { id: string; nombre: string; emoji?: string }[] = [];
@@ -150,6 +154,12 @@
     return sorted;
   })();
 
+  async function loadImpresoras() {
+    loadingImpresoras = true;
+    impresorasDisponibles = await loadImpresorasDisponibles();
+    loadingImpresoras = false;
+  }
+
   // Init local state from store
   onMount(() => {
     editNombre = $myDeviceNombre || '';
@@ -157,7 +167,9 @@
     selectedFamilias = new Set($filtrosActivos);
     selectedTipoEstacion = $tipoEstacion || 'general';
     editEsp32DeviceId = $myImpresora?.esp32_device_id || '';
+    selectedImpresora = $myImpresora?.destino || '';
     loadCategorias();
+    loadImpresoras();
   });
 
   function toggleFamilia(f: string) {
@@ -187,9 +199,14 @@
     // Update station type
     await setTipoEstacion(selectedTipoEstacion);
 
-    // Update printer (ESP32 bridge)
-    const newImpresora = editEsp32DeviceId.trim()
-      ? { esp32_device_id: editEsp32DeviceId.trim() }
+    // Update printer — destino de perifericos + ESP32 bridge opcional
+    const hasDestino = selectedImpresora.trim();
+    const hasEsp32 = editEsp32DeviceId.trim();
+    const newImpresora: ImpresoraConfig | null = (hasDestino || hasEsp32)
+      ? {
+          esp32_device_id: editEsp32DeviceId.trim(),
+          ...(hasDestino ? { destino: selectedImpresora.trim() } : {})
+        }
       : null;
     await setImpresora(newImpresora);
 
@@ -347,28 +364,67 @@
         {/if}
       </section>
 
-      <!-- Printer selection (ESP32 bridge) -->
+      <!-- Printer selection -->
       <section class="config-section">
         <h3>Impresora</h3>
-        <p class="section-hint">Device ID del ESP32 que conecta con la impresora BLE (ej: cocina-1).</p>
+        <p class="section-hint">Selecciona la impresora destino para esta estación.</p>
 
-        <input
-          class="name-input full-width"
-          type="text"
-          bind:value={editEsp32DeviceId}
-          placeholder="Device ID del ESP32 (ej: cocina-1)"
-          maxlength="30"
-        />
-
-        {#if editEsp32DeviceId.trim()}
-          <div class="tipo-info">
-            <p class="tipo-desc">ESP32: {editEsp32DeviceId.trim()}</p>
-            <span class="tipo-badge print">Activa</span>
+        {#if loadingImpresoras}
+          <p class="loading-hint">Cargando impresoras...</p>
+        {:else if impresorasDisponibles.length > 0}
+          <div class="familia-grid">
+            <button
+              class="familia-chip imp-chip"
+              class:active={!selectedImpresora}
+              on:click={() => selectedImpresora = ''}
+            >
+              NINGUNA
+            </button>
+            {#each impresorasDisponibles as imp}
+              <button
+                class="familia-chip imp-chip"
+                class:active={selectedImpresora === imp.nombre}
+                class:offline={imp.estado === 'error'}
+                on:click={() => selectedImpresora = imp.nombre}
+              >
+                {imp.nombre.toUpperCase()}
+                <span class="imp-status" class:online={imp.estado === 'online'} class:error={imp.estado === 'error'}></span>
+              </button>
+            {/each}
           </div>
+
+          {#if selectedImpresora}
+            {@const sel = impresorasDisponibles.find(i => i.nombre === selectedImpresora)}
+            {#if sel}
+              <div class="tipo-info">
+                <p class="tipo-desc">{sel.tipo} — {sel.transporte_tipo}{sel.metadata?.ancho ? ` — ${sel.metadata.ancho}` : ''}</p>
+                <span class="tipo-badge print">{sel.estado === 'online' ? 'Online' : sel.estado}</span>
+              </div>
+            {/if}
+          {:else}
+            <div class="tipo-info">
+              <p class="tipo-desc">Sin impresora configurada</p>
+            </div>
+          {/if}
         {:else}
-          <div class="tipo-info">
-            <p class="tipo-desc">Sin impresora configurada</p>
-          </div>
+          <p class="section-hint" style="color: #64748b; font-style: italic;">No hay impresoras registradas en periféricos.</p>
+        {/if}
+
+        <!-- ESP32 bridge ID (opcional, para transportes esp32-proxy) -->
+        {#if selectedImpresora}
+          {@const sel = impresorasDisponibles.find(i => i.nombre === selectedImpresora)}
+          {#if sel?.transporte_tipo === 'esp32-proxy'}
+            <div style="margin-top: 10px;">
+              <p class="section-hint">Device ID del ESP32 bridge (auto-detectado del registro).</p>
+              <input
+                class="name-input full-width"
+                type="text"
+                bind:value={editEsp32DeviceId}
+                placeholder="Device ID del ESP32 (ej: cocina-1)"
+                maxlength="30"
+              />
+            </div>
+          {/if}
         {/if}
       </section>
 
@@ -617,6 +673,41 @@
     background: rgba(249, 115, 22, 0.2);
     color: #f97316;
     border: 1px solid rgba(249, 115, 22, 0.3);
+  }
+
+  /* Impresora chips */
+  .imp-chip {
+    position: relative;
+    padding-right: 24px;
+  }
+
+  .imp-chip.offline {
+    opacity: 0.5;
+  }
+
+  .imp-status {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #64748b;
+  }
+
+  .imp-status.online {
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  }
+
+  .imp-status.error {
+    background: #ef4444;
+  }
+
+  .familia-chip.imp-chip.active {
+    background: #f97316;
+    border-color: #f97316;
+    color: #fff;
   }
 
   .no-familias {

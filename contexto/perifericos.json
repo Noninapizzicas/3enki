@@ -1,15 +1,17 @@
 {
-  "_VERSION": "1.0.0",
+  "_VERSION": "2.0.0",
   "_CREATED": "2026-03-18",
-  "_DESCRIPTION": "Arquitectura del Servicio de Periféricos — infraestructura core de Enki",
+  "_UPDATED": "2026-03-18",
+  "_DESCRIPTION": "Arquitectura del Servicio de Periféricos — infraestructura core de Enki. Fases 1-3 completadas.",
 
   "_AI_INSTRUCTIONS": {
     "IMPORTANT": "Este servicio es CORE de Enki, no de pizzepos. Cualquier módulo puede usarlo.",
-    "rule_1": "Los módulos publican eventos de CAPACIDAD (imprimir, cortar, escanear), no de dispositivo",
+    "rule_1": "Los módulos publican eventos de CAPACIDAD (imprimir, display, abrir-cajon, cortar, escanear), no de dispositivo",
     "rule_2": "El servicio resuelve nombre lógico → dispositivo físico → transporte correcto",
-    "rule_3": "Los transportes (BLE, TCP, USB, ESP32-proxy) son plugins intercambiables",
+    "rule_3": "Los transportes (BLE, TCP, USB, ESP32-proxy, comando) son plugins intercambiables",
     "rule_4": "Los módulos NUNCA hablan directamente con un dispositivo — siempre via periferico.*",
-    "how_to_use": "eventBus.publish('periferico.imprimir', { destino: 'cocina', data: base64 })"
+    "how_to_use": "eventBus.publish('periferico.imprimir', { destino: 'cocina', data: escposBuffer })",
+    "estado_migracion": "Las 3 fases están COMPLETADAS. impresion, cocina y cobros usan perifericos."
   },
 
   "vision": {
@@ -27,12 +29,14 @@
           "ble-directo": {
             "descripcion": "Bluetooth Low Energy directo desde el servidor (rfcomm)",
             "casos": "Impresora BT conectada directamente al servidor Termux/Linux",
-            "config": { "dispositivo": "/dev/rfcomm0", "mac": "AA:BB:CC:DD:EE:FF" }
+            "config": { "dispositivo": "/dev/rfcomm0", "mac": "AA:BB:CC:DD:EE:FF" },
+            "estado": "implementado"
           },
           "tcp": {
             "descripcion": "Socket TCP directo al dispositivo",
             "casos": "Impresoras de red, CNC con puerto TCP, cualquier dispositivo IP",
-            "config": { "host": "192.168.1.50", "puerto": 9100 }
+            "config": { "host": "192.168.1.50", "puerto": 9100 },
+            "estado": "implementado"
           },
           "esp32-proxy": {
             "descripcion": "ESP32 como bridge — recibe MQTT, reenvía a BLE/Serial local",
@@ -42,28 +46,30 @@
               "envio": "periferico/{esp32_device_id}/send",
               "respuesta": "periferico/{esp32_device_id}/ack",
               "status": "periferico/{esp32_device_id}/status"
-            }
+            },
+            "estado": "implementado"
+          },
+          "comando": {
+            "descripcion": "Pipe a un comando shell arbitrario",
+            "casos": "CUPS, lp, scripts custom",
+            "config": { "comando": "lp -d impresora-cocina" },
+            "estado": "implementado"
           },
           "usb": {
             "descripcion": "Dispositivo USB conectado directamente",
             "casos": "Impresora USB, escáner USB, lector de código de barras",
             "config": { "path": "/dev/usb/lp0" },
-            "estado": "futuro"
-          },
-          "comando": {
-            "descripcion": "Pipe a un comando shell arbitrario",
-            "casos": "CUPS, lp, scripts custom",
-            "config": { "comando": "lp -d impresora-cocina" }
+            "estado": "stub — placeholder para implementación futura"
           }
         },
         "interfaz_comun": {
           "metodos": [
             "async conectar(config) → { ok: boolean, error? }",
             "async enviar(datos, opciones) → { ok: boolean, bytes?, error? }",
-            "async estado() → { conectado: boolean, info: {} }",
+            "async getEstado() → { conectado: boolean, tipo, estado, info: {} }",
             "async desconectar() → void"
           ],
-          "contrato": "Todos los transportes implementan la misma interfaz. El servicio los usa de forma polimórfica."
+          "contrato": "Todos los transportes extienden TransporteBase. El servicio los usa de forma polimórfica."
         }
       },
 
@@ -72,9 +78,9 @@
         "ubicacion": "services/providers/local/perifericos/registry.js",
         "modelo_dispositivo": {
           "id": "string — UUID auto-generado",
-          "nombre": "string — nombre lógico único (ej: 'cocina', 'barra', 'cnc-taller')",
-          "tipo": "string — tipo de dispositivo (impresora-termica, impresora-etiquetas, cnc, escaner, display)",
-          "capacidades": ["imprimir", "cortar-papel"],
+          "nombre": "string — nombre lógico único (ej: 'cocina', 'barra', 'caja', 'display-cocina')",
+          "tipo": "string — tipo de dispositivo (impresora-termica, impresora-etiquetas, cnc, escaner, display, cajon)",
+          "capacidades": ["imprimir", "cortar-papel", "display", "abrir-cajon"],
           "transporte": {
             "tipo": "ble-directo | tcp | esp32-proxy | usb | comando",
             "config": {}
@@ -90,6 +96,7 @@
         },
         "persistencia": "data/perifericos/dispositivos.json — se guarda al registrar/modificar",
         "descubrimiento": {
+          "activos": "Reporta transportes conectados y su estado — implementado via discover(metodo='activos')",
           "manual": "POST /modules/perifericos/dispositivos — registro manual con nombre + transporte",
           "mdns": "Escaneo mDNS para impresoras de red (_ipp._tcp, _pdl-datastream._tcp) — futuro",
           "esp32_auto": "Los ESP32 publican su status al conectar → auto-registro con capacidades declaradas",
@@ -100,30 +107,54 @@
       "capa_3_servicio_capacidades": {
         "descripcion": "Capa pública que expone capacidades genéricas. Los módulos solo hablan con esta capa.",
         "ubicacion": "modules/perifericos/ (módulo core tier_2)",
-        "capacidades": {
+        "capacidades_implementadas": {
           "imprimir": {
             "evento": "periferico.imprimir",
-            "descripcion": "Envía datos a una impresora",
+            "handler": "onImprimir",
+            "descripcion": "Envía datos a una impresora (ESC/POS, texto, gcode)",
             "payload": {
-              "destino": "string — nombre lógico del dispositivo (ej: 'cocina', 'barra')",
-              "data": "string | Buffer — datos raw (ESC/POS, texto, etc.)",
-              "formato": "string — 'escpos' | 'texto' | 'imagen' (default: 'escpos')",
-              "prioridad": "number — 1 (urgente) a 5 (normal), default 3",
-              "opciones": {
-                "cortar": "boolean — cortar papel después de imprimir (default: true)",
-                "copias": "number — número de copias (default: 1)"
-              }
+              "destino": "string — nombre lógico del dispositivo",
+              "data": "string | Buffer — datos raw",
+              "formato": "string — 'escpos' | 'texto' | 'imagen' | 'gcode' (default: 'escpos')",
+              "prioridad": "number — 1-5, default 3",
+              "opciones": { "cortar": "boolean", "copias": "number" }
             },
-            "respuesta_evento": "periferico.impreso | periferico.error"
+            "respuesta_evento": "periferico.impreso | periferico.error",
+            "consumidores": ["pizzepos/impresion"]
+          },
+          "display": {
+            "evento": "periferico.display",
+            "handler": "onDisplay",
+            "descripcion": "Envía contenido estructurado a pantalla externa (TV, LED, tablet fija)",
+            "payload": {
+              "destino": "string — nombre lógico del display (ej: 'display-cocina')",
+              "data": "object — { accion: 'mostrar'|'actualizar'|'limpiar', contenido: {} }",
+              "prioridad": "number — 1-5, default 3"
+            },
+            "respuesta_evento": "periferico.displayed | periferico.error",
+            "consumidores": ["pizzepos/cocina"]
+          },
+          "abrir_cajon": {
+            "evento": "periferico.abrir-cajon",
+            "handler": "onAbrirCajon",
+            "descripcion": "Abre cajón de dinero via comando ESC/POS estándar (ESC p)",
+            "payload": {
+              "destino": "string — nombre lógico de la impresora con cajón (ej: 'caja')",
+              "pin": "number — 0 (pin 2) o 1 (pin 5), default 0"
+            },
+            "respuesta_evento": "periferico.cajon-abierto | periferico.error",
+            "consumidores": ["pizzepos/cobros"]
           },
           "estado_dispositivo": {
             "evento": "periferico.estado",
+            "handler": "onEstado",
             "descripcion": "Consultar estado de un dispositivo",
             "payload": { "nombre": "string — nombre lógico" },
             "respuesta_evento": "periferico.estado.respuesta"
           },
           "listar_dispositivos": {
             "evento": "periferico.listar",
+            "handler": "onListar",
             "descripcion": "Listar todos los dispositivos registrados",
             "respuesta_evento": "periferico.listado"
           }
@@ -131,9 +162,7 @@
         "capacidades_futuras": [
           "periferico.escanear — escanear documento/código de barras",
           "periferico.cortar — enviar gcode a CNC",
-          "periferico.display — mostrar info en pantalla externa",
-          "periferico.peso — leer balanza/báscula",
-          "periferico.abrir-cajon — abrir cajón de dinero (comando ESC/POS estándar)"
+          "periferico.peso — leer balanza/báscula"
         ]
       }
     },
@@ -141,14 +170,31 @@
     "flujo_completo": {
       "ejemplo_imprimir_comanda": [
         "1. módulo impresion (pizzepos) recibe evento pedido.enviado_cocina",
-        "2. impresion formatea ESC/POS (la lógica de formato sigue en pizzepos/impresion)",
-        "3. impresion publica: eventBus.publish('periferico.imprimir', { destino: 'cocina', data: escposBuffer, formato: 'escpos' })",
-        "4. módulo perifericos recibe el evento",
+        "2. impresion formatea ESC/POS (la lógica de formato está en pizzepos/impresion)",
+        "3. impresion publica: eventBus.publish('periferico.imprimir', { destino: 'cocina', data: escpos, formato: 'escpos' })",
+        "4. módulo perifericos recibe el evento via onImprimir()",
         "5. perifericos busca 'cocina' en el registry → encuentra dispositivo con transporte esp32-proxy",
         "6. perifericos obtiene el transporte esp32-proxy, llama transporte.enviar(datos)",
         "7. el transporte publica MQTT a periferico/esp32-cocina-01/send con los datos base64",
         "8. ESP32 recibe, reenvía por BLE a la impresora térmica",
         "9. perifericos publica periferico.impreso con confirmación"
+      ],
+      "ejemplo_display_cocina": [
+        "1. módulo cocina recibe pedido.enviado_cocina → nuevo pedido",
+        "2. cocina publica: eventBus.publish('periferico.display', { destino: 'display-cocina', data: { accion: 'nuevo_pedido', contenido: {...} } })",
+        "3. módulo perifericos recibe via onDisplay()",
+        "4. perifericos busca 'display-cocina' en registry → TCP 192.168.1.60:8080",
+        "5. envía JSON por socket TCP a la pantalla",
+        "6. publica periferico.displayed"
+      ],
+      "ejemplo_cajon_dinero": [
+        "1. módulo cobros confirma pago en efectivo",
+        "2. cobros publica: eventBus.publish('periferico.abrir-cajon', { destino: 'caja', pin: 0 })",
+        "3. módulo perifericos recibe via onAbrirCajon()",
+        "4. perifericos genera comando ESC/POS: ESC p \\x00 \\x19 \\xFA",
+        "5. busca 'caja' en registry → BLE directo /dev/rfcomm0",
+        "6. envía comando ESC/POS al transporte BLE",
+        "7. publica periferico.cajon-abierto"
       ],
       "ejemplo_futuro_cnc": [
         "1. módulo cnc-taller (futuro) recibe evento pieza.fabricar",
@@ -162,33 +208,39 @@
   },
 
   "migracion_desde_impresion_actual": {
+    "_estado": "COMPLETADA — Las 3 fases están implementadas.",
     "fase_1_coexistencia": {
-      "descripcion": "El módulo perifericos se crea como servicio core. pizzepos/impresion sigue funcionando como está.",
-      "cambios": [
-        "Crear services/providers/local/perifericos/ con los transportes (reutilizar transporte.js existente)",
-        "Crear modules/perifericos/ como módulo core tier_2",
-        "Mover lógica de transporte de pizzepos/impresion a perifericos (BLE directo, TCP, ESP32, comando)",
-        "pizzepos/impresion conserva la lógica ESC/POS de formateo (eso SÍ es de pizzepos)"
-      ],
-      "resultado": "Dos caminos funcionan: impresion puede seguir imprimiendo directo O via periferico.imprimir"
+      "descripcion": "El módulo perifericos se creó como servicio core. pizzepos/impresion seguía funcionando como estaba.",
+      "estado": "COMPLETADA",
+      "cambios_realizados": [
+        "Creado services/providers/local/perifericos/ con transportes (BLE, TCP, ESP32-proxy, comando)",
+        "Creado modules/perifericos/ como módulo core tier_2",
+        "Lógica de transporte movida de pizzepos/impresion a perifericos",
+        "pizzepos/impresion conserva solo la lógica ESC/POS de formateo"
+      ]
     },
     "fase_2_adopcion": {
-      "descripcion": "pizzepos/impresion migra a usar periferico.imprimir en vez de enviarImpresora() directo",
-      "cambios": [
-        "impresion.enviarImpresora() → eventBus.publish('periferico.imprimir', { destino, data })",
-        "impresion.enviarViaEsp32() → eliminado (perifericos lo resuelve internamente)",
-        "impresion.transporte (y pool de transportes) → eliminado (perifericos lo gestiona)",
-        "Eliminar dependencia de transporte.js en impresion"
-      ],
-      "resultado": "impresion solo formatea ESC/POS + publica eventos. Cero conocimiento de hardware."
+      "descripcion": "pizzepos/impresion migrado a usar periferico.imprimir en vez de enviarImpresora() directo.",
+      "estado": "COMPLETADA",
+      "cambios_realizados": [
+        "impresion v2.0 — enviarPeriferico() publica periferico.imprimir",
+        "Eliminados: enviarImpresora(), enviarViaEsp32(), obtenerTransporte(), handleConectar()",
+        "Eliminados: this.transporte, this.transportes pool, config.transporte",
+        "Eliminado: transporte.js de pizzepos/impresion (código movido a perifericos/transportes/ble.js)",
+        "Eliminados: endpoint POST /conectar y ui_handler conectar"
+      ]
     },
     "fase_3_expansion": {
-      "descripcion": "Nuevos módulos usan perifericos directamente. Nuevos tipos de dispositivos.",
-      "ejemplos": [
-        "cocina publica periferico.display para pantalla de cocina",
-        "cobros publica periferico.abrir-cajon para cajón de dinero",
-        "Un futuro módulo CNC publica periferico.cortar",
-        "Se añade transporte Raspberry Pi como nuevo tipo de proxy"
+      "descripcion": "Nuevos módulos usan perifericos directamente. Nuevas capacidades implementadas.",
+      "estado": "COMPLETADA",
+      "cambios_realizados": [
+        "perifericos v1.1 — onDisplay() y onAbrirCajon() implementados",
+        "cocina v3.1 — publica periferico.display en pedido nuevo y pedido listo",
+        "cobros v2.1 — publica periferico.abrir-cajon al confirmar pago efectivo",
+        "Provider: discover() implementado (método 'activos')",
+        "Módulo: handleDescubrir() UI handler añadido",
+        "Creado usb.js transporte stub para implementación futura",
+        "Creado data/perifericos/ directorio para persistencia"
       ]
     }
   },
@@ -198,15 +250,15 @@
       "root": "services/providers/local/perifericos/",
       "archivos": {
         "manifest.json": "Manifiesto del provider (funciones: register, unregister, send, status, list, discover)",
-        "index.js": "Lógica del provider — registry de dispositivos + routing a transportes",
+        "index.js": "Lógica del provider — registry de dispositivos + routing a transportes + discover",
         "registry.js": "Clase DeviceRegistry — CRUD de dispositivos, persistencia JSON, búsqueda por nombre/capacidad",
         "transportes/": {
-          "base.js": "Clase base TransporteBase con interfaz común",
-          "ble.js": "Transporte Bluetooth directo (rfcomm) — migrado de pizzepos/impresion/transporte.js",
+          "base.js": "Clase base TransporteBase con interfaz común (conectar, enviar, getEstado, desconectar)",
+          "ble.js": "Transporte Bluetooth directo (rfcomm)",
           "tcp.js": "Transporte TCP socket",
           "esp32-proxy.js": "Transporte ESP32 via MQTT (reutiliza local.esp32 provider)",
-          "comando.js": "Transporte por comando shell",
-          "usb.js": "Transporte USB (placeholder para futuro)"
+          "comando.js": "Transporte por comando shell (CUPS, lp)",
+          "usb.js": "Transporte USB (stub — placeholder para implementación futura)"
         }
       }
     },
@@ -214,25 +266,27 @@
       "root": "modules/perifericos/",
       "archivos": {
         "module.json": "Manifest — subscribes a periferico.*, ui_handlers para gestión, tier: 2",
-        "index.js": "PerifericosModule — orquesta capacidades, consume provider local.perifericos"
+        "index.js": "PerifericosModule — orquesta capacidades (imprimir, display, abrir-cajon), consume provider"
       }
     },
     "datos": {
       "root": "data/perifericos/",
       "archivos": {
-        "dispositivos.json": "Registry persistido — array de dispositivos registrados"
+        "dispositivos.json": "Registry persistido — array de dispositivos registrados (auto-creado en primer uso)"
       }
     }
   },
 
   "module_json_ejemplo": {
     "name": "perifericos",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Servicio core de periféricos — descubrimiento, registro y routing de dispositivos hardware",
     "tier": "tier_2_platform",
     "events": {
       "subscribes": [
         { "event": "periferico.imprimir", "handler": "onImprimir" },
+        { "event": "periferico.display", "handler": "onDisplay" },
+        { "event": "periferico.abrir-cajon", "handler": "onAbrirCajon" },
         { "event": "periferico.estado", "handler": "onEstado" },
         { "event": "periferico.listar", "handler": "onListar" },
         { "event": "periferico.registrar", "handler": "onRegistrar" },
@@ -240,8 +294,11 @@
       ],
       "publishes": [
         "periferico.impreso",
+        "periferico.displayed",
+        "periferico.cajon-abierto",
         "periferico.error",
         "periferico.dispositivo.registrado",
+        "periferico.dispositivo.desregistrado",
         "periferico.dispositivo.online",
         "periferico.dispositivo.offline",
         "periferico.estado.respuesta",
@@ -255,6 +312,7 @@
       { "domain": "perifericos", "action": "update", "handler": "handleActualizar" },
       { "domain": "perifericos", "action": "delete", "handler": "handleDesregistrar" },
       { "domain": "perifericos", "action": "test", "handler": "handleTestDispositivo" },
+      { "domain": "perifericos", "action": "status", "handler": "handleEstado" },
       { "domain": "perifericos", "action": "discover", "handler": "handleDescubrir" }
     ]
   },
@@ -284,6 +342,26 @@
           "metadata": { "ancho": "80mm" }
         },
         {
+          "nombre": "caja",
+          "tipo": "impresora-termica",
+          "capacidades": ["imprimir", "abrir-cajon"],
+          "transporte": {
+            "tipo": "ble-directo",
+            "config": { "dispositivo": "/dev/rfcomm1", "mac": "AA:BB:CC:DD:EE:FF" }
+          },
+          "metadata": { "ancho": "58mm", "tiene_cajon": true }
+        },
+        {
+          "nombre": "display-cocina",
+          "tipo": "display",
+          "capacidades": ["display"],
+          "transporte": {
+            "tipo": "tcp",
+            "config": { "host": "192.168.1.60", "puerto": 8080 }
+          },
+          "metadata": { "tipo_pantalla": "tv", "resolucion": "1920x1080" }
+        },
+        {
           "nombre": "cnc-taller",
           "tipo": "cnc",
           "capacidades": ["cortar"],
@@ -306,33 +384,39 @@
     "mqtt": "ESP32 proxies se comunican via MQTT (Aedes broker interno)",
     "providers": "local.perifericos es un provider como local.pdf o local.sharp — tonto, solo ejecuta",
     "modulos": "modules/perifericos es el módulo inteligente que decide y orquesta",
-    "ui_handlers": "CRUD de dispositivos via mqttRequest('perifericos', 'list|create|update|delete')",
+    "ui_handlers": "CRUD + discover de dispositivos via mqttRequest('perifericos', 'list|create|update|delete|discover')",
     "config": "Dispositivos pueden pre-registrarse en config.json o registrarse dinámicamente",
-    "startup": "tier_2_platform — carga antes que cualquier módulo de dominio que necesite imprimir"
+    "startup": "tier_2_platform — carga antes que cualquier módulo de dominio que necesite periféricos",
+    "modulos_consumidores": {
+      "pizzepos/impresion": "periferico.imprimir — envío de ESC/POS formateado",
+      "pizzepos/cocina": "periferico.display — notificación a pantalla externa de cocina",
+      "pizzepos/cobros": "periferico.abrir-cajon — apertura de cajón en pago efectivo"
+    }
   },
 
   "relacion_con_esp32_provider": {
     "actual": "services/providers/local/esp32/ — comunicación genérica con ESP32 (comandos, sensores, OTA)",
-    "futuro": "perifericos usa esp32 provider internamente para el transporte esp32-proxy",
+    "uso_en_perifericos": "perifericos usa esp32 provider internamente para el transporte esp32-proxy",
     "no_se_elimina": "local.esp32 sigue existiendo para uso genérico (sensores, OTA). perifericos lo consume para el canal de impresión/envío."
   },
 
   "relacion_con_impresion_pizzepos": {
-    "actual": "modules/pizzepos/impresion/ — formatea ESC/POS + envía directo a BT/TCP/ESP32",
-    "futuro": "impresion SOLO formatea ESC/POS. El envío lo hace via periferico.imprimir.",
+    "estado": "Migración COMPLETADA. impresion v2.0 solo formatea ESC/POS.",
     "lo_que_queda_en_impresion": [
       "Formateo ESC/POS de comandas de cocina",
       "Formateo ESC/POS de tickets de venta",
       "Formateo ESC/POS de tickets de pieza",
       "Lógica de negocio: qué imprimir, cuándo, con qué datos",
-      "Historial de comandas impresas"
+      "Historial de comandas impresas",
+      "enviarPeriferico(contenido, destino) — publica periferico.imprimir"
     ],
-    "lo_que_se_mueve_a_perifericos": [
+    "lo_que_se_movio_a_perifericos": [
       "TransporteBluetooth (transporte.js) → perifericos/transportes/ble.js",
       "Pool de transportes (this.transportes Map) → perifericos/registry.js",
       "enviarImpresora() → perifericos resuelve destino + transporte",
       "enviarViaEsp32() → perifericos/transportes/esp32-proxy.js",
-      "Reconexión automática → perifericos gestiona estado de cada dispositivo"
+      "Reconexión automática → perifericos gestiona estado de cada dispositivo",
+      "handleConectar() → perifericos gestiona conexiones"
     ]
   }
 }

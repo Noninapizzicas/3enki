@@ -109,7 +109,8 @@
     { "domain": "perifericos", "action": "update", "handler": "handleActualizar" },
     { "domain": "perifericos", "action": "delete", "handler": "handleDesregistrar" },
     { "domain": "perifericos", "action": "test", "handler": "handleTestDispositivo" },
-    { "domain": "perifericos", "action": "status", "handler": "handleEstado" }
+    { "domain": "perifericos", "action": "status", "handler": "handleEstado" },
+    { "domain": "perifericos", "action": "discover", "handler": "handleDescubrir" }
   ],
 
   "config": {

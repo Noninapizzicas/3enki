@@ -237,6 +237,57 @@ module.exports = {
         total: dispositivos.length
       }
     };
+  },
+
+  /**
+   * Descubrimiento de dispositivos.
+   * Intenta detectar dispositivos disponibles según el método solicitado.
+   * Actualmente soporta: transportes activos (reporte de conectados).
+   * Futuro: mDNS, BLE scan, ESP32 auto-discovery.
+   *
+   * @param {string} [metodo] - Método de descubrimiento: 'activos' | 'mdns' | 'ble' (default: 'activos')
+   */
+  async discover({ metodo, _context } = {}) {
+    _ensureRegistry();
+
+    const metodoFinal = metodo || 'activos';
+    const logger = _context?.logger || console;
+
+    if (metodoFinal === 'activos') {
+      // Reportar dispositivos con transporte activo y su estado de conexión
+      const descubiertos = [];
+      for (const [nombre, transporte] of transportesActivos.entries()) {
+        const estado = await transporte.getEstado();
+        descubiertos.push({
+          nombre,
+          tipo_transporte: transporte.tipo,
+          conectado: estado.conectado,
+          estado: estado.estado,
+          info: estado.info || {}
+        });
+      }
+
+      return {
+        success: true,
+        data: {
+          metodo: metodoFinal,
+          descubiertos,
+          total: descubiertos.length
+        }
+      };
+    }
+
+    // Métodos futuros: mdns, ble, esp32
+    logger.info('perifericos.discover.metodo_futuro', { metodo: metodoFinal });
+    return {
+      success: true,
+      data: {
+        metodo: metodoFinal,
+        descubiertos: [],
+        total: 0,
+        nota: `Método '${metodoFinal}' aún no implementado. Disponible: 'activos'.`
+      }
+    };
   }
 };
 

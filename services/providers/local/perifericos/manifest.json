@@ -69,6 +69,18 @@
         "dispositivos": { "type": "array", "description": "Lista de dispositivos" },
         "total": { "type": "number", "description": "Total de dispositivos" }
       }
+    },
+    "discover": {
+      "event": "local.perifericos.discover.request",
+      "description": "Descubre dispositivos disponibles",
+      "input": {
+        "metodo": { "type": "string", "required": false, "description": "Método: activos | mdns | ble (default: activos)" }
+      },
+      "output": {
+        "metodo": { "type": "string", "description": "Método utilizado" },
+        "descubiertos": { "type": "array", "description": "Dispositivos descubiertos" },
+        "total": { "type": "number", "description": "Total descubiertos" }
+      }
     }
   }
 }

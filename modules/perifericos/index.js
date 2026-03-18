@@ -465,6 +465,21 @@ class PerifericosModule {
     return { status: 200, data: result.data };
   }
 
+  /**
+   * Descubrimiento de dispositivos.
+   * Métodos: 'activos' (default) — reporta estado de transportes conectados.
+   * Futuro: 'mdns', 'ble', 'esp32'.
+   */
+  async handleDescubrir(data) {
+    const result = await this.provider.discover({
+      metodo: data?.metodo,
+      _context: { logger: this.logger }
+    });
+
+    if (!result.success) return { status: 500, error: result.error };
+    return { status: 200, data: result.data };
+  }
+
   // ==========================================
   // Internal
   // ==========================================

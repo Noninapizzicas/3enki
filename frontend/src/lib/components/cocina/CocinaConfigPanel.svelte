@@ -366,7 +366,12 @@
 
       <!-- Printer selection -->
       <section class="config-section">
-        <h3>Impresora</h3>
+        <div class="section-header-row">
+          <h3>Impresora</h3>
+          <button class="refresh-btn" on:click={loadImpresoras} disabled={loadingImpresoras} title="Actualizar lista">
+            <span class="refresh-icon" class:spinning={loadingImpresoras}>&#x21bb;</span>
+          </button>
+        </div>
         <p class="section-hint">Selecciona la impresora destino para esta estación.</p>
 
         {#if loadingImpresoras}
@@ -691,6 +696,52 @@
     background: rgba(249, 115, 22, 0.2);
     color: #f97316;
     border: 1px solid rgba(249, 115, 22, 0.3);
+  }
+
+  /* Section header with refresh */
+  .section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .section-header-row h3 {
+    margin: 0;
+  }
+
+  .refresh-btn {
+    background: none;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #94a3b8;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .refresh-btn:active {
+    color: #3b82f6;
+    border-color: #3b82f6;
+  }
+
+  .refresh-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .refresh-icon.spinning {
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   /* Impresora chips */

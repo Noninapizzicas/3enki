@@ -1,7 +1,7 @@
 {
   "name": "cocina",
-  "version": "2.3.0",
-  "description": "Display de cocina en tiempo real - Sistema de preparación de pedidos",
+  "version": "3.1.0",
+  "description": "Display de cocina en tiempo real - Sistema de preparación de pedidos. Publica periferico.display para pantallas externas.",
   "author": "Pizzepos Team",
   "routes": ["/cocina"],
 
@@ -10,7 +10,8 @@
       "cocina.item_preparando",
       "cocina.item_preparado",
       "cocina.pedido_listo",
-      "cocina.item_ticket"
+      "cocina.item_ticket",
+      "periferico.display"
     ],
     "queries": ["cocina.activos", "cocina.historial"]
   },
@@ -44,6 +45,10 @@
         "schema": {
           "$ref": "./schemas/events.json#/definitions/cocina_pedido_listo"
         }
+      },
+      {
+        "event": "periferico.display",
+        "description": "Notificación a display externo de cocina (TV, LED, tablet) con estado de pedidos"
       },
       {
         "event": "cocina.item_ticket",

@@ -1,30 +1,32 @@
 /**
- * Módulo Periféricos v1.0.0
+ * Módulo Periféricos v1.1.0
  *
  * Servicio core de periféricos a nivel de plataforma.
  * Descubre dispositivos, los registra con nombres lógicos,
  * y los expone como capacidades genéricas via eventos.
  *
- * Los módulos de dominio (pizzepos/impresion, cnc, etc.) publican
- * eventos de CAPACIDAD (periferico.imprimir, periferico.cortar)
- * y este módulo resuelve: nombre lógico → dispositivo físico → transporte.
+ * Los módulos de dominio (pizzepos/impresion, cocina, cobros, cnc, etc.)
+ * publican eventos de CAPACIDAD y este módulo resuelve:
+ * nombre lógico → dispositivo físico → transporte.
  *
  * Tier: tier_2_platform (carga antes que módulos de dominio)
  *
- * Eventos consumidos:
- *   periferico.imprimir    → enviar datos a un dispositivo
- *   periferico.estado      → consultar estado
- *   periferico.listar      → listar dispositivos
- *   periferico.registrar   → registrar nuevo dispositivo
+ * Capacidades:
+ *   periferico.imprimir     → enviar datos a impresora
+ *   periferico.display      → enviar contenido a pantalla externa
+ *   periferico.abrir-cajon  → abrir cajón de dinero (ESC/POS o GPIO)
+ *   periferico.estado       → consultar estado
+ *   periferico.listar       → listar dispositivos
+ *   periferico.registrar    → registrar nuevo dispositivo
  *   periferico.desregistrar → eliminar dispositivo
  *
  * Eventos emitidos:
  *   periferico.impreso     → envío exitoso
+ *   periferico.displayed    → contenido enviado a display
+ *   periferico.cajon-abierto → cajón abierto exitosamente
  *   periferico.error       → error en envío/conexión
- *   periferico.dispositivo.registrado
- *   periferico.dispositivo.desregistrado
- *   periferico.estado.respuesta
- *   periferico.listado
+ *   periferico.dispositivo.registrado / .desregistrado
+ *   periferico.estado.respuesta / .listado
  */
 
 const path = require('path');
@@ -32,7 +34,7 @@ const path = require('path');
 class PerifericosModule {
   constructor() {
     this.name = 'perifericos';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
 
     this.core = null;
     this.logger = null;
@@ -160,6 +162,111 @@ class PerifericosModule {
       destino,
       formato: formato || 'escpos',
       copias,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * periferico.display — Envía contenido a una pantalla externa (TV, LED, tablet fija).
+   *
+   * Payload:
+   *   destino: string — nombre lógico del display (ej: 'display-cocina', 'tv-barra')
+   *   data: object — contenido estructurado a mostrar
+   *     accion: string — 'mostrar' | 'actualizar' | 'limpiar'
+   *     contenido: object — datos a renderizar (formato libre, el display los interpreta)
+   *   prioridad: number — 1-5, default 3
+   */
+  async onDisplay(event) {
+    const data = event?.data || event?.payload || event;
+    const { destino, prioridad } = data;
+    const contenido = data.data;
+
+    if (!destino) {
+      await this._emitError('destino es requerido', data);
+      return;
+    }
+    if (!contenido) {
+      await this._emitError('data es requerido', data);
+      return;
+    }
+
+    this.internalMetrics.envios_total++;
+
+    this.logger.info('perifericos.display.enviando', {
+      destino,
+      accion: contenido.accion || 'mostrar',
+      prioridad: prioridad || 3
+    });
+
+    const result = await this.provider.send({
+      destino,
+      data: typeof contenido === 'string' ? contenido : JSON.stringify(contenido),
+      formato: 'json',
+      opciones: { tipo_capacidad: 'display' },
+      _context: { logger: this.logger, eventBus: this.eventBus }
+    });
+
+    if (!result.success) {
+      this.internalMetrics.envios_error++;
+      await this._emitError(result.error, { destino, capacidad: 'display' });
+      return;
+    }
+
+    this.internalMetrics.envios_ok++;
+
+    await this.eventBus.publish('periferico.displayed', {
+      destino,
+      accion: contenido.accion || 'mostrar',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * periferico.abrir-cajon — Abre cajón de dinero.
+   * Envía el comando ESC/POS estándar de apertura de cajón (pulse pin 2/5).
+   *
+   * Payload:
+   *   destino: string — nombre lógico de la impresora con cajón conectado (ej: 'caja', 'barra')
+   *   pin: number — pin del cajón: 0 (pin 2) o 1 (pin 5), default 0
+   */
+  async onAbrirCajon(event) {
+    const data = event?.data || event?.payload || event;
+    const { destino, pin } = data;
+
+    if (!destino) {
+      await this._emitError('destino es requerido', data);
+      return;
+    }
+
+    this.internalMetrics.envios_total++;
+
+    // Comando ESC/POS estándar: ESC p <pin> <t1> <t2>
+    // pin 0 = conector 1 (pin 2), pin 1 = conector 2 (pin 5)
+    // t1=25, t2=250 → 50ms on, 500ms off
+    const pinByte = (pin === 1) ? '\x01' : '\x00';
+    const cmdAbrirCajon = `\x1B\x70${pinByte}\x19\xFA`;
+
+    this.logger.info('perifericos.cajon.abriendo', { destino, pin: pin || 0 });
+
+    const result = await this.provider.send({
+      destino,
+      data: cmdAbrirCajon,
+      formato: 'escpos',
+      opciones: { tipo_capacidad: 'abrir-cajon' },
+      _context: { logger: this.logger, eventBus: this.eventBus }
+    });
+
+    if (!result.success) {
+      this.internalMetrics.envios_error++;
+      await this._emitError(result.error, { destino, capacidad: 'abrir-cajon' });
+      return;
+    }
+
+    this.internalMetrics.envios_ok++;
+
+    await this.eventBus.publish('periferico.cajon-abierto', {
+      destino,
+      pin: pin || 0,
       timestamp: new Date().toISOString()
     });
   }

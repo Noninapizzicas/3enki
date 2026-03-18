@@ -1,14 +1,15 @@
 {
   "name": "cobros",
-  "version": "2.0.0",
-  "description": "Gestión unificada de cobros - 7 métodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr",
+  "version": "2.1.0",
+  "description": "Gestión unificada de cobros - 7 métodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr. Abre cajón via periferico.abrir-cajon.",
   "author": "Pizzepos Team",
 
   "provides": {
     "events": [
       "cobro.iniciado",
       "cobro.procesado",
-      "cobro.reembolsado"
+      "cobro.reembolsado",
+      "periferico.abrir-cajon"
     ],
     "queries": ["cobro.obtener", "cobro.listar", "cobro.por_cuenta"]
   },
@@ -35,6 +36,10 @@
         "schema": {
           "$ref": "./schemas/events.json#/definitions/cobro_reembolsado"
         }
+      },
+      {
+        "event": "periferico.abrir-cajon",
+        "description": "Abre cajón de dinero al confirmar pago en efectivo"
       }
     ],
     "subscribes": [

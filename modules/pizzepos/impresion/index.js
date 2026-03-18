@@ -60,6 +60,7 @@ class ImpresionModule {
     // Config (defaults para NETUM 58mm en Termux)
     this.config = {
       ancho: '58mm',
+      project_id: null, // se inyecta desde core.config o se pasa en impresora config
       transporte: {
         modo: 'dispositivo',
         mac: null,
@@ -107,6 +108,11 @@ class ImpresionModule {
       if (core.config.impresion.transporte) {
         this.config.transporte = { ...this.config.transporte, ...core.config.impresion.transporte };
       }
+    }
+
+    // Project ID: necesario para topic MQTT impresion/{project_id}/print
+    if (!this.config.project_id) {
+      this.config.project_id = core.config?.project_id || core.config?.projectId || null;
     }
 
     // Calcular ancho de línea
@@ -234,7 +240,7 @@ class ImpresionModule {
 
     this.logger.info('impresion.ticket_pieza.generando', {
       pedido_id, item_id, nombre, estacion,
-      impresora: impresora?.dispositivo || 'default'
+      impresora: impresora?.esp32_device_id || impresora?.dispositivo || 'default'
     });
 
     try {
@@ -898,17 +904,21 @@ class ImpresionModule {
 
   /**
    * Envía datos ESC/POS a un ESP32 printer bridge via MQTT.
-   * El ESP32 escucha en esp32/{deviceId}/command y reenvía por BLE a la impresora.
-   * Datos se envían en base64 para evitar problemas con caracteres binarios ESC/POS.
+   * Topic: impresion/{project_id}/print (el ESP32 se suscribe a este topic)
+   * Payload: { destino: esp32_device_id, data: base64, ts, id }
+   * Datos en base64 para evitar problemas con caracteres binarios ESC/POS.
    */
   async enviarViaEsp32(contenido, esp32DeviceId) {
-    const topic = `esp32/${esp32DeviceId}/command`;
+    const projectId = this.config.project_id;
+    const topic = projectId
+      ? `impresion/${projectId}/print`
+      : `esp32/${esp32DeviceId}/command`;
+
     const buffer = Buffer.isBuffer(contenido) ? contenido : Buffer.from(contenido, 'binary');
     const payload = {
       cmd: 'print',
-      params: {
-        data: buffer.toString('base64')
-      },
+      destino: esp32DeviceId,
+      data: buffer.toString('base64'),
       ts: Date.now(),
       id: `prt_${crypto.randomUUID().slice(0, 8)}`
     };

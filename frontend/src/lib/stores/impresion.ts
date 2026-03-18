@@ -278,6 +278,70 @@ export async function imprimirComanda(
 }
 
 // =============================================================================
+// TICKET DE VENTA
+// =============================================================================
+
+export interface TicketVentaItem {
+  nombre: string;
+  cantidad: number;
+  precio_unitario: number;
+  precio_total?: number;
+}
+
+export interface DatosNegocio {
+  nombre?: string;
+  direccion?: string;
+  telefono?: string;
+  nif?: string;
+}
+
+export interface TicketVentaParams {
+  cuenta_id: string;
+  canal?: Canal;
+  items: TicketVentaItem[];
+  subtotal?: number;
+  iva?: number | { porcentaje: number; importe: number };
+  total: number;
+  metodo_pago?: string;
+  propina?: number;
+  referencia_pago?: string;
+  datos_negocio?: DatosNegocio;
+}
+
+/**
+ * Imprime ticket de venta (recibo para el cliente con precios)
+ */
+export async function imprimirTicketVenta(params: TicketVentaParams): Promise<boolean> {
+  impresionStore.update(s => ({
+    ...s,
+    loading: true,
+    resultado: { type: 'info', message: 'Imprimiendo ticket...' }
+  }));
+
+  try {
+    const response = await mqttRequest<any>('impresion', 'ticket-venta', params);
+
+    impresionStore.update(s => ({
+      ...s,
+      loading: false,
+      resultado: { type: 'ok', message: `Ticket impreso (${response.data.comanda_id})` }
+    }));
+
+    await loadHistorial();
+    return true;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    impresionStore.update(s => ({
+      ...s,
+      loading: false,
+      resultado: { type: 'error', message: errorMessage }
+    }));
+    console.error('[Impresion] ticket venta failed:', errorMessage);
+    return false;
+  }
+}
+
+// =============================================================================
 // UI STATE ACTIONS
 // =============================================================================
 

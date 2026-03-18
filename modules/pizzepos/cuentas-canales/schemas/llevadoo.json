@@ -1,0 +1,175 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pizzepos.com/schemas/llevadoo.json",
+  "title": "Llevadoo Schema",
+  "description": "Esquemas de datos para pedidos Llevadoo (delivery externo)",
+
+  "definitions": {
+    "estado_pedido_llevadoo": {
+      "type": "string",
+      "enum": ["recibido", "aceptado", "en_preparacion", "listo", "recogido", "cancelado"],
+      "description": "Estado del pedido Llevadoo"
+    },
+
+    "pedido_llevadoo": {
+      "type": "object",
+      "required": ["cuenta_id", "numero_pedido", "estado", "total", "hora_pedido"],
+      "properties": {
+        "cuenta_id": {
+          "type": "string",
+          "pattern": "^llevadoo_\\d{8}_\\d{3}$",
+          "description": "ID único: llevadoo_{YYYYMMDD}_{secuencial}"
+        },
+        "numero_pedido": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Número secuencial del día"
+        },
+        "nombre_cliente": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Nombre del cliente final"
+        },
+        "telefono_cliente": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "Teléfono del cliente (opcional)"
+        },
+        "direccion": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Dirección de entrega"
+        },
+        "estado": {
+          "$ref": "#/definitions/estado_pedido_llevadoo"
+        },
+        "total": {
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 0.01
+        },
+        "recargo_total": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total de recargo delivery aplicado"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_llevadoo"
+          }
+        },
+        "hora_pedido": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "hora_recogida_estimada": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "hora_recogida_real": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "pedidos": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "IDs de pedidos enviados a cocina"
+        },
+        "notas": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+
+    "item_llevadoo": {
+      "type": "object",
+      "required": ["producto_id", "nombre", "cantidad", "precio_base", "recargo"],
+      "properties": {
+        "producto_id": {
+          "type": "string"
+        },
+        "nombre": {
+          "type": "string"
+        },
+        "cantidad": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "precio_base": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Precio original del producto"
+        },
+        "recargo": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Recargo delivery por unidad"
+        },
+        "precio_delivery": {
+          "type": "number",
+          "minimum": 0,
+          "description": "precio_base + recargo"
+        },
+        "variaciones": {
+          "type": "object"
+        },
+        "notas": {
+          "type": "string"
+        }
+      }
+    },
+
+    "crear_pedido_request": {
+      "type": "object",
+      "properties": {
+        "nombre_cliente": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "telefono_cliente": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "direccion": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "tiempo_preparacion": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 120,
+          "default": 25,
+          "description": "Minutos estimados de preparación"
+        },
+        "notas": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+
+    "config_recargo": {
+      "type": "object",
+      "properties": {
+        "recargo_por_producto": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.0,
+          "description": "Recargo fijo en € por cada producto"
+        },
+        "recargos_especificos": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          },
+          "description": "Recargo específico por producto_id (override del general)"
+        }
+      }
+    }
+  }
+}

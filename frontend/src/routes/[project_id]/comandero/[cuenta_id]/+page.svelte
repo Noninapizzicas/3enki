@@ -22,7 +22,10 @@
   $: projectId = $activeProjectId || urlProjectId;
 
   function handleNavigate(path: string) {
-    if (path.startsWith('/comandero')) {
+    // Si es pedido llevadoo y quiere volver a la lista, ir a /llevadoo
+    if (path === '/comandero' && cuenta_id?.startsWith('llevadoo_')) {
+      goto(`/${urlProjectId}/llevadoo`);
+    } else if (path.startsWith('/comandero')) {
       goto(`/${urlProjectId}${path}`);
     } else {
       goto(path);

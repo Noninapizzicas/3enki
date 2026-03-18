@@ -14,7 +14,8 @@
   let isRunning = false;
   let refreshInterval: any = null;
 
-  const API_BASE = browser ? `http://${window.location.hostname}:3000` : '';
+  // URLs relativas: funcionan tanto directo (:3000) como detrás de reverse proxy
+  const API_BASE = '';
 
   async function runTest() {
     isRunning = true;

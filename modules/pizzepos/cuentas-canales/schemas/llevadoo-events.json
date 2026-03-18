@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pizzepos.com/schemas/llevadoo-events.json",
+  "title": "Llevadoo Events Schema",
+  "description": "Eventos del canal Llevadoo (delivery externo)",
+
+  "definitions": {
+    "pedido_recibido": {
+      "type": "object",
+      "required": ["cuenta_id", "numero_pedido"],
+      "properties": {
+        "cuenta_id": { "type": "string" },
+        "numero_pedido": { "type": "integer" },
+        "nombre_cliente": { "type": "string" },
+        "direccion": { "type": "string" },
+        "total": { "type": "number" },
+        "recargo_total": { "type": "number" },
+        "items_count": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "pedido_aceptado": {
+      "type": "object",
+      "required": ["cuenta_id"],
+      "properties": {
+        "cuenta_id": { "type": "string" },
+        "hora_recogida_estimada": { "type": "string", "format": "date-time" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "pedido_listo": {
+      "type": "object",
+      "required": ["cuenta_id"],
+      "properties": {
+        "cuenta_id": { "type": "string" },
+        "numero_pedido": { "type": "integer" },
+        "nombre_cliente": { "type": "string" },
+        "total": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "pedido_recogido": {
+      "type": "object",
+      "required": ["cuenta_id"],
+      "properties": {
+        "cuenta_id": { "type": "string" },
+        "numero_pedido": { "type": "integer" },
+        "total": { "type": "number" },
+        "tiempo_total_minutos": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

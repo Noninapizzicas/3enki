@@ -25,6 +25,7 @@ const TelefonoStrategy = require('./strategies/telefono');
 const LlevarStrategy = require('./strategies/llevar');
 const GlovoStrategy = require('./strategies/glovo');
 const WhatsAppStrategy = require('./strategies/whatsapp');
+const LlevadooStrategy = require('./strategies/llevadoo');
 
 class CuentasCanalesModule {
   constructor() {
@@ -57,6 +58,7 @@ class CuentasCanalesModule {
     this.registerStrategy(new LlevarStrategy());
     this.registerStrategy(new GlovoStrategy());
     this.registerStrategy(new WhatsAppStrategy());
+    this.registerStrategy(new LlevadooStrategy());
   }
 
   registerStrategy(strategy) {

@@ -305,6 +305,11 @@ class CobrosModule {
     // cobro.procesado es el evento que cuentas escucha para marcar como cobrado
     await this.publishCoboProcesado(cobro);
 
+    // Abrir cajón de dinero para pagos en efectivo
+    if (cobro.metodo_pago === 'efectivo') {
+      await this.abrirCajonDinero(cobro);
+    }
+
     this.logger.info('cobros.cobro.confirmado', {
       cobro_id: id, monto_total: cobro.monto_total, metodo_pago: cobro.metodo_pago
     });
@@ -454,6 +459,32 @@ class CobrosModule {
       motivo: cobro.motivo_reembolso,
       reembolsado_at: cobro.reembolsado_at
     });
+  }
+
+  // ==========================================
+  // Periféricos
+  // ==========================================
+
+  /**
+   * Abre cajón de dinero via periferico.abrir-cajon.
+   * Best-effort — no falla el cobro si el cajón no abre.
+   */
+  async abrirCajonDinero(cobro) {
+    try {
+      const destino = this.config?.cobros?.cajon_destino || 'caja';
+      await this.eventBus.publish('periferico.abrir-cajon', {
+        destino,
+        pin: 0
+      });
+      this.logger.info('cobros.cajon.abierto', {
+        cobro_id: cobro.id, destino
+      });
+    } catch (err) {
+      // Cajón es best-effort — no bloquea el flujo de cobro
+      this.logger.warn('cobros.cajon.error', {
+        cobro_id: cobro.id, error: err.message
+      });
+    }
   }
 
   // ==========================================

@@ -269,6 +269,15 @@ class CocinaModule {
 
     this.metrics?.increment?.('cocina.pedido_recibido.total');
     this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
+
+    // Notificar display externo de cocina (TV, LED, etc.)
+    await this.publishDisplayCocina('nuevo_pedido', {
+      pedido_id,
+      cuenta_id,
+      canal: canal || null,
+      items: pedidoCocina.items.map(i => ({ nombre: i.nombre, cantidad: i.cantidad, categoria: i.categoria })),
+      items_count: pedidoCocina.items.length
+    });
   }
 
   async onPedidoCancelado(event) {
@@ -817,6 +826,15 @@ class CocinaModule {
 
     await this.publishPedidoListo(pedido);
 
+    // Notificar display externo: pedido listo para servir
+    await this.publishDisplayCocina('pedido_listo', {
+      pedido_id: pedido.pedido_id,
+      cuenta_id: pedido.cuenta_id,
+      canal: pedido.canal || null,
+      items_count: pedido.items.length,
+      tiempo_preparacion: tiempoPreparacion
+    });
+
     this.logger.info('cocina.pedido.listo', {
       pedido_id: pedido.pedido_id,
       canal: pedido.canal || null,
@@ -924,6 +942,33 @@ class CocinaModule {
       tiempo_preparacion: pedido.tiempo_preparacion,
       listo_at: pedido.listo_at
     });
+  }
+
+  /**
+   * Publica periferico.display para pantallas externas de cocina.
+   * Acciones: 'nuevo_pedido', 'pedido_listo', 'actualizar'.
+   * El display externo (TV, LED, tablet fija) consume esto via perifericos.
+   *
+   * @param {string} accion - tipo de actualización
+   * @param {object} contenido - datos a mostrar
+   */
+  async publishDisplayCocina(accion, contenido) {
+    try {
+      await this.eventBus.publish('periferico.display', {
+        destino: 'display-cocina',
+        data: {
+          accion,
+          modulo: 'cocina',
+          contenido,
+          pedidos_activos: this.pedidosActivos.size,
+          timestamp: new Date().toISOString()
+        },
+        prioridad: accion === 'pedido_listo' ? 2 : 3
+      });
+    } catch (err) {
+      // Display es best-effort — no falla el flujo principal
+      this.logger.debug('cocina.display.error', { accion, error: err.message });
+    }
   }
 }
 

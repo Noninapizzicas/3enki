@@ -19,11 +19,11 @@
   import {
     cocinaStore,
     myDeviceColor, myDeviceNombre, myEstacion, filtrosActivos,
-    tipoEstacion, tiposDisponibles, cocinaDevices,
+    tipoEstacion, tiposDisponibles, cocinaDevices, myImpresora,
     pedidosCocina,
-    setFiltros, updateDeviceName, updateEstacion, setTipoEstacion
+    setFiltros, updateDeviceName, updateEstacion, setTipoEstacion, setImpresora
   } from '$lib/stores/cocina';
-  import type { ItemCocina, TipoEstacionInfo } from '$lib/stores/cocina';
+  import type { ItemCocina, TipoEstacionInfo, ImpresoraConfig } from '$lib/stores/cocina';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
 
   const dispatch = createEventDispatcher();
@@ -34,6 +34,17 @@
   let selectedFamilias: Set<string> = new Set();
   let selectedTipoEstacion: string = 'general';
   let saving = false;
+
+  // Impresora
+  let editImpresoraDispositivo = '';
+
+  // Opciones predefinidas de impresora (rfcomm devices típicos)
+  const IMPRESORAS_PREDEFINIDAS = [
+    { label: 'Sin impresora', dispositivo: '' },
+    { label: 'rfcomm0', dispositivo: '/dev/rfcomm0' },
+    { label: 'rfcomm1', dispositivo: '/dev/rfcomm1' },
+    { label: 'rfcomm2', dispositivo: '/dev/rfcomm2' }
+  ];
 
   // Categorías cargadas del catálogo
   let catalogCategorias: { id: string; nombre: string; emoji?: string }[] = [];
@@ -153,6 +164,7 @@
     editEstacion = $myEstacion || '';
     selectedFamilias = new Set($filtrosActivos);
     selectedTipoEstacion = $tipoEstacion || 'general';
+    editImpresoraDispositivo = $myImpresora?.dispositivo || '';
     loadCategorias();
   });
 
@@ -182,6 +194,12 @@
 
     // Update station type
     await setTipoEstacion(selectedTipoEstacion);
+
+    // Update printer
+    const newImpresora = editImpresoraDispositivo
+      ? { dispositivo: editImpresoraDispositivo, modo: 'dispositivo' as const }
+      : null;
+    await setImpresora(newImpresora);
 
     // Update name if changed
     const currentName = $myDeviceNombre || '';
@@ -334,6 +352,31 @@
               {/if}
             </div>
           {/if}
+        {/if}
+      </section>
+
+      <!-- Printer selection -->
+      <section class="config-section">
+        <h3>Impresora</h3>
+        <p class="section-hint">Selecciona la impresora para este dispositivo (tickets de pieza).</p>
+
+        <div class="familia-grid">
+          {#each IMPRESORAS_PREDEFINIDAS as opcion}
+            <button
+              class="familia-chip impresora-chip"
+              class:active={editImpresoraDispositivo === opcion.dispositivo}
+              on:click={() => editImpresoraDispositivo = opcion.dispositivo}
+            >
+              {opcion.label.toUpperCase()}
+            </button>
+          {/each}
+        </div>
+
+        {#if editImpresoraDispositivo}
+          <div class="tipo-info">
+            <p class="tipo-desc">{editImpresoraDispositivo}</p>
+            <span class="tipo-badge print">Activa</span>
+          </div>
         {/if}
       </section>
 
@@ -552,6 +595,12 @@
   .familia-chip.tipo-chip.active {
     background: #8b5cf6;
     border-color: #8b5cf6;
+    color: #fff;
+  }
+
+  .familia-chip.impresora-chip.active {
+    background: #f97316;
+    border-color: #f97316;
     color: #fff;
   }
 

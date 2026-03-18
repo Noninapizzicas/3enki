@@ -99,6 +99,12 @@ export interface TipoEstacionInfo {
   };
 }
 
+export interface ImpresoraConfig {
+  dispositivo: string;  // ej: "/dev/rfcomm0", "/dev/rfcomm1"
+  mac?: string;         // MAC Bluetooth
+  modo?: 'dispositivo' | 'tcp' | 'comando';
+}
+
 export interface CocinaDevice {
   device_id: string;
   nombre: string;
@@ -106,6 +112,7 @@ export interface CocinaDevice {
   color: string;
   filtros: { familias: string[] };
   tipo_estacion: string;
+  impresora: ImpresoraConfig | null;
   connected_at: string;
   last_seen: string;
 }
@@ -124,6 +131,7 @@ export interface CocinaState {
   tipoEstacion: string; // tipo de estación: 'general', 'horno', 'montaje', etc.
   tipoEstacionInfo: TipoEstacionInfo | null; // info completa del tipo seleccionado
   tiposDisponibles: TipoEstacionInfo[]; // tipos cargados del backend
+  impresora: ImpresoraConfig | null; // impresora asignada a este dispositivo
   devices: CocinaDevice[];
 }
 
@@ -173,6 +181,7 @@ export const cocinaStore = writable<CocinaState>({
   tipoEstacion: 'general',
   tipoEstacionInfo: null,
   tiposDisponibles: [],
+  impresora: null,
   devices: []
 });
 
@@ -193,6 +202,7 @@ export const tipoEstacion = derived(cocinaStore, $s => $s.tipoEstacion);
 export const tipoEstacionInfo = derived(cocinaStore, $s => $s.tipoEstacionInfo);
 export const tiposDisponibles = derived(cocinaStore, $s => $s.tiposDisponibles);
 export const cocinaDevices = derived(cocinaStore, $s => $s.devices);
+export const myImpresora = derived(cocinaStore, $s => $s.impresora);
 
 export const itemsPendientes = derived(cocinaStore, $s =>
   $s.pedidos.reduce((sum, p) => sum + p.items.filter(i => i.estado === 'pendiente').length, 0)
@@ -351,7 +361,8 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
       nombre: nombre || undefined,
       estacion: state.myEstacion || undefined,
       filtros: state.filtrosActivos.length > 0 ? { familias: state.filtrosActivos } : undefined,
-      tipo_estacion: state.tipoEstacion || 'general'
+      tipo_estacion: state.tipoEstacion || 'general',
+      impresora: state.impresora || undefined
     });
 
     const data = res?.data?.color ? res.data : res?.data?.data;
@@ -364,6 +375,7 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
         myEstacion: data.estacion || s.myEstacion,
         tipoEstacion: data.tipo_estacion || s.tipoEstacion,
         tipoEstacionInfo: data.tipo_estacion_info || s.tipoEstacionInfo,
+        impresora: data.impresora !== undefined ? data.impresora : s.impresora,
         devices: data.devices || s.devices
       }));
     }
@@ -495,6 +507,50 @@ export async function setTipoEstacion(tipo: string): Promise<boolean> {
     }
   }
   return true;
+}
+
+/**
+ * Establece la impresora asignada a este dispositivo.
+ * Se persiste en localStorage y se envía al backend en el registro.
+ */
+export async function setImpresora(impresora: ImpresoraConfig | null): Promise<boolean> {
+  cocinaStore.update(s => ({ ...s, impresora }));
+
+  // Persistir en localStorage
+  const IMPRESORA_KEY = 'cocina_impresora';
+  try {
+    if (impresora) {
+      localStorage.setItem(IMPRESORA_KEY, JSON.stringify(impresora));
+    } else {
+      localStorage.removeItem(IMPRESORA_KEY);
+    }
+  } catch {}
+
+  // Enviar al backend
+  const state = get(cocinaStore);
+  if (state.myDeviceId) {
+    try {
+      await mqttRequest('cocina', 'register-device', {
+        device_id: state.myDeviceId,
+        impresora
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Carga la impresora desde localStorage al iniciar.
+ */
+function loadImpresoraFromStorage(): ImpresoraConfig | null {
+  try {
+    const raw = localStorage.getItem('cocina_impresora');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
 }
 
 /**
@@ -1017,6 +1073,12 @@ export function initCocinaSubscriptions(): () => void {
     }
   }
   document.addEventListener('visibilitychange', onVisibilityChange);
+
+  // Cargar impresora desde localStorage antes de registrar
+  const savedImpresora = loadImpresoraFromStorage();
+  if (savedImpresora) {
+    cocinaStore.update(s => ({ ...s, impresora: savedImpresora }));
+  }
 
   // Carga inicial + register device + tipos estación
   loadPedidosActivos();

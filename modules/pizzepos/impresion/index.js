@@ -51,8 +51,11 @@ class ImpresionModule {
     this.metrics = null;
     this.uiHandler = null;
 
-    // Transporte Bluetooth
+    // Transporte Bluetooth (default)
     this.transporte = null;
+
+    // Pool de transportes por dispositivo (clave = "/dev/rfcommN" o "host:port")
+    this.transportes = new Map();
 
     // Config (defaults para NETUM 58mm en Termux)
     this.config = {
@@ -143,6 +146,12 @@ class ImpresionModule {
       await this.transporte.desconectar();
     }
 
+    // Desconectar transportes del pool
+    for (const [clave, transporte] of this.transportes) {
+      try { await transporte.desconectar(); } catch {}
+    }
+    this.transportes.clear();
+
     this.historial = [];
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -221,10 +230,11 @@ class ImpresionModule {
    */
   async onItemTicket(event) {
     const data = event?.data || event?.payload || event;
-    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion } = data;
+    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion, impresora } = data;
 
     this.logger.info('impresion.ticket_pieza.generando', {
-      pedido_id, item_id, nombre, estacion
+      pedido_id, item_id, nombre, estacion,
+      impresora: impresora?.dispositivo || 'default'
     });
 
     try {
@@ -232,7 +242,7 @@ class ImpresionModule {
         pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion
       });
 
-      await this.enviarImpresora(ticket);
+      await this.enviarImpresora(ticket, impresora);
 
       const registro = {
         comanda_id: `tkt_${crypto.randomUUID().slice(0, 8)}`,
@@ -811,11 +821,41 @@ class ImpresionModule {
   // ==========================================
 
   /**
+   * Obtiene o crea un transporte para una impresora específica.
+   * Si no se pasa configImpresora, devuelve el transporte default.
+   * @param {Object} configImpresora - { dispositivo, mac, modo, tcp_host, tcp_puerto, comando }
+   */
+  obtenerTransporte(configImpresora) {
+    if (!configImpresora || !configImpresora.dispositivo) {
+      return this.transporte;
+    }
+
+    const clave = configImpresora.dispositivo;
+
+    if (this.transportes.has(clave)) {
+      return this.transportes.get(clave);
+    }
+
+    // Crear nuevo transporte con la config del dispositivo
+    const transporteConfig = {
+      ...this.config.transporte,
+      ...configImpresora
+    };
+    const nuevoTransporte = new TransporteBluetooth(transporteConfig, this.logger);
+    this.transportes.set(clave, nuevoTransporte);
+
+    this.logger.info('impresion.transporte.pool.nuevo', { clave, modo: transporteConfig.modo });
+    return nuevoTransporte;
+  }
+
+  /**
    * Envía ESC/POS a la impresora vía transporte Bluetooth.
    * Si el transporte no está conectado, intenta reconectar una vez.
    * También publica impresion.raw al eventBus (para monitoreo/logging).
+   * @param {string} contenido - datos ESC/POS
+   * @param {Object} [configImpresora] - config específica de impresora (opcional, para routing)
    */
-  async enviarImpresora(contenido) {
+  async enviarImpresora(contenido, configImpresora) {
     // Publicar al bus para monitoreo
     await this.eventBus.publish('impresion.raw', {
       tipo: 'comanda',
@@ -823,17 +863,24 @@ class ImpresionModule {
       timestamp: new Date().toISOString()
     });
 
-    // Enviar por transporte Bluetooth
-    if (this.transporte) {
+    // Resolver transporte (específico del device o default)
+    const transporte = this.obtenerTransporte(configImpresora);
+
+    if (transporte) {
       try {
-        if (this.transporte.estado !== 'conectado') {
-          this.logger.info('impresion.transporte.reconectando');
-          await this.transporte.conectar();
+        if (transporte.estado !== 'conectado') {
+          this.logger.info('impresion.transporte.reconectando', {
+            dispositivo: configImpresora?.dispositivo || 'default'
+          });
+          await transporte.conectar();
         }
-        await this.transporte.enviar(contenido);
+        await transporte.enviar(contenido);
       } catch (error) {
         this.internalMetrics.errores_transporte++;
-        this.logger.error('impresion.transporte.envio_fallido', { error: error.message });
+        this.logger.error('impresion.transporte.envio_fallido', {
+          error: error.message,
+          dispositivo: configImpresora?.dispositivo || 'default'
+        });
         throw new Error(`transporte: ${error.message}`);
       }
     } else {

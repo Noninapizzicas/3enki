@@ -480,6 +480,51 @@ class PerifericosModule {
     return { status: 200, data: result.data };
   }
 
+  /**
+   * Lista dispositivos filtrados por capacidad.
+   * Útil para que otros módulos ofrezcan selección de dispositivo al usuario.
+   *
+   * Ejemplo: mqttRequest('perifericos', 'listar-por-capacidad', { capacidad: 'imprimir' })
+   * Retorna solo dispositivos con esa capacidad + su estado actual.
+   */
+  async handleListarPorCapacidad(data) {
+    if (!data?.capacidad) return { status: 400, error: 'capacidad requerida (imprimir, display, abrir-cajon, cortar, etc.)' };
+
+    const result = await this.provider.list({
+      capacidad: data.capacidad,
+      _context: { logger: this.logger }
+    });
+
+    if (!result.success) return { status: 500, error: result.error };
+
+    // Enriquecer con estado de transporte activo
+    const dispositivos = [];
+    for (const disp of result.data.dispositivos) {
+      const statusResult = await this.provider.status({
+        nombre: disp.nombre,
+        _context: { logger: this.logger }
+      });
+      dispositivos.push({
+        nombre: disp.nombre,
+        tipo: disp.tipo,
+        estado: disp.estado,
+        capacidades: disp.capacidades,
+        transporte_tipo: disp.transporte?.tipo,
+        conectado: statusResult.data?.transporte?.conectado || false,
+        metadata: disp.metadata || {}
+      });
+    }
+
+    return {
+      status: 200,
+      data: {
+        capacidad: data.capacidad,
+        dispositivos,
+        total: dispositivos.length
+      }
+    };
+  }
+
   // ==========================================
   // Internal
   // ==========================================

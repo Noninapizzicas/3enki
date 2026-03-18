@@ -220,6 +220,12 @@
       "path": "/metrics",
       "handler": "handleGetMetrics",
       "description": "Métricas del módulo"
+    },
+    {
+      "method": "GET",
+      "path": "/cajones",
+      "handler": "handleListarCajones",
+      "description": "Lista dispositivos con cajón de dinero disponibles para selección"
     }
   ],
 

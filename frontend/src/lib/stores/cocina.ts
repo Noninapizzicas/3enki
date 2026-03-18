@@ -101,6 +101,16 @@ export interface TipoEstacionInfo {
 
 export interface ImpresoraConfig {
   esp32_device_id: string;  // ID del ESP32 bridge BLE (ej: "cocina-1")
+  destino?: string;         // Nombre lógico en perifericos registry (ej: "cocina")
+}
+
+export interface ImpresoraDisponible {
+  nombre: string;
+  tipo: string;
+  estado: string;
+  conectado: boolean;
+  transporte_tipo: string;
+  metadata: Record<string, any>;
 }
 
 export interface CocinaDevice {
@@ -549,6 +559,21 @@ function loadImpresoraFromStorage(): ImpresoraConfig | null {
     if (raw) return JSON.parse(raw);
   } catch {}
   return null;
+}
+
+/**
+ * Carga las impresoras disponibles del registry de periféricos.
+ * Consulta por capacidad 'imprimir'.
+ */
+export async function loadImpresorasDisponibles(): Promise<ImpresoraDisponible[]> {
+  try {
+    const res = await mqttRequest<any>('perifericos', 'listar-por-capacidad', {
+      capacidad: 'imprimir'
+    }, { timeout: 5000 });
+    return res?.data?.dispositivos || [];
+  } catch {
+    return [];
+  }
 }
 
 /**

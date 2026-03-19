@@ -10,7 +10,6 @@
       "prompt.context.loaded"
     ],
     "subscribes": [
-      { "event": "prompt.compose.request", "handler": "onComposeRequest" },
       { "event": "project.get.response", "handler": "onProjectGetResponse" },
       { "event": "storage.info.response", "handler": "onStorageInfoResponse" },
       { "event": "prompt.get.response", "handler": "onPromptManagerGetResponse" },

@@ -167,6 +167,36 @@ class PromptEngine {
   }
 
   // ==========================================
+  // Route → Module resolution
+  // ==========================================
+
+  /**
+   * Resolve a frontend route to a module name.
+   * Routes like '/menu-generator' map to 'pizzepos/menu-generator'.
+   * Tries exact match first, then suffix match against loaded modules.
+   *
+   * @param {string} route - Frontend route (e.g., '/menu-generator')
+   * @returns {string|null} Module name or null if not found
+   */
+  resolveRouteToModule(route) {
+    if (!route) return null;
+
+    // Strip leading slash: '/menu-generator' → 'menu-generator'
+    const slug = route.replace(/^\/+/, '');
+    if (!slug) return null;
+
+    // 1. Exact match (e.g., 'escandallo' → 'escandallo')
+    if (this._prompts.has(slug)) return slug;
+
+    // 2. Suffix match (e.g., 'menu-generator' → 'pizzepos/menu-generator')
+    for (const moduleName of this._prompts.keys()) {
+      if (moduleName.endsWith('/' + slug)) return moduleName;
+    }
+
+    return null;
+  }
+
+  // ==========================================
   // Core: Build system prompt for a module
   // ==========================================
 
@@ -283,11 +313,18 @@ class PromptEngine {
 
   onComposeRequest(event) {
     const data = event.data || event;
+
+    // Detect format: chat-ai-bridge sends request_id + page_context,
+    // direct callers send moduleName + userMessage
+    if (data.request_id) {
+      return this._handleBridgeComposeRequest(data);
+    }
+
+    // Original format (direct prompt-engine callers)
     const { moduleName, moduleNames, userMessage, history, runtimeContext, correlationId } = data;
 
     let messages;
     if (moduleNames && moduleNames.length > 0) {
-      // Multi-module: combine prompts from several modules
       const system = this.buildMultiModulePrompt(moduleNames, runtimeContext);
       messages = [{ role: 'system', content: system }];
       const maxHistory = this.config.maxHistory || 40;
@@ -309,6 +346,65 @@ class PromptEngine {
       moduleName: moduleName || (moduleNames || []).join('+'),
       historyCount: (history || []).length
     });
+  }
+
+  /**
+   * Handle prompt.compose.request from chat-ai-bridge.
+   * Format: { request_id, conversation, project_id, include_tools, page_context, correlation_id }
+   * Returns: { request_id, success, prompt } — a string prompt, not messages array.
+   */
+  _handleBridgeComposeRequest(data) {
+    const { request_id, page_context, correlation_id } = data;
+
+    try {
+      // Resolve module from page_context route
+      const moduleName = this.resolveRouteToModule(page_context?.route);
+
+      // Build runtime context from page_context state
+      const runtimeContext = {};
+      if (page_context) {
+        if (page_context.title) runtimeContext.page_title = page_context.title;
+        if (page_context.description) runtimeContext.page_description = page_context.description;
+        if (page_context.state) {
+          Object.assign(runtimeContext, page_context.state);
+        }
+      }
+
+      // Build system prompt
+      const prompt = this.buildSystemPrompt(moduleName, runtimeContext);
+
+      // Add page-specific instructions if present
+      const sections = [prompt];
+      if (page_context?.instructions) {
+        sections.push(page_context.instructions);
+      }
+
+      this.logger.info('prompt-engine.bridge.compose', {
+        request_id,
+        route: page_context?.route,
+        resolvedModule: moduleName,
+        promptLength: prompt.length
+      });
+
+      this.eventBus.emit('prompt.compose.response', {
+        request_id,
+        success: true,
+        prompt: sections.join('\n\n'),
+        correlation_id
+      });
+    } catch (error) {
+      this.logger.error('prompt-engine.bridge.compose.error', {
+        request_id,
+        error: error.message
+      });
+
+      this.eventBus.emit('prompt.compose.response', {
+        request_id,
+        success: false,
+        error: error.message,
+        correlation_id
+      });
+    }
   }
 
   onModulePromptRequest(event) {

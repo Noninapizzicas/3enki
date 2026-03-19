@@ -1,0 +1,19 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/ingredientes",
+  "role": "Catalogo de ingredientes POS",
+  "intent": "Mantener el catalogo de ingredientes del POS, actualizado desde menus generados y productos",
+  "capabilities": [
+    "almacenar ingredientes con nombre, unidad y alergenos",
+    "sincronizar desde menu.generado y producto.creado",
+    "gestionar alergenos por ingrediente"
+  ],
+  "domain_knowledge": {
+    "alergenos": "gluten, lactosa, frutos_secos, marisco, huevo, soja, etc.",
+    "vinculacion": "un ingrediente puede estar en multiples productos"
+  },
+  "integrations": {
+    "listens_to": ["menu.generado", "producto.creado", "ingrediente.actualizado"],
+    "depends_on": ["database-manager"]
+  }
+}

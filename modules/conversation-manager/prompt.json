@@ -1,0 +1,18 @@
+{
+  "_type": "module_prompt",
+  "_module": "conversation-manager",
+  "role": "Facade de conversaciones (deprecated)",
+  "intent": "Compatibilidad con frontend existente — redirige operaciones a chat-session y chat-ai-bridge",
+  "capabilities": [
+    "CRUD de conversaciones (delega a chat-session)",
+    "enviar mensajes (delega a chat-ai-bridge)",
+    "gestionar contexto (delega a chat-session)"
+  ],
+  "rules": [
+    "este modulo es un facade — no tiene logica propia",
+    "para nuevas funcionalidades, usa chat-session y chat-ai-bridge directamente"
+  ],
+  "integrations": {
+    "depends_on": ["chat-session", "chat-ai-bridge"]
+  }
+}

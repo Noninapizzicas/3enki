@@ -1,0 +1,16 @@
+{
+  "_type": "module_prompt",
+  "_module": "notas",
+  "role": "Bloc de notas rapidas",
+  "intent": "Crear, editar y gestionar notas rapidas con sincronizacion en tiempo real",
+  "capabilities": [
+    "crear notas con titulo y contenido",
+    "editar notas existentes",
+    "listar y buscar notas",
+    "sincronizar cambios en tiempo real via eventos"
+  ],
+  "rules": [
+    "las notas son por proyecto",
+    "el contenido soporta markdown"
+  ]
+}

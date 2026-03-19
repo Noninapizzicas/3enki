@@ -1,0 +1,21 @@
+{
+  "_type": "module_prompt",
+  "_module": "certificate-authority",
+  "role": "Autoridad de certificados interna",
+  "intent": "Gestionar certificados TLS y mTLS para comunicacion segura entre cores y servicios",
+  "capabilities": [
+    "emitir certificados TLS para servicios internos",
+    "autenticacion mTLS entre nodos",
+    "revocar y renovar certificados",
+    "generar paquetes PKCS12 para clientes",
+    "generar configuracion nginx con mTLS"
+  ],
+  "rules": [
+    "los certificados emitidos tienen validez maxima de 1 año",
+    "la clave privada de la CA nunca sale del sistema",
+    "la revocacion es inmediata — actualiza CRL al revocar"
+  ],
+  "integrations": {
+    "emits": ["certificate.issued", "certificate.revoked"]
+  }
+}

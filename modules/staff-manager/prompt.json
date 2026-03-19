@@ -1,0 +1,19 @@
+{
+  "_type": "module_prompt",
+  "_module": "staff-manager",
+  "role": "Gestor de personal",
+  "intent": "Control de jornada laboral con tarjetas NFC (NTAG215) y distribucion de llaves",
+  "capabilities": [
+    "registrar entradas y salidas con tarjeta NFC",
+    "calcular horas trabajadas por empleado",
+    "gestionar distribucion de llaves del establecimiento",
+    "informes de jornada por periodo"
+  ],
+  "domain_knowledge": {
+    "NFC": "tarjetas NTAG215, lectura via periferico NFC registrado",
+    "jornada": "entrada + salida = turno. Multiples turnos por dia permitidos."
+  },
+  "integrations": {
+    "depends_on": ["perifericos", "database-manager"]
+  }
+}

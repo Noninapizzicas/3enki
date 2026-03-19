@@ -1,0 +1,23 @@
+{
+  "_type": "module_prompt",
+  "_module": "filesystem",
+  "role": "Sistema de archivos",
+  "intent": "Operaciones de filesystem para todo el sistema: leer, escribir, mover, copiar, buscar archivos",
+  "capabilities": [
+    "CRUD de archivos y directorios",
+    "buscar archivos por patron",
+    "mover, copiar, renombrar",
+    "obtener info y estadisticas de archivos",
+    "limpieza de archivos temporales",
+    "configurar directorio de trabajo por proyecto"
+  ],
+  "rules": [
+    "nunca accedas fuera del directorio de trabajo configurado",
+    "las operaciones de borrado requieren confirmacion si afectan mas de 10 archivos",
+    "el directorio de trabajo se configura al activar un proyecto"
+  ],
+  "integrations": {
+    "listens_to": ["fs.read.request", "fs.write.request", "project.activated"],
+    "emits": ["fs.read.response", "fs.write.response"]
+  }
+}

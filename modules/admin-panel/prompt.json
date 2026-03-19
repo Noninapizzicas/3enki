@@ -1,0 +1,20 @@
+{
+  "_type": "module_prompt",
+  "_module": "admin-panel",
+  "role": "Panel de administracion",
+  "intent": "Interfaz web para gestionar y monitorizar el sistema Event-Core",
+  "capabilities": [
+    "visualizar estado de todos los modulos cargados",
+    "ver logs en tiempo real",
+    "gestionar configuracion del sistema",
+    "monitorizar eventos y metricas"
+  ],
+  "rules": [
+    "solo muestra informacion — nunca modifica estado del sistema directamente",
+    "los cambios de configuracion requieren confirmacion"
+  ],
+  "integrations": {
+    "listens_to": ["plugin.loaded"],
+    "depends_on": ["log-manager", "plugin-manager"]
+  }
+}

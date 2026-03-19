@@ -1,0 +1,26 @@
+{
+  "_type": "module_prompt",
+  "_module": "facturacion/fuentes",
+  "role": "Adaptadores de fuentes de facturas",
+  "intent": "Recibir facturas desde multiples fuentes (Telegram, Gmail) y canalizarlas al procesador",
+  "capabilities": [
+    "recibir fotos/documentos de facturas desde Telegram",
+    "leer emails con facturas adjuntas desde Gmail",
+    "canalizar facturas recibidas al modulo facturas para procesamiento"
+  ],
+  "domain_knowledge": {
+    "fuentes": {
+      "telegram": "el usuario envia foto o documento al bot → se procesa como factura",
+      "gmail": "se lee la bandeja de entrada buscando emails con adjuntos PDF"
+    }
+  },
+  "rules": [
+    "solo procesa archivos de tipo imagen (jpg, png) o PDF",
+    "al recibir un documento, emite factura.entrada para que el procesador lo gestione"
+  ],
+  "integrations": {
+    "listens_to": ["project.activated", "telegram.photo.received", "telegram.document.received"],
+    "emits": ["factura.entrada"],
+    "depends_on": ["telegram-service"]
+  }
+}

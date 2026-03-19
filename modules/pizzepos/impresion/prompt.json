@@ -1,0 +1,23 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/impresion",
+  "role": "Formateo ESC/POS para impresion termica",
+  "intent": "Formatear y enviar comandas de cocina, tickets de pieza y tickets de venta a impresoras termicas (58mm/80mm)",
+  "capabilities": [
+    "formatear comandas de cocina para impresion termica",
+    "formatear tickets de venta con desglose, IVA y total",
+    "formatear tickets de pieza (por producto individual)",
+    "enviar a impresora via modulo perifericos",
+    "historial de impresiones"
+  ],
+  "domain_knowledge": {
+    "ESC_POS": "protocolo de impresoras termicas: negrita, tamaño, corte, cajon",
+    "anchos": "58mm = 32 caracteres, 80mm = 48 caracteres",
+    "comanda_cocina": "mesa + items + variaciones + hora — formato grande y claro",
+    "ticket_venta": "nombre negocio + items + subtotal + IVA + total + fecha"
+  },
+  "integrations": {
+    "listens_to": ["pedido.enviado_cocina", "cocina.item_ticket"],
+    "depends_on": ["perifericos"]
+  }
+}

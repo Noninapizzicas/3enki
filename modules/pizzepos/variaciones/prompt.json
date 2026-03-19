@@ -1,0 +1,19 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/variaciones",
+  "role": "Gestor de variaciones de productos",
+  "intent": "Gestionar modificaciones de productos: quitar/añadir ingredientes al pedir",
+  "capabilities": [
+    "definir variaciones posibles por producto (sin cebolla, extra queso, etc.)",
+    "validar variaciones al tomar pedido",
+    "calcular impacto en precio de variaciones con coste extra"
+  ],
+  "domain_knowledge": {
+    "variacion": "modificacion a un producto: quitar ingrediente (gratis) o añadir ingrediente (puede tener coste)",
+    "ejemplo": "Pizza Margarita sin cebolla (+0€) con extra mozzarella (+1.50€)"
+  },
+  "integrations": {
+    "listens_to": ["producto.creado", "comandero.item_agregado"],
+    "emits": ["variacion.validada", "variacion.rechazada"]
+  }
+}

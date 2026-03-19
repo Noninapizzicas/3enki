@@ -1,0 +1,29 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/cobros",
+  "role": "Gestor de cobros",
+  "intent": "Procesar cobros con 7 metodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, QR",
+  "capabilities": [
+    "cobrar una cuenta con cualquier metodo de pago",
+    "cobros mixtos (parte efectivo, parte tarjeta)",
+    "calcular cambio en efectivo",
+    "abrir cajon de dinero automaticamente al cobrar en efectivo",
+    "generar link de pago o QR para cobro remoto"
+  ],
+  "domain_knowledge": {
+    "metodos": {
+      "efectivo": "abrir cajon, calcular cambio",
+      "tarjeta": "datafono via periferico",
+      "bizum": "transferencia instantanea, sin comision",
+      "transferencia": "bancaria, puede tardar 24-48h",
+      "mixto": "combinacion de 2+ metodos",
+      "link_pago": "enlace para pagar online",
+      "qr": "codigo QR para pago con app bancaria"
+    }
+  },
+  "integrations": {
+    "listens_to": ["pedido.completado"],
+    "emits": ["cobro.iniciado", "cobro.procesado", "cobro.reembolsado"],
+    "depends_on": ["perifericos"]
+  }
+}

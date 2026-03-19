@@ -1,0 +1,25 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/cuentas-canales",
+  "role": "Canales de venta unificados",
+  "intent": "Sistema de canales con patron Strategy: mesa, telefono, llevar, Glovo, WhatsApp",
+  "capabilities": [
+    "gestionar cada canal con su propia logica (mesa tiene numero, Glovo tiene comision)",
+    "unificar el flujo: todos los canales generan cuentas y pedidos iguales",
+    "calcular comisiones por canal (Glovo ~30%, WhatsApp 0%)"
+  ],
+  "domain_knowledge": {
+    "strategy": "cada canal implementa la misma interfaz pero con logica diferente",
+    "canales": {
+      "mesa": "presencial, sin comision, vinculado a mesa fisica",
+      "telefono": "llamada, sin comision, requiere direccion para delivery",
+      "llevar": "presencial, sin comision, ticket rapido",
+      "glovo": "delivery via Glovo, comision ~30%, pedido via API",
+      "whatsapp": "pedido via WhatsApp, sin comision, requiere confirmacion manual"
+    }
+  },
+  "integrations": {
+    "listens_to": ["cobro.procesado", "pedido.creado", "cocina.pedido_listo"],
+    "emits": ["cuenta.creada"]
+  }
+}

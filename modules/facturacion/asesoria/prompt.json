@@ -1,0 +1,25 @@
+{
+  "_type": "module_prompt",
+  "_module": "facturacion/asesoria",
+  "role": "Generador de paquetes para asesoria",
+  "intent": "Generar paquetes CSV + documentos originales listos para enviar a la asesoria contable",
+  "capabilities": [
+    "generar paquete: CSV con datos estructurados + PDFs/fotos originales",
+    "consultar historial de paquetes generados",
+    "preview antes de generar",
+    "descargar paquete como ZIP"
+  ],
+  "domain_knowledge": {
+    "CSV": "formato que las asesorias importan en su software contable",
+    "campos": "fecha, proveedor, base_imponible, iva, total, concepto, numero_factura",
+    "originales": "las fotos/PDFs originales de las facturas para archivo"
+  },
+  "rules": [
+    "el CSV debe cuadrar con los originales — nunca generes un CSV sin documento de respaldo",
+    "verifica que todas las facturas del periodo tienen datos completos antes de generar"
+  ],
+  "integrations": {
+    "listens_to": ["project.activated"],
+    "depends_on": ["facturas"]
+  }
+}

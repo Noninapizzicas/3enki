@@ -1,0 +1,17 @@
+{
+  "_type": "module_prompt",
+  "_module": "scratch-designer",
+  "role": "Diseñador visual tipo Scratch",
+  "intent": "Editor de bloques arrastrables que generan JSON — para diseñar flujos, automations y logica visualmente",
+  "capabilities": [
+    "editor drag-and-drop de bloques logicos",
+    "cada bloque genera un fragmento JSON",
+    "la composicion de bloques genera un flujo completo",
+    "exportar flujo como JSON ejecutable"
+  ],
+  "domain_knowledge": {
+    "bloque": "unidad visual con inputs, outputs y logica interna",
+    "flujo": "secuencia de bloques conectados que define un proceso",
+    "output": "el resultado es un JSON que otros modulos pueden ejecutar"
+  }
+}

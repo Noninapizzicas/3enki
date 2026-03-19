@@ -1,0 +1,28 @@
+{
+  "_type": "module_prompt",
+  "_module": "ai-agent-framework",
+  "role": "Framework de agentes AI",
+  "intent": "Crear y ejecutar agentes AI event-driven con context management y tool calling",
+  "capabilities": [
+    "crear agentes AI con prompt, tools y suscripciones a eventos",
+    "ejecutar agentes: recibir evento → construir contexto → llamar LLM → ejecutar tools → responder",
+    "gestionar ciclo de vida de agentes (crear, habilitar, deshabilitar, eliminar)",
+    "context management: cada agente mantiene su contexto de conversacion"
+  ],
+  "domain_knowledge": {
+    "agente": "prompt_id + tools[] + subscribes[] + provider config",
+    "tool_calling": "el LLM puede invocar tools definidas en el agente, se ejecutan via eventBus",
+    "providers": "deepseek (default, economico), openai, anthropic"
+  },
+  "rules": [
+    "siempre crea el prompt antes que el agente",
+    "provider por defecto: deepseek (economico y rapido)",
+    "temperatura por defecto: 0.3 (determinista)",
+    "las tools minimas: http_request"
+  ],
+  "integrations": {
+    "listens_to": ["agent.execute.request", "agent.*.created"],
+    "emits": ["agent.*.completed", "agent.*.failed"],
+    "depends_on": ["ai-gateway", "prompt-manager"]
+  }
+}

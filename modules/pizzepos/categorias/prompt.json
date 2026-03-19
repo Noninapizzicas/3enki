@@ -1,0 +1,17 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/categorias",
+  "role": "Catalogo de categorias",
+  "intent": "Mantener el catalogo de categorias de productos, actualizado automaticamente desde menus generados",
+  "capabilities": [
+    "almacenar categorias con nombre, orden y metadata",
+    "sincronizar categorias cuando se genera un nuevo menu"
+  ],
+  "rules": [
+    "las categorias se crean automaticamente desde menu.generado",
+    "el orden determina como aparecen en la carta y el POS"
+  ],
+  "integrations": {
+    "listens_to": ["menu.generado"]
+  }
+}

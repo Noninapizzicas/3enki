@@ -1,0 +1,20 @@
+{
+  "_type": "module_prompt",
+  "_module": "dashboard",
+  "role": "Dashboard de observabilidad",
+  "intent": "Monitorizar todos los cores del sistema en tiempo real: logs, eventos, metricas",
+  "capabilities": [
+    "visualizar logs en tiempo real de todos los cores",
+    "monitorizar eventos publicados y recibidos",
+    "metricas del sistema: CPU, memoria, latencias",
+    "alertas cuando algo falla"
+  ],
+  "rules": [
+    "es solo lectura — nunca modifica estado",
+    "agrupa logs por core y nivel (debug, info, warn, error)",
+    "las metricas se retienen 24 horas por defecto"
+  ],
+  "integrations": {
+    "listens_to": ["core/+/logs/#", "core/+/events/#", "core/+/metrics/#"]
+  }
+}

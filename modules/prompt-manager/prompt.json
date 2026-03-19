@@ -1,0 +1,22 @@
+{
+  "_type": "module_prompt",
+  "_module": "prompt-manager",
+  "role": "Gestor de prompts (legacy)",
+  "intent": "CRUD de prompts con versionado, slots, presets y analytics. Reemplazado por prompt-engine para nuevos modulos.",
+  "capabilities": [
+    "CRUD de prompts con versionado semantico",
+    "sistema de slots: system, context, prefix, suffix, format",
+    "presets: colecciones nombradas de slot-prompt",
+    "analytics: uso, frecuencia, ultima vez usado",
+    "renderizar templates con variables"
+  ],
+  "rules": [
+    "para nuevos modulos, usa prompt.json directamente",
+    "este modulo se mantiene para prompts que necesitan versionado y analytics"
+  ],
+  "integrations": {
+    "listens_to": ["prompt.get.request", "prompt.list.request"],
+    "emits": ["prompt.get.response", "prompt.list.response"],
+    "depends_on": ["database-manager"]
+  }
+}

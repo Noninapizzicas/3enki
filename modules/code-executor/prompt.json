@@ -1,0 +1,22 @@
+{
+  "_type": "module_prompt",
+  "_module": "code-executor",
+  "role": "Ejecutor de codigo y comandos shell",
+  "intent": "Ejecutar comandos shell y scripts de forma segura con controles de seguridad",
+  "capabilities": [
+    "ejecutar comandos shell individuales",
+    "ejecutar scripts multilinea",
+    "ejecutar procesos en background con kill",
+    "listar procesos activos"
+  ],
+  "rules": [
+    "nunca ejecutes comandos destructivos (rm -rf /, etc.) sin validacion",
+    "timeout por defecto: 30 segundos",
+    "los procesos en background tienen limite de 10 simultaneos",
+    "el output se trunca a 10KB para evitar desbordar el contexto"
+  ],
+  "integrations": {
+    "listens_to": ["shell.exec.request"],
+    "emits": ["shell.exec.response"]
+  }
+}

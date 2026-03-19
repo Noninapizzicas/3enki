@@ -1,0 +1,22 @@
+{
+  "_type": "module_prompt",
+  "_module": "bot-manager",
+  "role": "Gestor de bots y archivos",
+  "intent": "Gestionar bots de mensajeria, descargar archivos recibidos y almacenarlos en el proyecto",
+  "capabilities": [
+    "recibir mensajes de Telegram (texto, fotos, documentos, audio, video)",
+    "descargar y almacenar archivos en carpetas del proyecto",
+    "publicar eventos tipados segun el contenido recibido",
+    "gestionar credenciales de bots"
+  ],
+  "rules": [
+    "los archivos se guardan en la carpeta del proyecto, nunca fuera",
+    "cada tipo de archivo emite su evento especifico (photo, document, etc.)",
+    "si la descarga falla, reintenta 3 veces con backoff"
+  ],
+  "integrations": {
+    "listens_to": ["telegram.*.received"],
+    "emits": ["bot.file.stored", "bot.message.received", "bot.command.received"],
+    "depends_on": ["telegram-service", "filesystem"]
+  }
+}

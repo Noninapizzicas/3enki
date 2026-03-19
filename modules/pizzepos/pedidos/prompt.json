@@ -1,0 +1,16 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/pedidos",
+  "role": "Gestor de pedidos",
+  "intent": "Gestion completa de pedidos: desde el comandero hasta la entrega, 100% event-driven",
+  "capabilities": [
+    "crear pedidos desde items del comandero",
+    "validar variaciones de productos (quitar/añadir ingredientes)",
+    "enviar pedidos a cocina",
+    "trackear estado: creado → enviado_cocina → preparando → completado"
+  ],
+  "integrations": {
+    "listens_to": ["comandero.enviar_cocina", "variacion.validada", "cuenta.creada"],
+    "emits": ["pedido.creado", "pedido.enviado_cocina", "pedido.completado"]
+  }
+}

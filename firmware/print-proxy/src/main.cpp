@@ -663,6 +663,35 @@ void handleTestPrint() {
   }
 }
 
+void handleWifiScan() {
+  // Escanear redes WiFi visibles (funciona en modo AP y STA)
+  Serial.println("[WiFi] Escaneando redes...");
+  int n = WiFi.scanNetworks(false, false, false, 300);
+
+  JsonDocument doc;
+  auto arr = doc.to<JsonArray>();
+
+  for (int i = 0; i < n; i++) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["ssid"]    = WiFi.SSID(i);
+    obj["rssi"]    = WiFi.RSSI(i);
+    obj["open"]    = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
+    // Marcar si coincide con alguna red configurada
+    for (int j = 0; j < WIFI_MAX_NETWORKS; j++) {
+      if (strlen(cfg.wifi[j].ssid) > 0 && WiFi.SSID(i) == cfg.wifi[j].ssid) {
+        obj["configured"] = j + 1;  // slot 1-3
+        break;
+      }
+    }
+  }
+  WiFi.scanDelete();
+
+  char buf[1024];
+  serializeJson(doc, buf, sizeof(buf));
+  webServer.send(200, "application/json", buf);
+  Serial.printf("[WiFi] Scan: %d redes encontradas\n", n);
+}
+
 void handleReset() {
   prefs.begin(NVS_NAMESPACE, false);
   prefs.clear();
@@ -678,6 +707,7 @@ void portalSetup() {
   webServer.on("/api/config",      HTTP_POST, handlePostConfig);
   webServer.on("/api/status",      HTTP_GET,  handleGetStatus);
   webServer.on("/api/scan",        HTTP_GET,  handleScan);
+  webServer.on("/api/wifi-scan",   HTTP_GET,  handleWifiScan);
   webServer.on("/api/test-print",  HTTP_POST, handleTestPrint);
   webServer.on("/api/reset",       HTTP_POST, handleReset);
 }

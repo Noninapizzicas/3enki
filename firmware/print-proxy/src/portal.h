@@ -75,6 +75,13 @@ btn,button,.btn{display:block;width:100%;padding:12px;border:none;border-radius:
 .btn-primary:hover{background:#c73e54}
 .btn-scan{background:#0f3460;color:#e94560;border:1px solid #e94560}
 .btn-scan:hover{background:#1a4080}
+.btn-wifi-scan{background:#0f3460;color:#52b788;border:1px solid #52b788;margin-top:8px}
+.btn-wifi-scan:hover{background:#1a4080}
+.wifi-net{padding:8px 10px;background:#0f3460;border:1px solid #1a4080;border-radius:8px;margin-top:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.wifi-net:hover{border-color:#52b788}
+.wifi-net.configured{border-color:#52b788;background:#1b4332}
+.wifi-signal{font-size:.75em;color:#888}
+.wifi-tag{font-size:.7em;padding:2px 6px;border-radius:4px;background:#533483;color:#fff;margin-left:6px}
 .btn-test{background:#533483;color:#fff}
 .btn-test:hover{background:#6b44a0}
 .btn-reset{background:transparent;color:#e94560;border:1px solid #333;font-size:.85em}
@@ -120,6 +127,8 @@ btn,button,.btn{display:block;width:100%;padding:12px;border:none;border-radius:
     <div><input id="wifi_ssid3" placeholder="SSID movil/hotspot"></div>
     <div><input id="wifi_pass3" type="password" placeholder="Password"></div>
   </div>
+  <button class="btn btn-wifi-scan" onclick="scanWifi()">&#128246; Escanear redes WiFi</button>
+  <div id="wifi-scan-results"></div>
   <p style="font-size:.75em;color:#888;margin-top:8px">Si las 3 fallan se abre portal cautivo para configurar desde el movil</p>
 </div>
 
@@ -241,6 +250,38 @@ function scanBLE(){
       +'<span>'+d.name+'</span><span style="color:#888;font-size:.8em">'+d.addr+(d.rssi?' ('+d.rssi+'dBm)':'')+'</span></div>'
     ).join('');
   }).catch(e=>{div.innerHTML='<div style="color:#e94560">Error escaneando</div>';});
+}
+
+function scanWifi(){
+  const div=document.getElementById('wifi-scan-results');
+  div.innerHTML='<div style="padding:8px"><span class="spinner"></span> Escaneando redes WiFi...</div>';
+  fetch('/api/wifi-scan').then(r=>r.json()).then(nets=>{
+    if(!nets.length){div.innerHTML='<div style="padding:8px;color:#888">No se encontraron redes WiFi</div>';return;}
+    nets.sort((a,b)=>b.rssi-a.rssi);
+    div.innerHTML=nets.map(n=>{
+      let cls=n.configured?'wifi-net configured':'wifi-net';
+      let signal=n.rssi>-50?'Excelente':n.rssi>-60?'Buena':n.rssi>-70?'Normal':'Debil';
+      let tag=n.configured?'<span class="wifi-tag">Red '+n.configured+'</span>':'';
+      let lock=n.open?'':'&#128274; ';
+      return '<div class="'+cls+'" onclick="selectWifi(\''+n.ssid.replace(/'/g,"\\'")+'\')">'
+        +'<span>'+lock+n.ssid+tag+'</span>'
+        +'<span class="wifi-signal">'+n.rssi+'dBm ('+signal+')</span></div>';
+    }).join('');
+  }).catch(e=>{div.innerHTML='<div style="color:#e94560">Error escaneando</div>';});
+}
+
+function selectWifi(ssid){
+  for(let i=1;i<=3;i++){
+    if(!document.getElementById('wifi_ssid'+i).value){
+      document.getElementById('wifi_ssid'+i).value=ssid;
+      document.getElementById('wifi_pass'+i).focus();
+      showMsg('SSID copiado a Red '+i+'. Introduce la password.',true);
+      return;
+    }
+  }
+  document.getElementById('wifi_ssid1').value=ssid;
+  document.getElementById('wifi_pass1').focus();
+  showMsg('SSID copiado a Red 1 (todas estaban ocupadas)',true);
 }
 
 function selectPrinter(el,name,addr){

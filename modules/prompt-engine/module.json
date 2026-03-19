@@ -1,0 +1,69 @@
+{
+  "name": "prompt-engine",
+  "version": "1.0.0",
+  "description": "Motor de prompts hibrido: lee prompt.json de cada modulo, concatena con base prompt, entrega al LLM. Reemplaza la complejidad de prompt-composer + prompt-manager.",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "provides": {
+    "events": ["prompt.compose.response", "prompt.module.response", "prompt.list.response"]
+  },
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "prompt.compose.request",
+        "description": "Compone messages array completo para enviar al LLM",
+        "handler": "onComposeRequest"
+      },
+      {
+        "event": "prompt.module.request",
+        "description": "Obtiene el prompt.json de un modulo especifico",
+        "handler": "onModulePromptRequest"
+      },
+      {
+        "event": "prompt.list.request",
+        "description": "Lista todos los modulos que tienen prompt.json",
+        "handler": "onListRequest"
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/prompts",
+      "handler": "handleListPrompts",
+      "description": "Lista modulos con prompt.json cargado"
+    },
+    {
+      "method": "GET",
+      "path": "/prompts/:moduleName",
+      "handler": "handleGetPrompt",
+      "description": "Obtiene el prompt.json de un modulo"
+    },
+    {
+      "method": "POST",
+      "path": "/prompts/:moduleName/reload",
+      "handler": "handleReloadPrompt",
+      "description": "Recarga el prompt.json de un modulo desde disco"
+    },
+    {
+      "method": "POST",
+      "path": "/reload",
+      "handler": "handleReloadAll",
+      "description": "Recarga todos los prompt.json"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    }
+  ],
+
+  "config": {
+    "maxHistory": 40,
+    "modulesDir": null
+  }
+}

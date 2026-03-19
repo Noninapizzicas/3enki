@@ -25,6 +25,7 @@
 #define BLE_CHUNK_SIZE          20      // bytes por write BLE (MTU default)
 #define BLE_CHUNK_DELAY         20      // ms entre chunks
 #define BLE_SCAN_SECONDS        10      // duracion del escaneo BLE
+#define BLE_RECONNECT_MS        15000   // reintento reconexion BLE cada 15s
 #define STATUS_INTERVAL_MS      30000   // cada 30s publica status
 #define PORTAL_PORT             80      // puerto del portal web
 #define LED_PIN                 2       // LED integrado del ESP32

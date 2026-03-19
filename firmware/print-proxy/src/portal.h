@@ -21,6 +21,7 @@ struct PrintProxyConfig {
   char mqttPass[64];
   // Impresora BLE
   char printerName[32];
+  char printerAddr[20];       // MAC guardada para reconexion directa sin escaneo
   char printerSvcUuid[48];
   char printerCharUuid[48];
   // Estado (no persistido)
@@ -120,6 +121,8 @@ btn,button,.btn{display:block;width:100%;padding:12px;border:none;border-radius:
   <h2>&#128424; Impresora BLE</h2>
   <label>Nombre Bluetooth</label>
   <input id="printer_name" placeholder="Pulsa Escanear para buscar">
+  <label>MAC Address (se guarda automaticamente)</label>
+  <input id="printer_addr" placeholder="Se rellena al escanear o conectar" readonly style="color:#888">
   <button class="btn btn-scan" onclick="scanBLE()">&#128269; Escanear impresoras</button>
   <div id="scan-results"></div>
   <label>Service UUID</label>
@@ -145,6 +148,7 @@ fetch('/api/config').then(r=>r.json()).then(c=>{
   document.getElementById('device_id').value=c.device_id||'';
   document.getElementById('project_id').value=c.project_id||'';
   document.getElementById('printer_name').value=c.printer_name||'';
+  document.getElementById('printer_addr').value=c.printer_addr||'';
   document.getElementById('printer_svc').value=c.printer_svc||'';
   document.getElementById('printer_char').value=c.printer_char||'';
   document.getElementById('device-info').textContent=
@@ -177,6 +181,7 @@ function saveConfig(){
     device_id:document.getElementById('device_id').value,
     project_id:document.getElementById('project_id').value,
     printer_name:document.getElementById('printer_name').value,
+    printer_addr:document.getElementById('printer_addr').value,
     printer_svc:document.getElementById('printer_svc').value,
     printer_char:document.getElementById('printer_char').value
   };
@@ -203,6 +208,7 @@ function selectPrinter(el,name,addr){
   document.querySelectorAll('.printer-opt').forEach(e=>e.classList.remove('selected'));
   el.classList.add('selected');
   document.getElementById('printer_name').value=name;
+  document.getElementById('printer_addr').value=addr;
 }
 
 function testPrint(){

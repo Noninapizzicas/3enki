@@ -43,10 +43,11 @@ char topicPrint[80];
 char topicPrinted[80];
 char topicStatus[80];
 
-unsigned long lastStatusMs    = 0;
-unsigned long lastReconnectMs = 0;
-uint32_t     printCount       = 0;
-uint32_t     errorCount       = 0;
+unsigned long lastStatusMs      = 0;
+unsigned long lastReconnectMs   = 0;
+unsigned long lastBleRetryMs    = 0;
+uint32_t     printCount         = 0;
+uint32_t     errorCount         = 0;
 
 uint8_t payloadBuffer[MAX_PAYLOAD_SIZE];
 
@@ -63,15 +64,16 @@ void configLoad() {
   strlcpy(cfg.mqttUser,       prefs.getString("mqttUser",    DEFAULT_MQTT_USER).c_str(),    sizeof(cfg.mqttUser));
   strlcpy(cfg.mqttPass,       prefs.getString("mqttPass",    DEFAULT_MQTT_PASS).c_str(),    sizeof(cfg.mqttPass));
   strlcpy(cfg.printerName,    prefs.getString("printerName", DEFAULT_PRINTER_NAME).c_str(), sizeof(cfg.printerName));
+  strlcpy(cfg.printerAddr,    prefs.getString("printerAddr", "").c_str(),                   sizeof(cfg.printerAddr));
   strlcpy(cfg.printerSvcUuid, prefs.getString("printerSvc",  DEFAULT_PRINTER_SVC).c_str(),  sizeof(cfg.printerSvcUuid));
   strlcpy(cfg.printerCharUuid,prefs.getString("printerChar", DEFAULT_PRINTER_CHAR).c_str(), sizeof(cfg.printerCharUuid));
   prefs.end();
 
   cfg.configured = (strlen(cfg.mqttHost) > 0 && strlen(cfg.printerName) > 0);
 
-  Serial.printf("[CFG] device=%s project=%s mqtt=%s:%d printer=%s configured=%s\n",
+  Serial.printf("[CFG] device=%s project=%s mqtt=%s:%d printer=%s addr=%s configured=%s\n",
     cfg.deviceId, cfg.projectId, cfg.mqttHost, cfg.mqttPort,
-    cfg.printerName, cfg.configured ? "SI" : "NO");
+    cfg.printerName, cfg.printerAddr, cfg.configured ? "SI" : "NO");
 }
 
 void configSave() {
@@ -83,6 +85,7 @@ void configSave() {
   prefs.putString("mqttUser",    cfg.mqttUser);
   prefs.putString("mqttPass",    cfg.mqttPass);
   prefs.putString("printerName", cfg.printerName);
+  prefs.putString("printerAddr", cfg.printerAddr);
   prefs.putString("printerSvc",  cfg.printerSvcUuid);
   prefs.putString("printerChar", cfg.printerCharUuid);
   prefs.end();
@@ -135,48 +138,17 @@ void setupWiFi() {
 // BLE — Conexion con impresora
 // ============================================
 
-bool connectPrinter() {
-  if (strlen(cfg.printerName) == 0) {
-    Serial.println("[BLE] No hay impresora configurada. Configura desde el portal web.");
-    return false;
-  }
-
-  Serial.printf("[BLE] Escaneando '%s' (%d seg)...\n", cfg.printerName, BLE_SCAN_SECONDS);
-  printerReady = false;
-
-  NimBLEScan* scan = NimBLEDevice::getScan();
-  scan->setActiveScan(true);
-  NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
-
-  NimBLEAdvertisedDevice* printer = nullptr;
-  for (int i = 0; i < results.getCount(); i++) {
-    NimBLEAdvertisedDevice dev = results.getDevice(i);
-    Serial.printf("[BLE]   Encontrado: %s (%s)\n",
-      dev.getName().c_str(), dev.getAddress().toString().c_str());
-    if (dev.getName() == cfg.printerName) {
-      printer = new NimBLEAdvertisedDevice(dev);
-      break;
-    }
-  }
-  scan->clearResults();
-
-  if (!printer) {
-    Serial.printf("[BLE] Impresora '%s' no encontrada\n", cfg.printerName);
-    return false;
-  }
-
-  Serial.printf("[BLE] Conectando a %s...\n", printer->getAddress().toString().c_str());
+bool connectPrinterByAddress(NimBLEAddress addr) {
+  Serial.printf("[BLE] Conectando directo a %s...\n", addr.toString().c_str());
 
   if (bleClient && bleClient->isConnected()) bleClient->disconnect();
   if (bleClient) NimBLEDevice::deleteClient(bleClient);
 
   bleClient = NimBLEDevice::createClient();
-  if (!bleClient->connect(printer)) {
-    Serial.println("[BLE] Fallo conexion");
-    delete printer;
+  if (!bleClient->connect(addr)) {
+    Serial.println("[BLE] Fallo conexion directa");
     return false;
   }
-  delete printer;
 
   Serial.println("[BLE] Conectado. Buscando servicio...");
 
@@ -219,6 +191,62 @@ bool connectPrinter() {
     printChar->canWriteNoResponse() ? " no-response" : " con response");
   ledBlink(3, 200);
   return true;
+}
+
+bool connectPrinter() {
+  if (strlen(cfg.printerName) == 0) {
+    Serial.println("[BLE] No hay impresora configurada. Configura desde el portal web.");
+    return false;
+  }
+
+  printerReady = false;
+
+  // 1. Si tenemos MAC guardada, intentar conexion directa (sin escaneo — rapido)
+  if (strlen(cfg.printerAddr) > 0) {
+    Serial.printf("[BLE] MAC guardada: %s — conectando directo...\n", cfg.printerAddr);
+    NimBLEAddress savedAddr(cfg.printerAddr);
+    if (connectPrinterByAddress(savedAddr)) {
+      return true;
+    }
+    Serial.println("[BLE] Conexion directa fallo, cayendo a escaneo...");
+  }
+
+  // 2. Escanear por nombre
+  Serial.printf("[BLE] Escaneando '%s' (%d seg)...\n", cfg.printerName, BLE_SCAN_SECONDS);
+
+  NimBLEScan* scan = NimBLEDevice::getScan();
+  scan->setActiveScan(true);
+  NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
+
+  NimBLEAdvertisedDevice* printer = nullptr;
+  for (int i = 0; i < results.getCount(); i++) {
+    NimBLEAdvertisedDevice dev = results.getDevice(i);
+    Serial.printf("[BLE]   Encontrado: %s (%s)\n",
+      dev.getName().c_str(), dev.getAddress().toString().c_str());
+    if (dev.getName() == cfg.printerName) {
+      printer = new NimBLEAdvertisedDevice(dev);
+      break;
+    }
+  }
+  scan->clearResults();
+
+  if (!printer) {
+    Serial.printf("[BLE] Impresora '%s' no encontrada\n", cfg.printerName);
+    return false;
+  }
+
+  // Guardar MAC en NVS para reconexion directa la proxima vez
+  String foundAddr = printer->getAddress().toString().c_str();
+  if (strcmp(cfg.printerAddr, foundAddr.c_str()) != 0) {
+    strlcpy(cfg.printerAddr, foundAddr.c_str(), sizeof(cfg.printerAddr));
+    configSave();
+    Serial.printf("[BLE] MAC guardada en NVS: %s\n", cfg.printerAddr);
+  }
+
+  NimBLEAddress addr = printer->getAddress();
+  delete printer;
+
+  return connectPrinterByAddress(addr);
 }
 
 bool sendToPrinter(const uint8_t* data, size_t len) {
@@ -275,6 +303,7 @@ void publishStatus() {
   doc["online"]         = true;
   doc["printer_ready"]  = printerReady;
   doc["printer_name"]   = cfg.printerName;
+  doc["printer_addr"]   = cfg.printerAddr;
   doc["wifi_rssi"]      = WiFi.RSSI();
   doc["ip"]             = WiFi.localIP().toString();
   doc["uptime_sec"]     = millis() / 1000;
@@ -403,6 +432,7 @@ void handleGetConfig() {
   doc["mqtt_user"]    = cfg.mqttUser;
   doc["mqtt_pass"]    = cfg.mqttPass;
   doc["printer_name"] = cfg.printerName;
+  doc["printer_addr"] = cfg.printerAddr;
   doc["printer_svc"]  = cfg.printerSvcUuid;
   doc["printer_char"] = cfg.printerCharUuid;
   doc["ip"]           = WiFi.localIP().toString();
@@ -431,6 +461,7 @@ void handlePostConfig() {
   if (doc["mqtt_user"].is<const char*>())    strlcpy(cfg.mqttUser,        doc["mqtt_user"],    sizeof(cfg.mqttUser));
   if (doc["mqtt_pass"].is<const char*>())    strlcpy(cfg.mqttPass,        doc["mqtt_pass"],    sizeof(cfg.mqttPass));
   if (doc["printer_name"].is<const char*>()) strlcpy(cfg.printerName,     doc["printer_name"], sizeof(cfg.printerName));
+  if (doc["printer_addr"].is<const char*>()) strlcpy(cfg.printerAddr,    doc["printer_addr"], sizeof(cfg.printerAddr));
   if (doc["printer_svc"].is<const char*>())  strlcpy(cfg.printerSvcUuid,  doc["printer_svc"],  sizeof(cfg.printerSvcUuid));
   if (doc["printer_char"].is<const char*>()) strlcpy(cfg.printerCharUuid, doc["printer_char"], sizeof(cfg.printerCharUuid));
 
@@ -592,9 +623,20 @@ void loop() {
     }
   }
 
-  // Check BLE
+  // Check BLE — detectar desconexion y reconectar automaticamente
   if (printerReady && bleClient && !bleClient->isConnected()) {
     Serial.println("[BLE] Impresora desconectada");
     printerReady = false;
+    lastBleRetryMs = millis();  // empezar timer de reconexion
+  }
+
+  // Auto-reconexion BLE periodica
+  if (!printerReady && cfg.configured && strlen(cfg.printerName) > 0) {
+    unsigned long now = millis();
+    if (now - lastBleRetryMs > BLE_RECONNECT_MS) {
+      lastBleRetryMs = now;
+      Serial.println("[BLE] Reintentando conexion...");
+      connectPrinter();
+    }
   }
 }

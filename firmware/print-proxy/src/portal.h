@@ -10,10 +10,18 @@
 // Config en RAM — cargada de NVS al boot
 // ============================================
 
+struct WifiEntry {
+  char ssid[33];
+  char pass[65];
+};
+
 struct PrintProxyConfig {
   // Identidad
   char deviceId[32];
   char projectId[32];
+  // WiFi — hasta 3 redes con fallback
+  WifiEntry wifi[WIFI_MAX_NETWORKS];
+  int8_t wifiActive;            // indice de la red actualmente conectada (-1 = ninguna)
   // MQTT
   char mqttHost[64];
   uint16_t mqttPort;
@@ -94,6 +102,27 @@ btn,button,.btn{display:block;width:100%;padding:12px;border:none;border-radius:
 
 <div class="status" id="status-badges"></div>
 
+<!-- WiFi — 3 redes con fallback -->
+<div class="card">
+  <h2>&#128246; WiFi (3 redes, fallback automatico)</h2>
+  <label>Red 1 (principal)</label>
+  <div class="row">
+    <div><input id="wifi_ssid1" placeholder="SSID principal"></div>
+    <div><input id="wifi_pass1" type="password" placeholder="Password"></div>
+  </div>
+  <label>Red 2 (respaldo)</label>
+  <div class="row">
+    <div><input id="wifi_ssid2" placeholder="SSID respaldo"></div>
+    <div><input id="wifi_pass2" type="password" placeholder="Password"></div>
+  </div>
+  <label>Red 3 (respaldo)</label>
+  <div class="row">
+    <div><input id="wifi_ssid3" placeholder="SSID movil/hotspot"></div>
+    <div><input id="wifi_pass3" type="password" placeholder="Password"></div>
+  </div>
+  <p style="font-size:.75em;color:#888;margin-top:8px">Si las 3 fallan se abre portal cautivo para configurar desde el movil</p>
+</div>
+
 <!-- MQTT -->
 <div class="card">
   <h2>&#9729; MQTT (Servidor)</h2>
@@ -141,6 +170,10 @@ btn,button,.btn{display:block;width:100%;padding:12px;border:none;border-radius:
 <script>
 // Cargar config actual al abrir
 fetch('/api/config').then(r=>r.json()).then(c=>{
+  for(let i=1;i<=3;i++){
+    document.getElementById('wifi_ssid'+i).value=c['wifi_ssid'+i]||'';
+    document.getElementById('wifi_pass'+i).value=c['wifi_pass'+i]||'';
+  }
   document.getElementById('mqtt_host').value=c.mqtt_host||'';
   document.getElementById('mqtt_port').value=c.mqtt_port||1883;
   document.getElementById('mqtt_user').value=c.mqtt_user||'';
@@ -152,7 +185,7 @@ fetch('/api/config').then(r=>r.json()).then(c=>{
   document.getElementById('printer_svc').value=c.printer_svc||'';
   document.getElementById('printer_char').value=c.printer_char||'';
   document.getElementById('device-info').textContent=
-    c.device_id+' / '+c.project_id+' — IP: '+c.ip+' — Up: '+c.uptime;
+    c.device_id+' / '+c.project_id+' — IP: '+c.ip+' — WiFi: '+(c.wifi_active||'?')+' — Up: '+c.uptime;
 });
 
 // Cargar status
@@ -174,6 +207,12 @@ function showMsg(txt,ok){
 
 function saveConfig(){
   const body={
+    wifi_ssid1:document.getElementById('wifi_ssid1').value,
+    wifi_pass1:document.getElementById('wifi_pass1').value,
+    wifi_ssid2:document.getElementById('wifi_ssid2').value,
+    wifi_pass2:document.getElementById('wifi_pass2').value,
+    wifi_ssid3:document.getElementById('wifi_ssid3').value,
+    wifi_pass3:document.getElementById('wifi_pass3').value,
     mqtt_host:document.getElementById('mqtt_host').value,
     mqtt_port:parseInt(document.getElementById('mqtt_port').value)||1883,
     mqtt_user:document.getElementById('mqtt_user').value,

@@ -40,12 +40,7 @@ class PromptEngine {
     this._loadBasePrompt();
     this._scanModulePrompts();
 
-    // Subscribe to chat requests
-    if (this.eventBus) {
-      this.eventBus.on('prompt.compose.request', (e) => this.onComposeRequest(e));
-      this.eventBus.on('prompt.module.request', (e) => this.onModulePromptRequest(e));
-      this.eventBus.on('prompt.list.request', (e) => this.onListRequest(e));
-    }
+    // Event subscriptions are auto-wired by the module loader from module.json
 
     this.logger.info('prompt-engine.loaded', {
       modules: this._prompts.size,
@@ -353,7 +348,7 @@ class PromptEngine {
    * Format: { request_id, conversation, project_id, include_tools, page_context, correlation_id }
    * Returns: { request_id, success, prompt } — a string prompt, not messages array.
    */
-  _handleBridgeComposeRequest(data) {
+  async _handleBridgeComposeRequest(data) {
     const { request_id, page_context, correlation_id } = data;
 
     try {
@@ -386,7 +381,7 @@ class PromptEngine {
         promptLength: prompt.length
       });
 
-      this.eventBus.emit('prompt.compose.response', {
+      await this.eventBus.emit('prompt.compose.response', {
         request_id,
         success: true,
         prompt: sections.join('\n\n'),
@@ -398,7 +393,7 @@ class PromptEngine {
         error: error.message
       });
 
-      this.eventBus.emit('prompt.compose.response', {
+      await this.eventBus.emit('prompt.compose.response', {
         request_id,
         success: false,
         error: error.message,

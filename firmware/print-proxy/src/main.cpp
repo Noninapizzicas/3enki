@@ -1,9 +1,10 @@
 /**
- * ESP32 Print Proxy v2.0 — MQTT ←→ BLE thermal printer bridge
+ * ESP32 Print Proxy v2.1 — MQTT ←→ BLE thermal printer bridge
  *
  * Flujo:
- *   1. WiFi via WiFiManager (portal cautivo desde el movil)
- *   2. Portal web en http://<ip>/ para configurar MQTT, impresora, etc.
+ *   1. WiFi multi-red (hasta 3 redes con fallback automatico)
+ *      Si ninguna conecta → portal cautivo AP para configurar desde el movil
+ *   2. Portal web en http://<ip>/ para configurar MQTT, impresora, redes WiFi
  *   3. Conecta MQTT al VPS (event-core)
  *   4. Escanea y conecta impresora BLE
  *   5. Recibe ESC/POS en base64 por MQTT → decodifica → envia por BLE
@@ -15,12 +16,13 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiManager.h>
+#include <DNSServer.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <PubSubClient.h>
 #include <NimBLEDevice.h>
 #include <ArduinoJson.h>
+#include <esp_task_wdt.h>
 #include "mbedtls/base64.h"
 #include "config.h"
 #include "portal.h"
@@ -34,6 +36,7 @@ Preferences prefs;
 WebServer webServer(PORTAL_PORT);
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
+DNSServer dnsServer;
 
 NimBLEClient*               bleClient     = nullptr;
 NimBLERemoteCharacteristic* printChar     = nullptr;
@@ -46,8 +49,11 @@ char topicStatus[80];
 unsigned long lastStatusMs      = 0;
 unsigned long lastReconnectMs   = 0;
 unsigned long lastBleRetryMs    = 0;
+unsigned long lastWifiCheckMs   = 0;
 uint32_t     printCount         = 0;
 uint32_t     errorCount         = 0;
+
+bool portalMode = false;  // true = AP captive portal activo
 
 uint8_t payloadBuffer[MAX_PAYLOAD_SIZE];
 
@@ -67,6 +73,16 @@ void configLoad() {
   strlcpy(cfg.printerAddr,    prefs.getString("printerAddr", "").c_str(),                   sizeof(cfg.printerAddr));
   strlcpy(cfg.printerSvcUuid, prefs.getString("printerSvc",  DEFAULT_PRINTER_SVC).c_str(),  sizeof(cfg.printerSvcUuid));
   strlcpy(cfg.printerCharUuid,prefs.getString("printerChar", DEFAULT_PRINTER_CHAR).c_str(), sizeof(cfg.printerCharUuid));
+
+  // Cargar las 3 redes WiFi
+  for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+    char keyS[16], keyP[16];
+    snprintf(keyS, sizeof(keyS), "wifiSsid%d", i);
+    snprintf(keyP, sizeof(keyP), "wifiPass%d", i);
+    strlcpy(cfg.wifi[i].ssid, prefs.getString(keyS, "").c_str(), sizeof(cfg.wifi[i].ssid));
+    strlcpy(cfg.wifi[i].pass, prefs.getString(keyP, "").c_str(), sizeof(cfg.wifi[i].pass));
+  }
+  cfg.wifiActive = -1;
   prefs.end();
 
   cfg.configured = (strlen(cfg.mqttHost) > 0 && strlen(cfg.printerName) > 0);
@@ -74,6 +90,10 @@ void configLoad() {
   Serial.printf("[CFG] device=%s project=%s mqtt=%s:%d printer=%s addr=%s configured=%s\n",
     cfg.deviceId, cfg.projectId, cfg.mqttHost, cfg.mqttPort,
     cfg.printerName, cfg.printerAddr, cfg.configured ? "SI" : "NO");
+  for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+    if (strlen(cfg.wifi[i].ssid) > 0)
+      Serial.printf("[CFG] WiFi[%d] = %s\n", i, cfg.wifi[i].ssid);
+  }
 }
 
 void configSave() {
@@ -88,6 +108,15 @@ void configSave() {
   prefs.putString("printerAddr", cfg.printerAddr);
   prefs.putString("printerSvc",  cfg.printerSvcUuid);
   prefs.putString("printerChar", cfg.printerCharUuid);
+
+  // Guardar las 3 redes WiFi
+  for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+    char keyS[16], keyP[16];
+    snprintf(keyS, sizeof(keyS), "wifiSsid%d", i);
+    snprintf(keyP, sizeof(keyP), "wifiPass%d", i);
+    prefs.putString(keyS, cfg.wifi[i].ssid);
+    prefs.putString(keyP, cfg.wifi[i].pass);
+  }
   prefs.end();
 
   cfg.configured = (strlen(cfg.mqttHost) > 0 && strlen(cfg.printerName) > 0);
@@ -118,20 +147,82 @@ void ledBlink(int times, int ms = 100) {
 }
 
 // ============================================
-// WiFi
+// WiFi — Multi-red con fallback y portal cautivo
 // ============================================
 
-void setupWiFi() {
-  Serial.println("[WiFi] Iniciando WiFiManager...");
-  WiFiManager wm;
-  wm.setConfigPortalTimeout(180);
-  String apName = "PrintProxy-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
-  if (!wm.autoConnect(apName.c_str())) {
-    Serial.println("[WiFi] Fallo portal cautivo, reiniciando...");
-    ESP.restart();
+// Intenta conectar a una red especifica. Retorna true si conecta.
+bool wifiTryConnect(int idx) {
+  if (idx < 0 || idx >= WIFI_MAX_NETWORKS) return false;
+  if (strlen(cfg.wifi[idx].ssid) == 0) return false;
+
+  Serial.printf("[WiFi] Intentando red %d: %s...\n", idx + 1, cfg.wifi[idx].ssid);
+  WiFi.begin(cfg.wifi[idx].ssid, cfg.wifi[idx].pass);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < WIFI_CONNECT_TIMEOUT) {
+    delay(250);
+    Serial.print(".");
   }
-  Serial.printf("[WiFi] Conectado — IP: %s\n", WiFi.localIP().toString().c_str());
-  ledBlink(2);
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    cfg.wifiActive = idx;
+    Serial.printf("[WiFi] Conectado a '%s' — IP: %s\n",
+      cfg.wifi[idx].ssid, WiFi.localIP().toString().c_str());
+    return true;
+  }
+
+  Serial.printf("[WiFi] Fallo conectar a '%s'\n", cfg.wifi[idx].ssid);
+  WiFi.disconnect();
+  return false;
+}
+
+// Cicla por las 3 redes. Retorna true si alguna conecta.
+bool wifiConnectMulti() {
+  WiFi.mode(WIFI_STA);
+  cfg.wifiActive = -1;
+
+  for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+    if (wifiTryConnect(i)) return true;
+  }
+
+  Serial.println("[WiFi] Ninguna red disponible");
+  return false;
+}
+
+// Abre portal cautivo en modo AP para configurar WiFi desde el movil
+void wifiStartPortal() {
+  portalMode = true;
+  WiFi.disconnect();
+  WiFi.mode(WIFI_AP);
+
+  String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
+  WiFi.softAP(apName.c_str());
+
+  Serial.printf("[WiFi] Portal cautivo activo — SSID: %s  IP: %s\n",
+    apName.c_str(), WiFi.softAPIP().toString().c_str());
+
+  // DNS que resuelve todo al ESP32 (captive portal)
+  dnsServer.start(53, "*", WiFi.softAPIP());
+}
+
+// Conecta WiFi o abre portal. Retorna true si conecta a una red.
+bool setupWiFi() {
+  // Verificar si hay alguna red configurada
+  bool hasNetworks = false;
+  for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+    if (strlen(cfg.wifi[i].ssid) > 0) { hasNetworks = true; break; }
+  }
+
+  if (hasNetworks && wifiConnectMulti()) {
+    portalMode = false;
+    ledBlink(2);
+    return true;
+  }
+
+  // Sin redes o todas fallaron → portal cautivo
+  wifiStartPortal();
+  return false;
 }
 
 // ============================================
@@ -305,6 +396,7 @@ void publishStatus() {
   doc["printer_name"]   = cfg.printerName;
   doc["printer_addr"]   = cfg.printerAddr;
   doc["wifi_rssi"]      = WiFi.RSSI();
+  doc["wifi_ssid"]      = (cfg.wifiActive >= 0) ? cfg.wifi[cfg.wifiActive].ssid : "";
   doc["ip"]             = WiFi.localIP().toString();
   doc["uptime_sec"]     = millis() / 1000;
   doc["print_count"]    = printCount;
@@ -376,7 +468,7 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
 void connectMQTT() {
   if (mqtt.connected()) return;
-  if (strlen(cfg.mqttHost) == 0) return;  // no configurado aun
+  if (strlen(cfg.mqttHost) == 0) return;
 
   Serial.printf("[MQTT] Conectando a %s:%d...\n", cfg.mqttHost, cfg.mqttPort);
 
@@ -407,7 +499,6 @@ void reconnectServices() {
   mqtt.setServer(cfg.mqttHost, cfg.mqttPort);
   connectMQTT();
 
-  // Intentar conectar impresora si cambio el nombre
   if (strlen(cfg.printerName) > 0 && !printerReady) {
     connectPrinter();
   }
@@ -417,8 +508,6 @@ void reconnectServices() {
 // Portal web — API endpoints
 // ============================================
 
-// Handler functions (no lambdas — evita problemas con captures en ESP32)
-
 void handleRoot() {
   webServer.send_P(200, "text/html", PORTAL_HTML);
 }
@@ -427,6 +516,17 @@ void handleGetConfig() {
   JsonDocument doc;
   doc["device_id"]    = cfg.deviceId;
   doc["project_id"]   = cfg.projectId;
+
+  // WiFi — las 3 redes
+  for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+    char keyS[16], keyP[16];
+    snprintf(keyS, sizeof(keyS), "wifi_ssid%d", i + 1);
+    snprintf(keyP, sizeof(keyP), "wifi_pass%d", i + 1);
+    doc[keyS] = cfg.wifi[i].ssid;
+    doc[keyP] = cfg.wifi[i].pass;
+  }
+  doc["wifi_active"]  = (cfg.wifiActive >= 0) ? cfg.wifi[cfg.wifiActive].ssid : "ninguna";
+
   doc["mqtt_host"]    = cfg.mqttHost;
   doc["mqtt_port"]    = cfg.mqttPort;
   doc["mqtt_user"]    = cfg.mqttUser;
@@ -435,13 +535,15 @@ void handleGetConfig() {
   doc["printer_addr"] = cfg.printerAddr;
   doc["printer_svc"]  = cfg.printerSvcUuid;
   doc["printer_char"] = cfg.printerCharUuid;
-  doc["ip"]           = WiFi.localIP().toString();
+  doc["ip"]           = portalMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  doc["portal_mode"]  = portalMode;
+
   unsigned long up = millis() / 1000;
   char upStr[32];
   snprintf(upStr, sizeof(upStr), "%luh %lum", up / 3600, (up % 3600) / 60);
   doc["uptime"] = upStr;
 
-  char buf[512];
+  char buf[768];
   serializeJson(doc, buf, sizeof(buf));
   webServer.send(200, "application/json", buf);
 }
@@ -456,18 +558,42 @@ void handlePostConfig() {
 
   if (doc["device_id"].is<const char*>())    strlcpy(cfg.deviceId,        doc["device_id"],    sizeof(cfg.deviceId));
   if (doc["project_id"].is<const char*>())   strlcpy(cfg.projectId,       doc["project_id"],   sizeof(cfg.projectId));
+
+  // WiFi — las 3 redes
+  for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+    char keyS[16], keyP[16];
+    snprintf(keyS, sizeof(keyS), "wifi_ssid%d", i + 1);
+    snprintf(keyP, sizeof(keyP), "wifi_pass%d", i + 1);
+    if (doc[keyS].is<const char*>()) strlcpy(cfg.wifi[i].ssid, doc[keyS], sizeof(cfg.wifi[i].ssid));
+    if (doc[keyP].is<const char*>()) strlcpy(cfg.wifi[i].pass, doc[keyP], sizeof(cfg.wifi[i].pass));
+  }
+
   if (doc["mqtt_host"].is<const char*>())    strlcpy(cfg.mqttHost,        doc["mqtt_host"],    sizeof(cfg.mqttHost));
   if (doc["mqtt_port"].is<int>())            cfg.mqttPort = doc["mqtt_port"];
   if (doc["mqtt_user"].is<const char*>())    strlcpy(cfg.mqttUser,        doc["mqtt_user"],    sizeof(cfg.mqttUser));
   if (doc["mqtt_pass"].is<const char*>())    strlcpy(cfg.mqttPass,        doc["mqtt_pass"],    sizeof(cfg.mqttPass));
   if (doc["printer_name"].is<const char*>()) strlcpy(cfg.printerName,     doc["printer_name"], sizeof(cfg.printerName));
-  if (doc["printer_addr"].is<const char*>()) strlcpy(cfg.printerAddr,    doc["printer_addr"], sizeof(cfg.printerAddr));
+  if (doc["printer_addr"].is<const char*>()) strlcpy(cfg.printerAddr,     doc["printer_addr"], sizeof(cfg.printerAddr));
   if (doc["printer_svc"].is<const char*>())  strlcpy(cfg.printerSvcUuid,  doc["printer_svc"],  sizeof(cfg.printerSvcUuid));
   if (doc["printer_char"].is<const char*>()) strlcpy(cfg.printerCharUuid, doc["printer_char"], sizeof(cfg.printerCharUuid));
 
   configSave();
-  reconnectServices();
 
+  // Si estamos en portal cautivo y ahora hay redes, intentar conectar
+  if (portalMode) {
+    bool hasNetworks = false;
+    for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
+      if (strlen(cfg.wifi[i].ssid) > 0) { hasNetworks = true; break; }
+    }
+    if (hasNetworks) {
+      webServer.send(200, "application/json", "{\"ok\":true,\"msg\":\"Guardado. Reiniciando para conectar WiFi...\"}");
+      delay(1000);
+      ESP.restart();
+      return;
+    }
+  }
+
+  reconnectServices();
   webServer.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -476,6 +602,7 @@ void handleGetStatus() {
   doc["wifi"]    = (WiFi.status() == WL_CONNECTED);
   doc["mqtt"]    = mqtt.connected();
   doc["printer"] = printerReady;
+  doc["portal"]  = portalMode;
 
   char buf[128];
   serializeJson(doc, buf, sizeof(buf));
@@ -565,49 +692,85 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
 
   Serial.println("\n========================================");
-  Serial.println("  ESP32 Print Proxy v2.0");
+  Serial.println("  ESP32 Print Proxy v2.1");
+  Serial.println("  Multi-WiFi + Portal Cautivo");
   Serial.println("========================================\n");
+
+  // Watchdog — reinicia si se queda colgado
+  esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
+  esp_task_wdt_add(NULL);
 
   // 1. Cargar config de NVS
   configLoad();
   buildTopics();
 
-  // 2. WiFi (portal cautivo si no hay credenciales guardadas)
-  setupWiFi();
+  // 2. WiFi multi-red o portal cautivo
+  bool wifiOk = setupWiFi();
 
-  // 3. Portal web de configuracion
+  // 3. BLE + Portal web (siempre disponible, en STA o AP mode)
   NimBLEDevice::init("PrintProxy");
   portalSetup();
   webServer.begin();
-  Serial.printf("[WEB] Portal en http://%s/\n", WiFi.localIP().toString().c_str());
 
-  // 4. MQTT (solo si esta configurado)
-  mqtt.setCallback(onMqttMessage);
-  mqtt.setBufferSize(MAX_PAYLOAD_SIZE + 256);
-  if (cfg.configured) {
-    mqtt.setServer(cfg.mqttHost, cfg.mqttPort);
-    connectMQTT();
-
-    // 5. Impresora BLE
-    if (!connectPrinter()) {
-      Serial.println("[BLE] Impresora no disponible. Configura desde el portal web.");
-    }
+  if (portalMode) {
+    Serial.printf("[WEB] Portal cautivo en http://%s/\n", WiFi.softAPIP().toString().c_str());
+    Serial.println("[!] Conectate al AP 'PrintProxy-XXXX' y abre el portal para configurar WiFi");
   } else {
-    Serial.println("\n[!] No configurado. Abre el portal web para configurar:");
-    Serial.printf("    http://%s/\n\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[WEB] Portal en http://%s/\n", WiFi.localIP().toString().c_str());
+
+    // 4. MQTT (solo si esta configurado y hay WiFi)
+    mqtt.setCallback(onMqttMessage);
+    mqtt.setBufferSize(MAX_PAYLOAD_SIZE + 256);
+    if (cfg.configured) {
+      mqtt.setServer(cfg.mqttHost, cfg.mqttPort);
+      connectMQTT();
+
+      // 5. Impresora BLE
+      if (!connectPrinter()) {
+        Serial.println("[BLE] Impresora no disponible. Configura desde el portal web.");
+      }
+    } else {
+      Serial.println("\n[!] No configurado. Abre el portal web para configurar:");
+      Serial.printf("    http://%s/\n\n", WiFi.localIP().toString().c_str());
+    }
   }
 
   Serial.println("[READY] Print Proxy operativo\n");
 }
 
 void loop() {
+  // Watchdog feed
+  esp_task_wdt_reset();
+
+  // DNS para captive portal (solo en modo AP)
+  if (portalMode) {
+    dnsServer.processNextRequest();
+  }
+
   // Servir portal web
   webServer.handleClient();
 
-  // MQTT
+  // Si estamos en modo portal, no hay nada mas que hacer
+  if (portalMode) return;
+
+  // --- WiFi monitoring ---
+  unsigned long now = millis();
+  if (now - lastWifiCheckMs > WIFI_CHECK_INTERVAL) {
+    lastWifiCheckMs = now;
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[WiFi] Desconectado, reconectando...");
+      if (!wifiConnectMulti()) {
+        Serial.println("[WiFi] Todas las redes fallaron. Reiniciando en 10s...");
+        delay(10000);
+        ESP.restart();
+      }
+    }
+  }
+
+  // --- MQTT ---
   if (cfg.configured) {
     if (!mqtt.connected()) {
-      unsigned long now = millis();
+      now = millis();
       if (now - lastReconnectMs > 5000) {
         lastReconnectMs = now;
         connectMQTT();
@@ -616,23 +779,22 @@ void loop() {
     mqtt.loop();
 
     // Status periodico
-    unsigned long now = millis();
+    now = millis();
     if (now - lastStatusMs > STATUS_INTERVAL_MS) {
       lastStatusMs = now;
       if (mqtt.connected()) publishStatus();
     }
   }
 
-  // Check BLE — detectar desconexion y reconectar automaticamente
+  // --- BLE — detectar desconexion y reconectar ---
   if (printerReady && bleClient && !bleClient->isConnected()) {
     Serial.println("[BLE] Impresora desconectada");
     printerReady = false;
-    lastBleRetryMs = millis();  // empezar timer de reconexion
+    lastBleRetryMs = millis();
   }
 
-  // Auto-reconexion BLE periodica
   if (!printerReady && cfg.configured && strlen(cfg.printerName) > 0) {
-    unsigned long now = millis();
+    now = millis();
     if (now - lastBleRetryMs > BLE_RECONNECT_MS) {
       lastBleRetryMs = now;
       Serial.println("[BLE] Reintentando conexion...");

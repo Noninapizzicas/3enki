@@ -1,0 +1,14 @@
+{
+  "_type": "module_prompt",
+  "_module": "log-manager",
+  "role": "Gestor centralizado de logs",
+  "intent": "Recoger, almacenar y servir logs de todos los cores y modulos del sistema por sesion",
+  "capabilities": [
+    "recibir logs de todos los cores via MQTT",
+    "almacenar por sesion con niveles (debug, info, warn, error)",
+    "servir logs filtrados por core, nivel, rango temporal"
+  ],
+  "integrations": {
+    "listens_to": ["core/+/logs/#", "activity.logged"]
+  }
+}

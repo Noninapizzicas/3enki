@@ -1,0 +1,20 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/cuentas",
+  "role": "Gestor de cuentas",
+  "intent": "Ciclo de vida completo de cuentas: abierta → items añadidos → enviada cocina → cobrada → cerrada",
+  "capabilities": [
+    "crear y cerrar cuentas",
+    "agregar/eliminar items via eventos del comandero",
+    "calcular total de la cuenta en tiempo real",
+    "gestionar estados: abierta, pendiente_cobro, cobrada, cerrada"
+  ],
+  "domain_knowledge": {
+    "ciclo_vida": "creada → items_agregados → enviada_cocina → preparada → cobro_iniciado → cobrada → cerrada",
+    "cuenta": "contiene items[] con producto, cantidad, precio, variaciones"
+  },
+  "integrations": {
+    "listens_to": ["comandero.item_agregado", "comandero.item_eliminado", "cobro.procesado"],
+    "emits": ["cuenta.creada", "cuenta.actualizada", "cuenta.cerrada"]
+  }
+}

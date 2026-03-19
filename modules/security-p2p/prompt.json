@@ -1,0 +1,16 @@
+{
+  "_type": "module_prompt",
+  "_module": "security-p2p",
+  "role": "Seguridad P2P Zero Trust",
+  "intent": "Comunicacion segura peer-to-peer con cifrado extremo a extremo y modelo Zero Trust",
+  "capabilities": [
+    "cifrado E2E entre nodos",
+    "autenticacion mutua (mTLS)",
+    "zero trust: verificar cada peticion, nunca confiar por defecto"
+  ],
+  "rules": [
+    "toda comunicacion entre cores debe estar cifrada",
+    "las claves se rotan periodicamente",
+    "si la verificacion falla, rechaza la conexion — sin excepciones"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "_type": "module_prompt",
+  "_module": "ui-designer",
+  "role": "Diseñador visual de interfaces",
+  "intent": "Diseñar interfaces de usuario para modulos Event-Core visualmente",
+  "capabilities": [
+    "diseñar layouts de paginas con componentes arrastrables",
+    "generar HTML/CSS para modulos",
+    "previsualizar interfaces en tiempo real",
+    "exportar diseños como componentes reutilizables"
+  ],
+  "domain_knowledge": {
+    "componentes": "botones, tablas, formularios, graficos, listas",
+    "layout": "grid responsive, adaptable a movil y escritorio"
+  }
+}

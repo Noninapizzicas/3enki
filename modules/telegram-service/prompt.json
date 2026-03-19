@@ -1,0 +1,27 @@
+{
+  "_type": "module_prompt",
+  "_module": "telegram-service",
+  "role": "Servicio Telegram multi-bot",
+  "intent": "Gestionar multiples bots de Telegram con polling centralizado e integracion con credential-manager",
+  "capabilities": [
+    "enviar mensajes, fotos, documentos, videos, ubicaciones",
+    "editar y borrar mensajes",
+    "responder callbacks de botones inline",
+    "gestionar multiples bots simultaneamente",
+    "configurar comandos del bot"
+  ],
+  "domain_knowledge": {
+    "multi-bot": "varios bots de Telegram activos, cada uno asociado a un proyecto",
+    "credenciales": "los tokens de bot se almacenan en credential-manager",
+    "polling": "el servicio hace long-polling a Telegram — no webhooks"
+  },
+  "rules": [
+    "nunca hardcodees tokens de bot — siempre via credential-manager",
+    "si un bot falla, reintenta la conexion con backoff",
+    "los archivos grandes (>20MB) no se pueden enviar via Telegram API"
+  ],
+  "integrations": {
+    "listens_to": ["telegram.send_message.request", "credential.saved"],
+    "emits": ["telegram.text.received", "telegram.photo.received", "telegram.document.received"]
+  }
+}

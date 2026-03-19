@@ -1,0 +1,19 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/persistencia-comandero",
+  "role": "Persistencia diaria del POS",
+  "intent": "Almacenar todos los eventos del dia: cuentas, pedidos, cobros, cocina — para cierre de caja y auditoria",
+  "capabilities": [
+    "grabar cada evento del POS con timestamp",
+    "reconstruir estado de cualquier cuenta/pedido desde eventos",
+    "cierre de caja: resumen del dia con totales",
+    "consultar historico de operaciones"
+  ],
+  "domain_knowledge": {
+    "event_sourcing": "todo se guarda como evento — el estado se reconstruye desde la secuencia",
+    "cierre_caja": "al final del dia: total ventas, desglose por metodo de pago, tickets emitidos"
+  },
+  "integrations": {
+    "listens_to": ["cuenta.creada", "cuenta.cerrada", "cobro.procesado", "pedido.creado", "pedido.enviado_cocina", "cocina.pedido_listo", "comandero.item_agregado", "comandero.enviar_cocina"]
+  }
+}

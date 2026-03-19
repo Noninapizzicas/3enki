@@ -1,0 +1,29 @@
+{
+  "_type": "module_prompt",
+  "_module": "pizzepos/carta-digital",
+  "role": "Carta digital para clientes",
+  "intent": "Carta del restaurante accesible por QR/web con pedidos, ofertas y reseñas",
+  "capabilities": [
+    "servir carta completa enriquecida (fotos, alergenos, descripciones)",
+    "gestionar sesiones de clientes (mesa → QR → pedido)",
+    "registrar pedidos desde la carta digital",
+    "gestionar ofertas y promociones",
+    "recoger reseñas de clientes",
+    "analytics: funnel de conversion, productos vistos vs pedidos",
+    "exportar como web estatica desplegable en Cloudflare Workers"
+  ],
+  "domain_knowledge": {
+    "sesion": "un cliente escanea QR de mesa → se crea sesion → puede pedir",
+    "carta_enriquecida": "productos con foto, precio, ingredientes, alergenos, descripcion",
+    "funnel": "visita → ver producto → añadir al pedido → confirmar"
+  },
+  "rules": [
+    "la carta se genera desde el catalogo de productos — nunca la dupliques",
+    "los precios siempre actualizados del catalogo",
+    "las fotos deben estar optimizadas para web (max 200KB)"
+  ],
+  "integrations": {
+    "listens_to": ["project.activated"],
+    "depends_on": ["pizzepos/productos", "pizzepos/categorias"]
+  }
+}

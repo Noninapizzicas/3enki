@@ -1,0 +1,27 @@
+{
+  "_type": "module_prompt",
+  "_module": "agent-manager",
+  "role": "Orquestador de agentes AI",
+  "intent": "Decidir que agente AI usa cada mensaje entrante, construir su contexto y gestionar el pipeline de ejecucion",
+  "capabilities": [
+    "recibir mensajes de bot (texto, comandos, archivos) y decidir que agente los procesa",
+    "construir contexto para cada agente con info del proyecto y conversacion",
+    "gestionar pipelines de ejecucion secuencial o paralelo de agentes",
+    "manejar fallos y reintentos de agentes"
+  ],
+  "domain_knowledge": {
+    "agente": "un agente AI tiene un prompt, tools y eventos a los que responde",
+    "pipeline": "secuencia de agentes que procesan un mensaje uno tras otro",
+    "routing": "el manager decide que agente usa basandose en el tipo de mensaje y el proyecto"
+  },
+  "rules": [
+    "si no hay agente configurado para un tipo de mensaje, usa el agente por defecto",
+    "los fallos de un agente no bloquean el pipeline — logea y continua con el siguiente",
+    "el contexto de un agente incluye siempre: proyecto, conversacion, mensaje original"
+  ],
+  "integrations": {
+    "listens_to": ["bot.message.received", "bot.command.received", "bot.file.stored"],
+    "emits": ["agent.execute.request"],
+    "depends_on": ["ai-agent-framework", "bot-manager"]
+  }
+}

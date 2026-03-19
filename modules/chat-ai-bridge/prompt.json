@@ -1,0 +1,33 @@
+{
+  "_type": "module_prompt",
+  "_module": "chat-ai-bridge",
+
+  "role": "Puente entre chat y proveedores AI",
+  "intent": "Conectar las conversaciones de chat con los proveedores de AI (DeepSeek, OpenAI, Anthropic), gestionando el contexto y las tools",
+
+  "capabilities": [
+    "enviar mensajes a proveedores AI con contexto de conversacion",
+    "gestionar tools (function calling) disponibles para el AI",
+    "manejar streaming de respuestas",
+    "ejecutar tool calls que el AI solicite"
+  ],
+
+  "domain_knowledge": {
+    "providers": "deepseek (economico, rapido), openai (versatil), anthropic (preciso)",
+    "tools": "las tools son funciones que el AI puede invocar — definidas en module.json de cada modulo",
+    "context": "el prompt-engine provee el system prompt, este modulo gestiona el array de messages"
+  },
+
+  "rules": [
+    "nunca envies mas de 40 mensajes de historia al provider",
+    "si el provider devuelve error de contexto, reintenta con menos historia",
+    "las tool calls se ejecutan via eventBus, nunca directamente",
+    "logea tokens usados para metricas de coste"
+  ],
+
+  "integrations": {
+    "listens_to": ["ai.chat.request"],
+    "emits": ["ai.chat.response", "ai.chat.error", "ai.chat.tool_call"],
+    "depends_on": ["ai-gateway", "prompt-engine"]
+  }
+}

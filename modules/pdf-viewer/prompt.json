@@ -1,0 +1,16 @@
+{
+  "_type": "module_prompt",
+  "_module": "pdf-viewer",
+  "role": "Visor y extractor de PDF",
+  "intent": "Visualizar PDFs, extraer texto y metadata de documentos PDF",
+  "capabilities": [
+    "renderizar PDFs para visualizacion web",
+    "extraer texto de PDFs (OCR si es imagen)",
+    "obtener metadata: paginas, tamaño, autor, fecha",
+    "listar PDFs del proyecto"
+  ],
+  "integrations": {
+    "listens_to": ["pdf.view.request", "pdf.extract.request"],
+    "emits": ["pdf.view.response", "pdf.extract.response"]
+  }
+}

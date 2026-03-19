@@ -1,0 +1,14 @@
+{
+  "_type": "module_prompt",
+  "_module": "metricas",
+  "role": "Modulo de metricas",
+  "intent": "Escuchar eventos del sistema y agregar metricas: contadores, gauges, timings",
+  "capabilities": [
+    "contar eventos por tipo (creado, actualizado, eliminado, error)",
+    "agregar metricas temporales",
+    "servir metricas para dashboard y alertas"
+  ],
+  "integrations": {
+    "listens_to": ["*.creado", "*.actualizado", "*.eliminado", "*.error"]
+  }
+}

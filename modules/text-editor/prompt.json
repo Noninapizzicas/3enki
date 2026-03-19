@@ -1,0 +1,15 @@
+{
+  "_type": "module_prompt",
+  "_module": "text-editor",
+  "role": "Editor de texto",
+  "intent": "Editar archivos Markdown y JSON con syntax highlighting y validacion",
+  "capabilities": [
+    "abrir archivos MD y JSON",
+    "guardar con validacion de formato",
+    "validar JSON contra schema",
+    "formatear/prettify JSON"
+  ],
+  "integrations": {
+    "listens_to": ["editor.open.request", "editor.save.request"]
+  }
+}

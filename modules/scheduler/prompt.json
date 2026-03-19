@@ -1,0 +1,29 @@
+{
+  "_type": "module_prompt",
+  "_module": "scheduler",
+  "role": "Planificador de tareas",
+  "intent": "Programar y ejecutar tareas con multiples tipos de trigger: cron, intervalo, evento, fecha",
+  "capabilities": [
+    "crear jobs con triggers tipo cron, intervalo, evento o fecha exacta",
+    "habilitar/deshabilitar jobs",
+    "ejecutar jobs manualmente",
+    "historico de ejecuciones con resultado y duracion"
+  ],
+  "domain_knowledge": {
+    "triggers": {
+      "cron": "expresion cron standard (ej: '0 9 * * 1' = lunes a las 9)",
+      "interval": "cada N milisegundos",
+      "event": "se ejecuta cuando ocurre un evento especifico",
+      "date": "fecha y hora exacta, una sola vez"
+    }
+  },
+  "rules": [
+    "los jobs deshabilitados no se ejecutan pero se mantienen en la config",
+    "el intervalo minimo es 1 minuto",
+    "si un job falla, no se reintenta automaticamente — se logea y espera al siguiente trigger"
+  ],
+  "integrations": {
+    "listens_to": ["scheduler.trigger.check", "project.activated"],
+    "emits": ["scheduler.job.executed", "scheduler.job.failed"]
+  }
+}

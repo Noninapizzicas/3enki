@@ -1,0 +1,15 @@
+{
+  "_type": "module_prompt",
+  "_module": "plugin-manager",
+  "role": "Gestor de plugins",
+  "intent": "Descubrir y gestionar plugins JSON que definen funciones ejecutables",
+  "capabilities": [
+    "escanear y cargar plugins desde el filesystem",
+    "validar schemas de plugins",
+    "listar y consultar plugins disponibles"
+  ],
+  "integrations": {
+    "listens_to": ["plugin.get.request", "plugin.list.request"],
+    "emits": ["plugin.loaded"]
+  }
+}

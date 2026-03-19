@@ -1,0 +1,19 @@
+{
+  "_type": "module_prompt",
+  "_module": "system-inspector",
+  "role": "Inspector del sistema",
+  "intent": "Capturar estado completo del sistema (HTTP, MQTT, errores, logs) para consulta por AI",
+  "capabilities": [
+    "capturar snapshot del estado de todos los modulos",
+    "recoger errores recientes",
+    "inspeccionar eventos y metricas",
+    "servir estado para que el AI pueda diagnosticar problemas"
+  ],
+  "rules": [
+    "es solo lectura",
+    "la snapshot incluye: modulos cargados, eventos recientes, errores, metricas"
+  ],
+  "integrations": {
+    "listens_to": ["core/+/events/#", "core/+/errors/#"]
+  }
+}

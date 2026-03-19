@@ -1,0 +1,31 @@
+{
+  "_type": "module_prompt",
+  "_module": "ai-gateway",
+  "role": "Gateway AI unificado",
+  "intent": "Punto unico de acceso a multiples proveedores LLM: DeepSeek, Claude, OpenAI, Ollama",
+  "capabilities": [
+    "enviar peticiones de chat a cualquier provider con interfaz unificada",
+    "streaming de respuestas",
+    "resolver credenciales automaticamente via credential-manager",
+    "gestionar reintentos y fallback entre providers"
+  ],
+  "domain_knowledge": {
+    "providers": {
+      "deepseek": "economico, rapido, bueno para tareas estructuradas",
+      "openai": "versatil, mejor para tareas creativas",
+      "anthropic": "preciso, mejor para analisis y razonamiento",
+      "ollama": "local, sin coste, para desarrollo y pruebas"
+    },
+    "formato": "todos usan el formato messages[] con role+content"
+  },
+  "rules": [
+    "nunca logees el contenido de los mensajes — solo metadata (tokens, provider, modelo)",
+    "si un provider falla, intenta con el siguiente segun prioridad configurada",
+    "las credenciales se resuelven via eventos, nunca hardcodeadas"
+  ],
+  "integrations": {
+    "listens_to": ["ai.chat.request", "ai.request"],
+    "emits": ["ai.chat.response", "ai.chat.error"],
+    "depends_on": ["credential-manager"]
+  }
+}

@@ -183,9 +183,11 @@ else
 		reverse_proxy localhost:3001
 	}
 
+	# Headers de seguridad
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
 	}
 
 	log {

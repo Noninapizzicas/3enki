@@ -227,10 +227,6 @@ sudo tee "$CADDY_CONFIG" > /dev/null << EOF
 # Caddy obtiene HTTPS automáticamente via Let's Encrypt
 
 $DOMAIN {
-	# Frontend - archivos estáticos del build de SvelteKit
-	root * /srv/event-core/frontend/build
-	file_server
-
 	# API REST → event-core HTTP gateway
 	handle /modules/* {
 		reverse_proxy localhost:3000
@@ -240,7 +236,11 @@ $DOMAIN {
 		reverse_proxy localhost:3000
 	}
 
-	handle /api/* {
+	handle /stats {
+		reverse_proxy localhost:3000
+	}
+
+	handle /ui/* {
 		reverse_proxy localhost:3000
 	}
 
@@ -249,8 +249,20 @@ $DOMAIN {
 		reverse_proxy localhost:9001
 	}
 
-	# SPA fallback: rutas que no matchean archivos → index.html
-	try_files {path} /index.html
+	# Frontend - archivos estáticos del build de SvelteKit
+	# SPA fallback dentro de handle para no interferir con rutas API
+	handle {
+		root * /srv/event-core/frontend/build
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Headers de seguridad
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
 
 	# Logs
 	log {

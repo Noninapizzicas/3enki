@@ -672,28 +672,40 @@
     },
 
     "impresion": {
-      "version": "1.1.0",
-      "descripcion": "Impresión de comandas de cocina via impresora térmica Bluetooth (58mm NETUM / 80mm). Sin precios — solo info relevante para cocina. Formato ESC/POS.",
+      "version": "3.0.0",
+      "descripcion": "Formateo ESC/POS y envío DIRECTO a impresoras ESP32 via MQTT. Autodescubrimiento. Sin capas intermedias.",
       "ui_domain": "impresion",
-      "uiHandlers": ["ticket", "conectar", "estado", "historial", "health", "metrics"],
-      "eventos_publica": ["impresion.comanda_generada", "impresion.error", "impresion.raw"],
-      "eventos_suscribe": ["pedido.enviado_cocina"],
-      "transporte": {
-        "modos": ["dispositivo (/dev/rfcomm0)", "rfcomm (MAC + canal)", "comando (shell)", "TCP (host:puerto)"],
-        "entorno": "Termux en Android con Bluetooth",
-        "auto_reconnect": "Si desconectado al imprimir, intenta reconectar una vez"
+      "uiHandlers": ["ticket", "ticket-venta", "estado", "historial", "health", "metrics", "impresoras"],
+      "eventos_publica": ["impresion.comanda_generada", "impresion.error", "impresion.ticket_venta_generado", "impresion.ticket_pieza_generado"],
+      "eventos_suscribe": ["pedido.enviado_cocina", "cocina.item_ticket"],
+      "envio_mqtt_directo": {
+        "topic_print": "impresion/{project}/print/{device} ← ESC/POS base64",
+        "topic_status": "impresion/+/status/+ → autodescubrimiento de ESP32",
+        "payload": "{ job_id, data: base64 }",
+        "nota": "Publica directo via mqtt.publish() — NO usa perifericos ni provider ni transport"
+      },
+      "autodescubrimiento": {
+        "escucha": "impresion/+/status/+",
+        "mantiene": "Map de impresoras con: device_id, project_id, online, printer_ready, printer_name, printer_addr, ancho, wifi_rssi, ip, uptime, last_seen",
+        "handleListarImpresoras": "Devuelve impresoras descubiertas en tiempo real"
       },
       "formateador": {
         "anchos": { "58mm": 32, "80mm": 42 },
-        "secciones": ["Header COMANDA", "Ref mesa/canal", "Hora/Fecha", "Items con variaciones", "Notas", "Footer", "Corte parcial"],
+        "tipos_ticket": ["comanda (cocina, sin precios)", "ticket_venta (cliente, con precios+IVA)", "ticket_pieza (individual por item)"],
         "items_formatea": ["cantidad + nombre", "mitad-mitad (IZQ/DER)", "ingredientes (+)", "variaciones (SIN/CON)", "notas (>> texto)"]
+      },
+      "config": {
+        "ancho": "58mm",
+        "project_id": "nonina",
+        "destino_default": "cocina-1"
       },
       "frontend": {
         "store": "frontend/src/lib/stores/impresion.ts",
         "ui_module": "frontend/src/lib/modules/impresion/ — work-bar, routes: ['/comandero']",
-        "panel": "ImpresionPanel.svelte — conectar, estado, historial, reimprimir"
+        "panel": "ImpresionPanel.svelte — estado, historial, reimprimir, selección impresora"
       },
-      "relacion_cocina": "COMPLEMENTARIO — impresión genera ticket físico (snapshot), pantalla cocina muestra cola digital (estado vivo). Ambos escuchan pedido.enviado_cocina."
+      "relacion_cocina": "COMPLEMENTARIO — impresión genera ticket físico (snapshot), pantalla cocina muestra cola digital (estado vivo). Ambos escuchan pedido.enviado_cocina.",
+      "relacion_perifericos": "INDEPENDIENTE — impresion v3.0 NO usa perifericos. Publica MQTT directo al ESP32."
     },
 
     "carta-impresion": {

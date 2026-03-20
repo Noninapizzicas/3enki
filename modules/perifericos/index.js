@@ -563,8 +563,9 @@ class PerifericosModule {
     try {
       await mqtt.subscribe('esp32/+/status');
       await mqtt.subscribe('periferico/+/status');
+      await mqtt.subscribe('impresion/+/status/+');
       this.logger.info('perifericos.autodiscovery.iniciado', {
-        topics: ['esp32/+/status', 'periferico/+/status']
+        topics: ['esp32/+/status', 'periferico/+/status', 'impresion/+/status/+']
       });
     } catch (err) {
       this.logger.warn('perifericos.autodiscovery.subscribe_error', {
@@ -584,17 +585,19 @@ class PerifericosModule {
   /**
    * Procesa mensajes MQTT de descubrimiento.
    * Patterns:
-   *   esp32/{deviceId}/status     → { ip, firmware, capacidades?, tipo?, nombre? }
-   *   periferico/{deviceId}/status → { online, capacidades?, tipo? }
+   *   esp32/{deviceId}/status              → { ip, firmware, capacidades?, tipo?, nombre? }
+   *   periferico/{deviceId}/status          → { online, capacidades?, tipo? }
+   *   impresion/{projectId}/status/{deviceId} → { device_id, online, printer_ready, ip, ... }
    */
   async _handleDiscoveryMessage(topic, payload) {
     // Solo procesar topics de discovery
     const esp32Match = topic.match(/^esp32\/([^/]+)\/status$/);
     const perifMatch = topic.match(/^periferico\/([^/]+)\/status$/);
+    const impresionMatch = topic.match(/^impresion\/([^/]+)\/status\/([^/]+)$/);
 
-    if (!esp32Match && !perifMatch) return;
+    if (!esp32Match && !perifMatch && !impresionMatch) return;
 
-    const deviceId = (esp32Match || perifMatch)[1];
+    const deviceId = impresionMatch ? impresionMatch[2] : (esp32Match || perifMatch)[1];
     let data;
 
     try {
@@ -609,23 +612,33 @@ class PerifericosModule {
     const registry = this.provider._getRegistry();
     if (!registry) return;
 
-    const existente = registry.obtener(deviceId);
+    // Buscar por deviceId o por nombre del payload (el firmware envía device_id)
+    const nombrePayload = data.nombre || data.name || data.device_id;
+    const existente = registry.obtener(deviceId) || (nombrePayload && registry.obtener(nombrePayload));
 
     if (existente) {
       // Ya registrado — actualizar estado a online
-      registry.actualizarEstado(deviceId, 'online');
+      registry.actualizarEstado(existente.nombre, 'online');
       return;
     }
 
     // Auto-registrar nuevo dispositivo
     const capacidades = data.capacidades || data.capabilities || ['imprimir'];
     const tipo = data.tipo || data.type || 'impresora-termica';
-    const nombre = data.nombre || data.name || deviceId;
+    const nombre = data.nombre || data.name || data.device_id || deviceId;
+    const source = impresionMatch ? 'impresion/status'
+                 : esp32Match ? 'esp32/status'
+                 : 'periferico/status';
 
     this.logger.info('perifericos.autodiscovery.nuevo_dispositivo', {
-      deviceId, nombre, tipo, capacidades,
-      source: esp32Match ? 'esp32/status' : 'periferico/status'
+      deviceId, nombre, tipo, capacidades, source
     });
+
+    // Para impresion/+/status/+, el projectId va en la config del transporte
+    const transporteConfig = { esp32_device_id: deviceId };
+    if (impresionMatch) {
+      transporteConfig.project_id = impresionMatch[1];
+    }
 
     try {
       await this.provider.register({
@@ -634,11 +647,13 @@ class PerifericosModule {
         capacidades,
         transporte: {
           tipo: 'esp32-proxy',
-          config: { esp32_device_id: deviceId }
+          config: transporteConfig
         },
         metadata: {
           ip: data.ip || null,
           firmware: data.firmware || null,
+          printer_name: data.printer_name || null,
+          printer_addr: data.printer_addr || null,
           auto_descubierto: true,
           descubierto_at: new Date().toISOString()
         },

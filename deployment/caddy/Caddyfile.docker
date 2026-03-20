@@ -4,10 +4,6 @@
 # en vez de localhost (core:3000 en vez de localhost:3000)
 
 {$DOMAIN:localhost} {
-	# Frontend - archivos estáticos
-	root * /srv/frontend
-	file_server
-
 	# API REST → event-core container
 	handle /modules/* {
 		reverse_proxy core:3000
@@ -17,11 +13,30 @@
 		reverse_proxy core:3000
 	}
 
+	handle /stats {
+		reverse_proxy core:3000
+	}
+
+	handle /ui/* {
+		reverse_proxy core:3000
+	}
+
 	# MQTT WebSocket → broker en container
 	handle /mqtt {
 		reverse_proxy core:9001
 	}
 
-	# SPA fallback
-	try_files {path} /index.html
+	# Frontend - archivos estáticos con SPA fallback
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Headers de seguridad
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
 }

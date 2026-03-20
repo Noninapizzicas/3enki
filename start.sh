@@ -249,20 +249,43 @@ start_frontend() {
 start_production() {
     log_info "Iniciando servicios de producción (systemd)..."
 
-    # Verificar que el setup se haya ejecutado
-    if ! systemctl list-unit-files event-core.service &>/dev/null; then
-        log_error "Servicio event-core.service no encontrado."
-        log_info "Ejecuta primero: ./setup-vps.sh"
+    # Detectar qué servicio backend está instalado (enki o event-core)
+    local backend_service=""
+    local frontend_service=""
+    if systemctl list-unit-files enki.service 2>/dev/null | grep -q 'enki.service'; then
+        backend_service="enki"
+        # deployment/vps-setup.sh también crea enki-frontend.service
+        if systemctl list-unit-files enki-frontend.service 2>/dev/null | grep -q 'enki-frontend.service'; then
+            frontend_service="enki-frontend"
+        fi
+    elif systemctl list-unit-files event-core.service 2>/dev/null | grep -q 'event-core.service'; then
+        backend_service="event-core"
+    else
+        log_error "No se encontró servicio systemd (enki.service ni event-core.service)."
+        log_info "Ejecuta primero: ./setup-vps.sh o deployment/vps-setup.sh"
         return 1
     fi
 
-    # Iniciar event-core
-    sudo systemctl start event-core
+    log_info "Servicio backend detectado: ${backend_service}.service"
+
+    # Iniciar backend
+    sudo systemctl start "$backend_service"
     sleep 2
-    if systemctl is-active --quiet event-core; then
-        log_success "event-core activo"
+    if systemctl is-active --quiet "$backend_service"; then
+        log_success "$backend_service activo"
     else
-        log_error "event-core falló. Ver: journalctl -u event-core -n 20"
+        log_error "$backend_service falló. Ver: journalctl -u $backend_service -n 20"
+    fi
+
+    # Iniciar frontend (si existe como servicio separado)
+    if [ -n "$frontend_service" ]; then
+        sudo systemctl start "$frontend_service"
+        sleep 2
+        if systemctl is-active --quiet "$frontend_service"; then
+            log_success "$frontend_service activo"
+        else
+            log_error "$frontend_service falló. Ver: journalctl -u $frontend_service -n 20"
+        fi
     fi
 
     # Iniciar Caddy
@@ -318,17 +341,34 @@ show_status() {
         echo -e "  ${YELLOW}●${NC} Frontend: No iniciado"
     fi
 
-    # Servicios de producción (systemd)
-    if systemctl list-unit-files event-core.service &>/dev/null 2>&1; then
+    # Servicios de producción (systemd) - detectar enki o event-core
+    local backend_svc=""
+    if systemctl list-unit-files enki.service 2>/dev/null | grep -q 'enki.service'; then
+        backend_svc="enki"
+    elif systemctl list-unit-files event-core.service 2>/dev/null | grep -q 'event-core.service'; then
+        backend_svc="event-core"
+    fi
+
+    if [ -n "$backend_svc" ]; then
         echo ""
         echo -e "  ${BLUE}── Producción (systemd) ──${NC}"
-        local ec_status=$(systemctl is-active event-core 2>/dev/null || echo "no instalado")
+        local ec_status=$(systemctl is-active "$backend_svc" 2>/dev/null || echo "no instalado")
         local caddy_status=$(systemctl is-active caddy 2>/dev/null || echo "no instalado")
 
         if [ "$ec_status" = "active" ]; then
-            echo -e "  ${GREEN}●${NC} event-core: activo (systemd)"
+            echo -e "  ${GREEN}●${NC} $backend_svc: activo (systemd)"
         else
-            echo -e "  ${YELLOW}●${NC} event-core: $ec_status"
+            echo -e "  ${YELLOW}●${NC} $backend_svc: $ec_status"
+        fi
+
+        # Frontend separado (deployment/vps-setup.sh crea enki-frontend.service)
+        if systemctl list-unit-files enki-frontend.service 2>/dev/null | grep -q 'enki-frontend.service'; then
+            local fe_status=$(systemctl is-active enki-frontend 2>/dev/null || echo "no instalado")
+            if [ "$fe_status" = "active" ]; then
+                echo -e "  ${GREEN}●${NC} enki-frontend: activo (systemd)"
+            else
+                echo -e "  ${YELLOW}●${NC} enki-frontend: $fe_status"
+            fi
         fi
 
         if [ "$caddy_status" = "active" ]; then

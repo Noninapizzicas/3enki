@@ -727,6 +727,7 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
+      project_id: pedido.project_id || null,
       items: pedido.items.map(item => {
         const mapped = {
           item_id: item.item_id,

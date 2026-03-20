@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-03-07",
+  "_updated": "2026-03-20",
   "mejoras": [
     {
       "id": "pantallas-cocina",
@@ -20,11 +20,12 @@
     },
     {
       "id": "sistema-impresion-multi-destino",
-      "titulo": "Sistema de impresión multi-destino con ESP32 como proxy local",
+      "titulo": "Sistema de impresión multi-destino con ESP32 como nodo MQTT directo",
       "prioridad": "alta",
-      "estado": "pendiente",
+      "estado": "parcial",
       "fecha_propuesta": "2026-03-05",
-      "descripcion": "Ampliar el módulo impresion para soportar múltiples impresoras (cocina, caja, barra) con routing por tipo de documento. ESP32 como proxy local entre VPS y impresoras en red local de la pizzería.",
+      "fecha_parcial": "2026-03-20",
+      "descripcion": "Sistema de impresión con ESP32 como nodo MQTT de primera clase. impresion v3.0 publica MQTT directo al ESP32 (sin perifericos). Autodescubrimiento. Firmware ESP32 v2.1 operativo. PARCIAL: falta routing por tipo documento, ticket_venta automático en cobro.procesado, UI de selección de impresora.",
       "contexto": {
         "problema": "El VPS no tiene acceso directo a las impresoras de la red local. Se necesita un puente.",
         "solucion": "ESP32 conectado al WiFi local se suscribe por MQTT al VPS y reenvía ESC/POS a impresoras por TCP o Bluetooth.",

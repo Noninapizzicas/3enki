@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "zone": "work-bar",
   "order": 2,
-  "routes": ["/certificate-authority"],
+  "routes": ["/3333"],
   "icon": "🔐",
   "label": "Certificados"
 }

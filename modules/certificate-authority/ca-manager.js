@@ -6,13 +6,14 @@
  *   1. Certificados para clientes del portal de facturación
  *   2. Certificados para dispositivos de trabajo
  *
- * Usa Node.js crypto nativo (sin dependencias externas).
- * Certificados exportables como .p12 (PKCS#12) para importar en navegador.
+ * Genera certificados X.509 reales (ASN.1/DER) y bundles PKCS#12 reales
+ * usando node-forge. Compatible con navegadores, nginx, Android, iOS, etc.
  *
  * Algoritmo: RSA 2048 + SHA-256 (compatible con todos los navegadores)
  */
 
 const crypto = require('crypto');
+const forge = require('node-forge');
 const fs = require('fs');
 const path = require('path');
 
@@ -24,8 +25,8 @@ class CAManager {
     this.crlPath = path.join(this.storagePath, 'crl.json');
     this.certsPath = path.join(this.storagePath, 'certs');
 
-    this.caKey = null;
-    this.caCert = null;
+    this.caKey = null;   // forge private key object
+    this.caCert = null;  // forge certificate object
     this.crl = []; // Certificate Revocation List
 
     // Configuración por defecto
@@ -53,8 +54,10 @@ class CAManager {
 
     // Intentar cargar CA existente
     if (fs.existsSync(this.caKeyPath) && fs.existsSync(this.caCertPath)) {
-      this.caKey = fs.readFileSync(this.caKeyPath, 'utf8');
-      this.caCert = fs.readFileSync(this.caCertPath, 'utf8');
+      const keyPem = fs.readFileSync(this.caKeyPath, 'utf8');
+      const certPem = fs.readFileSync(this.caCertPath, 'utf8');
+      this.caKey = forge.pki.privateKeyFromPem(keyPem);
+      this.caCert = forge.pki.certificateFromPem(certPem);
       return { created: false, loaded: true };
     }
 
@@ -67,45 +70,47 @@ class CAManager {
    * @private
    */
   _generateCA() {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
-      modulusLength: this.config.key_size,
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
-    });
+    const keys = forge.pki.rsa.generateKeyPair(this.config.key_size);
+    const cert = forge.pki.createCertificate();
 
-    // Crear certificado auto-firmado para la CA
-    const serialNumber = this._generateSerialNumber();
+    cert.publicKey = keys.publicKey;
+    cert.serialNumber = this._generateSerialNumber();
+
     const notBefore = new Date();
     const notAfter = new Date();
     notAfter.setDate(notAfter.getDate() + this.config.ca_validity_days);
 
-    const caCertData = {
-      serialNumber,
-      subject: {
-        CN: this.config.ca_cn,
-        O: this.config.ca_org
-      },
-      issuer: {
-        CN: this.config.ca_cn,
-        O: this.config.ca_org
-      },
-      notBefore: notBefore.toISOString(),
-      notAfter: notAfter.toISOString(),
-      isCA: true,
-      publicKey
-    };
+    cert.validity.notBefore = notBefore;
+    cert.validity.notAfter = notAfter;
 
-    // Firmar el certificado CA (auto-firmado)
-    const certPem = this._createSelfSignedCert(caCertData, privateKey);
+    const attrs = [
+      { name: 'commonName', value: this.config.ca_cn },
+      { name: 'organizationName', value: this.config.ca_org }
+    ];
+
+    cert.setSubject(attrs);
+    cert.setIssuer(attrs); // Auto-firmado
+
+    cert.setExtensions([
+      { name: 'basicConstraints', cA: true, critical: true },
+      { name: 'keyUsage', keyCertSign: true, cRLSign: true, critical: true },
+      { name: 'subjectKeyIdentifier' }
+    ]);
+
+    // Auto-firmar
+    cert.sign(keys.privateKey, forge.md.sha256.create());
+
+    const certPem = forge.pki.certificateToPem(cert);
+    const keyPem = forge.pki.privateKeyToPem(keys.privateKey);
 
     // Guardar en disco
-    fs.writeFileSync(this.caKeyPath, privateKey, { mode: 0o600 });
+    fs.writeFileSync(this.caKeyPath, keyPem, { mode: 0o600 });
     fs.writeFileSync(this.caCertPath, certPem, { mode: 0o644 });
 
-    this.caKey = privateKey;
-    this.caCert = certPem;
+    this.caKey = keys.privateKey;
+    this.caCert = cert;
 
-    return { created: true, loaded: true, serialNumber };
+    return { created: true, loaded: true, serialNumber: cert.serialNumber };
   }
 
   /**
@@ -143,56 +148,73 @@ class CAManager {
     }
 
     // Generar par de claves para el cliente
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
-      modulusLength: this.config.key_size,
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
-    });
+    const keys = forge.pki.rsa.generateKeyPair(this.config.key_size);
 
+    const cert = forge.pki.createCertificate();
     const serialNumber = this._generateSerialNumber();
+
+    cert.publicKey = keys.publicKey;
+    cert.serialNumber = serialNumber;
+
     const notBefore = new Date();
     const notAfter = new Date();
     notAfter.setDate(notAfter.getDate() + validityDays);
 
-    // Construir subject del certificado
-    const subject = {
-      CN: commonName,
-      OU: type === 'client' ? 'Portal Clientes' : 'Dispositivos',
-      ...(organization && { O: organization }),
-      ...(email && { emailAddress: email })
-    };
+    cert.validity.notBefore = notBefore;
+    cert.validity.notAfter = notAfter;
 
-    // Crear certificado cliente firmado por la CA
-    const certData = {
-      serialNumber,
-      subject,
-      issuer: {
-        CN: this.config.ca_cn,
-        O: this.config.ca_org
-      },
-      notBefore: notBefore.toISOString(),
-      notAfter: notAfter.toISOString(),
-      isCA: false,
-      publicKey,
-      extensions: {
-        type,
-        identifier,
-        ...(email && { email })
-      }
-    };
+    // Subject del certificado
+    const subjectAttrs = [
+      { name: 'commonName', value: commonName },
+      { name: 'organizationalUnitName', value: type === 'client' ? 'Portal Clientes' : 'Dispositivos' }
+    ];
+    if (organization) {
+      subjectAttrs.push({ name: 'organizationName', value: organization });
+    }
+    if (email) {
+      subjectAttrs.push({ name: 'emailAddress', value: email });
+    }
 
-    const certificate = this._createSignedCert(certData, this.caKey);
+    cert.setSubject(subjectAttrs);
 
-    // Generar fingerprint
-    const fingerprint = crypto.createHash('sha256')
-      .update(certificate)
-      .digest('hex')
+    // Issuer = nuestra CA
+    cert.setIssuer(this.caCert.subject.attributes);
+
+    // Extensiones del certificado cliente
+    const extensions = [
+      { name: 'basicConstraints', cA: false },
+      { name: 'keyUsage', digitalSignature: true, keyEncipherment: true, critical: true },
+      { name: 'extKeyUsage', clientAuth: true },
+      { name: 'subjectKeyIdentifier' },
+      { name: 'authorityKeyIdentifier', keyIdentifier: true }
+    ];
+
+    // Guardar tipo e identifier como extensión personalizada en subjectAltName
+    // Usamos uniformResourceIdentifier para codificar type:identifier
+    extensions.push({
+      name: 'subjectAltName',
+      altNames: [
+        { type: 6, value: `urn:eventcore:${type}:${identifier}` }
+      ]
+    });
+
+    cert.setExtensions(extensions);
+
+    // Firmar con la clave de la CA
+    cert.sign(this.caKey, forge.md.sha256.create());
+
+    const certificate = forge.pki.certificateToPem(cert);
+    const privateKey = forge.pki.privateKeyToPem(keys.privateKey);
+
+    // Generar fingerprint SHA-256 del certificado DER
+    const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
+    const fingerprint = forge.md.sha256.create().update(certDer).digest().toHex()
       .toUpperCase()
       .match(/.{2}/g)
       .join(':');
 
-    // Crear PKCS#12 bundle (certificado + clave privada)
-    const p12Data = this._createP12Bundle(certificate, privateKey, passphrase);
+    // Crear PKCS#12 bundle real
+    const p12Data = this._createP12Bundle(cert, keys.privateKey, passphrase);
 
     // Guardar metadata del certificado
     const metadata = {
@@ -290,45 +312,49 @@ class CAManager {
    */
   verifyCertificate(certificatePem) {
     try {
-      // Extraer metadata del certificado
-      const certInfo = this._parseCertificateInfo(certificatePem);
+      // Parsear el certificado X.509
+      const cert = forge.pki.certificateFromPem(certificatePem);
+      const serialNumber = cert.serialNumber;
 
-      if (!certInfo) {
+      if (!cert) {
         return { valid: false, error: 'Cannot parse certificate' };
       }
 
       // Verificar que fue firmado por nuestra CA
-      const isSignedByCA = this._verifySignature(certificatePem);
+      const isSignedByCA = this._verifySignature(cert);
       if (!isSignedByCA) {
         return { valid: false, error: 'Not signed by this CA' };
       }
 
       // Verificar que no está en la CRL
       const isRevoked = this.crl.some(entry =>
-        entry.serialNumber === certInfo.serialNumber
+        entry.serialNumber === serialNumber
       );
       if (isRevoked) {
-        return { valid: false, error: 'Certificate revoked', serialNumber: certInfo.serialNumber };
+        return { valid: false, error: 'Certificate revoked', serialNumber };
       }
 
-      // Verificar expiración
-      const metadataPath = path.join(this.certsPath, certInfo.serialNumber, 'metadata.json');
+      // Verificar expiración desde el propio certificado
+      const now = new Date();
+      if (now > cert.validity.notAfter) {
+        return { valid: false, error: 'Certificate expired', serialNumber };
+      }
+      if (now < cert.validity.notBefore) {
+        return { valid: false, error: 'Certificate not yet valid', serialNumber };
+      }
+
+      // Verificar contra metadata si existe (puede tener status revoked por otros medios)
+      const metadataPath = path.join(this.certsPath, serialNumber, 'metadata.json');
       if (fs.existsSync(metadataPath)) {
         const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-        const now = new Date();
-        const expires = new Date(metadata.expiresAt);
-
-        if (now > expires) {
-          return { valid: false, error: 'Certificate expired', serialNumber: certInfo.serialNumber };
-        }
 
         if (metadata.status === 'revoked') {
-          return { valid: false, error: 'Certificate revoked', serialNumber: certInfo.serialNumber };
+          return { valid: false, error: 'Certificate revoked', serialNumber };
         }
 
         return {
           valid: true,
-          serialNumber: certInfo.serialNumber,
+          serialNumber,
           type: metadata.type,
           identifier: metadata.identifier,
           commonName: metadata.commonName,
@@ -336,7 +362,16 @@ class CAManager {
         };
       }
 
-      return { valid: false, error: 'Certificate metadata not found' };
+      // Sin metadata local — extraer info del propio certificado
+      const certInfo = this._parseCertificateInfo(cert);
+      return {
+        valid: true,
+        serialNumber,
+        type: certInfo.type,
+        identifier: certInfo.identifier,
+        commonName: certInfo.commonName,
+        expiresAt: cert.validity.notAfter.toISOString()
+      };
     } catch (error) {
       return { valid: false, error: error.message };
     }
@@ -390,7 +425,7 @@ class CAManager {
    */
   getCACertificate() {
     if (!this.caCert) throw new Error('CA not initialized');
-    return this.caCert;
+    return forge.pki.certificateToPem(this.caCert);
   }
 
   /**
@@ -491,173 +526,78 @@ class CAManager {
    * @private
    */
   _generateSerialNumber() {
-    return crypto.randomBytes(16).toString('hex').toUpperCase();
+    // Lowercase para compatibilidad con node-forge (que normaliza a lowercase)
+    return crypto.randomBytes(16).toString('hex');
   }
 
   /**
-   * Crea un certificado auto-firmado (para la CA raíz)
-   * Usamos un formato PEM simplificado con la info embebida como extensión
+   * Verifica que un certificado fue firmado por nuestra CA
+   * @param {Object} cert - forge certificate object
+   * @returns {boolean}
    * @private
    */
-  _createSelfSignedCert(certData, privateKey) {
-    // Crear estructura del certificado
-    const certBody = JSON.stringify({
-      version: 3,
-      serialNumber: certData.serialNumber,
-      subject: certData.subject,
-      issuer: certData.issuer,
-      notBefore: certData.notBefore,
-      notAfter: certData.notAfter,
-      isCA: certData.isCA,
-      publicKey: certData.publicKey,
-      keyUsage: certData.isCA
-        ? ['keyCertSign', 'cRLSign']
-        : ['digitalSignature', 'keyEncipherment']
-    });
-
-    // Firmar con la clave privada
-    const sign = crypto.createSign('SHA256');
-    sign.update(certBody);
-    const signature = sign.sign(privateKey, 'base64');
-
-    // Formato PEM-like con body + signature
-    const combined = Buffer.from(JSON.stringify({
-      body: certBody,
-      signature
-    })).toString('base64');
-
-    return `-----BEGIN CERTIFICATE-----\n${combined.match(/.{1,64}/g).join('\n')}\n-----END CERTIFICATE-----`;
-  }
-
-  /**
-   * Crea un certificado firmado por la CA
-   * @private
-   */
-  _createSignedCert(certData, caPrivateKey) {
-    const certBody = JSON.stringify({
-      version: 3,
-      serialNumber: certData.serialNumber,
-      subject: certData.subject,
-      issuer: certData.issuer,
-      notBefore: certData.notBefore,
-      notAfter: certData.notAfter,
-      isCA: false,
-      publicKey: certData.publicKey,
-      keyUsage: ['digitalSignature', 'keyEncipherment'],
-      extKeyUsage: ['clientAuth'],
-      extensions: certData.extensions || {}
-    });
-
-    // Firmar con la clave de la CA
-    const sign = crypto.createSign('SHA256');
-    sign.update(certBody);
-    const signature = sign.sign(caPrivateKey, 'base64');
-
-    const combined = Buffer.from(JSON.stringify({
-      body: certBody,
-      signature
-    })).toString('base64');
-
-    return `-----BEGIN CERTIFICATE-----\n${combined.match(/.{1,64}/g).join('\n')}\n-----END CERTIFICATE-----`;
-  }
-
-  /**
-   * Verifica la firma de un certificado contra la CA
-   * @private
-   */
-  _verifySignature(certificatePem) {
+  _verifySignature(cert) {
     try {
-      const certContent = certificatePem
-        .replace('-----BEGIN CERTIFICATE-----', '')
-        .replace('-----END CERTIFICATE-----', '')
-        .replace(/\s/g, '');
-
-      const decoded = JSON.parse(Buffer.from(certContent, 'base64').toString());
-      const { body, signature } = decoded;
-
-      // Extraer la clave pública de la CA
-      const caCertContent = this.caCert
-        .replace('-----BEGIN CERTIFICATE-----', '')
-        .replace('-----END CERTIFICATE-----', '')
-        .replace(/\s/g, '');
-      const caDecoded = JSON.parse(Buffer.from(caCertContent, 'base64').toString());
-      const caBody = JSON.parse(caDecoded.body);
-
-      // Verificar firma con la clave pública de la CA
-      const verify = crypto.createVerify('SHA256');
-      verify.update(body);
-      return verify.verify(caBody.publicKey, signature, 'base64');
+      return this.caCert.verify(cert);
     } catch {
       return false;
     }
   }
 
   /**
-   * Extrae información básica de un certificado PEM
+   * Extrae tipo e identifier del certificado X.509
+   * @param {Object} cert - forge certificate object
+   * @returns {Object} { type, identifier, commonName }
    * @private
    */
-  _parseCertificateInfo(certificatePem) {
-    try {
-      const certContent = certificatePem
-        .replace('-----BEGIN CERTIFICATE-----', '')
-        .replace('-----END CERTIFICATE-----', '')
-        .replace(/\s/g, '');
+  _parseCertificateInfo(cert) {
+    const cn = cert.subject.getField('CN');
+    const commonName = cn ? cn.value : 'unknown';
 
-      const decoded = JSON.parse(Buffer.from(certContent, 'base64').toString());
-      const body = JSON.parse(decoded.body);
+    // Extraer type:identifier de subjectAltName URI
+    let type = 'client';
+    let identifier = 'unknown';
 
-      return {
-        serialNumber: body.serialNumber,
-        subject: body.subject,
-        issuer: body.issuer,
-        notBefore: body.notBefore,
-        notAfter: body.notAfter,
-        isCA: body.isCA,
-        extensions: body.extensions || {}
-      };
-    } catch {
-      return null;
+    const sanExt = cert.getExtension('subjectAltName');
+    if (sanExt && sanExt.altNames) {
+      for (const alt of sanExt.altNames) {
+        // type 6 = URI
+        if (alt.type === 6 && alt.value.startsWith('urn:eventcore:')) {
+          const parts = alt.value.replace('urn:eventcore:', '').split(':');
+          if (parts.length >= 2) {
+            type = parts[0];
+            identifier = parts.slice(1).join(':');
+          }
+        }
+      }
     }
+
+    return { type, identifier, commonName };
   }
 
   /**
-   * Crea un bundle PKCS#12 (certificado + clave privada)
-   * Nota: Node.js nativo no soporta crear .p12 directamente.
-   * Almacenamos cert + key en un formato empaquetado firmado.
-   * Para producción real se usaría `openssl pkcs12` o la lib `node-forge`.
+   * Crea un bundle PKCS#12 real (certificado + clave privada + CA cert)
+   * Importable en navegadores, Android, iOS, Windows, macOS.
+   *
+   * @param {Object} cert - forge certificate object
+   * @param {Object} privateKey - forge private key object
+   * @param {string} passphrase - Contraseña para proteger el P12
+   * @returns {Buffer} P12 binary data
    * @private
    */
-  _createP12Bundle(certificate, privateKey, passphrase) {
-    // Crear un bundle empaquetado (cert + key cifrado con passphrase)
-    const bundleData = {
-      certificate,
-      key: privateKey,
-      created: new Date().toISOString()
-    };
+  _createP12Bundle(cert, privateKey, passphrase) {
+    const p12Asn1 = forge.pkcs12.toPkcs12Asn1(
+      privateKey,
+      [cert, this.caCert],
+      passphrase || '',
+      {
+        algorithm: '3des',
+        friendlyName: cert.subject.getField('CN')?.value || 'Event Core Certificate'
+      }
+    );
 
-    const bundleJson = JSON.stringify(bundleData);
-
-    if (passphrase) {
-      // Cifrar con AES-256-GCM usando passphrase
-      const salt = crypto.randomBytes(16);
-      const key = crypto.scryptSync(passphrase, salt, 32);
-      const iv = crypto.randomBytes(12);
-      const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-
-      let encrypted = cipher.update(bundleJson, 'utf8', 'base64');
-      encrypted += cipher.final('base64');
-      const authTag = cipher.getAuthTag();
-
-      return Buffer.from(JSON.stringify({
-        encrypted: true,
-        salt: salt.toString('base64'),
-        iv: iv.toString('base64'),
-        authTag: authTag.toString('base64'),
-        data: encrypted
-      }));
-    }
-
-    return Buffer.from(bundleJson);
+    const p12Der = forge.asn1.toDer(p12Asn1).getBytes();
+    return Buffer.from(p12Der, 'binary');
   }
 
   /**

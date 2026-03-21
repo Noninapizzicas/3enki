@@ -1,7 +1,7 @@
 {
   "_VERSION": "3.0.0",
   "_CREATED": "2026-03-18",
-  "_UPDATED": "2026-03-20",
+  "_UPDATED": "2026-03-21",
   "_DESCRIPTION": "Arquitectura de Periféricos y Nodos ESP32 — infraestructura core de Enki.",
 
   "_AI_INSTRUCTIONS": {
@@ -239,7 +239,18 @@
       "periferico.abrir-cajon — cajón de dinero por BLE directo (cobros usa esto)",
       "Impresoras no-ESP32: BLE directo, TCP de red, USB, comando shell",
       "Cualquier dispositivo que NO hable MQTT nativo"
-    ]
+    ],
+    "fase_5_gateways_mqtt": {
+      "descripcion": "Convertir TODO dispositivo en nodo MQTT mediante gateways software. Un gateway es un 'ESP32 virtual' que traduce MQTT→protocolo nativo.",
+      "estado": "DOCUMENTADO — pendiente de implementación",
+      "fecha_documentacion": "2026-03-20",
+      "documento_detalle": "contexto/gateways-mqtt.json",
+      "concepto": "Cada tipo de protocolo (TCP, BLE, USB, comando) tiene un gateway que se suscribe a MQTT, traduce al protocolo nativo, y se anuncia con el mismo contrato que un ESP32. Desde el servidor todos los dispositivos son iguales.",
+      "gateways_planificados": ["gateway-tcp", "gateway-ble", "gateway-usb", "gateway-cmd"],
+      "autodescubrimiento": "Los gateways descubren dispositivos automáticamente (mDNS para TCP, BLE scan, lsusb, lpstat). Config manual es fallback.",
+      "impacto_en_perifericos": "perifericos se simplifica — deja de ser router de transportes y pasa a ser orquestador de dispositivos descubiertos por MQTT",
+      "reutiliza_transportes": "El código existente de tcp.js, ble.js, comando.js se reutiliza DENTRO de los gateways"
+    }
   },
 
   "estructura_archivos": {

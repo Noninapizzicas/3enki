@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-03-20",
+  "_updated": "2026-03-21",
   "mejoras": [
     {
       "id": "pantallas-cocina",
@@ -564,6 +564,48 @@
       },
       "no_toca": "Cero cambios en módulos existentes — es puramente aditivo",
       "cuando_implementar": "Cuando el sistema de facturación esté estable y validado con uso real en Nonina"
+    },
+    {
+      "id": "gateways-mqtt-universal",
+      "titulo": "Gateways MQTT — convertir todo dispositivo en nodo MQTT",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-20",
+      "descripcion": "Crear gateways software que traduzcan MQTT→protocolo nativo (TCP, BLE, USB, comando shell). Cada gateway se comporta como un 'ESP32 virtual' — mismo contrato MQTT, mismo autodescubrimiento, misma interfaz. El servidor no distingue entre ESP32 real y gateway software. Los gateways descubren dispositivos automáticamente (mDNS, BLE scan, lsusb, lpstat).",
+      "documento_detalle": "contexto/gateways-mqtt.json",
+      "componentes": {
+        "1_gateway_base": {
+          "que": "Clase base GatewayBase — conexión MQTT, autodescubrimiento, publicación de status, gestión de ACK",
+          "donde": "services/gateways/base.js"
+        },
+        "2_gateway_tcp": {
+          "que": "GatewayTCP — traduce MQTT→TCP socket. Autodescubrimiento via mDNS. Reutiliza transportes/tcp.js",
+          "donde": "services/gateways/tcp/",
+          "prioridad": "primera implementación — impresoras de red son el caso más común tras ESP32"
+        },
+        "3_gateway_cmd": {
+          "que": "GatewayCMD — traduce MQTT→comando shell (CUPS, lp). Autodescubrimiento via lpstat. Reutiliza transportes/comando.js",
+          "donde": "services/gateways/cmd/"
+        },
+        "4_gateway_ble": {
+          "que": "GatewayBLE — traduce MQTT→BLE/rfcomm. Para servidores con BT directo. Reutiliza transportes/ble.js",
+          "donde": "services/gateways/ble/"
+        },
+        "5_gateway_usb": {
+          "que": "GatewayUSB — traduce MQTT→USB. Implementar transporte USB real + gateway. Autodescubrimiento via lsusb.",
+          "donde": "services/gateways/usb/"
+        },
+        "6_simplificar_perifericos": {
+          "que": "Refactorizar perifericos — que consuma gateways MQTT en vez de transportes directos",
+          "donde": "modules/perifericos/"
+        }
+      },
+      "vision_escala": {
+        "pequeno": "1 ESP32 + opcional gateway-tcp",
+        "mediano": "ESP32 por local + gateway-tcp central (10 locales, 50 dispositivos)",
+        "grande": "Mezcla de ESP32 + gateways TCP/USB/CMD + broker bridging (300+ dispositivos)"
+      },
+      "cuando_implementar": "Después de validar que el sistema de impresión directa (ESP32 + impresion v3.0) es estable en producción"
     }
   ]
 }

@@ -64,7 +64,8 @@ async function runTests() {
     assert(result.loaded === true, 'CA debería estar cargada');
     assert(ca.caCert, 'CA cert debería existir');
     assert(ca.caKey, 'CA key debería existir');
-    assert(ca.caCert.includes('-----BEGIN CERTIFICATE-----'), 'CA cert en formato PEM');
+    const caCertPem = ca.getCACertificate();
+    assert(caCertPem.includes('-----BEGIN CERTIFICATE-----'), 'CA cert en formato PEM');
   });
 
   await test('CAManager: debe cargar CA existente sin regenerar', async () => {
@@ -73,7 +74,7 @@ async function runTests() {
 
     assert(result.created === false, 'No debería recrear la CA');
     assert(result.loaded === true, 'Debería cargar la existente');
-    assert(ca2.caCert === ca.caCert, 'Mismo certificado CA');
+    assert(ca2.getCACertificate() === ca.getCACertificate(), 'Mismo certificado CA PEM');
   });
 
   await test('CAManager: debe emitir certificado cliente', async () => {
@@ -257,6 +258,51 @@ async function runTests() {
     assert(result.valid === false, 'No debería ser válido');
   });
 
+  await test('CAManager: certificados X.509 deben ser parseables por node-forge', async () => {
+    const forge = require('node-forge');
+    const cert = await ca.issueCertificate({
+      commonName: 'X509 Real Test',
+      type: 'client',
+      identifier: 'project-x509'
+    });
+
+    // Parsear el certificado con forge — si no es X.509 real, esto falla
+    const parsed = forge.pki.certificateFromPem(cert.certificate);
+    assert(parsed.subject.getField('CN').value === 'X509 Real Test', 'CN correcto en X.509');
+    assert(parsed.subject.getField('OU').value === 'Portal Clientes', 'OU correcto en X.509');
+
+    // Verificar que la CA cert también es X.509 real
+    const caParsed = forge.pki.certificateFromPem(ca.getCACertificate());
+    assert(caParsed.subject.getField('CN').value === 'Event Core Internal CA', 'CA CN correcto');
+
+    // Verificar cadena de firma
+    assert(caParsed.verify(parsed), 'CA firma válida sobre certificado cliente');
+  });
+
+  await test('CAManager: P12 debe ser PKCS#12 real parseable', async () => {
+    const forge = require('node-forge');
+    const cert = await ca.issueCertificate({
+      commonName: 'P12 Real Test',
+      type: 'device',
+      identifier: 'device-p12-real',
+      passphrase: 'mypassword'
+    });
+
+    // Parsear P12 con forge — si no es PKCS#12 real, esto falla
+    const p12Der = cert.p12.toString('binary');
+    const p12Asn1 = forge.asn1.fromDer(p12Der);
+    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, 'mypassword');
+
+    // Extraer certificados y claves del P12
+    const certBags = p12.getBags({ bagType: forge.pki.oids.certBag });
+    const certList = certBags[forge.pki.oids.certBag];
+    assert(certList && certList.length >= 1, 'P12 contiene al menos 1 certificado');
+
+    const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+    const keyList = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag];
+    assert(keyList && keyList.length >= 1, 'P12 contiene clave privada');
+  });
+
   // ------------------------------------------------------------------------
   // MTLSMiddleware Tests
   // ------------------------------------------------------------------------
@@ -417,13 +463,9 @@ async function runTests() {
       hooks: {
         register: () => {}
       },
-      config: {
-        modules: {
-          'certificate-authority': {
-            storagePath: path.join(TEST_CA_PATH, 'module-test'),
-            mtls_enabled: true
-          }
-        }
+      moduleConfig: {
+        storagePath: path.join(TEST_CA_PATH, 'module-test'),
+        mtls_enabled: true
       }
     };
 

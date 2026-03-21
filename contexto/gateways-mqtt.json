@@ -1,0 +1,231 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-03-20",
+  "_DESCRIPTION": "Arquitectura de Gateways MQTT — convertir todo dispositivo en nodo MQTT.",
+
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANT": "Los gateways son 'ESP32 virtuales' en software. Desde el servidor son indistinguibles de un ESP32 real.",
+    "rule_1": "Un gateway se crea POR TIPO DE PROTOCOLO, no por dispositivo. Un gateway-tcp sirve para N impresoras TCP.",
+    "rule_2": "Cada gateway se anuncia por MQTT con el mismo contrato que un ESP32: status, print, printed.",
+    "rule_3": "Los gateways descubren dispositivos automáticamente (mDNS, lsusb, BLE scan) — config manual es fallback.",
+    "rule_4": "El servidor NUNCA sabe si al otro lado hay un ESP32 real o un gateway software — misma interfaz MQTT.",
+    "rule_5": "Los transportes existentes (tcp.js, ble.js, comando.js) se REUTILIZAN dentro de los gateways.",
+    "rule_6": "NO implementar gateways todavía — solo documentar. Sistema en producción este fin de semana."
+  },
+
+  "vision": {
+    "resumen": "Todo dispositivo del sistema habla MQTT. Los que no pueden hablar MQTT nativo usan un gateway que traduce MQTT→protocolo nativo. Desde el servidor, todos los dispositivos son iguales.",
+    "principio": "Un gateway es un traductor de protocolo. Nada más. Recibe MQTT, envía al dispositivo en su idioma nativo, y responde por MQTT.",
+    "analogia": "El ESP32 traduce MQTT→BLE. Un gateway-tcp traduce MQTT→TCP. Un gateway-usb traduce MQTT→USB. Mismo patrón, mismo contrato.",
+    "beneficios": [
+      "Interfaz uniforme — el servidor solo publica a topics MQTT",
+      "Autodescubrimiento universal — todos los dispositivos se anuncian igual",
+      "Desacoplamiento total — mover un gateway a otra máquina sin cambiar el servidor",
+      "Escalabilidad — añadir nuevo tipo de dispositivo = nuevo gateway, sin tocar core",
+      "Simplicidad — perifericos deja de ser router de transportes, solo orquestador"
+    ]
+  },
+
+  "contrato_universal": {
+    "descripcion": "Todo gateway implementa el mismo contrato MQTT que un ESP32. El servidor no distingue uno de otro.",
+    "topics": {
+      "status": "{tipo}/{project}/status/{device}",
+      "comando": "{tipo}/{project}/print/{device}",
+      "ack": "{tipo}/{project}/printed/{device}"
+    },
+    "status_payload": {
+      "device_id": "string — ID lógico del dispositivo",
+      "tipo": "string — tipo de dispositivo (impresora-termica, display, cajon, etc.)",
+      "protocolo": "string — protocolo nativo (tcp, ble, usb, comando, esp32)",
+      "capacidades": ["imprimir", "cortar-papel", "abrir-cajon"],
+      "estado": "online | offline | error",
+      "metadata": {
+        "ancho": "58mm | 80mm",
+        "marca": "string",
+        "modelo": "string",
+        "ip": "string (si aplica)",
+        "mac": "string (si aplica)",
+        "firmware": "string (si aplica)"
+      },
+      "gateway": {
+        "tipo": "esp32 | gateway-tcp | gateway-ble | gateway-usb | gateway-cmd",
+        "version": "string",
+        "host": "string — máquina donde corre el gateway"
+      }
+    },
+    "comando_payload": {
+      "job_id": "string — ID único del trabajo",
+      "data": "string — datos base64 (ESC/POS, gcode, JSON, etc.)"
+    },
+    "ack_payload": {
+      "job_id": "string — ID del trabajo completado",
+      "status": "ok | error",
+      "error": "string (si aplica)",
+      "bytes": "number — bytes enviados"
+    }
+  },
+
+  "gateways": {
+    "gateway-tcp": {
+      "descripcion": "Traduce MQTT→TCP socket. Para impresoras de red, CNC, displays IP.",
+      "protocolo_nativo": "TCP socket (típicamente puerto 9100 para impresoras, 8080 para displays)",
+      "autodescubrimiento": {
+        "metodo": "mDNS (Bonjour/Avahi)",
+        "servicios": ["_pdl-datastream._tcp (impresoras raw)", "_ipp._tcp (impresoras IPP)", "_http._tcp (displays web)"],
+        "como": "El gateway escanea la red local buscando servicios mDNS. Cada servicio encontrado se anuncia como dispositivo MQTT.",
+        "fallback": "Escaneo de puerto 9100 en rango de IPs de la red local",
+        "config_manual": "Array de {device_id, host, puerto} para dispositivos sin mDNS"
+      },
+      "reutiliza": "services/providers/local/perifericos/transportes/tcp.js",
+      "ejemplo_flujo": [
+        "1. gateway-tcp arranca → escanea mDNS → encuentra impresora en 192.168.1.50:9100",
+        "2. Publica status: impresion/{project}/status/impresora-red-1 → {device_id, tipo: impresora-termica, ip, protocolo: tcp}",
+        "3. Se suscribe a: impresion/{project}/print/impresora-red-1",
+        "4. Llega trabajo → desempaqueta base64 → envía por TCP:9100 → publica ACK"
+      ],
+      "estado": "pendiente — diseño completo, implementar cuando sea seguro"
+    },
+
+    "gateway-ble": {
+      "descripcion": "Traduce MQTT→BLE/rfcomm. Para impresoras Bluetooth directas.",
+      "protocolo_nativo": "Bluetooth Classic SPP via rfcomm (/dev/rfcommN)",
+      "autodescubrimiento": {
+        "metodo": "BLE scan (bluetoothctl / hcitool)",
+        "como": "Escaneo BLE periódico. Dispositivos con perfil SPP (Serial Port Profile) se anuncian.",
+        "filtro": "Por nombre BT conocido (contiene 'printer', 'POS', 'thermal') o por clase de dispositivo",
+        "config_manual": "Array de {device_id, mac, rfcomm_canal} para dispositivos sin nombre reconocible"
+      },
+      "reutiliza": "services/providers/local/perifericos/transportes/ble.js",
+      "nota": "En muchos casos el ESP32 ya hace de bridge MQTT→BLE. Este gateway es para cuando NO hay ESP32 y el servidor tiene BT directo (ej: Termux en Android, Linux con dongle BT).",
+      "estado": "pendiente"
+    },
+
+    "gateway-usb": {
+      "descripcion": "Traduce MQTT→USB. Para impresoras USB conectadas al servidor o a un PC.",
+      "protocolo_nativo": "USB device (/dev/usb/lp0 o librería usb)",
+      "autodescubrimiento": {
+        "metodo": "Lectura de /dev/usb/lp* + lsusb",
+        "como": "Detecta dispositivos USB de clase 'Printer'. Lee vendor/product ID para identificar marca/modelo.",
+        "hotplug": "udev rules o polling de /dev/usb/ para detectar conexión/desconexión en caliente"
+      },
+      "reutiliza": "services/providers/local/perifericos/transportes/usb.js (actualmente stub, necesita implementación)",
+      "distribuido": "Un PC con impresoras USB corre su propio gateway-usb. El gateway se conecta al broker MQTT central y anuncia las impresoras locales como si fueran ESP32.",
+      "estado": "pendiente"
+    },
+
+    "gateway-cmd": {
+      "descripcion": "Traduce MQTT→comando shell. Para CUPS, lp, scripts custom.",
+      "protocolo_nativo": "Pipe a proceso shell (stdin)",
+      "autodescubrimiento": {
+        "metodo": "Lectura de CUPS (lpstat -a) o config",
+        "como": "Lista impresoras registradas en CUPS. Cada una se anuncia como dispositivo MQTT.",
+        "config_manual": "Array de {device_id, comando} para scripts custom"
+      },
+      "reutiliza": "services/providers/local/perifericos/transportes/comando.js",
+      "estado": "pendiente"
+    }
+  },
+
+  "arquitectura_proceso": {
+    "opcion_recomendada": "Proceso único multi-dispositivo",
+    "descripcion": "Un solo proceso gateway por tipo gestiona N dispositivos. Lee config o autodescubre, crea una conexión por dispositivo, gestiona N suscripciones MQTT.",
+    "ejemplo": {
+      "gateway-tcp": {
+        "arranca": "Lee config + escanea mDNS",
+        "encuentra": ["impresora-red-1 (192.168.1.50:9100)", "impresora-red-2 (192.168.1.51:9100)"],
+        "suscribe": ["impresion/nonina/print/impresora-red-1", "impresion/nonina/print/impresora-red-2"],
+        "anuncia": ["status de impresora-red-1", "status de impresora-red-2"]
+      }
+    },
+    "alternativa": {
+      "instancia_por_dispositivo": "Un proceso por dispositivo. Más aislado, más overhead. Útil para máquinas distribuidas o contenedores.",
+      "cuando": "Si un dispositivo falla no debe afectar a otros, o si los dispositivos están en máquinas distintas."
+    }
+  },
+
+  "integracion_con_sistema": {
+    "donde_viven": "services/gateways/ — nuevo directorio para gateways MQTT",
+    "estructura_propuesta": {
+      "services/gateways/": {
+        "base.js": "Clase GatewayBase — conexión MQTT, autodescubrimiento, status, ACK",
+        "tcp/": "GatewayTCP extends GatewayBase",
+        "ble/": "GatewayBLE extends GatewayBase",
+        "usb/": "GatewayUSB extends GatewayBase",
+        "cmd/": "GatewayCMD extends GatewayBase"
+      }
+    },
+    "relacion_con_perifericos": {
+      "antes": "perifericos era router de transportes (BLE, TCP, USB, comando, ESP32-proxy)",
+      "despues": "perifericos se simplifica — solo orquesta gateways y mantiene registry de dispositivos descubiertos por MQTT",
+      "transportes_se_reutilizan": "El código de tcp.js, ble.js, comando.js se reutiliza DENTRO de los gateways"
+    },
+    "relacion_con_impresion": {
+      "sin_cambios": "impresion v3.0 sigue publicando MQTT directo. No sabe ni le importa si al otro lado hay ESP32 o gateway.",
+      "transparente": "El autodescubrimiento de impresion (impresion/+/status/+) captura tanto ESP32 como gateways."
+    },
+    "config": {
+      "descripcion": "Cada gateway se configura en config.json del proyecto o por autodescubrimiento",
+      "ejemplo": {
+        "gateways": {
+          "tcp": {
+            "habilitado": true,
+            "autodescubrimiento": true,
+            "dispositivos_manuales": [
+              { "device_id": "impresora-oficina", "host": "192.168.1.100", "puerto": 9100 }
+            ]
+          },
+          "ble": {
+            "habilitado": false,
+            "nota": "No necesario si hay ESP32 como bridge"
+          },
+          "usb": {
+            "habilitado": false,
+            "nota": "Activar en máquinas con impresoras USB locales"
+          },
+          "cmd": {
+            "habilitado": false,
+            "dispositivos_manuales": [
+              { "device_id": "cups-default", "comando": "lp -d default" }
+            ]
+          }
+        }
+      }
+    }
+  },
+
+  "escenarios_escala": {
+    "pequeno": {
+      "descripcion": "1 pizzería, 2-3 impresoras",
+      "setup": "1 ESP32 con BLE → impresora cocina. Opcional: gateway-tcp para impresora de red en caja.",
+      "gateways_activos": ["ninguno o gateway-tcp"]
+    },
+    "mediano": {
+      "descripcion": "Cadena de 10 locales, 30-50 dispositivos",
+      "setup": "ESP32 por local para impresoras BLE. Gateway-tcp central para impresoras de red. project_id por local para aislamiento.",
+      "gateways_activos": ["gateway-tcp"]
+    },
+    "grande": {
+      "descripcion": "Empresa con 300 dispositivos heterogéneos",
+      "setup": "Mezcla de ESP32 (BLE), gateways TCP (red), gateways USB (PCs), gateways CMD (CUPS). Broker bridging entre sedes. Firmware OTA para ESP32. Cada sede su gateway local.",
+      "gateways_activos": ["gateway-tcp", "gateway-usb", "gateway-cmd"],
+      "consideraciones": [
+        "Broker bridging entre sedes para aislar tráfico MQTT",
+        "Gateway por sede — corre local, habla con broker central",
+        "Firmware OTA registry para gestionar versiones de ESP32",
+        "Dashboard de estado de todos los dispositivos vía MQTT status",
+        "Alertas cuando un dispositivo deja de publicar status"
+      ]
+    }
+  },
+
+  "orden_implementacion": [
+    "1. GatewayBase — clase base con conexión MQTT, autodescubrimiento, status, ACK",
+    "2. GatewayTCP — el más útil tras ESP32, impresoras de red son comunes",
+    "3. GatewayCMD — trivial, reutiliza comando.js tal cual",
+    "4. GatewayBLE — para servidores con BT directo (sin ESP32)",
+    "5. GatewayUSB — implementar transporte USB + gateway",
+    "6. Simplificar perifericos — que consuma gateways en vez de transportes directos"
+  ],
+
+  "estado": "DOCUMENTADO — no implementar hasta que el sistema esté estable en producción"
+}

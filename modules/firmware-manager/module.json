@@ -1,0 +1,73 @@
+{
+  "name": "firmware-manager",
+  "version": "1.0.0",
+  "description": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
+  "author": "Enki",
+  "tier": "tier_3_core",
+
+  "provides": {
+    "events": [
+      "firmware.ota_requested",
+      "firmware.ota_completed",
+      "firmware.ota_failed",
+      "firmware.registered"
+    ]
+  },
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "shadow.updated",
+        "handler": "onShadowUpdated",
+        "description": "Detecta cuando reported.firmware cambia (OTA completada o fallida)"
+      },
+      {
+        "event": "device.registered",
+        "handler": "onDeviceRegistered",
+        "description": "Verifica firmware de nuevos dispositivos registrados"
+      }
+    ],
+    "publishes": [
+      { "event": "firmware.ota_requested", "description": "OTA solicitada para un dispositivo via shadow" },
+      { "event": "firmware.ota_completed", "description": "Dispositivo actualizó firmware exitosamente" },
+      { "event": "firmware.ota_failed", "description": "OTA falló para un dispositivo" },
+      { "event": "firmware.registered", "description": "Nuevo firmware registrado en catálogo" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "firmware", "action": "list", "handler": "handleList" },
+    { "domain": "firmware", "action": "register", "handler": "handleRegister" },
+    { "domain": "firmware", "action": "trigger-ota", "handler": "handleTriggerOta" },
+    { "domain": "firmware", "action": "status", "handler": "handleOtaStatus" },
+    { "domain": "firmware", "action": "rollback", "handler": "handleRollback" },
+    { "domain": "firmware", "action": "device-versions", "handler": "handleDeviceVersions" }
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/firmware/:type/:version/:file",
+      "handler": "handleServeBinary",
+      "description": "Sirve binarios de firmware para descarga por ESP32"
+    }
+  ],
+
+  "config": {
+    "data_path": "./data/firmware",
+    "auto_check_on_register": true
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "firmware.ota_requested.total",
+        "firmware.ota_completed.total",
+        "firmware.ota_failed.total",
+        "firmware.catalog_entries.total"
+      ]
+    }
+  }
+}

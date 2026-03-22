@@ -114,7 +114,7 @@
         {:else}
           <div class="edit-form">
             <input class="input" bind:value={desiredKey} placeholder="key (ej: firmware)" />
-            <input class="input" bind:value={desiredValue} placeholder='valor (ej: {"version":"2.2.0"})' />
+            <input class="input" bind:value={desiredValue} placeholder={'valor (ej: {"version":"2.2.0"})'} />
             <div class="edit-actions">
               <button class="btn-cancel" on:click={() => editingDesired = false}>Cancelar</button>
               <button class="btn-apply" on:click={handleSetDesired}>Aplicar</button>

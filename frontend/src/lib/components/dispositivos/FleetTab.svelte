@@ -75,7 +75,7 @@
   {:else}
     <div class="device-grid">
       {#each filteredDevices as device (device.device_id)}
-        <button class="device-card" on:click={() => handleSelect(device)}>
+        <div class="device-card" role="button" tabindex="0" on:click={() => handleSelect(device)} on:keydown={(e) => e.key === 'Enter' && handleSelect(device)}>
           <div class="card-header">
             <span class="card-icon">{typeIcon(device.type)}</span>
             <span class="card-dot" style="background: {stateColor(device.state)}"></span>
@@ -106,7 +106,7 @@
               ✕
             </button>
           </div>
-        </button>
+        </div>
       {/each}
     </div>
   {/if}

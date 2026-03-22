@@ -1,5 +1,5 @@
 /**
- * Módulo Firmware Manager v1.0.0
+ * Módulo Firmware Manager v1.1.0
  *
  * Gestión de firmwares, versionado, y orquestación de OTA.
  *
@@ -9,6 +9,8 @@
  *   - Orquestar OTA via device-shadow (escribe desired.firmware)
  *   - Trackear progreso: escucha shadow.updated para detectar reported.firmware
  *   - Rollback: re-escribe desired con versión anterior
+ *   - Timeout automático de OTAs que no completan
+ *   - Validación de integridad de binarios al cargar
  *
  * NO compila firmware — solo gestiona binarios ya compilados.
  *
@@ -22,7 +24,7 @@ const crypto = require('crypto');
 class FirmwareManagerModule {
   constructor() {
     this.name = 'firmware-manager';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
 
     // Dependencias
     this.eventBus = null;
@@ -32,7 +34,10 @@ class FirmwareManagerModule {
     // Config
     this.config = {
       data_path: './data/firmware',
-      auto_check_on_register: true
+      auto_check_on_register: true,
+      ota_timeout_ms: 5 * 60 * 1000,
+      ota_cleanup_interval_ms: 60 * 1000,
+      validate_binaries_on_load: true
     };
 
     // Catálogo de firmwares: { tipo: { latest, releases: { version: {...} } } }
@@ -41,17 +46,15 @@ class FirmwareManagerModule {
     // OTA en progreso: device_id → { requested_at, target_version, previous_version, type }
     this.pendingOtas = new Map();
 
+    // Timers de OTA timeout: device_id → setTimeout handle
+    this._otaTimeoutTimers = new Map();
+
+    // Timer de limpieza periódica
+    this._cleanupTimer = null;
+
     // Log de OTAs: [ { device_id, type, from, to, status, timestamp } ]
     this.otaLog = [];
     this.maxOtaLog = 500;
-
-    // Métricas
-    this.internalMetrics = {
-      ota_requested_total: 0,
-      ota_completed_total: 0,
-      ota_failed_total: 0,
-      catalog_entries_total: 0
-    };
   }
 
   // ==========================================
@@ -69,24 +72,89 @@ class FirmwareManagerModule {
       this.config = { ...this.config, ...core.config['firmware-manager'] };
     }
 
+    // Validar configuración
+    this._validateConfig();
+
     this.config.data_path = path.resolve(this.config.data_path);
 
     await this._loadCatalog();
     await this._loadOtaLog();
 
+    // Validar integridad de binarios referenciados en catálogo
+    if (this.config.validate_binaries_on_load) {
+      await this._validateCatalogIntegrity();
+    }
+
+    // Publicar métricas iniciales
+    this._publishCatalogMetrics();
+    this.metrics.gauge('firmware.pending_otas.count', 0);
+
+    // Timer de limpieza periódica de OTAs huérfanas
+    this._cleanupTimer = setInterval(
+      () => this._cleanupStaleOtas(),
+      this.config.ota_cleanup_interval_ms
+    );
+
     this.logger.info('module.loaded', {
       module: this.name,
       version: this.version,
       catalog_types: Object.keys(this.catalog).length,
-      data_path: this.config.data_path
+      data_path: this.config.data_path,
+      ota_timeout_ms: this.config.ota_timeout_ms
     });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
+
+    // Limpiar timer de cleanup
+    if (this._cleanupTimer) {
+      clearInterval(this._cleanupTimer);
+      this._cleanupTimer = null;
+    }
+
+    // Limpiar todos los timers de OTA timeout
+    for (const timer of this._otaTimeoutTimers.values()) {
+      clearTimeout(timer);
+    }
+    this._otaTimeoutTimers.clear();
+
     await this._saveCatalog();
     await this._saveOtaLog();
+
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // Validación de configuración
+  // ==========================================
+
+  _validateConfig() {
+    if (typeof this.config.data_path !== 'string' || !this.config.data_path) {
+      this.logger.warn('firmware.config.invalid', {
+        field: 'data_path',
+        value: this.config.data_path,
+        fallback: './data/firmware'
+      });
+      this.config.data_path = './data/firmware';
+    }
+
+    if (typeof this.config.auto_check_on_register !== 'boolean') {
+      this.config.auto_check_on_register = true;
+    }
+
+    if (typeof this.config.ota_timeout_ms !== 'number' || this.config.ota_timeout_ms < 100) {
+      this.logger.warn('firmware.config.invalid', {
+        field: 'ota_timeout_ms',
+        value: this.config.ota_timeout_ms,
+        fallback: 300000
+      });
+      this.config.ota_timeout_ms = 5 * 60 * 1000;
+    }
+
+    if (typeof this.config.ota_cleanup_interval_ms !== 'number' || this.config.ota_cleanup_interval_ms < 10000) {
+      this.config.ota_cleanup_interval_ms = 60 * 1000;
+    }
   }
 
   // ==========================================
@@ -115,8 +183,13 @@ class FirmwareManagerModule {
 
     if (reportedVersion === pending.target_version) {
       // OTA completada
+      this._clearOtaTimeout(device_id);
       this.pendingOtas.delete(device_id);
-      this.internalMetrics.ota_completed_total++;
+
+      const duration = Date.now() - new Date(pending.requested_at).getTime();
+      this.metrics.increment('firmware.ota_completed.total');
+      this.metrics.timing('firmware.ota.duration', duration);
+      this.metrics.gauge('firmware.pending_otas.count', this.pendingOtas.size);
 
       const logEntry = {
         device_id,
@@ -124,6 +197,7 @@ class FirmwareManagerModule {
         from: pending.previous_version,
         to: pending.target_version,
         status: 'completed',
+        duration_ms: duration,
         requested_at: pending.requested_at,
         completed_at: new Date().toISOString()
       };
@@ -133,7 +207,8 @@ class FirmwareManagerModule {
       this.logger.info('firmware.ota.completed', {
         device_id,
         from: pending.previous_version,
-        to: pending.target_version
+        to: pending.target_version,
+        duration_ms: duration
       });
 
       await this.eventBus.publish('firmware.ota_completed', logEntry);
@@ -143,8 +218,10 @@ class FirmwareManagerModule {
       // No marcar como fallido inmediatamente, el dispositivo puede estar descargando
     } else {
       // Firmware cambió pero no a la versión esperada — fallo
+      this._clearOtaTimeout(device_id);
       this.pendingOtas.delete(device_id);
-      this.internalMetrics.ota_failed_total++;
+      this.metrics.increment('firmware.ota_failed.total');
+      this.metrics.gauge('firmware.pending_otas.count', this.pendingOtas.size);
 
       const logEntry = {
         device_id,
@@ -153,6 +230,7 @@ class FirmwareManagerModule {
         to: pending.target_version,
         actual: reportedVersion,
         status: 'failed',
+        reason: 'version_mismatch',
         requested_at: pending.requested_at,
         failed_at: new Date().toISOString()
       };
@@ -183,6 +261,8 @@ class FirmwareManagerModule {
     if (!typeEntry || !typeEntry.latest) return;
 
     if (device.firmware !== typeEntry.latest) {
+      this.metrics.increment('firmware.device_outdated.total');
+
       this.logger.info('firmware.device.outdated', {
         device_id: device.device_id,
         current: device.firmware,
@@ -221,11 +301,17 @@ class FirmwareManagerModule {
    * El binario debe existir en data/firmware/binaries/
    */
   async handleRegister(data) {
+    const startTime = Date.now();
     const { type, version, file, changelog, min_version } = data;
 
     if (!type) return { status: 400, error: 'type requerido (ej: esp32-gateway-printer)' };
     if (!version) return { status: 400, error: 'version requerida (semver)' };
     if (!file) return { status: 400, error: 'file requerido (nombre del .bin)' };
+
+    // Validar formato semver básico
+    if (!/^\d+\.\d+\.\d+/.test(version)) {
+      return { status: 400, error: 'version debe ser semver (ej: 1.2.3)' };
+    }
 
     const binPath = path.join(this.config.data_path, 'binaries', file);
 
@@ -259,7 +345,10 @@ class FirmwareManagerModule {
     };
 
     this.catalog[type].latest = version;
-    this.internalMetrics.catalog_entries_total++;
+
+    this.metrics.increment('firmware.catalog_entries.total');
+    this.metrics.timing('firmware.register.duration', Date.now() - startTime);
+    this._publishCatalogMetrics();
 
     await this._saveCatalog();
 
@@ -302,6 +391,16 @@ class FirmwareManagerModule {
       }
     }
 
+    // Si ya hay OTA pendiente para este dispositivo, limpiar
+    if (this.pendingOtas.has(device_id)) {
+      this._clearOtaTimeout(device_id);
+      this.pendingOtas.delete(device_id);
+      this.logger.warn('firmware.ota.replaced', {
+        device_id,
+        new_target: targetVersion
+      });
+    }
+
     // Construir URL del binario
     const firmwareUrl = `/firmware/${encodeURIComponent(type)}/${encodeURIComponent(targetVersion)}/${encodeURIComponent(release.file)}`;
 
@@ -327,13 +426,18 @@ class FirmwareManagerModule {
       type
     });
 
-    this.internalMetrics.ota_requested_total++;
+    this.metrics.increment('firmware.ota_requested.total');
+    this.metrics.gauge('firmware.pending_otas.count', this.pendingOtas.size);
+
+    // Programar timeout
+    this._scheduleOtaTimeout(device_id);
 
     this.logger.info('firmware.ota.requested', {
       device_id,
       type,
       target_version: targetVersion,
-      sha256: release.sha256
+      sha256: release.sha256,
+      timeout_ms: this.config.ota_timeout_ms
     });
 
     await this.eventBus.publish('firmware.ota_requested', {
@@ -351,7 +455,8 @@ class FirmwareManagerModule {
         type,
         target_version: targetVersion,
         firmware_url: firmwareUrl,
-        sha256: release.sha256
+        sha256: release.sha256,
+        timeout_ms: this.config.ota_timeout_ms
       }
     };
   }
@@ -361,9 +466,18 @@ class FirmwareManagerModule {
    */
   async handleOtaStatus(data) {
     const pending = [];
+    const now = Date.now();
+
     for (const [deviceId, ota] of this.pendingOtas) {
       if (!data?.device_id || data.device_id === deviceId) {
-        pending.push({ device_id: deviceId, ...ota });
+        const elapsed = now - new Date(ota.requested_at).getTime();
+        pending.push({
+          device_id: deviceId,
+          ...ota,
+          elapsed_ms: elapsed,
+          timeout_ms: this.config.ota_timeout_ms,
+          remaining_ms: Math.max(0, this.config.ota_timeout_ms - elapsed)
+        });
       }
     }
 
@@ -391,7 +505,8 @@ class FirmwareManagerModule {
     if (!type) return { status: 400, error: 'type requerido' };
     if (!target_version) return { status: 400, error: 'target_version requerido (versión a la que volver)' };
 
-    // Reutilizar la lógica de trigger
+    this.metrics.increment('firmware.rollback.total');
+
     return this.handleTriggerOta({
       device_id,
       project_id,
@@ -407,7 +522,6 @@ class FirmwareManagerModule {
   async handleDeviceVersions(data) {
     const versions = [];
 
-    // Recorrer OTA log para construir historial por dispositivo
     for (const entry of this.otaLog) {
       if (!data?.device_id || data.device_id === entry.device_id) {
         versions.push({
@@ -428,6 +542,37 @@ class FirmwareManagerModule {
   }
 
   /**
+   * Limpiar OTAs pendientes manualmente (para un dispositivo o todas).
+   */
+  async handleCleanupOtas(data) {
+    let cleaned = 0;
+
+    if (data?.device_id) {
+      if (this.pendingOtas.has(data.device_id)) {
+        this._clearOtaTimeout(data.device_id);
+        this.pendingOtas.delete(data.device_id);
+        cleaned = 1;
+      }
+    } else {
+      cleaned = this.pendingOtas.size;
+      for (const timer of this._otaTimeoutTimers.values()) {
+        clearTimeout(timer);
+      }
+      this._otaTimeoutTimers.clear();
+      this.pendingOtas.clear();
+    }
+
+    this.metrics.gauge('firmware.pending_otas.count', this.pendingOtas.size);
+
+    this.logger.info('firmware.ota.cleanup.manual', { cleaned });
+
+    return {
+      status: 200,
+      data: { cleaned, remaining: this.pendingOtas.size }
+    };
+  }
+
+  /**
    * HTTP handler: sirve binarios de firmware.
    * GET /firmware/:type/:version/:file
    */
@@ -435,8 +580,13 @@ class FirmwareManagerModule {
     const { type, version, file } = req.params || req;
     const binPath = path.join(this.config.data_path, 'binaries', file);
 
+    this.metrics.increment('firmware.binary_served.total');
+
     try {
       const content = await fs.promises.readFile(binPath);
+
+      this.metrics.increment('firmware.binary_served.bytes', content.length);
+
       return {
         status: 200,
         headers: {
@@ -447,7 +597,95 @@ class FirmwareManagerModule {
         body: content
       };
     } catch (err) {
+      this.metrics.increment('firmware.binary_served.errors');
       return { status: 404, error: `Firmware binary not found: ${file}` };
+    }
+  }
+
+  // ==========================================
+  // OTA Timeout Management
+  // ==========================================
+
+  _scheduleOtaTimeout(device_id) {
+    this._clearOtaTimeout(device_id);
+
+    const timer = setTimeout(async () => {
+      this._otaTimeoutTimers.delete(device_id);
+      const pending = this.pendingOtas.get(device_id);
+      if (!pending) return;
+
+      this.pendingOtas.delete(device_id);
+      this.metrics.increment('firmware.ota_failed.total');
+      this.metrics.increment('firmware.ota_timeout.total');
+      this.metrics.gauge('firmware.pending_otas.count', this.pendingOtas.size);
+
+      const logEntry = {
+        device_id,
+        type: pending.type,
+        from: pending.previous_version,
+        to: pending.target_version,
+        status: 'failed',
+        reason: 'timeout',
+        requested_at: pending.requested_at,
+        failed_at: new Date().toISOString()
+      };
+
+      this._addOtaLog(logEntry);
+
+      this.logger.warn('firmware.ota.timeout', {
+        device_id,
+        target_version: pending.target_version,
+        timeout_ms: this.config.ota_timeout_ms
+      });
+
+      await this.eventBus.publish('firmware.ota_failed', logEntry);
+    }, this.config.ota_timeout_ms);
+
+    this._otaTimeoutTimers.set(device_id, timer);
+  }
+
+  _clearOtaTimeout(device_id) {
+    const timer = this._otaTimeoutTimers.get(device_id);
+    if (timer) {
+      clearTimeout(timer);
+      this._otaTimeoutTimers.delete(device_id);
+    }
+  }
+
+  /**
+   * Limpieza periódica de OTAs que sobrevivieron al timeout
+   * (safety net por si el setTimeout falla o se recarga el módulo)
+   */
+  _cleanupStaleOtas() {
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const [deviceId, ota] of this.pendingOtas) {
+      const elapsed = now - new Date(ota.requested_at).getTime();
+      if (elapsed > this.config.ota_timeout_ms * 2) {
+        this._clearOtaTimeout(deviceId);
+        this.pendingOtas.delete(deviceId);
+        this.metrics.increment('firmware.ota_failed.total');
+        this.metrics.increment('firmware.ota_stale_cleanup.total');
+
+        this._addOtaLog({
+          device_id: deviceId,
+          type: ota.type,
+          from: ota.previous_version,
+          to: ota.target_version,
+          status: 'failed',
+          reason: 'stale_cleanup',
+          requested_at: ota.requested_at,
+          failed_at: new Date().toISOString()
+        });
+
+        cleaned++;
+      }
+    }
+
+    if (cleaned > 0) {
+      this.metrics.gauge('firmware.pending_otas.count', this.pendingOtas.size);
+      this.logger.info('firmware.ota.stale_cleanup', { cleaned, remaining: this.pendingOtas.size });
     }
   }
 
@@ -466,16 +704,9 @@ class FirmwareManagerModule {
       const data = JSON.parse(raw);
       this.catalog = data.catalog || data;
 
-      // Contar entradas
-      let count = 0;
-      for (const type of Object.values(this.catalog)) {
-        count += Object.keys(type.releases || {}).length;
-      }
-      this.internalMetrics.catalog_entries_total = count;
-
       this.logger.info('firmware.catalog.loaded', {
         types: Object.keys(this.catalog).length,
-        entries: count
+        entries: this._countCatalogEntries()
       });
     } catch (err) {
       if (err.code !== 'ENOENT') {
@@ -536,6 +767,64 @@ class FirmwareManagerModule {
     if (this.otaLog.length > this.maxOtaLog) {
       this.otaLog.pop();
     }
+  }
+
+  // ==========================================
+  // Validación de integridad
+  // ==========================================
+
+  /**
+   * Verifica que cada binario referenciado en el catálogo existe en disco.
+   * Reporta warnings pero no elimina entradas — puede ser que el archivo
+   * se suba después.
+   */
+  async _validateCatalogIntegrity() {
+    let valid = 0;
+    let missing = 0;
+    const missingFiles = [];
+
+    for (const [type, entry] of Object.entries(this.catalog)) {
+      for (const [version, release] of Object.entries(entry.releases || {})) {
+        const binPath = path.join(this.config.data_path, 'binaries', release.file);
+        try {
+          await fs.promises.access(binPath, fs.constants.R_OK);
+          valid++;
+        } catch {
+          missing++;
+          missingFiles.push({ type, version, file: release.file });
+        }
+      }
+    }
+
+    this.metrics.gauge('firmware.catalog_valid_binaries.count', valid);
+    this.metrics.gauge('firmware.catalog_missing_binaries.count', missing);
+
+    if (missing > 0) {
+      this.logger.warn('firmware.catalog.integrity_check', {
+        valid,
+        missing,
+        missing_files: missingFiles
+      });
+    } else {
+      this.logger.info('firmware.catalog.integrity_check', { valid, missing: 0 });
+    }
+  }
+
+  // ==========================================
+  // Métricas helpers
+  // ==========================================
+
+  _countCatalogEntries() {
+    let count = 0;
+    for (const type of Object.values(this.catalog)) {
+      count += Object.keys(type.releases || {}).length;
+    }
+    return count;
+  }
+
+  _publishCatalogMetrics() {
+    this.metrics.gauge('firmware.catalog_types.count', Object.keys(this.catalog).length);
+    this.metrics.gauge('firmware.catalog_entries.count', this._countCatalogEntries());
   }
 
   // ==========================================

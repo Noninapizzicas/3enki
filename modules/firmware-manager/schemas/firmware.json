@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enki.local/schemas/firmware-manager/firmware.json",
+  "title": "Firmware Manager Schemas",
+  "description": "Esquemas de request/response para firmware-manager",
+
+  "definitions": {
+    "register_request": {
+      "type": "object",
+      "required": ["type", "version", "file"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tipo de firmware (ej: esp32-gateway-printer)"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+",
+          "description": "Versión semver del firmware"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nombre del archivo .bin en binaries/"
+        },
+        "changelog": {
+          "type": ["string", "null"],
+          "description": "Notas de cambio"
+        },
+        "min_version": {
+          "type": ["string", "null"],
+          "pattern": "^\\d+\\.\\d+\\.\\d+",
+          "description": "Versión mínima desde la que se puede actualizar"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "trigger_ota_request": {
+      "type": "object",
+      "required": ["device_id", "type"],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+",
+          "description": "Versión objetivo (si no se pasa, usa latest)"
+        },
+        "current_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+",
+          "description": "Versión actual del dispositivo (para validar min_version)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "rollback_request": {
+      "type": "object",
+      "required": ["device_id", "type", "target_version"],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+",
+          "description": "Versión a la que hacer rollback"
+        },
+        "current_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "catalog_entry": {
+      "type": "object",
+      "required": ["latest", "releases"],
+      "properties": {
+        "latest": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+"
+        },
+        "releases": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/release_entry"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "release_entry": {
+      "type": "object",
+      "required": ["file", "sha256", "size", "date"],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "changelog": {
+          "type": ["string", "null"]
+        },
+        "min_version": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

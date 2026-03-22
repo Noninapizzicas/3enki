@@ -1,6 +1,6 @@
 {
   "name": "firmware-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
   "author": "Enki",
   "tier": "tier_3_core",
@@ -28,20 +28,52 @@
       }
     ],
     "publishes": [
-      { "event": "firmware.ota_requested", "description": "OTA solicitada para un dispositivo via shadow" },
-      { "event": "firmware.ota_completed", "description": "Dispositivo actualizó firmware exitosamente" },
-      { "event": "firmware.ota_failed", "description": "OTA falló para un dispositivo" },
-      { "event": "firmware.registered", "description": "Nuevo firmware registrado en catálogo" }
+      {
+        "event": "firmware.registered",
+        "description": "Nuevo firmware registrado en catálogo",
+        "schema": { "$ref": "./schemas/events.json#/definitions/firmware_registered" }
+      },
+      {
+        "event": "firmware.ota_requested",
+        "description": "OTA solicitada para un dispositivo via shadow",
+        "schema": { "$ref": "./schemas/events.json#/definitions/ota_requested" }
+      },
+      {
+        "event": "firmware.ota_completed",
+        "description": "Dispositivo actualizó firmware exitosamente",
+        "schema": { "$ref": "./schemas/events.json#/definitions/ota_completed" }
+      },
+      {
+        "event": "firmware.ota_failed",
+        "description": "OTA falló para un dispositivo (timeout, version_mismatch, stale_cleanup)",
+        "schema": { "$ref": "./schemas/events.json#/definitions/ota_failed" }
+      }
     ]
   },
 
   "ui_handlers": [
     { "domain": "firmware", "action": "list", "handler": "handleList" },
-    { "domain": "firmware", "action": "register", "handler": "handleRegister" },
-    { "domain": "firmware", "action": "trigger-ota", "handler": "handleTriggerOta" },
+    {
+      "domain": "firmware",
+      "action": "register",
+      "handler": "handleRegister",
+      "schema": { "$ref": "./schemas/firmware.json#/definitions/register_request" }
+    },
+    {
+      "domain": "firmware",
+      "action": "trigger-ota",
+      "handler": "handleTriggerOta",
+      "schema": { "$ref": "./schemas/firmware.json#/definitions/trigger_ota_request" }
+    },
     { "domain": "firmware", "action": "status", "handler": "handleOtaStatus" },
-    { "domain": "firmware", "action": "rollback", "handler": "handleRollback" },
-    { "domain": "firmware", "action": "device-versions", "handler": "handleDeviceVersions" }
+    {
+      "domain": "firmware",
+      "action": "rollback",
+      "handler": "handleRollback",
+      "schema": { "$ref": "./schemas/firmware.json#/definitions/rollback_request" }
+    },
+    { "domain": "firmware", "action": "device-versions", "handler": "handleDeviceVersions" },
+    { "domain": "firmware", "action": "cleanup-otas", "handler": "handleCleanupOtas" }
   ],
 
   "apis": [
@@ -55,7 +87,10 @@
 
   "config": {
     "data_path": "./data/firmware",
-    "auto_check_on_register": true
+    "auto_check_on_register": true,
+    "ota_timeout_ms": 300000,
+    "ota_cleanup_interval_ms": 60000,
+    "validate_binaries_on_load": true
   },
 
   "observability": {
@@ -66,7 +101,25 @@
         "firmware.ota_requested.total",
         "firmware.ota_completed.total",
         "firmware.ota_failed.total",
-        "firmware.catalog_entries.total"
+        "firmware.ota_timeout.total",
+        "firmware.ota_stale_cleanup.total",
+        "firmware.catalog_entries.total",
+        "firmware.rollback.total",
+        "firmware.device_outdated.total",
+        "firmware.binary_served.total",
+        "firmware.binary_served.bytes",
+        "firmware.binary_served.errors"
+      ],
+      "gauges": [
+        "firmware.pending_otas.count",
+        "firmware.catalog_types.count",
+        "firmware.catalog_entries.count",
+        "firmware.catalog_valid_binaries.count",
+        "firmware.catalog_missing_binaries.count"
+      ],
+      "timings": [
+        "firmware.ota.duration",
+        "firmware.register.duration"
       ]
     }
   }

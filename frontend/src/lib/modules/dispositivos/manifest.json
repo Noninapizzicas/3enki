@@ -1,0 +1,10 @@
+{
+  "id": "dispositivos",
+  "name": "Dispositivos",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 1,
+  "routes": ["/dispositivos"],
+  "icon": "📟",
+  "label": "Dispositivos"
+}

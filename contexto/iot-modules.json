@@ -1,0 +1,311 @@
+{
+  "_VERSION": "1.0.0",
+  "_CREATED": "2026-03-22",
+  "_DESCRIPTION": "Arquitectura de módulos IoT backend — device-registry, device-shadow, firmware-manager, gateway-manager, device-health.",
+
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANT": "Estos 5 módulos forman la infraestructura IoT de Enki. Se cargan en tier_2 y tier_3, ANTES de módulos de dominio.",
+    "rule_1": "device-registry es la UNICA fuente de verdad de dispositivos. Ni perifericos ni impresion mantienen registros propios.",
+    "rule_2": "device-shadow gestiona estado desired/reported/delta. Los módulos escriben desired, los dispositivos escriben reported.",
+    "rule_3": "firmware-manager orquesta OTA via device-shadow (escribe desired.firmware). No envía binarios por MQTT.",
+    "rule_4": "gateway-manager traduce MQTT↔protocolo nativo. Desde el servidor, un gateway es indistinguible de un ESP32.",
+    "rule_5": "device-health monitoriza liveness y genera alertas. No toma acciones correctivas, solo informa.",
+    "rule_6": "Todos usan el patrón estándar de Enki: module.json + index.js con onLoad/onUnload, event handlers, ui_handlers."
+  },
+
+  "modulos": {
+    "device-registry": {
+      "version": "1.0.0",
+      "tier": "tier_2_platform",
+      "ubicacion": "modules/device-registry/",
+      "responsabilidad": "Fuente única de verdad de TODOS los dispositivos del sistema (ESP32, gateways, perifericos manuales).",
+      "problema_que_resuelve": "Hoy el registro está fragmentado: perifericos tiene registry.js con dispositivos manuales, impresion tiene su Map con impresoras autodescubiertas. Dos registros paralelos.",
+
+      "mqtt_topics": {
+        "escucha": [
+          "devices/{project}/+/birth — Birth message de dispositivo (retained)",
+          "devices/{project}/+/lwt — Last Will and Testament (offline)",
+          "+/+/status/+ — Status periódico (compatibilidad con impresion/+/status/+)"
+        ],
+        "publica": []
+      },
+
+      "eventos": {
+        "publica": [
+          "device.registered — Nuevo dispositivo registrado",
+          "device.unregistered — Dispositivo eliminado",
+          "device.online — Dispositivo conectado",
+          "device.offline — Dispositivo desconectado",
+          "device.updated — Metadata actualizada"
+        ],
+        "escucha": [
+          "device.register — Petición de registro manual",
+          "device.unregister — Petición de eliminación"
+        ]
+      },
+
+      "ui_handlers": [
+        { "domain": "devices", "action": "list", "handler": "handleList" },
+        { "domain": "devices", "action": "get", "handler": "handleGet" },
+        { "domain": "devices", "action": "register", "handler": "handleRegister" },
+        { "domain": "devices", "action": "unregister", "handler": "handleUnregister" },
+        { "domain": "devices", "action": "stats", "handler": "handleStats" }
+      ],
+
+      "modelo_dispositivo": {
+        "device_id": "string — ID único (del birth message o generado)",
+        "project_id": "string — proyecto al que pertenece",
+        "name": "string — nombre lógico legible (cocina-1, barra-printer)",
+        "type": "string — impresora-termica, display, cajon, sensor, actuador",
+        "capabilities": ["imprimir", "cortar-papel", "abrir-cajon", "display", "sensor"],
+        "protocol": "string — mqtt-native, tcp, ble, usb, cmd",
+        "gateway": "string|null — ID del gateway que lo gestiona (null si es MQTT nativo)",
+        "state": "online | offline | error",
+        "firmware": "string|null — versión de firmware reportada",
+        "metadata": {},
+        "last_seen": "ISO timestamp",
+        "registered_at": "ISO timestamp"
+      },
+
+      "persistencia": "data/devices/registry.json",
+
+      "impacto_en_existentes": {
+        "perifericos": "Deja de mantener registry propio. Consulta device-registry para resolver destinos.",
+        "impresion": "Deja de mantener Map de impresoras. Consulta device-registry para saber qué impresoras hay."
+      }
+    },
+
+    "device-shadow": {
+      "version": "1.0.0",
+      "tier": "tier_2_platform",
+      "ubicacion": "modules/device-shadow/",
+      "responsabilidad": "Sincronización bidireccional de estado desired/reported/delta entre servidor y dispositivos.",
+      "problema_que_resuelve": "No existe forma de decirle a un dispositivo 'quiero que tengas X config' y que el dispositivo converja solo. Tampoco de saber qué tiene realmente vs qué queremos.",
+
+      "mqtt_topics": {
+        "escucha": [
+          "devices/{project}/{device_id}/state/reported — El dispositivo reporta su estado actual"
+        ],
+        "publica": [
+          "devices/{project}/{device_id}/state/desired — Estado deseado (retained)",
+          "devices/{project}/{device_id}/state/delta — Diferencia computed (retained)"
+        ]
+      },
+
+      "eventos": {
+        "publica": [
+          "shadow.updated — Estado reported actualizado",
+          "shadow.delta — Nuevo delta computado (desired != reported)",
+          "shadow.synced — Delta vacío (dispositivo sincronizado)"
+        ],
+        "escucha": [
+          "shadow.set_desired — Escribir estado deseado para un dispositivo"
+        ]
+      },
+
+      "ui_handlers": [
+        { "domain": "shadow", "action": "get-reported", "handler": "handleGetReported" },
+        { "domain": "shadow", "action": "get-desired", "handler": "handleGetDesired" },
+        { "domain": "shadow", "action": "get-delta", "handler": "handleGetDelta" },
+        { "domain": "shadow", "action": "set-desired", "handler": "handleSetDesired" },
+        { "domain": "shadow", "action": "get-full", "handler": "handleGetFull" }
+      ],
+
+      "estado_por_dispositivo": {
+        "reported": "object — lo que el dispositivo dice que tiene (firmware, config, sensores)",
+        "desired": "object — lo que el servidor quiere que tenga",
+        "delta": "object — keys de desired que difieren de reported",
+        "last_reported_at": "ISO timestamp",
+        "last_desired_at": "ISO timestamp"
+      },
+
+      "persistencia": "data/devices/shadows.json",
+
+      "ejemplo_flujo": [
+        "1. firmware-manager llama: eventBus.publish('shadow.set_desired', { device_id: 'esp32-cocina-01', state: { firmware: { version: '2.2.0', url: '...', sha256: '...' } } })",
+        "2. device-shadow guarda desired, computa delta, publica delta a MQTT (retained)",
+        "3. ESP32 lee delta → ve firmware.version diferente → descarga → aplica → publica reported.firmware.version = '2.2.0'",
+        "4. device-shadow recibe reported, recalcula delta → delta vacío → publica shadow.synced"
+      ]
+    },
+
+    "firmware-manager": {
+      "version": "1.0.0",
+      "tier": "tier_3_core",
+      "ubicacion": "modules/firmware-manager/",
+      "responsabilidad": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow.",
+      "problema_que_resuelve": "local.esp32.ota-update es un stub sin versionado, checksums, ni tracking. No hay forma de saber qué versión tiene cada dispositivo ni hacer rollback.",
+
+      "eventos": {
+        "publica": [
+          "firmware.ota_requested — OTA solicitada para un dispositivo",
+          "firmware.ota_completed — Dispositivo actualizó exitosamente",
+          "firmware.ota_failed — OTA falló",
+          "firmware.registered — Nuevo firmware registrado en catálogo"
+        ],
+        "escucha": [
+          "shadow.updated — Para detectar cuando reported.firmware cambia (OTA completada/fallida)",
+          "device.registered — Para verificar firmware de nuevos dispositivos"
+        ]
+      },
+
+      "ui_handlers": [
+        { "domain": "firmware", "action": "list", "handler": "handleList" },
+        { "domain": "firmware", "action": "register", "handler": "handleRegister" },
+        { "domain": "firmware", "action": "trigger-ota", "handler": "handleTriggerOta" },
+        { "domain": "firmware", "action": "status", "handler": "handleOtaStatus" },
+        { "domain": "firmware", "action": "rollback", "handler": "handleRollback" }
+      ],
+
+      "apis": [
+        { "method": "GET", "path": "/firmware/:type/:version/:file", "handler": "handleServeBinary" }
+      ],
+
+      "catalogo": {
+        "ubicacion": "data/firmware/manifest.json",
+        "estructura": {
+          "tipo_dispositivo": {
+            "latest": "semver",
+            "releases": {
+              "version": {
+                "file": "nombre-archivo.bin",
+                "sha256": "hash del binario",
+                "size": "bytes",
+                "date": "ISO date",
+                "changelog": "descripción del cambio",
+                "min_version": "versión mínima para actualizar (null = cualquiera)"
+              }
+            }
+          }
+        }
+      },
+
+      "binarios": "data/firmware/binaries/ — directorio con .bin subidos",
+
+      "persistencia": "data/firmware/manifest.json + data/firmware/ota-log.json (historial de OTAs)"
+    },
+
+    "gateway-manager": {
+      "version": "1.0.0",
+      "tier": "tier_2_platform",
+      "ubicacion": "modules/gateway-manager/",
+      "responsabilidad": "Ciclo de vida de gateways software que traducen MQTT a protocolos nativos (TCP, BLE, USB, CMD).",
+      "problema_que_resuelve": "Documentado en gateways-mqtt.json pero no implementado. Impresoras TCP/USB/BLE no aparecen como nodos MQTT.",
+
+      "estructura_interna": {
+        "index.js": "Módulo principal — arranca/para gateways según config",
+        "base.js": "GatewayBase — conexión MQTT, birth message, ACK, health",
+        "gateways/tcp.js": "GatewayTCP extends GatewayBase — mDNS + TCP socket",
+        "gateways/ble.js": "GatewayBLE extends GatewayBase — BLE scan + rfcomm",
+        "gateways/usb.js": "GatewayUSB extends GatewayBase — lsusb + /dev/usb/",
+        "gateways/cmd.js": "GatewayCMD extends GatewayBase — lpstat + shell pipe"
+      },
+
+      "eventos": {
+        "publica": [
+          "gateway.started — Gateway arrancado",
+          "gateway.stopped — Gateway parado",
+          "gateway.device_found — Dispositivo descubierto por un gateway",
+          "gateway.device_lost — Dispositivo perdido",
+          "gateway.error — Error en gateway"
+        ],
+        "escucha": []
+      },
+
+      "ui_handlers": [
+        { "domain": "gateways", "action": "list", "handler": "handleList" },
+        { "domain": "gateways", "action": "status", "handler": "handleStatus" },
+        { "domain": "gateways", "action": "restart", "handler": "handleRestart" },
+        { "domain": "gateways", "action": "discover", "handler": "handleDiscover" }
+      ],
+
+      "contrato_mqtt": "Idéntico al de gateways-mqtt.json — cada gateway publica birth, suscribe a comandos, publica ACK.",
+
+      "reutiliza": "services/providers/local/perifericos/transportes/ (tcp.js, ble.js, comando.js)",
+
+      "config": {
+        "gateways": {
+          "tcp": { "enabled": true, "autodiscovery": true, "manual_devices": [] },
+          "ble": { "enabled": false },
+          "usb": { "enabled": false },
+          "cmd": { "enabled": false }
+        }
+      }
+    },
+
+    "device-health": {
+      "version": "1.0.0",
+      "tier": "tier_3_core",
+      "ubicacion": "modules/device-health/",
+      "responsabilidad": "Monitorización de liveness, uptime, alertas y métricas de flota de dispositivos.",
+      "problema_que_resuelve": "Si un ESP32 se desconecta nadie se entera hasta que alguien intenta imprimir. No hay métricas de uptime ni alertas.",
+
+      "eventos": {
+        "publica": [
+          "health.alert.offline — Dispositivo lleva >N minutos offline",
+          "health.alert.reconnect_loop — Dispositivo reconectando repetidamente",
+          "health.alert.ota_failed — OTA falló para un dispositivo",
+          "health.report — Reporte periódico de estado de flota"
+        ],
+        "escucha": [
+          "device.online — Dispositivo conectado (de device-registry)",
+          "device.offline — Dispositivo desconectado (de device-registry)",
+          "firmware.ota_failed — OTA falló (de firmware-manager)",
+          "firmware.ota_completed — OTA completada (de firmware-manager)"
+        ]
+      },
+
+      "ui_handlers": [
+        { "domain": "health", "action": "dashboard", "handler": "handleDashboard" },
+        { "domain": "health", "action": "device-history", "handler": "handleDeviceHistory" },
+        { "domain": "health", "action": "alerts", "handler": "handleAlerts" }
+      ],
+
+      "metricas_por_dispositivo": {
+        "device_id": "string",
+        "uptime_pct": "number — porcentaje de tiempo online en últimas 24h",
+        "reconnections": "number — reconexiones en últimas 24h",
+        "last_online": "ISO timestamp",
+        "last_offline": "ISO timestamp",
+        "consecutive_offline_min": "number — minutos offline consecutivos actuales",
+        "alerts": []
+      },
+
+      "config": {
+        "offline_threshold_min": 5,
+        "reconnect_loop_threshold": 5,
+        "reconnect_loop_window_min": 30,
+        "report_interval_min": 60
+      },
+
+      "persistencia": "data/devices/health-history.json"
+    }
+  },
+
+  "orden_implementacion": [
+    "1. device-registry (tier_2) — base para todos los demás",
+    "2. device-shadow (tier_2) — depende de device-registry para validar device_id",
+    "3. firmware-manager (tier_3) — depende de device-shadow para orquestar OTA",
+    "4. gateway-manager (tier_2) — depende de device-registry para registrar dispositivos descubiertos",
+    "5. device-health (tier_3) — depende de device-registry para escuchar online/offline"
+  ],
+
+  "dependencias_entre_modulos": {
+    "device-registry": [],
+    "device-shadow": ["device-registry"],
+    "firmware-manager": ["device-shadow", "device-registry"],
+    "gateway-manager": ["device-registry"],
+    "device-health": ["device-registry", "firmware-manager"]
+  },
+
+  "topologia_mqtt": {
+    "devices/{project}/{device_id}/birth": "retained — birth message con capacidades y metadata",
+    "devices/{project}/{device_id}/lwt": "LWT — broker publica automáticamente al desconectar",
+    "devices/{project}/{device_id}/state/reported": "retained — estado actual del dispositivo",
+    "devices/{project}/{device_id}/state/desired": "retained — estado deseado por el servidor",
+    "devices/{project}/{device_id}/state/delta": "retained — diferencia computed",
+    "impresion/{project}/print/{device_id}": "comando de impresión (existente, no cambia)",
+    "impresion/{project}/printed/{device_id}": "ACK de impresión (existente, no cambia)",
+    "impresion/{project}/status/{device_id}": "status periódico (existente, device-registry lo escucha)"
+  }
+}

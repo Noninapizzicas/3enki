@@ -1,0 +1,70 @@
+{
+  "name": "gateway-manager",
+  "version": "1.0.0",
+  "description": "Ciclo de vida de gateways software que traducen MQTT a protocolos nativos (TCP, BLE, USB, CMD)",
+  "author": "Enki",
+  "tier": "tier_2_platform",
+
+  "provides": {
+    "events": [
+      "gateway.started",
+      "gateway.stopped",
+      "gateway.device_found",
+      "gateway.device_lost",
+      "gateway.error"
+    ]
+  },
+
+  "events": {
+    "subscribes": [],
+    "publishes": [
+      { "event": "gateway.started", "description": "Gateway arrancado y operativo" },
+      { "event": "gateway.stopped", "description": "Gateway detenido" },
+      { "event": "gateway.device_found", "description": "Dispositivo descubierto por un gateway" },
+      { "event": "gateway.device_lost", "description": "Dispositivo perdido por un gateway" },
+      { "event": "gateway.error", "description": "Error en un gateway" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "gateways", "action": "list", "handler": "handleList" },
+    { "domain": "gateways", "action": "status", "handler": "handleStatus" },
+    { "domain": "gateways", "action": "restart", "handler": "handleRestart" },
+    { "domain": "gateways", "action": "discover", "handler": "handleDiscover" }
+  ],
+
+  "config": {
+    "gateways": {
+      "tcp": {
+        "enabled": false,
+        "autodiscovery": true,
+        "manual_devices": []
+      },
+      "ble": {
+        "enabled": false,
+        "manual_devices": []
+      },
+      "usb": {
+        "enabled": false,
+        "manual_devices": []
+      },
+      "cmd": {
+        "enabled": false,
+        "manual_devices": []
+      }
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "gateway.started.total",
+        "gateway.devices_found.total",
+        "gateway.commands_processed.total",
+        "gateway.errors.total"
+      ]
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "name": "device-health",
+  "version": "1.0.0",
+  "description": "Monitorización de liveness, uptime, alertas y métricas de la flota de dispositivos IoT",
+  "author": "Enki",
+  "tier": "tier_3_core",
+
+  "provides": {
+    "events": [
+      "health.alert.offline",
+      "health.alert.reconnect_loop",
+      "health.alert.ota_failed",
+      "health.report"
+    ]
+  },
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "device.online",
+        "handler": "onDeviceOnline",
+        "description": "Dispositivo conectado — registrar timestamp, resetear contador offline"
+      },
+      {
+        "event": "device.offline",
+        "handler": "onDeviceOffline",
+        "description": "Dispositivo desconectado — iniciar conteo, verificar alertas"
+      },
+      {
+        "event": "firmware.ota_failed",
+        "handler": "onOtaFailed",
+        "description": "OTA falló — generar alerta"
+      },
+      {
+        "event": "firmware.ota_completed",
+        "handler": "onOtaCompleted",
+        "description": "OTA completada — registrar en historial"
+      }
+    ],
+    "publishes": [
+      { "event": "health.alert.offline", "description": "Dispositivo lleva más de N minutos offline" },
+      { "event": "health.alert.reconnect_loop", "description": "Dispositivo reconectando repetidamente" },
+      { "event": "health.alert.ota_failed", "description": "OTA falló para un dispositivo" },
+      { "event": "health.report", "description": "Reporte periódico de estado de la flota" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "health", "action": "dashboard", "handler": "handleDashboard" },
+    { "domain": "health", "action": "device-history", "handler": "handleDeviceHistory" },
+    { "domain": "health", "action": "alerts", "handler": "handleAlerts" }
+  ],
+
+  "config": {
+    "offline_threshold_min": 5,
+    "reconnect_loop_threshold": 5,
+    "reconnect_loop_window_min": 30,
+    "report_interval_min": 60,
+    "data_path": "./data/devices"
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "health.alerts.total",
+        "health.alerts.offline",
+        "health.alerts.reconnect_loop",
+        "health.alerts.ota_failed"
+      ]
+    }
+  }
+}

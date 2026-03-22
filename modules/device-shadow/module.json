@@ -1,0 +1,56 @@
+{
+  "name": "device-shadow",
+  "version": "1.0.0",
+  "description": "Sincronización bidireccional de estado desired/reported/delta entre servidor y dispositivos IoT",
+  "author": "Enki",
+  "tier": "tier_2_platform",
+
+  "provides": {
+    "events": [
+      "shadow.updated",
+      "shadow.delta",
+      "shadow.synced"
+    ]
+  },
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "shadow.set_desired",
+        "handler": "onSetDesired",
+        "description": "Escribir estado deseado para un dispositivo"
+      }
+    ],
+    "publishes": [
+      { "event": "shadow.updated", "description": "Estado reported de un dispositivo fue actualizado" },
+      { "event": "shadow.delta", "description": "Nuevo delta computado — desired difiere de reported" },
+      { "event": "shadow.synced", "description": "Delta vacío — dispositivo sincronizado con estado deseado" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "shadow", "action": "get-reported", "handler": "handleGetReported" },
+    { "domain": "shadow", "action": "get-desired", "handler": "handleGetDesired" },
+    { "domain": "shadow", "action": "get-delta", "handler": "handleGetDelta" },
+    { "domain": "shadow", "action": "set-desired", "handler": "handleSetDesired" },
+    { "domain": "shadow", "action": "get-full", "handler": "handleGetFull" }
+  ],
+
+  "config": {
+    "persist_interval_ms": 30000,
+    "data_path": "./data/devices"
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "shadow.reported_updates.total",
+        "shadow.desired_updates.total",
+        "shadow.deltas_computed.total",
+        "shadow.synced.total"
+      ]
+    }
+  }
+}

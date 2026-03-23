@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     esp32Store, loadFirmwareCatalog, loadOtaStatus, loadRollbackDevices,
-    triggerOta, rollbackDevice, elapsed, statusColor
+    triggerOta, rollbackDevice, elapsed, statusColor, selectFirmwareForFlash
   } from '$lib/stores/esp32';
 
   type SubTab = 'catalogo' | 'otas' | 'rollback';
@@ -72,7 +72,7 @@
     {:else}
       <div class="fw-grid">
         {#each firmwareTypes as fw (fw.type)}
-          <button class="fw-card" on:click={() => { otaType = fw.type; otaVersion = ''; showOtaForm = true; subTab = 'otas'; }}>
+          <button class="fw-card" on:click={() => { if (fw.binary_path) { selectFirmwareForFlash(fw.binary_path); } else { otaType = fw.type; otaVersion = ''; showOtaForm = true; subTab = 'otas'; } }}>
             <span class="fw-type">{fw.type}</span>
             <span class="fw-latest">v{fw.latest}</span>
             <span class="fw-count">{fw.releases_count} release{fw.releases_count !== 1 ? 's' : ''}</span>

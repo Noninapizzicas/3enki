@@ -32,6 +32,14 @@
   $: lines = $esp32Store.serialLines;
   $: isMonitoring = monitorPort !== null;
 
+  // Auto-fill binary from catalog selection
+  $: selectedBinary = $esp32Store.selectedBinaryPath;
+  $: if (selectedBinary) {
+    binaryPath = selectedBinary;
+    subTab = 'grabar';
+    esp32Store.update(s => ({ ...s, selectedBinaryPath: null }));
+  }
+
   // Auto-fill binary from last build
   $: if (lastBuild?.binary_path && !binaryPath) {
     binaryPath = lastBuild.binary_path;

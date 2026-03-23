@@ -89,7 +89,7 @@
   ],
 
   "config": {
-    "esptool_path": "esptool.py",
+    "esptool_path": "esptool",
     "platformio_path": "platformio",
     "default_baud": 115200,
     "flash_baud": 460800,

@@ -1,0 +1,8 @@
+{
+  "name": "Gateway Impresora",
+  "description": "Bridge MQTT ↔ BLE para impresora térmica. Recibe ESC/POS via MQTT y reenvía por Bluetooth. Basado en print-proxy.",
+  "category": "gateway",
+  "framework": "arduino",
+  "defaultBoard": "esp32dev",
+  "boards": ["esp32dev", "esp32-s3"]
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enki.local/schemas/esp32-dev/esp32.json",
+  "title": "ESP32 Dev Schemas",
+  "description": "Esquemas de request/response para esp32-dev",
+
+  "definitions": {
+    "create_project_request": {
+      "type": "object",
+      "required": ["project_name", "template"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "minLength": 2,
+          "maxLength": 64,
+          "description": "Nombre del proyecto (slug: lowercase, hyphens)"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID del template a usar"
+        },
+        "board": {
+          "type": "string",
+          "default": "esp32dev",
+          "description": "Board PlatformIO (default: esp32dev)"
+        },
+        "framework": {
+          "type": "string",
+          "enum": ["arduino", "espidf"],
+          "default": "arduino",
+          "description": "Framework (default: arduino)"
+        },
+        "vars": {
+          "type": "object",
+          "description": "Variables de template (wifi_ssid, mqtt_host, device_name, etc.)",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "get_project_request": {
+      "type": "object",
+      "required": ["project_name"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "build_request": {
+      "type": "object",
+      "required": ["project_name"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clean": {
+          "type": "boolean",
+          "default": false,
+          "description": "Limpiar build antes de compilar"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "delete_project_request": {
+      "type": "object",
+      "required": ["project_name"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confirm": {
+          "type": "boolean",
+          "description": "Debe ser true para confirmar eliminación"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "name": "esp32-flasher",
+  "version": "1.0.0",
+  "description": "Flash de firmware a ESP32 via serial (esptool/platformio) y monitor serial en tiempo real",
+  "author": "Enki",
+  "tier": "tier_3_core",
+
+  "provides": {
+    "events": [
+      "flash.started",
+      "flash.progress",
+      "flash.completed",
+      "flash.failed",
+      "flash.serial_output"
+    ]
+  },
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "esp32.build_completed",
+        "handler": "onBuildCompleted",
+        "description": "Notifica que hay un binario listo para flashear"
+      }
+    ],
+    "publishes": [
+      {
+        "event": "flash.started",
+        "description": "Flash iniciado en un puerto serial",
+        "schema": { "$ref": "./schemas/events.json#/definitions/flash_started" }
+      },
+      {
+        "event": "flash.progress",
+        "description": "Progreso de flash (porcentaje, etapa)",
+        "schema": { "$ref": "./schemas/events.json#/definitions/flash_progress" }
+      },
+      {
+        "event": "flash.completed",
+        "description": "Flash completado exitosamente",
+        "schema": { "$ref": "./schemas/events.json#/definitions/flash_completed" }
+      },
+      {
+        "event": "flash.failed",
+        "description": "Flash falló",
+        "schema": { "$ref": "./schemas/events.json#/definitions/flash_failed" }
+      },
+      {
+        "event": "flash.serial_output",
+        "description": "Línea de salida del monitor serial",
+        "schema": { "$ref": "./schemas/events.json#/definitions/serial_output" }
+      }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "flash", "action": "list-ports", "handler": "handleListPorts" },
+    {
+      "domain": "flash",
+      "action": "start",
+      "handler": "handleStart",
+      "schema": { "$ref": "./schemas/flash.json#/definitions/start_request" }
+    },
+    { "domain": "flash", "action": "status", "handler": "handleStatus" },
+    {
+      "domain": "flash",
+      "action": "cancel",
+      "handler": "handleCancel",
+      "schema": { "$ref": "./schemas/flash.json#/definitions/cancel_request" }
+    },
+    {
+      "domain": "flash",
+      "action": "monitor-start",
+      "handler": "handleMonitorStart",
+      "schema": { "$ref": "./schemas/flash.json#/definitions/monitor_start_request" }
+    },
+    {
+      "domain": "flash",
+      "action": "monitor-stop",
+      "handler": "handleMonitorStop",
+      "schema": { "$ref": "./schemas/flash.json#/definitions/monitor_stop_request" }
+    },
+    {
+      "domain": "flash",
+      "action": "monitor-send",
+      "handler": "handleMonitorSend",
+      "schema": { "$ref": "./schemas/flash.json#/definitions/monitor_send_request" }
+    },
+    { "domain": "flash", "action": "history", "handler": "handleHistory" }
+  ],
+
+  "config": {
+    "esptool_path": "esptool.py",
+    "platformio_path": "platformio",
+    "default_baud": 115200,
+    "flash_baud": 460800,
+    "monitor_baud": 115200,
+    "flash_timeout_ms": 120000,
+    "serial_patterns": ["/dev/ttyUSB*", "/dev/ttyACM*"],
+    "max_monitor_buffer": 5000,
+    "max_history": 200
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "flash.started.total",
+        "flash.completed.total",
+        "flash.failed.total",
+        "flash.cancelled.total",
+        "flash.monitor_started.total"
+      ],
+      "gauges": [
+        "flash.active.count",
+        "flash.monitors.count",
+        "flash.ports_detected.count"
+      ],
+      "timings": [
+        "flash.duration"
+      ]
+    }
+  }
+}

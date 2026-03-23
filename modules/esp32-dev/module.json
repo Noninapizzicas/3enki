@@ -1,0 +1,104 @@
+{
+  "name": "esp32-dev",
+  "version": "1.0.0",
+  "description": "Desarrollo ESP32: templates, scaffolding de proyectos y compilación de firmware",
+  "author": "Enki",
+  "tier": "tier_3_core",
+
+  "provides": {
+    "events": [
+      "esp32.project_created",
+      "esp32.build_started",
+      "esp32.build_completed",
+      "esp32.build_failed"
+    ]
+  },
+
+  "events": {
+    "subscribes": [],
+    "publishes": [
+      {
+        "event": "esp32.project_created",
+        "description": "Nuevo proyecto de firmware creado desde template",
+        "schema": { "$ref": "./schemas/events.json#/definitions/project_created" }
+      },
+      {
+        "event": "esp32.build_started",
+        "description": "Compilación iniciada",
+        "schema": { "$ref": "./schemas/events.json#/definitions/build_started" }
+      },
+      {
+        "event": "esp32.build_completed",
+        "description": "Compilación completada exitosamente",
+        "schema": { "$ref": "./schemas/events.json#/definitions/build_completed" }
+      },
+      {
+        "event": "esp32.build_failed",
+        "description": "Compilación falló",
+        "schema": { "$ref": "./schemas/events.json#/definitions/build_failed" }
+      }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "esp32", "action": "list-templates", "handler": "handleListTemplates" },
+    {
+      "domain": "esp32",
+      "action": "create-project",
+      "handler": "handleCreateProject",
+      "schema": { "$ref": "./schemas/esp32.json#/definitions/create_project_request" }
+    },
+    { "domain": "esp32", "action": "list-projects", "handler": "handleListProjects" },
+    {
+      "domain": "esp32",
+      "action": "get-project",
+      "handler": "handleGetProject",
+      "schema": { "$ref": "./schemas/esp32.json#/definitions/get_project_request" }
+    },
+    {
+      "domain": "esp32",
+      "action": "build",
+      "handler": "handleBuild",
+      "schema": { "$ref": "./schemas/esp32.json#/definitions/build_request" }
+    },
+    {
+      "domain": "esp32",
+      "action": "build-status",
+      "handler": "handleBuildStatus"
+    },
+    { "domain": "esp32", "action": "list-boards", "handler": "handleListBoards" },
+    {
+      "domain": "esp32",
+      "action": "delete-project",
+      "handler": "handleDeleteProject",
+      "schema": { "$ref": "./schemas/esp32.json#/definitions/delete_project_request" }
+    }
+  ],
+
+  "config": {
+    "data_path": "./data/esp32-dev",
+    "platformio_path": "platformio",
+    "build_timeout_ms": 300000,
+    "max_concurrent_builds": 2
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "esp32.project_created.total",
+        "esp32.build_started.total",
+        "esp32.build_completed.total",
+        "esp32.build_failed.total"
+      ],
+      "gauges": [
+        "esp32.active_builds.count",
+        "esp32.projects.count"
+      ],
+      "timings": [
+        "esp32.build.duration"
+      ]
+    }
+  }
+}

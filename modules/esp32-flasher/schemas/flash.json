@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enki.local/schemas/esp32-flasher/flash.json",
+  "title": "ESP32 Flasher Schemas",
+  "description": "Esquemas de request/response para esp32-flasher",
+
+  "definitions": {
+    "start_request": {
+      "type": "object",
+      "required": ["port", "binary_path"],
+      "properties": {
+        "port": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Puerto serial (ej: /dev/ttyUSB0)"
+        },
+        "binary_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Ruta al .bin a flashear"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["esptool", "platformio"],
+          "default": "esptool",
+          "description": "Método de flash"
+        },
+        "baud": {
+          "type": "integer",
+          "minimum": 9600,
+          "maximum": 2000000,
+          "default": 460800,
+          "description": "Baud rate para flash"
+        },
+        "flash_mode": {
+          "type": "string",
+          "enum": ["dio", "dout", "qio", "qout"],
+          "default": "dio",
+          "description": "Flash mode del ESP32"
+        },
+        "flash_freq": {
+          "type": "string",
+          "enum": ["40m", "80m"],
+          "default": "80m",
+          "description": "Frecuencia del flash"
+        },
+        "erase_before": {
+          "type": "boolean",
+          "default": false,
+          "description": "Borrar flash completo antes de escribir"
+        },
+        "project_dir": {
+          "type": "string",
+          "description": "Directorio del proyecto PlatformIO (solo para method=platformio)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "cancel_request": {
+      "type": "object",
+      "required": ["flash_id"],
+      "properties": {
+        "flash_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID del flash a cancelar"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "monitor_start_request": {
+      "type": "object",
+      "required": ["port"],
+      "properties": {
+        "port": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Puerto serial a monitorear"
+        },
+        "baud": {
+          "type": "integer",
+          "minimum": 9600,
+          "maximum": 2000000,
+          "default": 115200,
+          "description": "Baud rate del monitor"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "monitor_stop_request": {
+      "type": "object",
+      "required": ["port"],
+      "properties": {
+        "port": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "monitor_send_request": {
+      "type": "object",
+      "required": ["port", "data"],
+      "properties": {
+        "port": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data": {
+          "type": "string",
+          "description": "Texto a enviar al serial"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

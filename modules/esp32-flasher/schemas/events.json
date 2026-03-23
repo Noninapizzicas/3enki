@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enki.local/schemas/esp32-flasher/events.json",
+  "title": "ESP32 Flasher Events",
+  "description": "Esquemas de eventos publicados por esp32-flasher",
+
+  "definitions": {
+    "flash_started": {
+      "type": "object",
+      "required": ["flash_id", "port", "method", "binary_path", "timestamp"],
+      "properties": {
+        "flash_id": { "type": "string", "minLength": 1 },
+        "port": { "type": "string", "minLength": 1 },
+        "method": { "type": "string", "enum": ["esptool", "platformio"] },
+        "binary_path": { "type": "string" },
+        "baud": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+
+    "flash_progress": {
+      "type": "object",
+      "required": ["flash_id", "stage", "percent"],
+      "properties": {
+        "flash_id": { "type": "string", "minLength": 1 },
+        "stage": { "type": "string", "description": "Etapa: connecting, erasing, writing, verifying" },
+        "percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "flash_completed": {
+      "type": "object",
+      "required": ["flash_id", "port", "method", "duration_ms"],
+      "properties": {
+        "flash_id": { "type": "string", "minLength": 1 },
+        "port": { "type": "string" },
+        "method": { "type": "string" },
+        "binary_path": { "type": "string" },
+        "binary_size": { "type": "integer" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "flash_failed": {
+      "type": "object",
+      "required": ["flash_id", "port", "method", "error"],
+      "properties": {
+        "flash_id": { "type": "string", "minLength": 1 },
+        "port": { "type": "string" },
+        "method": { "type": "string" },
+        "error": { "type": "string" },
+        "exit_code": { "type": "integer" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "serial_output": {
+      "type": "object",
+      "required": ["port", "line"],
+      "properties": {
+        "port": { "type": "string" },
+        "line": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

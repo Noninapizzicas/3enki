@@ -1531,29 +1531,17 @@ class AIGatewayModule {
     }
 
     switch (providerName) {
-      case 'anthropic': {
+      case 'anthropic':
         // Anthropic format: { name, description, input_schema }
-        // Tool names must match ^[a-zA-Z0-9_-]{1,64}$ — sanitize dots
-        const seen = new Set();
-        return tools
-          .map(tool => {
-            const safeName = tool.name.replace(/\./g, '_');
-            return {
-              name: safeName,
-              description: tool.description || '',
-              input_schema: tool.parameters || {
-                type: 'object',
-                properties: {},
-                required: []
-              }
-            };
-          })
-          .filter(tool => {
-            if (seen.has(tool.name)) return false;
-            seen.add(tool.name);
-            return true;
-          });
-      }
+        return tools.map(tool => ({
+          name: tool.name,
+          description: tool.description || '',
+          input_schema: tool.parameters || {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }));
 
       case 'gemini':
         // Gemini format: handled inside gemini-provider.convertTools()
@@ -1575,30 +1563,20 @@ class AIGatewayModule {
       case 'deepseek':
       case 'groq':
       case 'ollama':
-      default: {
+      default:
         // OpenAI-compatible format (DeepSeek, Groq, Ollama all use this)
-        // Sanitize dots in tool names and deduplicate
-        const seen = new Set();
-        return tools
-          .map(tool => ({
-            type: 'function',
-            function: {
-              name: tool.name.replace(/\./g, '_'),
-              description: tool.description || '',
-              parameters: tool.parameters || {
-                type: 'object',
-                properties: {},
-                required: []
-              }
+        return tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.parameters || {
+              type: 'object',
+              properties: {},
+              required: []
             }
-          }))
-          .filter(tool => {
-            const name = tool.function.name;
-            if (seen.has(name)) return false;
-            seen.add(name);
-            return true;
-          });
-      }
+          }
+        }));
     }
   }
 

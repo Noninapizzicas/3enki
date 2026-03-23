@@ -177,6 +177,20 @@ class ESP32FlasherModule {
     }
 
     const flashMethod = method || 'esptool';
+
+    // Verificar que la herramienta de flash existe antes de intentar
+    const toolCheck = await this._checkFlashTool(flashMethod);
+    if (!toolCheck.available) {
+      return { status: 400, error: toolCheck.error };
+    }
+
+    // Verificar que el puerto serial existe
+    try {
+      await fs.promises.access(port, fs.constants.R_OK | fs.constants.W_OK);
+    } catch {
+      return { status: 400, error: `Puerto serial no accesible: ${port}. ¿Está conectado el dispositivo? ¿Permisos?` };
+    }
+
     const flashBaud = baud || this.config.flash_baud;
     const flashId = this._generateId();
 
@@ -439,6 +453,28 @@ class ESP32FlasherModule {
         total: history.length
       }
     };
+  }
+
+  // ─── Pre-flash validation ────────────────────────────────
+
+  async _checkFlashTool(method) {
+    const { execFileSync } = require('child_process');
+    const toolPath = method === 'platformio'
+      ? this.config.platformio_path
+      : this.config.esptool_path;
+
+    try {
+      execFileSync('which', [toolPath], { timeout: 3000, stdio: 'pipe' });
+      return { available: true };
+    } catch {
+      const installHint = method === 'platformio'
+        ? 'Instala PlatformIO: pip install platformio'
+        : 'Instala esptool: pip install esptool';
+      return {
+        available: false,
+        error: `'${toolPath}' no encontrado en PATH. ${installHint}`
+      };
+    }
   }
 
   // ─── Flash: esptool ───────────────────────────────────────

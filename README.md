@@ -1,64 +1,347 @@
-# Event Core - Meta-Core Event-Driven Framework
+# Event Core
 
-**Arquitectura fractal event-driven** con IA integrada, zero dependencias externas, diseñada para escalar de un proceso a N cores distribuidos.
+Plataforma event-driven modular con IA integrada, MQTT nativo y arquitectura fractal. Un solo proceso que escala de standalone a N cores distribuidos.
 
-## 🎊 Status: v0.5.0 Network - COMPLETADO ✅
+**v0.2.0** | Node.js >= 18 | MIT
 
-**100+ tests** | **110 Story Points** | **Multi-Machine Ready** | **✅ Production Ready** | **📊 Observable**
+---
 
-### 🚀 New in v0.5.0 "Network"
-
-#### Network Deployment (8 SP)
-- ✅ **Multi-Machine Support** - Cores en diferentes máquinas con discovery automático
-- ✅ **Network Scripts** - Setup wizard, validation, latency testing
-- ✅ **External MQTT Broker** - Mosquitto integration con fallback automático
-- ✅ **Deployment Guide** - 7,000+ palabras de documentación
-
-#### Observability Dashboard (21 SP)
-- ✅ **Web UI** - Dashboard moderna con dark theme
-- ✅ **Real-time Monitoring** - Cores activos, logs, events via SSE
-- ✅ **Metrics Dashboard** - Métricas agregadas de todos los cores
-- ✅ **User Guide** - 5,000+ palabras de documentación
-
-### ✅ Core Components (from v0.1.0-v0.5.0)
-
-#### Core Infrastructure (55 SP)
-- ✅ **Hook System** (8 SP) - `core/hooks.js` - 21 tests ✅
-- ✅ **Observability** (8 SP) - Logger, Tracer, Metrics - 19 tests ✅
-- ✅ **MQTT Broker** (8 SP) - Aedes embebido con fallback automático
-- ✅ **Event Bus** (8 SP) - Híbrido EventEmitter + MQTT + Hooks
-- ✅ **Module Loader** (13 SP) - Autodiscovery + hot-reload + registry
-- ✅ **HTTP Gateway** (10 SP) - Routing automático - 20 tests ✅
-
-#### Módulos (26 SP)
-- ✅ **Echo Module** (3 SP) - Módulo de ejemplo con APIs y eventos
-- ✅ **File Watcher Module** (2 SP) - Observador de filesystem
-- ✅ **Security P2P Module** (21 SP) - Estructura base implementada
-
-#### CLI & Tests (21 SP)
-- ✅ **CLI HTTP Client** (8 SP) - Cliente HTTP puro sin lógica
-- ✅ **Integration Tests** (13 SP) - 18/19 tests ✅ (95%)
-
-#### Entry Point
-- ✅ **Main Entry Point** - `index.js` - Inicialización completa del stack
-
-### 📊 Tests Implementados
+## Arquitectura
 
 ```
-Tests Unitarios:
-- Hook System:       21 tests ✅
-- Observability:     19 tests ✅
-- HTTP Gateway:      20 tests ✅
-- CLI Client:        Implementado
-- Security P2P:      Implementado
-
-Tests Integración:
-- Full Stack:        18/19 tests ✅ (95%)
-
-Total: 60+ unit tests + 18 integration tests
+                    +-----------------------+
+                    |     HTTP Gateway      |  :3000
+                    |   (REST + UI static)  |
+                    +-----------+-----------+
+                                |
+                    +-----------+-----------+
+                    |     MQTT Broker       |  :1883 TCP / :9001 WS
+                    |      (Aedes)          |
+                    +-----------+-----------+
+                                |
+          +---------------------+---------------------+
+          |                     |                     |
+    +-----+------+     +-------+------+     +--------+-----+
+    |   Core     |     |   Module     |     |   Frontend   |
+    | hooks      |     |   Loader     |     |   SvelteKit  |
+    | events     |     | autodiscovery|     |   via WS     |
+    | gateway    |     | hot-reload   |     |   MQTT req   |
+    | discovery  |     | 49 modules   |     |              |
+    | validation |     +--------------+     +--------------+
+    +------------+
 ```
 
-### 🚀 Inicio Rápido
+**Principios:**
+- El core es solo infraestructura. Todo feature es un modulo
+- Comunicacion exclusiva por MQTT (pub/sub + request/response)
+- Modulos se autodescubren, se cargan por manifiesto `module.json`
+- La seguridad es modular: certificate-authority, security-p2p
+- Frontend conecta via WebSocket al broker MQTT, nunca REST directo
+
+---
+
+## Estructura del Proyecto
+
+```
+event-core/
+|-- index.js                 # Entry point
+|-- config.json              # Configuracion principal
+|-- package.json             # Dependencias (minimas)
+|
+|-- core/                    # Infraestructura (no features)
+|   |-- broker/              # MQTT broker embebido (Aedes)
+|   |-- mqtt/                # Cliente MQTT + pool + topics
+|   |-- events/              # Event bus (EventEmitter + MQTT)
+|   |-- gateway/             # HTTP Gateway + cache + compression
+|   |-- hooks.js             # Sistema de hooks (beforeRequest, etc.)
+|   |-- modules/             # Loader + registry de modulos
+|   |-- discovery/           # Discovery de cores + heartbeat
+|   |-- observability/       # Logger, Tracer, Metrics
+|   |-- providers/           # Sistema de providers (IA, servicios)
+|   |-- validation/          # JSON Schema validation
+|   |-- ui/                  # UIRequestHandler (MQTT req/res)
+|   |-- flow/                # Motor de flujos (agent, engine, registry)
+|   +-- config/              # Carga de configuracion
+|
+|-- modules/                 # 49 modulos habilitados + 9 deshabilitados
+|   |-- ai-gateway/          # Gateway IA multi-provider
+|   |-- ai-agent-framework/  # Orquestacion de agentes IA
+|   |-- agent-manager/       # Lifecycle de agentes
+|   |-- certificate-authority/ # CA interna + mTLS
+|   |-- security-p2p/        # Seguridad P2P (deshabilitado)
+|   |-- credential-manager/  # Gestion de credenciales
+|   |-- project-manager/     # Gestion de proyectos
+|   |-- pizzepos/            # Sistema POS restauracion
+|   |   |-- cuentas/         # Gestion de cuentas
+|   |   |-- pedidos/         # Pedidos
+|   |   |-- cobros/          # Cobros
+|   |   |-- cocina/          # Pantalla cocina
+|   |   |-- comandero/       # Comandero (camareros)
+|   |   |-- productos/       # Catalogo productos
+|   |   |-- carta-digital/   # Carta digital
+|   |   +-- ...              # +8 sub-modulos mas
+|   |-- facturas/            # Facturacion (OCR + IA)
+|   |-- recetas/             # Gestion de recetas
+|   |-- escandallo/          # Analisis de costes
+|   |-- viabilidad/          # Estudios de viabilidad
+|   |-- bot-manager/         # Bots multi-canal
+|   |-- telegram-service/    # Integracion Telegram
+|   |-- scheduler/           # Planificador de tareas (cron)
+|   +-- ...                  # +20 modulos mas
+|
+|-- frontend/                # SvelteKit + TypeScript + Tailwind
+|   +-- src/
+|       |-- routes/          # Paginas (file-based routing)
+|       |   |-- /            # Home - chat general
+|       |   |-- /facturas    # Modo facturacion
+|       |   |-- /[project_id]/menu-generator   # Generador cartas
+|       |   |-- /[project_id]/comandero        # Comandero
+|       |   |-- /[project_id]/cocina           # Pantalla cocina
+|       |   |-- /[project_id]/recetas          # Recetas
+|       |   |-- /[project_id]/escandallo       # Escandallo
+|       |   +-- /[project_id]/viabilidad       # Viabilidad
+|       |-- lib/
+|       |   |-- modules/     # Modulos UI (manifest.json + Panel.svelte)
+|       |   |-- stores/      # Svelte stores (28 archivos)
+|       |   |-- components/  # Componentes reutilizables
+|       |   +-- ui-core/     # MQTT client + mqtt-request.ts
+|       +-- app.html
+|
+|-- contexto/                # Documentacion estructurada del sistema (JSON)
+|-- handlers/                # Handlers globales y por proyecto
+|-- services/providers/      # Providers: anthropic, google, elevenlabs, local/
+|-- plugins/                 # github, ocr, slack, weather, http-utils
+|-- tests/                   # Unit (10) + Integration (2)
+|-- scripts/                 # Utilidades (create-module, migrations, etc.)
+|-- deployment/              # Caddy, Helm, deploy.sh, vps-setup.sh
+|-- docs/                    # 40+ guias (arquitectura, modulos, flujos)
+|-- prompts/                 # 17 prompts IA especializados
+|-- templates/               # Templates de facturas, emails
+|-- plop-templates/          # Generadores de codigo (8 templates)
++-- firmware/                # IoT print-proxy (ESP32, PlatformIO)
+```
+
+---
+
+## Modulos
+
+### Habilitados (49)
+
+| Categoria | Modulos |
+|-----------|---------|
+| **Infraestructura** | credential-manager, database-manager, filesystem, plugin-manager, scheduler, system-inspector, composition-manager, context-manager |
+| **IA & Agentes** | ai-gateway, ai-agent-framework, agent-manager, prompt-manager, prompt-engine, prompt-composer |
+| **Chat & Bots** | chat-ai-bridge, chat-session, bot-manager, telegram-service, channel-manager, calling-generator |
+| **PizzaPos** | pizzepos, cuentas, cuentas-canales, pedidos, cobros, cocina, comandero, productos, categorias, ingredientes, variaciones, persistencia-comandero, carta-digital, carta-impresion, menu-generator, impresion |
+| **Negocio** | facturas, recetas, escandallo, viabilidad, project-manager |
+| **Facturacion** | asesoria, fuentes |
+| **Utilidades** | admin-panel, pdf-viewer, text-editor, code-executor |
+| **Seguridad** | certificate-authority |
+
+### Deshabilitados (9)
+
+| Modulo | Descripcion |
+|--------|-------------|
+| `security-p2p` | Autenticacion y cifrado P2P entre cores distribuidos |
+| `staff-manager` | Gestion de personal y roles |
+| `log-manager` | Gestion avanzada de logs |
+| `conversation-manager` | Persistencia de conversaciones |
+| `dashboard` | Dashboard de observabilidad web |
+| `metricas` | Recoleccion de metricas |
+| `notas` | Sistema de notas |
+| `scratch-designer` | Disenador visual |
+| `ui-designer` | Disenador de UI |
+
+---
+
+## Seguridad
+
+El sistema tiene dos modulos de seguridad, ambos implementados como modulos (no en el core):
+
+### Certificate Authority (habilitado)
+
+CA interna que emite certificados X.509 para autenticacion mTLS. Mismo patron que FNMT: CA propia genera certificados, el cliente los importa, cada request se autentica por certificado.
+
+```
+modules/certificate-authority/
+|-- index.js              # Lifecycle + 10 API handlers
+|-- ca-manager.js         # CA raiz, emision, revocacion, CRL, P12
+|-- mtls-middleware.js     # Hook beforeRequest para validar cert cliente
+|-- module.json            # Manifiesto (route code: 3333)
++-- prompt.json            # Prompt IA para el modulo
+```
+
+**Capacidades:**
+- Generar CA raiz auto-firmada (RSA 2048 + SHA-256)
+- Emitir certificados cliente (portal facturacion) y dispositivo
+- Revocar, renovar, verificar certificados
+- CRL (Certificate Revocation List)
+- Bundles P12 para importar en navegador
+- Middleware mTLS: modo proxy (nginx) o nativo (Node.js TLS)
+- Configuracion nginx generada automaticamente
+
+**API (via `/3333/` o `/modules/certificate-authority/`):**
+
+```
+GET  /status        Estado CA + estadisticas
+GET  /ca-cert       Descargar certificado raiz (publico)
+POST /issue         Emitir certificado {commonName, type, identifier}
+POST /revoke        Revocar {serialNumber, reason}
+POST /renew         Renovar {serialNumber}
+GET  /list          Listar certificados (?type=client&status=active)
+POST /verify        Verificar certificado PEM
+GET  /crl           Lista de revocacion
+GET  /download-p12  Descargar bundle .p12
+GET  /nginx-config  Configuracion nginx para mTLS
+GET  /health        Health check
+```
+
+**Tipos de certificado:**
+- `client` — Portal de facturacion. OU: "Portal Clientes". Identifica proyecto/cliente
+- `device` — Dispositivos de trabajo. OU: "Dispositivos". Control de acceso por dispositivo
+
+**Eventos:** `certificate.issued`, `certificate.revoked`, `certificate.renewed`, `certificate.expired`
+
+**Estado UI:** El backend tiene `ui_handlers` listos. El frontend tiene store (`certificate-authority.ts`) y modulo UI (`frontend/src/lib/modules/certificate-authority/`). Aparece en la work-bar con icono `🔐`.
+
+**Config (en config.json):**
+```json
+{
+  "mtls_enabled": false,
+  "mtls_mode": "proxy",
+  "allow_unauthenticated": true,
+  "cert_validity_days": 365,
+  "ca_validity_days": 3650
+}
+```
+
+### Security P2P (deshabilitado)
+
+Seguridad para comunicacion entre cores distribuidos. Cifrado y autenticacion de mensajes MQTT entre nodos.
+
+**Estado:** Implementado pero deshabilitado en config. Se activa cuando se despliega en modo multi-core.
+
+---
+
+## Frontend
+
+SvelteKit + TypeScript + Tailwind CSS. Conecta al backend exclusivamente via MQTT WebSocket (:9001).
+
+### Filosofia UI
+
+Cada ruta es un **modo de trabajo**, no una app separada. Todas comparten:
+- Chat con IA (siempre disponible)
+- System-bar (proyecto activo, provider, credenciales)
+- Archivos del proyecto
+
+Lo que cambia entre rutas es la **work-bar**: herramientas especificas del modo.
+
+### Zonas de la interfaz
+
+| Zona | Ubicacion | Contenido |
+|------|-----------|-----------|
+| **work-bar** | Top | Herramientas del modo actual (cambia por ruta) |
+| **chat-config** | Config | Proyecto, provider, prompts, credenciales |
+| **chat-tools** | Bottom | Archivos, adjuntos |
+| **system-bar** | Right | Modulos del sistema |
+
+### Modulos UI
+
+Los modulos UI se autodescubren via `manifest.json` + `index.ts` en `frontend/src/lib/modules/`. Cada uno define `zone`, `icon`, `label` y opcionalmente `routes` (en que rutas aparece).
+
+Los paneles se abren como **flotantes** sobre el contenido — no reemplazan la pantalla.
+
+### Stores (28)
+
+```
+attachments, carta, certificate-authority, channels, chat,
+cocina, comandero, conversations, credentials, cuentas,
+escandallo, facturas, files, impresion, llevadoo,
+menu-generator, page-context, persistence, projects, prompts,
+recetas, staff, theme, ui, viabilidad, workspace
+```
+
+### Comunicacion UI - Backend
+
+```
+Frontend                        Backend
+   |                               |
+   |-- ui/request/{domain}/{action} -->|
+   |                               |-- procesa handler
+   |<-- ui/response/{request_id} --|
+   |                               |
+```
+
+```typescript
+const response = await mqttRequest('project', 'list');
+const certs = await mqttRequest('certificate-authority', 'list');
+```
+
+---
+
+## Comunicacion MQTT
+
+Puerto TCP: 1883 | WebSocket: 9001
+
+### Topics
+
+```
+# Core
+core/{core-id}/events/{domain}/{action}    # Eventos internos
+core/{core-id}/status                      # Discovery (retained)
+core/{core-id}/heartbeat                   # Health check
+
+# UI Request/Response
+ui/request/{domain}/{action}               # Frontend -> Backend
+ui/response/{request_id}                   # Backend -> Frontend
+
+# Broadcast
+broadcast/{event}                          # Eventos globales
+```
+
+### ui_handlers
+
+Cada modulo declara `ui_handlers` en su `module.json`. El core los registra automaticamente:
+
+```json
+{
+  "ui_handlers": [
+    { "domain": "certificate-authority", "action": "list", "handler": "handleListCertificates" },
+    { "domain": "certificate-authority", "action": "issue", "handler": "handleIssueCertificate" }
+  ]
+}
+```
+
+El frontend llama con `mqttRequest('certificate-authority', 'list')` y recibe la respuesta.
+
+---
+
+## Providers
+
+### IA (ai-gateway)
+
+6 providers LLM con tool calling:
+
+| Provider | Modelos |
+|----------|---------|
+| DeepSeek | deepseek-chat, deepseek-reasoner |
+| Anthropic | claude-sonnet-4-20250514 |
+| OpenAI | gpt-4o, gpt-4o-mini |
+| Groq | llama, mixtral |
+| Gemini | gemini-2.0-flash |
+| Ollama | modelos locales |
+
+### Servicios locales
+
+Providers locales en `services/providers/local/` — funciones del sistema expuestas como tools para la IA (filesystem, OCR, PDF, etc.)
+
+### Credenciales
+
+4 niveles de resolucion: GLOBAL -> PROJECT -> CLIENT -> CUSTOM. Las credenciales nunca se resuelven dentro del provider.
+
+---
+
+## Inicio Rapido
 
 ```bash
 # Instalar dependencias
@@ -67,442 +350,124 @@ npm install
 # Iniciar el core
 node index.js
 
-# Acceder al Dashboard (en tu navegador)
-# http://localhost:3000/modules/dashboard/
-# (o puerto 3001 si el 3000 está en uso)
+# O en modo debug
+node index.js --log-level debug
 
-# Usar el CLI
-node cli/index.js health
-node cli/index.js stats
-node cli/index.js modules
-node cli/index.js call GET /modules/echo/ping
+# Frontend (en otra terminal)
+cd frontend && npm install && npm run dev
 
-# Multi-Machine Setup (opcional)
-./network/setup-core.sh     # Setup wizard interactivo
-./network/validate.sh       # Validar configuración
-
-# Ejecutar tests
-npm test                    # Tests básicos
-npm run test:hooks         # Solo hooks
-npm run test:observability # Solo observability
-npm run test:gateway       # Solo gateway
-npm run test:integration   # Tests de integración
-```
-
-### 📊 Dashboard
-
-Accede al dashboard de observabilidad en:
-- **URL**: `http://localhost:3000/modules/dashboard/`
-- **Features**: Cores activos, logs en tiempo real, event stream, métricas
-- **Guía completa**: [`docs/DASHBOARD_GUIDE.md`](docs/DASHBOARD_GUIDE.md)
-
----
-
-## 🎯 Visión
-
-Un meta-core que funciona como **cimientos arquitectónicos** escalables:
-- **Casa** → Proceso standalone (proyectos simples)
-- **Rascacielos** → Sistema modular complejo
-- **Manzana** → Múltiples cores distribuidos comunicándose via MQTT
-
-**Diferenciación clave:**
-- Event-driven 100% (MQTT pub/sub nativo)
-- Módulos como plugins (autodescubrimiento + hot-reload)
-- IA como ciudadano de primera clase
-- Zero dependencias (solo Node.js built-ins + Aedes + mqtt)
-- Portable (Termux → Linux → Docker → K8s)
-
----
-
-## 📁 Estructura del Proyecto
-
-```
-event-core/
-├── prompts/               # 15 prompts especializados para desarrollo
-├── strategy/              # Outputs estratégicos (vision, OKRs, roadmap)
-├── core/                  # Core minimalista (solo infraestructura)
-│   ├── broker/           # MQTT broker embebido (Aedes)
-│   ├── mqtt/             # Cliente MQTT + helpers
-│   ├── events/           # Event bus local + routing
-│   ├── modules/          # Module system (loader, manager, registry)
-│   ├── hooks/            # Hook system para módulos
-│   ├── gateway/          # HTTP Gateway + Request-Reply pattern
-│   ├── ui/               # UI Request/Response handler
-│   ├── discovery/        # Discovery de cores + heartbeat
-│   ├── observability/    # Logs, traces, métricas
-│   └── validation/       # JSON Schemas para validación
-├── modules/              # Módulos (features como plugins)
-│   ├── project-manager/ # Gestión de proyectos
-│   ├── credential-manager/ # Gestión de credenciales
-│   └── ...              # Otros módulos
-├── frontend/             # SvelteKit UI
-│   └── src/lib/
-│       ├── ui-core/     # MQTT client + request utilities
-│       └── stores/      # Svelte stores (projects, credentials)
-├── cli/                  # CLI puro (cliente HTTP, sin lógica)
-├── tests/                # Tests de integración y unitarios
-└── docs/                 # Documentación completa
-    └── architecture/    # Documentación arquitectónica
-```
-
----
-
-## 🚀 Quick Start
-
-```bash
-# Clonar o navegar al proyecto
-cd event-core
-
-# Instalar dependencias (solo Aedes + mqtt client)
-npm install
-
-# Iniciar core
-node index.js
-
-# Or with custom configuration
-node index.js --port 3001 --core-id my-core --log-level debug
-
-# Check health
+# Health check
 curl http://localhost:3000/health
 
-# View modules
+# Ver modulos cargados
 curl http://localhost:3000/modules
+
+# CLI
+node cli/index.js health
+node cli/index.js modules
 ```
 
-📖 **See [Quick Start Guide](./docs/QUICK_START.md) for detailed instructions**
-
----
-
-## 🏗️ Arquitectura
-
-### **Core Minimalista + Módulos**
-
-El Core provee solo infraestructura. Todo feature es un módulo:
-
-```
-┌─────────────────────────────────────────┐
-│         Core (Infraestructura)          │
-│  - MQTT Broker (Aedes)                  │
-│  - Event Bus                            │
-│  - HTTP API Gateway                     │
-│  - Hook System                          │
-│  - Module Loader                        │
-│  - Observability                        │
-└───────────┬─────────────────────────────┘
-            │
-    ┌───────┴────────┬──────────┬─────────┐
-    │                │          │         │
-┌───▼────┐   ┌──────▼────┐  ┌──▼──────┐  │
-│ Echo   │   │ Security  │  │ Watcher │  │
-│ Module │   │ P2P       │  │ Module  │  │
-│        │   │ Module    │  │         │  │
-└────────┘   └───────────┘  └─────────┘  │
-                                          │
-                            ┌─────────────▼┐
-                            │  CLI (HTTP)  │
-                            │  Web UI      │
-                            │  Scripts     │
-                            └──────────────┘
-```
-
-### **Comunicación via MQTT + HTTP**
-
-```
-┌─────────────────────────────────────────┐
-│          MQTT Broker (Aedes)            │
-│                                         │
-│  Topics:                                │
-│  ├── core/+/events/#    (eventos)      │
-│  ├── core/+/api/#       (APIs)         │
-│  ├── core/+/status      (discovery)    │
-│  ├── ui/request/#       (UI requests)  │
-│  ├── ui/response/#      (UI responses) │
-│  └── core/+/heartbeat   (health)       │
-└────────┬───────────────────┬────────────┘
-         │                   │
-    ┌────▼──────┐      ┌────▼──────┐
-    │  Core A   │      │  Core B   │
-    │           │      │           │
-    │ Modules:  │      │ Modules:  │
-    │ - echo    │      │ - ai-gw   │
-    │ - watcher │      │ - analyzer│
-    └─────┬─────┘      └─────┬─────┘
-          │                  │
-    HTTP  │            HTTP  │
-    :3000 │            :3001 │
-          │                  │
-      ┌───▼───┐          ┌───▼───┐
-      │  CLI  │          │  CLI  │
-      └───────┘          └───────┘
-```
-
-### **UI Communication - Request/Response Pattern**
-
-El frontend usa un patrón Request/Response sobre MQTT que combina:
-- **Respuestas garantizadas** (o timeout)
-- **Status codes** HTTP-like (200, 400, 404, 500)
-- **Una sola conexión** MQTT para todo
-
-```typescript
-// Frontend - Async/await natural
-const response = await mqttRequest('project', 'list');
-console.log(response.data.projects);
-
-// Con manejo de errores
-try {
-  await mqttRequest('project', 'create', { name: 'Mi Proyecto' });
-} catch (error) {
-  if (error instanceof MqttTimeoutError) {
-    console.error('Server did not respond');
-  } else if (error instanceof MqttRequestError) {
-    console.error(error.code, error.message); // 400, "Name required"
-  }
-}
-```
-
-**Topics:**
-```
-Request:  ui/request/{domain}/{action}  → ui/request/project/list
-Response: ui/response/{request_id}      → ui/response/req_abc123
-```
-
-📖 **Ver [MQTT Request/Response Pattern](./docs/architecture/mqtt-request-response.md)** para documentación completa.
-
-### **Topic Structure**
-
-```
-# Core internos
-core/{core-id}/events/{domain}/{action}    # Eventos internos
-core/{core-id}/api/request/{service}       # API requests
-core/{core-id}/api/response/{requestId}    # API responses
-core/{core-id}/status                      # Discovery (retained)
-core/{core-id}/heartbeat                   # Health check
-core/{core-id}/logs/{level}                # Logs
-
-# UI Communication (Request/Response)
-ui/request/{domain}/{action}               # Frontend → Backend
-ui/response/{request_id}                   # Backend → Frontend
-```
-
-### **QoS Strategy**
-
-- **QoS 1** (at-least-once) → Eventos críticos, comandos, state changes
-- **QoS 0** (fire-and-forget) → Logs, métricas, telemetría
-
----
-
-## 🧩 Filosofía Arquitectónica
-
-### **Core Minimalista**
-
-El Core provee SOLO infraestructura, NUNCA features:
-
-✅ **Core incluye:**
-- MQTT Broker (Aedes)
-- Event Bus (EventEmitter)
-- HTTP API Gateway
-- UI Request Handler (MQTT Request/Response)
-- Module Loader
-- Hook System
-- Observability (logs, traces, métricas)
-- Discovery & Registry
-
-❌ **Core NO incluye:**
-- Security (es un módulo: `security-p2p`)
-- Business logic (siempre en módulos)
-- Features específicas
-
-### **Todo Feature es un Módulo**
-
-Incluso funcionalidades complejas como security son módulos:
-
-```javascript
-// modules/security-p2p/  ← No en core/security/
-```
-
-**Ventajas:**
-- ✅ Hot-reload de security sin reiniciar core
-- ✅ Proyectos simples pueden no cargar security
-- ✅ Security es testeable aisladamente
-- ✅ Múltiples módulos de security pueden coexistir
-
-### **CLI como Cliente HTTP Puro**
-
-El CLI NO tiene lógica de negocio:
-
-```javascript
-// CLI = HTTP Client
-async securityStatus() {
-  const data = await this.request('GET', '/modules/security-p2p/status');
-  console.log(data);  // Solo renderizar
-}
-```
-
-**Ventajas:**
-- ✅ CLI puede conectarse a core remoto
-- ✅ Mismas APIs para CLI, Web UI, scripts
-- ✅ CLI puede escribirse en cualquier lenguaje
-- ✅ Zero duplicación de lógica
-
----
-
-## 📦 Sistema de Módulos
-
-Módulos auto-descubiertos en `./modules/`:
-
-```javascript
-// modules/echo/module.json
-{
-  "name": "echo",
-  "version": "1.0.0",
-  "provides": ["echo"],
-  "subscribes": ["test.echo"],
-  "apis": {
-    "echo": {
-      "method": "POST",
-      "path": "/echo",
-      "schema": "./schema/echo.json"
-    }
-  }
-}
-```
-
-**Features:**
-- ✅ Autodescubrimiento (scan `./modules/`)
-- ✅ Hot-reload (fs.watch)
-- ✅ JSON Schema validation
-- ✅ Lifecycle hooks (onLoad, onUnload, onEvent)
-
----
-
-## 🔍 Discovery & Registry
-
-Cores se descubren automáticamente via **retained messages**:
-
-```javascript
-// Core publica su status al iniciar
-{
-  topic: 'core/a/status',
-  payload: {
-    state: 'ready',
-    version: '0.1.0',
-    apis: ['analyze', 'process'],
-    subscriptions: ['file.*', 'ai.request.*']
-  },
-  retain: true,  // Persiste en broker
-  will: {        // Last Will si core muere
-    payload: { state: 'offline' }
-  }
-}
-
-// Otros cores reciben status automáticamente al suscribirse
-client.subscribe('core/+/status');
-```
-
----
-
-## 📊 Observabilidad
-
-### **Logging estructurado**
-```javascript
-logger.info('module.loaded', { module: 'echo', version: '1.0.0' });
-// → { timestamp, level, message, context, trace_id }
-```
-
-### **Tracing (W3C Trace Context)**
-```javascript
-const trace = tracer.start('process.file');
-// ... operación
-trace.end();
-// → trace_id propagado en eventos MQTT
-```
-
-### **Métricas**
-```javascript
-metrics.increment('events.published', { topic: 'file.created' });
-metrics.histogram('mqtt.latency', latencyMs);
-```
-
----
-
-## 🛠️ CLI
+### Docker
 
 ```bash
-# Iniciar core
-event-core start [--port 3000] [--broker mqtt://localhost:1883]
-
-# Ver status
-event-core status [--core-id a]
-
-# Listar módulos
-event-core modules [--watch]
-
-# Reload módulo
-event-core reload <module-name>
-
-# Ver logs en tiempo real
-event-core logs [--level error] [--follow]
+docker-compose up        # Desarrollo
+docker-compose -f docker-compose.production.yml up  # Produccion
 ```
 
----
-
-## 🧪 Testing
+### Multi-Machine
 
 ```bash
-# Tests unitarios
-npm test
-
-# Tests de integración
-npm run test:integration
-
-# Coverage
-npm run test:coverage
+./network/setup-core.sh     # Setup wizard interactivo
+./network/validate.sh       # Validar configuracion
+./network/latency-test.sh   # Test de latencia
 ```
 
 ---
 
-## 📚 Documentación
+## Tests
 
-Ver `/docs/` para:
-- `architecture/mqtt-request-response.md` - Patrón Request/Response UI
-- `DASHBOARD_GUIDE.md` - Guía del dashboard
-- `QUICK_START.md` - Inicio rápido
-- `DEPLOYMENT_GUIDE.md` - Despliegue multi-máquina
+```bash
+npm test                       # Tests basicos
+npm run test:hooks            # Hook system (21 tests)
+npm run test:observability    # Observability (19 tests)
+npm run test:gateway          # HTTP Gateway (20 tests)
+npm run test:security         # Security P2P
+npm run test:integration      # Full stack (18/19 tests)
+```
 
----
-
-## 🗺️ Roadmap
-
-Ver `strategy/v1/roadmap.json` para roadmap completo generado por **Estratega de Producto**.
-
-**Milestones:**
-- ✅ v0.1.0 - Foundation (COMPLETADO 2025-10-19)
-- 🔄 v0.2.0 - Security P2P completo (Target: 2025-11-10)
-- ⏳ v0.3.0 - Discovery & Distribution (Target: 2025-12-15)
-- ⏳ v1.0.0 - Production Release (Target: 2026-01-31)
+60+ tests unitarios + 18 tests de integracion.
 
 ---
 
-## 🤝 Desarrollo
+## Generacion de Codigo
 
-Este proyecto usa **15 prompts especializados** (ver `prompts/README.md`) para desarrollo guiado por IA:
+```bash
+npm run plop                  # Menu interactivo
+npm run create-module         # Crear modulo nuevo
+npm run create-module -- --interactive  # Modo interactivo
+```
 
-- Estratega de Producto
-- Arquitecto Event-Driven
-- Gestor Gobernanza
-- Optimizador Performance
-- Y más...
-
-Cada prompt genera deliverables en ubicaciones estándar.
+Templates disponibles: module, service-module, full-module, handler, local-provider, svelte-component, selector-panel, chat-module.
 
 ---
 
-## 📄 Licencia
+## Directorio contexto/
 
-TBD
+Documentacion estructurada del sistema en formato JSON. 31 archivos que describen la arquitectura real, modulos, patrones, convenciones. Sirve como fuente de verdad para desarrollo asistido por IA.
+
+Archivos clave:
+- `system.json` — Arquitectura, puertos, convenciones
+- `modules.json` — Sistema de modulos (55 total)
+- `mqtt.json` — Patrones de comunicacion MQTT
+- `ui.json` — Frontend, stores, work-bar, paneles
+- `ai-gateway.json` — Providers IA y tool calling
+- `certificate-authority.json` — CA interna y mTLS
+- `pizzepos.json` — Sistema POS completo
+- `handlers.json` — Sistema de handlers event-driven
+- `credentials.json` — Gestion de credenciales multi-nivel
 
 ---
 
-**Version:** 0.1.0
-**Status:** ✅ COMPLETADO - Production Ready
-**Last Updated:** 2025-10-19
+## Puertos
+
+| Puerto | Servicio |
+|--------|----------|
+| 3000 | HTTP Gateway (REST + UI estatica) |
+| 1883 | MQTT Broker (TCP) |
+| 9001 | MQTT Broker (WebSocket) |
+| 5173 | Frontend dev server (SvelteKit) |
+
+---
+
+## Dependencias
+
+Minimas por diseno. Solo Node.js built-ins + estas:
+
+| Dependencia | Uso |
+|-------------|-----|
+| aedes | MQTT broker embebido |
+| mqtt | Cliente MQTT |
+| ws | WebSocket server |
+| ajv | JSON Schema validation |
+| sharp | Procesamiento de imagenes |
+| pdfkit, pdf-parse, pdfjs-dist | Generacion y procesamiento PDF |
+| tesseract.js, scribe.js-ocr | OCR local |
+| sql.js | SQLite en memoria |
+| node-cron | Planificacion de tareas |
+| dotenv | Variables de entorno |
+
+---
+
+## Despliegue
+
+- **Standalone:** `node index.js` — un proceso, todo incluido
+- **Docker:** `docker-compose up` — con broker externo opcional
+- **VPS:** `./setup-vps.sh` — wizard de configuracion
+- **Kubernetes:** Charts Helm en `deployment/helm/`
+- **Multi-core:** Multiples instancias conectadas al mismo broker MQTT
+
+---
+
+## Licencia
+
+MIT

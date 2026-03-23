@@ -85,7 +85,6 @@
       "fuentes",
       "carta-digital",
       "carta-impresion",
-      "certificate-authority",
       "channel-manager",
       "composition-manager",
       "context-manager",
@@ -113,6 +112,7 @@
       "notas",
       "metricas",
       "security-p2p",
+      "certificate-authority",
       "staff-manager"
     ]
   },

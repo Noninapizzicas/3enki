@@ -318,6 +318,60 @@ class PersistenciaComanderoModule {
         venta_id: venta.venta_id,
         total: venta.resumen.total_final
       });
+    } else if (cuenta_id && cuenta_id.startsWith('llevadoo_')) {
+      // Llevadoo paga externamente (no pasa por caja) pero se refleja en totales de venta
+      const cuentaCreadaEvento = this.eventosCache
+        .filter(e => e.event_type === 'cuenta.creada')
+        .find(e => e.payload?.cuenta_id === cuenta_id);
+
+      const pedidosEventos = this.eventosCache
+        .filter(e => e.event_type === 'pedido.creado')
+        .filter(e => e.payload?.cuenta_id === cuenta_id);
+
+      const venta = {
+        venta_id: `venta_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: new Date().toISOString(),
+        project_id,
+        cuenta: {
+          cuenta_id,
+          tipo: 'llevadoo',
+          origen: cuentaCreadaEvento?.payload?.origen || 'llevadoo',
+          hora_apertura: cuentaCreadaEvento?.timestamp || null,
+          hora_cierre: new Date().toISOString(),
+          metadata: metadata || {}
+        },
+        cobro: {
+          cobro_id: null,
+          monto: total || 0,
+          propina: 0,
+          monto_total: total || 0,
+          metodo_pago: 'externo_llevadoo',
+          referencia_pago: null
+        },
+        pedidos: pedidosEventos.map(p => ({
+          pedido_id: p.payload.pedido_id,
+          items: p.payload.items || [],
+          total: p.payload.total || 0
+        })),
+        resumen: {
+          subtotal: total || 0,
+          propina: 0,
+          total_final: total || 0
+        }
+      };
+
+      this.ventasCache.push(venta);
+      this.internalMetrics.ventas_guardadas++;
+      this.metrics.increment('persistencia.ventas.total');
+
+      await this.guardarVentas();
+
+      this.logger.info('persistencia.venta.registrada_externo', {
+        correlation_id: correlationId,
+        venta_id: venta.venta_id,
+        total: venta.resumen.total_final,
+        metodo: 'externo_llevadoo'
+      });
     } else {
       this.logger.warn('persistencia.cuenta_sin_cobro', {
         correlation_id: correlationId,
@@ -1421,12 +1475,14 @@ class PersistenciaComanderoModule {
         efectivo: 0,
         tarjeta: 0,
         bizum: 0,
-        transferencia: 0
+        transferencia: 0,
+        externo_llevadoo: 0
       },
       por_tipo_cuenta: {
         mesa: 0,
         telefono: 0,
-        llevar: 0
+        llevar: 0,
+        llevadoo: 0
       },
       por_camarero: {}
     };

@@ -89,7 +89,39 @@ export interface BuildStatus {
   last_build?: string;
 }
 
-export type TabId = 'dev' | 'flash' | 'monitor';
+export interface FirmwareType {
+  type: string;
+  latest: string;
+  releases_count: number;
+  releases: string[];
+}
+
+export interface OtaPending {
+  device_id: string;
+  requested_at: string;
+  target_version: string;
+  previous_version: string | null;
+  type: string;
+}
+
+export interface OtaLogEntry {
+  device_id: string;
+  type: string;
+  from: string | null;
+  to: string;
+  status: 'completed' | 'failed';
+  timestamp: string;
+}
+
+export interface RollbackEntry {
+  device_id: string;
+  current_version: string;
+  previous_version: string | null;
+  type: string;
+  can_rollback: boolean;
+}
+
+export type TabId = 'dev' | 'firmware' | 'flash';
 
 export interface Esp32State {
   // UI
@@ -105,13 +137,19 @@ export interface Esp32State {
   boards: Board[];
   buildStatus: BuildStatus | null;
 
+  // Firmware (firmware-manager — reutilizado)
+  firmwareTypes: FirmwareType[];
+  otaPending: OtaPending[];
+  otaLog: OtaLogEntry[];
+  rollbackDevices: RollbackEntry[];
+
   // Flash (esp32-flasher)
   ports: SerialPort[];
   activeFlashes: FlashStatus[];
   flashHistory: FlashHistoryEntry[];
   lastBuild: { project_name: string; binary_path: string; timestamp: string } | null;
 
-  // Monitor
+  // Monitor (parte de Flash)
   serialLines: string[];
   monitorPort: string | null;
   monitorBaud: number;
@@ -131,6 +169,10 @@ const initialState: Esp32State = {
   projectDetail: null,
   boards: [],
   buildStatus: null,
+  firmwareTypes: [],
+  otaPending: [],
+  otaLog: [],
+  rollbackDevices: [],
   ports: [],
   activeFlashes: [],
   flashHistory: [],
@@ -273,6 +315,65 @@ function pollBuildStatus(name: string): void {
 }
 
 // =============================================================================
+// FIRMWARE (firmware-manager — reutilizado)
+// =============================================================================
+
+export async function loadFirmwareCatalog(): Promise<void> {
+  try {
+    const res = await mqttRequest<any>('firmware', 'list', {});
+    esp32Store.update(s => ({
+      ...s,
+      firmwareTypes: res.data?.types || []
+    }));
+  } catch {}
+}
+
+export async function loadOtaStatus(): Promise<void> {
+  try {
+    const res = await mqttRequest<any>('firmware', 'status', { limit: 50 });
+    esp32Store.update(s => ({
+      ...s,
+      otaPending: res.data?.pending || [],
+      otaLog: res.data?.recent_log || []
+    }));
+  } catch {}
+}
+
+export async function triggerOta(deviceId: string, type: string, version?: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('firmware', 'trigger-ota', {
+      device_id: deviceId,
+      type,
+      version
+    });
+    await loadOtaStatus();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function loadRollbackDevices(): Promise<void> {
+  try {
+    const res = await mqttRequest<any>('firmware', 'rollback-list', {});
+    esp32Store.update(s => ({
+      ...s,
+      rollbackDevices: res.data?.devices || []
+    }));
+  } catch {}
+}
+
+export async function rollbackDevice(deviceId: string, type: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('firmware', 'rollback', { device_id: deviceId, type });
+    await Promise.all([loadOtaStatus(), loadRollbackDevices()]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// =============================================================================
 // FLASH (esp32-flasher)
 // =============================================================================
 
@@ -407,7 +508,10 @@ export async function initEsp32(): Promise<void> {
     loadBoards(),
     loadPorts(),
     loadFlashStatus(),
-    loadFlashHistory()
+    loadFlashHistory(),
+    loadFirmwareCatalog(),
+    loadOtaStatus(),
+    loadRollbackDevices()
   ]);
   esp32Store.update(s => ({ ...s, loading: false }));
 }
@@ -420,6 +524,12 @@ export function initEsp32Subscriptions(): () => void {
     mqttSubscribe('esp32.build_completed', () => { loadProjects(); }),
     mqttSubscribe('esp32.build_failed', () => { loadProjects(); }),
     mqttSubscribe('esp32.project_created', () => { loadProjects(); })
+  );
+
+  // Firmware/OTA events
+  cleanups.push(
+    mqttSubscribe('firmware.ota_completed', () => { loadOtaStatus(); loadRollbackDevices(); }),
+    mqttSubscribe('firmware.ota_failed', () => { loadOtaStatus(); })
   );
 
   // Flash events

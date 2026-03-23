@@ -2,7 +2,10 @@
   /**
    * Esp32Panel — Panel de desarrollo ESP32 dentro de LazyShell
    *
-   * Tabs: Dev (templates/proyectos/build) | Flash (puertos/grabar) | Monitor (serial)
+   * 3 tabs principales con sub-tabs:
+   *   Dev:      Templates | Proyectos | Build
+   *   Firmware: Catalogo  | OTAs      | Rollback
+   *   Flash:    Puertos   | Grabar    | Monitor
    */
   import { onMount, onDestroy } from 'svelte';
   import {
@@ -12,8 +15,8 @@
   import { updatePageState } from '$lib/stores/page-context';
 
   import DevTab from '$lib/components/esp32/DevTab.svelte';
+  import FirmwareTab from '$lib/components/esp32/FirmwareTab.svelte';
   import FlashTab from '$lib/components/esp32/FlashTab.svelte';
-  import MonitorTab from '$lib/components/esp32/MonitorTab.svelte';
 
   export let panelId: string = '';
 
@@ -21,21 +24,23 @@
 
   const tabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'dev', label: 'Dev', icon: '🔧' },
-    { id: 'flash', label: 'Flash', icon: '⚡' },
-    { id: 'monitor', label: 'Monitor', icon: '📺' }
+    { id: 'firmware', label: 'Firmware', icon: '⬆' },
+    { id: 'flash', label: 'Flash', icon: '⚡' }
   ];
 
   $: projectCount = $esp32Store.projects.length;
   $: portCount = $esp32Store.ports.length;
   $: isMonitoring = $esp32Store.monitorPort !== null;
   $: activeFlashCount = $esp32Store.activeFlashes.length;
+  $: otaPendingCount = $esp32Store.otaPending.length;
 
   // Sync state to page context for the AI
   $: updatePageState('esp32', {
     projects: projectCount,
     ports: portCount,
     monitoring: isMonitoring,
-    flashing: activeFlashCount
+    flashing: activeFlashCount,
+    otaPending: otaPendingCount
   });
   $: updatePageState('activeTab', $activeTab);
 
@@ -86,10 +91,12 @@
       >
         <span class="tab-icon">{tab.icon}</span>
         <span class="tab-label">{tab.label}</span>
-        {#if tab.id === 'monitor' && isMonitoring}
-          <span class="tab-badge-live">LIVE</span>
+        {#if tab.id === 'firmware' && otaPendingCount > 0}
+          <span class="tab-badge">{otaPendingCount}</span>
         {/if}
-        {#if tab.id === 'flash' && activeFlashCount > 0}
+        {#if tab.id === 'flash' && isMonitoring}
+          <span class="tab-badge-live">LIVE</span>
+        {:else if tab.id === 'flash' && activeFlashCount > 0}
           <span class="tab-badge">{activeFlashCount}</span>
         {/if}
       </button>
@@ -105,10 +112,10 @@
       </div>
     {:else if $activeTab === 'dev'}
       <DevTab />
+    {:else if $activeTab === 'firmware'}
+      <FirmwareTab />
     {:else if $activeTab === 'flash'}
       <FlashTab />
-    {:else if $activeTab === 'monitor'}
-      <MonitorTab />
     {/if}
   </main>
 </div>

@@ -42,9 +42,36 @@
       }
     },
 
+    "para_recoger": {
+      "type": "object",
+      "required": ["cuenta_id"],
+      "description": "Items llegaron al horno — repartidor puede venir a buscar",
+      "properties": {
+        "cuenta_id": { "type": "string" },
+        "numero_pedido": { "type": "integer" },
+        "nombre_cliente": { "type": "string" },
+        "total": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "pedido_entregado": {
+      "type": "object",
+      "required": ["cuenta_id"],
+      "description": "Comandero entregó el pedido al repartidor",
+      "properties": {
+        "cuenta_id": { "type": "string" },
+        "numero_pedido": { "type": "integer" },
+        "total": { "type": "number" },
+        "tiempo_total_minutos": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+
     "pedido_recogido": {
       "type": "object",
       "required": ["cuenta_id"],
+      "description": "Legado — usar pedido_entregado para nuevos flujos",
       "properties": {
         "cuenta_id": { "type": "string" },
         "numero_pedido": { "type": "integer" },

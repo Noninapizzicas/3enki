@@ -13,7 +13,7 @@ const path = require('path');
 const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
   con_pedido: ['en_preparacion', 'con_pedido', 'cobrado'], // cobrado: pago rápido sin enviar cocina
-  en_preparacion: ['listo', 'en_preparacion', 'cobrado'],   // cobrado: pago mientras cocina prepara
+  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'], // entregado: llevadoo entrega desde horno; cobrado: pago mientras cocina prepara
   listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'],
   entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],
   para_cobrar: ['cobrado'],
@@ -730,8 +730,8 @@ class CuentasModule {
       return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
     }
 
-    if (cuenta.estado !== 'listo') {
-      return { status: 400, error: `Cuenta debe estar en estado 'listo' para marcar entregado (actual: ${cuenta.estado})` };
+    if (!['listo', 'en_preparacion'].includes(cuenta.estado)) {
+      return { status: 400, error: `Cuenta debe estar en estado 'listo' o 'en_preparacion' para marcar entregado (actual: ${cuenta.estado})` };
     }
 
     const ok = await this.transicionarEstado(id, 'entregado');

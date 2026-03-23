@@ -13,7 +13,7 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 // Types
 // ============================================================================
 
-export type EstadoLlevadoo = 'recibido' | 'aceptado' | 'en_preparacion' | 'listo' | 'recogido' | 'cancelado';
+export type EstadoLlevadoo = 'recibido' | 'aceptado' | 'en_preparacion' | 'para_recoger' | 'listo' | 'entregado' | 'cancelado';
 
 export interface ProductoDelivery {
   id: string;
@@ -446,6 +446,13 @@ export async function setConfigRecargo(config: Partial<ConfigRecargo>): Promise<
 export function initLlevadooSubscriptions(projectId: string): () => void {
   const unsubs: (() => void)[] = [];
 
+  // Pedido para recoger (items en horno) → actualizar estado
+  unsubs.push(mqttSubscribe('llevadoo.para_recoger', (event: any) => {
+    const data = event?.data || event?.payload || event;
+    console.log('[Llevadoo] Para recoger:', data?.cuenta_id);
+    refreshPedidosActivos();
+  }));
+
   // Pedido listo en cocina → actualizar estado
   unsubs.push(mqttSubscribe('llevadoo.pedido_listo', (event: any) => {
     const data = event?.data || event?.payload || event;
@@ -453,10 +460,10 @@ export function initLlevadooSubscriptions(projectId: string): () => void {
     refreshPedidosActivos();
   }));
 
-  // Pedido recogido → actualizar lista
-  unsubs.push(mqttSubscribe('llevadoo.pedido_recogido', (event: any) => {
+  // Pedido entregado (comandero entrega al repartidor) → actualizar lista
+  unsubs.push(mqttSubscribe('llevadoo.pedido_entregado', (event: any) => {
     const data = event?.data || event?.payload || event;
-    console.log('[Llevadoo] Pedido recogido:', data?.cuenta_id);
+    console.log('[Llevadoo] Pedido entregado:', data?.cuenta_id);
     refreshPedidosActivos();
   }));
 

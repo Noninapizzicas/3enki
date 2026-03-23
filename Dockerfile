@@ -20,8 +20,9 @@ RUN npm ci --only=production && \
 # ============================================================================
 FROM node:18-alpine AS production
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init for proper signal handling + Python for ESP32 tooling
+RUN apk add --no-cache dumb-init python3 py3-pip && \
+    pip3 install --no-cache-dir --break-system-packages esptool platformio
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

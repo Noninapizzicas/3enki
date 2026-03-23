@@ -153,6 +153,9 @@ class LlevadooStrategy {
 
     if (!pedidoLlevadoo) return;
 
+    // Solo transicionar a listo si estamos en un estado anterior (no machacar entregado/recogido)
+    if (!['en_preparacion', 'para_recoger'].includes(pedidoLlevadoo.estado)) return;
+
     pedidoLlevadoo.estado = 'listo';
     pedidoLlevadoo.hora_listo = new Date().toISOString();
 
@@ -178,12 +181,12 @@ class LlevadooStrategy {
   async onCocinaItemAvanzado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { cuenta_id, desde_estacion } = eventData;
+    const { cuenta_id, pase } = eventData;
 
     if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
 
-    // Solo nos interesa cuando items pasan de general → horno (pase a estación siguiente)
-    if (desde_estacion !== 'general') return;
+    // pase=1 significa que el item acaba de entrar al horno (avanzó desde general pase_minimo=0)
+    if (pase !== 1) return;
 
     const pedido = this.pedidosActivos.get(cuenta_id);
     if (!pedido) return;
@@ -205,7 +208,7 @@ class LlevadooStrategy {
     this.modulo.logger.info('llevadoo.para_recoger', {
       correlation_id: correlationId,
       cuenta_id,
-      desde_estacion
+      pase
     });
   }
 
@@ -429,7 +432,7 @@ class LlevadooStrategy {
       return { status: 404, error: 'Pedido no encontrado' };
     }
 
-    if (['recogido', 'cancelado'].includes(pedido.estado)) {
+    if (['recogido', 'entregado', 'cancelado'].includes(pedido.estado)) {
       return { status: 400, error: `No se puede cancelar un pedido en estado '${pedido.estado}'` };
     }
 

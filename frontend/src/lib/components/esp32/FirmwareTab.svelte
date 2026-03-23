@@ -72,18 +72,18 @@
     {:else}
       <div class="fw-grid">
         {#each firmwareTypes as fw (fw.type)}
-          <div class="fw-card">
+          <button class="fw-card" on:click={() => { otaType = fw.type; otaVersion = ''; showOtaForm = true; subTab = 'otas'; }}>
             <span class="fw-type">{fw.type}</span>
             <span class="fw-latest">v{fw.latest}</span>
             <span class="fw-count">{fw.releases_count} release{fw.releases_count !== 1 ? 's' : ''}</span>
-            {#if fw.releases.length > 1}
+            {#if fw.releases.length > 0}
               <div class="fw-releases">
                 {#each fw.releases.slice(0, 5) as rel}
                   <span class="fw-rel">{rel}</span>
                 {/each}
               </div>
             {/if}
-          </div>
+          </button>
         {/each}
       </div>
     {/if}
@@ -238,7 +238,9 @@
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     padding: 12px 20px; border-radius: 10px; border: 1px solid #222;
     background: #151515; min-width: 120px;
+    cursor: pointer; transition: all 0.15s; font: inherit; color: inherit;
   }
+  .fw-card:hover { border-color: #f59e0b; background: rgba(245,158,11,0.05); }
   .fw-type { font-size: 0.75rem; font-weight: 600; }
   .fw-latest { font-size: 1rem; font-weight: 700; color: #f59e0b; }
   .fw-count { font-size: 0.6rem; color: #555; }

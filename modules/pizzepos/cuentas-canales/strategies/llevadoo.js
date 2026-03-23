@@ -2,13 +2,17 @@
  * Strategy: Llevadoo
  * Gestión de pedidos de delivery externo (empresa Llevadoo)
  *
- * Flujo: Llevadoo crea pedido → cocina lo prepara → Llevadoo viene a recoger
+ * Flujo: Llevadoo crea pedido → cocina → horno → para_recoger → comandero entrega a repartidor → entregado
+ *
+ * Llevadoo solo toma la comanda. Después queda en manos de comandero.
+ * Cuando items llegan al horno → marca "para_recoger" automáticamente.
+ * Comandero entrega al repartidor y marca "entregado" desde cuentas.
  *
  * Prefijo cuenta_id: llevadoo_{YYYYMMDD}_{seq}
  * Dominio uiHandler: 'llevadoo'
  * Eventos propios: llevadoo.pedido_recibido, llevadoo.pedido_aceptado,
- *                  llevadoo.pedido_listo, llevadoo.pedido_recogido
- * Consume: cocina.pedido_listo, comandero.enviar_cocina
+ *                  llevadoo.para_recoger, llevadoo.pedido_listo, llevadoo.pedido_entregado
+ * Consume: cocina.pedido_listo, cocina.item_avanzado, comandero.enviar_cocina, cuenta.estado_cambiado
  */
 
 class LlevadooStrategy {
@@ -83,7 +87,9 @@ class LlevadooStrategy {
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
+    await eventBus.subscribe('cocina.item_avanzado', this.onCocinaItemAvanzado.bind(this));
     await eventBus.subscribe('comandero.enviar_cocina', this.onComanderoEnviarCocina.bind(this));
+    await eventBus.subscribe('cuenta.estado_cambiado', this.onCuentaEstadoCambiado.bind(this));
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
@@ -99,7 +105,7 @@ class LlevadooStrategy {
       estado: pedido.estado
     });
 
-    if (pedido.estado === 'recogido') {
+    if (['recogido', 'entregado'].includes(pedido.estado)) {
       await this.cerrarCuenta(cuenta_id, correlationId);
     }
   }
@@ -147,6 +153,9 @@ class LlevadooStrategy {
 
     if (!pedidoLlevadoo) return;
 
+    // Solo transicionar a listo si estamos en un estado anterior (no machacar entregado/recogido)
+    if (!['en_preparacion', 'para_recoger'].includes(pedidoLlevadoo.estado)) return;
+
     pedidoLlevadoo.estado = 'listo';
     pedidoLlevadoo.hora_listo = new Date().toISOString();
 
@@ -162,6 +171,88 @@ class LlevadooStrategy {
       correlation_id: correlationId,
       cuenta_id: pedidoLlevadoo.cuenta_id
     });
+  }
+
+  /**
+   * Cuando un item avanza de estación en cocina (general → horno),
+   * marcar el pedido Llevadoo como "para_recoger".
+   * El repartidor ya puede venir a buscar el pedido.
+   */
+  async onCocinaItemAvanzado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { cuenta_id, pase } = eventData;
+
+    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+
+    // pase=1 significa que el item acaba de entrar al horno (avanzó desde general pase_minimo=0)
+    if (pase !== 1) return;
+
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) return;
+
+    // Solo transicionar si estamos en en_preparacion (evitar doble transición)
+    if (pedido.estado !== 'en_preparacion') return;
+
+    pedido.estado = 'para_recoger';
+    pedido.hora_para_recoger = new Date().toISOString();
+
+    await this.modulo.eventBus.publish('llevadoo.para_recoger', {
+      cuenta_id: pedido.cuenta_id,
+      numero_pedido: pedido.numero_pedido,
+      nombre_cliente: pedido.nombre_cliente,
+      total: pedido.total,
+      timestamp: new Date().toISOString()
+    }, { correlationId });
+
+    this.modulo.logger.info('llevadoo.para_recoger', {
+      correlation_id: correlationId,
+      cuenta_id,
+      pase
+    });
+  }
+
+  /**
+   * Cuando comandero marca la cuenta como entregada desde cuentas,
+   * cerrar el pedido Llevadoo automáticamente.
+   */
+  async onCuentaEstadoCambiado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const correlationId = event?.metadata?.correlationId;
+    const { cuenta_id, estado_nuevo } = eventData;
+
+    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (estado_nuevo !== 'entregado') return;
+
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) return;
+
+    pedido.estado = 'entregado';
+    pedido.hora_entregado = new Date().toISOString();
+
+    const tiempoTotal = (new Date(pedido.hora_entregado) - new Date(pedido.hora_pedido)) / 1000 / 60;
+    this.modulo.trackTiempo('llevadoo_preparacion', tiempoTotal);
+
+    this.internalMetrics.pedidos_completados++;
+    this.internalMetrics.ingresos_totales += pedido.total;
+    this.internalMetrics.recargo_total_acumulado += pedido.recargo_total || 0;
+
+    await this.modulo.eventBus.publish('llevadoo.pedido_entregado', {
+      cuenta_id: pedido.cuenta_id,
+      numero_pedido: pedido.numero_pedido,
+      total: pedido.total,
+      tiempo_total_minutos: Math.round(tiempoTotal),
+      timestamp: new Date().toISOString()
+    }, { correlationId });
+
+    this.modulo.logger.info('llevadoo.pedido_entregado', {
+      correlation_id: correlationId,
+      cuenta_id,
+      tiempo_minutos: Math.round(tiempoTotal)
+    });
+
+    // Cerrar cuenta Llevadoo
+    await this.cerrarCuenta(cuenta_id, correlationId);
   }
 
   async onComanderoEnviarCocina(event) {
@@ -265,7 +356,7 @@ class LlevadooStrategy {
 
   async handleGetPendientes() {
     const pendientes = Array.from(this.pedidosActivos.values())
-      .filter(p => ['recibido', 'aceptado', 'en_preparacion'].includes(p.estado))
+      .filter(p => ['recibido', 'aceptado', 'en_preparacion', 'para_recoger'].includes(p.estado))
       .sort((a, b) => new Date(a.hora_pedido) - new Date(b.hora_pedido));
 
     return {
@@ -341,7 +432,7 @@ class LlevadooStrategy {
       return { status: 404, error: 'Pedido no encontrado' };
     }
 
-    if (['recogido', 'cancelado'].includes(pedido.estado)) {
+    if (['recogido', 'entregado', 'cancelado'].includes(pedido.estado)) {
       return { status: 400, error: `No se puede cancelar un pedido en estado '${pedido.estado}'` };
     }
 
@@ -470,7 +561,7 @@ class LlevadooStrategy {
       throw new Error('Pedido no encontrado');
     }
 
-    if (!['listo', 'en_preparacion'].includes(pedido.estado)) {
+    if (!['para_recoger', 'listo', 'en_preparacion'].includes(pedido.estado)) {
       throw new Error(`No se puede marcar como recogido un pedido en estado '${pedido.estado}'`);
     }
 

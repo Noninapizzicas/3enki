@@ -28,6 +28,11 @@
       "whatsapp.pedido_creado",
       "whatsapp.pedido_confirmado",
       "whatsapp.pedido_listo",
+      "llevadoo.pedido_recibido",
+      "llevadoo.pedido_aceptado",
+      "llevadoo.para_recoger",
+      "llevadoo.pedido_listo",
+      "llevadoo.pedido_entregado",
       "cuenta.creada",
       "cuenta.cerrada"
     ],

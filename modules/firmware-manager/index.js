@@ -272,6 +272,75 @@ class FirmwareManagerModule {
     }
   }
 
+  /**
+   * Auto-registro de firmware tras build exitoso.
+   * Copia el binario a data/firmware/binaries/ y lo registra en el catálogo.
+   */
+  async onBuildCompleted(event) {
+    const data = event?.data || event?.payload || event;
+    const { project_name, board, binary_path, binary_size } = data;
+
+    if (!project_name || !binary_path) return;
+
+    try {
+      // Verificar que el binario existe
+      await fs.promises.access(binary_path, fs.constants.R_OK);
+    } catch (_) {
+      this.logger.warn('firmware.auto_register.binary_not_found', {
+        project_name, binary_path
+      });
+      return;
+    }
+
+    // Generar nombre y versión para el binario
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `${project_name}-${timestamp}.bin`;
+    const version = this._timestampToVersion(timestamp);
+    const type = project_name;
+
+    // Asegurar que el directorio binaries existe
+    const binariesDir = path.join(this.config.data_path, 'binaries');
+    await fs.promises.mkdir(binariesDir, { recursive: true });
+
+    // Copiar binario
+    const destPath = path.join(binariesDir, fileName);
+    await fs.promises.copyFile(binary_path, destPath);
+
+    this.logger.info('firmware.auto_register.copied', {
+      project_name, from: binary_path, to: destPath, size: binary_size
+    });
+
+    // Registrar en catálogo usando handleRegister
+    const result = await this.handleRegister({
+      type,
+      version,
+      file: fileName,
+      changelog: `Auto-registrado desde build de ${project_name} (${board})`
+    });
+
+    if (result.status === 201) {
+      this.logger.info('firmware.auto_register.success', {
+        project_name, type, version, file: fileName
+      });
+    } else {
+      this.logger.warn('firmware.auto_register.failed', {
+        project_name, error: result.error
+      });
+    }
+  }
+
+  /**
+   * Genera una versión semver a partir de un timestamp.
+   * Formato: YYYY.M.DDHHMM (ej: 2026.3.231045)
+   */
+  _timestampToVersion(timestamp) {
+    const now = new Date();
+    const major = now.getFullYear();
+    const minor = now.getMonth() + 1;
+    const patch = now.getDate() * 10000 + now.getHours() * 100 + now.getMinutes();
+    return `${major}.${minor}.${patch}`;
+  }
+
   // ==========================================
   // UI Handlers
   // ==========================================

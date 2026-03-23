@@ -25,6 +25,11 @@
         "event": "device.registered",
         "handler": "onDeviceRegistered",
         "description": "Verifica firmware de nuevos dispositivos registrados"
+      },
+      {
+        "event": "esp32.build_completed",
+        "handler": "onBuildCompleted",
+        "description": "Auto-registra firmware en catálogo tras build exitoso"
       }
     ],
     "publishes": [

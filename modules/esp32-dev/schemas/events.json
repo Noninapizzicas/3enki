@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enki.local/schemas/esp32-dev/events.json",
+  "title": "ESP32 Dev Events",
+  "description": "Esquemas de eventos publicados por esp32-dev",
+
+  "definitions": {
+    "project_created": {
+      "type": "object",
+      "required": ["project_name", "template", "board", "framework"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nombre del proyecto de firmware"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Template usado para crear el proyecto"
+        },
+        "board": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Board target (esp32dev, esp32-s3, etc.)"
+        },
+        "framework": {
+          "type": "string",
+          "enum": ["arduino", "espidf"],
+          "description": "Framework de desarrollo"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "build_started": {
+      "type": "object",
+      "required": ["project_name", "board", "timestamp"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "board": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "build_completed": {
+      "type": "object",
+      "required": ["project_name", "board", "binary_path", "binary_size", "duration_ms"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "board": {
+          "type": "string",
+          "minLength": 1
+        },
+        "binary_path": {
+          "type": "string",
+          "description": "Ruta al .bin generado"
+        },
+        "binary_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "build_failed": {
+      "type": "object",
+      "required": ["project_name", "board", "error", "duration_ms"],
+      "properties": {
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "board": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error": {
+          "type": "string",
+          "description": "Mensaje de error de compilación"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

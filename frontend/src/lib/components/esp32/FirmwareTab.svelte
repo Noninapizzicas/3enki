@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     esp32Store, loadFirmwareCatalog, loadOtaStatus, loadRollbackDevices,
-    triggerOta, rollbackDevice, elapsed, statusColor
+    triggerOta, rollbackDevice, elapsed, statusColor, selectFirmwareForFlash
   } from '$lib/stores/esp32';
 
   type SubTab = 'catalogo' | 'otas' | 'rollback';
@@ -72,7 +72,7 @@
     {:else}
       <div class="fw-grid">
         {#each firmwareTypes as fw (fw.type)}
-          <button class="fw-card" on:click={() => { otaType = fw.type; otaVersion = ''; showOtaForm = true; subTab = 'otas'; }}>
+          <div class="fw-card">
             <span class="fw-type">{fw.type}</span>
             <span class="fw-latest">v{fw.latest}</span>
             <span class="fw-count">{fw.releases_count} release{fw.releases_count !== 1 ? 's' : ''}</span>
@@ -83,7 +83,22 @@
                 {/each}
               </div>
             {/if}
-          </button>
+            <div class="fw-actions">
+              <button
+                class="fw-btn fw-btn-usb"
+                disabled={!fw.binary_path}
+                on:click={() => fw.binary_path && selectFirmwareForFlash(fw.binary_path)}
+              >
+                USB
+              </button>
+              <button
+                class="fw-btn fw-btn-ota"
+                on:click={() => { otaType = fw.type; otaVersion = ''; showOtaForm = true; subTab = 'otas'; }}
+              >
+                OTA
+              </button>
+            </div>
+          </div>
         {/each}
       </div>
     {/if}
@@ -238,9 +253,22 @@
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     padding: 12px 20px; border-radius: 10px; border: 1px solid #222;
     background: #151515; min-width: 120px;
-    cursor: pointer; transition: all 0.15s; font: inherit; color: inherit;
+    transition: all 0.15s;
   }
-  .fw-card:hover { border-color: #f59e0b; background: rgba(245,158,11,0.05); }
+  .fw-card:hover { border-color: #444; }
+  .fw-actions {
+    display: flex; gap: 6px; margin-top: 8px; width: 100%;
+  }
+  .fw-btn {
+    flex: 1; padding: 5px 8px; border-radius: 6px; border: 1px solid #333;
+    background: none; cursor: pointer; font-size: 0.65rem; font-weight: 600;
+    transition: all 0.15s;
+  }
+  .fw-btn-usb { color: #3b82f6; border-color: #3b82f633; }
+  .fw-btn-usb:hover:not(:disabled) { background: rgba(59,130,246,0.1); border-color: #3b82f6; }
+  .fw-btn-usb:disabled { opacity: 0.3; cursor: default; }
+  .fw-btn-ota { color: #f59e0b; border-color: #f59e0b33; }
+  .fw-btn-ota:hover { background: rgba(245,158,11,0.1); border-color: #f59e0b; }
   .fw-type { font-size: 0.75rem; font-weight: 600; }
   .fw-latest { font-size: 1rem; font-weight: 700; color: #f59e0b; }
   .fw-count { font-size: 0.6rem; color: #555; }

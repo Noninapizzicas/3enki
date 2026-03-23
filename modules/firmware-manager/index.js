@@ -351,11 +351,15 @@ class FirmwareManagerModule {
   async handleList() {
     const types = [];
     for (const [type, entry] of Object.entries(this.catalog)) {
+      const latestRelease = entry.releases[entry.latest];
       types.push({
         type,
         latest: entry.latest,
         releases_count: Object.keys(entry.releases).length,
-        releases: Object.keys(entry.releases)
+        releases: Object.keys(entry.releases),
+        binary_path: latestRelease?.file
+          ? path.join(this.config.data_path, 'binaries', latestRelease.file)
+          : null
       });
     }
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, onMount } from 'svelte';
   import {
     esp32Store, loadPorts, startFlash, cancelFlash,
     loadFlashStatus, loadFlashHistory,
@@ -31,6 +31,16 @@
   $: monitorPort = $esp32Store.monitorPort;
   $: lines = $esp32Store.serialLines;
   $: isMonitoring = monitorPort !== null;
+
+  // Auto-fill binary from catalog selection (on mount, consume once)
+  onMount(() => {
+    const selected = $esp32Store.selectedBinaryPath;
+    if (selected) {
+      binaryPath = selected;
+      subTab = 'grabar';
+      esp32Store.update(s => ({ ...s, selectedBinaryPath: null }));
+    }
+  });
 
   // Auto-fill binary from last build
   $: if (lastBuild?.binary_path && !binaryPath) {

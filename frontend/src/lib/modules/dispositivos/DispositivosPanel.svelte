@@ -14,6 +14,7 @@
   import { updatePageState } from '$lib/stores/page-context';
 
   import FleetTab from '$lib/components/dispositivos/FleetTab.svelte';
+  import ImpresorasTab from '$lib/components/dispositivos/ImpresorasTab.svelte';
   import ShadowTab from '$lib/components/dispositivos/ShadowTab.svelte';
   import FirmwareTab from '$lib/components/dispositivos/FirmwareTab.svelte';
   import GatewaysTab from '$lib/components/dispositivos/GatewaysTab.svelte';
@@ -23,8 +24,11 @@
 
   let cleanupSubs: (() => void) | null = null;
 
+  import { impresoras, impresorasOnline } from '$lib/stores/dispositivos';
+
   const tabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'fleet', label: 'Fleet', icon: '📟' },
+    { id: 'impresoras', label: 'Impresoras', icon: '🖨' },
     { id: 'shadow', label: 'Shadow', icon: '🔄' },
     { id: 'firmware', label: 'Firmware', icon: '⬆' },
     { id: 'gateways', label: 'Gateways', icon: '🌐' },
@@ -81,6 +85,9 @@
         {#if tab.id === 'health' && alertCount > 0}
           <span class="tab-badge">{alertCount}</span>
         {/if}
+        {#if tab.id === 'impresoras' && $impresoras.length > 0}
+          <span class="tab-badge printer-badge">{$impresorasOnline.length}/{$impresoras.length}</span>
+        {/if}
       </button>
     {/each}
   </nav>
@@ -94,6 +101,8 @@
       </div>
     {:else if $activeTab === 'fleet'}
       <FleetTab />
+    {:else if $activeTab === 'impresoras'}
+      <ImpresorasTab />
     {:else if $activeTab === 'shadow'}
       <ShadowTab />
     {:else if $activeTab === 'firmware'}
@@ -195,6 +204,9 @@
     align-items: center;
     justify-content: center;
     padding: 0 3px;
+  }
+  .tab-badge.printer-badge {
+    background: #22c55e;
   }
 
   /* Content */

@@ -8,6 +8,7 @@
   } from '$lib/stores/dispositivos';
 
   import FleetTab from './FleetTab.svelte';
+  import ImpresorasTab from './ImpresorasTab.svelte';
   import ShadowTab from './ShadowTab.svelte';
   import FirmwareTab from './FirmwareTab.svelte';
   import GatewaysTab from './GatewaysTab.svelte';
@@ -15,8 +16,11 @@
 
   let cleanupSubs: (() => void) | null = null;
 
+  import { impresoras, impresorasOnline } from '$lib/stores/dispositivos';
+
   const tabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'fleet', label: 'Fleet', icon: '📟' },
+    { id: 'impresoras', label: 'Impresoras', icon: '🖨' },
     { id: 'shadow', label: 'Shadow', icon: '🔄' },
     { id: 'firmware', label: 'Firmware', icon: '⬆' },
     { id: 'gateways', label: 'Gateways', icon: '🌐' },
@@ -76,6 +80,9 @@
         {#if tab.id === 'health' && alertCount > 0}
           <span class="tab-badge">{alertCount}</span>
         {/if}
+        {#if tab.id === 'impresoras' && $impresoras.length > 0}
+          <span class="tab-badge" style="background: #22c55e">{$impresorasOnline.length}/{$impresoras.length}</span>
+        {/if}
       </button>
     {/each}
   </nav>
@@ -89,6 +96,8 @@
       </div>
     {:else if $activeTab === 'fleet'}
       <FleetTab />
+    {:else if $activeTab === 'impresoras'}
+      <ImpresorasTab />
     {:else if $activeTab === 'shadow'}
       <ShadowTab />
     {:else if $activeTab === 'firmware'}

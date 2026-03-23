@@ -107,7 +107,31 @@ export interface HealthSummary {
   avg_uptime_pct: number;
 }
 
-export type TabId = 'fleet' | 'shadow' | 'firmware' | 'gateways' | 'health';
+export type TabId = 'fleet' | 'impresoras' | 'shadow' | 'firmware' | 'gateways' | 'health';
+
+// =============================================================================
+// PRINTER-SPECIFIC TYPES
+// =============================================================================
+
+export interface Periferico {
+  nombre: string;
+  tipo: string;
+  estado: 'online' | 'offline' | 'error';
+  capacidades: string[];
+  transporte_tipo: string;
+  conectado: boolean;
+  metadata: Record<string, any>;
+}
+
+/** Connection chain node — each step in the System→MQTT→ESP32→BLE→Printer path */
+export interface ChainNode {
+  id: string;
+  label: string;
+  status: 'ok' | 'error' | 'unknown' | 'loading';
+  detail?: string;
+}
+
+export type OnboardingStep = 'idle' | 'flash' | 'connect' | 'pair' | 'test' | 'name' | 'done';
 
 export interface DispositivosState {
   // UI
@@ -140,6 +164,12 @@ export interface DispositivosState {
   healthSummary: HealthSummary | null;
   healthDevices: HealthDevice[];
   healthAlerts: HealthAlert[];
+
+  // Impresoras (perifericos)
+  perifericos: Periferico[];
+  perifericosLoading: boolean;
+  onboardingStep: OnboardingStep;
+  onboardingDeviceId: string | null;
 }
 
 // =============================================================================
@@ -160,7 +190,11 @@ const initialState: DispositivosState = {
   gateways: [],
   healthSummary: null,
   healthDevices: [],
-  healthAlerts: []
+  healthAlerts: [],
+  perifericos: [],
+  perifericosLoading: false,
+  onboardingStep: 'idle',
+  onboardingDeviceId: null
 };
 
 export const dispositivosStore = writable<DispositivosState>(initialState);
@@ -177,6 +211,13 @@ export const activeTab = derived(dispositivosStore, $s => $s.activeTab);
 export const devicesOnline = derived(dispositivosStore, $s => $s.devices.filter(d => d.state === 'online'));
 export const devicesOffline = derived(dispositivosStore, $s => $s.devices.filter(d => d.state !== 'online'));
 export const healthAlerts = derived(dispositivosStore, $s => $s.healthAlerts.filter(a => !a.resolved));
+
+// Printers: perifericos with 'imprimir' capability
+export const impresoras = derived(dispositivosStore, $s =>
+  $s.perifericos.filter(p => p.capacidades.includes('imprimir'))
+);
+export const impresorasOnline = derived(impresoras, $i => $i.filter(p => p.estado === 'online'));
+export const onboardingStep = derived(dispositivosStore, $s => $s.onboardingStep);
 
 // =============================================================================
 // TAB NAVIGATION
@@ -389,6 +430,174 @@ export async function loadAlerts(): Promise<void> {
 }
 
 // =============================================================================
+// IMPRESORAS (perifericos)
+// =============================================================================
+
+export async function loadPerifericos(): Promise<void> {
+  dispositivosStore.update(s => ({ ...s, perifericosLoading: true }));
+  try {
+    const res = await mqttRequest<any>('perifericos', 'list', {});
+    dispositivosStore.update(s => ({
+      ...s,
+      perifericos: res.data?.dispositivos || [],
+      perifericosLoading: false
+    }));
+  } catch {
+    dispositivosStore.update(s => ({ ...s, perifericosLoading: false }));
+  }
+}
+
+export async function getPerifericoStatus(nombre: string): Promise<any | null> {
+  try {
+    const res = await mqttRequest<any>('perifericos', 'status', { nombre });
+    return res.data || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function testPeriferico(nombre: string): Promise<boolean> {
+  try {
+    const res = await mqttRequest<any>('perifericos', 'test', { nombre });
+    return res.data?.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function discoverPerifericos(): Promise<any[]> {
+  try {
+    const res = await mqttRequest<any>('perifericos', 'discover', {});
+    return res.data?.dispositivos || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function registerPeriferico(data: {
+  nombre: string;
+  tipo?: string;
+  capacidades?: string[];
+  transporte: { tipo: string; config: Record<string, any> };
+  metadata?: Record<string, any>;
+}): Promise<boolean> {
+  try {
+    await mqttRequest<any>('perifericos', 'create', data);
+    await loadPerifericos();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function deletePeriferico(nombre: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('perifericos', 'delete', { nombre });
+    await loadPerifericos();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build the connection chain for a printer device.
+ * Returns the status of each link: System → MQTT → ESP32 → BLE → Printer
+ */
+export function buildPrinterChain(
+  periferico: Periferico,
+  deviceRegistry: Device[]
+): ChainNode[] {
+  const chain: ChainNode[] = [];
+
+  // 1. Sistema (always ok if we're running)
+  chain.push({ id: 'system', label: 'Sistema', status: 'ok' });
+
+  // 2. MQTT — if periferico exists in our list, MQTT is working
+  chain.push({ id: 'mqtt', label: 'MQTT', status: 'ok' });
+
+  // 3. ESP32 — find matching device in registry
+  const esp32Id = periferico.metadata?.esp32_device_id ||
+    periferico.metadata?.transporte_config?.esp32_device_id;
+  const isEsp32Proxy = periferico.transporte_tipo === 'esp32-proxy';
+
+  if (isEsp32Proxy) {
+    const esp32Device = deviceRegistry.find(d =>
+      d.device_id === esp32Id || d.name === esp32Id || d.device_id === periferico.nombre
+    );
+    if (esp32Device) {
+      chain.push({
+        id: 'esp32',
+        label: 'ESP32',
+        status: esp32Device.state === 'online' ? 'ok' : 'error',
+        detail: esp32Device.state === 'online'
+          ? `${esp32Device.name} (${esp32Device.metadata?.ip || '?'})`
+          : `${esp32Device.name} offline`
+      });
+    } else {
+      chain.push({
+        id: 'esp32',
+        label: 'ESP32',
+        status: periferico.estado === 'online' ? 'ok' : 'unknown',
+        detail: esp32Id || periferico.nombre
+      });
+    }
+
+    // 4. BLE — inferred from printer_addr metadata
+    const printerAddr = periferico.metadata?.printer_addr;
+    const printerReady = periferico.metadata?.printer_ready;
+    if (printerAddr) {
+      chain.push({
+        id: 'ble',
+        label: 'BLE',
+        status: printerReady !== false && periferico.estado === 'online' ? 'ok' : 'error',
+        detail: printerAddr
+      });
+    } else {
+      chain.push({
+        id: 'ble',
+        label: 'BLE',
+        status: periferico.estado === 'online' ? 'ok' : 'unknown',
+        detail: 'Sin dirección BLE'
+      });
+    }
+  } else if (periferico.transporte_tipo === 'tcp') {
+    // TCP printer — shorter chain
+    chain.push({
+      id: 'red',
+      label: 'Red',
+      status: periferico.conectado ? 'ok' : 'error',
+      detail: periferico.metadata?.host || periferico.metadata?.ip || '?'
+    });
+  } else if (periferico.transporte_tipo === 'ble-directo') {
+    chain.push({
+      id: 'ble',
+      label: 'BLE',
+      status: periferico.conectado ? 'ok' : 'error',
+      detail: periferico.metadata?.mac || '?'
+    });
+  }
+
+  // 5. Printer (final node)
+  chain.push({
+    id: 'printer',
+    label: 'Impresora',
+    status: periferico.estado === 'online' && periferico.conectado ? 'ok' : 'error',
+    detail: periferico.metadata?.printer_name || periferico.nombre
+  });
+
+  return chain;
+}
+
+export function setOnboardingStep(step: OnboardingStep, deviceId?: string): void {
+  dispositivosStore.update(s => ({
+    ...s,
+    onboardingStep: step,
+    onboardingDeviceId: deviceId ?? s.onboardingDeviceId
+  }));
+}
+
+// =============================================================================
 // INIT / SUBSCRIPTIONS
 // =============================================================================
 
@@ -400,7 +609,8 @@ export async function initDispositivos(): Promise<void> {
     loadHealthDashboard(),
     loadGateways(),
     loadFirmwareCatalog(),
-    loadOtaStatus()
+    loadOtaStatus(),
+    loadPerifericos()
   ]);
   dispositivosStore.update(s => ({ ...s, loading: false }));
 }
@@ -443,6 +653,14 @@ export function initDispositivosSubscriptions(): () => void {
     mqttSubscribe('health.alert.offline', () => loadAlerts()),
     mqttSubscribe('health.alert.reconnect_loop', () => loadAlerts()),
     mqttSubscribe('health.report', () => loadHealthDashboard())
+  );
+
+  // Perifericos events
+  cleanups.push(
+    mqttSubscribe('periferico.dispositivo.registrado', () => { loadPerifericos(); loadDevices(); }),
+    mqttSubscribe('periferico.dispositivo.desregistrado', () => loadPerifericos()),
+    mqttSubscribe('periferico.dispositivo.online', () => loadPerifericos()),
+    mqttSubscribe('periferico.dispositivo.offline', () => loadPerifericos())
   );
 
   // Reconnect handler

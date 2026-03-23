@@ -97,6 +97,8 @@
       "gateway-manager",
       "firmware-manager",
       "device-health",
+      "esp32-dev",
+      "esp32-flasher",
       "menu-generator",
       "recetas",
       "escandallo",

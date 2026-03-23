@@ -25,6 +25,8 @@
   $: selected = $esp32Store.selectedProject;
   $: detail = $esp32Store.projectDetail;
   $: buildStatus = $esp32Store.buildStatus;
+  $: storeError = $esp32Store.error;
+  $: loading = $esp32Store.loading;
 
   async function handleCreate() {
     createError = '';
@@ -101,9 +103,19 @@
 
   <!-- TEMPLATES -->
   {#if subTab === 'templates'}
-    {#if templates.length === 0}
+    {#if storeError}
+      <div class="empty-section">
+        <span class="error-text">{storeError}</span>
+        <button class="btn-retry" on:click={handleRefresh}>Reintentar</button>
+      </div>
+    {:else if templates.length === 0 && loading}
       <div class="empty-section">
         <span class="empty-text">Cargando templates...</span>
+      </div>
+    {:else if templates.length === 0}
+      <div class="empty-section">
+        <span class="empty-text">No hay templates disponibles. Verifica que el módulo esp32-dev esté activo.</span>
+        <button class="btn-retry" on:click={handleRefresh}>Reintentar</button>
       </div>
     {:else}
       <div class="tpl-grid">
@@ -490,6 +502,12 @@
   .build-log::-webkit-scrollbar-track { background: #050505; }
   .build-log::-webkit-scrollbar-thumb { background: #222; border-radius: 3px; }
 
-  .empty-section { padding: 30px; text-align: center; }
+  .empty-section { padding: 30px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
   .empty-text { font-size: 0.8rem; color: #555; }
+  .error-text { font-size: 0.8rem; color: #ef4444; }
+  .btn-retry {
+    padding: 6px 16px; border-radius: 6px; border: 1px solid #333;
+    background: none; color: #888; cursor: pointer; font-size: 0.75rem;
+  }
+  .btn-retry:hover { color: #ccc; border-color: #555; }
 </style>

@@ -214,15 +214,20 @@ export function selectProject(name: string | null): void {
 export async function loadTemplates(): Promise<void> {
   try {
     const res = await mqttRequest<any>('esp32', 'list-templates', {});
-    esp32Store.update(s => ({ ...s, templates: res.data?.templates || [] }));
-  } catch {}
+    esp32Store.update(s => ({ ...s, templates: res.data?.templates || [], error: null }));
+  } catch (err: any) {
+    console.warn('[ESP32] loadTemplates failed:', err.message || err);
+    esp32Store.update(s => ({ ...s, templates: [], error: `Templates: ${err.message || 'sin respuesta del backend'}` }));
+  }
 }
 
 export async function loadProjects(): Promise<void> {
   try {
     const res = await mqttRequest<any>('esp32', 'list-projects', {});
     esp32Store.update(s => ({ ...s, projects: res.data?.projects || [] }));
-  } catch {}
+  } catch (err: any) {
+    console.warn('[ESP32] loadProjects failed:', err.message || err);
+  }
 }
 
 export async function loadProjectDetail(name: string): Promise<void> {
@@ -238,7 +243,9 @@ export async function loadBoards(): Promise<void> {
   try {
     const res = await mqttRequest<any>('esp32', 'list-boards', {});
     esp32Store.update(s => ({ ...s, boards: res.data?.boards || [] }));
-  } catch {}
+  } catch (err: any) {
+    console.warn('[ESP32] loadBoards failed:', err.message || err);
+  }
 }
 
 export async function createProject(data: {

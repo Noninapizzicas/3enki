@@ -209,30 +209,55 @@ class DeepSeekProvider extends BaseProvider {
    *
    * Stores a reverse map so restoreToolNames can restore ONLY the names
    * that were actually translated (avoids corrupting names with underscores).
+   *
+   * Deduplicates after sanitization: if a module tool (e.g. "pdf.create")
+   * collides with a provider tool (e.g. "pdf_create") after dot→underscore,
+   * the translated (dotted) version is kept and the original underscore
+   * duplicate is dropped, since restoreToolNames can map it back correctly.
    */
   translateToolNames(tools) {
     // Reset reverse map for this request
     this._toolNameMap = new Map();
 
-    return tools.map(tool => {
+    const seen = new Set();
+    const result = [];
+
+    for (const tool of tools) {
       if (tool.type === 'function' && tool.function?.name) {
         const original = tool.function.name;
         const sanitized = original.replace(/\./g, '_');
+
+        if (seen.has(sanitized)) {
+          // Duplicate after sanitization — skip this tool
+          if (this.logger) {
+            this.logger.warn('deepseek.tools.duplicate_after_sanitize', {
+              original,
+              sanitized,
+              kept: this._toolNameMap.get(sanitized) || sanitized
+            });
+          }
+          continue;
+        }
+
+        seen.add(sanitized);
 
         if (sanitized !== original) {
           this._toolNameMap.set(sanitized, original);
         }
 
-        return {
+        result.push({
           ...tool,
           function: {
             ...tool.function,
             name: sanitized
           }
-        };
+        });
+      } else {
+        result.push(tool);
       }
-      return tool;
-    });
+    }
+
+    return result;
   }
 
   /**

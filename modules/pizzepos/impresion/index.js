@@ -76,14 +76,14 @@ const CP437 = {
 
 // Icono CP437 por canal — discreto pero reconocible
 const CANAL_ICON = {
-  mesa:      CP437.DIAMOND,    // ♦ MESA
-  telefono:  CP437.PHONE,      // § TEL
-  llevar:    CP437.ARROW_R,    // ► LLEVAR
-  glovo:     CP437.STAR,       // ☼ GLOVO
-  whatsapp:  CP437.BULLET,     // • WHATSAPP
-  uber_eats: CP437.SQUARE,     // ■ UBER
-  just_eat:  CP437.DOT,        // ∙ JUST EAT
-  default:   CP437.SQUARE      // ■
+  mesa:      '*',    // ♦ MESA
+  telefono:  'T',      // § TEL
+  llevar:    '>',    // ► LLEVAR
+  glovo:     '*',       // ☼ GLOVO
+  whatsapp:  '*',     // • WHATSAPP
+  uber_eats: '*',     // ■ UBER
+  just_eat:  '.',        // ∙ JUST EAT
+  default:   '*'      // ■
 };
 
 // Anchos por tipo de impresora
@@ -152,8 +152,8 @@ class ImpresionModule {
 
     // Calcular ancho de línea
     this.lineWidth = ANCHOS[this.config.ancho] || 32;
-    this.separator = CP437.LIGHT_HORIZ.repeat(this.lineWidth);
-    this.doubleSep = CP437.HORIZ.repeat(this.lineWidth);
+    this.separator = '-'.repeat(this.lineWidth);
+    this.doubleSep = '='.repeat(this.lineWidth);
 
     // Iniciar autodescubrimiento de impresoras ESP32
     await this._iniciarAutoDescubrimiento();
@@ -522,36 +522,27 @@ class ImpresionModule {
     lineas.push(CMD.CODEPAGE_437);
 
     // ══════════════════════════════════════════
-    // APARTADO 1: Header — ref pedido + canal
+    // APARTADO 1: Header — ref pedido + hora
     // ══════════════════════════════════════════
     const refMesa = this.extraerRefMesa(cuenta_id, canal);
-    const canalKey = this._detectarCanal(cuenta_id, canal);
-    const icon = CANAL_ICON[canalKey] || CANAL_ICON.default;
 
-    // Linea superior con graficos CP437
-    lineas.push(this._lineaBox('top', w));
-
-    // Ref del pedido centrada, doble tamaño
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.DOUBLE_ON);
     lineas.push(CMD.BOLD_ON);
     if (reimpresion) {
-      lineas.push(`${icon} REIMP ${icon}`);
+      lineas.push('REIMP');
     }
     // Referencia principal (MESA 5, GLOVO #xx, etc)
     lineas.push(refMesa || `#${pedido_id || '-'}`);
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
 
-    // Hora/fecha — sin IDs internos
+    // Hora/fecha
     lineas.push(CMD.FONT_NORMAL);
     const ahora = new Date();
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-    lineas.push(`${icon} ${hora}  ${fecha}`);
-
-    // Linea inferior box
-    lineas.push(this._lineaBox('bottom', w));
+    lineas.push(`${hora}  ${fecha}`);
 
     // ══════════════════════════════════════════
     // APARTADO 2: Items — producto + ingredientes + variaciones
@@ -566,7 +557,7 @@ class ImpresionModule {
     // Notas generales
     if (notas_generales) {
       lineas.push(CMD.BOLD_ON);
-      lineas.push(`${CP437.ARROW_R} NOTAS:`);
+      lineas.push(`${'>'} NOTAS:`);
       lineas.push(CMD.BOLD_OFF);
       lineas.push(this.truncar(notas_generales));
       lineas.push(this._separadorLigero(w));
@@ -575,7 +566,7 @@ class ImpresionModule {
     // Footer discreto
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.FONT_SMALL);
-    lineas.push(`${CP437.DOT} ${items.length} item(s) ${CP437.DOT}`);
+    lineas.push(`${'.'} ${items.length} item(s) ${'.'}`);
     lineas.push(CMD.FONT_NORMAL);
 
     lineas.push(CMD.FEED_5);
@@ -597,10 +588,10 @@ class ImpresionModule {
     // Mitad-mitad
     if (item.tipo === 'mitad-mitad' || item.pizza_izquierda || item.pizza_derecha) {
       if (item.pizza_izquierda) {
-        lineas.push(this.truncar(` ${CP437.ARROW_R} IZQ: ${item.pizza_izquierda}`));
+        lineas.push(this.truncar(` ${'>'} IZQ: ${item.pizza_izquierda}`));
       }
       if (item.pizza_derecha) {
-        lineas.push(this.truncar(` ${CP437.ARROW_R} DER: ${item.pizza_derecha}`));
+        lineas.push(this.truncar(` ${'>'} DER: ${item.pizza_derecha}`));
       }
     }
 
@@ -608,7 +599,7 @@ class ImpresionModule {
     if (item.ingredientes && item.ingredientes.length > 0) {
       for (const ing of item.ingredientes) {
         const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-        lineas.push(this.truncar(` ${CP437.DOT} ${nombre}`));
+        lineas.push(this.truncar(` ${'.'} ${nombre}`));
       }
     }
 
@@ -642,10 +633,10 @@ class ImpresionModule {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
           lineas.push(CMD.BOLD_ON);
-          lineas.push(` ${CP437.SQUARE} ${key.toUpperCase()}`);
+          lineas.push(` ${'*'} ${key.toUpperCase()}`);
           lineas.push(CMD.BOLD_OFF);
         } else if (val && val !== false) {
-          lineas.push(this.truncar(` ${CP437.SQUARE} ${key}: ${val}`));
+          lineas.push(this.truncar(` ${'*'} ${key}: ${val}`));
         }
       }
     }
@@ -653,7 +644,7 @@ class ImpresionModule {
     // Notas del item
     if (item.notas) {
       lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(this.truncar(` ${CP437.ARROW_R} ${item.notas}`));
+      lineas.push(this.truncar(` ${'>'} ${item.notas}`));
       lineas.push(CMD.UNDERLINE_OFF);
     }
   }
@@ -666,12 +657,9 @@ class ImpresionModule {
     lineas.push(CMD.INIT);
     lineas.push(CMD.CODEPAGE_437);
 
-    // ── APARTADO 1: Header — ref pedido + canal ──
+    // ── APARTADO 1: Header — ref pedido + estacion + hora ──
     const refMesa = this.extraerRefMesa(cuenta_id, canal);
-    const canalKey = this._detectarCanal(cuenta_id, canal);
-    const icon = CANAL_ICON[canalKey] || CANAL_ICON.default;
 
-    lineas.push(this._lineaBox('top', w));
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.DOUBLE_ON);
     lineas.push(CMD.BOLD_ON);
@@ -683,8 +671,7 @@ class ImpresionModule {
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     lineas.push(CMD.FONT_NORMAL);
     const estacionStr = estacion ? `${estacion.toUpperCase()} ` : '';
-    lineas.push(`${icon} ${estacionStr}${hora}`);
-    lineas.push(this._lineaBox('bottom', w));
+    lineas.push(`${estacionStr}${hora}`);
 
     // ── APARTADO 2: Producto + ingredientes + variaciones ──
     lineas.push(CMD.ALIGN_CENTER);
@@ -698,13 +685,11 @@ class ImpresionModule {
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
 
-    lineas.push(CMD.ALIGN_LEFT);
-
     // Ingredientes base
     if (ingredientes && ingredientes.length > 0) {
       for (const ing of ingredientes) {
         const ingNombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-        lineas.push(this.truncar(` ${CP437.DOT} ${ingNombre}`));
+        lineas.push(this.truncar(` ${'.'} ${ingNombre}`));
       }
     }
 
@@ -735,10 +720,10 @@ class ImpresionModule {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
           lineas.push(CMD.BOLD_ON);
-          lineas.push(` ${CP437.SQUARE} ${key.toUpperCase()}`);
+          lineas.push(` ${'*'} ${key.toUpperCase()}`);
           lineas.push(CMD.BOLD_OFF);
         } else if (val && val !== false) {
-          lineas.push(this.truncar(` ${CP437.SQUARE} ${key}: ${val}`));
+          lineas.push(this.truncar(` ${'*'} ${key}: ${val}`));
         }
       }
     }
@@ -746,7 +731,7 @@ class ImpresionModule {
     // Notas
     if (notas) {
       lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(this.truncar(` ${CP437.ARROW_R} ${notas}`));
+      lineas.push(this.truncar(` ${'>'} ${notas}`));
       lineas.push(CMD.UNDERLINE_OFF);
     }
 
@@ -892,7 +877,9 @@ class ImpresionModule {
     for (const [prefijo, label] of Object.entries(prefijos)) {
       if (cuenta_id.startsWith(`${prefijo}_`)) {
         const ref = cuenta_id.slice(prefijo.length + 1);
-        return `${label} ${ref}`;
+        // Extraer solo el identificador antes del sufijo _YYYYMMDD_NNN
+        const limpio = ref.replace(/_\d{8}_\d+$/, '');
+        return `${label} ${limpio || ref}`;
       }
     }
 
@@ -972,20 +959,14 @@ class ImpresionModule {
    * bottom: ╚══════════════════════════════╝
    */
   _lineaBox(tipo, ancho) {
-    const interior = CP437.HORIZ.repeat(ancho - 2);
-    if (tipo === 'top') {
-      return `${CP437.TOP_LEFT}${interior}${CP437.TOP_RIGHT}`;
-    }
-    return `${CP437.BOT_LEFT}${interior}${CP437.BOT_RIGHT}`;
+    return '='.repeat(ancho);
   }
 
   /**
-   * Separador ligero entre items — discreto con CP437
-   * ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─
+   * Separador ligero entre items
    */
   _separadorLigero(ancho) {
-    const patron = `${CP437.LIGHT_HORIZ}${CP437.DOT}`;
-    return patron.repeat(Math.floor(ancho / 2)).slice(0, ancho);
+    return '-'.repeat(ancho);
   }
 
   /**

@@ -543,12 +543,12 @@ class ImpresionModule {
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
 
-    // Pedido ID + hora en fuente normal
+    // Hora/fecha — sin IDs internos
     lineas.push(CMD.FONT_NORMAL);
     const ahora = new Date();
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-    lineas.push(`${icon} #${pedido_id || '-'}  ${hora} ${fecha}`);
+    lineas.push(`${icon} ${hora}  ${fecha}`);
 
     // Linea inferior box
     lineas.push(this._lineaBox('bottom', w));
@@ -683,7 +683,7 @@ class ImpresionModule {
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     lineas.push(CMD.FONT_NORMAL);
     const estacionStr = estacion ? `${estacion.toUpperCase()} ` : '';
-    lineas.push(`${icon} ${estacionStr}${hora}  #${pedido_id || '-'}`);
+    lineas.push(`${icon} ${estacionStr}${hora}`);
     lineas.push(this._lineaBox('bottom', w));
 
     // ── APARTADO 2: Producto + ingredientes + variaciones ──

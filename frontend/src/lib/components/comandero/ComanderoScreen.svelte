@@ -256,14 +256,16 @@
     { id: 'menu', label: 'Menú', icon: '📋', color: '#0ea5e9' }
   ];
 
-  // Acciones sidebar
-  const acciones = [
+  // Acciones sidebar (llevadoo no tiene cobro — pago externo)
+  $: isLlevadoo = cuenta_id.startsWith('llevadoo_');
+  const accionesBase = [
     { id: 'cuenta', label: 'Cuenta', icon: '📄', variant: 'default' as const },
     { id: 'enviar', label: 'Enviar', icon: '🍳', variant: 'primary' as const },
     { id: 'imprimir', label: 'Imprimir', icon: '🖨️', variant: 'default' as const },
     { id: 'cobro', label: 'Cobro', icon: '💶', variant: 'default' as const },
     { id: 'salir', label: 'Salir', icon: '↩️', variant: 'danger' as const }
   ];
+  $: acciones = isLlevadoo ? accionesBase.filter(a => a.id !== 'cobro') : accionesBase;
 
   // Estado resultado impresion
   let printResult: { type: 'ok' | 'error'; msg: string } | null = null;
@@ -528,8 +530,8 @@
         } catch { /* usa nombre por defecto */ }
       }
 
-      // Auto-abrir cobro si se navega con ?view=cuenta
-      if (initialView === 'cuenta') {
+      // Auto-abrir cobro si se navega con ?view=cuenta (no para llevadoo)
+      if (initialView === 'cuenta' && !isLlevadoo) {
         showCobro = true;
       }
     }).catch((err) => {

@@ -111,8 +111,8 @@
   $: showDeleteBtn = cuenta.estado === 'pendiente' && cuenta.items === 0;
 
   async function handleEntregarAction() {
-    if (cuenta.pagado) {
-      // Pagado → marcar entregado (cierra la cuenta via strategy)
+    if (cuenta.pagado || cuenta.tipo === 'llevadoo') {
+      // Pagado o llevadoo (pago externo) → marcar entregado directamente
       await marcarEntregado(projectId, cuenta.id);
     } else {
       // No pagado → abrir cobros

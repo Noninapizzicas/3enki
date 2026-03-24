@@ -41,9 +41,14 @@
   $: estadoColor = estadoCfg.color;
   $: estadoUrgent = estadoCfg.urgent;
 
+  $: isLlevadoo = cuenta.tipo === 'llevadoo';
+
   // Acciones contextuales según estado
-  $: showEntregarBtn = cuenta.estado === 'listo';
-  $: showCobrarBtn = cuenta.estado === 'listo' || cuenta.estado === 'entregado';
+  // Llevadoo: solo entregar (pago externo, sin cobro)
+  $: showEntregarBtn = isLlevadoo
+    ? ['en_preparacion', 'para_recoger', 'listo'].includes(cuenta.estado)
+    : cuenta.estado === 'listo';
+  $: showCobrarBtn = !isLlevadoo && (cuenta.estado === 'listo' || cuenta.estado === 'entregado');
   $: showDeleteBtn = cuenta.estado === 'pendiente' || cuenta.estado === 'cobrado';
   $: showActions = showEntregarBtn || showCobrarBtn || showDeleteBtn;
 

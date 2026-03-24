@@ -127,11 +127,11 @@
     }
   }
 
-  // Nombre editable de la cuenta (mesa y llevar)
+  // Nombre editable de la cuenta (mesa, llevar y llevadoo)
   const isMesa = cuenta_id.startsWith('mesa_');
   const isLlevar = cuenta_id.startsWith('llevar_');
-  const canRename = isMesa || isLlevar;
-  let cuentaNombre = isMesa ? 'Mesa...' : isLlevar ? 'Llevar...' : cuenta_id.split('_')[0] || 'Cuenta';
+  const canRename = isMesa || isLlevar || isLlevadoo;
+  let cuentaNombre = isMesa ? 'Mesa...' : isLlevar ? 'Llevar...' : isLlevadoo ? 'Llevadoo' : cuenta_id.split('_')[0] || 'Cuenta';
   let editingName = false;
   let nameInput = '';
   let nameInputEl: HTMLInputElement;
@@ -518,7 +518,7 @@
           const data = (res as any)?.data;
           if (data?.nombre) cuentaNombre = data.nombre;
         } catch { /* usa nombre por defecto */ }
-      } else if (isLlevar) {
+      } else if (isLlevar || isLlevadoo) {
         try {
           const { mqttRequest } = await import('$lib/ui-core/mqtt-request');
           const res = await mqttRequest('cuenta', 'get', {

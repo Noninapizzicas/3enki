@@ -178,9 +178,9 @@
     },
 
     "flujo_completo": {
-      "ejemplo_imprimir_comanda_esp32": [
-        "1. módulo impresion (pizzepos) recibe evento pedido.enviado_cocina (con project_id)",
-        "2. impresion formatea ESC/POS (la lógica de formato está en pizzepos/impresion)",
+      "ejemplo_imprimir_ticket_pieza_esp32": [
+        "1. módulo cocina marca item como salido en horno → publica cocina.item_ticket",
+        "2. módulo impresion recibe cocina.item_ticket → formatea ticket ESC/POS individual",
         "3. impresion publica DIRECTO via mqtt.publish('impresion/{project}/print/{device}', { job_id, data: base64 })",
         "4. ESP32 recibe en su topic MQTT, decodifica base64, envía por BLE a la impresora",
         "5. ESP32 publica ACK en impresion/{project}/printed/{device}",

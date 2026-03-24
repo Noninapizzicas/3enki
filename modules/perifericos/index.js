@@ -484,7 +484,37 @@ class PerifericosModule {
     });
 
     if (!result.success) return { status: 500, error: result.error };
-    return { status: 200, data: result.data };
+
+    // Combinar descubiertos con dispositivos registrados en el registry
+    const registry = this.provider._getRegistry();
+    const registrados = registry ? registry.listar() : [];
+    const descubiertos = result.data?.descubiertos || [];
+
+    // Unificar: transportes activos + dispositivos registrados (sin duplicados)
+    const vistos = new Set(descubiertos.map(d => d.nombre));
+    const dispositivos = [...descubiertos];
+    for (const disp of registrados) {
+      if (!vistos.has(disp.nombre)) {
+        dispositivos.push({
+          nombre: disp.nombre,
+          tipo: disp.tipo,
+          tipo_transporte: disp.transporte?.tipo,
+          conectado: disp.estado === 'online',
+          estado: disp.estado,
+          capacidades: disp.capacidades,
+          metadata: disp.metadata
+        });
+      }
+    }
+
+    return {
+      status: 200,
+      data: {
+        metodo: result.data?.metodo || 'activos',
+        dispositivos,
+        total: dispositivos.length
+      }
+    };
   }
 
   /**
@@ -564,8 +594,10 @@ class PerifericosModule {
       await mqtt.subscribe('esp32/+/status');
       await mqtt.subscribe('periferico/+/status');
       await mqtt.subscribe('impresion/+/status/+');
+      await mqtt.subscribe('enki/+/status/+');
+      await mqtt.subscribe('devices/+/+/birth');
       this.logger.info('perifericos.autodiscovery.iniciado', {
-        topics: ['esp32/+/status', 'periferico/+/status', 'impresion/+/status/+']
+        topics: ['esp32/+/status', 'periferico/+/status', 'impresion/+/status/+', 'enki/+/status/+', 'devices/+/+/birth']
       });
     } catch (err) {
       this.logger.warn('perifericos.autodiscovery.subscribe_error', {
@@ -594,10 +626,14 @@ class PerifericosModule {
     const esp32Match = topic.match(/^esp32\/([^/]+)\/status$/);
     const perifMatch = topic.match(/^periferico\/([^/]+)\/status$/);
     const impresionMatch = topic.match(/^impresion\/([^/]+)\/status\/([^/]+)$/);
+    const enkiMatch = topic.match(/^enki\/([^/]+)\/status\/([^/]+)$/);
+    const birthMatch = topic.match(/^devices\/([^/]+)\/([^/]+)\/birth$/);
 
-    if (!esp32Match && !perifMatch && !impresionMatch) return;
+    if (!esp32Match && !perifMatch && !impresionMatch && !enkiMatch && !birthMatch) return;
 
-    const deviceId = impresionMatch ? impresionMatch[2] : (esp32Match || perifMatch)[1];
+    const deviceId = (impresionMatch || enkiMatch) ? (impresionMatch || enkiMatch)[2]
+                   : birthMatch ? birthMatch[2]
+                   : (esp32Match || perifMatch)[1];
     let data;
 
     try {
@@ -627,6 +663,8 @@ class PerifericosModule {
     const tipo = data.tipo || data.type || 'impresora-termica';
     const nombre = data.nombre || data.name || data.device_id || deviceId;
     const source = impresionMatch ? 'impresion/status'
+                 : enkiMatch ? 'enki/status'
+                 : birthMatch ? 'devices/birth'
                  : esp32Match ? 'esp32/status'
                  : 'periferico/status';
 
@@ -634,10 +672,14 @@ class PerifericosModule {
       deviceId, nombre, tipo, capacidades, source
     });
 
-    // Para impresion/+/status/+, el projectId va en la config del transporte
+    // El projectId va en la config del transporte
     const transporteConfig = { esp32_device_id: deviceId };
     if (impresionMatch) {
       transporteConfig.project_id = impresionMatch[1];
+    } else if (enkiMatch) {
+      transporteConfig.project_id = enkiMatch[1];
+    } else if (birthMatch) {
+      transporteConfig.project_id = birthMatch[1];
     }
 
     try {

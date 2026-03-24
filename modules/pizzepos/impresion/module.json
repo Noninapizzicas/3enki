@@ -103,8 +103,7 @@
 
   "config": {
     "ancho": "58mm",
-    "project_id": "nonina",
-    "destino_default": "cocina-1"
+    "destino_default": ""
   },
 
   "observability": {

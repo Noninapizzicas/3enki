@@ -111,7 +111,7 @@
     if (wizDevices.length === 0) {
       // Also check device registry for ESP32s that haven't registered as perifericos yet
       wizDevices = devices
-        .filter(d => d.state === 'online' && (d.type === 'unknown' || d.type === 'impresora-termica'))
+        .filter(d => d.state === 'online' && (d.type === 'unknown' || d.type === 'impresora-termica' || d.type === 'print-proxy'))
         .map(d => ({
           nombre: d.name || d.device_id,
           device_id: d.device_id,

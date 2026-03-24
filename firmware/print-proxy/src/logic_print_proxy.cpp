@@ -349,12 +349,22 @@ void logic_setup() {
 }
 
 void logic_loop() {
-  // Resuscribir si MQTT se reconectó
+  // Resuscribir si MQTT se reconectó O si la suscripción no se confirmó
   static bool wasConnected = false;
+  static bool subscribed = false;
   bool isConnected = enki_mqtt_connected();
-  if (isConnected && !wasConnected) {
-    enki_mqtt_subscribe(topicPrint);
-    Serial.printf("[PRINT] Re-suscrito a: %s\n", topicPrint);
+
+  if (isConnected && (!wasConnected || !subscribed)) {
+    if (enki_mqtt_subscribe(topicPrint)) {
+      subscribed = true;
+      Serial.printf("[PRINT] Suscrito OK a: %s\n", topicPrint);
+    } else {
+      subscribed = false;
+      Serial.println("[PRINT] Subscribe fallo, reintentando...");
+    }
+  }
+  if (!isConnected) {
+    subscribed = false;
   }
   wasConnected = isConnected;
 

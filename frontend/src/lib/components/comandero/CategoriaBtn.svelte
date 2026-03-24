@@ -38,12 +38,12 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    padding: 6px 12px;
+    padding: 8px 14px;
     border: none;
     border-radius: 6px;
     background: color-mix(in srgb, var(--cat-color) 12%, #1a1a1a);
     color: #bbb;
-    font-size: 0.7rem;
+    font-size: 0.78rem;
     font-weight: 600;
     cursor: pointer;
     transition: background 0.15s, color 0.15s, box-shadow 0.15s;
@@ -79,10 +79,10 @@
 
   @media (max-width: 600px) {
     .categoria-btn {
-      padding: 4px 8px;
+      padding: 6px 10px;
       gap: 3px;
       border-radius: 5px;
-      font-size: 0.6rem;
+      font-size: 0.68rem;
     }
     .icon { font-size: 0.85rem; }
     .nombre { max-width: 60px; }

@@ -130,8 +130,9 @@
   // Nombre editable de la cuenta (mesa, llevar y llevadoo)
   const isMesa = cuenta_id.startsWith('mesa_');
   const isLlevar = cuenta_id.startsWith('llevar_');
-  const canRename = isMesa || isLlevar || isLlevadoo;
-  let cuentaNombre = isMesa ? 'Mesa...' : isLlevar ? 'Llevar...' : isLlevadoo ? 'Llevadoo' : cuenta_id.split('_')[0] || 'Cuenta';
+  const isLlevadooRename = cuenta_id.startsWith('llevadoo_');
+  const canRename = isMesa || isLlevar || isLlevadooRename;
+  let cuentaNombre = isMesa ? 'Mesa...' : isLlevar ? 'Llevar...' : isLlevadooRename ? 'Llevadoo' : cuenta_id.split('_')[0] || 'Cuenta';
   let editingName = false;
   let nameInput = '';
   let nameInputEl: HTMLInputElement;

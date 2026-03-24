@@ -154,9 +154,6 @@ export interface Esp32State {
   serialLines: string[];
   monitorPort: string | null;
   monitorBaud: number;
-
-  // Cross-tab: firmware selected from catalog for flashing
-  selectedBinaryPath: string | null;
 }
 
 // =============================================================================
@@ -183,8 +180,7 @@ const initialState: Esp32State = {
   lastBuild: null,
   serialLines: [],
   monitorPort: null,
-  monitorBaud: 115200,
-  selectedBinaryPath: null
+  monitorBaud: 115200
 };
 
 export const esp32Store = writable<Esp32State>(initialState);
@@ -207,9 +203,6 @@ export function setTab(tab: TabId): void {
   esp32Store.update(s => ({ ...s, activeTab: tab }));
 }
 
-export function selectFirmwareForFlash(binaryPath: string): void {
-  esp32Store.update(s => ({ ...s, selectedBinaryPath: binaryPath, activeTab: 'flash' }));
-}
 
 export function selectProject(name: string | null): void {
   esp32Store.update(s => ({ ...s, selectedProject: name, projectDetail: null }));

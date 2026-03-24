@@ -1,21 +1,85 @@
 <script lang="ts">
   import {
     esp32Store, loadFirmwareCatalog, loadOtaStatus, loadRollbackDevices,
-    triggerOta, rollbackDevice, elapsed, statusColor, selectFirmwareForFlash
+    triggerOta, rollbackDevice, elapsed, statusColor,
+    loadPorts, startFlash
   } from '$lib/stores/esp32';
 
   type SubTab = 'catalogo' | 'otas' | 'rollback';
   let subTab: SubTab = 'catalogo';
 
+  // OTA form (sub-tab otas)
   let otaDeviceId = '';
   let otaType = '';
   let otaVersion = '';
   let showOtaForm = false;
 
+  // Inline action on catalog card
+  let selectedFw: string | null = null;       // fw.type seleccionado
+  let selectedAction: 'usb' | 'ota' | null = null;
+  let inlinePort = '';
+  let inlineDeviceId = '';
+  let inlineError = '';
+  let inlineBusy = false;
+
   $: firmwareTypes = $esp32Store.firmwareTypes;
+  $: ports = $esp32Store.ports;
   $: pending = $esp32Store.otaPending;
   $: log = $esp32Store.otaLog;
   $: rollbackDevices = $esp32Store.rollbackDevices;
+
+  function selectCard(fwType: string, action: 'usb' | 'ota') {
+    if (selectedFw === fwType && selectedAction === action) {
+      // Toggle off
+      selectedFw = null;
+      selectedAction = null;
+      return;
+    }
+    selectedFw = fwType;
+    selectedAction = action;
+    inlineError = '';
+    inlineBusy = false;
+    if (action === 'usb') loadPorts();
+  }
+
+  async function handleInlineFlash() {
+    const fw = firmwareTypes.find(f => f.type === selectedFw);
+    if (!fw?.binary_path) { inlineError = 'Sin binario disponible'; return; }
+    if (!inlinePort) { inlineError = 'Selecciona un puerto'; return; }
+
+    inlineError = '';
+    inlineBusy = true;
+    const result = await startFlash({
+      port: inlinePort,
+      binary_path: fw.binary_path
+    });
+    inlineBusy = false;
+
+    if (result.success) {
+      selectedFw = null;
+      selectedAction = null;
+    } else {
+      inlineError = result.error || 'Error al flashear';
+    }
+  }
+
+  async function handleInlineOta() {
+    if (!inlineDeviceId) { inlineError = 'Introduce el Device ID'; return; }
+    if (!selectedFw) return;
+
+    inlineError = '';
+    inlineBusy = true;
+    const success = await triggerOta(inlineDeviceId, selectedFw);
+    inlineBusy = false;
+
+    if (success) {
+      selectedFw = null;
+      selectedAction = null;
+      inlineDeviceId = '';
+    } else {
+      inlineError = 'Error al enviar OTA';
+    }
+  }
 
   async function handleTriggerOta() {
     if (!otaDeviceId || !otaType) return;
@@ -72,7 +136,7 @@
     {:else}
       <div class="fw-grid">
         {#each firmwareTypes as fw (fw.type)}
-          <div class="fw-card">
+          <div class="fw-card" class:fw-card-selected={selectedFw === fw.type}>
             <span class="fw-type">{fw.type}</span>
             <span class="fw-latest">v{fw.latest}</span>
             <span class="fw-count">{fw.releases_count} release{fw.releases_count !== 1 ? 's' : ''}</span>
@@ -86,18 +150,51 @@
             <div class="fw-actions">
               <button
                 class="fw-btn fw-btn-usb"
+                class:active={selectedFw === fw.type && selectedAction === 'usb'}
                 disabled={!fw.binary_path}
-                on:click={() => fw.binary_path && selectFirmwareForFlash(fw.binary_path)}
+                on:click={() => selectCard(fw.type, 'usb')}
               >
                 USB
               </button>
               <button
                 class="fw-btn fw-btn-ota"
-                on:click={() => { otaType = fw.type; otaVersion = ''; showOtaForm = true; subTab = 'otas'; }}
+                class:active={selectedFw === fw.type && selectedAction === 'ota'}
+                on:click={() => selectCard(fw.type, 'ota')}
               >
                 OTA
               </button>
             </div>
+
+            <!-- Inline form: USB -->
+            {#if selectedFw === fw.type && selectedAction === 'usb'}
+              <div class="inline-form">
+                <select class="inline-input" bind:value={inlinePort}>
+                  <option value="">— puerto —</option>
+                  {#each ports.filter(p => !p.in_use_by) as port}
+                    <option value={port.path}>{port.path}</option>
+                  {/each}
+                </select>
+                {#if inlineError}
+                  <span class="inline-error">{inlineError}</span>
+                {/if}
+                <button class="inline-btn inline-btn-usb" disabled={inlineBusy || !inlinePort} on:click={handleInlineFlash}>
+                  {inlineBusy ? 'Flasheando...' : 'Flashear'}
+                </button>
+              </div>
+            {/if}
+
+            <!-- Inline form: OTA -->
+            {#if selectedFw === fw.type && selectedAction === 'ota'}
+              <div class="inline-form">
+                <input class="inline-input" bind:value={inlineDeviceId} placeholder="device-id (ej: cocina-01)" />
+                {#if inlineError}
+                  <span class="inline-error">{inlineError}</span>
+                {/if}
+                <button class="inline-btn inline-btn-ota" disabled={inlineBusy || !inlineDeviceId} on:click={handleInlineOta}>
+                  {inlineBusy ? 'Enviando...' : 'Enviar OTA'}
+                </button>
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
@@ -252,10 +349,21 @@
   .fw-card {
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     padding: 12px 20px; border-radius: 10px; border: 1px solid #222;
-    background: #151515; min-width: 120px;
+    background: #151515; min-width: 140px;
     transition: all 0.15s;
   }
   .fw-card:hover { border-color: #444; }
+  .fw-card-selected { border-color: #f59e0b44; background: #1a1a1a; }
+  .fw-type { font-size: 0.75rem; font-weight: 600; }
+  .fw-latest { font-size: 1rem; font-weight: 700; color: #f59e0b; }
+  .fw-count { font-size: 0.6rem; color: #555; }
+  .fw-releases { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+  .fw-rel {
+    padding: 1px 6px; background: #1a1a1a; border-radius: 4px;
+    font-size: 0.55rem; color: #666; font-family: monospace;
+  }
+
+  /* Action buttons on card */
   .fw-actions {
     display: flex; gap: 6px; margin-top: 8px; width: 100%;
   }
@@ -266,17 +374,35 @@
   }
   .fw-btn-usb { color: #3b82f6; border-color: #3b82f633; }
   .fw-btn-usb:hover:not(:disabled) { background: rgba(59,130,246,0.1); border-color: #3b82f6; }
+  .fw-btn-usb.active { background: rgba(59,130,246,0.15); border-color: #3b82f6; }
   .fw-btn-usb:disabled { opacity: 0.3; cursor: default; }
   .fw-btn-ota { color: #f59e0b; border-color: #f59e0b33; }
   .fw-btn-ota:hover { background: rgba(245,158,11,0.1); border-color: #f59e0b; }
-  .fw-type { font-size: 0.75rem; font-weight: 600; }
-  .fw-latest { font-size: 1rem; font-weight: 700; color: #f59e0b; }
-  .fw-count { font-size: 0.6rem; color: #555; }
-  .fw-releases { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
-  .fw-rel {
-    padding: 1px 6px; background: #1a1a1a; border-radius: 4px;
-    font-size: 0.55rem; color: #666; font-family: monospace;
+  .fw-btn-ota.active { background: rgba(245,158,11,0.15); border-color: #f59e0b; }
+
+  /* Inline form inside card */
+  .inline-form {
+    display: flex; flex-direction: column; gap: 6px;
+    width: 100%; margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid #222;
   }
+  .inline-input {
+    width: 100%; padding: 6px 8px; border-radius: 6px;
+    border: 1px solid #333; background: #0d0d0d; color: #e5e5e5;
+    font-size: 0.75rem;
+  }
+  .inline-input:focus { outline: none; border-color: #f59e0b; }
+  .inline-error { font-size: 0.65rem; color: #ef4444; }
+  .inline-btn {
+    padding: 6px 10px; border-radius: 6px; border: none;
+    font-size: 0.7rem; font-weight: 600; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .inline-btn:disabled { opacity: 0.4; cursor: default; }
+  .inline-btn-usb { background: #3b82f6; color: #fff; }
+  .inline-btn-usb:hover:not(:disabled) { background: #2563eb; }
+  .inline-btn-ota { background: #f59e0b; color: #000; }
+  .inline-btn-ota:hover:not(:disabled) { background: #d97706; }
 
   /* OTA Form */
   .ota-form {

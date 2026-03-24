@@ -103,8 +103,8 @@
 
   "config": {
     "ancho": "58mm",
-    "project_id": "nonina",
-    "destino_default": "cocina-1"
+    "project_id": "no",
+    "destino_default": "printerhorno"
   },
 
   "observability": {

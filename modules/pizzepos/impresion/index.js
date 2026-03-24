@@ -61,8 +61,8 @@ class ImpresionModule {
     // Config
     this.config = {
       ancho: '58mm',
-      project_id: 'nonina',
-      destino_default: 'cocina-1'   // device_id del ESP32 destino por defecto
+      project_id: 'no',
+      destino_default: 'printerhorno'   // device_id del ESP32 destino por defecto
     };
 
     // Ancho de línea calculado

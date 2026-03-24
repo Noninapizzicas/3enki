@@ -1,0 +1,71 @@
+{
+  "name": "firmware-builder",
+  "version": "1.0.0",
+  "description": "Compilación de firmware ESP32 con arquitectura BASE + LÓGICA. Detecta drivers en firmware/, compila via PlatformIO",
+  "author": "Enki",
+  "tier": "tier_3_core",
+
+  "provides": {
+    "events": [
+      "firmware.build_started",
+      "firmware.build_completed",
+      "firmware.build_failed"
+    ]
+  },
+
+  "events": {
+    "subscribes": [],
+    "publishes": [
+      {
+        "event": "firmware.build_started",
+        "description": "Compilación de driver iniciada"
+      },
+      {
+        "event": "firmware.build_completed",
+        "description": "Compilación completada, binario disponible"
+      },
+      {
+        "event": "firmware.build_failed",
+        "description": "Compilación falló"
+      }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "builder", "action": "list-drivers", "handler": "handleListDrivers" },
+    {
+      "domain": "builder",
+      "action": "build",
+      "handler": "handleBuild",
+      "schema": { "type": "object", "properties": { "driver": { "type": "string" }, "board": { "type": "string" }, "clean": { "type": "boolean" } }, "required": ["driver"] }
+    },
+    { "domain": "builder", "action": "build-status", "handler": "handleBuildStatus" },
+    { "domain": "builder", "action": "list-boards", "handler": "handleListBoards" }
+  ],
+
+  "config": {
+    "firmware_path": "./firmware",
+    "platformio_path": "platformio",
+    "build_timeout_ms": 300000,
+    "max_concurrent_builds": 2
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "firmware.build_started.total",
+        "firmware.build_completed.total",
+        "firmware.build_failed.total"
+      ],
+      "gauges": [
+        "firmware.active_builds.count",
+        "firmware.drivers.count"
+      ],
+      "timings": [
+        "firmware.build.duration"
+      ]
+    }
+  }
+}

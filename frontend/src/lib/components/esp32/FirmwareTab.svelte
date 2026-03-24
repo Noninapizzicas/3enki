@@ -131,7 +131,7 @@
   {#if subTab === 'catalogo'}
     {#if firmwareTypes.length === 0}
       <div class="empty-section">
-        <span class="empty-text">No hay firmwares registrados. Sube binarios a data/firmware/binaries/ y registralos.</span>
+        <span class="empty-text">No hay firmwares registrados. Compila un driver en la tab Drivers para generar binarios.</span>
       </div>
     {:else}
       <div class="fw-grid">

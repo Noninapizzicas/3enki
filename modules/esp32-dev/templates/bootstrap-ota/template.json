@@ -1,0 +1,8 @@
+{
+  "name": "Bootstrap OTA",
+  "description": "Firmware base con portal cautivo para configurar 2 redes WiFi + MQTT. Listo para recibir cualquier firmware especializado via OTA.",
+  "category": "bootstrap",
+  "framework": "arduino",
+  "defaultBoard": "esp32dev",
+  "boards": ["esp32dev", "esp32-s2", "esp32-s3", "esp32-c3", "esp32-c6"]
+}

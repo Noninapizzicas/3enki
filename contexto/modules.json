@@ -154,19 +154,26 @@
     "channel-manager",
     "recetas",
     "escandallo",
-    "viabilidad"
+    "viabilidad",
+    "device-registry",
+    "device-shadow",
+    "device-health",
+    "firmware-builder",
+    "firmware-manager",
+    "esp32-flasher",
+    "gateway-manager"
   ],
-  "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager"],
+  "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager", "esp32-dev"],
   "module_count": {
-    "_updated": "2026-03-10",
-    "core": 38,
-    "core_active": 30,
-    "core_disabled": 8,
+    "_updated": "2026-03-24",
+    "core": 44,
+    "core_active": 36,
+    "core_disabled": 9,
     "pizzepos": 15,
     "facturacion": 2,
-    "total_discovered": 55,
-    "total_active": 47,
-    "disabled": 8
+    "total_discovered": 62,
+    "total_active": 53,
+    "disabled": 9
   },
   "module_categories": {
     "ai": {
@@ -227,6 +234,24 @@
         "escandallo (análisis de costes y márgenes por receta)",
         "viabilidad (estudio de viabilidad de negocio: escenarios, break-even, proyecciones)"
       ]
+    },
+    "iot": {
+      "description": "Módulos IoT — firmware ESP32, flash, dispositivos, OTA, gateways",
+      "modules": [
+        "device-registry (registro único de dispositivos)",
+        "device-shadow (sincronización desired/reported/delta)",
+        "device-health (monitorización liveness y alertas)",
+        "firmware-builder (compilación de drivers ESP32 via PlatformIO — reemplaza esp32-dev)",
+        "firmware-manager (catálogo firmware, versionado, OTA via device-shadow)",
+        "esp32-flasher (flash USB, monitor serial)",
+        "gateway-manager (traducción MQTT↔protocolos nativos)"
+      ],
+      "arquitectura_firmware": {
+        "modelo": "BASE + LOGIC — firmware universal (BASE) + drivers compilados (LOGIC) conectados por contrato enki_logic.h",
+        "drivers": "Cada subdirectorio de firmware/ con platformio.ini es un driver compilable",
+        "flujo": "firmware-builder compila → firmware-manager registra en catálogo → esp32-flasher flashea USB o firmware-manager despliega OTA",
+        "sin_templates": "El antiguo esp32-dev con templates/scaffolding/variables está deprecado. firmware-builder escanea firmware/ directamente."
+      }
     },
     "facturacion": {
       "description": "Vertical facturación — consumidores de datos de facturas. Ver contexto/facturas.json",

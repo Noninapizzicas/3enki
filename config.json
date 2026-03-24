@@ -96,7 +96,7 @@
       "gateway-manager",
       "firmware-manager",
       "device-health",
-      "esp32-dev",
+      "firmware-builder",
       "esp32-flasher",
       "menu-generator",
       "recetas",

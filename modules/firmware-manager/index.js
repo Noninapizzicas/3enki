@@ -275,28 +275,30 @@ class FirmwareManagerModule {
   /**
    * Auto-registro de firmware tras build exitoso.
    * Copia el binario a data/firmware/binaries/ y lo registra en el catálogo.
+   * Acepta tanto el nuevo campo "driver" como el legacy "project_name".
    */
   async onBuildCompleted(event) {
     const data = event?.data || event?.payload || event;
-    const { project_name, board, binary_path, binary_size } = data;
+    const { driver, project_name, board, binary_path, binary_size } = data;
 
-    if (!project_name || !binary_path) return;
+    // Compatibilidad: "driver" (nuevo firmware-builder) o "project_name" (legacy esp32-dev)
+    const driverName = driver || project_name;
+    if (!driverName || !binary_path) return;
 
     try {
-      // Verificar que el binario existe
       await fs.promises.access(binary_path, fs.constants.R_OK);
     } catch (_) {
       this.logger.warn('firmware.auto_register.binary_not_found', {
-        project_name, binary_path
+        driver: driverName, binary_path
       });
       return;
     }
 
     // Generar nombre y versión para el binario
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const fileName = `${project_name}-${timestamp}.bin`;
+    const fileName = `${driverName}-${timestamp}.bin`;
     const version = this._timestampToVersion(timestamp);
-    const type = project_name;
+    const type = driverName;
 
     // Asegurar que el directorio binaries existe
     const binariesDir = path.join(this.config.data_path, 'binaries');
@@ -307,24 +309,24 @@ class FirmwareManagerModule {
     await fs.promises.copyFile(binary_path, destPath);
 
     this.logger.info('firmware.auto_register.copied', {
-      project_name, from: binary_path, to: destPath, size: binary_size
+      driver: driverName, from: binary_path, to: destPath, size: binary_size
     });
 
-    // Registrar en catálogo usando handleRegister
+    // Registrar en catálogo
     const result = await this.handleRegister({
       type,
       version,
       file: fileName,
-      changelog: `Auto-registrado desde build de ${project_name} (${board})`
+      changelog: `Build de driver ${driverName} (${board || 'esp32dev'})`
     });
 
     if (result.status === 201) {
       this.logger.info('firmware.auto_register.success', {
-        project_name, type, version, file: fileName
+        driver: driverName, type, version, file: fileName
       });
     } else {
       this.logger.warn('firmware.auto_register.failed', {
-        project_name, error: result.error
+        driver: driverName, error: result.error
       });
     }
   }

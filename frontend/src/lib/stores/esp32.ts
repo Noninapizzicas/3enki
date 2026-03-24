@@ -1,9 +1,10 @@
 /**
  * Store ESP32 — Estado central para desarrollo, flash y monitor serial.
  *
- * Compone datos de 2 módulos backend:
- *   - esp32-dev     → templates, proyectos, builds
- *   - esp32-flasher → puertos, flash, monitor serial
+ * Compone datos de 3 módulos backend:
+ *   - firmware-builder  → drivers, builds
+ *   - firmware-manager  → catálogo, OTA, rollback
+ *   - esp32-flasher     → puertos, flash, monitor serial
  */
 
 import { writable, derived } from 'svelte/store';
@@ -14,30 +15,16 @@ import { subscribe as mqttSubscribe, onReconnect } from '$lib/ui-core/mqtt';
 // TYPES
 // =============================================================================
 
-export interface Template {
+export interface Driver {
   id: string;
   name: string;
   description: string;
-  framework: string;
-  boards: string[];
-  category: string;
-}
-
-export interface Project {
-  name: string;
-  template: string;
   board: string;
-  framework: string;
-  created_at: string;
+  has_binary: boolean;
+  binary_size: number | null;
   last_build: string | null;
-  last_build_status: string | null;
-}
-
-export interface ProjectDetail extends Project {
-  path: string;
-  files: string[];
-  binary: { path: string; size: number; modified: string } | null;
   is_building: boolean;
+  source_files: string[];
 }
 
 export interface Board {
@@ -80,7 +67,7 @@ export interface FlashHistoryEntry {
 }
 
 export interface BuildStatus {
-  project_name: string;
+  driver: string;
   status: string;
   started_at?: string;
   elapsed_ms?: number;
@@ -114,15 +101,15 @@ export interface OtaLogEntry {
   timestamp: string;
 }
 
-export interface RollbackEntry {
+export interface RollbackDevice {
   device_id: string;
+  type: string;
   current_version: string;
   previous_version: string | null;
-  type: string;
   can_rollback: boolean;
 }
 
-export type TabId = 'dev' | 'firmware' | 'flash';
+export type TabId = 'drivers' | 'firmware' | 'flash';
 
 export interface Esp32State {
   // UI
@@ -130,33 +117,29 @@ export interface Esp32State {
   loading: boolean;
   error: string | null;
 
-  // Dev (esp32-dev)
-  templates: Template[];
-  projects: Project[];
-  selectedProject: string | null;
-  projectDetail: ProjectDetail | null;
+  // Drivers (firmware-builder)
+  drivers: Driver[];
   boards: Board[];
+  selectedDriver: string | null;
   buildStatus: BuildStatus | null;
 
-  // Firmware (firmware-manager — reutilizado)
+  // Firmware (firmware-manager)
   firmwareTypes: FirmwareType[];
   otaPending: OtaPending[];
   otaLog: OtaLogEntry[];
-  rollbackDevices: RollbackEntry[];
+  rollbackDevices: RollbackDevice[];
 
   // Flash (esp32-flasher)
   ports: SerialPort[];
   activeFlashes: FlashStatus[];
   flashHistory: FlashHistoryEntry[];
-  lastBuild: { project_name: string; binary_path: string; timestamp: string } | null;
+  lastBuild: { driver: string; binary_path: string; timestamp: string } | null;
+  selectedBinaryPath: string | null;
 
-  // Monitor (parte de Flash)
+  // Monitor
   serialLines: string[];
   monitorPort: string | null;
   monitorBaud: number;
-
-  // Cross-tab: firmware selected from catalog for flashing
-  selectedBinaryPath: string | null;
 }
 
 // =============================================================================
@@ -164,14 +147,12 @@ export interface Esp32State {
 // =============================================================================
 
 const initialState: Esp32State = {
-  activeTab: 'dev',
+  activeTab: 'drivers',
   loading: false,
   error: null,
-  templates: [],
-  projects: [],
-  selectedProject: null,
-  projectDetail: null,
+  drivers: [],
   boards: [],
+  selectedDriver: null,
   buildStatus: null,
   firmwareTypes: [],
   otaPending: [],
@@ -181,10 +162,10 @@ const initialState: Esp32State = {
   activeFlashes: [],
   flashHistory: [],
   lastBuild: null,
+  selectedBinaryPath: null,
   serialLines: [],
   monitorPort: null,
-  monitorBaud: 115200,
-  selectedBinaryPath: null
+  monitorBaud: 115200
 };
 
 export const esp32Store = writable<Esp32State>(initialState);
@@ -194,8 +175,7 @@ export const esp32Store = writable<Esp32State>(initialState);
 // =============================================================================
 
 export const activeTab = derived(esp32Store, $s => $s.activeTab);
-export const projects = derived(esp32Store, $s => $s.projects);
-export const templates = derived(esp32Store, $s => $s.templates);
+export const drivers = derived(esp32Store, $s => $s.drivers);
 export const ports = derived(esp32Store, $s => $s.ports);
 export const serialLines = derived(esp32Store, $s => $s.serialLines);
 
@@ -207,112 +187,57 @@ export function setTab(tab: TabId): void {
   esp32Store.update(s => ({ ...s, activeTab: tab }));
 }
 
-export function selectFirmwareForFlash(binaryPath: string): void {
-  esp32Store.update(s => ({ ...s, selectedBinaryPath: binaryPath, activeTab: 'flash' }));
-}
-
-export function selectProject(name: string | null): void {
-  esp32Store.update(s => ({ ...s, selectedProject: name, projectDetail: null }));
-  if (name) loadProjectDetail(name);
+export function selectDriver(id: string | null): void {
+  esp32Store.update(s => ({ ...s, selectedDriver: id }));
 }
 
 // =============================================================================
-// DEV (esp32-dev)
+// DRIVERS (firmware-builder)
 // =============================================================================
 
-export async function loadTemplates(): Promise<void> {
+export async function loadDrivers(): Promise<void> {
   try {
-    const res = await mqttRequest<any>('esp32', 'list-templates', {});
-    esp32Store.update(s => ({ ...s, templates: res.data?.templates || [], error: null }));
+    const res = await mqttRequest<any>('builder', 'list-drivers', {});
+    esp32Store.update(s => ({ ...s, drivers: res.data?.drivers || [], error: null }));
   } catch (err: any) {
-    console.warn('[ESP32] loadTemplates failed:', err.message || err);
-    esp32Store.update(s => ({ ...s, templates: [], error: `Templates: ${err.message || 'sin respuesta del backend'}` }));
-  }
-}
-
-export async function loadProjects(): Promise<void> {
-  try {
-    const res = await mqttRequest<any>('esp32', 'list-projects', {});
-    esp32Store.update(s => ({ ...s, projects: res.data?.projects || [] }));
-  } catch (err: any) {
-    console.warn('[ESP32] loadProjects failed:', err.message || err);
-  }
-}
-
-export async function loadProjectDetail(name: string): Promise<void> {
-  try {
-    const res = await mqttRequest<any>('esp32', 'get-project', { project_name: name });
-    esp32Store.update(s => ({ ...s, projectDetail: res.data || null }));
-  } catch {
-    esp32Store.update(s => ({ ...s, projectDetail: null }));
+    console.warn('[ESP32] loadDrivers failed:', err.message || err);
+    esp32Store.update(s => ({ ...s, drivers: [], error: `Drivers: ${err.message || 'sin respuesta del backend'}` }));
   }
 }
 
 export async function loadBoards(): Promise<void> {
   try {
-    const res = await mqttRequest<any>('esp32', 'list-boards', {});
+    const res = await mqttRequest<any>('builder', 'list-boards', {});
     esp32Store.update(s => ({ ...s, boards: res.data?.boards || [] }));
   } catch (err: any) {
     console.warn('[ESP32] loadBoards failed:', err.message || err);
   }
 }
 
-export async function createProject(data: {
-  project_name: string;
-  template: string;
-  board?: string;
-  framework?: string;
-  vars?: Record<string, string>;
-}): Promise<{ success: boolean; error?: string }> {
+export async function buildDriver(driver: string, clean = false): Promise<boolean> {
   try {
-    await mqttRequest<any>('esp32', 'create-project', data);
-    await loadProjects();
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Error creando proyecto' };
-  }
-}
-
-export async function deleteProject(name: string): Promise<boolean> {
-  try {
-    await mqttRequest<any>('esp32', 'delete-project', { project_name: name, confirm: true });
-    esp32Store.update(s => ({
-      ...s,
-      projects: s.projects.filter(p => p.name !== name),
-      selectedProject: s.selectedProject === name ? null : s.selectedProject,
-      projectDetail: s.selectedProject === name ? null : s.projectDetail
-    }));
+    await mqttRequest<any>('builder', 'build', { driver, clean });
+    pollBuildStatus(driver);
     return true;
   } catch {
     return false;
   }
 }
 
-export async function buildProject(name: string, clean = false): Promise<boolean> {
+export async function loadBuildStatus(driver: string): Promise<void> {
   try {
-    await mqttRequest<any>('esp32', 'build', { project_name: name, clean });
-    // El build es async (202), ahora polleamos status
-    pollBuildStatus(name);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function loadBuildStatus(name: string): Promise<void> {
-  try {
-    const res = await mqttRequest<any>('esp32', 'build-status', { project_name: name });
+    const res = await mqttRequest<any>('builder', 'build-status', { driver });
     esp32Store.update(s => ({ ...s, buildStatus: res.data || null }));
   } catch {}
 }
 
 let buildPollTimer: ReturnType<typeof setTimeout> | null = null;
 
-function pollBuildStatus(name: string): void {
+function pollBuildStatus(driver: string): void {
   if (buildPollTimer) clearTimeout(buildPollTimer);
 
   async function poll() {
-    const res = await mqttRequest<any>('esp32', 'build-status', { project_name: name }).catch(() => null);
+    const res = await mqttRequest<any>('builder', 'build-status', { driver }).catch(() => null);
     if (!res) return;
 
     esp32Store.update(s => ({ ...s, buildStatus: res.data || null }));
@@ -321,9 +246,7 @@ function pollBuildStatus(name: string): void {
       buildPollTimer = setTimeout(poll, 2000);
     } else {
       buildPollTimer = null;
-      // Reload project detail to get binary info
-      loadProjectDetail(name);
-      loadProjects();
+      loadDrivers();
     }
   }
 
@@ -331,16 +254,13 @@ function pollBuildStatus(name: string): void {
 }
 
 // =============================================================================
-// FIRMWARE (firmware-manager — reutilizado)
+// FIRMWARE (firmware-manager)
 // =============================================================================
 
 export async function loadFirmwareCatalog(): Promise<void> {
   try {
     const res = await mqttRequest<any>('firmware', 'list', {});
-    esp32Store.update(s => ({
-      ...s,
-      firmwareTypes: res.data?.types || []
-    }));
+    esp32Store.update(s => ({ ...s, firmwareTypes: res.data?.types || [] }));
   } catch {}
 }
 
@@ -357,11 +277,7 @@ export async function loadOtaStatus(): Promise<void> {
 
 export async function triggerOta(deviceId: string, type: string, version?: string): Promise<boolean> {
   try {
-    await mqttRequest<any>('firmware', 'trigger-ota', {
-      device_id: deviceId,
-      type,
-      version
-    });
+    await mqttRequest<any>('firmware', 'trigger-ota', { device_id: deviceId, type, version });
     await loadOtaStatus();
     return true;
   } catch {
@@ -371,18 +287,15 @@ export async function triggerOta(deviceId: string, type: string, version?: strin
 
 export async function loadRollbackDevices(): Promise<void> {
   try {
-    const res = await mqttRequest<any>('firmware', 'rollback-list', {});
-    esp32Store.update(s => ({
-      ...s,
-      rollbackDevices: res.data?.devices || []
-    }));
+    const res = await mqttRequest<any>('firmware', 'device-versions', {});
+    esp32Store.update(s => ({ ...s, rollbackDevices: res.data?.devices || [] }));
   } catch {}
 }
 
 export async function rollbackDevice(deviceId: string, type: string): Promise<boolean> {
   try {
     await mqttRequest<any>('firmware', 'rollback', { device_id: deviceId, type });
-    await Promise.all([loadOtaStatus(), loadRollbackDevices()]);
+    await loadRollbackDevices();
     return true;
   } catch {
     return false;
@@ -413,9 +326,7 @@ export async function startFlash(data: {
 }): Promise<{ success: boolean; flash_id?: string; error?: string }> {
   try {
     const res = await mqttRequest<any>('flash', 'start', data);
-    if (res.data?.flash_id) {
-      pollFlashStatus(res.data.flash_id);
-    }
+    if (res.data?.flash_id) pollFlashStatus(res.data.flash_id);
     return { success: true, flash_id: res.data?.flash_id };
   } catch (err: any) {
     return { success: false, error: err.message || 'Error iniciando flash' };
@@ -456,10 +367,7 @@ function pollFlashStatus(flashId: string): void {
     if (!res) return;
 
     if (res.data?.status === 'flashing') {
-      esp32Store.update(s => ({
-        ...s,
-        activeFlashes: [res.data]
-      }));
+      esp32Store.update(s => ({ ...s, activeFlashes: [res.data] }));
       flashPollTimer = setTimeout(poll, 1000);
     } else {
       flashPollTimer = null;
@@ -519,8 +427,7 @@ function addSerialLine(line: string): void {
 export async function initEsp32(): Promise<void> {
   esp32Store.update(s => ({ ...s, loading: true }));
   await Promise.all([
-    loadTemplates(),
-    loadProjects(),
+    loadDrivers(),
     loadBoards(),
     loadPorts(),
     loadFlashStatus(),
@@ -537,14 +444,13 @@ export function initEsp32Subscriptions(): () => void {
 
   // Build events
   cleanups.push(
-    mqttSubscribe('esp32.build_completed', () => { loadProjects(); }),
-    mqttSubscribe('esp32.build_failed', () => { loadProjects(); }),
-    mqttSubscribe('esp32.project_created', () => { loadProjects(); })
+    mqttSubscribe('firmware.build_completed', () => { loadDrivers(); loadFirmwareCatalog(); }),
+    mqttSubscribe('firmware.build_failed', () => { loadDrivers(); })
   );
 
-  // Firmware/OTA events
+  // OTA events
   cleanups.push(
-    mqttSubscribe('firmware.ota_completed', () => { loadOtaStatus(); loadRollbackDevices(); }),
+    mqttSubscribe('firmware.ota_completed', () => { loadOtaStatus(); }),
     mqttSubscribe('firmware.ota_failed', () => { loadOtaStatus(); })
   );
 
@@ -588,13 +494,6 @@ export function elapsed(iso: string): string {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ${mins % 60}m`;
   return `${Math.floor(hours / 24)}d`;
-}
-
-export function boardIcon(board: string): string {
-  if (board.includes('p4')) return '🖥';
-  if (board.includes('s3')) return '🚀';
-  if (board.includes('c3') || board.includes('c6')) return '📡';
-  return '⚡';
 }
 
 export function statusColor(status: string | null): string {

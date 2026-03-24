@@ -145,11 +145,12 @@ class DeviceRegistryModule {
     try {
       await mqtt.subscribe('devices/+/+/birth');
       await mqtt.subscribe('devices/+/+/lwt');
+      await mqtt.subscribe('enki/+/status/+');
       await mqtt.subscribe('impresion/+/status/+');
       await mqtt.subscribe('esp32/+/status');
 
       this.logger.info('device-registry.mqtt.subscribed', {
-        topics: ['devices/+/+/birth', 'devices/+/+/lwt', 'impresion/+/status/+', 'esp32/+/status']
+        topics: ['devices/+/+/birth', 'devices/+/+/lwt', 'enki/+/status/+', 'impresion/+/status/+', 'esp32/+/status']
       });
     } catch (err) {
       this.logger.error('device-registry.mqtt.subscribe_error', { error: err.message });
@@ -183,7 +184,14 @@ class DeviceRegistryModule {
         return;
       }
 
-      // Status impresion: impresion/{project}/status/{device_id}
+      // Status Enki BASE: enki/{project}/status/{device_id}
+      const enkiMatch = topic.match(/^enki\/([^/]+)\/status\/([^/]+)$/);
+      if (enkiMatch) {
+        this._handleStatus(enkiMatch[1], enkiMatch[2], payload, 'mqtt-native');
+        return;
+      }
+
+      // Status impresion (legacy): impresion/{project}/status/{device_id}
       const impresionMatch = topic.match(/^impresion\/([^/]+)\/status\/([^/]+)$/);
       if (impresionMatch) {
         this._handleStatus(impresionMatch[1], impresionMatch[2], payload, 'mqtt-native');
@@ -220,6 +228,7 @@ class DeviceRegistryModule {
       project_id: projectId,
       name: data.name || data.nombre || deviceId,
       type: data.type || data.tipo || 'unknown',
+      driver: data.driver || null,
       capabilities: data.capabilities || data.capacidades || [],
       protocol: data.protocol || data.protocolo || 'mqtt-native',
       gateway: data.gateway || null,
@@ -297,6 +306,7 @@ class DeviceRegistryModule {
         project_id: projectId || data.project_id || 'default',
         name: data.name || data.nombre || data.device_id || deviceId,
         type: data.type || data.tipo || this._inferType(data),
+        driver: data.driver || null,
         capabilities: data.capabilities || data.capacidades || this._inferCapabilities(data),
         protocol: protocol || 'mqtt-native',
         gateway: data.gateway || null,
@@ -333,6 +343,7 @@ class DeviceRegistryModule {
     existing.state = 'online';
     existing.last_seen = now;
     if (data.firmware) existing.firmware = data.firmware;
+    if (data.driver) existing.driver = data.driver;
     existing.metadata = { ...existing.metadata, ...this._extractMetadata(data) };
     this._dirty = true;
     this._resetHeartbeat(deviceId);
@@ -397,7 +408,7 @@ class DeviceRegistryModule {
 
   async onDeviceRegister(event) {
     const data = event?.data || event?.payload || event;
-    const { device_id, project_id, name, type, capabilities, protocol, gateway, metadata } = data;
+    const { device_id, project_id, name, type, capabilities, protocol, gateway, metadata, driver } = data;
 
     if (!device_id) {
       this.logger.warn('device-registry.register.missing_device_id');
@@ -415,6 +426,7 @@ class DeviceRegistryModule {
       capabilities: capabilities || [],
       protocol: protocol || 'manual',
       gateway: gateway || null,
+      driver: driver || null,
       state: 'offline',
       firmware: data.firmware || null,
       metadata: metadata || {},

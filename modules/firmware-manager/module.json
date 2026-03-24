@@ -27,9 +27,14 @@
         "description": "Verifica firmware de nuevos dispositivos registrados"
       },
       {
+        "event": "firmware.build_completed",
+        "handler": "onBuildCompleted",
+        "description": "Auto-registra firmware en catálogo tras build exitoso (firmware-builder)"
+      },
+      {
         "event": "esp32.build_completed",
         "handler": "onBuildCompleted",
-        "description": "Auto-registra firmware en catálogo tras build exitoso"
+        "description": "Compatibilidad: auto-registra firmware desde legacy esp32-dev"
       }
     ],
     "publishes": [

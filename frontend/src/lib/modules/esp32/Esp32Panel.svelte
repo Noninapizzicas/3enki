@@ -3,7 +3,7 @@
    * Esp32Panel — Panel de desarrollo ESP32 dentro de LazyShell
    *
    * 3 tabs principales con sub-tabs:
-   *   Dev:      Templates | Proyectos | Build
+   *   Drivers:  Drivers   | Build
    *   Firmware: Catalogo  | OTAs      | Rollback
    *   Flash:    Puertos   | Grabar    | Monitor
    */
@@ -23,12 +23,12 @@
   let cleanupSubs: (() => void) | null = null;
 
   const tabs: { id: TabId; label: string; icon: string }[] = [
-    { id: 'dev', label: 'Dev', icon: '🔧' },
+    { id: 'drivers', label: 'Drivers', icon: '🔧' },
     { id: 'firmware', label: 'Firmware', icon: '⬆' },
     { id: 'flash', label: 'Flash', icon: '⚡' }
   ];
 
-  $: projectCount = $esp32Store.projects.length;
+  $: driverCount = $esp32Store.drivers.length;
   $: portCount = $esp32Store.ports.length;
   $: isMonitoring = $esp32Store.monitorPort !== null;
   $: activeFlashCount = $esp32Store.activeFlashes.length;
@@ -36,7 +36,7 @@
 
   // Sync state to page context for the AI
   $: updatePageState('esp32', {
-    projects: projectCount,
+    drivers: driverCount,
     ports: portCount,
     monitoring: isMonitoring,
     flashing: activeFlashCount,
@@ -63,7 +63,7 @@
   <!-- Header Stats -->
   <div class="stats-bar">
     <span class="stat">
-      <span class="stat-num">{projectCount}</span> proyecto{projectCount !== 1 ? 's' : ''}
+      <span class="stat-num">{driverCount}</span> driver{driverCount !== 1 ? 's' : ''}
     </span>
     <span class="stat">
       <span class="dot" class:dot-active={portCount > 0}></span>
@@ -105,12 +105,12 @@
 
   <!-- Tab Content -->
   <main class="content">
-    {#if $esp32Store.loading && $esp32Store.projects.length === 0}
+    {#if $esp32Store.loading && $esp32Store.drivers.length === 0}
       <div class="empty-state">
         <span class="empty-icon">⏳</span>
         <span class="empty-text">Cargando...</span>
       </div>
-    {:else if $activeTab === 'dev'}
+    {:else if $activeTab === 'drivers'}
       <DevTab />
     {:else if $activeTab === 'firmware'}
       <FirmwareTab />

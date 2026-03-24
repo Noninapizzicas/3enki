@@ -339,8 +339,9 @@ void logic_setup() {
   webServer.on("/api/printer",      HTTP_GET,  handleGetDriverConfig);
   webServer.on("/api/printer",      HTTP_POST, handlePostDriverConfig);
 
-  // 6. Conectar impresora BLE
-  if (strlen(printerName) > 0) {
+  // 6. Conectar impresora BLE (solo si NO estamos en portal mode)
+  //    En portal mode el scan BLE bloquea ~10s y puede interferir con WiFi AP
+  if (!portalMode && strlen(printerName) > 0) {
     if (!connectPrinter()) {
       Serial.println("[PRINT] Impresora no disponible. Configura desde el portal web.");
     }

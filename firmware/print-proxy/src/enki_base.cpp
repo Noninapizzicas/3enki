@@ -25,6 +25,10 @@ uint8_t payloadBuffer[MAX_PAYLOAD_SIZE];
 
 // Topics MQTT base
 static char topicStatus[80];
+static char topicBirth[80];
+static char topicLwt[80];
+static char topicShadowDelta[80];
+static char topicShadowReported[80];
 
 // Timers
 static unsigned long lastStatusMs    = 0;
@@ -63,9 +67,12 @@ void enki_config_set(const char* key, const char* value) {
 }
 
 const char* enki_config_get(const char* key, const char* defaultValue) {
-  static char buf[128];
+  static char bufs[4][128];
+  static int idx = 0;
+  char* buf = bufs[idx];
+  idx = (idx + 1) % 4;
   prefs.begin(NVS_NAMESPACE, true);
-  strlcpy(buf, prefs.getString(key, defaultValue).c_str(), sizeof(buf));
+  strlcpy(buf, prefs.getString(key, defaultValue).c_str(), sizeof(bufs[0]));
   prefs.end();
   return buf;
 }
@@ -250,7 +257,69 @@ void baseHandleWifiReconnect() {
 // ============================================
 
 static void buildTopics() {
-  snprintf(topicStatus, sizeof(topicStatus), "enki/%s/status/%s", baseCfg.projectId, baseCfg.deviceId);
+  snprintf(topicStatus,         sizeof(topicStatus),         "enki/%s/status/%s",                baseCfg.projectId, baseCfg.deviceId);
+  snprintf(topicBirth,          sizeof(topicBirth),          "devices/%s/%s/birth",              baseCfg.projectId, baseCfg.deviceId);
+  snprintf(topicLwt,            sizeof(topicLwt),            "devices/%s/%s/lwt",                baseCfg.projectId, baseCfg.deviceId);
+  snprintf(topicShadowDelta,    sizeof(topicShadowDelta),    "devices/%s/%s/state/delta",        baseCfg.projectId, baseCfg.deviceId);
+  snprintf(topicShadowReported, sizeof(topicShadowReported), "devices/%s/%s/state/reported",     baseCfg.projectId, baseCfg.deviceId);
+}
+
+static void publishReportedState() {
+  if (!mqtt.connected()) return;
+  JsonDocument doc;
+  doc["firmware"]["version"] = FIRMWARE_VERSION;
+  char buf[128];
+  serializeJson(doc, buf, sizeof(buf));
+  mqtt.publish(topicShadowReported, buf, true);
+  Serial.printf("[SHADOW] Reported: %s\n", buf);
+}
+
+static void handleShadowDelta(JsonDocument& doc) {
+  // OTA: firmware-manager escribe desired.firmware con version, url, sha256, size
+  if (doc["firmware"].is<JsonObject>()) {
+    const char* targetVersion = doc["firmware"]["version"];
+    const char* otaUrl        = doc["firmware"]["url"];
+
+    if (!targetVersion || !otaUrl) {
+      Serial.println("[SHADOW] Delta firmware incompleto (falta version o url)");
+      return;
+    }
+
+    // Si ya tenemos esa versión, solo reportar
+    if (strcmp(targetVersion, FIRMWARE_VERSION) == 0) {
+      Serial.printf("[SHADOW] Ya estamos en v%s, reportando...\n", FIRMWARE_VERSION);
+      publishReportedState();
+      return;
+    }
+
+    Serial.printf("[SHADOW] OTA solicitada: v%s → v%s desde %s\n", FIRMWARE_VERSION, targetVersion, otaUrl);
+
+    // Construir URL absoluta si es relativa (firmware-manager envía paths relativos)
+    char fullUrl[256];
+    if (strncmp(otaUrl, "http", 4) == 0) {
+      strlcpy(fullUrl, otaUrl, sizeof(fullUrl));
+    } else {
+      // Usar el host MQTT como base para el servidor de firmware
+      snprintf(fullUrl, sizeof(fullUrl), "http://%s:3000%s", baseCfg.mqttHost, otaUrl);
+    }
+
+    Serial.printf("[OTA] Descargando firmware desde %s...\n", fullUrl);
+    enki_led_blink(5, 100);
+
+    t_httpUpdate_return ret = httpUpdate.update(wifiClient, fullUrl);
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("[OTA] Fallo: %s\n", httpUpdate.getLastErrorString().c_str());
+        break;
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("[OTA] Sin cambios en binario");
+        break;
+      case HTTP_UPDATE_OK:
+        Serial.println("[OTA] OK — reiniciando...");
+        // Tras reinicio, el nuevo firmware publicará reported con la nueva versión
+        break;
+    }
+  }
 }
 
 static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
@@ -260,6 +329,12 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   DeserializationError err = deserializeJson(doc, payload, length);
   if (err) {
     Serial.printf("[MQTT] Error JSON: %s\n", err.c_str());
+    return;
+  }
+
+  // Shadow delta — OTA y configuración remota
+  if (strcmp(topic, topicShadowDelta) == 0) {
+    handleShadowDelta(doc);
     return;
   }
 
@@ -281,15 +356,36 @@ void baseConnectMQTT() {
 
   String clientId = "enki-" + String(baseCfg.deviceId);
 
+  // LWT: el broker publica esto cuando el dispositivo se desconecta inesperadamente
   bool connected;
   if (strlen(baseCfg.mqttUser) > 0) {
-    connected = mqtt.connect(clientId.c_str(), baseCfg.mqttUser, baseCfg.mqttPass);
+    connected = mqtt.connect(clientId.c_str(), baseCfg.mqttUser, baseCfg.mqttPass,
+                             topicLwt, 1, true, "{\"online\":false}");
   } else {
-    connected = mqtt.connect(clientId.c_str());
+    connected = mqtt.connect(clientId.c_str(), nullptr, nullptr,
+                             topicLwt, 1, true, "{\"online\":false}");
   }
 
   if (connected) {
     Serial.println("[MQTT] Conectado");
+
+    // Birth message retained — device-registry lo usa para auto-registro
+    JsonDocument birthDoc;
+    birthDoc["type"]     = DRIVER_TYPE;
+    birthDoc["driver"]   = DRIVER_TYPE;
+    birthDoc["protocol"] = "mqtt-native";
+    birthDoc["firmware"] = FIRMWARE_VERSION;
+    char birthBuf[192];
+    serializeJson(birthDoc, birthBuf, sizeof(birthBuf));
+    mqtt.publish(topicBirth, birthBuf, true);
+
+    // Suscribirse a shadow delta para OTA y configuración remota
+    mqtt.subscribe(topicShadowDelta, 1);
+    Serial.printf("[MQTT] Suscrito a shadow delta: %s\n", topicShadowDelta);
+
+    // Publicar reported state (firmware version) para que el shadow esté sincronizado
+    publishReportedState();
+
     enki_led_blink(1, 500);
   } else {
     Serial.printf("[MQTT] Fallo (rc=%d)\n", mqtt.state());
@@ -325,6 +421,8 @@ void basePublishStatus() {
   doc["ip"]         = WiFi.localIP().toString();
   doc["uptime_sec"] = millis() / 1000;
   doc["free_heap"]  = ESP.getFreeHeap();
+  doc["firmware"]   = FIRMWARE_VERSION;
+  doc["driver"]     = DRIVER_TYPE;
 
   // La LÓGICA añade sus campos
   logic_status(doc);

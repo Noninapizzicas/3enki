@@ -15,6 +15,9 @@
 #include "enki_base.h"
 #include "enki_logic.h"
 
+// Timer para portal timeout
+static unsigned long portalStartMs = 0;
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -40,8 +43,9 @@ void setup() {
   webServer.begin();
 
   if (portalMode) {
+    portalStartMs = millis();
     Serial.printf("[WEB] Portal cautivo en http://%s/\n", WiFi.softAPIP().toString().c_str());
-    Serial.println("[!] Conectate al AP y abre el portal para configurar WiFi");
+    Serial.printf("[!] Conectate al AP y abre el portal para configurar WiFi (timeout %ds)\n", WIFI_PORTAL_TIMEOUT / 1000);
   } else {
     Serial.printf("[WEB] Portal en http://%s/\n", WiFi.localIP().toString().c_str());
 
@@ -74,8 +78,15 @@ void loop() {
   // Servir portal web
   webServer.handleClient();
 
-  // Si estamos en modo portal, no hay más que hacer
-  if (portalMode) return;
+  // Si estamos en modo portal, comprobar timeout
+  if (portalMode) {
+    if (millis() - portalStartMs > WIFI_PORTAL_TIMEOUT) {
+      Serial.println("[BASE] Portal timeout — reiniciando...");
+      delay(500);
+      ESP.restart();
+    }
+    return;
+  }
 
   // --- BASE: WiFi monitoring ---
   baseHandleWifiReconnect();

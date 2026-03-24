@@ -25,7 +25,7 @@
       "estado": "parcial",
       "fecha_propuesta": "2026-03-05",
       "fecha_parcial": "2026-03-20",
-      "descripcion": "Sistema de impresión con ESP32 como nodo MQTT de primera clase. impresion v3.0 publica MQTT directo al ESP32 (sin perifericos). Autodescubrimiento. Firmware ESP32 v2.1 operativo. PARCIAL: falta routing por tipo documento, ticket_venta automático en cobro.procesado, UI de selección de impresora.",
+      "descripcion": "Sistema de impresión con ESP32 como nodo MQTT de primera clase. impresion v3.0 publica MQTT directo al ESP32 (sin perifericos). Autodescubrimiento. Firmware ESP32 refactorizado a arquitectura BASE+LOGIC con driver print-proxy. Backend simplificado: firmware-builder reemplaza esp32-dev. PARCIAL: falta routing por tipo documento, ticket_venta automático en cobro.procesado, UI de selección de impresora, hardware testing.",
       "contexto": {
         "problema": "El VPS no tiene acceso directo a las impresoras de la red local. Se necesita un puente.",
         "solucion": "ESP32 conectado al WiFi local se suscribe por MQTT al VPS y reenvía ESC/POS a impresoras por TCP o Bluetooth.",
@@ -67,18 +67,22 @@
           "nota": "Ya existe impresion.raw — ampliar para incluir destino"
         },
         "5_firmware_esp32": {
-          "que": "Firmware ESP32 — MQTT→TCP/BT bridge",
+          "que": "Firmware ESP32 — driver print-proxy (BASE + LOGIC architecture)",
+          "estado": "implementado",
+          "arquitectura": "BASE (plataforma universal: WiFi, MQTT, OTA, portal) + LOGIC (driver compilado via contrato enki_logic.h)",
+          "driver": "firmware/print-proxy/ — puente BLE con NimBLE para impresoras térmicas ESC/POS via MQTT",
+          "compilacion": "firmware-builder module escanea firmware/ y compila via PlatformIO (reemplaza esp32-dev)",
           "funciones": [
-            "Conectar WiFi local",
-            "Conectar MQTT broker del VPS (WSS con TLS)",
-            "Suscribirse a impresion/{proyecto}/print",
-            "Al recibir mensaje: decodificar base64, enviar por TCP o BT según destino",
-            "Publicar ACK en impresion/{proyecto}/printed"
+            "BASE: WiFi multi-red, MQTT con reconnect, portal web de config, NVS, OTA check, LED status, watchdog",
+            "LOGIC: Conexión BLE NimBLE, buffer ESC/POS chunked, suscripción a impresion/{project}/print/{device}",
+            "Publicar ACK en impresion/{project}/printed/{device}",
+            "Status periódico en enki/{project}/status/{device} con campo driver"
           ],
-          "lenguaje": "MicroPython o C/Arduino (lo de menos)",
+          "lenguaje": "C++ Arduino/PlatformIO",
           "hardware": "ESP32 estándar (~5€), WiFi+BT integrado",
           "limitacion_usb": "ESP32 NO soporta USB Host — no puede imprimir por USB. Usar impresoras WiFi/TCP o BT.",
-          "coste_estimado": "ESP32 ~5€ + impresora WiFi 80mm ~60€ + impresora WiFi 58mm ~35€"
+          "coste_estimado": "ESP32 ~5€ + impresora WiFi 80mm ~60€ + impresora WiFi 58mm ~35€",
+          "nota": "Requiere hardware testing. El firmware está compilable pero no validado en dispositivo real."
         },
         "6_config_destinos": {
           "que": "UI o JSON para configurar impresoras: nombre → IP:puerto o MAC BT",
@@ -105,7 +109,7 @@
         "2. Ticket cliente ESC/POS (formateador nuevo)",
         "3. Routing por tipo de documento",
         "4. Publicación MQTT con destino",
-        "5. Firmware ESP32 (proxy MQTT→TCP/BT)",
+        "5. Firmware ESP32 (driver print-proxy, BASE+LOGIC — IMPLEMENTADO, falta hardware test)",
         "6. UI de configuración de impresoras"
       ]
     },

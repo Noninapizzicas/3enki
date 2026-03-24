@@ -4,13 +4,16 @@
   "_DESCRIPTION": "Arquitectura de módulos IoT backend — device-registry, device-shadow, firmware-manager, gateway-manager, device-health.",
 
   "_AI_INSTRUCTIONS": {
-    "IMPORTANT": "Estos 5 módulos forman la infraestructura IoT de Enki. Se cargan en tier_2 y tier_3, ANTES de módulos de dominio.",
+    "IMPORTANT": "Estos 7 módulos forman la infraestructura IoT de Enki. Se cargan en tier_2 y tier_3, ANTES de módulos de dominio.",
     "rule_1": "device-registry es la UNICA fuente de verdad de dispositivos. Ni perifericos ni impresion mantienen registros propios.",
     "rule_2": "device-shadow gestiona estado desired/reported/delta. Los módulos escriben desired, los dispositivos escriben reported.",
     "rule_3": "firmware-manager orquesta OTA via device-shadow (escribe desired.firmware). No envía binarios por MQTT.",
     "rule_4": "gateway-manager traduce MQTT↔protocolo nativo. Desde el servidor, un gateway es indistinguible de un ESP32.",
     "rule_5": "device-health monitoriza liveness y genera alertas. No toma acciones correctivas, solo informa.",
-    "rule_6": "Todos usan el patrón estándar de Enki: module.json + index.js con onLoad/onUnload, event handlers, ui_handlers."
+    "rule_6": "firmware-builder compila drivers ESP32 via PlatformIO. Reemplaza al antiguo esp32-dev (sin templates ni scaffolding).",
+    "rule_7": "esp32-flasher flashea binarios por USB y proporciona monitor serial.",
+    "rule_8": "Arquitectura firmware: BASE + LOGIC. BASE es la plataforma universal (WiFi, MQTT, OTA, portal). LOGIC es el driver compilado que implementa enki_logic.h.",
+    "rule_9": "Todos usan el patrón estándar de Enki: module.json + index.js con onLoad/onUnload, event handlers, ui_handlers."
   },
 
   "modulos": {
@@ -60,6 +63,7 @@
         "capabilities": ["imprimir", "cortar-papel", "abrir-cajon", "display", "sensor"],
         "protocol": "string — mqtt-native, tcp, ble, usb, cmd",
         "gateway": "string|null — ID del gateway que lo gestiona (null si es MQTT nativo)",
+        "driver": "string|null — nombre del driver LOGIC que ejecuta (ej: print-proxy). Se extrae del status message.",
         "state": "online | offline | error",
         "firmware": "string|null — versión de firmware reportada",
         "metadata": {},
@@ -145,7 +149,8 @@
         ],
         "escucha": [
           "shadow.updated — Para detectar cuando reported.firmware cambia (OTA completada/fallida)",
-          "device.registered — Para verificar firmware de nuevos dispositivos"
+          "device.registered — Para verificar firmware de nuevos dispositivos",
+          "firmware.build_completed — Auto-registra firmware en catálogo tras build exitoso (de firmware-builder)"
         ]
       },
 
@@ -279,6 +284,88 @@
       },
 
       "persistencia": "data/devices/health-history.json"
+    },
+
+    "firmware-builder": {
+      "version": "1.0.0",
+      "tier": "tier_3_core",
+      "ubicacion": "modules/firmware-builder/",
+      "responsabilidad": "Compilación de drivers ESP32 via PlatformIO. Escanea firmware/ buscando subdirectorios con platformio.ini.",
+      "reemplaza": "esp32-dev (deprecado) — sin templates, sin scaffolding, sin variable substitution. Solo escanear y compilar.",
+
+      "arquitectura_firmware": {
+        "modelo": "BASE + LOGIC",
+        "BASE": "Plataforma universal: WiFi multi-red, MQTT, portal web de config, NVS, OTA check, LED, watchdog",
+        "LOGIC": "Driver compilado que implementa el contrato enki_logic.h: logic_setup(), logic_loop(), logic_on_message(), logic_status(), logic_portal_status()",
+        "servicios_BASE": "enki_mqtt_publish/subscribe, enki_device_id/project_id, enki_config_get/set, enki_led_*, enki_buffer, enki_request_restart",
+        "contrato": "firmware/{driver}/src/enki_logic.h",
+        "entry_point": "firmware/{driver}/src/main.cpp conecta BASE + LOGIC"
+      },
+
+      "eventos": {
+        "publica": [
+          "firmware.build_started — Build iniciado",
+          "firmware.build_completed — Build exitoso (con binary_path, binary_size)",
+          "firmware.build_failed — Build fallido"
+        ],
+        "escucha": []
+      },
+
+      "ui_handlers": [
+        { "domain": "builder", "action": "list-drivers", "handler": "handleListDrivers" },
+        { "domain": "builder", "action": "build", "handler": "handleBuild" },
+        { "domain": "builder", "action": "build-status", "handler": "handleBuildStatus" },
+        { "domain": "builder", "action": "list-boards", "handler": "handleListBoards" }
+      ],
+
+      "flujo_build": [
+        "1. UI llama builder.list-drivers → _scanDrivers() escanea firmware/",
+        "2. UI llama builder.build { driver, clean } → spawns PlatformIO",
+        "3. UI hace polling builder.build-status { driver } para ver progreso",
+        "4. Al completar: publica firmware.build_completed → firmware-manager auto-registra en catálogo",
+        "5. esp32-flasher detecta firmware.build_completed → sugiere binario para flash USB"
+      ],
+
+      "drivers_ejemplo": {
+        "print-proxy": "Puente BLE para impresoras térmicas — NimBLE + ESC/POS via MQTT"
+      }
+    },
+
+    "esp32-flasher": {
+      "version": "1.0.0",
+      "tier": "tier_3_core",
+      "ubicacion": "modules/esp32-flasher/",
+      "responsabilidad": "Flash de binarios a ESP32 via USB (esptool/PlatformIO) y monitor serial.",
+
+      "eventos": {
+        "publica": [
+          "flash.started — Flash iniciado en un puerto",
+          "flash.completed — Flash completado",
+          "flash.failed — Flash fallido",
+          "flash.serial_output — Línea de monitor serial"
+        ],
+        "escucha": [
+          "firmware.build_completed — Guarda referencia al último binario compilado para auto-sugerir"
+        ]
+      },
+
+      "ui_handlers": [
+        { "domain": "flash", "action": "list-ports", "handler": "handleListPorts" },
+        { "domain": "flash", "action": "start", "handler": "handleStartFlash" },
+        { "domain": "flash", "action": "cancel", "handler": "handleCancelFlash" },
+        { "domain": "flash", "action": "status", "handler": "handleFlashStatus" },
+        { "domain": "flash", "action": "history", "handler": "handleFlashHistory" },
+        { "domain": "flash", "action": "monitor-start", "handler": "handleMonitorStart" },
+        { "domain": "flash", "action": "monitor-stop", "handler": "handleMonitorStop" },
+        { "domain": "flash", "action": "monitor-send", "handler": "handleMonitorSend" }
+      ],
+
+      "flujo_flash": [
+        "1. UI llama flash.list-ports → detecta puertos seriales + último build",
+        "2. UI llama flash.start { port, binary_path, method } → spawns esptool",
+        "3. Polling flash.status para ver progreso",
+        "4. Al completar: publica flash.completed"
+      ]
     }
   },
 
@@ -293,7 +380,9 @@
   "dependencias_entre_modulos": {
     "device-registry": [],
     "device-shadow": ["device-registry"],
-    "firmware-manager": ["device-shadow", "device-registry"],
+    "firmware-builder": [],
+    "firmware-manager": ["device-shadow", "device-registry", "firmware-builder (via eventos)"],
+    "esp32-flasher": ["firmware-builder (via eventos)"],
     "gateway-manager": ["device-registry"],
     "device-health": ["device-registry", "firmware-manager"]
   },
@@ -306,6 +395,7 @@
     "devices/{project}/{device_id}/state/delta": "retained — diferencia computed",
     "impresion/{project}/print/{device_id}": "comando de impresión (existente, no cambia)",
     "impresion/{project}/printed/{device_id}": "ACK de impresión (existente, no cambia)",
-    "impresion/{project}/status/{device_id}": "status periódico (existente, device-registry lo escucha)"
+    "impresion/{project}/status/{device_id}": "status periódico (existente, device-registry lo escucha)",
+    "enki/{project}/status/{device_id}": "status periódico de dispositivos BASE+LOGIC (device-registry lo escucha, extrae driver field)"
   }
 }

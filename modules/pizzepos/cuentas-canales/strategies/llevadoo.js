@@ -90,6 +90,7 @@ class LlevadooStrategy {
     await eventBus.subscribe('cocina.item_avanzado', this.onCocinaItemAvanzado.bind(this));
     await eventBus.subscribe('comandero.enviar_cocina', this.onComanderoEnviarCocina.bind(this));
     await eventBus.subscribe('cuenta.estado_cambiado', this.onCuentaEstadoCambiado.bind(this));
+    await eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
@@ -253,6 +254,28 @@ class LlevadooStrategy {
 
     // Cerrar cuenta Llevadoo
     await this.cerrarCuenta(cuenta_id, correlationId);
+  }
+
+  /**
+   * Cuando se renombra la cuenta desde comandero,
+   * actualizar nombre_cliente en el pedido llevadoo.
+   */
+  async onCuentaActualizada(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = eventData;
+
+    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!cambios?.nombre) return;
+
+    const pedido = this.pedidosActivos.get(cuenta_id);
+    if (!pedido) return;
+
+    pedido.nombre_cliente = cambios.nombre;
+
+    this.modulo.logger.info('llevadoo.nombre_actualizado', {
+      cuenta_id,
+      nombre: cambios.nombre
+    });
   }
 
   async onComanderoEnviarCocina(event) {

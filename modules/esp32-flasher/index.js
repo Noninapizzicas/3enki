@@ -237,9 +237,14 @@ class ESP32FlasherModule {
         erase_before: !!erase_before
       });
     } else if (flashMethod === 'platformio') {
+      const pioDir = project_dir || this._findPlatformioRoot(binary_path);
+      if (!pioDir) {
+        this.activeFlashes.delete(flashId);
+        return { status: 400, error: `No se encontró platformio.ini subiendo desde ${binary_path}. Verifica la ruta o usa el método esptool.` };
+      }
       this._runPlatformioFlash(flashId, {
         port,
-        project_dir: project_dir || path.dirname(binary_path)
+        project_dir: pioDir
       });
     } else {
       this.activeFlashes.delete(flashId);
@@ -456,6 +461,22 @@ class ESP32FlasherModule {
   }
 
   // ─── Pre-flash validation ────────────────────────────────
+
+  /**
+   * Sube desde binary_path hasta encontrar platformio.ini.
+   * Retorna el directorio raíz del proyecto PlatformIO o null.
+   */
+  _findPlatformioRoot(binaryPath) {
+    let dir = path.dirname(path.resolve(binaryPath));
+    const root = path.parse(dir).root;
+    while (dir !== root) {
+      if (fs.existsSync(path.join(dir, 'platformio.ini'))) {
+        return dir;
+      }
+      dir = path.dirname(dir);
+    }
+    return null;
+  }
 
   async _checkFlashTool(method) {
     const { execFileSync } = require('child_process');

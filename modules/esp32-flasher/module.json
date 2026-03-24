@@ -18,7 +18,7 @@
   "events": {
     "subscribes": [
       {
-        "event": "esp32.build_completed",
+        "event": "firmware.build_completed",
         "handler": "onBuildCompleted",
         "description": "Notifica que hay un binario listo para flashear"
       }

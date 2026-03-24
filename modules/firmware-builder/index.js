@@ -143,9 +143,14 @@ class FirmwareBuilderModule {
     }
 
     const startTime = Date.now();
-    const args = ['run'];
-    if (clean) args.push('-t', 'clean');
-    args.push('-d', driverInfo.path);
+    const buildEnv = driverInfo.buildEnv || board || driverInfo.board;
+
+    // Si clean, primero limpiar y luego compilar (clean solo no compila)
+    if (clean) {
+      await this._runClean(driverInfo.path, buildEnv);
+    }
+
+    const args = ['run', '-d', driverInfo.path];
     if (board) args.push('-e', board);
 
     this.logger.info('firmware.build.starting', { driver, board: board || driverInfo.board, clean: !!clean });
@@ -236,8 +241,12 @@ class FirmwareBuilderModule {
   // ─── Build execution ─────────────────────────────────────
 
   async _runBuild(driverName, driverPath, args, startTime, board) {
+    const driverInfo = this.drivers.get(driverName);
+    const buildEnv = driverInfo?.buildEnv || board;
+
     return new Promise((resolve) => {
       const buildLog = [];
+      let resolved = false; // Evitar doble resolución por error+close
       const buildInfo = {
         started_at: new Date(startTime).toISOString(),
         log: buildLog,
@@ -263,6 +272,9 @@ class FirmwareBuilderModule {
       });
 
       proc.on('close', async (code) => {
+        if (resolved) return;
+        resolved = true;
+
         const duration = Date.now() - startTime;
         this.activeBuilds.delete(driverName);
         this.metrics.gauge('firmware.active_builds.count', this.activeBuilds.size);
@@ -270,7 +282,7 @@ class FirmwareBuilderModule {
         const driver = this.drivers.get(driverName);
 
         if (code === 0) {
-          const binPath = path.join(driverPath, '.pio', 'build', board, 'firmware.bin');
+          const binPath = path.join(driverPath, '.pio', 'build', buildEnv, 'firmware.bin');
           let binarySize = 0;
           try {
             const stat = await fs.promises.stat(binPath);
@@ -328,14 +340,18 @@ class FirmwareBuilderModule {
       });
 
       proc.on('error', async (err) => {
+        if (resolved) return;
+        resolved = true;
+
         const duration = Date.now() - startTime;
         this.activeBuilds.delete(driverName);
         this.metrics.gauge('firmware.active_builds.count', this.activeBuilds.size);
         this.metrics.increment('firmware.build_failed.total');
 
-        if (this.drivers.get(driverName)) {
-          this.drivers.get(driverName).last_build = new Date().toISOString();
-          this.drivers.get(driverName).last_build_status = 'failed';
+        const driver = this.drivers.get(driverName);
+        if (driver) {
+          driver.last_build = new Date().toISOString();
+          driver.last_build_status = 'failed';
         }
 
         this.logger.error('firmware.build.spawn_error', { driver: driverName, error: err.message });
@@ -353,6 +369,25 @@ class FirmwareBuilderModule {
     });
   }
 
+  /**
+   * Ejecuta pio run -t clean de forma síncrona (espera a que termine).
+   */
+  _runClean(driverPath, buildEnv) {
+    return new Promise((resolve) => {
+      const args = ['run', '-t', 'clean', '-d', driverPath];
+      if (buildEnv) args.push('-e', buildEnv);
+
+      const proc = spawn(this.config.platformio_path, args, {
+        cwd: driverPath,
+        env: { ...process.env, PLATFORMIO_FORCE_COLOR: 'false' },
+        timeout: 60000
+      });
+
+      proc.on('close', () => resolve());
+      proc.on('error', () => resolve());
+    });
+  }
+
   // ─── Driver scanner ───────────────────────────────────────
 
   /**
@@ -360,6 +395,14 @@ class FirmwareBuilderModule {
    * Cada uno es un driver compilable.
    */
   async _scanDrivers() {
+    // Preservar estado de builds anteriores antes de re-escanear
+    const prevState = new Map();
+    for (const [id, drv] of this.drivers) {
+      if (drv.last_build || drv.last_build_status) {
+        prevState.set(id, { last_build: drv.last_build, last_build_status: drv.last_build_status });
+      }
+    }
+
     this.drivers.clear();
 
     try {
@@ -377,13 +420,16 @@ class FirmwareBuilderModule {
           continue; // No es un driver compilable
         }
 
-        // Leer board del platformio.ini
+        // Leer board y env del platformio.ini
         let board = 'esp32dev';
+        let envName = null;
         let description = '';
         try {
           const ini = await fs.promises.readFile(pioIni, 'utf-8');
           const boardMatch = ini.match(/board\s*=\s*(\S+)/);
           if (boardMatch) board = boardMatch[1];
+          const envMatch = ini.match(/\[env:(\S+)\]/);
+          if (envMatch) envName = envMatch[1];
         } catch (_) {}
 
         // Leer descripción del README si existe
@@ -393,10 +439,13 @@ class FirmwareBuilderModule {
           if (firstLine) description = firstLine.trim().substring(0, 120);
         } catch (_) {}
 
+        // Resolver directorio de build (env name o board name)
+        const buildEnv = envName || board;
+
         // Comprobar si hay binario compilado
         let hasBinary = false;
         let binarySize = 0;
-        const binPath = path.join(driverPath, '.pio', 'build', board, 'firmware.bin');
+        const binPath = path.join(driverPath, '.pio', 'build', buildEnv, 'firmware.bin');
         try {
           const stat = await fs.promises.stat(binPath);
           hasBinary = true;
@@ -411,19 +460,23 @@ class FirmwareBuilderModule {
           sourceFiles = srcEntries.filter(f => f.endsWith('.cpp') || f.endsWith('.h') || f.endsWith('.c'));
         } catch (_) {}
 
+        // Restaurar estado previo de build si existe
+        const prev = prevState.get(entry.name);
+
         this.drivers.set(entry.name, {
           name: entry.name,
           description,
           path: driverPath,
           board,
+          buildEnv,
           has_binary: hasBinary,
           binary_size: binarySize,
           source_files: sourceFiles,
-          last_build: null,
-          last_build_status: null
+          last_build: prev?.last_build || null,
+          last_build_status: prev?.last_build_status || null
         });
 
-        this.logger.info('firmware.driver.detected', { driver: entry.name, board, source_files: sourceFiles.length });
+        this.logger.info('firmware.driver.detected', { driver: entry.name, board, buildEnv, source_files: sourceFiles.length });
       }
     } catch (err) {
       this.logger.warn('firmware.scan.failed', { path: this.config.firmware_path, error: err.message });

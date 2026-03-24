@@ -102,14 +102,14 @@ class ESP32FlasherModule {
   // ─── Event Handlers ──────────────────────────────────────
 
   /**
-   * Cuando esp32-dev completa un build, guardamos referencia para auto-suggest.
+   * Cuando firmware-builder completa un build, guardamos referencia para auto-suggest.
    */
   async onBuildCompleted(event) {
     const data = event?.data || event?.payload || event;
     if (!data?.binary_path) return;
 
     this.lastBuild = {
-      project_name: data.project_name,
+      driver: data.driver || data.project_name,
       board: data.board,
       binary_path: data.binary_path,
       binary_size: data.binary_size,
@@ -117,7 +117,7 @@ class ESP32FlasherModule {
     };
 
     this.logger.info('flash.build_available', {
-      project_name: data.project_name,
+      driver: data.driver || data.project_name,
       binary_path: data.binary_path
     });
   }

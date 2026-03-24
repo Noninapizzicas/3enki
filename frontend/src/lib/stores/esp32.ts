@@ -134,6 +134,7 @@ export interface Esp32State {
   activeFlashes: FlashStatus[];
   flashHistory: FlashHistoryEntry[];
   lastBuild: { driver: string; binary_path: string; timestamp: string } | null;
+  selectedBinaryPath: string | null;
 
   // Monitor
   serialLines: string[];
@@ -161,6 +162,7 @@ const initialState: Esp32State = {
   activeFlashes: [],
   flashHistory: [],
   lastBuild: null,
+  selectedBinaryPath: null,
   serialLines: [],
   monitorPort: null,
   monitorBaud: 115200

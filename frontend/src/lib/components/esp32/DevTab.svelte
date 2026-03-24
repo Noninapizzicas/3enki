@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     esp32Store, loadDrivers, loadBoards, buildDriver,
-    selectDriver, loadBuildStatus, elapsed, statusColor
+    selectDriver, elapsed, statusColor
   } from '$lib/stores/esp32';
 
   type SubTab = 'drivers' | 'build';

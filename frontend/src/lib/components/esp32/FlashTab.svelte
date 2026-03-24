@@ -179,7 +179,7 @@
       <div class="build-hint">
         <span class="hint-icon">📦</span>
         <span class="hint-text">
-          Ultimo build: <strong>{lastBuild.project_name}</strong>
+          Ultimo build: <strong>{lastBuild.driver}</strong>
         </span>
         <button
           class="btn-use-build"

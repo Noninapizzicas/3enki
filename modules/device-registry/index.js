@@ -408,7 +408,7 @@ class DeviceRegistryModule {
 
   async onDeviceRegister(event) {
     const data = event?.data || event?.payload || event;
-    const { device_id, project_id, name, type, capabilities, protocol, gateway, metadata } = data;
+    const { device_id, project_id, name, type, capabilities, protocol, gateway, metadata, driver } = data;
 
     if (!device_id) {
       this.logger.warn('device-registry.register.missing_device_id');
@@ -426,6 +426,7 @@ class DeviceRegistryModule {
       capabilities: capabilities || [],
       protocol: protocol || 'manual',
       gateway: gateway || null,
+      driver: driver || null,
       state: 'offline',
       firmware: data.firmware || null,
       metadata: metadata || {},

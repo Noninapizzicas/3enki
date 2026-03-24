@@ -401,6 +401,9 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
+    // Llevadoo paga externamente, no pasa por caja
+    if (cuenta.tipo === 'llevadoo') return;
+
     if (cuenta.estado === 'listo' || cuenta.estado === 'entregado') {
       await this.transicionarEstado(cuenta_id, 'para_cobrar');
     }
@@ -450,6 +453,9 @@ class CuentasModule {
     // Llevar: el cobro no cierra la cuenta, se mantiene hasta que se entregue.
     // La strategy de llevar gestiona el cierre vía llevar/entregar.
     if (cuenta.tipo === 'llevar') return;
+
+    // Llevadoo paga externamente (no pasa por caja), ignorar cobro
+    if (cuenta.tipo === 'llevadoo') return;
 
     // Transicionar a cobrado usando la máquina de estados formal
     await this.cerrarCuentaCobrada(cuenta_id);

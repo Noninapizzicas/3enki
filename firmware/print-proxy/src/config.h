@@ -9,6 +9,10 @@
 // en http://<ip-del-esp32>/ y se guarda en flash (NVS).
 // ============================================
 
+// --- BASE: Identidad del firmware ---
+#define DRIVER_TYPE             "print-proxy"
+#define FIRMWARE_VERSION        "3.1.0"
+
 // --- BASE: Defaults identidad (solo si no hay config en NVS) ---
 #define DEFAULT_DEVICE_ID       "enki-device-1"
 #define DEFAULT_PROJECT_ID      "enki"

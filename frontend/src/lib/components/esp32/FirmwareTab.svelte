@@ -19,6 +19,7 @@
   let selectedAction: 'usb' | 'ota' | null = null;
   let inlinePort = '';
   let inlineDeviceId = '';
+  let inlineMethod: 'esptool' | 'platformio' = 'esptool';
   let inlineError = '';
   let inlineBusy = false;
 
@@ -51,7 +52,8 @@
     inlineBusy = true;
     const result = await startFlash({
       port: inlinePort,
-      binary_path: fw.binary_path
+      binary_path: fw.binary_path,
+      method: inlineMethod
     });
     inlineBusy = false;
 
@@ -173,6 +175,10 @@
                   {#each ports.filter(p => !p.in_use_by) as port}
                     <option value={port.path}>{port.path}</option>
                   {/each}
+                </select>
+                <select class="inline-input" bind:value={inlineMethod}>
+                  <option value="esptool">esptool</option>
+                  <option value="platformio">PlatformIO</option>
                 </select>
                 {#if inlineError}
                   <span class="inline-error">{inlineError}</span>

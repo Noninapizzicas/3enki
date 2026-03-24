@@ -61,8 +61,7 @@ class ImpresionModule {
     // Config
     this.config = {
       ancho: '58mm',
-      project_id: 'no',
-      destino_default: 'printerhorno'   // device_id del ESP32 destino por defecto
+      destino_default: ''   // vacío = usar primera impresora descubierta online
     };
 
     // Ancho de línea calculado
@@ -120,8 +119,7 @@ class ImpresionModule {
       version: this.version,
       ancho: this.config.ancho,
       chars: this.lineWidth,
-      project_id: this.config.project_id,
-      destino_default: this.config.destino_default
+      destino_default: this.config.destino_default || '(auto-discovery)'
     });
   }
 
@@ -157,8 +155,9 @@ class ImpresionModule {
 
     try {
       await mqtt.subscribe('impresion/+/status/+');
+      await mqtt.subscribe('enki/+/status/+');
       this.logger.info('impresion.autodiscovery.iniciado', {
-        topic: 'impresion/+/status/+'
+        topics: ['impresion/+/status/+', 'enki/+/status/+']
       });
     } catch (err) {
       this.logger.warn('impresion.autodiscovery.subscribe_error', {
@@ -177,10 +176,11 @@ class ImpresionModule {
 
   /**
    * Procesa mensajes de status de ESP32.
-   * Topic: impresion/{projectId}/status/{deviceId}
+   * Topics: impresion/{projectId}/status/{deviceId}
+   *         enki/{projectId}/status/{deviceId}
    */
   _handleStatusMessage(topic, payload) {
-    const match = topic.match(/^impresion\/([^/]+)\/status\/([^/]+)$/);
+    const match = topic.match(/^(?:impresion|enki)\/([^/]+)\/status\/([^/]+)$/);
     if (!match) return;
 
     const [, projectId, deviceId] = match;
@@ -410,8 +410,7 @@ class ImpresionModule {
           ancho: this.config.ancho,
           chars_linea: this.lineWidth
         },
-        project_id: this.config.project_id,
-        destino_default: this.config.destino_default,
+        destino_default: this.config.destino_default || '(auto-discovery)',
         impresoras_descubiertas: this.impresoras.size,
         impresoras_online: impresorasOnline.length
       }
@@ -856,11 +855,29 @@ class ImpresionModule {
    *
    * @param {string} contenido - datos ESC/POS formateados
    * @param {string} [destino] - device_id del ESP32 (default: config.destino_default)
-   * @param {string} [projectId] - project_id para el topic (default: config.project_id)
+   * @param {string} [projectId] - project_id para el topic (inferido de auto-discovery si no se pasa)
    */
   async enviarImpresora(contenido, destino, projectId) {
-    const deviceId = destino || this.config.destino_default;
-    const pid = projectId || this.config.project_id;
+    let deviceId = destino || this.config.destino_default;
+    let pid = projectId || '';
+
+    // Si no hay destino/project_id configurado, buscar la primera impresora descubierta online+ready
+    if (!deviceId || !pid) {
+      const candidata = Array.from(this.impresoras.values())
+        .find(i => i.online && i.printer_ready);
+      if (candidata) {
+        deviceId = deviceId || candidata.device_id;
+        pid = pid || candidata.project_id;
+        this.logger.info('impresion.auto_destino', { device_id: deviceId, project_id: pid });
+      }
+    }
+
+    if (!deviceId) {
+      throw new Error('No hay destino configurado ni impresoras descubiertas online');
+    }
+    if (!pid) {
+      throw new Error('No hay project_id configurado ni inferible de impresoras descubiertas');
+    }
 
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt || !mqtt.isConnected) {

@@ -103,8 +103,7 @@
 
   "config": {
     "ancho": "58mm",
-    "project_id": "no",
-    "destino_default": "printerhorno"
+    "destino_default": ""
   },
 
   "observability": {

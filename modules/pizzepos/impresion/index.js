@@ -26,12 +26,18 @@ const ESC = '\x1B';
 const GS  = '\x1D';
 const CMD = {
   INIT:           `${ESC}@`,
+  CODEPAGE_437:   `${ESC}t\x00`,       // Code Page 437 (US)
   BOLD_ON:        `${ESC}E\x01`,
   BOLD_OFF:       `${ESC}E\x00`,
   DOUBLE_ON:      `${GS}!\x11`,       // doble ancho + alto
   DOUBLE_OFF:     `${GS}!\x00`,
+  WIDE_ON:        `${GS}!\x10`,       // solo doble ancho
+  WIDE_OFF:       `${GS}!\x00`,
+  TALL_ON:        `${GS}!\x01`,       // solo doble alto
+  TALL_OFF:       `${GS}!\x00`,
   ALIGN_CENTER:   `${ESC}a\x01`,
   ALIGN_LEFT:     `${ESC}a\x00`,
+  ALIGN_RIGHT:    `${ESC}a\x02`,
   FONT_NORMAL:    `${ESC}M\x00`,
   FONT_SMALL:     `${ESC}M\x01`,
   CUT:            `${GS}V\x00`,
@@ -40,6 +46,44 @@ const CMD = {
   FEED_5:         `${ESC}d\x05`,
   UNDERLINE_ON:   `${ESC}-\x01`,
   UNDERLINE_OFF:  `${ESC}-\x00`
+};
+
+// ==========================================
+// Code Page 437 graphic characters
+// ==========================================
+const CP437 = {
+  // Box drawing
+  TOP_LEFT:     '\xC9',  // ╔
+  TOP_RIGHT:    '\xBB',  // ╗
+  BOT_LEFT:     '\xC8',  // ╚
+  BOT_RIGHT:    '\xBC',  // ╝
+  HORIZ:        '\xCD',  // ═
+  VERT:         '\xBA',  // ║
+  LIGHT_HORIZ:  '\xC4',  // ─
+  // Symbols
+  DIAMOND:      '\x04',  // ♦
+  BULLET:       '\x07',  // •
+  ARROW_R:      '\x10',  // ►
+  SQUARE:       '\xFE',  // ■
+  BLOCK:        '\xDB',  // █
+  SHADE_LIGHT:  '\xB0',  // ░
+  SHADE_MED:    '\xB1',  // ▒
+  TRIANGLE_R:   '\x10',  // ►
+  STAR:         '\x0F',  // ☼
+  PHONE:        '\x15',  // §
+  DOT:          '\xF9',  // ∙
+};
+
+// Icono CP437 por canal — discreto pero reconocible
+const CANAL_ICON = {
+  mesa:      CP437.DIAMOND,    // ♦ MESA
+  telefono:  CP437.PHONE,      // § TEL
+  llevar:    CP437.ARROW_R,    // ► LLEVAR
+  glovo:     CP437.STAR,       // ☼ GLOVO
+  whatsapp:  CP437.BULLET,     // • WHATSAPP
+  uber_eats: CP437.SQUARE,     // ■ UBER
+  just_eat:  CP437.DOT,        // ∙ JUST EAT
+  default:   CP437.SQUARE      // ■
 };
 
 // Anchos por tipo de impresora
@@ -108,8 +152,8 @@ class ImpresionModule {
 
     // Calcular ancho de línea
     this.lineWidth = ANCHOS[this.config.ancho] || 32;
-    this.separator = '-'.repeat(this.lineWidth);
-    this.doubleSep = '='.repeat(this.lineWidth);
+    this.separator = CP437.LIGHT_HORIZ.repeat(this.lineWidth);
+    this.doubleSep = CP437.HORIZ.repeat(this.lineWidth);
 
     // Iniciar autodescubrimiento de impresoras ESP32
     await this._iniciarAutoDescubrimiento();
@@ -234,7 +278,8 @@ class ImpresionModule {
 
   async onItemTicket(event) {
     const data = event?.data || event?.payload || event;
-    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion, impresora, project_id } = data;
+    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion,
+            ingredientes, variaciones, notas, impresora, project_id } = data;
 
     const destino = impresora?.destino || this.config.destino_default;
 
@@ -244,7 +289,8 @@ class ImpresionModule {
 
     try {
       const ticket = this.formatearTicketPieza({
-        pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion
+        pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion,
+        ingredientes, variaciones, notas
       });
 
       await this.enviarImpresora(ticket, destino, project_id);
@@ -470,58 +516,66 @@ class ImpresionModule {
 
   formatearComanda({ pedido_id, cuenta_id, canal, items, notas_generales, reimpresion }) {
     const lineas = [];
+    const w = this.lineWidth;
 
     lineas.push(CMD.INIT);
+    lineas.push(CMD.CODEPAGE_437);
 
+    // ══════════════════════════════════════════
+    // APARTADO 1: Header — ref pedido + canal
+    // ══════════════════════════════════════════
+    const refMesa = this.extraerRefMesa(cuenta_id, canal);
+    const canalKey = this._detectarCanal(cuenta_id, canal);
+    const icon = CANAL_ICON[canalKey] || CANAL_ICON.default;
+
+    // Linea superior con graficos CP437
+    lineas.push(this._lineaBox('top', w));
+
+    // Ref del pedido centrada, doble tamaño
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.DOUBLE_ON);
-    lineas.push(reimpresion ? '** REIMPRESION **' : 'COMANDA');
+    lineas.push(CMD.BOLD_ON);
+    if (reimpresion) {
+      lineas.push(`${icon} REIMP ${icon}`);
+    }
+    // Referencia principal (MESA 5, GLOVO #xx, etc)
+    lineas.push(refMesa || `#${pedido_id || '-'}`);
+    lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
 
+    // Pedido ID + hora en fuente normal
     lineas.push(CMD.FONT_NORMAL);
-    lineas.push(this.doubleSep);
-
-    const refMesa = this.extraerRefMesa(cuenta_id, canal);
-    if (refMesa) {
-      lineas.push(CMD.BOLD_ON);
-      lineas.push(CMD.DOUBLE_ON);
-      lineas.push(refMesa);
-      lineas.push(CMD.DOUBLE_OFF);
-      lineas.push(CMD.BOLD_OFF);
-    }
-
-    lineas.push(CMD.ALIGN_LEFT);
-
     const ahora = new Date();
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+    lineas.push(`${icon} #${pedido_id || '-'}  ${hora} ${fecha}`);
 
-    if (this.lineWidth <= 32) {
-      lineas.push(`${hora} ${fecha}  #${pedido_id || '-'}`);
-    } else {
-      lineas.push(`Hora: ${hora}  Fecha: ${fecha}`);
-      lineas.push(`Pedido: ${pedido_id || '-'}`);
-    }
-    if (canal) lineas.push(`Canal: ${canal}`);
+    // Linea inferior box
+    lineas.push(this._lineaBox('bottom', w));
 
-    lineas.push(this.doubleSep);
+    // ══════════════════════════════════════════
+    // APARTADO 2: Items — producto + ingredientes + variaciones
+    // ══════════════════════════════════════════
+    lineas.push(CMD.ALIGN_LEFT);
 
     for (const item of items) {
       this.formatearItem(lineas, item);
-      lineas.push(this.separator);
+      lineas.push(this._separadorLigero(w));
     }
 
+    // Notas generales
     if (notas_generales) {
       lineas.push(CMD.BOLD_ON);
-      lineas.push('NOTAS:');
+      lineas.push(`${CP437.ARROW_R} NOTAS:`);
       lineas.push(CMD.BOLD_OFF);
       lineas.push(this.truncar(notas_generales));
-      lineas.push(this.separator);
+      lineas.push(this._separadorLigero(w));
     }
 
+    // Footer discreto
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.FONT_SMALL);
-    lineas.push(`${items.length} item(s)`);
+    lineas.push(`${CP437.DOT} ${items.length} item(s) ${CP437.DOT}`);
     lineas.push(CMD.FONT_NORMAL);
 
     lineas.push(CMD.FEED_5);
@@ -532,66 +586,107 @@ class ImpresionModule {
 
   formatearItem(lineas, item) {
     const qty = item.cantidad > 1 ? `${item.cantidad}x ` : '';
+
+    // Nombre del producto — GRANDE y negrita (doble alto)
     lineas.push(CMD.BOLD_ON);
+    lineas.push(CMD.TALL_ON);
     lineas.push(this.truncar(`${qty}${item.nombre}`));
+    lineas.push(CMD.TALL_OFF);
     lineas.push(CMD.BOLD_OFF);
 
+    // Mitad-mitad
     if (item.tipo === 'mitad-mitad' || item.pizza_izquierda || item.pizza_derecha) {
       if (item.pizza_izquierda) {
-        lineas.push(this.truncar(` IZQ: ${item.pizza_izquierda}`));
+        lineas.push(this.truncar(` ${CP437.ARROW_R} IZQ: ${item.pizza_izquierda}`));
       }
       if (item.pizza_derecha) {
-        lineas.push(this.truncar(` DER: ${item.pizza_derecha}`));
+        lineas.push(this.truncar(` ${CP437.ARROW_R} DER: ${item.pizza_derecha}`));
       }
     }
 
+    // Ingredientes base — fuente normal, listados con dot
     if (item.ingredientes && item.ingredientes.length > 0) {
       for (const ing of item.ingredientes) {
         const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-        lineas.push(this.truncar(` + ${nombre}`));
+        lineas.push(this.truncar(` ${CP437.DOT} ${nombre}`));
       }
     }
 
+    // Variaciones — destacadas
     if (item.variaciones && Object.keys(item.variaciones).length > 0) {
       const v = item.variaciones;
 
+      // SIN — negrita + doble alto para que salte a la vista
       if (v.ingredientes_quitar && v.ingredientes_quitar.length > 0) {
         lineas.push(CMD.BOLD_ON);
+        lineas.push(CMD.TALL_ON);
         for (const ing of v.ingredientes_quitar) {
           lineas.push(this.truncar(` SIN ${ing.toUpperCase()}`));
+        }
+        lineas.push(CMD.TALL_OFF);
+        lineas.push(CMD.BOLD_OFF);
+      }
+
+      // CON — negrita normal
+      if (v.ingredientes_anadir && v.ingredientes_anadir.length > 0) {
+        lineas.push(CMD.BOLD_ON);
+        for (const ing of v.ingredientes_anadir) {
+          const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
+          lineas.push(this.truncar(` + CON ${nombre}`));
         }
         lineas.push(CMD.BOLD_OFF);
       }
 
-      if (v.ingredientes_anadir && v.ingredientes_anadir.length > 0) {
-        for (const ing of v.ingredientes_anadir) {
-          const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-          lineas.push(this.truncar(` CON ${nombre}`));
-        }
-      }
-
+      // Otras variaciones
       for (const [key, val] of Object.entries(v)) {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
-          lineas.push(` ${key.toUpperCase()}`);
+          lineas.push(CMD.BOLD_ON);
+          lineas.push(` ${CP437.SQUARE} ${key.toUpperCase()}`);
+          lineas.push(CMD.BOLD_OFF);
         } else if (val && val !== false) {
-          lineas.push(this.truncar(` ${key}: ${val}`));
+          lineas.push(this.truncar(` ${CP437.SQUARE} ${key}: ${val}`));
         }
       }
     }
 
+    // Notas del item
     if (item.notas) {
       lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(this.truncar(` >> ${item.notas}`));
+      lineas.push(this.truncar(` ${CP437.ARROW_R} ${item.notas}`));
       lineas.push(CMD.UNDERLINE_OFF);
     }
   }
 
-  formatearTicketPieza({ pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion }) {
+  formatearTicketPieza({ pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion,
+                         ingredientes, variaciones, notas }) {
     const lineas = [];
+    const w = this.lineWidth;
 
     lineas.push(CMD.INIT);
+    lineas.push(CMD.CODEPAGE_437);
 
+    // ── APARTADO 1: Header — ref pedido + canal ──
+    const refMesa = this.extraerRefMesa(cuenta_id, canal);
+    const canalKey = this._detectarCanal(cuenta_id, canal);
+    const icon = CANAL_ICON[canalKey] || CANAL_ICON.default;
+
+    lineas.push(this._lineaBox('top', w));
+    lineas.push(CMD.ALIGN_CENTER);
+    lineas.push(CMD.DOUBLE_ON);
+    lineas.push(CMD.BOLD_ON);
+    lineas.push(refMesa || `#${pedido_id || '-'}`);
+    lineas.push(CMD.BOLD_OFF);
+    lineas.push(CMD.DOUBLE_OFF);
+
+    const ahora = new Date();
+    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    lineas.push(CMD.FONT_NORMAL);
+    const estacionStr = estacion ? `${estacion.toUpperCase()} ` : '';
+    lineas.push(`${icon} ${estacionStr}${hora}  #${pedido_id || '-'}`);
+    lineas.push(this._lineaBox('bottom', w));
+
+    // ── APARTADO 2: Producto + ingredientes + variaciones ──
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.DOUBLE_ON);
     lineas.push(CMD.BOLD_ON);
@@ -603,27 +698,57 @@ class ImpresionModule {
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
 
-    lineas.push(this.separator);
-
-    const refMesa = this.extraerRefMesa(cuenta_id, canal);
-    if (refMesa) {
-      lineas.push(CMD.BOLD_ON);
-      lineas.push(CMD.DOUBLE_ON);
-      lineas.push(refMesa);
-      lineas.push(CMD.DOUBLE_OFF);
-      lineas.push(CMD.BOLD_OFF);
-    }
-
     lineas.push(CMD.ALIGN_LEFT);
-    lineas.push(CMD.FONT_SMALL);
-    const ahora = new Date();
-    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    if (estacion) {
-      lineas.push(`${estacion.toUpperCase()} ${hora}`);
-    } else {
-      lineas.push(hora);
+
+    // Ingredientes base
+    if (ingredientes && ingredientes.length > 0) {
+      for (const ing of ingredientes) {
+        const ingNombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
+        lineas.push(this.truncar(` ${CP437.DOT} ${ingNombre}`));
+      }
     }
-    lineas.push(CMD.FONT_NORMAL);
+
+    // Variaciones
+    if (variaciones && Object.keys(variaciones).length > 0) {
+      const v = variaciones;
+
+      if (v.ingredientes_quitar && v.ingredientes_quitar.length > 0) {
+        lineas.push(CMD.BOLD_ON);
+        lineas.push(CMD.TALL_ON);
+        for (const ing of v.ingredientes_quitar) {
+          lineas.push(this.truncar(` SIN ${ing.toUpperCase()}`));
+        }
+        lineas.push(CMD.TALL_OFF);
+        lineas.push(CMD.BOLD_OFF);
+      }
+
+      if (v.ingredientes_anadir && v.ingredientes_anadir.length > 0) {
+        lineas.push(CMD.BOLD_ON);
+        for (const ing of v.ingredientes_anadir) {
+          const ingNombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
+          lineas.push(this.truncar(` + CON ${ingNombre}`));
+        }
+        lineas.push(CMD.BOLD_OFF);
+      }
+
+      for (const [key, val] of Object.entries(v)) {
+        if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
+        if (val === true) {
+          lineas.push(CMD.BOLD_ON);
+          lineas.push(` ${CP437.SQUARE} ${key.toUpperCase()}`);
+          lineas.push(CMD.BOLD_OFF);
+        } else if (val && val !== false) {
+          lineas.push(this.truncar(` ${CP437.SQUARE} ${key}: ${val}`));
+        }
+      }
+    }
+
+    // Notas
+    if (notas) {
+      lineas.push(CMD.UNDERLINE_ON);
+      lineas.push(this.truncar(` ${CP437.ARROW_R} ${notas}`));
+      lineas.push(CMD.UNDERLINE_OFF);
+    }
 
     lineas.push(CMD.FEED_3);
     lineas.push(CMD.PARTIAL_CUT);
@@ -640,6 +765,7 @@ class ImpresionModule {
     const w = this.lineWidth;
 
     lineas.push(CMD.INIT);
+    lineas.push(CMD.CODEPAGE_437);
 
     lineas.push(CMD.ALIGN_CENTER);
     if (datos_negocio?.nombre) {
@@ -840,8 +966,44 @@ class ImpresionModule {
   // Utilidades
   // ==========================================
 
+  /**
+   * Linea superior o inferior de box con caracteres CP437
+   * top:    ╔══════════════════════════════╗
+   * bottom: ╚══════════════════════════════╝
+   */
+  _lineaBox(tipo, ancho) {
+    const interior = CP437.HORIZ.repeat(ancho - 2);
+    if (tipo === 'top') {
+      return `${CP437.TOP_LEFT}${interior}${CP437.TOP_RIGHT}`;
+    }
+    return `${CP437.BOT_LEFT}${interior}${CP437.BOT_RIGHT}`;
+  }
+
+  /**
+   * Separador ligero entre items — discreto con CP437
+   * ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─
+   */
+  _separadorLigero(ancho) {
+    const patron = `${CP437.LIGHT_HORIZ}${CP437.DOT}`;
+    return patron.repeat(Math.floor(ancho / 2)).slice(0, ancho);
+  }
+
+  /**
+   * Detecta el canal a partir de cuenta_id o canal explícito
+   */
+  _detectarCanal(cuenta_id, canal) {
+    if (canal && CANAL_ICON[canal]) return canal;
+    if (!cuenta_id) return 'default';
+
+    const prefijos = ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'uber_eats', 'just_eat'];
+    for (const p of prefijos) {
+      if (cuenta_id.startsWith(`${p}_`)) return p;
+    }
+    return 'default';
+  }
+
   truncar(texto) {
-    return texto.length > this.lineWidth ? texto.slice(0, this.lineWidth - 1) + '…' : texto;
+    return texto.length > this.lineWidth ? texto.slice(0, this.lineWidth - 1) + '\xC4' : texto;
   }
 
   guardarHistorial(registro) {

@@ -606,6 +606,98 @@
         "grande": "Mezcla de ESP32 + gateways TCP/USB/CMD + broker bridging (300+ dispositivos)"
       },
       "cuando_implementar": "Después de validar que el sistema de impresión directa (ESP32 + impresion v3.0) es estable en producción"
+    },
+    {
+      "id": "llevadoo-direccion-callejero",
+      "titulo": "Llevadoo: campo de dirección con autocompletado de callejero",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-24",
+      "descripcion": "Añadir campo de dirección editable en pedidos llevadoo con autocompletado basado en API de callejero. El campo debe estar accesible desde el comandero (header o modal) y la dirección debe propagarse en todo el recorrido del pedido (cuenta → cocina → ticket impreso).",
+      "contexto": {
+        "estado_actual": "El modelo de datos ya soporta 'direccion' en el pedido llevadoo (handleCrearPedido línea 303, evento llevadoo.pedido_recibido línea 323). Falta UI para introducirla y autocompletado.",
+        "nombre_pedido": "Implementado en 2026-03-24 — tap en header del comandero para editar nombre/número del pedido llevadoo"
+      },
+      "opciones_api_callejero": {
+        "cartociudad_ign": {
+          "nombre": "Cartociudad (IGN España)",
+          "url_autocomplete": "https://www.cartociudad.es/geocoder/api/geocoder/candidatesBySearch",
+          "coste": "gratuito",
+          "cobertura": "España — callejero oficial del Instituto Geográfico Nacional",
+          "ventajas": ["Callejero oficial español", "Gratuito sin límite conocido", "Muy preciso en direcciones españolas", "No requiere API key"],
+          "desventajas": ["Solo España", "API más lenta que alternativas comerciales", "Documentación escasa"],
+          "recomendacion": "Primera opción si solo se opera en España"
+        },
+        "google_places_autocomplete": {
+          "nombre": "Google Places Autocomplete",
+          "coste": "$2.83 por 1000 requests (Place Autocomplete)",
+          "cobertura": "global",
+          "ventajas": ["Máxima precisión", "Cobertura global", "Buena UX con session tokens"],
+          "desventajas": ["Requiere API key + facturación activa", "Coste por uso", "Términos de uso exigen mostrar Google Maps"],
+          "recomendacion": "Si se necesita máxima precisión y se acepta el coste"
+        },
+        "mapbox_geocoding": {
+          "nombre": "Mapbox Geocoding",
+          "coste": "100,000 requests gratis/mes, luego $5/1000",
+          "cobertura": "global",
+          "ventajas": ["Buen plan gratuito", "API rápida", "Sin obligación de mostrar mapa"],
+          "desventajas": ["Menos preciso que Google en calles españolas"],
+          "recomendacion": "Buen balance coste/calidad con plan gratuito generoso"
+        },
+        "nominatim_osm": {
+          "nombre": "Nominatim (OpenStreetMap)",
+          "coste": "gratuito (self-hosted o API pública con rate limit)",
+          "cobertura": "global — datos abiertos OSM",
+          "ventajas": ["Totalmente gratuito", "Self-hosteable", "Sin dependencia de terceros"],
+          "desventajas": ["API pública: max 1 req/segundo", "Menos completo que callejero oficial", "Self-hosting requiere servidor con ~50GB disco"],
+          "recomendacion": "Alternativa gratuita sin dependencias externas"
+        },
+        "photon_osm": {
+          "nombre": "Photon (basado en OSM)",
+          "coste": "gratuito (self-hosted)",
+          "cobertura": "global",
+          "ventajas": ["Muy rápido", "Diseñado para autocompletado", "Self-hosteable"],
+          "desventajas": ["Requiere servidor propio (~30GB RAM para import completo)", "Basado en datos OSM (mismas limitaciones)"],
+          "recomendacion": "Si se quiere autocompletado rápido self-hosted"
+        }
+      },
+      "recomendacion_nonina": "Cartociudad (gratuito, callejero oficial español) como primera opción. Nominatim como fallback.",
+      "implementacion_propuesta": {
+        "fase_1_ui": {
+          "titulo": "Campo de dirección en comandero llevadoo",
+          "tareas": [
+            "Añadir botón/sección de dirección en ComanderoScreen para llevadoo (debajo del nombre o en modal)",
+            "Input de texto con debounce (300ms) que consulta API de callejero",
+            "Dropdown con sugerencias de autocompletado",
+            "Al seleccionar: guardar dirección completa en la cuenta via MQTT (cuenta.update_direccion o reuse cuenta.actualizada)"
+          ]
+        },
+        "fase_2_backend": {
+          "titulo": "Propagación de dirección",
+          "tareas": [
+            "Añadir handler en cuentas para actualizar dirección (similar a handleRenameCuenta)",
+            "Llevar strategy escucha cambio de dirección y actualiza pedido.direccion",
+            "Dirección visible en tarjeta de llevadoo (LlevadooScreen)",
+            "Dirección incluida en comanda/ticket impreso"
+          ]
+        },
+        "fase_3_api": {
+          "titulo": "Integración con API de callejero",
+          "tareas": [
+            "Crear servicio frontend addressLookup(query) que llama a Cartociudad",
+            "Proxy backend si es necesario (CORS) o llamada directa desde frontend",
+            "Cache de búsquedas recientes en localStorage",
+            "Fallback si la API no responde: input libre sin autocompletado"
+          ]
+        }
+      },
+      "archivos_afectados": [
+        "frontend/src/lib/components/comandero/ComanderoScreen.svelte",
+        "frontend/src/lib/stores/cuentas.ts",
+        "modules/pizzepos/cuentas/index.js",
+        "modules/pizzepos/cuentas-canales/strategies/llevadoo.js"
+      ],
+      "cuando_implementar": "Cuando se valide el flujo de nombre/número de pedido y se decida qué API de callejero usar"
     }
   ]
 }

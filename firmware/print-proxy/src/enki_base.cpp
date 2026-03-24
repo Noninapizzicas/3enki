@@ -7,6 +7,7 @@
 
 #include "enki_base.h"
 #include "enki_logic.h"
+#include "portal.h"
 
 // ============================================
 // Estado global de la BASE
@@ -371,8 +372,6 @@ void baseCheckOTA() {
 // ============================================
 
 static void handleRoot() {
-  // El HTML del portal lo proporciona el driver en portal.h
-  extern const char PORTAL_HTML[];
   webServer.send_P(200, "text/html", PORTAL_HTML);
 }
 

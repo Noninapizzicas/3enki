@@ -72,6 +72,9 @@ build/
 *.tgz
 carta-static-output/
 
+# PlatformIO build artifacts
+.pio/
+
 # Temporary files
 tmp/
 temp/

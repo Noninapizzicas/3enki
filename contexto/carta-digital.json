@@ -1,0 +1,253 @@
+{
+  "descripcion": "Análisis completo del módulo carta-digital: backend, frontend UI, y estado actual",
+  "_updated": "2026-03-25",
+
+  "resumen": "Carta web pública para clientes (QR/WhatsApp). Backend event-driven multi-tenant con 16 UI handlers y 17 APIs. Frontend SvelteKit con carrito client-side, variaciones, y checkout WhatsApp. Export estático PWA con chat AI via Cloudflare Worker.",
+
+  "arquitectura": {
+    "backend": {
+      "archivo": "modules/pizzepos/carta-digital/index.js (1447 líneas)",
+      "clase": "CartaDigitalModule",
+      "version": "1.1.0",
+      "patron": "uiHandler + HTTP APIs + event subscriptions",
+      "archivos_adicionales": [
+        "static-template.js — generador HTML PWA (~1200 líneas de HTML/CSS/JS inline)",
+        "export-cli.js — CLI para export estático",
+        "prompt.json — system prompt para AI chat",
+        "cf-worker/ — Cloudflare Worker proxy para chat AI (worker.js, wrangler.toml, deploy.js)"
+      ]
+    },
+    "frontend": {
+      "componentes": {
+        "CartaScreen.svelte": "Pantalla principal (319 líneas): header + categorías scroll + grid productos + FAB carrito. Orquesta 3 modales: ProductoDetalle, VariacionesPanel, CarritoPanel",
+        "ProductoCard.svelte": "Tarjeta producto (261 líneas): dual-zone (click→detalle, botón→variaciones/añadir). Imagen/emoji placeholder, badges (Vegano, Vegetariano, Picante, Popular, Nuevo, Premium), preview ingredientes",
+        "ProductoDetalle.svelte": "Modal bottom-sheet (377 líneas): imagen 16:9, badges con colores, descripción, ingredientes tipados con chips coloreados, alérgenos, botones Personalizar/Añadir",
+        "CategoriaScroll.svelte": "Scroll horizontal pills (100 líneas): botón 'Todas' + categorías, pill activa amber (#f59e0b)",
+        "CarritoPanel.svelte": "Panel slide-up (396 líneas): items con qty +/-, variaciones (rojo=sin, verde=extra), total, botones vaciar/compartir/WhatsApp",
+        "VariacionesPanel.svelte": "COMPARTIDO desde comandero/ (699 líneas): ingredientes base quitables, extras por tipo con colores, resumen, precio recalculado"
+      },
+      "store": "frontend/src/lib/stores/carta.ts (343 líneas)",
+      "ruta": "/[project_id]/carta (standalone, sin AppShell)"
+    }
+  },
+
+  "ui_handlers": {
+    "total": 16,
+    "lista": [
+      {"accion": "config", "desc": "Leer config actual (WhatsApp, branding, tema)"},
+      {"accion": "update-config", "desc": "Actualizar config"},
+      {"accion": "create-session", "desc": "Crear sesión analytics (user_agent, referrer)"},
+      {"accion": "register-pedido", "desc": "Registrar pedido desde carta digital"},
+      {"accion": "stats", "desc": "Estadísticas: sesiones activas, pedidos hoy"},
+      {"accion": "health", "desc": "Health check del módulo"},
+      {"accion": "carta-completa", "desc": "Carta enriquecida: productos + config + ofertas + reseñas"},
+      {"accion": "export-static", "desc": "Generar PWA estática auto-contenida"},
+      {"accion": "deploy-cf-worker", "desc": "Deploy chat AI a Cloudflare Workers"},
+      {"accion": "ofertas", "desc": "Listar ofertas (activas o todas con include_inactive)"},
+      {"accion": "create-oferta", "desc": "Crear oferta/combo"},
+      {"accion": "update-oferta", "desc": "Modificar oferta"},
+      {"accion": "delete-oferta", "desc": "Eliminar oferta"},
+      {"accion": "track-event", "desc": "Track evento funnel (page_view, product_view, add_to_cart, order_sent, chat_open)"},
+      {"accion": "funnel", "desc": "Análisis conversión: tasas, top productos, sesiones únicas"},
+      {"accion": "resenas", "desc": "Reseñas aprobadas + avg_rating + distribución"},
+      {"accion": "create-resena", "desc": "Enviar reseña (anti-spam por session_id, max 1000/proyecto)"}
+    ]
+  },
+
+  "flujo_datos": {
+    "carga_carta_frontend": {
+      "paso_1": "initCarta(project_id) → crea sesión analytics (fire-and-forget)",
+      "paso_2_primario": "mqttRequest('carta-digital', 'carta-completa', {project_id}) → categorías + productos (con ingredientes embebidos) + config + ofertas + reseñas",
+      "paso_2_fallback": "Si falla: mqttRequest('productos', 'carta_completa') → categorías + productos + ingredientes SEPARADOS",
+      "paso_3": "Filtra productos por primera categoría, actualiza store",
+      "diferencia_clave": "Endpoint enriched embebe ingredientes EN cada producto (producto.ingredientes[]). Fallback devuelve ingredientes como array separado (response.ingredientes[])."
+    },
+    "carta_completa_backend": {
+      "flujo": [
+        "1. Resolver project_id (fallback al primer proyecto configurado)",
+        "2. Leer carta JSON de disco: storage/pizzepos/cartas/{carta_id}.json",
+        "3. Formatear productos: id, nombre, categoria, precio, descripcion, emoji, tags, imagen→URL, ingredientes, tiene_variaciones",
+        "4. Formatear categorías: id, nombre, orden, icon, imagen→URL",
+        "5. Filtrar ofertas activas (activa=true + dentro de rango fechas)",
+        "6. Obtener últimas 20 reseñas aprobadas + avg_rating + distribución",
+        "7. Devolver todo junto como respuesta enriquecida"
+      ]
+    },
+    "checkout_whatsapp": {
+      "flujo": [
+        "1. Usuario añade productos al carrito (client-side)",
+        "2. Toca botón WhatsApp en CarritoPanel",
+        "3. formatPedidoWhatsApp() genera texto: header + items con variaciones + total",
+        "4. getWhatsAppUrl() → wa.me/{telefono}?text={mensaje_codificado}",
+        "5. window.open() abre WhatsApp Web/App"
+      ]
+    }
+  },
+
+  "persistencia": {
+    "en_disco": {
+      "config": "storage/pizzepos/carta-digital.json — se carga en onProjectActivated, se guarda en update-config",
+      "ofertas": "storage/pizzepos/carta-digital-ofertas.json — CRUD completo",
+      "resenas": "storage/pizzepos/carta-digital-resenas.json — append + FIFO max 1000",
+      "cartas": "storage/pizzepos/cartas/{carta_id}.json — generadas por menu-generator",
+      "imagenes": "storage/pizzepos/preprocesadas/ — servidas por GET /media/:path",
+      "export": "storage/pizzepos/carta-static/{slug}/ — output del export estático"
+    },
+    "solo_memoria": {
+      "sesiones": "Map — limpieza de inactivas >30min solo cuando se llama a /stats",
+      "pedidos_registrados": "Map — se pierden al reiniciar",
+      "funnel_events": "Array — max 10k por proyecto, FIFO. Se pierden al reiniciar",
+      "nota": "Los 3 se pierden al reiniciar el servidor. No es crítico: sesiones son efímeras, pedidos van a WhatsApp, funnel es nice-to-have"
+    },
+    "carrito_frontend": {
+      "ui_dinamica": "Solo en memoria del store Svelte — SE PIERDE al recargar",
+      "export_estatico": "Persiste en localStorage (LS_CART) — sobrevive recarga"
+    }
+  },
+
+  "bugs_conocidos": {
+    "criticos": [
+      {
+        "id": "ingredientes-vacios-enriched",
+        "titulo": "VariacionesPanel sin ingredientes cuando usa endpoint enriquecido",
+        "donde": "carta.ts:154 + CartaScreen.svelte:179",
+        "problema": "Endpoint enriched (carta-completa) embebe ingredientes dentro de cada producto, pero carta.ts:154 setea ings=[] explícitamente. CartaScreen pasa catalogoIngredientes={$ingredientes} al VariacionesPanel → ingredientes disponibles para añadir = vacío. VariacionesPanel necesita catálogo global para mostrar extras añadibles.",
+        "solo_funciona_con": "Fallback (productos.carta_completa) que devuelve ingredientes[] como array separado",
+        "solucion_propuesta": "Opción A (limpia): carta-completa devuelve también ingredientes[] separados. Opción B: carta.ts extrae ingredientes únicos de todos los productos."
+      }
+    ],
+    "menores": [
+      {
+        "id": "moneda-hardcoded-ui",
+        "titulo": "€ hardcodeado en todos los componentes frontend",
+        "donde": "ProductoCard:61, ProductoDetalle:38, CarritoPanel:20, CartaScreen:112",
+        "problema": "Todos los formatPrecio() devuelven precio.toFixed(2) + ' €'. Config soporta moneda personalizable pero nunca se usa.",
+        "solucion": "Pasar config.moneda a formatPrecio() o usar store derived"
+      },
+      {
+        "id": "nombre-negocio-hardcoded",
+        "titulo": "Header y fallback hardcodean 'Pizzicas'",
+        "donde": "CartaScreen.svelte:120 ('Pizzicas' en HTML), carta.ts:88 (DEFAULT_CONFIG.nombre_negocio)",
+        "problema": "CartaScreen tiene <span class='brand-name'>Pizzicas</span> hardcodeado. No usa config.nombre_negocio.",
+        "solucion": "Usar $cartaStore.config.nombre_negocio en el header"
+      },
+      {
+        "id": "alergenos-sin-interface",
+        "titulo": "ProductoDetalle usa producto.alergenos sin definir en interfaz",
+        "donde": "ProductoDetalle.svelte:110-119",
+        "problema": "Referencia producto.alergenos (array) pero no está en la interfaz Producto de carta.ts. Funciona silenciosamente si el backend lo envía, pero TypeScript no lo valida.",
+        "solucion": "Añadir alergenos?: string[] a la interfaz Producto"
+      },
+      {
+        "id": "carrito-no-persiste",
+        "titulo": "Carrito se pierde al recargar la página",
+        "donde": "carta.ts — carrito es writable([]) sin persistencia",
+        "problema": "Al recargar, el carrito empieza vacío. El export estático SÍ usa localStorage.",
+        "solucion": "Persistir carrito en localStorage, cargar al inicializar store"
+      },
+      {
+        "id": "sesion-cleanup-lazy",
+        "titulo": "Sesiones inactivas solo se limpian al pedir /stats",
+        "donde": "index.js — handleGetStats()",
+        "problema": "Si nadie llama a /stats, las sesiones se acumulan indefinidamente en memoria.",
+        "solucion": "setInterval de limpieza cada 5-10min, o cleanup al crear nueva sesión"
+      },
+      {
+        "id": "emoji-fallback-pizza",
+        "titulo": "Emoji 🍕 como fallback universal",
+        "donde": "ProductoCard.svelte:72, ProductoDetalle.svelte:62",
+        "problema": "Todos los productos sin imagen ni emoji muestran 🍕, incluso postres, bebidas, etc.",
+        "solucion": "Usar emoji por categoría o sin emoji"
+      }
+    ]
+  },
+
+  "export_estatico": {
+    "generador": "static-template.js (~1200+ líneas)",
+    "funcionalidades": [
+      "Grid responsive de productos con imágenes, descripciones, tags, emojis",
+      "Modal detalle con ingredientes tipados",
+      "Carrito completo con +/- cantidades (localStorage)",
+      "Repetir último pedido (LS_LAST_ORDER)",
+      "Botón WhatsApp con pedido formateado",
+      "Ofertas carousel horizontal",
+      "Sección reseñas con avg_rating",
+      "Chat AI widget (conecta a CF Worker, streaming SSE, voice input/output, quick suggestions)",
+      "Motor de upselling contextual (cross-sell, same-category, auto-dismiss 5s)",
+      "i18n: 5 idiomas (ES, EN, FR, DE, IT)",
+      "Service worker para offline (PWA instalable)",
+      "Zero dependencias externas (todo inline)"
+    ],
+    "output": "index.html + sw.js + manifest.json + icon-192.svg + icon-512.svg + img/"
+  },
+
+  "ai_chat_cloudflare": {
+    "que_es": "Proxy seguro para chat AI desplegado como Cloudflare Worker",
+    "flujo": "PWA Chat Widget → HTTPS → CF Worker → DeepSeek API → respuesta streaming",
+    "seguridad": [
+      "API key DeepSeek solo en CF Worker secrets (nunca expuesta al cliente)",
+      "System prompt auto-generado desde carta (bloqueado server-side, no overrideable)",
+      "Rate limit 12 req/min por IP",
+      "CORS con origin checking",
+      "Filtra mensajes con role:system del cliente"
+    ],
+    "system_prompt_incluye": [
+      "Menú completo con precios e ingredientes",
+      "Reglas de upselling dinámicas según categorías del menú",
+      "Ofertas activas",
+      "Personalidad de asistente de restaurante"
+    ],
+    "requisitos": ["Cuenta Cloudflare + API token", "DeepSeek API key", "Wrangler CLI"]
+  },
+
+  "relacion_modulos": {
+    "menu-generator": "Genera cartas JSON (storage/pizzepos/cartas/) con productos enriquecidos (descripciones AI, emojis, ingredientes clasificados, imágenes). carta-digital las LEE, no las escribe.",
+    "productos": "Fallback: productos.carta_completa devuelve categorías + productos + ingredientes separados cuando carta-digital.carta-completa falla",
+    "variaciones": "VariacionesPanel llama a variaciones.get para obtener config de ingredientes quitables/añadibles por producto",
+    "impresion": "Complementario: impresion = ticket físico cocina, carta-digital = web pública clientes",
+    "carta-impresion": "Complementario: carta-impresion = imprimir carta para mesa, carta-digital = QR/WhatsApp digital"
+  },
+
+  "metricas": {
+    "counters": [
+      "carta-digital.sesion.total",
+      "carta-digital.pedido.total",
+      "carta-digital.page_view.total",
+      "carta-digital.product_view.total",
+      "carta-digital.add_to_cart.total",
+      "carta-digital.order_sent.total",
+      "carta-digital.chat_open.total",
+      "carta-digital.resena.total",
+      "carta-digital.media.served",
+      "carta-digital.export.completed"
+    ],
+    "gauges": ["carta-digital.sesiones_activas.count"]
+  },
+
+  "estilos_ui": {
+    "tema": "Dark mode (#0a0a0a fondo, #e5e5e5 texto)",
+    "color_primario": "#f59e0b (amber) — precios, FAB, categoría activa, badges Popular",
+    "colores_badges": {
+      "Vegano": "#22c55e",
+      "Vegetariano": "#4ade80",
+      "Picante": "#ef4444",
+      "Popular": "#f59e0b",
+      "Nuevo": "#3b82f6",
+      "Premium": "#a855f7",
+      "Especial": "#ec4899"
+    },
+    "colores_ingredientes": {
+      "queso": "rgba(250, 204, 21, 0.25)",
+      "carne": "rgba(239, 68, 68, 0.2)",
+      "verdura": "rgba(34, 197, 94, 0.2)",
+      "marisco": "rgba(59, 130, 246, 0.2)"
+    },
+    "mobile_first": true,
+    "breakpoints": {
+      "max_400px": "Grid 2 columnas, gap 8px, padding 10px",
+      "default": "Grid auto-fill minmax(160px, 1fr), gap 12px",
+      "min_600px": "Grid auto-fill minmax(200px, 1fr), gap 16px, modales centrados"
+    },
+    "whatsapp_verde": "#25d366"
+  }
+}

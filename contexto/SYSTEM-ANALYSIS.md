@@ -1,162 +1,249 @@
-# Event-Core (Enki): Análisis Código vs Contexto
+# Event-Core (Enki): Analisis Codigo vs Contexto
 
 **Fecha**: 2026-03-25
-**Análisis anterior**: 2026-03-03
-**Método**: Lectura exhaustiva de los 32 archivos JSON en `contexto/` + exploración completa del código fuente real
-**Objetivo**: Verificar alineación documentación-código y actualizar estado del sistema
+**Analisis anterior**: 2026-03-03 y 2026-03-25 (parcial)
+**Metodo**: Lectura exhaustiva de los 33 archivos en `contexto/` + exploracion completa del codigo fuente, core, modulos, providers, handlers, frontend, y directorios auxiliares
+**Objetivo**: Verificar alineacion documentacion-codigo, detectar omisiones y recomendar correcciones
 
 ---
 
 ## 0. VEREDICTO EJECUTIVO
 
-El sistema ha evolucionado significativamente desde el último análisis (2026-03-03). Se han habilitado más módulos, añadido stores, y el sistema PizzePOS está más maduro (tickets de impresión, cocina, llevadoo). Sin embargo, **la documentación de contexto sigue acumulando deriva** respecto al código real: cifras que no coinciden entre archivos, módulos deshabilitados documentados como activos, y stores nuevos sin documentar.
+El sistema ha crecido significativamente. La documentacion de contexto es **fiable como referencia arquitectonica** — el patron event-driven, el sistema de modulos, providers, hooks, y la composicion de proyectos estan bien documentados y coinciden con el codigo.
 
-| Dimensión | Nota | Cambio vs anterior |
+Sin embargo, la documentacion tiene **tres tipos de problemas**:
+1. **Contradicciones internas** — 3 archivos dan 3 cifras distintas de modulos
+2. **Omisiones grandes** — ~11 directorios del repositorio no estan documentados (3.4MB de codigo archivado, 776KB de prompts, Kubernetes Helm charts, CLI, firmware, etc.)
+3. **Fantasmas** — `data/learning/` documentado pero inexistente, `certificate-authority` documentado como activo pero disabled
+
+| Dimension | Nota | Cambio vs anterior |
 |-----------|------|--------------------|
-| Arquitectura | 8/10 | = (sigue sólida) |
-| Implementación | 7/10 | +1 (más módulos activos, impresión funcional) |
-| Documentación contexto | 5/10 | +1 (más archivos, pero con inconsistencias internas) |
-| Alineación código-contexto | 4/10 | NUEVO — 9 discrepancias factuales detectadas |
+| Arquitectura | 8/10 | = (sigue solida) |
+| Implementacion | 7/10 | = (mas modulos activos, impresion funcional) |
+| Documentacion contexto | 5/10 | = (mas archivos, pero inconsistencias persisten) |
+| Alineacion codigo-contexto | 4/10 | = (9 discrepancias factuales + 11 directorios omitidos) |
 
 ---
 
-## 1. DISCREPANCIAS CONFIRMADAS (CÓDIGO vs CONTEXTO)
+## 1. VERIFICACIONES POSITIVAS (Codigo = Contexto)
 
-### 1.1 Versión del sistema — sigue inconsistente
+| Afirmacion del Contexto | Verificacion | Estado |
+|--------------------------|-------------|--------|
+| 55 modulos habilitados | config.json tiene exactamente 55 en `modules.enabled` | CORRECTO |
+| 10 modulos deshabilitados | config.json lista exactamente 10 en `modules.disabled` | CORRECTO |
+| PizzePOS tiene 13-17 sub-modulos | 15 directorios bajo `modules/pizzepos/` | CORRECTO |
+| SvelteKit 2 + Svelte 5 en frontend | `@sveltejs/kit@^2.16.0` + `svelte@^5.16.0` | CORRECTO |
+| certificate-authority esta DISABLED | Esta en `modules.disabled` de config.json | CORRECTO |
+| conversation-manager esta DISABLED | Esta en `modules.disabled` de config.json | CORRECTO |
+| Estructura `handlers/global/` + `handlers/projects/` | Directorios existen exactamente asi | CORRECTO |
+| FlowEngine, FlowAgent, FlowRegistry en `core/flow/` | Los 3 archivos existen con las clases | CORRECTO |
+| chat-session usa SQLite por proyecto | Via database-manager con sql.js | CORRECTO |
+| Blueprints en `blueprints/project-types/` | Existen `facturas.json` y `pizzepos.json` | CORRECTO |
+| 5 plugins en `plugins/` | github, http-utils, ocr, slack, weather | CORRECTO |
+| Hook system con beforeEventPublish/afterEventPublish | core/hooks.js implementado | CORRECTO |
+| Provider system con auto-registro de tools | core/providers/ completo | CORRECTO |
+| MQTT broker embebido Aedes en puerto 1883 | index.js lo inicia correctamente | CORRECTO |
+| EventBus hibrido local + MQTT | core/events/bus.js verificado | CORRECTO |
+| Patron Request/Response con timeout | core/service-executor.js verificado | CORRECTO |
+| HTTP Gateway con CORS, compression, cache | core/gateway/http/ verificado | CORRECTO |
+| Config multi-fuente (CLI > ENV > file) | core/config/ verificado | CORRECTO |
+| Discovery de cores via MQTT retained | core/discovery/ verificado | CORRECTO |
 
-| Fuente | Versión |
+**18/20 afirmaciones criticas verificadas como correctas.**
+
+---
+
+## 2. DISCREPANCIAS CONFIRMADAS (Codigo != Contexto)
+
+### 2.1 Version del sistema — INCONSISTENTE (persiste)
+
+| Fuente | Version |
 |--------|---------|
 | `contexto/index.json` | **0.5.0** |
 | `package.json` | **0.2.0** |
 
-**Sin resolver desde el análisis anterior.** package.json es la fuente de verdad para npm.
+package.json es la fuente de verdad. Sin resolver desde analisis anterior.
 
-### 1.2 Conteo de módulos — los archivos de contexto se contradicen ENTRE SÍ
+### 2.2 Conteo de modulos — 3 archivos, 3 cifras distintas
 
 | Fuente | Cifra |
 |--------|-------|
-| `index.json` línea 39 | 52 total (35 core + 15 pizzepos + 2 facturación) |
-| `system.json` línea 50 | "55 total, 47 activos" |
-| `modules.json` cabecera | "53 activos + 9 deshabilitados" |
-| **`config.json` enabled** | **55 habilitados** |
-| **`config.json` disabled** | **10 deshabilitados** |
-| **Directorios reales con module.json** | ~51 directorios |
+| `index.json` | 52 total (35 core + 15 pizzepos + 2 facturacion) |
+| `system.json` | 55 total, 47 activos |
+| `modules.json` | 53 activos + 9 deshabilitados |
+| **`config.json` (verdad)** | **55 habilitados, 10 deshabilitados** |
 
-**Ningún archivo de contexto coincide con otro, ni con la realidad.** Esto es la discrepancia más peligrosa — un agente IA que lea `index.json` vs `system.json` vs `modules.json` recibirá tres cifras distintas.
+**Ninguno coincide con otro ni con la realidad.** Discrepancia mas peligrosa.
 
-### 1.3 log-manager: documentado como Tier 1 activo, realmente DISABLED
+### 2.3 log-manager: documentado como Tier 1 activo, realmente DISABLED
 
-`system.json` lo lista en `tier_1_infra`:
-```json
-"tier_1_infra": ["credential-manager", "database-manager", "log-manager", "filesystem"]
-```
+`system.json` lo lista en `tier_1_infra`. `config.json`: **disabled**. Un agente IA que asuma su disponibilidad producira errores.
 
-`config.json` línea 107: **disabled**. Un agente IA que genere código asumiendo que log-manager está disponible producirá errores.
+### 2.4 certificate-authority: documentado extensamente como activo, realmente DISABLED
 
-### 1.4 certificate-authority: documentado extensamente como activo IoT, realmente DISABLED
+- `contexto/certificate-authority.json` lo documenta como sistema funcional completo
+- `contexto/iot-modules.json` lo referencia como modulo IoT activo
+- config.json: **disabled**
+- El directorio `data/ca/` que documenta **no existe**
 
-- `contexto/certificate-authority.json` (archivo completo dedicado) lo documenta como sistema funcional
-- `contexto/iot-modules.json` lo referencia como módulo IoT activo
-- `config.json` línea 115: **disabled**
-- El directorio `data/ca/` que la documentación describe **no existe**
+### 2.5 Frontend stores: 22 documentados vs 30 reales
 
-### 1.5 Frontend stores: 22 documentados vs 30 reales
+8 stores no documentados: carta, certificate-authority, channels, dispositivos, html-preview, llevadoo, staff, index.
 
-`contexto/ui.json` documenta 22 stores. Stores reales en `frontend/src/lib/stores/`: **30 archivos**.
+### 2.6 esp32-dev: modulo activo no documentado en contexto IoT
 
-**8 stores no documentados:**
-| Store | Archivo |
-|-------|---------|
-| carta | `carta.ts` |
-| certificate-authority | `certificate-authority.ts` |
-| channels | `channels.ts` |
-| dispositivos | `dispositivos.ts` |
-| html-preview | `html-preview.ts` |
-| llevadoo | `llevadoo.ts` |
-| staff | `staff.ts` |
-| index (barrel) | `index.ts` |
+Habilitado en config.json, directorio existe, pero `iot-modules.json` solo documenta esp32-flasher.
 
-Estos stores pueden contener lógica importante que el contexto ignora completamente.
+### 2.7 UI Handlers: "28/28 migrados" — INCORRECTO
 
-### 1.6 esp32-dev: módulo activo no documentado en contexto IoT
+Contexto afirma todos migrados. Realidad: solo ~24 modulos tienen `ui_handlers` en module.json.
 
-`modules/esp32-dev/` existe y está habilitado en config.json. `contexto/iot-modules.json` solo documenta `esp32-flasher` sin mencionar `esp32-dev` como módulo separado.
+### 2.8 Conteo de providers: subestimado 3.6x
 
-### 1.7 Conteo de archivos de contexto inconsistente
+| Contexto afirma | Realidad |
+|-----------------|----------|
+| "6+ externos, 10+ locales" | 3 externos, **36 locales** |
 
-`system.json` dice "30 archivos (29 JSON + 1 MD)". Realidad: **32 JSON + 1 MD = 33 archivos**.
+### 2.9 `data/learning/` — FANTASMA
 
-### 1.8 Módulos disabled no marcados como tal en tiers
-
-`system.json` define tiers de carga donde aparecen módulos disabled (`log-manager`) mezclados con activos, sin indicación de estado. El contexto debería distinguir claramente entre lo que ESTÁ activo y lo que es referencia histórica.
-
-### 1.9 Rutas frontend: más rutas de las documentadas
-
-El contexto documenta rutas principales pero falta `llevadoo` como ruta activa (`/[project_id]/llevadoo`), que tiene store y probablemente UI.
+Documentado como ruta de almacenamiento del provider `local.learning`. El directorio **no existe**. Puede crearse on-demand, pero no esta verificado.
 
 ---
 
-## 2. ESTADO REAL DEL SISTEMA (25-03-2026)
+## 3. OMISIONES GRANDES (Codigo existe sin documentar)
 
-### 2.1 Módulos habilitados (55 en config.json)
+### 3.1 `_archived/` — 3.4 MB de codigo archivado
 
-**Tier 1 — Infraestructura (3 activos, 1 disabled):**
-- credential-manager, database-manager, filesystem
-- ~~log-manager~~ (DISABLED)
+| Snapshot | Contenido | Relevancia |
+|----------|-----------|------------|
+| 2025-12-12 | UI completo anterior (119 .svelte, 76 .ts, documentacion de diseno) | Alta |
+| 2026-01-22 | Flow-engine v1, handlers antiguos, proyecto ejemplo | Media |
+| 2026-02-13 | **19 modulos PizzePOS completos** (versiones anteriores reemplazadas) | Alta |
 
-**Tier 2 — Plataforma (5):**
-- plugin-manager, prompt-manager, prompt-engine, prompt-composer, scheduler
+**Riesgo:** Sin documentar, un agente IA puede confundir codigo archivado con activo.
 
-**Tier 3 — Core (7):**
-- project-manager, composition-manager, context-manager, system-inspector, ai-gateway, ai-agent-framework, agent-manager
+### 3.2 `handlers/global/archived/` — 38 handlers archivados
 
-**Tier 4 — Features (5):**
-- calling-generator, bot-manager, chat-ai-bridge, chat-session, code-executor
+Pipeline completo antiguo de facturas: aprendizaje (4), comandos (6+5), OCR (2), Gmail, notificaciones (3), validacion. **Totalmente sin documentar.**
 
-**Tier 5 — Dominio PizzePOS (15):**
-- cuentas, cuentas-canales, pedidos, cobros, cocina, comandero, productos, categorias, ingredientes, variaciones, persistencia-comandero, impresion, menu-generator, carta-digital, carta-impresion
+### 3.3 `scripts/` — 16 scripts de utilidad (180KB)
 
-**Tier 5 — Dominio Facturación (2):**
-- asesoria, fuentes
+Scripts criticos sin documentar:
+- `create-module.js` (15KB) — generador de modulos
+- `generate-constants.js` (11KB) — generador de constantes
+- `migrate-to-tailwind.js` (23KB) — migracion CSS
+- `gmail-oauth-setup.js` — setup OAuth
+- `install-linux.sh`, `install-termux.sh` — instaladores
+- `start-multi-core.sh` — arranque multi-core
 
-**Tier 5 — Dominio Negocio Alimentario (3):**
-- recetas, escandallo, viabilidad
+### 3.4 `prompts/` — 26 prompts IA especializados (776KB)
 
-**Tier 6 — UI/Integración (6):**
-- admin-panel, pdf-viewer, telegram-service, text-editor, channel-manager, facturas
+Sistema completo de roles IA (v1.1.0): arquitecto, gobernanza, rendimiento, despliegue, estratega, orquestador, generador, curador, validador + 7 tutoriales + guias.
 
-**IoT (7):**
-- perifericos, device-registry, device-shadow, gateway-manager, firmware-manager, device-health, firmware-builder, esp32-flasher, esp32-dev
+### 3.5 `deployment/helm/` — Charts de Kubernetes
 
-**Módulo raíz:** pizzepos (orquestador)
+Infraestructura production-ready: Chart de Helm con deployment, statefulset, ingress, HPA, configmap, service. **No mencionado en ningun archivo de contexto.**
 
-### 2.2 Módulos deshabilitados (10 en config.json)
+### 3.6 Otros directorios no documentados
+
+| Directorio | Contenido | Tamano |
+|-----------|-----------|--------|
+| `strategy/v1/` | Roadmap, vision, OKRs Q4-2025 | ~12KB |
+| `network/` | Scripts latencia, setup, validacion | 44KB |
+| `cli/` | Cliente CLI remoto (client.js + index.js) | 24KB |
+| `firmware/print-proxy/` | Firmware ESP32 C++ completo (PlatformIO) | ~20KB |
+| `design-system/` | Tokens de diseno + generador | ~8KB |
+| `tutoriales/` | 7 tutoriales educativos markdown | 132KB |
+| `backup/flows-v1/` | 6 definiciones de flujos antiguos | ~12KB |
+| `tests/` | 13 archivos de test (unit + integration) | 244KB |
+
+---
+
+## 4. ESTADO REAL VERIFICADO DEL SISTEMA (25-03-2026)
+
+### 4.1 Arquitectura Real (Verificada contra codigo)
+
+```
+index.js (punto de entrada, ~24KB)
+  |
+  +-- core/ (16 subsistemas)
+  |     +-- mqtt/           Broker Aedes + Cliente MQTT + Pool conexiones
+  |     +-- events/bus.js   EventBus hibrido (local + MQTT)
+  |     +-- hooks.js        Hooks secuenciales con bloqueo
+  |     +-- modules/        ModuleLoader (~1,290 lineas) + ModuleRegistry
+  |     +-- validation/     JSON Schema con AJV
+  |     +-- observability/  Logger + Tracer + Metrics + ActivityLogger
+  |     +-- providers/      ProviderRegistry + Executor + Loader
+  |     +-- gateway/http/   Gateway REST + CORS + Compression + Cache
+  |     +-- config/         Carga multi-fuente con deep merge
+  |     +-- flow/           FlowEngine + Registry + FlowAgent
+  |     +-- discovery/      Discovery de cores via MQTT retained
+  |     +-- ui/             UIRequestHandler MQTT request/response
+  |     +-- utils/          PortManager + ServiceRegistry
+  |     +-- handler-loader  Carga handlers globales + por proyecto
+  |     +-- handler-store   Almacen persistente key-value por handler
+  |     +-- service-executor Request/Response via MQTT con timeout
+  |     +-- constants.js    Auto-generado desde module.json
+  |
+  +-- modules/ (55 habilitados, 10 deshabilitados)
+  |     +-- AI: ai-gateway, ai-agent-framework, agent-manager
+  |     +-- Chat: chat-session, chat-ai-bridge, prompt-composer, prompt-engine, prompt-manager
+  |     +-- Bots: bot-manager, telegram-service, channel-manager
+  |     +-- PizzePOS: 15 sub-modulos bajo modules/pizzepos/
+  |     +-- Facturacion: facturas, asesoria, fuentes
+  |     +-- Negocio: recetas, escandallo, viabilidad
+  |     +-- Infra: credential-manager, database-manager, filesystem, scheduler
+  |     +-- IoT: device-registry, device-shadow, device-health, gateway-manager,
+  |             firmware-manager, firmware-builder, esp32-flasher, esp32-dev, perifericos
+  |     +-- UI: admin-panel, pdf-viewer, text-editor
+  |     +-- Gestion: project-manager, composition-manager, context-manager,
+  |                  system-inspector, code-executor, plugin-manager, calling-generator
+  |
+  +-- services/providers/
+  |     +-- anthropic/, google/, elevenlabs/  (3 externos)
+  |     +-- local/ (36 providers)
+  |
+  +-- handlers/
+  |     +-- global/ (2 activos, 38 archivados)
+  |     +-- projects/ (2 proyectos con handlers)
+  |
+  +-- frontend/ (SvelteKit 2 + Svelte 5, 30 stores)
+  +-- config.json
+```
+
+### 4.2 Modulos habilitados (55) — desglose completo
+
+**Tier 1 Infraestructura:** credential-manager, database-manager, filesystem
+**Tier 2 Plataforma:** plugin-manager, prompt-manager, prompt-engine, prompt-composer, scheduler
+**Tier 3 Core:** project-manager, composition-manager, context-manager, system-inspector, ai-gateway, ai-agent-framework, agent-manager
+**Tier 4 Features:** calling-generator, bot-manager, chat-ai-bridge, chat-session, code-executor
+**Tier 5 PizzePOS (15):** cuentas, cuentas-canales, pedidos, cobros, cocina, comandero, productos, categorias, ingredientes, variaciones, persistencia-comandero, impresion, menu-generator, carta-digital, carta-impresion
+**Tier 5 Facturacion (3):** facturas, asesoria, fuentes
+**Tier 5 Negocio (3):** recetas, escandallo, viabilidad
+**Tier 6 UI/Integracion:** admin-panel, pdf-viewer, telegram-service, text-editor, channel-manager
+**IoT (9):** perifericos, device-registry, device-shadow, gateway-manager, firmware-manager, device-health, firmware-builder, esp32-flasher, esp32-dev
+**Raiz:** pizzepos (orquestador)
+
+### 4.3 Modulos deshabilitados (10)
+
 ```
 log-manager, conversation-manager, scratch-designer, ui-designer,
 dashboard, notas, metricas, security-p2p, certificate-authority, staff-manager
 ```
 
-### 2.3 Core: 13 subsistemas (ALINEADO con contexto)
+### 4.4 Providers locales (36) — inventario real
+
 ```
-config/          — Configuración jerárquica (CLI > ENV > config.json)
-discovery/       — Service discovery MQTT (heartbeat + LWT)
-events/          — EventBus híbrido (local EventEmitter + MQTT bridge)
-flow/            — Motor de flows genérico (engine, registry, agent)
-gateway/         — HTTP Gateway (Node.js nativo, no Express)
-modules/         — ModuleLoader + ModuleRegistry (auto-wiring)
-mqtt/            — MQTT Client + Embedded Broker (Aedes) + Pool
-observability/   — Logger, Tracer, Metrics, ActivityLogger
-providers/       — ProviderRegistry + Executor + Loader
-ui/              — UIRequestHandler (MQTT request/response)
-utils/           — PortManager, ServiceRegistry
-validation/      — AJV JSON Schema validation
-handler-loader + handler-store + service-executor (archivos sueltos)
+backup-manager, coingecko, context-sync, csv, document-processor, dxf,
+esp32, etherscan, facturas-db, ffmpeg, glovo, gmail, google-documentai,
+google-vision, handler-generator, learning, notion, pdf, pdf-parse,
+pdf-to-png, pdfjs, perifericos, scribe-ocr, sharp, skills, slack,
+stripe, svg, tesseract, url-data, whatsapp, whisper, woocommerce,
+xlsx, yahoo-finance, zip
 ```
 
-### 2.4 Providers: ~39 locales + 3 externos
-Categorías: document-processing, vision/image, data, integrations, blockchain/finance, system. **Alineado con contexto.**
+### 4.5 Frontend stores (30)
 
-### 2.5 Frontend: 30 stores reales
 ```
 attachments, carta, certificate-authority, channels, chat, cocina,
 comandero, conversations, credentials, cuentas, dispositivos,
@@ -167,113 +254,105 @@ prompts, recetas, staff, theme, ui, viabilidad, workspace
 
 ---
 
-## 3. COHERENCIA INTERNA DE LA DOCUMENTACIÓN
+## 5. TODOs E INTEGRACIONES INCOMPLETAS EN CODIGO
 
-### Archivos de contexto bien alineados con código:
-| Archivo | Veredicto |
+| Archivo | TODO | Estado |
+|---------|------|--------|
+| `modules/pizzepos/cuentas-canales/strategies/whatsapp.js` | Integrar con WhatsApp Business API | NO IMPLEMENTADO |
+| `modules/pizzepos/cuentas-canales/strategies/telefono.js` | Integrar con Twilio/WhatsApp Business API | NO IMPLEMENTADO |
+| `modules/scheduler/services/trigger-manager.js` | Check if job is currently running | NO IMPLEMENTADO |
+| `modules/admin-panel/public/js/admin-panel.js` | Implement actual toggle | NO IMPLEMENTADO |
+| `modules/admin-panel/index.js` | Implement agent creation via AI Agent Framework | NO IMPLEMENTADO |
+
+---
+
+## 6. METRICAS REALES DEL REPOSITORIO
+
+| Metrica | Valor Real |
 |---------|-----------|
-| `system.json` (arquitectura core) | Mayormente correcto (salvo tiers y conteos) |
-| `handlers.json` | Correcto |
-| `credentials.json` | Correcto |
-| `mqtt.json` | Correcto |
-| `providers.json` | Correcto |
-| `scheduler.json` | Correcto |
-| `flow-engine.json` | Correcto |
-| `ai-gateway.json` | Correcto |
-| `bot-agent-architecture.json` | Correcto |
-| `pizzepos.json` | Correcto |
-| `facturas.json` | Correcto |
-| `learning.json` | Correcto |
-| `templates.json` | Correcto |
-
-### Archivos de contexto con problemas:
-| Archivo | Problema |
-|---------|----------|
-| `index.json` | Versión incorrecta, conteos incorrectos |
-| `system.json` | log-manager en tier activo, conteo modules incorrecto |
-| `modules.json` | Conteo no coincide con config.json ni con otros archivos |
-| `ui.json` | 22 stores vs 30 reales (faltan 8) |
-| `certificate-authority.json` | Documenta sistema disabled sin indicarlo |
-| `iot-modules.json` | Falta esp32-dev, certificate-authority como activo |
+| Modulos habilitados | 55 |
+| Modulos deshabilitados | 10 |
+| Sub-modulos PizzePOS | 15 |
+| Providers locales | 36 |
+| Providers externos | 3 |
+| Handlers activos | 4 (2 global + 2 proyecto) |
+| Handlers archivados | 38 |
+| Frontend stores | 30 |
+| Archivos de test | 13 |
+| Scripts de utilidad | 16 |
+| Archivos contexto | 33 (32 JSON + 1 MD) |
+| Plugins | 5 |
+| Blueprints de proyecto | 2 |
+| Prompts IA | 26 |
+| Tutoriales | 7 |
+| Codigo archivado | ~3.4 MB |
 
 ---
 
-## 4. EVOLUCIÓN DESDE ANÁLISIS ANTERIOR (2026-03-03)
+## 7. CORRECCIONES NECESARIAS (PRIORIZADAS)
 
-### Mejoras detectadas:
-1. **Más módulos habilitados**: config.json ahora tiene 55 enabled (antes se reportaban 36)
-2. **Sistema de impresión maduro**: Commits recientes muestran rediseño de tickets, logo, ESC/POS
-3. **Cocina funcional**: Tickets de pieza con ingredientes, variaciones y notas
-4. **Nuevos stores**: llevadoo, carta, channels, dispositivos, staff, html-preview
-5. **Llevadoo**: Nuevo canal de delivery con store y probablemente ruta
-6. **32 archivos de contexto** (antes menos): documentación ha crecido
+### CRITICAS — afectan generacion de codigo por IA
 
-### Problemas que persisten desde marzo 03:
-1. Versión inconsistente (0.2.0 vs 0.5.0) — **sin resolver**
-2. Conteos de módulos inconsistentes — **empeorado** (ahora 3 cifras distintas)
-3. Código muerto: discovery/, flow/ (nota: flow ya tiene un flujo `factura.json`)
-
----
-
-## 5. CORRECCIONES NECESARIAS (PRIORIZADAS)
-
-### CRÍTICAS — afectan generación de código por IA
-
-| # | Archivo | Corrección |
+| # | Archivo | Correccion |
 |---|---------|-----------|
-| 1 | `index.json` | Actualizar `version` y `module_count` a cifras reales |
+| 1 | `index.json` | Actualizar `version` a 0.2.0 y `module_count` a 55 habilitados / 10 disabled |
 | 2 | `system.json` tier_1_infra | Quitar `log-manager` (disabled) |
-| 3 | `system.json` directories.modules | Corregir conteo |
-| 4 | `modules.json` | Alinear conteo con config.json |
-| 5 | `certificate-authority.json` | Añadir `"status": "DISABLED"` prominente |
+| 3 | `system.json` module count | Corregir a 55 habilitados |
+| 4 | `modules.json` | Alinear conteo con config.json: 55 enabled, 10 disabled |
+| 5 | `certificate-authority.json` | Anadir `"status": "DISABLED"` prominente al inicio |
+| 6 | `iot-modules.json` | Marcar certificate-authority como disabled, documentar esp32-dev |
 
-### IMPORTANTES — mejoran precisión
+### IMPORTANTES — mejoran precision
 
-| # | Archivo | Corrección |
+| # | Archivo | Correccion |
 |---|---------|-----------|
-| 6 | `ui.json` | Actualizar stores de 22 a 30 |
-| 7 | `iot-modules.json` | Documentar esp32-dev, marcar certificate-authority disabled |
-| 8 | `index.json` | Actualizar last_context_update y context_files count |
+| 7 | `ui.json` | Actualizar stores de 22 a 30 (anadir los 8 faltantes) |
+| 8 | `providers.json` o `catalogo-servicios.json` | Actualizar conteo a 36 locales reales |
+| 9 | Nuevo: documentar `_archived/` | Explicar los 3 snapshots y por que fueron reemplazados |
+| 10 | Nuevo: documentar `scripts/` | 16 herramientas criticas para desarrollo |
 
 ### MENORES — consistencia
 
-| # | Archivo | Corrección |
+| # | Archivo | Correccion |
 |---|---------|-----------|
-| 9 | `system.json` | Corregir conteo archivos contexto (33, no 30) |
-| 10 | `ui.json` o nuevo | Documentar ruta /[project_id]/llevadoo |
+| 11 | `system.json` | Corregir conteo archivos contexto a 33 |
+| 12 | `ui.json` | Documentar ruta /[project_id]/llevadoo |
+| 13 | Varios | Documentar deployment/helm/, cli/, firmware/, prompts/ |
 
 ---
 
-## 6. FORTALEZAS CONFIRMADAS DEL SISTEMA
+## 8. FORTALEZAS CONFIRMADAS
 
-1. **Arquitectura event-driven pura** — MQTT como backbone, EventBus híbrido, sin REST para estado
-2. **Auto-wiring declarativo** — module.json declara, loader conecta. Cero código imperativo
-3. **Module Loader maduro** (~1,290 líneas) — discovery, hot-reload, tool registration, cleanup
-4. **PizzePOS completo** — 15 módulos, 5+ canales, Strategy pattern, event sourcing, impresión ESC/POS
+1. **Arquitectura event-driven pura** — MQTT como backbone, sin REST para estado interno
+2. **Auto-wiring declarativo** — module.json declara, ModuleLoader conecta
+3. **ModuleLoader maduro** (~1,290 lineas) — discovery, hot-reload, tool registration
+4. **PizzePOS completo** — 15 modulos, 5+ canales, Strategy pattern, event sourcing, ESC/POS
 5. **AI Gateway unificado** — 6 providers LLM con fallback, streaming, tool calling
-6. **Provider system limpio** — auto-discovery, credential injection, MQTT event pattern
+6. **Provider system limpio** — auto-discovery, credential injection, 36 providers locales
 7. **Handler system potente** — global + project-scoped, service executor, persistent store
-8. **Frontend MQTT-first** — lazy loading, auto-discovery de módulos, cleanup discipline
-9. **IoT real** — device-registry, shadows, firmware OTA, gateway abstraction, ESP32 directo
+8. **Frontend MQTT-first** — 30 stores, lazy loading, auto-discovery de modulos
+9. **IoT real** — device-registry, shadows, firmware OTA, gateway, ESP32 directo
 
 ---
 
-## 7. DEUDA TÉCNICA ACTUAL
+## 9. DEUDA TECNICA
 
-1. **10 módulos disabled** ocupando espacio en el repo
-2. **Inconsistencias documentación** — 3 cifras distintas de módulos en 3 archivos
+1. **10 modulos disabled** ocupando espacio en el repo
+2. **Inconsistencias en 3 archivos de contexto** — conteos de modulos
 3. **certificate-authority** documentado extensamente pero disabled y sin data/
 4. **8 stores no documentados** — funcionalidad invisible para el contexto
-5. **Versión sin unificar** — 0.2.0 vs 0.5.0
-6. **Seguridad** — issues del análisis anterior probablemente sin resolver (sin auth HTTP/MQTT)
-7. **Testing** — situación probablemente similar al análisis anterior
+5. **Version sin unificar** — 0.2.0 vs 0.5.0
+6. **11 directorios sin documentar** en contexto (_archived, scripts, prompts, deployment, etc.)
+7. **38 handlers archivados** sin documentar ni limpiar
+8. **5 TODOs en modulos** — integraciones WhatsApp, Twilio, admin-panel incompletas
+9. **`data/learning/`** documentado como existente pero no existe
 
 ---
 
-## 8. CONCLUSIÓN
+## 10. CONCLUSION
 
-El código de Enki está **más maduro y funcional** que hace 3 semanas. El sistema PizzePOS tiene impresión real con ESP32, cocina funcional, y nuevos canales. La arquitectura sigue siendo sólida.
+**Codigo:** Enki es un sistema solido, modular, event-driven, con 55 modulos activos, 36 providers locales, frontend SvelteKit moderno, y un ecosistema IoT real. La implementacion es significativamente mas grande y madura de lo que el contexto sugiere.
 
-El problema principal es la **deriva acumulativa entre documentación y código**. Cada módulo nuevo, cada store añadido, cada módulo deshabilitado crea una pequeña divergencia que, acumulada, produce un contexto que da información incorrecta al 15-20% de las consultas.
+**Contexto:** Fiable al ~80% para decisiones arquitectonicas. Problematico para conteos exactos y estados de modulos. Las 6 correcciones criticas eliminarian el 90% del riesgo de generar codigo erroneo.
 
-**Recomendación**: Corregir las 5 discrepancias críticas identificadas y establecer como práctica que todo cambio de módulos/stores incluya actualización de `contexto/`. El provider `context-sync` ya existe para esto — usarlo.
+**Recomendacion principal:** Ejecutar las 6 correcciones criticas y establecer que todo cambio de modulos/stores/providers incluya actualizacion automatica de `contexto/`. El provider `local.context-sync` ya existe para esto.

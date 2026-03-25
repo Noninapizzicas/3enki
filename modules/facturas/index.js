@@ -195,9 +195,20 @@ class FacturasModule {
 
     this.logger.info('facturas.procesando', { filePath, projectId, source });
 
+    // Calcular hash del archivo para detección de duplicados y registro
+    let fileHash = null;
+    if (!facturaId) {
+      try {
+        const fileBuffer = fs.readFileSync(filePath);
+        fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+      } catch (e) {
+        this.logger.debug('facturas.hash.calc-error', { error: e.message });
+      }
+    }
+
     // Detección de duplicados por hash del contenido del archivo
-    if (!facturaId && !skipDuplicateCheck) {
-      const duplicate = await this.checkDuplicate(filePath, projectId);
+    if (fileHash && !facturaId && !skipDuplicateCheck) {
+      const duplicate = await this.buscarDuplicado(fileHash, projectId);
       if (duplicate) {
         this.logger.warn('facturas.duplicado', { fileName, projectId, duplicateId: duplicate.id });
         return {
@@ -237,8 +248,10 @@ class FacturasModule {
           projectId, id: facturaDbId, nombre_archivo: fileName, source
         });
 
-        // Guardar hash del archivo para detección de duplicados
-        await this.guardarHash(filePath, projectId, facturaDbId);
+        // Guardar hash del archivo para detección de duplicados futuros
+        if (fileHash) {
+          await this.actualizarDB(projectId, facturaDbId, { file_hash: fileHash });
+        }
       } catch (e) {
         this.logger.error('facturas.registrar.error', { error: e.message });
       }
@@ -416,7 +429,7 @@ class FacturasModule {
    * Extrae texto via OCR (Google Vision)
    */
   async extraerOCR(imagePath) {
-    const result = await this.services.call('local.google-vision', 'extract', {
+    const result = await this.services.call(this.config.ocr.provider, 'extract', {
       image: imagePath,
       hint: this.config.ocr.hint,
       languageHints: this.config.ocr.languages
@@ -487,14 +500,11 @@ class FacturasModule {
   // ==========================================
 
   /**
-   * Comprueba si un archivo ya fue procesado (detección de duplicados).
-   * Usa hash SHA-256 del contenido del archivo para comparar.
+   * Busca en la DB si ya existe una factura con el mismo hash de archivo.
+   * El hash se calcula una sola vez en procesarArchivo y se reutiliza.
    */
-  async checkDuplicate(filePath, projectId) {
+  async buscarDuplicado(fileHash, projectId) {
     try {
-      const fileBuffer = fs.readFileSync(filePath);
-      const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-
       const result = await this.services.call('local.facturas-db', 'buscarPorHash', {
         proyecto: projectId, hash: fileHash
       }, { timeout: this.config.timeouts.db });
@@ -505,19 +515,6 @@ class FacturasModule {
       // Si el método no existe todavía en facturas-db, no bloquear el procesamiento
       this.logger.debug('facturas.duplicate-check.skip', { error: e.message });
       return null;
-    }
-  }
-
-  /**
-   * Calcula hash SHA-256 de un archivo y lo guarda en la DB tras registrar
-   */
-  async guardarHash(filePath, projectId, facturaId) {
-    try {
-      const fileBuffer = fs.readFileSync(filePath);
-      const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-      await this.actualizarDB(projectId, facturaId, { file_hash: fileHash });
-    } catch (e) {
-      this.logger.debug('facturas.hash.error', { error: e.message });
     }
   }
 
@@ -573,7 +570,8 @@ class FacturasModule {
     }
 
     const result = await this.procesarArchivo(filePath, proyecto, { source, origen });
-    return { status: result.success ? 200 : 500, data: result };
+    const status = result.success ? 200 : (result.duplicate ? 409 : 500);
+    return { status, data: result };
   }
 
   /**
@@ -606,7 +604,8 @@ class FacturasModule {
       origen: { manual: true, nombreOriginal: archivo.nombre }
     });
 
-    return { status: result.success ? 201 : 500, data: result };
+    const status = result.success ? 201 : (result.duplicate ? 409 : 500);
+    return { status, data: result };
   }
 
   /**

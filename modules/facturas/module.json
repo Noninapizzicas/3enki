@@ -79,7 +79,7 @@
       "languages": ["es", "en"]
     },
     "ai": {
-      "provider": "deepseek",
+      "providers": ["deepseek", "anthropic", "openai", "gemini"],
       "temperature": 0.1,
       "maxTokens": 2000
     },

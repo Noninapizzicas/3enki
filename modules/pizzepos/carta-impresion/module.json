@@ -93,6 +93,76 @@
         },
         "required": ["plantilla_id"]
       }
+    },
+    {
+      "name": "carta.export_pdf",
+      "description": "Genera un PDF de la carta listo para descargar o enviar. Usa pdfkit para renderizado server-side sin navegador. Ideal para email, archivo, impresión profesional.",
+      "handler": "toolExportPdf",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta a exportar"
+          },
+          "formato": {
+            "type": "string",
+            "enum": ["A4", "A5"],
+            "description": "Tamaño de página (default: A4)"
+          },
+          "orientacion": {
+            "type": "string",
+            "enum": ["portrait", "landscape"],
+            "description": "Orientación (default: portrait)"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "carta.export_image",
+      "description": "Genera una imagen PNG de la carta. Ideal para redes sociales, WhatsApp, stories de Instagram.",
+      "handler": "toolExportImage",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta a exportar"
+          },
+          "formato": {
+            "type": "string",
+            "enum": ["A4", "A5"],
+            "description": "Tamaño base (default: A4)"
+          },
+          "orientacion": {
+            "type": "string",
+            "enum": ["portrait", "landscape"],
+            "description": "Orientación (default: landscape)"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "carta.export_svg",
+      "description": "Genera un SVG vectorial de la carta. Escalable a cualquier tamaño, editable en Illustrator/Figma/Canva. Perfecto para imprenta profesional.",
+      "handler": "toolExportSvg",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta a exportar"
+          },
+          "orientacion": {
+            "type": "string",
+            "enum": ["portrait", "landscape"],
+            "description": "Orientación (default: landscape)"
+          }
+        },
+        "required": ["carta_id"]
+      }
     }
   ],
 
@@ -103,7 +173,10 @@
         "carta.render.completed",
         "carta.render.errors",
         "carta.plantilla.creada",
-        "carta.plantilla.eliminada"
+        "carta.plantilla.eliminada",
+        "carta.export_pdf.completed",
+        "carta.export_image.completed",
+        "carta.export_svg.completed"
       ]
     }
   }

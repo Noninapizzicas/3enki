@@ -377,6 +377,25 @@
       }
     },
     {
+      "name": "menu.save_carta",
+      "description": "Guarda una carta completa a disco desde un objeto JSON. Útil cuando el diseñador construye la carta manualmente o modifica la estructura. Si la carta ya existe, la sobreescribe.",
+      "handler": "toolSaveCarta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta": {
+            "type": "object",
+            "description": "Objeto carta completo con meta (id, nombre), categorias[] y productos[]. Si no tiene meta.id se genera uno automático."
+          },
+          "carta_id": {
+            "type": "string",
+            "description": "ID de carta existente a sobreescribir (alternativa a incluir meta.id en el objeto)"
+          }
+        },
+        "required": ["carta"]
+      }
+    },
+    {
       "name": "menu.set_category_image",
       "description": "Asocia una imagen o icono a una categoría de la carta.",
       "handler": "toolSetCategoryImage",

@@ -363,7 +363,7 @@
         addItem('porcion', 1, [], {
           tipo: 'porcion',
           nombre_override: 'Porción',
-          precio_override: 3
+          precio_override: 2.625
         });
         break;
     }

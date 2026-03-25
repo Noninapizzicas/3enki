@@ -11,11 +11,13 @@
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { imprimirTicketVenta } from '$lib/stores/impresion';
   import CierreCajaPanel from './CierreCajaPanel.svelte';
 
   export let cuenta_id: string;
   export let monto: number;
   export let pedido_ids: string[] = [];
+  export let items: any[] = [];
   export let visible: boolean = true;
   export let project_id: string = '';
 
@@ -141,6 +143,36 @@
 
   function formatPrecio(precio: number): string {
     return precio.toFixed(2) + ' €';
+  }
+
+  // Impresión ticket
+  let imprimiendo = false;
+  let ticketImpreso = false;
+
+  async function imprimirTicket() {
+    if (!cobroCreado || imprimiendo) return;
+    imprimiendo = true;
+    try {
+      const ticketItems = items.map(i => ({
+        nombre: i.nombre || i.name,
+        cantidad: i.cantidad || 1,
+        precio_unitario: i.precio || i.precio_unitario || 0,
+        precio_total: i.subtotal || (i.precio || 0) * (i.cantidad || 1)
+      }));
+      await imprimirTicketVenta({
+        cuenta_id,
+        items: ticketItems,
+        total: cobroCreado.monto_total || montoTotal,
+        metodo_pago: cobroCreado.metodo_pago || metodoSeleccionado || undefined,
+        propina: propina || undefined,
+        referencia_pago: cobroCreado.referencia_pago || undefined
+      });
+      ticketImpreso = true;
+    } catch {
+      // silencioso — el store de impresion ya loguea el error
+    } finally {
+      imprimiendo = false;
+    }
   }
 
   // Botones rápidos de efectivo
@@ -320,9 +352,24 @@
             {/if}
           </button>
         {:else if cobroCreado.estado === 'completado'}
-          <button class="action-btn success" on:click={handleClose}>
-            ✅ Cerrar
-          </button>
+          <div class="footer-actions">
+            <button
+              class="action-btn print"
+              disabled={imprimiendo}
+              on:click={imprimirTicket}
+            >
+              {#if imprimiendo}
+                Imprimiendo...
+              {:else if ticketImpreso}
+                Reimprimir ticket
+              {:else}
+                Imprimir ticket
+              {/if}
+            </button>
+            <button class="action-btn success" on:click={handleClose}>
+              Cerrar
+            </button>
+          </div>
         {:else}
           <button class="action-btn secondary" on:click={handleClose}>
             ↩️ Cerrar
@@ -775,6 +822,26 @@
   }
 
   .action-btn.primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .action-btn.print {
+    background: #333;
+    color: #ccc;
+  }
+
+  .action-btn.print:hover:not(:disabled) {
+    background: #444;
+    color: #fff;
+  }
+
+  .action-btn.print:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

@@ -18,6 +18,8 @@
  */
 
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
 
 // ==========================================
 // ESC/POS constants
@@ -76,20 +78,26 @@ const CP437 = {
 
 // Icono CP437 por canal — discreto pero reconocible
 const CANAL_ICON = {
-  mesa:      CP437.DIAMOND,    // ♦ MESA
-  telefono:  CP437.PHONE,      // § TEL
-  llevar:    CP437.ARROW_R,    // ► LLEVAR
-  glovo:     CP437.STAR,       // ☼ GLOVO
-  whatsapp:  CP437.BULLET,     // • WHATSAPP
-  uber_eats: CP437.SQUARE,     // ■ UBER
-  just_eat:  CP437.DOT,        // ∙ JUST EAT
-  default:   CP437.SQUARE      // ■
+  mesa:      '*',    // ♦ MESA
+  telefono:  'T',      // § TEL
+  llevar:    '>',    // ► LLEVAR
+  glovo:     '*',       // ☼ GLOVO
+  whatsapp:  '*',     // • WHATSAPP
+  uber_eats: '*',     // ■ UBER
+  just_eat:  '.',        // ∙ JUST EAT
+  default:   '*'      // ■
 };
 
 // Anchos por tipo de impresora
 const ANCHOS = {
   '58mm': 32,
   '80mm': 42
+};
+
+// Dots (píxeles) por tipo de impresora
+const DOTS = {
+  '58mm': 384,
+  '80mm': 576
 };
 
 class ImpresionModule {
@@ -130,6 +138,9 @@ class ImpresionModule {
       impresoras_descubiertas: 0
     };
 
+    // Logo raster ESC/POS precalculado
+    this.logoBuffer = null;
+
     // Referencia al listener MQTT para cleanup
     this._onMqttMessage = null;
   }
@@ -152,8 +163,12 @@ class ImpresionModule {
 
     // Calcular ancho de línea
     this.lineWidth = ANCHOS[this.config.ancho] || 32;
-    this.separator = CP437.LIGHT_HORIZ.repeat(this.lineWidth);
-    this.doubleSep = CP437.HORIZ.repeat(this.lineWidth);
+    this.dotWidth = DOTS[this.config.ancho] || 384;
+    this.separator = '-'.repeat(this.lineWidth);
+    this.doubleSep = '='.repeat(this.lineWidth);
+
+    // Cargar logo si existe
+    await this._cargarLogo();
 
     // Iniciar autodescubrimiento de impresoras ESP32
     await this._iniciarAutoDescubrimiento();
@@ -522,36 +537,27 @@ class ImpresionModule {
     lineas.push(CMD.CODEPAGE_437);
 
     // ══════════════════════════════════════════
-    // APARTADO 1: Header — ref pedido + canal
+    // APARTADO 1: Header — ref pedido + hora
     // ══════════════════════════════════════════
     const refMesa = this.extraerRefMesa(cuenta_id, canal);
-    const canalKey = this._detectarCanal(cuenta_id, canal);
-    const icon = CANAL_ICON[canalKey] || CANAL_ICON.default;
 
-    // Linea superior con graficos CP437
-    lineas.push(this._lineaBox('top', w));
-
-    // Ref del pedido centrada, doble tamaño
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.DOUBLE_ON);
     lineas.push(CMD.BOLD_ON);
     if (reimpresion) {
-      lineas.push(`${icon} REIMP ${icon}`);
+      lineas.push('REIMP');
     }
     // Referencia principal (MESA 5, GLOVO #xx, etc)
     lineas.push(refMesa || `#${pedido_id || '-'}`);
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
 
-    // Hora/fecha — sin IDs internos
+    // Hora/fecha
     lineas.push(CMD.FONT_NORMAL);
     const ahora = new Date();
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-    lineas.push(`${icon} ${hora}  ${fecha}`);
-
-    // Linea inferior box
-    lineas.push(this._lineaBox('bottom', w));
+    lineas.push(`${hora}  ${fecha}`);
 
     // ══════════════════════════════════════════
     // APARTADO 2: Items — producto + ingredientes + variaciones
@@ -566,7 +572,7 @@ class ImpresionModule {
     // Notas generales
     if (notas_generales) {
       lineas.push(CMD.BOLD_ON);
-      lineas.push(`${CP437.ARROW_R} NOTAS:`);
+      lineas.push(`${'>'} NOTAS:`);
       lineas.push(CMD.BOLD_OFF);
       lineas.push(this.truncar(notas_generales));
       lineas.push(this._separadorLigero(w));
@@ -575,7 +581,7 @@ class ImpresionModule {
     // Footer discreto
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.FONT_SMALL);
-    lineas.push(`${CP437.DOT} ${items.length} item(s) ${CP437.DOT}`);
+    lineas.push(`${'.'} ${items.length} item(s) ${'.'}`);
     lineas.push(CMD.FONT_NORMAL);
 
     lineas.push(CMD.FEED_5);
@@ -597,10 +603,10 @@ class ImpresionModule {
     // Mitad-mitad
     if (item.tipo === 'mitad-mitad' || item.pizza_izquierda || item.pizza_derecha) {
       if (item.pizza_izquierda) {
-        lineas.push(this.truncar(` ${CP437.ARROW_R} IZQ: ${item.pizza_izquierda}`));
+        lineas.push(this.truncar(` ${'>'} IZQ: ${item.pizza_izquierda}`));
       }
       if (item.pizza_derecha) {
-        lineas.push(this.truncar(` ${CP437.ARROW_R} DER: ${item.pizza_derecha}`));
+        lineas.push(this.truncar(` ${'>'} DER: ${item.pizza_derecha}`));
       }
     }
 
@@ -608,7 +614,7 @@ class ImpresionModule {
     if (item.ingredientes && item.ingredientes.length > 0) {
       for (const ing of item.ingredientes) {
         const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-        lineas.push(this.truncar(` ${CP437.DOT} ${nombre}`));
+        lineas.push(this.truncar(` ${'.'} ${nombre}`));
       }
     }
 
@@ -642,10 +648,10 @@ class ImpresionModule {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
           lineas.push(CMD.BOLD_ON);
-          lineas.push(` ${CP437.SQUARE} ${key.toUpperCase()}`);
+          lineas.push(` ${'*'} ${key.toUpperCase()}`);
           lineas.push(CMD.BOLD_OFF);
         } else if (val && val !== false) {
-          lineas.push(this.truncar(` ${CP437.SQUARE} ${key}: ${val}`));
+          lineas.push(this.truncar(` ${'*'} ${key}: ${val}`));
         }
       }
     }
@@ -653,7 +659,7 @@ class ImpresionModule {
     // Notas del item
     if (item.notas) {
       lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(this.truncar(` ${CP437.ARROW_R} ${item.notas}`));
+      lineas.push(this.truncar(` ${'>'} ${item.notas}`));
       lineas.push(CMD.UNDERLINE_OFF);
     }
   }
@@ -666,25 +672,15 @@ class ImpresionModule {
     lineas.push(CMD.INIT);
     lineas.push(CMD.CODEPAGE_437);
 
-    // ── APARTADO 1: Header — ref pedido + canal ──
+    // ── APARTADO 1: Header — ref pedido ──
     const refMesa = this.extraerRefMesa(cuenta_id, canal);
-    const canalKey = this._detectarCanal(cuenta_id, canal);
-    const icon = CANAL_ICON[canalKey] || CANAL_ICON.default;
 
-    lineas.push(this._lineaBox('top', w));
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.DOUBLE_ON);
     lineas.push(CMD.BOLD_ON);
     lineas.push(refMesa || `#${pedido_id || '-'}`);
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
-
-    const ahora = new Date();
-    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    lineas.push(CMD.FONT_NORMAL);
-    const estacionStr = estacion ? `${estacion.toUpperCase()} ` : '';
-    lineas.push(`${icon} ${estacionStr}${hora}`);
-    lineas.push(this._lineaBox('bottom', w));
 
     // ── APARTADO 2: Producto + ingredientes + variaciones ──
     lineas.push(CMD.ALIGN_CENTER);
@@ -698,13 +694,11 @@ class ImpresionModule {
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
 
-    lineas.push(CMD.ALIGN_LEFT);
-
     // Ingredientes base
     if (ingredientes && ingredientes.length > 0) {
       for (const ing of ingredientes) {
         const ingNombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-        lineas.push(this.truncar(` ${CP437.DOT} ${ingNombre}`));
+        lineas.push(this.truncar(` ${'.'} ${ingNombre}`));
       }
     }
 
@@ -735,10 +729,10 @@ class ImpresionModule {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
           lineas.push(CMD.BOLD_ON);
-          lineas.push(` ${CP437.SQUARE} ${key.toUpperCase()}`);
+          lineas.push(` ${'*'} ${key.toUpperCase()}`);
           lineas.push(CMD.BOLD_OFF);
         } else if (val && val !== false) {
-          lineas.push(this.truncar(` ${CP437.SQUARE} ${key}: ${val}`));
+          lineas.push(this.truncar(` ${'*'} ${key}: ${val}`));
         }
       }
     }
@@ -746,7 +740,7 @@ class ImpresionModule {
     // Notas
     if (notas) {
       lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(this.truncar(` ${CP437.ARROW_R} ${notas}`));
+      lineas.push(this.truncar(` ${'>'} ${notas}`));
       lineas.push(CMD.UNDERLINE_OFF);
     }
 
@@ -892,7 +886,9 @@ class ImpresionModule {
     for (const [prefijo, label] of Object.entries(prefijos)) {
       if (cuenta_id.startsWith(`${prefijo}_`)) {
         const ref = cuenta_id.slice(prefijo.length + 1);
-        return `${label} ${ref}`;
+        // Extraer solo el identificador antes del sufijo _YYYYMMDD_NNN
+        const limpio = ref.replace(/_\d{8}_\d+$/, '');
+        return `${label} ${limpio || ref}`;
       }
     }
 
@@ -947,7 +943,19 @@ class ImpresionModule {
     }
 
     const topic = `impresion/${pid}/print/${deviceId}`;
-    const buffer = Buffer.from(contenido, 'binary');
+    const contentBuffer = Buffer.from(contenido, 'binary');
+
+    // Insertar logo después del INIT si existe
+    let buffer;
+    if (this.logoBuffer && contenido.startsWith(CMD.INIT)) {
+      const initLen = Buffer.byteLength(CMD.INIT, 'binary');
+      const preInit = contentBuffer.slice(0, initLen);
+      const postInit = contentBuffer.slice(initLen);
+      buffer = Buffer.concat([preInit, this.logoBuffer, postInit]);
+    } else {
+      buffer = contentBuffer;
+    }
+
     const payload = JSON.stringify({
       job_id: `job_${Date.now().toString(36)}`,
       data: buffer.toString('base64')
@@ -963,6 +971,80 @@ class ImpresionModule {
   }
 
   // ==========================================
+  // Logo raster ESC/POS
+  // ==========================================
+
+  /**
+   * Carga logo.png desde el directorio del módulo y lo convierte
+   * a comandos ESC/POS raster (GS v 0) usando sharp.
+   * Se ejecuta una vez en onLoad — el resultado queda en this.logoBuffer.
+   */
+  async _cargarLogo() {
+    const logoPath = this.config.logo
+      || path.join(__dirname, 'logo.png');
+
+    if (!fs.existsSync(logoPath)) {
+      this.logger?.info('impresion.logo.no_encontrado', { path: logoPath });
+      return;
+    }
+
+    try {
+      const sharp = require('sharp');
+      const maxWidth = this.dotWidth;
+
+      // Convertir a escala de grises, redimensionar al ancho de la impresora,
+      // y obtener buffer raw 1 canal (grayscale)
+      const img = sharp(logoPath)
+        .resize(maxWidth, null, { fit: 'inside' })
+        .grayscale()
+        .threshold(128)
+        .raw();
+
+      const { data, info } = await img.toBuffer({ resolveWithObject: true });
+      const width = info.width;
+      const height = info.height;
+
+      // Ancho en bytes (cada byte = 8 píxeles horizontales)
+      const byteWidth = Math.ceil(width / 8);
+
+      // Construir bitmap monocromo: 1 bit por píxel
+      const bitmapSize = byteWidth * height;
+      const bitmap = Buffer.alloc(bitmapSize);
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const pixel = data[y * width + x];
+          // pixel < 128 = negro = bit 1 (tinta)
+          if (pixel < 128) {
+            const byteIndex = y * byteWidth + Math.floor(x / 8);
+            const bitIndex = 7 - (x % 8);
+            bitmap[byteIndex] |= (1 << bitIndex);
+          }
+        }
+      }
+
+      // Comando ESC/POS: GS v 0 (raster bit image)
+      // GS v 0 m xL xH yL yH d1...dk
+      const header = Buffer.from([
+        0x1D, 0x76, 0x30, 0x00, // GS v 0, m=0 (normal)
+        byteWidth & 0xFF, (byteWidth >> 8) & 0xFF,  // xL xH
+        height & 0xFF, (height >> 8) & 0xFF           // yL yH
+      ]);
+
+      // Centrar + logo + salto de línea
+      const center = Buffer.from(CMD.ALIGN_CENTER, 'binary');
+      this.logoBuffer = Buffer.concat([center, header, bitmap]);
+
+      this.logger?.info('impresion.logo.cargado', {
+        path: logoPath, width, height, byteWidth, bytes: this.logoBuffer.length
+      });
+    } catch (error) {
+      this.logger?.error('impresion.logo.error', { error: error.message });
+      this.logoBuffer = null;
+    }
+  }
+
+  // ==========================================
   // Utilidades
   // ==========================================
 
@@ -972,20 +1054,14 @@ class ImpresionModule {
    * bottom: ╚══════════════════════════════╝
    */
   _lineaBox(tipo, ancho) {
-    const interior = CP437.HORIZ.repeat(ancho - 2);
-    if (tipo === 'top') {
-      return `${CP437.TOP_LEFT}${interior}${CP437.TOP_RIGHT}`;
-    }
-    return `${CP437.BOT_LEFT}${interior}${CP437.BOT_RIGHT}`;
+    return '='.repeat(ancho);
   }
 
   /**
-   * Separador ligero entre items — discreto con CP437
-   * ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─ ∙ ─
+   * Separador ligero entre items
    */
   _separadorLigero(ancho) {
-    const patron = `${CP437.LIGHT_HORIZ}${CP437.DOT}`;
-    return patron.repeat(Math.floor(ancho / 2)).slice(0, ancho);
+    return '-'.repeat(ancho);
   }
 
   /**

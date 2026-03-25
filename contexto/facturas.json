@@ -1,7 +1,7 @@
 {
   "_VERSION": "3.0.0",
   "_CREATED": "2026-01-20",
-  "_UPDATED": "2026-03-03",
+  "_UPDATED": "2026-03-25",
   "_DESCRIPTION": "Sistema de facturación: módulo facturas (extracción OCR+IA) + grupo facturacion/ (asesoría, compras, contabilidad)",
 
   "_AI_INSTRUCTIONS": {
@@ -78,21 +78,22 @@
     },
 
     "servicios_usados": {
-      "local.facturas-db": "BD SQLite por proyecto — registrar, actualizar, listar, obtener, exportar",
+      "local.facturas-db": "BD SQLite por proyecto — registrar, actualizar, listar, obtener, exportar, buscarPorHash",
       "local.pdf-to-png": "Conversión PDF → PNG (poppler)",
       "local.sharp": "Preparación imagen para OCR (grayscale, normalize, sharpen)",
-      "local.google-vision": "OCR con Google Vision API",
-      "ai (ai-gateway)": "Estructuración del texto OCR con DeepSeek"
+      "this.config.ocr.provider": "OCR configurable (default: local.google-vision) — NO hardcodeado",
+      "ai (ai-gateway)": "Estructuración del texto OCR — cadena de fallback: deepseek → anthropic → openai → gemini"
     },
 
     "pipeline_procesamiento": {
       "descripcion": "Pipeline interno del módulo facturas — ejecutado por procesarArchivo()",
       "pasos": {
-        "1_registro_db": "facturas-db.registrar() → estado: pendiente",
+        "0_hash_duplicado": "SHA-256 del archivo → buscarPorHash en facturas-db → si existe, rechaza con duplicate:true (409)",
+        "1_registro_db": "facturas-db.registrar() → estado: pendiente → guardar file_hash en DB",
         "2_pdf_a_png": "local.pdf-to-png.convert (si es PDF) → imágenes en preprocesadas/",
         "3_sharp_prepare": "local.sharp.prepare-ocr → grayscale, normalize, sharpen",
-        "4_ocr": "local.google-vision.extract → texto OCR en ocr/",
-        "5_estructura_ia": "ai.chat con DeepSeek → JSON estructurado en estructuradas/",
+        "4_ocr": "this.config.ocr.provider.extract (configurable, default google-vision) → texto OCR en ocr/",
+        "5_estructura_ia": "ai.chat con cadena de fallback (deepseek → anthropic → openai → gemini) → JSON estructurado",
         "6_guardar_db": "facturas-db.actualizar() → campos aplanados en BD, estado: procesada",
         "7_evento": "Emite factura.procesada con datos completos"
       }
@@ -100,7 +101,7 @@
 
     "config": {
       "ocr": { "provider": "local.google-vision", "hint": "DOCUMENT_TEXT_DETECTION", "languages": ["es", "en"] },
-      "ai": { "provider": "deepseek", "temperature": 0.1, "maxTokens": 2000 },
+      "ai": { "providers": ["deepseek", "anthropic", "openai", "gemini"], "temperature": 0.1, "maxTokens": 2000 },
       "processing": { "dpi": 300, "maxWidth": 2400, "maxHeight": 3200 },
       "timeouts": { "pdfConvert": 60000, "sharp": 30000, "ocr": 60000, "ai": 60000, "db": 30000 }
     }
@@ -154,18 +155,19 @@
     "persistencia": "Sin DB propia — historial se deduce del filesystem (lista ZIPs en export/asesoria/)",
 
     "uso_frontend": {
-      "generar": "mqttRequest('asesoria', 'generar-paquete', { proyecto, periodo: '2026-03' })",
-      "preview": "mqttRequest('asesoria', 'preview', { proyecto, periodo: '2026-03' })",
+      "generar": "mqttRequest('asesoria', 'generar-paquete', { proyecto, periodo }) → devuelve { contenido (base64), nombre, mimeType, totales }",
+      "preview": "mqttRequest('asesoria', 'preview', { proyecto, periodo })",
       "historial": "mqttRequest('asesoria', 'historial', { proyecto })",
-      "descargar": "mqttRequest('asesoria', 'descargar', { proyecto, archivo })"
-    }
+      "descargar": "mqttRequest('asesoria', 'descargar', { proyecto, archivo }) → devuelve { contenido (base64), nombre, mimeType }"
+    },
+    "nota_descarga": "Tanto generar-paquete como descargar devuelven el archivo como base64 en la respuesta MQTT. El frontend usa triggerDownload() para crear un blob y disparar la descarga en el navegador."
   },
 
   "facturas_db": {
     "provider": "local.facturas-db",
     "ubicacion": "services/providers/local/facturas-db/",
     "descripcion": "BD SQLite por proyecto con schema de 50+ columnas para facturas",
-    "funciones": ["init", "registrar", "actualizar", "listar", "obtener", "pendientes", "estadisticas", "exportar", "marcarExportadas"],
+    "funciones": ["init", "registrar", "actualizar", "listar", "obtener", "pendientes", "estadisticas", "exportar", "marcarExportadas", "buscarPorHash"],
     "campos_principales": {
       "identificacion": ["id", "nombre_archivo", "path_original", "path_procesada", "path_ocr_json"],
       "origen": ["source (telegram/gmail/manual)", "fecha_entrada", "origen_bot", "origen_chat_id", "origen_email_*"],
@@ -174,6 +176,7 @@
       "importes": ["base_imponible", "tipo_iva", "cuota_iva", "cuota_deducible", "retencion_irpf", "total_factura"],
       "pago": ["metodo_pago", "estado_pago", "fecha_vencimiento", "fecha_pago"],
       "export": ["semana_export", "fecha_exportado"],
+      "deduplicacion": ["file_hash (SHA-256 del archivo, con índice)"],
       "metadata": ["notas", "revisado_por", "created_at", "updated_at"]
     },
     "listar_filtros": {
@@ -295,12 +298,32 @@
       "problema": "El servicio local.zip transforma rutas absolutas con resolvePath()",
       "causa": "resolvePath prepend 'data/' a rutas que empiezan con /",
       "solucion": "Pasar rutas relativas al cwd usando path.relative(cwd, absolutePath)"
+    },
+    "ia_fallback_chain": {
+      "problema": "Si el primer provider IA falla, se pierde el procesamiento",
+      "causa": "Antes solo se usaba DeepSeek sin fallback",
+      "solucion": "config.ai.providers es un array — itera hasta obtener JSON válido. Si un provider falla o devuelve JSON inválido, intenta el siguiente"
+    },
+    "ocr_provider_configurable": {
+      "problema": "OCR estaba hardcodeado a 'local.google-vision'",
+      "causa": "services.call literal en vez de this.config",
+      "solucion": "Ahora usa this.config.ocr.provider — se puede cambiar desde module.json o project config"
+    },
+    "duplicados_hash": {
+      "problema": "Subir la misma factura dos veces creaba registros duplicados",
+      "causa": "No había verificación previa",
+      "solucion": "SHA-256 del archivo se guarda en file_hash. buscarPorHash() verifica antes de registrar. Devuelve 409 si duplicado. Se puede saltar con skipDuplicateCheck:true"
+    },
+    "export_base64": {
+      "problema": "handleExportar y handleDescargar devolvían solo path — el frontend no tiene acceso al filesystem",
+      "causa": "Comunicación MQTT, no HTTP con streaming",
+      "solucion": "Ahora devuelven { contenido (base64), nombre, mimeType }. El frontend usa triggerDownload() para descarga en navegador"
     }
   },
 
   "proximos_pasos": {
     "asesoria": [
-      "Frontend: sección dedicada de asesoría en la UI",
+      "Frontend: sección/tab de asesoría en FacturasPanel (store listo: generarPaqueteAsesoria, listarPaquetesAsesoria, descargarPaquete)",
       "Envío automático del paquete por email/Telegram"
     ],
     "futuros_modulos": [

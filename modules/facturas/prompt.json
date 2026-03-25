@@ -8,7 +8,9 @@
     "listar facturas procesadas del proyecto",
     "reprocesar facturas con errores",
     "estadisticas de gasto por proveedor, categoria, periodo",
-    "exportar facturas en formato estructurado"
+    "exportar facturas en formato CSV (devuelve base64 para descarga directa)",
+    "detectar duplicados por hash SHA-256 del archivo antes de procesar",
+    "fallback IA: si un provider falla, intenta el siguiente (deepseek → anthropic → openai → gemini)"
   ],
   "domain_knowledge": {
     "entrada": "foto de movil, PDF, texto copiado, documento escaneado",
@@ -24,7 +26,7 @@
   ],
   "integrations": {
     "listens_to": ["project.activated", "factura.entrada"],
-    "emits": ["factura.procesada"],
-    "depends_on": ["database-manager", "ai-gateway"]
+    "emits": ["factura.recibida", "factura.procesada", "factura.error", "factura.exportada"],
+    "depends_on": ["database-manager", "ai-gateway", "local.google-vision", "local.sharp", "local.pdf-to-png", "local.facturas-db"]
   }
 }

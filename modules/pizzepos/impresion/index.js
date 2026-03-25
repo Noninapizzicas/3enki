@@ -18,8 +18,6 @@
  */
 
 const crypto = require('crypto');
-const path = require('path');
-const fs = require('fs');
 
 // ==========================================
 // ESC/POS constants
@@ -94,11 +92,6 @@ const ANCHOS = {
   '80mm': 42
 };
 
-// Dots (píxeles) por tipo de impresora
-const DOTS = {
-  '58mm': 384,
-  '80mm': 576
-};
 
 class ImpresionModule {
   constructor() {
@@ -138,9 +131,6 @@ class ImpresionModule {
       impresoras_descubiertas: 0
     };
 
-    // Logo raster ESC/POS precalculado
-    this.logoBuffer = null;
-
     // Referencia al listener MQTT para cleanup
     this._onMqttMessage = null;
   }
@@ -163,12 +153,8 @@ class ImpresionModule {
 
     // Calcular ancho de línea
     this.lineWidth = ANCHOS[this.config.ancho] || 32;
-    this.dotWidth = DOTS[this.config.ancho] || 384;
     this.separator = '-'.repeat(this.lineWidth);
     this.doubleSep = '='.repeat(this.lineWidth);
-
-    // Cargar logo si existe
-    await this._cargarLogo();
 
     // Iniciar autodescubrimiento de impresoras ESP32
     await this._iniciarAutoDescubrimiento();
@@ -762,15 +748,17 @@ class ImpresionModule {
     lineas.push(CMD.CODEPAGE_437);
 
     lineas.push(CMD.ALIGN_CENTER);
-    if (datos_negocio?.nombre) {
-      lineas.push(CMD.DOUBLE_ON);
-      lineas.push(CMD.BOLD_ON);
-      lineas.push(datos_negocio.nombre);
-      lineas.push(CMD.BOLD_OFF);
-      lineas.push(CMD.DOUBLE_OFF);
-    }
+
+    // Logo texto: NO NI NA pizzicas
+    lineas.push(CMD.DOUBLE_ON);
+    lineas.push(CMD.BOLD_ON);
+    lineas.push('NO NI NA');
+    lineas.push(CMD.BOLD_OFF);
+    lineas.push(CMD.DOUBLE_OFF);
+    lineas.push('pizzicas');
+    lineas.push('643283034');
+
     if (datos_negocio?.direccion) lineas.push(datos_negocio.direccion);
-    if (datos_negocio?.telefono) lineas.push(`Tel: ${datos_negocio.telefono}`);
     if (datos_negocio?.nif) lineas.push(`NIF: ${datos_negocio.nif}`);
 
     lineas.push(this.doubleSep);
@@ -943,19 +931,7 @@ class ImpresionModule {
     }
 
     const topic = `impresion/${pid}/print/${deviceId}`;
-    const contentBuffer = Buffer.from(contenido, 'binary');
-
-    // Insertar logo después del INIT si existe
-    let buffer;
-    if (this.logoBuffer && contenido.startsWith(CMD.INIT)) {
-      const initLen = Buffer.byteLength(CMD.INIT, 'binary');
-      const preInit = contentBuffer.slice(0, initLen);
-      const postInit = contentBuffer.slice(initLen);
-      buffer = Buffer.concat([preInit, this.logoBuffer, postInit]);
-    } else {
-      buffer = contentBuffer;
-    }
-
+    const buffer = Buffer.from(contenido, 'binary');
     const payload = JSON.stringify({
       job_id: `job_${Date.now().toString(36)}`,
       data: buffer.toString('base64')
@@ -968,80 +944,6 @@ class ImpresionModule {
       device_id: deviceId,
       bytes: buffer.length
     });
-  }
-
-  // ==========================================
-  // Logo raster ESC/POS
-  // ==========================================
-
-  /**
-   * Carga logo.png desde el directorio del módulo y lo convierte
-   * a comandos ESC/POS raster (GS v 0) usando sharp.
-   * Se ejecuta una vez en onLoad — el resultado queda en this.logoBuffer.
-   */
-  async _cargarLogo() {
-    const logoPath = this.config.logo
-      || path.join(__dirname, 'logo.png');
-
-    if (!fs.existsSync(logoPath)) {
-      this.logger?.info('impresion.logo.no_encontrado', { path: logoPath });
-      return;
-    }
-
-    try {
-      const sharp = require('sharp');
-      // Limitar a 256px de ancho para no saturar el buffer del ESP32
-      // (el ancho del raster debe ser múltiplo de 8)
-      const maxWidth = Math.min(this.dotWidth, 256);
-
-      const img = sharp(logoPath)
-        .resize(maxWidth, null, { fit: 'inside' })
-        .grayscale()
-        .threshold(128)
-        .raw();
-
-      const { data, info } = await img.toBuffer({ resolveWithObject: true });
-      const width = info.width;
-      const height = info.height;
-
-      // Ancho en bytes (cada byte = 8 píxeles horizontales)
-      const byteWidth = Math.ceil(width / 8);
-
-      // Construir bitmap monocromo: 1 bit por píxel
-      const bitmapSize = byteWidth * height;
-      const bitmap = Buffer.alloc(bitmapSize);
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const pixel = data[y * width + x];
-          // pixel < 128 = negro = bit 1 (tinta)
-          if (pixel < 128) {
-            const byteIndex = y * byteWidth + Math.floor(x / 8);
-            const bitIndex = 7 - (x % 8);
-            bitmap[byteIndex] |= (1 << bitIndex);
-          }
-        }
-      }
-
-      // Comando ESC/POS: GS v 0 (raster bit image)
-      // GS v 0 m xL xH yL yH d1...dk
-      const header = Buffer.from([
-        0x1D, 0x76, 0x30, 0x00, // GS v 0, m=0 (normal)
-        byteWidth & 0xFF, (byteWidth >> 8) & 0xFF,  // xL xH
-        height & 0xFF, (height >> 8) & 0xFF           // yL yH
-      ]);
-
-      // Logo raster + feed después para separar del texto
-      const feed = Buffer.from('\n', 'binary');
-      this.logoBuffer = Buffer.concat([header, bitmap, feed]);
-
-      this.logger?.info('impresion.logo.cargado', {
-        path: logoPath, width, height, byteWidth, bytes: this.logoBuffer.length
-      });
-    } catch (error) {
-      this.logger?.error('impresion.logo.error', { error: error.message });
-      this.logoBuffer = null;
-    }
   }
 
   // ==========================================

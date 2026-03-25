@@ -24,18 +24,19 @@ async function fromImage(src) {
 }
 
 async function fromText() {
-  // Crear SVG con el texto del logo
+  // Logo compacto para no saturar el buffer de la impresora térmica
+  // Max ~3KB de raster (ancho 384 / 8 = 48 bytes/línea × ~60 líneas)
   const svg = `
-  <svg width="${WIDTH}" height="180" xmlns="http://www.w3.org/2000/svg">
+  <svg width="${WIDTH}" height="100" xmlns="http://www.w3.org/2000/svg">
     <rect width="100%" height="100%" fill="white"/>
-    <text x="50%" y="70" text-anchor="middle"
-          font-family="Arial, sans-serif" font-size="52" font-weight="bold"
+    <text x="50%" y="40" text-anchor="middle"
+          font-family="Arial, sans-serif" font-size="38" font-weight="bold"
           fill="black">NO NI NA</text>
-    <text x="50%" y="110" text-anchor="middle"
-          font-family="Arial, sans-serif" font-size="28" font-style="italic"
+    <text x="50%" y="68" text-anchor="middle"
+          font-family="Arial, sans-serif" font-size="22" font-style="italic"
           fill="black">pizzicas</text>
-    <text x="50%" y="155" text-anchor="middle"
-          font-family="Arial, sans-serif" font-size="24"
+    <text x="50%" y="92" text-anchor="middle"
+          font-family="Arial, sans-serif" font-size="18"
           fill="black">643283034</text>
   </svg>`;
 

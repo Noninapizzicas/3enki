@@ -92,7 +92,6 @@ const ANCHOS = {
   '80mm': 42
 };
 
-
 class ImpresionModule {
   constructor() {
     this.name = 'impresion';

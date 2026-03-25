@@ -6,7 +6,7 @@
    * ┌────────────────────────────────────────┐
    * │ Header: nombre cuenta                  │
    * ├────────────────────────────────────────┤
-   * │ Especiales: Mitad | Al gusto | Menú    │
+   * │ Especiales: Mitad | Al gusto | Porción  │
    * ├────────────────────────────────────────┤
    * │ Familias: [🍕Pizza][🥗Ensaladas][...]  │
    * ├──────────────────────────┬─────────────┤
@@ -250,11 +250,23 @@
   // Estado del panel al gusto
   let showAlGusto = false;
 
+  // Estado del selector de porciones
+  let showPorciones = false;
+
+  // Precio porciones: cada 4 = pizza media (10.50€), sueltas a 3€
+  const PRECIO_PORCION = 3;
+  const PRECIO_PIZZA_MEDIA = 10.5;
+  function calcularPrecioPorciones(n: number): number {
+    const pizzas = Math.floor(n / 4);
+    const resto = n % 4;
+    return pizzas * PRECIO_PIZZA_MEDIA + resto * PRECIO_PORCION;
+  }
+
   // Botones especiales (configurables según negocio)
   const botonesEspeciales = [
     { id: 'mitad', label: 'Mitad', icon: '🍕½', color: '#8b5cf6' },
     { id: 'algusto', label: 'Al gusto', icon: '🎨', color: '#ec4899' },
-    { id: 'menu', label: 'Menú', icon: '📋', color: '#0ea5e9' }
+    { id: 'porcion', label: 'Porción', icon: '🍕', color: '#0ea5e9' }
   ];
 
   // Acciones sidebar (llevadoo no tiene cobro — pago externo)
@@ -359,8 +371,8 @@
       case 'algusto':
         showAlGusto = true;
         break;
-      case 'menu':
-        if (onOpenPanel) onOpenPanel(id);
+      case 'porcion':
+        showPorciones = true;
         break;
     }
   }
@@ -421,6 +433,17 @@
     });
 
     showAlGusto = false;
+  }
+
+  function handlePorcionSelect(n: number) {
+    const total = calcularPrecioPorciones(n);
+    const nombre = n === 1 ? 'Porción' : `${n} Porciones`;
+    addItem('porcion', 1, [], {
+      tipo: 'porcion',
+      nombre_override: nombre,
+      precio_override: total
+    });
+    showPorciones = false;
   }
 
   async function handleAccionClick(e: CustomEvent<{ id: string }>) {
@@ -742,6 +765,24 @@
     />
   {/if}
 
+  <!-- Selector de porciones -->
+  {#if showPorciones}
+    <div class="porcion-overlay" on:click={() => showPorciones = false} on:keydown={(e) => e.key === 'Escape' && (showPorciones = false)}>
+      <div class="porcion-panel" on:click|stopPropagation>
+        <h3 class="porcion-title">🍕 Porciones</h3>
+        <p class="porcion-sub">4 porciones = pizza media (10.50€)</p>
+        <div class="porcion-grid">
+          {#each [1,2,3,4,5,6,7,8] as n}
+            <button class="porcion-btn" on:click={() => handlePorcionSelect(n)}>
+              <span class="porcion-n">{n}</span>
+              <span class="porcion-precio">{calcularPrecioPorciones(n).toFixed(2)}€</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Toast impresion -->
   {#if printResult}
     <div class="print-toast print-toast-{printResult.type}">
@@ -751,6 +792,68 @@
 </div>
 
 <style>
+  /* Selector porciones */
+  .porcion-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .porcion-panel {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 16px;
+    padding: 20px;
+    width: 320px;
+    text-align: center;
+  }
+  .porcion-title {
+    margin: 0 0 4px;
+    font-size: 1.1rem;
+    color: #fff;
+  }
+  .porcion-sub {
+    margin: 0 0 16px;
+    font-size: 0.75rem;
+    color: #888;
+  }
+  .porcion-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .porcion-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 8px;
+    border: 2px solid #333;
+    border-radius: 10px;
+    background: #222;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .porcion-btn:active {
+    transform: scale(0.95);
+    border-color: #0ea5e9;
+    background: rgba(14, 165, 233, 0.15);
+  }
+  .porcion-n {
+    font-size: 1.3rem;
+    font-weight: 800;
+  }
+  .porcion-precio {
+    font-size: 0.7rem;
+    color: #0ea5e9;
+    font-weight: 600;
+  }
+
   .comandero-screen {
     display: flex;
     flex-direction: column;

@@ -990,10 +990,10 @@ class ImpresionModule {
 
     try {
       const sharp = require('sharp');
-      const maxWidth = this.dotWidth;
+      // Limitar a 256px de ancho para no saturar el buffer del ESP32
+      // (el ancho del raster debe ser múltiplo de 8)
+      const maxWidth = Math.min(this.dotWidth, 256);
 
-      // Convertir a escala de grises, redimensionar al ancho de la impresora,
-      // y obtener buffer raw 1 canal (grayscale)
       const img = sharp(logoPath)
         .resize(maxWidth, null, { fit: 'inside' })
         .grayscale()
@@ -1031,9 +1031,9 @@ class ImpresionModule {
         height & 0xFF, (height >> 8) & 0xFF           // yL yH
       ]);
 
-      // Centrar + logo + salto de línea
-      const center = Buffer.from(CMD.ALIGN_CENTER, 'binary');
-      this.logoBuffer = Buffer.concat([center, header, bitmap]);
+      // Logo raster + feed después para separar del texto
+      const feed = Buffer.from('\n', 'binary');
+      this.logoBuffer = Buffer.concat([header, bitmap, feed]);
 
       this.logger?.info('impresion.logo.cargado', {
         path: logoPath, width, height, byteWidth, bytes: this.logoBuffer.length

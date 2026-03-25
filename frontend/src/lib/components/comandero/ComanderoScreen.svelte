@@ -714,6 +714,7 @@
       {cuenta_id}
       project_id={projectId}
       monto={$pedidoTotal}
+      items={$pedidoItems}
       pedido_ids={$pedidoItems.map(i => i.id)}
       visible={showCobro}
       on:close={handleCobroClose}

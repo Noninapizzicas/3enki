@@ -110,6 +110,12 @@ class AsesoriaModule {
         return { status: 400, data: result };
       }
 
+      // Leer ZIP y devolverlo como base64 para descarga directa en el frontend
+      if (result.archivo && fs.existsSync(result.archivo)) {
+        result.contenido = fs.readFileSync(result.archivo, 'base64');
+        result.mimeType = 'application/zip';
+      }
+
       return { status: 200, data: result };
     } catch (e) {
       this.logger.error('asesoria.generar-paquete.error', { error: e.message, proyecto });
@@ -152,7 +158,15 @@ class AsesoriaModule {
       return { status: 404, error: 'Archivo no encontrado' };
     }
 
-    return { status: 200, data: { path: filePath, nombre: path.basename(filePath) } };
+    // Leer y devolver contenido base64 para descarga en el frontend
+    const contenido = fs.readFileSync(filePath, 'base64');
+    const nombre = path.basename(filePath);
+    const mimeType = nombre.endsWith('.zip') ? 'application/zip' : 'text/csv';
+
+    return {
+      status: 200,
+      data: { nombre, contenido, mimeType }
+    };
   }
 
   /**

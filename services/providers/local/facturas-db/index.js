@@ -79,6 +79,9 @@ const FACTURAS_SCHEMA = `
     semana_export TEXT,
     fecha_exportado DATETIME,
 
+    -- DEDUPLICACIÓN
+    file_hash TEXT,
+
     -- METADATA
     notas TEXT,
     revisado_por TEXT,
@@ -91,6 +94,7 @@ const FACTURAS_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_facturas_fecha_entrada ON facturas(fecha_entrada);
   CREATE INDEX IF NOT EXISTS idx_facturas_source ON facturas(source);
   CREATE INDEX IF NOT EXISTS idx_facturas_semana ON facturas(semana_export);
+  CREATE INDEX IF NOT EXISTS idx_facturas_file_hash ON facturas(file_hash);
 `;
 
 module.exports = {
@@ -183,6 +187,14 @@ module.exports = {
         proyecto: { type: 'string', required: true },
         ids: { type: 'array', required: true, description: 'IDs de facturas a marcar' },
         semana: { type: 'string', required: true }
+      }
+    },
+    buscarPorHash: {
+      event: 'local.facturas-db.buscarPorHash.request',
+      description: 'Buscar factura por hash de archivo (detección de duplicados)',
+      input: {
+        proyecto: { type: 'string', required: true },
+        hash: { type: 'string', required: true, description: 'SHA-256 del contenido del archivo' }
       }
     }
   },
@@ -627,6 +639,43 @@ module.exports = {
       return {
         success: false,
         error: `Error marcando exportadas: ${error.message}`
+      };
+    }
+  },
+
+  /**
+   * Buscar factura por hash de archivo (detección de duplicados)
+   */
+  async buscarPorHash({ proyecto, hash }) {
+    try {
+      await this.ensureSchema(proyecto);
+
+      // Migrar: añadir columna file_hash si no existe (para DBs existentes)
+      try {
+        await this.executeQuery(proyecto, `ALTER TABLE facturas ADD COLUMN file_hash TEXT`, [], false);
+        await this.executeQuery(proyecto, `CREATE INDEX IF NOT EXISTS idx_facturas_file_hash ON facturas(file_hash)`, [], false);
+      } catch (e) {
+        // Columna ya existe — OK
+      }
+
+      const rows = await this.executeQuery(
+        proyecto,
+        `SELECT id, nombre_archivo, proveedor_nombre, factura_fecha, estado FROM facturas WHERE file_hash = ? LIMIT 1`,
+        [hash],
+        true
+      );
+
+      return {
+        success: true,
+        data: {
+          factura: rows && rows.length > 0 ? rows[0] : null
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: `Error buscando duplicado: ${error.message}`
       };
     }
   }

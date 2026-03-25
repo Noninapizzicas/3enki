@@ -80,15 +80,21 @@ void loop() {
 
   // Si estamos en modo portal, comprobar timeout
   if (portalMode) {
+    // Resetear timer si acaba de entrar en portal (fallback runtime)
+    if (portalStartMs == 0) portalStartMs = millis();
+
     if (millis() - portalStartMs > WIFI_PORTAL_TIMEOUT) {
-      Serial.println("[BASE] Portal timeout — reiniciando...");
+      Serial.println("[BASE] Portal timeout — reiniciando para reintentar WiFi...");
       delay(500);
       ESP.restart();
     }
     return;
   }
 
-  // --- BASE: WiFi monitoring ---
+  // Si salimos de portal mode, resetear timer para la próxima vez
+  portalStartMs = 0;
+
+  // --- BASE: WiFi monitoring (non-blocking) ---
   baseHandleWifiReconnect();
 
   // --- BASE: MQTT reconnect + loop ---

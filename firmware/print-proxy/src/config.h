@@ -24,9 +24,12 @@
 
 // --- BASE: WiFi Multi-Network ---
 #define WIFI_MAX_NETWORKS       3       // hasta 3 redes WiFi con fallback
-#define WIFI_CONNECT_TIMEOUT    10000   // ms para intentar conectar a cada red
+#define WIFI_CONNECT_TIMEOUT    10000   // ms para intentar conectar a cada red (solo en boot)
 #define WIFI_PORTAL_TIMEOUT     300000  // 5 min portal cautivo antes de reiniciar
-#define WIFI_CHECK_INTERVAL     30000   // cada 30s verificar WiFi en el loop
+#define WIFI_CHECK_INTERVAL     5000    // cada 5s verificar WiFi en el loop (antes 30s)
+#define WIFI_RECONNECT_TIMEOUT  8000    // ms máximo esperando reconexión por red (non-blocking)
+#define WIFI_RETRY_DELAY        3000    // ms entre ciclos de reconexión
+#define WIFI_MAX_FAILURES       3       // ciclos completos fallidos antes de abrir portal
 #define WIFI_AP_NAME_PREFIX     "Enki"
 
 // --- BASE: Hardware (no configurables desde portal) ---

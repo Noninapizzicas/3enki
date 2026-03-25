@@ -6,7 +6,7 @@
    * ┌────────────────────────────────────────┐
    * │ Header: nombre cuenta                  │
    * ├────────────────────────────────────────┤
-   * │ Especiales: Mitad | Al gusto | Menú    │
+   * │ Especiales: Mitad | Al gusto | Porción  │
    * ├────────────────────────────────────────┤
    * │ Familias: [🍕Pizza][🥗Ensaladas][...]  │
    * ├──────────────────────────┬─────────────┤
@@ -254,7 +254,7 @@
   const botonesEspeciales = [
     { id: 'mitad', label: 'Mitad', icon: '🍕½', color: '#8b5cf6' },
     { id: 'algusto', label: 'Al gusto', icon: '🎨', color: '#ec4899' },
-    { id: 'menu', label: 'Menú', icon: '📋', color: '#0ea5e9' }
+    { id: 'porcion', label: 'Porción', icon: '🍕', color: '#0ea5e9' }
   ];
 
   // Acciones sidebar (llevadoo no tiene cobro — pago externo)
@@ -359,8 +359,12 @@
       case 'algusto':
         showAlGusto = true;
         break;
-      case 'menu':
-        if (onOpenPanel) onOpenPanel(id);
+      case 'porcion':
+        addItem('porcion', 1, [], {
+          tipo: 'porcion',
+          nombre_override: 'Porción',
+          precio_override: 3
+        });
         break;
     }
   }

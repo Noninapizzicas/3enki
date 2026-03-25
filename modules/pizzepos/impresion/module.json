@@ -57,6 +57,11 @@
         "event": "llevar.ticket_creado",
         "description": "Cachear nombre de ticket llevar para impresión",
         "handler": "onLlevarTicketCreado"
+      },
+      {
+        "event": "cuenta.actualizada",
+        "description": "Actualizar nombre en cache cuando se renombra cualquier cuenta",
+        "handler": "onCuentaActualizada"
       }
     ]
   },

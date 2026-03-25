@@ -1,8 +1,9 @@
 {
   "_meta": {
     "description": "Documentación del módulo Certificate Authority — CA interna con autenticación mTLS",
-    "updated": "2026-03-05",
-    "version": "1.0.0"
+    "updated": "2026-03-25",
+    "version": "1.0.0",
+    "STATUS": "DISABLED — Este módulo está en config.json disabled. El directorio data/ca/ NO existe. Esta documentación es referencia para futura implementación, NO refleja estado activo."
   },
 
   "overview": {

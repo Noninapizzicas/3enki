@@ -89,7 +89,8 @@ class FacturasModule {
         languages: ['es', 'en']
       },
       ai: {
-        provider: 'deepseek',
+        // Cadena de fallback: intenta el primero, si falla pasa al siguiente
+        providers: ['deepseek', 'anthropic', 'openai', 'gemini'],
         temperature: 0.1,
         maxTokens: 2000
       },
@@ -187,12 +188,27 @@ class FacturasModule {
    * @returns {Promise<Object>} Resultado con datos estructurados
    */
   async procesarArchivo(filePath, projectId, options = {}) {
-    const { source = 'manual', origen = {}, facturaId = null } = options;
+    const { source = 'manual', origen = {}, facturaId = null, skipDuplicateCheck = false } = options;
     const startTime = Date.now();
     const fileName = path.basename(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
     this.logger.info('facturas.procesando', { filePath, projectId, source });
+
+    // Detección de duplicados por hash del contenido del archivo
+    if (!facturaId && !skipDuplicateCheck) {
+      const duplicate = await this.checkDuplicate(filePath, projectId);
+      if (duplicate) {
+        this.logger.warn('facturas.duplicado', { fileName, projectId, duplicateId: duplicate.id });
+        return {
+          success: false,
+          duplicate: true,
+          existingId: duplicate.id,
+          existingNombre: duplicate.nombre_archivo,
+          error: `Factura duplicada: ya existe como "${duplicate.nombre_archivo}" (${duplicate.proveedor_nombre || 'proveedor desconocido'}, ${duplicate.factura_fecha || 'sin fecha'})`
+        };
+      }
+    }
 
     // Directorios de trabajo del proyecto
     const storageDir = path.join(process.cwd(), 'data/projects', projectId, 'storage');
@@ -220,6 +236,9 @@ class FacturasModule {
         this.eventBus.publish('factura.recibida', {
           projectId, id: facturaDbId, nombre_archivo: fileName, source
         });
+
+        // Guardar hash del archivo para detección de duplicados
+        await this.guardarHash(filePath, projectId, facturaDbId);
       } catch (e) {
         this.logger.error('facturas.registrar.error', { error: e.message });
       }
@@ -408,38 +427,99 @@ class FacturasModule {
   }
 
   /**
-   * Estructura texto OCR con IA (DeepSeek)
+   * Estructura texto OCR con IA — cadena de fallback entre providers
    */
   async estructurarConIA(textoOCR) {
-    const result = await this.services.call('ai', 'chat', {
-      messages: [
-        { role: 'system', content: PROMPT_ESTRUCTURA },
-        { role: 'user', content: textoOCR }
-      ],
-      provider: this.config.ai.provider,
-      temperature: this.config.ai.temperature,
-      max_tokens: this.config.ai.maxTokens
-    }, { timeout: this.config.timeouts.ai });
+    const providers = this.config.ai.providers || ['deepseek'];
+    let lastError = null;
 
-    const data = result.data || result;
-    const respuesta = data.content || data.message || '';
+    for (const provider of providers) {
+      try {
+        this.logger.debug('facturas.ia.intentando', { provider });
 
-    if (!respuesta) return null;
+        const result = await this.services.call('ai', 'chat', {
+          messages: [
+            { role: 'system', content: PROMPT_ESTRUCTURA },
+            { role: 'user', content: textoOCR }
+          ],
+          provider,
+          temperature: this.config.ai.temperature,
+          max_tokens: this.config.ai.maxTokens
+        }, { timeout: this.config.timeouts.ai });
 
-    // Limpiar posible markdown wrapping
-    const cleaned = respuesta.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+        const data = result.data || result;
+        const respuesta = data.content || data.message || '';
 
-    try {
-      return JSON.parse(cleaned);
-    } catch (e) {
-      this.logger.warn('facturas.ia.parse-error', { error: e.message });
-      return null;
+        if (!respuesta) {
+          this.logger.warn('facturas.ia.respuesta-vacia', { provider });
+          continue;
+        }
+
+        // Limpiar posible markdown wrapping
+        const cleaned = respuesta.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+
+        try {
+          const parsed = JSON.parse(cleaned);
+          this.logger.info('facturas.ia.exito', { provider });
+          return parsed;
+        } catch (e) {
+          this.logger.warn('facturas.ia.parse-error', { provider, error: e.message });
+          lastError = e;
+          continue;
+        }
+
+      } catch (e) {
+        this.logger.warn('facturas.ia.provider-error', { provider, error: e.message });
+        lastError = e;
+        continue;
+      }
     }
+
+    this.logger.error('facturas.ia.todos-fallaron', {
+      providers,
+      lastError: lastError?.message
+    });
+    return null;
   }
 
   // ==========================================
   // Helpers
   // ==========================================
+
+  /**
+   * Comprueba si un archivo ya fue procesado (detección de duplicados).
+   * Usa hash SHA-256 del contenido del archivo para comparar.
+   */
+  async checkDuplicate(filePath, projectId) {
+    try {
+      const fileBuffer = fs.readFileSync(filePath);
+      const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+      const result = await this.services.call('local.facturas-db', 'buscarPorHash', {
+        proyecto: projectId, hash: fileHash
+      }, { timeout: this.config.timeouts.db });
+
+      const data = result.data || result;
+      return data.factura || null;
+    } catch (e) {
+      // Si el método no existe todavía en facturas-db, no bloquear el procesamiento
+      this.logger.debug('facturas.duplicate-check.skip', { error: e.message });
+      return null;
+    }
+  }
+
+  /**
+   * Calcula hash SHA-256 de un archivo y lo guarda en la DB tras registrar
+   */
+  async guardarHash(filePath, projectId, facturaId) {
+    try {
+      const fileBuffer = fs.readFileSync(filePath);
+      const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+      await this.actualizarDB(projectId, facturaId, { file_hash: fileHash });
+    } catch (e) {
+      this.logger.debug('facturas.hash.error', { error: e.message });
+    }
+  }
 
   /**
    * Aplana la estructura JSON de DeepSeek al formato plano de la DB
@@ -690,6 +770,10 @@ class FacturasModule {
         }, { timeout: this.config.timeouts.db });
       }
 
+      // Leer contenido del CSV para enviarlo al frontend (no tiene acceso al filesystem)
+      const contenido = fs.readFileSync(csvPath, 'base64');
+      const nombre = path.basename(csvPath);
+
       // Notificar UI
       this.eventBus.publish('factura.exportada', {
         projectId: proyecto,
@@ -701,6 +785,9 @@ class FacturasModule {
         status: 200,
         data: {
           path: csvPath,
+          nombre,
+          contenido,
+          mimeType: 'text/csv',
           total: exportData.total || 0
         }
       };

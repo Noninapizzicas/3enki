@@ -199,11 +199,7 @@
   // ==========================================================================
 
   async function handleExport() {
-    const path = await exportarExcel();
-    if (path) {
-      // TODO: Descargar archivo o mostrar notificación
-      console.log('Excel exportado:', path);
-    }
+    await exportarExcel();
   }
 
   // ==========================================================================

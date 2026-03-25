@@ -318,6 +318,16 @@ class ImpresionModule {
     }
   }
 
+  async onCuentaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = data;
+    if (cuenta_id && cambios?.nombre) {
+      const existing = this.cuentaNombres.get(cuenta_id);
+      this.cuentaNombres.set(cuenta_id, { ...existing, ref: cambios.nombre });
+      this.logger.info('impresion.cuenta_nombre.updated', { cuenta_id, nombre: cambios.nombre });
+    }
+  }
+
   // ==========================================
   // Event Handler: cocina.item_ticket
   // ==========================================

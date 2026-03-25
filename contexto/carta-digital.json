@@ -252,25 +252,34 @@
   },
 
   "carta_impresion": {
-    "descripcion": "Módulo complementario que renderiza cartas en HTML listo para imprimir o exportar a PDF desde el navegador. NO tiene UI propia — el LLM invoca las tools desde el chat.",
-    "version": "1.0.0",
-    "archivo": "modules/pizzepos/carta-impresion/index.js (453 líneas)",
+    "descripcion": "Módulo de renderizado y exportación de cartas. Genera HTML imprimible, PDF server-side, imágenes PNG y SVG vectorial. NO tiene UI propia — el LLM invoca las tools desde el chat.",
+    "version": "1.1.0",
+    "archivo": "modules/pizzepos/carta-impresion/index.js",
 
     "flujo": [
-      "1. Usuario pide imprimir carta en el chat",
-      "2. LLM llama tool carta.render(carta_id, plantilla_id)",
+      "1. Usuario pide imprimir/exportar carta en el chat",
+      "2. LLM llama tool según formato deseado (render, export_pdf, export_image, export_svg)",
       "3. Backend lee carta JSON de disco (storage/pizzepos/cartas/{carta_id}.json)",
-      "4. Aplica plantilla HTML con marcadores ({{nombre_carta}}, {{categorias_html}}, etc.)",
-      "5. Guarda HTML generado en storage/pizzepos/cartas-html/{carta_id}_{plantilla}_{ts}.html",
-      "6. Publica evento carta.html.generada con HTML incluido (para preview inline)",
-      "7. Usuario abre en navegador → Ctrl+P → PDF o impresora"
+      "4. Genera output según formato y guarda en storage/pizzepos/cartas-html/",
+      "5. Devuelve ruta al fichero generado + metadata"
     ],
 
     "tools": {
-      "carta.render": "Genera HTML imprimible. Params: carta_id (requerido), plantilla_id (default: a4-clasica), project_id",
+      "carta.render": "Genera HTML imprimible con plantilla. Params: carta_id, plantilla_id (default: a4-clasica), project_id",
       "carta.plantillas": "Lista plantillas disponibles (globales + proyecto)",
       "carta.plantilla_crear": "Crea plantilla custom con HTML/CSS propio. Params: nombre, html, formato (A4/A5/A6)",
-      "carta.plantilla_eliminar": "Elimina plantilla del proyecto (las globales son inmutables)"
+      "carta.plantilla_eliminar": "Elimina plantilla del proyecto (las globales son inmutables)",
+      "carta.export_pdf": "PDF server-side con pdfkit (sin navegador). Params: carta_id, formato (A4/A5), orientacion (portrait/landscape). Ideal para email, archivo, impresión.",
+      "carta.export_image": "PNG alta resolución (2x viewport). Genera PDF → convierte a PNG con pdf-to-png-converter. Params: carta_id, formato, orientacion. Ideal para redes sociales, WhatsApp.",
+      "carta.export_svg": "SVG vectorial puro. Columnas automáticas por categoría. Params: carta_id, orientacion. Editable en Figma/Illustrator/Canva, perfecto para imprenta."
+    },
+
+    "menu_save_carta": {
+      "modulo": "menu-generator",
+      "tool": "menu.save_carta",
+      "descripcion": "Guarda carta completa a disco desde objeto JSON. El diseñador construye la carta y la persiste. Si no tiene meta.id se genera automático. Sobreescribe si existe.",
+      "params": "carta (objeto con meta, categorias[], productos[]), carta_id (opcional, alternativa a meta.id)",
+      "output": "storage/pizzepos/cartas/{carta_id}.json + evento carta.generada"
     },
 
     "plantillas_globales": [
@@ -304,6 +313,19 @@
       "suscribe": ["project.activated", "project.deactivated"]
     },
 
-    "metricas": ["carta.render.completed", "carta.plantilla.creada", "carta.plantilla.eliminada"]
+    "metricas": ["carta.render.completed", "carta.plantilla.creada", "carta.plantilla.eliminada", "carta.export_pdf.completed", "carta.export_image.completed", "carta.export_svg.completed"],
+
+    "dependencias_npm": {
+      "pdfkit": "PDF generation server-side (carta.export_pdf)",
+      "pdf-to-png-converter": "PDF→PNG conversion (carta.export_image)",
+      "nota": "SVG no necesita dependencias — string puro generado por código"
+    },
+
+    "output_todos_los_formatos": {
+      "html": "storage/pizzepos/cartas-html/{carta_id}_{plantilla}_{ts}.html",
+      "pdf": "storage/pizzepos/cartas-html/{carta_id}_{formato}_{orientacion}.pdf",
+      "png": "storage/pizzepos/cartas-html/{carta_id}_{formato}_{orientacion}.png",
+      "svg": "storage/pizzepos/cartas-html/{carta_id}_{orientacion}.svg"
+    }
   }
 }

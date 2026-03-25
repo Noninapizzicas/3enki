@@ -249,5 +249,61 @@
       "min_600px": "Grid auto-fill minmax(200px, 1fr), gap 16px, modales centrados"
     },
     "whatsapp_verde": "#25d366"
+  },
+
+  "carta_impresion": {
+    "descripcion": "Módulo complementario que renderiza cartas en HTML listo para imprimir o exportar a PDF desde el navegador. NO tiene UI propia — el LLM invoca las tools desde el chat.",
+    "version": "1.0.0",
+    "archivo": "modules/pizzepos/carta-impresion/index.js (453 líneas)",
+
+    "flujo": [
+      "1. Usuario pide imprimir carta en el chat",
+      "2. LLM llama tool carta.render(carta_id, plantilla_id)",
+      "3. Backend lee carta JSON de disco (storage/pizzepos/cartas/{carta_id}.json)",
+      "4. Aplica plantilla HTML con marcadores ({{nombre_carta}}, {{categorias_html}}, etc.)",
+      "5. Guarda HTML generado en storage/pizzepos/cartas-html/{carta_id}_{plantilla}_{ts}.html",
+      "6. Publica evento carta.html.generada con HTML incluido (para preview inline)",
+      "7. Usuario abre en navegador → Ctrl+P → PDF o impresora"
+    ],
+
+    "tools": {
+      "carta.render": "Genera HTML imprimible. Params: carta_id (requerido), plantilla_id (default: a4-clasica), project_id",
+      "carta.plantillas": "Lista plantillas disponibles (globales + proyecto)",
+      "carta.plantilla_crear": "Crea plantilla custom con HTML/CSS propio. Params: nombre, html, formato (A4/A5/A6)",
+      "carta.plantilla_eliminar": "Elimina plantilla del proyecto (las globales son inmutables)"
+    },
+
+    "plantillas_globales": [
+      {"id": "a4-clasica", "nombre": "A4 Clásica", "formato": "A4 portrait", "desc": "Carta completa vertical. Ideal para muchos productos y categorías. Fuente Georgia serif."},
+      {"id": "a5-menu-dia", "nombre": "A5 Menú del Día", "formato": "A5 portrait", "desc": "Formato compacto para menú del día o cartas cortas."},
+      {"id": "a4-cuadruple", "nombre": "A4 Cuádruple (4 por hoja)", "formato": "A4 portrait", "desc": "Cuatro cartas en un A4 para recortar. Para cartas muy cortas (hasta 2 categorías)."},
+      {"id": "a4-diptico", "nombre": "A4 Díptico", "formato": "A4 landscape", "desc": "Doblar por la mitad. Portada izquierda, carta derecha. Formato clásico de restaurante."},
+      {"id": "a4-paisaje-5col", "nombre": "A4 Apaisado 5 Columnas", "formato": "A4 landscape", "desc": "Horizontal con 5 columnas CSS. Para muchas categorías en una sola hoja."}
+    ],
+
+    "plantillas_custom": {
+      "almacenamiento": "storage/pizzepos/carta-templates/{id}.json (meta) + {id}.html (contenido)",
+      "marcadores_html": [
+        "{{nombre_carta}} — nombre de la carta/restaurante",
+        "{{fecha}} — fecha actual (dd/mm/aaaa)",
+        "{{total_productos}} — número total de productos",
+        "{{total_categorias}} — número total de categorías",
+        "{{categorias_html}} — bloque HTML auto-generado con todas las categorías y productos"
+      ]
+    },
+
+    "motor_render": {
+      "categorias_html": "Genera <div class='categoria'> + <h2> + productos por categoría, ordenados por cat.orden",
+      "productos_html": "Cada producto: <div class='producto'> con nombre, precio (formateado español: coma decimal), ingredientes con emojis",
+      "seguridad": "escapeHtml() en nombres para prevenir XSS",
+      "output": "storage/pizzepos/cartas-html/{carta_id}_{plantilla_id}_{timestamp}.html"
+    },
+
+    "eventos": {
+      "publica": ["carta.html.generada — incluye html completo + ruta al fichero + metadata"],
+      "suscribe": ["project.activated", "project.deactivated"]
+    },
+
+    "metricas": ["carta.render.completed", "carta.plantilla.creada", "carta.plantilla.eliminada"]
   }
 }

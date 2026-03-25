@@ -1372,6 +1372,60 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
    * La imagen puede ser una ruta relativa al storage del proyecto,
    * una ruta absoluta local, o una URL externa.
    */
+  /**
+   * Guarda una carta completa a disco. El diseñador puede construir la carta
+   * pieza a pieza y llamar a esta tool para persistirla.
+   */
+  async toolSaveCarta({ carta, carta_id, project_id }) {
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!carta || typeof carta !== 'object') return { status: 400, error: 'Se requiere "carta" como objeto con meta, categorias y productos' };
+
+    // Asegurar meta
+    if (!carta.meta) carta.meta = {};
+    if (carta_id) carta.meta.id = carta_id;
+    if (!carta.meta.id) carta.meta.id = `carta_${Date.now().toString(36)}`;
+    if (!carta.meta.nombre) carta.meta.nombre = 'Carta sin nombre';
+    if (!carta.meta.created_at) carta.meta.created_at = new Date().toISOString();
+    carta.meta.updated_at = new Date().toISOString();
+
+    // Validar estructura mínima
+    if (!Array.isArray(carta.categorias)) carta.categorias = [];
+    if (!Array.isArray(carta.productos)) carta.productos = [];
+
+    // Guardar en memoria y disco
+    const cartas = this.getCartas(project_id);
+    cartas.set(carta.meta.id, carta);
+    await this.saveCartaToDisk(carta, project_id);
+
+    // Notificar
+    await this.eventBus.publish('carta.generada', {
+      carta_id: carta.meta.id,
+      project_id,
+      nombre: carta.meta.nombre,
+      categorias: carta.categorias.length,
+      productos: carta.productos.length
+    });
+
+    this.logger.info('menu-generator.carta.saved', {
+      carta_id: carta.meta.id,
+      project_id,
+      categorias: carta.categorias.length,
+      productos: carta.productos.length
+    });
+
+    return {
+      status: 200,
+      data: {
+        carta_id: carta.meta.id,
+        nombre: carta.meta.nombre,
+        categorias: carta.categorias.length,
+        productos: carta.productos.length,
+        path: `storage/pizzepos/cartas/${carta.meta.id}.json`,
+        message: `Carta "${carta.meta.nombre}" guardada con ${carta.productos.length} productos en ${carta.categorias.length} categorías.`
+      }
+    };
+  }
+
   async toolSetProductImage({ carta_id, project_id, producto_id, imagen, imagen_base64 }) {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     if (!producto_id) return { status: 400, error: 'Se requiere producto_id' };

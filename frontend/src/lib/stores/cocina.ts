@@ -176,6 +176,36 @@ function getOrCreateDeviceId(): string {
   return id;
 }
 
+// Persistencia de config del device en localStorage
+// Sobrevive a reinicios del servidor y reconexiones MQTT
+const DEVICE_CONFIG_KEY = 'cocina_device_config';
+
+interface DeviceConfig {
+  nombre?: string;
+  estacion?: string;
+  tipoEstacion?: string;
+  filtrosActivos?: string[];
+}
+
+function saveDeviceConfig(config: Partial<DeviceConfig>): void {
+  try {
+    const existing = loadDeviceConfig();
+    const merged = { ...existing, ...config };
+    localStorage.setItem(DEVICE_CONFIG_KEY, JSON.stringify(merged));
+  } catch {}
+}
+
+function loadDeviceConfig(): DeviceConfig {
+  try {
+    const raw = localStorage.getItem(DEVICE_CONFIG_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
+
+// Cargar config persistida para inicializar el store con valores previos
+const _savedConfig = loadDeviceConfig();
+
 export const cocinaStore = writable<CocinaState>({
   pedidos: [],
   loading: false,
@@ -183,10 +213,10 @@ export const cocinaStore = writable<CocinaState>({
   metrics: null,
   myDeviceId: null,
   myColor: null,
-  myNombre: null,
-  myEstacion: null,
-  filtrosActivos: [],
-  tipoEstacion: 'general',
+  myNombre: _savedConfig.nombre || null,
+  myEstacion: _savedConfig.estacion || null,
+  filtrosActivos: _savedConfig.filtrosActivos || [],
+  tipoEstacion: _savedConfig.tipoEstacion || 'general',
   tipoEstacionInfo: null,
   tiposDisponibles: [],
   impresora: null,
@@ -364,9 +394,10 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
 
   try {
     const state = get(cocinaStore);
+    // Enviar config completa: valores del store (que ya incluyen los persistidos de localStorage)
     const res = await mqttRequest<any>('cocina', 'register-device', {
       device_id: deviceId,
-      nombre: nombre || undefined,
+      nombre: nombre || state.myNombre || undefined,
       estacion: state.myEstacion || undefined,
       filtros: state.filtrosActivos.length > 0 ? { familias: state.filtrosActivos } : undefined,
       tipo_estacion: state.tipoEstacion || 'general',
@@ -386,6 +417,13 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
         impresora: data.impresora !== undefined ? data.impresora : s.impresora,
         devices: data.devices || s.devices
       }));
+      // Persistir lo que el backend devolvió (incluye nombre asignado si era nuevo)
+      saveDeviceConfig({
+        nombre: data.nombre || nombre || state.myNombre || undefined,
+        estacion: data.estacion || state.myEstacion || undefined,
+        tipoEstacion: data.tipo_estacion || state.tipoEstacion || 'general',
+        filtrosActivos: state.filtrosActivos
+      });
     }
     return true;
   } catch {
@@ -408,8 +446,9 @@ export function toggleFiltro(familia: string): void {
     return { ...s, filtrosActivos: activos };
   });
 
-  // Sincronizar filtros con backend (para que otros dispositivos vean la config)
+  // Persistir y sincronizar filtros con backend
   const state = get(cocinaStore);
+  saveDeviceConfig({ filtrosActivos: state.filtrosActivos });
   if (state.myDeviceId) {
     mqttRequest('cocina', 'register-device', {
       device_id: state.myDeviceId,
@@ -421,6 +460,7 @@ export function toggleFiltro(familia: string): void {
 /** Limpia todos los filtros (ver todo) */
 export function clearFiltros(): void {
   cocinaStore.update(s => ({ ...s, filtrosActivos: [] }));
+  saveDeviceConfig({ filtrosActivos: [] });
 
   const state = get(cocinaStore);
   if (state.myDeviceId) {
@@ -437,6 +477,7 @@ export function clearFiltros(): void {
  */
 export function setFiltros(familias: string[]): void {
   cocinaStore.update(s => ({ ...s, filtrosActivos: familias }));
+  saveDeviceConfig({ filtrosActivos: familias });
 
   const state = get(cocinaStore);
   if (state.myDeviceId) {
@@ -455,6 +496,7 @@ export async function updateDeviceName(nombre: string): Promise<boolean> {
   if (!state.myDeviceId) return false;
 
   cocinaStore.update(s => ({ ...s, myNombre: nombre }));
+  saveDeviceConfig({ nombre });
 
   try {
     await mqttRequest('cocina', 'register-device', {
@@ -478,6 +520,7 @@ export async function updateEstacion(estacion: string): Promise<boolean> {
   if (!state.myDeviceId) return false;
 
   cocinaStore.update(s => ({ ...s, myEstacion: estacion }));
+  saveDeviceConfig({ estacion });
 
   try {
     await mqttRequest('cocina', 'register-device', {
@@ -501,6 +544,7 @@ export async function setTipoEstacion(tipo: string): Promise<boolean> {
   const tipoInfo = state.tiposDisponibles.find(t => t.id === tipo) || null;
 
   cocinaStore.update(s => ({ ...s, tipoEstacion: tipo, tipoEstacionInfo: tipoInfo }));
+  saveDeviceConfig({ tipoEstacion: tipo });
 
   if (state.myDeviceId) {
     try {

@@ -716,6 +716,7 @@ class ImpresionModule {
     lineas.push(CMD.INIT + CMD.CODEPAGE_437);
 
     // ── Header — ref pedido ──
+    lineas.push(CMD.FEED_3);
     const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
     const ref = refCuenta || `#${pedido_id || '-'}`;
     lineas.push(CMD.ALIGN_CENTER + CMD.DOUBLE_ON + CMD.BOLD_ON + ref + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
@@ -759,7 +760,7 @@ class ImpresionModule {
       lineas.push(CMD.UNDERLINE_ON + this.truncar(` > ${notas}`) + CMD.UNDERLINE_OFF);
     }
 
-    lineas.push(CMD.FEED_3 + CMD.PARTIAL_CUT);
+    lineas.push(CMD.FEED_5 + CMD.PARTIAL_CUT);
 
     return lineas.join('\n');
   }

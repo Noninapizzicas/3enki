@@ -128,12 +128,22 @@
       const res = await mqttRequest('cobro', 'confirm', { id: cobro_id });
 
       if (res?.status === 200) {
+        // Efectivo con cambio: mostrar cambio, no cerrar aún
+        if (cobroCreado?.cambio > 0) return;
         dispatch('success', { cobro_id, estado: 'completado' });
       } else {
         error = res?.error || 'Error al confirmar cobro';
       }
     } catch (err: any) {
       error = err?.message || 'Error de conexión';
+    }
+  }
+
+  /** Cobrar + imprimir ticket de venta */
+  async function cobrarEImprimir() {
+    await procesarCobro();
+    if (!error && cobroCreado) {
+      await imprimirTicket();
     }
   }
 
@@ -302,78 +312,56 @@
             </div>
           </section>
 
-        {:else}
-          <!-- Cobro creado: mostrar resultado -->
+        {:else if cobroCreado.cambio > 0}
+          <!-- Efectivo con cambio -->
           <section class="section resultado">
-            {#if cobroCreado.estado === 'completado'}
-              <div class="resultado-icon success">✅</div>
-              <h3 class="resultado-titulo">¡Cobro completado!</h3>
-              <p class="resultado-ref">Ref: {cobroCreado.referencia_pago}</p>
-              {#if cobroCreado.cambio > 0}
-                <div class="cambio-final">
-                  <span>🔄 Cambio a entregar:</span>
-                  <strong>{formatPrecio(cobroCreado.cambio)}</strong>
-                </div>
-              {/if}
-            {:else if cobroCreado.metodo_pago === 'link_pago'}
-              <div class="resultado-icon pending">🔗</div>
-              <h3 class="resultado-titulo">Link de pago generado</h3>
-              <a href={cobroCreado.link_url} target="_blank" class="link-url">
-                {cobroCreado.link_url}
-              </a>
-              <p class="expira">Expira: {new Date(cobroCreado.expira_en).toLocaleString()}</p>
-            {:else if cobroCreado.metodo_pago === 'qr'}
-              <div class="resultado-icon pending">📲</div>
-              <h3 class="resultado-titulo">Código QR generado</h3>
-              <div class="qr-placeholder">
-                <img src={cobroCreado.qr_url} alt="QR Code" class="qr-img" />
-              </div>
-              <p class="expira">Expira: {new Date(cobroCreado.expira_en).toLocaleString()}</p>
-            {:else}
-              <div class="resultado-icon pending">⏳</div>
-              <h3 class="resultado-titulo">Cobro pendiente</h3>
-            {/if}
+            <div class="cambio-final">
+              <span>🔄 Cambio a entregar:</span>
+              <strong>{formatPrecio(cobroCreado.cambio)}</strong>
+            </div>
           </section>
         {/if}
       </div>
 
       <!-- Footer -->
       <footer class="panel-footer">
-        {#if !cobroCreado}
-          <button
-            class="action-btn primary"
-            disabled={loading || !metodoSeleccionado || (metodoSeleccionado === 'efectivo' && montoRecibido < montoTotal)}
-            on:click={procesarCobro}
-          >
-            {#if loading}
-              ⏳ Procesando...
-            {:else}
-              💶 Cobrar {formatPrecio(montoTotal)}
-            {/if}
-          </button>
-        {:else if cobroCreado.estado === 'completado'}
+        {#if cobroCreado?.cambio > 0}
+          <!-- Efectivo con cambio: imprimir opcional + cerrar -->
           <div class="footer-actions">
             <button
               class="action-btn print"
               disabled={imprimiendo}
-              on:click={imprimirTicket}
+              on:click={() => { imprimirTicket(); }}
             >
-              {#if imprimiendo}
-                Imprimiendo...
-              {:else if ticketImpreso}
-                Reimprimir ticket
-              {:else}
-                Imprimir ticket
-              {/if}
+              {imprimiendo ? '🖨️...' : '🖨️'}
             </button>
             <button class="action-btn success" on:click={handleClose}>
               Cerrar
             </button>
           </div>
         {:else}
-          <button class="action-btn secondary" on:click={handleClose}>
-            ↩️ Cerrar
-          </button>
+          <!-- Cobrar: con botón de imprimir al lado -->
+          <div class="footer-actions">
+            <button
+              class="action-btn print"
+              disabled={loading || imprimiendo || !metodoSeleccionado || (metodoSeleccionado === 'efectivo' && montoRecibido < montoTotal)}
+              on:click={cobrarEImprimir}
+              title="Cobrar e imprimir ticket"
+            >
+              {imprimiendo ? '🖨️...' : '🖨️'}
+            </button>
+            <button
+              class="action-btn primary"
+              disabled={loading || !metodoSeleccionado || (metodoSeleccionado === 'efectivo' && montoRecibido < montoTotal)}
+              on:click={procesarCobro}
+            >
+              {#if loading}
+                ⏳ Procesando...
+              {:else}
+                💶 Cobrar {formatPrecio(montoTotal)}
+              {/if}
+            </button>
+          </div>
         {/if}
       </footer>
     </div>
@@ -832,8 +820,13 @@
   }
 
   .action-btn.print {
+    width: auto;
+    min-width: 48px;
+    padding: 14px 16px;
     background: #333;
     color: #ccc;
+    font-size: 1.2rem;
+    flex-shrink: 0;
   }
 
   .action-btn.print:hover:not(:disabled) {

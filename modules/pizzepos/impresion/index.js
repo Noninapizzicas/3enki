@@ -310,11 +310,11 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, numero_ticket, cliente_nombre } = data;
     if (cuenta_id && numero_ticket != null) {
-      this.cuentaNombres.set(cuenta_id, {
-        ref: `LLEVAR ${numero_ticket}`,
-        detalle: cliente_nombre || null
-      });
-      this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, numero_ticket, cliente_nombre });
+      // Si el cliente tiene nombre real (no el default "Cliente N"), usarlo como ref
+      const esNombreReal = cliente_nombre && !/^Cliente\s+\d+$/i.test(cliente_nombre);
+      const ref = esNombreReal ? cliente_nombre : `LLEVAR ${numero_ticket}`;
+      this.cuentaNombres.set(cuenta_id, { ref });
+      this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, ref });
     }
   }
 

@@ -657,7 +657,7 @@ class ImpresionModule {
     lineas.push(CMD.INIT);
     lineas.push(CMD.CODEPAGE_437);
 
-    // ── APARTADO 1: Header — ref pedido + estacion + hora ──
+    // ── APARTADO 1: Header — ref pedido ──
     const refMesa = this.extraerRefMesa(cuenta_id, canal);
 
     lineas.push(CMD.ALIGN_CENTER);
@@ -666,12 +666,6 @@ class ImpresionModule {
     lineas.push(refMesa || `#${pedido_id || '-'}`);
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
-
-    const ahora = new Date();
-    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    lineas.push(CMD.FONT_NORMAL);
-    const estacionStr = estacion ? `${estacion.toUpperCase()} ` : '';
-    lineas.push(`${estacionStr}${hora}`);
 
     // ── APARTADO 2: Producto + ingredientes + variaciones ──
     lineas.push(CMD.ALIGN_CENTER);

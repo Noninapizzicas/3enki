@@ -715,17 +715,16 @@ class ImpresionModule {
 
     lineas.push(CMD.ALIGN_CENTER);
 
-    // Logo texto: NO NI NA pizzicas
-    lineas.push(CMD.DOUBLE_ON);
-    lineas.push(CMD.BOLD_ON);
-    lineas.push('NO NI NA');
-    lineas.push(CMD.BOLD_OFF);
-    lineas.push(CMD.DOUBLE_OFF);
+    // Logo + datos fiscales
+    lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + 'NO NI NA' + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
     lineas.push('pizzicas');
     lineas.push('643283034');
-
-    if (datos_negocio?.direccion) lineas.push(datos_negocio.direccion);
-    if (datos_negocio?.nif) lineas.push(`NIF: ${datos_negocio.nif}`);
+    lineas.push(CMD.FONT_SMALL);
+    lineas.push('SABOR EN CLAVE DE SOL S.COOP');
+    lineas.push('C/ Narciso Yepes, 12');
+    lineas.push('30840 Alhama de Murcia');
+    lineas.push('CIF: F24747164');
+    lineas.push(CMD.FONT_NORMAL);
 
     lineas.push(this.doubleSep);
 
@@ -805,6 +804,7 @@ class ImpresionModule {
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.FONT_SMALL);
     lineas.push('Gracias por su visita');
+    lineas.push('NO NI NA pizzicas - 643 28 30 34');
     lineas.push(CMD.FONT_NORMAL);
 
     lineas.push(CMD.FEED_5);

@@ -284,7 +284,7 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, nombre } = data;
     if (cuenta_id && nombre) {
-      this.cuentaNombres.set(cuenta_id, nombre);
+      this.cuentaNombres.set(cuenta_id, { ref: nombre });
       this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, nombre });
     }
   }
@@ -293,7 +293,7 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, nombre } = data;
     if (cuenta_id && nombre) {
-      this.cuentaNombres.set(cuenta_id, nombre);
+      this.cuentaNombres.set(cuenta_id, { ref: nombre });
       this.logger.info('impresion.cuenta_nombre.updated', { cuenta_id, nombre });
     }
   }
@@ -310,11 +310,11 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, numero_ticket, cliente_nombre } = data;
     if (cuenta_id && numero_ticket != null) {
-      const nombre = cliente_nombre
-        ? `LLEVAR ${numero_ticket} - ${cliente_nombre}`
-        : `LLEVAR ${numero_ticket}`;
-      this.cuentaNombres.set(cuenta_id, nombre);
-      this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, nombre });
+      this.cuentaNombres.set(cuenta_id, {
+        ref: `LLEVAR ${numero_ticket}`,
+        detalle: cliente_nombre || null
+      });
+      this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, numero_ticket, cliente_nombre });
     }
   }
 
@@ -570,7 +570,7 @@ class ImpresionModule {
     // ══════════════════════════════════════════
     // APARTADO 1: Header — ref pedido + hora
     // ══════════════════════════════════════════
-    const refMesa = this.extraerRefMesa(cuenta_id, canal);
+    const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
 
     lineas.push(CMD.ALIGN_CENTER);
     lineas.push(CMD.DOUBLE_ON);
@@ -578,10 +578,13 @@ class ImpresionModule {
     if (reimpresion) {
       lineas.push('REIMP');
     }
-    // Referencia principal (MESA 5, GLOVO #xx, etc)
-    lineas.push(refMesa || `#${pedido_id || '-'}`);
+    // Referencia principal (MESA 5, LLEVAR 1, etc)
+    lineas.push(refCuenta || `#${pedido_id || '-'}`);
     lineas.push(CMD.BOLD_OFF);
     lineas.push(CMD.DOUBLE_OFF);
+    if (detalleCuenta) {
+      lineas.push(CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
+    }
 
     // Hora/fecha
     lineas.push(CMD.FONT_NORMAL);
@@ -703,9 +706,12 @@ class ImpresionModule {
     lineas.push(CMD.INIT + CMD.CODEPAGE_437);
 
     // ── Header — ref pedido ──
-    const refMesa = this.extraerRefMesa(cuenta_id, canal);
-    const ref = refMesa || `#${pedido_id || '-'}`;
+    const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
+    const ref = refCuenta || `#${pedido_id || '-'}`;
     lineas.push(CMD.ALIGN_CENTER + CMD.DOUBLE_ON + CMD.BOLD_ON + ref + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
+    if (detalleCuenta) {
+      lineas.push(CMD.ALIGN_CENTER + CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
+    }
 
     // ── Producto ──
     const prod = cantidad > 1 ? this.truncar(`${cantidad}x ${nombre}`) : this.truncar(nombre);
@@ -769,14 +775,15 @@ class ImpresionModule {
     lineas.push(this.doubleSep);
 
     lineas.push(CMD.ALIGN_LEFT);
-    const refMesa = this.extraerRefMesa(cuenta_id, canal);
+    const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
     const ahora = new Date();
     const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
-    if (refMesa) {
+    if (refCuenta) {
       lineas.push(CMD.BOLD_ON);
-      lineas.push(refMesa);
+      lineas.push(refCuenta);
+      if (detalleCuenta) lineas.push(detalleCuenta);
       lineas.push(CMD.BOLD_OFF);
     }
     lineas.push(`${fecha} ${hora}`);
@@ -869,13 +876,17 @@ class ImpresionModule {
     return `${izq}${' '.repeat(espacio)}${der}`;
   }
 
-  extraerRefMesa(cuenta_id, canal) {
-    if (!cuenta_id) return null;
+  /**
+   * Devuelve { ref, detalle? } para imprimir en ticket.
+   * ref: línea principal (DOUBLE_ON), detalle: línea secundaria (tamaño normal).
+   */
+  extraerRefCuenta(cuenta_id, canal) {
+    if (!cuenta_id) return { ref: null };
 
     // Primero: nombre personalizado cacheado (de eventos mesa/llevar)
-    const nombreCustom = this.cuentaNombres.get(cuenta_id);
-    if (nombreCustom) {
-      return nombreCustom.toUpperCase();
+    const cached = this.cuentaNombres.get(cuenta_id);
+    if (cached) {
+      return { ref: cached.ref.toUpperCase(), detalle: cached.detalle || null };
     }
 
     // Fallback: extraer del patrón cuenta_id
@@ -889,25 +900,25 @@ class ImpresionModule {
 
     for (const [prefijo, label] of Object.entries(prefijos)) {
       if (cuenta_id.startsWith(`${prefijo}_`)) {
-        const ref = cuenta_id.slice(prefijo.length + 1);
-        // mesa_7_20250325_001 → ref="7_20250325_001" → limpio="7" → "MESA 7"
-        // llevar_20250325_001 → ref="20250325_001" → limpio="" → extraer seq
-        const limpio = ref.replace(/_?\d{8}_\d+$/, '');
-        if (limpio) {
-          return `${label} ${limpio}`;
+        const rest = cuenta_id.slice(prefijo.length + 1);
+        // mesa_7_20250325_001 → rest="7_20250325_001" → id="7" → "MESA 7"
+        // llevar_20250325_001 → rest="20250325_001" → id="" → extraer seq
+        const id = rest.replace(/_?\d{8}_\d+$/, '');
+        if (id) {
+          return { ref: `${label} ${id}` };
         }
         // Sin identificador intermedio (llevar, telefono): usar el secuencial
-        const seqMatch = ref.match(/_(\d+)$/);
-        const seq = seqMatch ? parseInt(seqMatch[1], 10) : ref;
-        return `${label} ${seq}`;
+        const seqMatch = rest.match(/_(\d+)$/);
+        const seq = seqMatch ? parseInt(seqMatch[1], 10) : rest;
+        return { ref: `${label} ${seq}` };
       }
     }
 
     if (canal && prefijos[canal]) {
-      return `${prefijos[canal]} - ${cuenta_id}`;
+      return { ref: `${prefijos[canal]} - ${cuenta_id}` };
     }
 
-    return `REF: ${cuenta_id}`;
+    return { ref: `REF: ${cuenta_id}` };
   }
 
   // ==========================================

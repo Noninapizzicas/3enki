@@ -52,6 +52,11 @@
         "event": "mesa.cerrada",
         "description": "Limpiar cache de nombre al cerrar mesa",
         "handler": "onMesaCerrada"
+      },
+      {
+        "event": "llevar.ticket_creado",
+        "description": "Cachear nombre de ticket llevar para impresión",
+        "handler": "onLlevarTicketCreado"
       }
     ]
   },

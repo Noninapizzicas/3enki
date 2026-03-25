@@ -130,9 +130,9 @@ class ImpresionModule {
       impresoras_descubiertas: 0
     };
 
-    // Cache de nombres personalizados de mesa (cuenta_id → nombre)
-    // Se alimenta de eventos mesa.abierta y mesa.renombrada
-    this.mesaNombres = new Map();
+    // Cache de nombres personalizados de cuenta (cuenta_id → nombre)
+    // Se alimenta de eventos mesa.abierta/renombrada, llevar.ticket_creado, etc.
+    this.cuentaNombres = new Map();
 
     // Referencia al listener MQTT para cleanup
     this._onMqttMessage = null;
@@ -284,8 +284,8 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, nombre } = data;
     if (cuenta_id && nombre) {
-      this.mesaNombres.set(cuenta_id, nombre);
-      this.logger.info('impresion.mesa_nombre.cached', { cuenta_id, nombre });
+      this.cuentaNombres.set(cuenta_id, nombre);
+      this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, nombre });
     }
   }
 
@@ -293,8 +293,8 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, nombre } = data;
     if (cuenta_id && nombre) {
-      this.mesaNombres.set(cuenta_id, nombre);
-      this.logger.info('impresion.mesa_nombre.updated', { cuenta_id, nombre });
+      this.cuentaNombres.set(cuenta_id, nombre);
+      this.logger.info('impresion.cuenta_nombre.updated', { cuenta_id, nombre });
     }
   }
 
@@ -302,7 +302,19 @@ class ImpresionModule {
     const data = event?.data || event?.payload || event;
     const { cuenta_id } = data;
     if (cuenta_id) {
-      this.mesaNombres.delete(cuenta_id);
+      this.cuentaNombres.delete(cuenta_id);
+    }
+  }
+
+  async onLlevarTicketCreado(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, numero_ticket, cliente_nombre } = data;
+    if (cuenta_id && numero_ticket != null) {
+      const nombre = cliente_nombre
+        ? `LLEVAR ${numero_ticket} - ${cliente_nombre}`
+        : `LLEVAR ${numero_ticket}`;
+      this.cuentaNombres.set(cuenta_id, nombre);
+      this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, nombre });
     }
   }
 
@@ -860,8 +872,8 @@ class ImpresionModule {
   extraerRefMesa(cuenta_id, canal) {
     if (!cuenta_id) return null;
 
-    // Primero: nombre personalizado cacheado (de mesa.abierta / mesa.renombrada)
-    const nombreCustom = this.mesaNombres.get(cuenta_id);
+    // Primero: nombre personalizado cacheado (de eventos mesa/llevar)
+    const nombreCustom = this.cuentaNombres.get(cuenta_id);
     if (nombreCustom) {
       return nombreCustom.toUpperCase();
     }
@@ -878,9 +890,16 @@ class ImpresionModule {
     for (const [prefijo, label] of Object.entries(prefijos)) {
       if (cuenta_id.startsWith(`${prefijo}_`)) {
         const ref = cuenta_id.slice(prefijo.length + 1);
-        // Extraer solo el identificador antes del sufijo _YYYYMMDD_NNN
-        const limpio = ref.replace(/_\d{8}_\d+$/, '');
-        return `${label} ${limpio || ref}`;
+        // mesa_7_20250325_001 → ref="7_20250325_001" → limpio="7" → "MESA 7"
+        // llevar_20250325_001 → ref="20250325_001" → limpio="" → extraer seq
+        const limpio = ref.replace(/_?\d{8}_\d+$/, '');
+        if (limpio) {
+          return `${label} ${limpio}`;
+        }
+        // Sin identificador intermedio (llevar, telefono): usar el secuencial
+        const seqMatch = ref.match(/_(\d+)$/);
+        const seq = seqMatch ? parseInt(seqMatch[1], 10) : ref;
+        return `${label} ${seq}`;
       }
     }
 

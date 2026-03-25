@@ -654,83 +654,50 @@ class ImpresionModule {
     const lineas = [];
     const w = this.lineWidth;
 
-    lineas.push(CMD.INIT);
-    lineas.push(CMD.CODEPAGE_437);
+    lineas.push(CMD.INIT + CMD.CODEPAGE_437);
 
-    // ── APARTADO 1: Header — ref pedido ──
+    // ── Header — ref pedido ──
     const refMesa = this.extraerRefMesa(cuenta_id, canal);
+    const ref = refMesa || `#${pedido_id || '-'}`;
+    lineas.push(CMD.ALIGN_CENTER + CMD.DOUBLE_ON + CMD.BOLD_ON + ref + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
 
-    lineas.push(CMD.ALIGN_CENTER);
-    lineas.push(CMD.DOUBLE_ON);
-    lineas.push(CMD.BOLD_ON);
-    lineas.push(refMesa || `#${pedido_id || '-'}`);
-    lineas.push(CMD.BOLD_OFF);
-    lineas.push(CMD.DOUBLE_OFF);
+    // ── Producto ──
+    const prod = cantidad > 1 ? this.truncar(`${cantidad}x ${nombre}`) : this.truncar(nombre);
+    lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + prod + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
 
-    // ── APARTADO 2: Producto + ingredientes + variaciones ──
-    lineas.push(CMD.ALIGN_CENTER);
-    lineas.push(CMD.DOUBLE_ON);
-    lineas.push(CMD.BOLD_ON);
-    if (cantidad > 1) {
-      lineas.push(this.truncar(`${cantidad}x ${nombre}`));
-    } else {
-      lineas.push(this.truncar(nombre));
-    }
-    lineas.push(CMD.BOLD_OFF);
-    lineas.push(CMD.DOUBLE_OFF);
-
-    // Ingredientes base
-    if (ingredientes && ingredientes.length > 0) {
-      for (const ing of ingredientes) {
-        const ingNombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-        lineas.push(this.truncar(` ${'.'} ${ingNombre}`));
-      }
-    }
-
-    // Variaciones
+    // ── Variaciones (solo) ──
     if (variaciones && Object.keys(variaciones).length > 0) {
       const v = variaciones;
 
       if (v.ingredientes_quitar && v.ingredientes_quitar.length > 0) {
-        lineas.push(CMD.BOLD_ON);
-        lineas.push(CMD.TALL_ON);
         for (const ing of v.ingredientes_quitar) {
-          lineas.push(this.truncar(` SIN ${ing.toUpperCase()}`));
+          lineas.push(CMD.BOLD_ON + CMD.TALL_ON + this.truncar(` SIN ${ing.toUpperCase()}`) + CMD.TALL_OFF + CMD.BOLD_OFF);
         }
-        lineas.push(CMD.TALL_OFF);
-        lineas.push(CMD.BOLD_OFF);
       }
 
       if (v.ingredientes_anadir && v.ingredientes_anadir.length > 0) {
-        lineas.push(CMD.BOLD_ON);
         for (const ing of v.ingredientes_anadir) {
           const ingNombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
-          lineas.push(this.truncar(` + CON ${ingNombre}`));
+          lineas.push(CMD.BOLD_ON + this.truncar(` + CON ${ingNombre}`) + CMD.BOLD_OFF);
         }
-        lineas.push(CMD.BOLD_OFF);
       }
 
       for (const [key, val] of Object.entries(v)) {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
-          lineas.push(CMD.BOLD_ON);
-          lineas.push(` ${'*'} ${key.toUpperCase()}`);
-          lineas.push(CMD.BOLD_OFF);
+          lineas.push(CMD.BOLD_ON + ` * ${key.toUpperCase()}` + CMD.BOLD_OFF);
         } else if (val && val !== false) {
-          lineas.push(this.truncar(` ${'*'} ${key}: ${val}`));
+          lineas.push(this.truncar(` * ${key}: ${val}`));
         }
       }
     }
 
     // Notas
     if (notas) {
-      lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(this.truncar(` ${'>'} ${notas}`));
-      lineas.push(CMD.UNDERLINE_OFF);
+      lineas.push(CMD.UNDERLINE_ON + this.truncar(` > ${notas}`) + CMD.UNDERLINE_OFF);
     }
 
-    lineas.push(CMD.FEED_3);
-    lineas.push(CMD.PARTIAL_CUT);
+    lineas.push(CMD.FEED_3 + CMD.PARTIAL_CUT);
 
     return lineas.join('\n');
   }

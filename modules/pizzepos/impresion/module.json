@@ -37,6 +37,21 @@
         "event": "cocina.item_ticket",
         "description": "Imprimir ticket de pieza individual cuando horno marca item como salido",
         "handler": "onItemTicket"
+      },
+      {
+        "event": "mesa.abierta",
+        "description": "Cachear nombre de mesa para impresión de tickets",
+        "handler": "onMesaAbierta"
+      },
+      {
+        "event": "mesa.renombrada",
+        "description": "Actualizar nombre de mesa cuando se renombra",
+        "handler": "onMesaRenombrada"
+      },
+      {
+        "event": "mesa.cerrada",
+        "description": "Limpiar cache de nombre al cerrar mesa",
+        "handler": "onMesaCerrada"
       }
     ]
   },

@@ -112,14 +112,31 @@
     }
   },
 
+  "estructura_directorio": {
+    "descripcion": "Cada módulo tiene su propio subdirectorio bajo storage/pizzepos/. No se pisan.",
+    "arbol": {
+      "storage/pizzepos/cartas/": "menu-generator — cartas JSON (fuente de verdad)",
+      "storage/pizzepos/cartas/.versions/": "menu-generator — versionado automático (max 50)",
+      "storage/pizzepos/carta-digital/config.json": "carta-digital — branding, WhatsApp, tema",
+      "storage/pizzepos/carta-digital/ofertas.json": "carta-digital — promociones/combos",
+      "storage/pizzepos/carta-digital/resenas.json": "carta-digital — reseñas clientes",
+      "storage/pizzepos/carta-design/designs/": "carta-design — HTML generados por el LLM + .meta.json",
+      "storage/pizzepos/carta-design/profiles/": "carta-design — perfiles de estilo custom",
+      "storage/pizzepos/carta-impresion/exports/": "carta-impresion — HTML/PDF/PNG/SVG generados",
+      "storage/pizzepos/carta-impresion/templates/": "carta-impresion — plantillas custom del proyecto",
+      "storage/pizzepos/preprocesadas/": "imágenes de productos"
+    },
+    "filosofia": "JSON files para todo. Sin base de datos. Cada módulo lee/escribe solo en su directorio. menu-generator es el único que escribe en cartas/."
+  },
+
   "persistencia": {
     "en_disco": {
-      "config": "storage/pizzepos/carta-digital.json — se carga en onProjectActivated, se guarda en update-config",
-      "ofertas": "storage/pizzepos/carta-digital-ofertas.json — CRUD completo",
-      "resenas": "storage/pizzepos/carta-digital-resenas.json — append + FIFO max 1000",
-      "cartas": "storage/pizzepos/cartas/{carta_id}.json — generadas por menu-generator",
-      "imagenes": "storage/pizzepos/preprocesadas/ — servidas por GET /media/:path",
-      "export": "storage/pizzepos/carta-static/{slug}/ — output del export estático"
+      "config": "storage/pizzepos/carta-digital/config.json",
+      "ofertas": "storage/pizzepos/carta-digital/ofertas.json",
+      "resenas": "storage/pizzepos/carta-digital/resenas.json",
+      "cartas_fuente": "storage/pizzepos/cartas/{carta_id}.json — leído de menu-generator, nunca modificado",
+      "imagenes": "storage/pizzepos/preprocesadas/",
+      "export_estatico": "storage/pizzepos/carta-static/{slug}/"
     },
     "solo_memoria": {
       "sesiones": "Map — limpieza de inactivas >30min solo cuando se llama a /stats",
@@ -350,10 +367,11 @@
     },
 
     "output_todos_los_formatos": {
-      "html": "storage/pizzepos/cartas-html/{carta_id}_{plantilla}_{ts}.html",
-      "pdf": "storage/pizzepos/cartas-html/{carta_id}_{formato}_{orientacion}.pdf",
-      "png": "storage/pizzepos/cartas-html/{carta_id}_{formato}_{orientacion}.png",
-      "svg": "storage/pizzepos/cartas-html/{carta_id}_{orientacion}.svg"
+      "html_impresion": "storage/pizzepos/carta-impresion/exports/{carta_id}_{plantilla}_{ts}.html",
+      "pdf": "storage/pizzepos/carta-impresion/exports/{carta_id}_{formato}_{orientacion}.pdf",
+      "png": "storage/pizzepos/carta-impresion/exports/{carta_id}_{formato}_{orientacion}.png",
+      "svg": "storage/pizzepos/carta-impresion/exports/{carta_id}_{orientacion}.svg",
+      "html_design": "storage/pizzepos/carta-design/designs/{carta_id}_{slug}_{ts}.html"
     }
   }
 }

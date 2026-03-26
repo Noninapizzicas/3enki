@@ -114,12 +114,12 @@ class CartaDesignModule {
 
   outputDir(projectId) {
     const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'cartas-html') : null;
+    return p ? path.join(p.featurePath, 'carta-design', 'designs') : null;
   }
 
   profilesDir(projectId) {
     const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'design-profiles') : null;
+    return p ? path.join(p.featurePath, 'carta-design', 'profiles') : null;
   }
 
   defaultCartasDir() {
@@ -127,11 +127,11 @@ class CartaDesignModule {
   }
 
   defaultOutputDir() {
-    return path.join(process.cwd(), 'storage', 'pizzepos', 'cartas-html');
+    return path.join(process.cwd(), 'storage', 'pizzepos', 'carta-design', 'designs');
   }
 
   defaultProfilesDir() {
-    return path.join(process.cwd(), 'storage', 'pizzepos', 'design-profiles');
+    return path.join(process.cwd(), 'storage', 'pizzepos', 'carta-design', 'profiles');
   }
 
   // ==========================================

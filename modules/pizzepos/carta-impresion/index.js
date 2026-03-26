@@ -154,12 +154,12 @@ class CartaImpresionModule {
 
   cartasHtmlDir(projectId) {
     const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'cartas-html') : null;
+    return p ? path.join(p.featurePath, 'carta-impresion', 'exports') : null;
   }
 
   cartaTemplatesDir(projectId) {
     const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'carta-templates') : null;
+    return p ? path.join(p.featurePath, 'carta-impresion', 'templates') : null;
   }
 
   // ==========================================
@@ -536,7 +536,7 @@ class CartaImpresionModule {
     const buffer = await bufferPromise;
 
     // Guardar
-    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas-html');
+    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'carta-impresion', 'exports');
     await fs.mkdir(dir, { recursive: true });
 
     const filename = `${carta_id}_${formato}_${orientacion}.pdf`;
@@ -576,7 +576,7 @@ class CartaImpresionModule {
     const pdfResult = await this.toolExportPdf({ carta_id, formato, orientacion, project_id });
     if (pdfResult.status !== 200) return pdfResult;
 
-    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas-html');
+    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'carta-impresion', 'exports');
     const pdfPath = path.join(dir, pdfResult.data.filename);
 
     try {
@@ -701,7 +701,7 @@ class CartaImpresionModule {
     svg += '</svg>';
 
     // Save
-    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas-html');
+    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'carta-impresion', 'exports');
     await fs.mkdir(dir, { recursive: true });
 
     const filename = `${carta_id}_${orientacion}.svg`;

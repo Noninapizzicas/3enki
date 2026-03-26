@@ -1,0 +1,10 @@
+{
+  "id": "design-profiles",
+  "name": "Estilos",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 2,
+  "routes": ["/carta-design"],
+  "icon": "🎭",
+  "label": "Estilos"
+}

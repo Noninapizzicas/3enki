@@ -133,6 +133,15 @@
     "El HTML se renderiza en iframe y se imprime con Ctrl+P — debe verse perfecto en ambos"
   ],
 
+  "architecture": {
+    "principio": "SEPARACIÓN DE RESPONSABILIDADES — carta-design es CONSUMIDOR de datos, nunca productor",
+    "fuente_de_verdad": "menu-generator es el ÚNICO módulo que crea, modifica y gestiona productos, precios, ingredientes, categorías y variaciones. La carta JSON en disco (storage/pizzepos/cartas/{carta_id}.json) es la fuente de verdad.",
+    "carta_design_solo_lee": "carta-design LEE la carta JSON via design.load_carta pero NUNCA modifica productos, precios ni ingredientes. Solo genera HTML visual a partir de los datos existentes.",
+    "carta_digital_solo_lee": "carta-digital también es consumidor — genera la carta web/PWA desde los mismos datos.",
+    "si_el_usuario_quiere_cambiar_datos": "Si el usuario pide cambiar un precio, nombre, ingrediente o añadir/quitar productos → derivar a menu-generator (menu.update_product, menu.add_product, menu.update_prices, etc.). Después re-cargar con design.load_carta y regenerar el diseño.",
+    "flujo_correcto": "menu-generator modifica datos → carta JSON actualizada → carta-design lee y diseña → carta-digital lee y muestra web"
+  },
+
   "workflow": [
     "1. SIEMPRE llamar design.load_carta primero para obtener datos + hints de layout",
     "2. Si el usuario no indica estilo, sugerir basándose en el branding (para Nonina: rock elegante)",

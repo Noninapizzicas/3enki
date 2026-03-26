@@ -4,6 +4,34 @@
 
   "resumen": "Carta web pública para clientes (QR/WhatsApp). Backend event-driven multi-tenant con 16 UI handlers y 17 APIs. Frontend SvelteKit con carrito client-side, variaciones, y checkout WhatsApp. Export estático PWA con chat AI via Cloudflare Worker.",
 
+  "arquitectura_general": {
+    "principio": "SEPARACIÓN DE RESPONSABILIDADES — un solo dueño de datos, múltiples consumidores",
+    "modulos": {
+      "menu-generator": {
+        "rol": "FUENTE DE VERDAD — único módulo que crea, modifica y gestiona productos, precios, ingredientes, categorías, variaciones",
+        "escribe": "storage/pizzepos/cartas/{carta_id}.json",
+        "tools_de_datos": ["menu.generate", "menu.save_carta", "menu.add_product", "menu.remove_product", "menu.update_product", "menu.update_prices", "menu.add_category", "menu.update_ingredient_prices", "menu.enrich_products"]
+      },
+      "carta-digital": {
+        "rol": "CONSUMIDOR — genera carta web/PWA para clientes desde el JSON de menu-generator",
+        "lee": "storage/pizzepos/cartas/{carta_id}.json (via carta-completa endpoint)",
+        "nunca_modifica": "productos, precios, ingredientes, categorías"
+      },
+      "carta-design": {
+        "rol": "CONSUMIDOR — genera diseños HTML+CSS profesionales para impresión desde el JSON de menu-generator",
+        "lee": "storage/pizzepos/cartas/{carta_id}.json (via design.load_carta)",
+        "nunca_modifica": "productos, precios, ingredientes, categorías",
+        "escribe": "storage/pizzepos/cartas-html/ (diseños HTML), storage/pizzepos/design-profiles/ (perfiles de estilo)"
+      },
+      "carta-impresion": {
+        "rol": "CONSUMIDOR — renderizado rápido con plantillas HTML predefinidas",
+        "lee": "storage/pizzepos/cartas/{carta_id}.json",
+        "nunca_modifica": "productos, precios, ingredientes, categorías"
+      }
+    },
+    "flujo": "menu-generator modifica datos → carta JSON actualizada en disco → carta-digital/carta-design/carta-impresion leen y generan su output"
+  },
+
   "arquitectura": {
     "backend": {
       "archivo": "modules/pizzepos/carta-digital/index.js (1447 líneas)",

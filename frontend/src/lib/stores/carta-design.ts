@@ -168,7 +168,6 @@ export function initCartaDesignSubscriptions(): () => void {
   cleanupFns.push(
     mqttSubscribe('carta.generada', (_topic, payload: any) => {
       const cartaId = payload?.meta?.id || payload?.carta_id;
-      const state = initialState; // check if same carta
       cartaDesignStore.update(s => {
         if (s.cartaId === cartaId) {
           // La carta que estamos diseñando cambió → marcar como stale

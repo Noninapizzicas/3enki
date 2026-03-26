@@ -267,7 +267,6 @@ class MenuGeneratorModule {
     try {
       const files = (await fs.readdir(vDir)).filter(f => f.endsWith('.json')).sort().reverse();
       for (const file of files) {
-        const ts = file.replace('.json', '').replace(/-/g, (m, i) => i < 19 ? (i === 10 ? 'T' : [4,7].includes(i) ? '-' : [13,16].includes(i) ? ':' : '.') : m);
         try {
           const raw = await fs.readFile(path.join(vDir, file), 'utf-8');
           const carta = JSON.parse(raw);
@@ -293,6 +292,10 @@ class MenuGeneratorModule {
     if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
     if (!version_file) return { status: 400, error: 'Se requiere version_file (de menu.list_versions)' };
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+
+    // Sanitizar: prevenir path traversal
+    if (carta_id.includes('..') || carta_id.includes('/')) return { status: 400, error: 'carta_id inválido' };
+    if (version_file.includes('..') || version_file.includes('/')) return { status: 400, error: 'version_file inválido' };
 
     const dir = this.cartasDirFor(project_id);
     if (!dir) return { status: 400, error: 'Proyecto sin paths configurados' };
@@ -1526,14 +1529,8 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     cartas.set(carta.meta.id, carta);
     await this.saveCartaToDisk(carta, project_id);
 
-    // Notificar
-    await this.eventBus.publish('carta.generada', {
-      carta_id: carta.meta.id,
-      project_id,
-      nombre: carta.meta.nombre,
-      categorias: carta.categorias.length,
-      productos: carta.productos.length
-    });
+    // Notificar — payload completo igual que las demás tools
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     this.logger.info('menu-generator.carta.saved', {
       carta_id: carta.meta.id,

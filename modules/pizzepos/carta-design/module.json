@@ -23,6 +23,15 @@
     ]
   },
 
+  "ui_handlers": [
+    { "domain": "design", "action": "load-carta", "handler": "toolLoadCarta" },
+    { "domain": "design", "action": "profiles", "handler": "toolProfiles" },
+    { "domain": "design", "action": "save", "handler": "toolSave" },
+    { "domain": "design", "action": "save-profile", "handler": "toolSaveProfile" },
+    { "domain": "design", "action": "delete-profile", "handler": "toolDeleteProfile" },
+    { "domain": "design", "action": "gallery", "handler": "toolGallery" }
+  ],
+
   "tools": [
     {
       "name": "design.load_carta",

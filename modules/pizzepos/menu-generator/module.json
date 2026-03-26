@@ -51,7 +51,15 @@
     { "domain": "menu", "action": "export", "handler": "handleExport" },
     { "domain": "menu", "action": "enrich", "handler": "handleEnrichProducts" },
     { "domain": "menu", "action": "set-product-image", "handler": "handleSetProductImage" },
-    { "domain": "menu", "action": "set-category-image", "handler": "handleSetCategoryImage" }
+    { "domain": "menu", "action": "set-category-image", "handler": "handleSetCategoryImage" },
+    { "domain": "menu", "action": "update-product", "handler": "toolUpdateProduct" },
+    { "domain": "menu", "action": "add-product", "handler": "toolAddProduct" },
+    { "domain": "menu", "action": "remove-product", "handler": "toolRemoveProduct" },
+    { "domain": "menu", "action": "update-prices", "handler": "toolUpdatePrices" },
+    { "domain": "menu", "action": "add-category", "handler": "toolAddCategory" },
+    { "domain": "menu", "action": "save-carta", "handler": "toolSaveCarta" },
+    { "domain": "menu", "action": "list-versions", "handler": "toolListVersions" },
+    { "domain": "menu", "action": "restore-version", "handler": "toolRestoreVersion" }
   ],
 
   "tools": [

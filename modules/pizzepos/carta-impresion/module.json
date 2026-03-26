@@ -22,6 +22,14 @@
     ]
   },
 
+  "ui_handlers": [
+    { "domain": "carta", "action": "render", "handler": "toolRender" },
+    { "domain": "carta", "action": "plantillas", "handler": "toolPlantillas" },
+    { "domain": "carta", "action": "export-pdf", "handler": "toolExportPdf" },
+    { "domain": "carta", "action": "export-image", "handler": "toolExportImage" },
+    { "domain": "carta", "action": "export-svg", "handler": "toolExportSvg" }
+  ],
+
   "tools": [
     {
       "name": "carta.render",

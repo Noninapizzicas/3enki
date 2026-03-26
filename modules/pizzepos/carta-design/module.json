@@ -1,0 +1,154 @@
+{
+  "name": "carta-design",
+  "version": "1.0.0",
+  "description": "Estudio de diseño profesional de cartas impresas. El LLM genera HTML5+CSS completo aplicando psicología de ventas, marketing gastronómico y diseño visual profesional.",
+  "author": "Pizzepos Team",
+  "main": "index.js",
+
+  "provides": {
+    "events": ["carta.html.generada"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "carta.html.generada",
+        "description": "HTML de diseño profesional generado — incluye HTML completo para HtmlPreviewPanel"
+      }
+    ],
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "design.load_carta",
+      "description": "Carga una carta desde disco y devuelve los datos enriquecidos con metadata de layout: productos por categoría, rangos de precio, sugerencia de layout. LLAMAR SIEMPRE antes de generar un diseño.",
+      "handler": "toolLoadCarta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta a cargar (ej: carta_pizzicas)"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "design.profiles",
+      "description": "Lista los perfiles de diseño disponibles (built-in + custom del proyecto). Cada perfil incluye paleta de colores, tipografía, tipo de layout y notas de estilo.",
+      "handler": "toolProfiles",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "design.save",
+      "description": "Guarda el HTML generado y lo abre automáticamente en el panel de preview del navegador. El usuario puede imprimir con Ctrl+P. LLAMAR después de generar el HTML completo.",
+      "handler": "toolSave",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta a la que pertenece el diseño"
+          },
+          "html": {
+            "type": "string",
+            "description": "HTML5+CSS completo generado (desde <!DOCTYPE html> hasta </html>)"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre descriptivo del diseño (ej: 'Nonina Rock Elegante')"
+          },
+          "profile_id": {
+            "type": "string",
+            "description": "ID del perfil de diseño usado (opcional, para referencia)"
+          }
+        },
+        "required": ["carta_id", "html"]
+      }
+    },
+    {
+      "name": "design.save_profile",
+      "description": "Guarda un perfil de diseño reutilizable. Define paleta, tipografía, estilo — NO contiene HTML, es metadata estética.",
+      "handler": "toolSaveProfile",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "description": "Nombre del perfil (ej: 'Rock Elegante')"
+          },
+          "description": {
+            "type": "string",
+            "description": "Descripción del estilo visual"
+          },
+          "color_palette": {
+            "type": "object",
+            "description": "Colores: { primary, secondary, background, text, accent }"
+          },
+          "fonts": {
+            "type": "object",
+            "description": "Tipografía: { heading, body, accent }"
+          },
+          "layout_type": {
+            "type": "string",
+            "description": "Tipo de layout: single_column, two_column, three_column, multi_column, diptico"
+          },
+          "style_notes": {
+            "type": "string",
+            "description": "Notas de estilo libre para guiar al diseñador"
+          }
+        },
+        "required": ["nombre"]
+      }
+    },
+    {
+      "name": "design.delete_profile",
+      "description": "Elimina un perfil de diseño custom. Los perfiles built-in no se pueden eliminar.",
+      "handler": "toolDeleteProfile",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "description": "ID del perfil a eliminar"
+          }
+        },
+        "required": ["profile_id"]
+      }
+    },
+    {
+      "name": "design.gallery",
+      "description": "Lista todos los diseños generados previamente para una carta, con timestamps y perfil usado.",
+      "handler": "toolGallery",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    }
+  ],
+
+  "observability": {
+    "metrics": {
+      "counters": [
+        "design.load_carta.total",
+        "design.save.total",
+        "design.save_profile.total",
+        "design.gallery.total"
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "nonina-rock",
+  "nombre": "Nonina Rock",
+  "description": "Diseño dark con estética rock/música. Fondo negro, acentos ámbar/dorado, tipografía bold. Texturas de papel gastado. Ideal para la marca Nonina.",
+  "color_palette": {
+    "primary": "#b45309",
+    "secondary": "#dc2626",
+    "background": "#1a1a1a",
+    "text": "#e5e5e5",
+    "accent": "#f59e0b",
+    "muted": "#666"
+  },
+  "fonts": {
+    "heading": "Bebas Neue",
+    "body": "Inter",
+    "accent": "Rock Salt"
+  },
+  "layout_type": "multi_column",
+  "style_notes": "Fondo oscuro con textura noise sutil. Categorías con fondo ámbar y texto blanco. Precios en dorado. Decoraciones con notas musicales o símbolos rock via CSS pseudo-elements. Separadores con línea doble dorada. Borde fino dorado en el perímetro.",
+  "decorations": {
+    "background_texture": "noise_subtle + dark_rock gradient",
+    "category_headers": "fondo ámbar, uppercase, letter-spacing amplio",
+    "price_style": "dorado, sin símbolo €, fuente display",
+    "border": "borde fino dorado 1px en el perímetro de la carta",
+    "ornaments": "notas musicales ♪ ♫ como separadores sutiles entre categorías"
+  }
+}

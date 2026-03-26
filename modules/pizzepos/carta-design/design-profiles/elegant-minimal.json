@@ -1,0 +1,27 @@
+{
+  "id": "elegant-minimal",
+  "nombre": "Elegante Minimalista",
+  "description": "Diseño limpio y sofisticado. Fondo blanco/crema, mucho espacio negativo, tipografía serif elegante. Precios sin símbolo €. Máxima percepción de calidad.",
+  "color_palette": {
+    "primary": "#1a1a1a",
+    "secondary": "#b45309",
+    "background": "#faf8f5",
+    "text": "#2d2d2d",
+    "accent": "#8b6914",
+    "muted": "#999"
+  },
+  "fonts": {
+    "heading": "Playfair Display",
+    "body": "Source Sans 3",
+    "accent": "Cormorant Garamond"
+  },
+  "layout_type": "single_column",
+  "style_notes": "Máximo espacio negativo. Sin bordes, sin cajas. Solo tipografía y espacio. Precios sin € (solo número con coma). Separadores mínimos: línea fina 0.5px. Categorías en itálica grande. Productos con generoso interlineado.",
+  "decorations": {
+    "background_texture": "ninguna — fondo sólido crema",
+    "category_headers": "serif itálica, tamaño grande, sin fondo, solo texto",
+    "price_style": "sin €, fuente serif, color neutro oscuro, peso normal",
+    "border": "ninguno",
+    "ornaments": "ornamento tipográfico sutil (◆ o ·) como separador entre categorías"
+  }
+}

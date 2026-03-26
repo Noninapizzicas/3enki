@@ -36,13 +36,44 @@
     },
     "requisito": "La carta DEBE existir en disco (storage/pizzepos/cartas/{carta_id}.json). Si no existe, el usuario debe usar menu.save_carta primero."
   },
+  "html_design_capabilities": {
+    "descripcion": "Las plantillas HTML soportan CUALQUIER diseño CSS — fondos, gradients, tipografía, imágenes, todo se imprime correctamente",
+    "fondos_imprimibles": "Todas las plantillas incluyen -webkit-print-color-adjust: exact — los fondos de color, gradients y imágenes de fondo SE IMPRIMEN",
+    "css_disponible": [
+      "CSS Grid y Flexbox — layouts complejos multi-columna",
+      "CSS Columns — columnas automáticas tipo periódico",
+      "Gradients (linear-gradient, radial-gradient) — fondos degradados",
+      "Google Fonts via @import — tipografías profesionales",
+      "SVG inline — logos e iconos vectoriales",
+      "background-image — imágenes y texturas de fondo",
+      "@page { size: A4 landscape/portrait } — tamaño exacto de página",
+      "break-inside: avoid — evitar cortar productos entre páginas",
+      "Variables CSS (--color-primario) — temas personalizables",
+      "Opacity, box-shadow, border-radius — efectos visuales",
+      "Pseudo-elements (::before, ::after) — decoraciones"
+    ],
+    "marcadores_template": [
+      "{{nombre_carta}} — nombre del restaurante/carta",
+      "{{fecha}} — fecha actual dd/mm/aaaa",
+      "{{total_productos}} — número de productos",
+      "{{total_categorias}} — número de categorías",
+      "{{categorias_html}} — HTML auto-generado de categorías+productos (div.categoria > h2 + div.producto)",
+      "{{print_colors_css}} — CSS para forzar fondos en impresión (incluir siempre)",
+      "{{categorias_json}} — JSON de categorías para uso en <script>",
+      "{{productos_json}} — JSON de productos para uso en <script>"
+    ],
+    "ejemplo_plantilla_con_fondo": "La plantilla puede usar background: linear-gradient(...), background-image: url(...), colores de fondo en categorías, etc. Todo se imprime correctamente gracias a print-color-adjust: exact.",
+    "nota_flujo": "El HTML se abre en el navegador → el usuario ve el preview exacto → Ctrl+P → PDF perfecto con fondos"
+  },
   "rules": [
     "la carta se renderiza con datos reales del catálogo — nunca datos hardcodeados",
-    "las plantillas HTML son autocontenidas (CSS embebido)",
+    "las plantillas HTML son autocontenidas (CSS + datos inline, zero dependencias externas excepto Google Fonts)",
+    "SIEMPRE incluir {{print_colors_css}} en las plantillas para que los fondos se impriman",
     "SIEMPRE verificar que la carta existe antes de intentar exportar — si no existe, sugerir menu.save_carta",
-    "para PDF/PNG/SVG: recomendar orientacion landscape para cartas con muchas categorías",
+    "PREFERIR carta.render con plantilla HTML sobre carta.export_pdf — HTML produce mejor calidad visual con fondos, gradients, tipografía",
+    "para crear plantillas ricas: usar CSS Grid/Columns, gradients, Google Fonts, SVG inline",
     "los precios se formatean en español: coma decimal + símbolo € (ej: 11,50 €)",
-    "al exportar, informar al usuario la ruta del fichero generado y las opciones de uso"
+    "al generar una plantilla con carta.plantilla_crear, incluir preview en @media screen y estilos de impresión en @media print"
   ],
   "integrations": {
     "listens_to": ["project.activated"],

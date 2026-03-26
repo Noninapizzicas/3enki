@@ -436,7 +436,7 @@ class CartaImpresionModule {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
 
     const carta = await this.loadCarta(carta_id, project_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada en disco. Usa menu.save_carta primero.` };
 
     const PDFDocument = require('pdfkit');
 
@@ -444,31 +444,43 @@ class CartaImpresionModule {
     const size = formato === 'A5' ? 'A5' : 'A4';
     const doc = new PDFDocument({ size, layout: isLandscape ? 'landscape' : 'portrait', margin: 40 });
 
+    // Collect chunks — registrar AMBOS listeners ANTES de escribir contenido
     const chunks = [];
-    doc.on('data', chunk => chunks.push(chunk));
+    const bufferPromise = new Promise((resolve, reject) => {
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
 
     const cartaNombre = carta.meta?.nombre || 'Carta';
-    const categorias = (carta.categorias || []).sort((a, b) => a.orden - b.orden);
+    const categorias = (carta.categorias || []).sort((a, b) => (a.orden || 0) - (b.orden || 0));
     const productos = carta.productos || [];
+    const pageW = doc.page.width;
+    const marginL = doc.page.margins.left;
+    const marginR = doc.page.margins.right;
+    const contentW = pageW - marginL - marginR;
 
     // Header
-    doc.fontSize(20).font('Helvetica-Bold').text(cartaNombre, { align: 'center' });
-    doc.moveDown(0.5);
-    doc.moveTo(doc.x, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).stroke('#333');
-    doc.moveDown(0.5);
+    doc.fontSize(20).font('Helvetica-Bold').fillColor('#1a1a1a')
+      .text(cartaNombre, { align: 'center' });
+    doc.moveDown(0.3);
+    doc.moveTo(marginL, doc.y).lineTo(pageW - marginR, doc.y).stroke('#b45309');
+    doc.moveDown(0.6);
 
     // Categorias + productos
     for (const cat of categorias) {
       const catProds = productos.filter(p => p.categoria === cat.id);
       if (catProds.length === 0) continue;
 
-      // Check if we need a new page (less than 80px left)
       if (doc.y > doc.page.height - doc.page.margins.bottom - 80) {
         doc.addPage();
       }
 
-      doc.fontSize(14).font('Helvetica-Bold').fillColor('#b45309')
-        .text(`${cat.icon || ''} ${cat.nombre}`.trim());
+      const catLabel = `${cat.icon || ''} ${cat.nombre}`.trim();
+      doc.fontSize(13).font('Helvetica-Bold').fillColor('#b45309')
+        .text(catLabel, marginL, doc.y);
+      doc.moveDown(0.2);
+      doc.moveTo(marginL, doc.y).lineTo(marginL + contentW, doc.y).stroke('#e5e7eb');
       doc.moveDown(0.3);
 
       for (const prod of catProds) {
@@ -477,36 +489,36 @@ class CartaImpresionModule {
         }
 
         const ings = (prod.ingredientes || []).map(i => i.nombre).join(', ');
-        const precio = `${prod.precio.toFixed(2)} €`;
+        const precio = `${prod.precio.toFixed(2).replace('.', ',')} \u20ac`;
+        const y = doc.y;
 
+        // Nombre del producto (izquierda)
         doc.fontSize(10).font('Helvetica-Bold').fillColor('#1a1a1a')
-          .text(prod.nombre, doc.page.margins.left, doc.y, {
-            continued: true, width: doc.page.width - doc.page.margins.left - doc.page.margins.right - 60
-          });
-        doc.font('Helvetica-Bold').fillColor('#b45309')
-          .text(precio, { align: 'right' });
+          .text(prod.nombre, marginL, y, { width: contentW - 70 });
 
+        // Precio (derecha, misma línea)
+        doc.fontSize(10).font('Helvetica-Bold').fillColor('#b45309')
+          .text(precio, marginL + contentW - 65, y, { width: 65, align: 'right' });
+
+        // Ingredientes (debajo)
         if (ings) {
-          doc.fontSize(8).font('Helvetica').fillColor('#666')
-            .text(ings, doc.page.margins.left, doc.y, {
-              width: doc.page.width - doc.page.margins.left - doc.page.margins.right
-            });
+          doc.fontSize(7.5).font('Helvetica').fillColor('#777')
+            .text(ings, marginL, doc.y, { width: contentW });
         }
-        doc.moveDown(0.3);
+        doc.moveDown(0.25);
       }
-      doc.moveDown(0.4);
+      doc.moveDown(0.5);
     }
 
     // Footer
     const fecha = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    doc.fontSize(7).font('Helvetica').fillColor('#999')
-      .text(fecha, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - 15, { align: 'center' });
+    doc.fontSize(7).font('Helvetica').fillColor('#aaa')
+      .text(fecha, marginL, doc.page.height - doc.page.margins.bottom - 12, {
+        width: contentW, align: 'center'
+      });
 
     doc.end();
-
-    const buffer = await new Promise(resolve => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-    });
+    const buffer = await bufferPromise;
 
     // Guardar
     const dir = this.cartasHtmlDir(project_id);

@@ -40,6 +40,7 @@ data/projects/*/originales/
 data/projects/*/tmp/
 data/projects/*/db/
 data/projects/*/storage/
+storage/pizzepos/cartas-html/
 # New structure: bot directories contain runtime data
 data/projects/*/*/recibidas/
 data/projects/*/*/procesadas/

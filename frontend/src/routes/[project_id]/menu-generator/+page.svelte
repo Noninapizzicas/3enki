@@ -28,21 +28,41 @@
       route: '/menu-generator',
       title: 'Menu Generator',
       description: 'Pipeline de creación de cartas de restaurante: PDF→Imagen→OCR→Generar carta estructurada con IA.',
-      instructions: `El usuario está en el pipeline de generación de cartas para el proyecto "${project_id}". Puede usar los paneles de la barra lateral o pedirte las cosas por el chat.
+      instructions: `El usuario está en menu-generator para el proyecto "${project_id}". Este es el módulo DUEÑO de los datos de carta — aquí se crean, modifican y gestionan productos, precios, ingredientes y categorías.
 
 Cuando el usuario dice "genera con eso", "usa el texto que acabo de escanear" o similar, usa el valor de ocrText del estado.
 Cuando menciona "la carta", "esa carta" o similar, se refiere a la activeCarta del estado (si existe).
 
-Tools disponibles para esta página:
-- menu.generate: genera carta desde texto
+Tools de generación y gestión de datos:
+- menu.generate: genera carta desde texto (OCR, lista, JSON)
+- menu.save_carta: guarda carta completa a disco desde JSON
 - menu.list_cartas: lista cartas generadas
 - menu.get_carta: obtiene carta por ID
-- menu.update_prices: ajusta precios
-- menu.add_product / menu.remove_product: añadir/quitar productos
+
+Tools de edición de productos:
+- menu.add_product: añadir producto a carta
+- menu.remove_product: quitar producto de carta
+- menu.update_product: actualizar nombre, precio, ingredientes, categoría
+- menu.update_prices: ajustar precios (porcentaje, por categoría, individuales)
 - menu.add_category: añadir categoría
-- menu.update_product: actualizar producto
-- menu.search_products: buscar productos
-- menu.stats: estadísticas de carta`,
+- menu.update_ingredient_prices: actualizar precios extra de ingredientes
+
+Tools de enriquecimiento:
+- menu.enrich_products: descripciones, emojis, tags con IA
+- menu.set_product_image: asignar imagen a producto
+- menu.set_category_image: asignar imagen/icono a categoría
+
+Tools de consulta:
+- menu.search_products: buscar productos por nombre o ingrediente
+- menu.stats: estadísticas de carta
+
+Control de versiones:
+- menu.list_versions: historial de versiones (max 50)
+- menu.restore_version: restaurar versión anterior
+
+Exportación:
+- menu.export_to_pos: sincronizar con POS
+- carta.render: renderizar HTML imprimible con plantilla`,
       state: {
         projectId: project_id
       }

@@ -521,8 +521,7 @@ class CartaImpresionModule {
     const buffer = await bufferPromise;
 
     // Guardar
-    const dir = this.cartasHtmlDir(project_id);
-    if (!dir) return { status: 500, error: 'Proyecto sin paths configurados' };
+    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas-html');
     await fs.mkdir(dir, { recursive: true });
 
     const filename = `${carta_id}_${formato}_${orientacion}.pdf`;
@@ -530,7 +529,8 @@ class CartaImpresionModule {
     await fs.writeFile(absolutePath, buffer);
 
     const paths = this.getPaths(project_id);
-    const relativePath = '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
+    const storagePath = paths?.storagePath || path.join(process.cwd(), 'storage');
+    const relativePath = '/' + path.relative(storagePath, absolutePath).replace(/\\/g, '/');
 
     this.metrics?.increment('carta.export_pdf.completed');
     this.logger.info('carta.export_pdf.completed', { carta_id, project_id, formato, orientacion, size: buffer.length });
@@ -561,7 +561,7 @@ class CartaImpresionModule {
     const pdfResult = await this.toolExportPdf({ carta_id, formato, orientacion, project_id });
     if (pdfResult.status !== 200) return pdfResult;
 
-    const dir = this.cartasHtmlDir(project_id);
+    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas-html');
     const pdfPath = path.join(dir, pdfResult.data.filename);
 
     try {
@@ -577,7 +577,8 @@ class CartaImpresionModule {
       await fs.writeFile(pngPath, pages[0].content);
 
       const paths = this.getPaths(project_id);
-      const relativePath = '/' + path.relative(paths.storagePath, pngPath).replace(/\\/g, '/');
+      const storagePath = paths?.storagePath || path.join(process.cwd(), 'storage');
+      const relativePath = '/' + path.relative(storagePath, pngPath).replace(/\\/g, '/');
 
       this.metrics?.increment('carta.export_image.completed');
       this.logger.info('carta.export_image.completed', { carta_id, project_id, size: pages[0].content.length });
@@ -685,8 +686,7 @@ class CartaImpresionModule {
     svg += '</svg>';
 
     // Save
-    const dir = this.cartasHtmlDir(project_id);
-    if (!dir) return { status: 500, error: 'Proyecto sin paths configurados' };
+    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas-html');
     await fs.mkdir(dir, { recursive: true });
 
     const filename = `${carta_id}_${orientacion}.svg`;
@@ -694,7 +694,8 @@ class CartaImpresionModule {
     await fs.writeFile(absolutePath, svg, 'utf-8');
 
     const paths = this.getPaths(project_id);
-    const relativePath = '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
+    const storagePath = paths?.storagePath || path.join(process.cwd(), 'storage');
+    const relativePath = '/' + path.relative(storagePath, absolutePath).replace(/\\/g, '/');
 
     this.metrics?.increment('carta.export_svg.completed');
     this.logger.info('carta.export_svg.completed', { carta_id, project_id, orientacion, size: svg.length });
@@ -718,19 +719,33 @@ class CartaImpresionModule {
   // ==========================================
 
   async loadCarta(cartaId, projectId) {
+    // Intentar ruta del proyecto activado
     const dir = this.cartasDir(projectId);
-    if (!dir) return null;
+    if (dir) {
+      try {
+        const raw = await fs.readFile(path.join(dir, `${cartaId}.json`), 'utf-8');
+        return JSON.parse(raw);
+      } catch (_) {}
+    }
+
+    // Fallback: buscar en todas las rutas de proyectos registrados
+    for (const [pid, paths] of this.projectPaths) {
+      if (pid === projectId) continue;
+      try {
+        const fallbackDir = path.join(paths.featurePath, 'cartas');
+        const raw = await fs.readFile(path.join(fallbackDir, `${cartaId}.json`), 'utf-8');
+        return JSON.parse(raw);
+      } catch (_) {}
+    }
+
+    // Último fallback: ruta por defecto (storage/pizzepos/cartas/)
     try {
-      const raw = await fs.readFile(path.join(dir, `${cartaId}.json`), 'utf-8');
+      const defaultPath = path.join(process.cwd(), 'storage', 'pizzepos', 'cartas', `${cartaId}.json`);
+      const raw = await fs.readFile(defaultPath, 'utf-8');
       return JSON.parse(raw);
     } catch (_) {
       return null;
     }
-  }
-
-  cartasDir(projectId) {
-    const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'cartas') : null;
   }
 
   // ==========================================

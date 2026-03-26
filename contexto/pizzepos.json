@@ -709,19 +709,26 @@
     },
 
     "carta-impresion": {
-      "version": "1.0.0",
-      "descripcion": "Generación de HTML para imprimir cartas de restaurante desde el navegador (Ctrl+P). Templates A4, A5 y custom.",
+      "version": "1.1.0",
+      "descripcion": "Renderizado y exportación de cartas en múltiples formatos: HTML imprimible, PDF server-side, PNG alta resolución, SVG vectorial.",
       "ui_domain": "carta",
-      "uiHandlers": ["render", "plantillas", "plantilla_crear", "plantilla_eliminar"],
       "tools": [
         { "name": "carta.render", "desc": "Genera HTML imprimible desde carta_id + plantilla" },
-        { "name": "carta.plantillas", "desc": "Lista plantillas disponibles" },
-        { "name": "carta.plantilla_crear", "desc": "Crea plantilla custom" },
-        { "name": "carta.plantilla_eliminar", "desc": "Elimina plantilla" }
+        { "name": "carta.plantillas", "desc": "Lista plantillas disponibles (globales + proyecto)" },
+        { "name": "carta.plantilla_crear", "desc": "Crea plantilla custom con HTML/CSS" },
+        { "name": "carta.plantilla_eliminar", "desc": "Elimina plantilla del proyecto" },
+        { "name": "carta.export_pdf", "desc": "PDF server-side con pdfkit. A4/A5, portrait/landscape" },
+        { "name": "carta.export_image", "desc": "PNG alta resolución (2x). PDF→PNG via pdf-to-png-converter" },
+        { "name": "carta.export_svg", "desc": "SVG vectorial puro. Columnas por categoría. Editable en Figma/Illustrator" }
       ],
       "eventos_suscribe": ["project.activated", "project.deactivated"],
-      "plantillas_incluidas": ["a4-clasica", "a5-compacta"],
-      "nota": "Output es HTML — el navegador se encarga del print/PDF via Ctrl+P o window.print()"
+      "plantillas_incluidas": ["a4-clasica", "a5-menu-dia", "a4-cuadruple", "a4-diptico", "a4-paisaje-5col"],
+      "output": "storage/pizzepos/cartas-html/ — HTML, PDF, PNG, SVG",
+      "dependencias": { "pdfkit": "PDF generation", "pdf-to-png-converter": "PDF→PNG" }
+    },
+
+    "menu-generator_save": {
+      "nota": "menu.save_carta — tool nueva en menu-generator para guardar carta completa a disco desde JSON. El diseñador construye la carta y la persiste explícitamente."
     },
 
     "carta-digital": {

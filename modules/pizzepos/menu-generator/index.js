@@ -208,10 +208,136 @@ class MenuGeneratorModule {
     try {
       await fs.mkdir(dir, { recursive: true });
       const filePath = path.join(dir, `${carta.meta.id}.json`);
+
+      // Versionado: guardar copia antes de sobreescribir
+      await this.saveVersion(carta.meta.id, dir);
+
+      // Actualizar timestamp
+      if (carta.meta) carta.meta.updated_at = new Date().toISOString();
+
       await fs.writeFile(filePath, JSON.stringify(carta, null, 2), 'utf-8');
     } catch (err) {
       this.logger.warn('menu-generator.carta.save_failed', { carta_id: carta.meta?.id, project_id: projectId, error: err.message });
     }
+  }
+
+  // ==========================================
+  // Version Control
+  // ==========================================
+
+  versionsDir(cartasDir, cartaId) {
+    return path.join(cartasDir, '.versions', cartaId);
+  }
+
+  async saveVersion(cartaId, cartasDir) {
+    const currentPath = path.join(cartasDir, `${cartaId}.json`);
+    try {
+      const current = await fs.readFile(currentPath, 'utf-8');
+      const vDir = this.versionsDir(cartasDir, cartaId);
+      await fs.mkdir(vDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      await fs.writeFile(path.join(vDir, `${ts}.json`), current, 'utf-8');
+
+      // Limitar a 50 versiones — eliminar las más antiguas
+      const files = (await fs.readdir(vDir)).filter(f => f.endsWith('.json')).sort();
+      if (files.length > 50) {
+        for (const old of files.slice(0, files.length - 50)) {
+          await fs.unlink(path.join(vDir, old)).catch(() => {});
+        }
+      }
+    } catch (err) {
+      // Si no existe el fichero actual, no hay nada que versionar (primera vez)
+      if (err.code !== 'ENOENT') {
+        this.logger.debug('menu-generator.version.save_skip', { carta_id: cartaId, error: err.message });
+      }
+    }
+  }
+
+  async toolListVersions({ carta_id, project_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+
+    const dir = this.cartasDirFor(project_id);
+    if (!dir) {
+      return { status: 200, data: { carta_id, versions: [], total: 0 } };
+    }
+
+    const vDir = this.versionsDir(dir, carta_id);
+    let versions = [];
+    try {
+      const files = (await fs.readdir(vDir)).filter(f => f.endsWith('.json')).sort().reverse();
+      for (const file of files) {
+        try {
+          const raw = await fs.readFile(path.join(vDir, file), 'utf-8');
+          const carta = JSON.parse(raw);
+          versions.push({
+            file,
+            timestamp: carta.meta?.updated_at || file.replace('.json', ''),
+            nombre: carta.meta?.nombre || carta_id,
+            productos: carta.productos?.length || 0,
+            categorias: carta.categorias?.length || 0,
+            size_bytes: Buffer.byteLength(raw, 'utf-8')
+          });
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    return {
+      status: 200,
+      data: { carta_id, versions, total: versions.length }
+    };
+  }
+
+  async toolRestoreVersion({ carta_id, version_file, project_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!version_file) return { status: 400, error: 'Se requiere version_file (de menu.list_versions)' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+
+    // Sanitizar: prevenir path traversal
+    if (carta_id.includes('..') || carta_id.includes('/')) return { status: 400, error: 'carta_id inválido' };
+    if (version_file.includes('..') || version_file.includes('/')) return { status: 400, error: 'version_file inválido' };
+
+    const dir = this.cartasDirFor(project_id);
+    if (!dir) return { status: 400, error: 'Proyecto sin paths configurados' };
+
+    const vDir = this.versionsDir(dir, carta_id);
+    const versionPath = path.join(vDir, version_file);
+
+    let carta;
+    try {
+      carta = JSON.parse(await fs.readFile(versionPath, 'utf-8'));
+    } catch (_) {
+      return { status: 404, error: `Versión "${version_file}" no encontrada` };
+    }
+
+    // Guardar versión actual antes de restaurar
+    await this.saveVersion(carta_id, dir);
+
+    // Restaurar
+    carta.meta.restored_from = version_file;
+    carta.meta.restored_at = new Date().toISOString();
+    await fs.writeFile(path.join(dir, `${carta_id}.json`), JSON.stringify(carta, null, 2), 'utf-8');
+
+    // Actualizar en memoria
+    const cartas = this.getCartas(project_id);
+    cartas.set(carta_id, carta);
+
+    // Notificar consumidores
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
+
+    this.logger.info('menu-generator.version.restored', { carta_id, version_file, project_id });
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        restored_from: version_file,
+        nombre: carta.meta?.nombre,
+        productos: carta.productos?.length || 0,
+        categorias: carta.categorias?.length || 0,
+        message: `Carta restaurada desde versión ${version_file}. La versión anterior se guardó automáticamente.`
+      }
+    };
   }
 
   async loadCartasFromDisk(projectId) {
@@ -748,6 +874,9 @@ class MenuGeneratorModule {
     const categoria = { id: catId, nombre, orden: maxOrden + 1 };
     carta.categorias.push(categoria);
 
+    await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
+
     return { status: 201, data: categoria };
   }
 
@@ -847,6 +976,9 @@ class MenuGeneratorModule {
         updated_at: new Date().toISOString()
       });
     }
+
+    // Notificar cambio de carta para que consumidores actualicen
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return {
       status: 200,
@@ -1397,14 +1529,8 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     cartas.set(carta.meta.id, carta);
     await this.saveCartaToDisk(carta, project_id);
 
-    // Notificar
-    await this.eventBus.publish('carta.generada', {
-      carta_id: carta.meta.id,
-      project_id,
-      nombre: carta.meta.nombre,
-      categorias: carta.categorias.length,
-      productos: carta.productos.length
-    });
+    // Notificar — payload completo igual que las demás tools
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     this.logger.info('menu-generator.carta.saved', {
       carta_id: carta.meta.id,
@@ -1495,6 +1621,7 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     if (icon) cat.icon = icon;
 
     await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return {
       status: 200,

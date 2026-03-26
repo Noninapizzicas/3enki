@@ -1,0 +1,27 @@
+{
+  "id": "seasonal-fresh",
+  "nombre": "Estacional Fresco",
+  "description": "Diseño luminoso y fresco. Colores pastel que cambian por temporada. Esquinas redondeadas, badges de precio tipo etiqueta. Ideal para menús del día o cartas de temporada.",
+  "color_palette": {
+    "primary": "#059669",
+    "secondary": "#2563eb",
+    "background": "#f0fdf4",
+    "text": "#1a1a1a",
+    "accent": "#d97706",
+    "muted": "#6b7280"
+  },
+  "fonts": {
+    "heading": "Nunito",
+    "body": "Open Sans",
+    "accent": "Pacifico"
+  },
+  "layout_type": "two_column",
+  "style_notes": "Fondo verde pastel muy sutil. Categorías con icono emoji grande. Precios en badges con borde redondeado (tipo etiqueta). Ingredientes como chips/pills redondeados. Sensación fresca, joven, Instagram-friendly. Ideal para cartas de temporada o menú del día.",
+  "decorations": {
+    "background_texture": "warm_amber gradient muy sutil",
+    "category_headers": "emoji grande + texto en color primario, sin fondo",
+    "price_style": "badge redondeado con fondo accent, texto blanco",
+    "border": "borde redondeado 12px en secciones",
+    "ornaments": "emojis de temporada como separadores (🌿 primavera, ☀️ verano, 🍂 otoño, ❄️ invierno)"
+  }
+}

@@ -214,6 +214,22 @@ export {
   renderCartaHtml
 } from './menu-generator';
 
+// Carta Design Store
+export {
+  cartaDesignStore,
+  loadCartaForDesign,
+  loadProfiles,
+  loadGallery,
+  initCartaDesignSubscriptions,
+  designProfiles,
+  designGallery,
+  designLoading,
+  designError,
+  cartaLoaded,
+  layoutHints
+} from './carta-design';
+export type { DesignProfile, DesignMeta, CartaDesignState } from './carta-design';
+
 // HTML Preview Store
 export {
   htmlPreviewStore,

@@ -25,19 +25,25 @@
       description: 'Gestión de carta digital del restaurante: configuración, preview, exportación y estadísticas.',
       instructions: `El usuario está en la gestión de carta digital para el proyecto "${project_id}". Puede usar los paneles de la barra superior o pedirte las cosas por el chat.
 
-Cuando el usuario dice "la carta", "mi carta digital" o similar, se refiere a la carta digital del proyecto activo.
-Cuando menciona "configurar", "tema", "colores", "WhatsApp" se refiere a la configuración de la carta digital.
+Carta digital es un CONSUMIDOR de datos — muestra la carta pero NO modifica productos, precios ni ingredientes.
+Si el usuario quiere cambiar datos de productos → derivar al módulo menu-generator.
+
+Cuando el usuario dice "la carta", "mi carta digital" se refiere a la carta digital del proyecto activo.
+Cuando menciona "configurar", "tema", "colores", "WhatsApp" se refiere a la configuración visual de la carta digital (eso SÍ es de este módulo).
 
 Tools disponibles para esta página:
-- menu.list_cartas: lista cartas generadas (para seleccionar cuál usar en la carta digital)
-- menu.get_carta: obtiene carta por ID
-- menu.enrich_products: enriquecer productos con descripciones, emojis, tags
-- menu.set_product_image: asignar imagen a producto
-- menu.set_category_image: asignar imagen/icono a categoría
-- menu.update_product: actualizar producto
-- menu.update_prices: ajustar precios
-- menu.search_products: buscar productos
-- menu.stats: estadísticas de carta`,
+- carta-digital.config: ver configuración actual (branding, WhatsApp, tema)
+- carta-digital.update-config: actualizar configuración visual (colores, nombre, WhatsApp)
+- carta-digital.carta-completa: ver carta completa enriquecida
+- carta-digital.ofertas: gestionar ofertas/combos (PROPIO de carta-digital)
+- carta-digital.create-oferta / update-oferta / delete-oferta: CRUD ofertas
+- carta-digital.resenas: ver reseñas de clientes
+- carta-digital.stats: estadísticas de uso (sesiones, pedidos)
+- carta-digital.funnel: análisis de conversión
+- carta-digital.export-static: exportar como web estática (GitHub Pages, Netlify)
+
+Para cambiar productos/precios/ingredientes → usar menu-generator:
+- menu.update_product, menu.add_product, menu.update_prices, etc.`,
       state: {
         projectId: project_id
       }

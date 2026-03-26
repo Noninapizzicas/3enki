@@ -51,7 +51,15 @@
     { "domain": "menu", "action": "export", "handler": "handleExport" },
     { "domain": "menu", "action": "enrich", "handler": "handleEnrichProducts" },
     { "domain": "menu", "action": "set-product-image", "handler": "handleSetProductImage" },
-    { "domain": "menu", "action": "set-category-image", "handler": "handleSetCategoryImage" }
+    { "domain": "menu", "action": "set-category-image", "handler": "handleSetCategoryImage" },
+    { "domain": "menu", "action": "update-product", "handler": "toolUpdateProduct" },
+    { "domain": "menu", "action": "add-product", "handler": "toolAddProduct" },
+    { "domain": "menu", "action": "remove-product", "handler": "toolRemoveProduct" },
+    { "domain": "menu", "action": "update-prices", "handler": "toolUpdatePrices" },
+    { "domain": "menu", "action": "add-category", "handler": "toolAddCategory" },
+    { "domain": "menu", "action": "save-carta", "handler": "toolSaveCarta" },
+    { "domain": "menu", "action": "list-versions", "handler": "toolListVersions" },
+    { "domain": "menu", "action": "restore-version", "handler": "toolRestoreVersion" }
   ],
 
   "tools": [
@@ -393,6 +401,40 @@
           }
         },
         "required": ["carta"]
+      }
+    },
+    {
+      "name": "menu.list_versions",
+      "description": "Lista el historial de versiones de una carta. Cada versión incluye timestamp, número de productos y categorías. Se guardan automáticamente en cada modificación (máximo 50).",
+      "handler": "toolListVersions",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "menu.restore_version",
+      "description": "Restaura una carta a una versión anterior. La versión actual se guarda automáticamente antes de restaurar (no se pierde nada). Publica carta.generada para notificar a consumidores.",
+      "handler": "toolRestoreVersion",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta"
+          },
+          "version_file": {
+            "type": "string",
+            "description": "Nombre del fichero de versión (obtenido de menu.list_versions)"
+          }
+        },
+        "required": ["carta_id", "version_file"]
       }
     },
     {

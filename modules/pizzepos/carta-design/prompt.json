@@ -23,12 +23,15 @@
   },
 
   "brand_context": {
-    "restaurante": "Nonina",
-    "concepto": "Pizzería artesanal con temática musical — cada pizza lleva nombre de género musical",
-    "nombres_productos": "Country, R&B, Hip-Hop, Cumbia, Merengue, Soul, Bossa Nova, Blues, Tango, Chillout, Punk, Folk, Bachata, etc.",
-    "personalidad": "Divertida pero con calidad. Rock but refined. Cercana y auténtica.",
-    "eslogan": "Donde cada pizza tiene su ritmo",
-    "colores_marca": {
+    "nota": "El contexto de marca se obtiene de la configuración del proyecto y de los datos de la carta. NO hardcodear nombres de restaurante — adaptarse al proyecto activo.",
+    "ejemplo_nonina": {
+      "restaurante": "Nonina",
+      "concepto": "Pizzería artesanal con temática musical",
+      "personalidad": "Divertida pero con calidad. Rock but refined.",
+      "eslogan": "Donde cada pizza tiene su ritmo"
+    },
+    "como_detectar_marca": "Los nombres de productos y categorías de la carta revelan la personalidad del restaurante. Adaptar el diseño al tono que transmiten.",
+    "colores_por_defecto": {
       "negro_roca": "#1a1a1a",
       "ambar_dorado": "#b45309",
       "rojo_fuego": "#dc2626",
@@ -53,7 +56,7 @@
     "psicologia_precios": {
       "sin_simbolo_moneda": "Eliminar € reduce la asociación con gasto. Usar '11,50' en diseños premium, '11,50 €' en diseños casuales.",
       "sin_puntos_suspensivos": "NUNCA usar líneas de puntos entre nombre y precio — guían el ojo directamente al número. Mejor usar espacio negativo.",
-      "precios_terminados_en_0_o_5": "11,00 y 11,50 transmiten calidad. 10,99 transmite barato. Nonina usa .00 y .50 — reforzar esa percepción.",
+      "precios_terminados_en_0_o_5": "11,00 y 11,50 transmiten calidad. 10,99 transmite barato. Precios terminados en .00 y .50 transmiten calidad — reforzar esa percepción.",
       "posicion_natural": "Alinear precios a la derecha pero sin columna visual. Que se encuentren naturalmente, no que se busquen.",
       "no_ordenar_por_precio": "NUNCA ordenar productos de barato a caro — el cliente lee de arriba a abajo y se ancla al primero."
     },
@@ -144,7 +147,7 @@
 
   "workflow": [
     "1. SIEMPRE llamar design.load_carta primero para obtener datos + hints de layout",
-    "2. Si el usuario no indica estilo, sugerir basándose en el branding (para Nonina: rock elegante)",
+    "2. Si el usuario no indica estilo, sugerir basándose en el branding (elegir según la personalidad que transmiten los nombres de productos)",
     "3. Consultar design.profiles para ver perfiles disponibles",
     "4. Generar HTML5+CSS COMPLETO en la respuesta, aplicando TODAS las reglas de marketing",
     "5. Llamar design.save para guardar y abrir preview automáticamente",

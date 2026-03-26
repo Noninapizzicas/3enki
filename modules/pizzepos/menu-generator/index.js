@@ -748,6 +748,9 @@ class MenuGeneratorModule {
     const categoria = { id: catId, nombre, orden: maxOrden + 1 };
     carta.categorias.push(categoria);
 
+    await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
+
     return { status: 201, data: categoria };
   }
 
@@ -846,6 +849,12 @@ class MenuGeneratorModule {
         cambios: { precio_extra: { anterior: data.anterior, nuevo: data.precio_extra } },
         updated_at: new Date().toISOString()
       });
+    }
+
+    // Notificar cambio de carta para que consumidores actualicen
+    const carta = this.getCartas(project_id).get(carta_id);
+    if (carta) {
+      await this.eventBus.publish('carta.generada', { ...carta, project_id });
     }
 
     return {
@@ -1495,6 +1504,7 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     if (icon) cat.icon = icon;
 
     await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return {
       status: 200,

@@ -25,6 +25,11 @@
         "event": "project.activated",
         "description": "Cache base_path del proyecto y cargar config",
         "handler": "onProjectActivated"
+      },
+      {
+        "event": "carta.generada",
+        "description": "Refrescar datos cuando menu-generator actualiza la carta",
+        "handler": "onCartaGenerada"
       }
     ]
   },

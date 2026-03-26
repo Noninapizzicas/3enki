@@ -65,6 +65,18 @@ class CartaDesignModule {
 
   async onProjectDeactivated() { /* no-op */ }
 
+  async onCartaGenerada(event) {
+    const data = event?.data || event?.payload || event;
+    const projectId = data?.project_id;
+    const cartaId = data?.meta?.id || data?.carta_id;
+    this.logger.info('carta-design.carta.updated', {
+      project_id: projectId,
+      carta_id: cartaId,
+      productos: data?.productos?.length,
+      categorias: data?.categorias?.length
+    });
+  }
+
   // ==========================================
   // Built-in design profiles
   // ==========================================

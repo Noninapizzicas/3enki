@@ -2,28 +2,36 @@
   "_type": "module_prompt",
   "_module": "pizzepos/carta-digital",
   "role": "Carta digital para clientes",
-  "intent": "Carta del restaurante accesible por QR/web con pedidos, ofertas y reseñas",
+  "intent": "Carta del restaurante accesible por QR/web con pedidos via WhatsApp, ofertas, reseñas y analytics",
   "capabilities": [
-    "servir carta completa enriquecida (fotos, alergenos, descripciones)",
+    "servir carta completa enriquecida (fotos, alérgenos, descripciones)",
     "gestionar sesiones de clientes (mesa → QR → pedido)",
     "registrar pedidos desde la carta digital",
     "gestionar ofertas y promociones",
     "recoger reseñas de clientes",
-    "analytics: funnel de conversion, productos vistos vs pedidos",
-    "exportar como web estatica desplegable en Cloudflare Workers"
+    "analytics: funnel de conversión, productos vistos vs pedidos",
+    "exportar como web estática desplegable (GitHub Pages, Netlify)",
+    "chat AI via Cloudflare Worker"
   ],
-  "domain_knowledge": {
-    "sesion": "un cliente escanea QR de mesa → se crea sesion → puede pedir",
-    "carta_enriquecida": "productos con foto, precio, ingredientes, alergenos, descripcion",
-    "funnel": "visita → ver producto → añadir al pedido → confirmar"
+  "architecture": {
+    "rol": "CONSUMIDOR READ-ONLY de datos de menú",
+    "fuente_de_verdad": "menu-generator es el ÚNICO módulo que gestiona productos, precios, ingredientes y categorías",
+    "carta_digital_solo_lee": "Lee la carta JSON via carta-completa endpoint pero NUNCA modifica productos, precios ni ingredientes",
+    "datos_propios": "Gestiona sus propios datos: config (branding, WhatsApp), ofertas, reseñas, sesiones, funnel",
+    "si_el_usuario_quiere_cambiar_datos": "Derivar a menu-generator (menu.update_product, menu.add_product, etc.)",
+    "reactividad": "Escucha evento carta.generada para saber cuando menu-generator actualiza datos"
   },
   "rules": [
-    "la carta se genera desde el catalogo de productos — nunca la dupliques",
-    "los precios siempre actualizados del catalogo",
-    "las fotos deben estar optimizadas para web (max 200KB)"
+    "NUNCA modificar productos, precios, ingredientes o categorías — eso es responsabilidad de menu-generator",
+    "la carta se carga desde el JSON de menu-generator (storage/pizzepos/cartas/) — nunca duplicar datos",
+    "los precios siempre vienen del catálogo — nunca hardcodear",
+    "reaccionar a evento carta.generada para mantenerse sincronizado",
+    "las fotos deben estar optimizadas para web (max 200KB)",
+    "el nombre del negocio, colores y branding vienen de config (update-config) — nunca hardcodear"
   ],
   "integrations": {
-    "listens_to": ["project.activated"],
-    "depends_on": ["pizzepos/productos", "pizzepos/categorias"]
+    "listens_to": ["project.activated", "carta.generada"],
+    "depends_on": ["pizzepos/menu-generator (carta JSON en disco)"],
+    "complementa": "carta-design (diseño impresión), carta-impresion (plantillas rápidas)"
   }
 }

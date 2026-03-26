@@ -362,21 +362,36 @@ class CartaImpresionModule {
    * Sustituye marcadores en el HTML de la plantilla con datos reales de la carta.
    *
    * Marcadores disponibles:
-   *   {{nombre_carta}}      — nombre de la carta/restaurante
-   *   {{fecha}}             — fecha actual formateada (dd/mm/aaaa)
-   *   {{total_productos}}   — número total de productos
-   *   {{total_categorias}}  — número total de categorías
-   *   {{categorias_html}}   — bloque HTML completo de categorías + productos (generado)
+   *   {{nombre_carta}}        — nombre de la carta/restaurante
+   *   {{fecha}}               — fecha actual formateada (dd/mm/aaaa)
+   *   {{total_productos}}     — número total de productos
+   *   {{total_categorias}}    — número total de categorías
+   *   {{categorias_html}}     — bloque HTML completo de categorías + productos (generado)
+   *   {{print_colors_css}}    — CSS para forzar fondos/colores en impresión
+   *   {{categorias_json}}     — JSON de categorías (para uso en <script>)
+   *   {{productos_json}}      — JSON de productos (para uso en <script>)
    */
   render(templateHtml, carta) {
     const fecha = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    // CSS para forzar fondos y colores en impresión
+    const printColorsCss = `
+    /* Forzar fondos y colores en impresión */
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }`.trim();
 
     const vars = {
       '{{nombre_carta}}': carta.meta?.nombre || 'Carta',
       '{{fecha}}': fecha,
       '{{total_productos}}': String(carta.productos?.length || 0),
       '{{total_categorias}}': String(carta.categorias?.length || 0),
-      '{{categorias_html}}': this.renderCategoriasHtml(carta)
+      '{{categorias_html}}': this.renderCategoriasHtml(carta),
+      '{{print_colors_css}}': printColorsCss,
+      '{{categorias_json}}': JSON.stringify(carta.categorias || []),
+      '{{productos_json}}': JSON.stringify(carta.productos || [])
     };
 
     let html = templateHtml;

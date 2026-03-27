@@ -31,6 +31,7 @@ static char topicPrinted[80];
 
 // Timers
 static unsigned long lastBleRetryMs = 0;
+static unsigned long lastBleActivityMs = 0;
 
 // Contadores
 static uint32_t printCount = 0;
@@ -109,6 +110,7 @@ static bool connectPrinterByAddress(NimBLEAddress addr) {
   }
 
   printerReady = true;
+  lastBleActivityMs = millis();
   Serial.printf("[BLE] Impresora lista (write%s)\n",
     printChar->canWriteNoResponse() ? " no-response" : " con response");
   enki_led_blink(3, 200);
@@ -196,6 +198,7 @@ static bool sendToPrinter(const uint8_t* data, size_t len) {
   }
 
   enki_led_off();
+  lastBleActivityMs = millis();
   Serial.printf("[BLE] Enviado OK (%d bytes)\n", sent);
   return true;
 }
@@ -382,6 +385,22 @@ void logic_loop() {
       lastBleRetryMs = now;
       Serial.println("[BLE] Reintentando conexion...");
       connectPrinter();
+    }
+  }
+
+  // Keepalive BLE: enviar pulso para evitar que la impresora entre en standby
+  if (printerReady && bleClient && bleClient->isConnected()) {
+    unsigned long now = millis();
+    if (now - lastBleActivityMs > BLE_KEEPALIVE_MS) {
+      lastBleActivityMs = now;
+      // ESC @ (init) — resetea formato sin imprimir nada visible
+      static const uint8_t keepalive[] = { 0x1B, 0x40 };
+      bool ok = printChar->writeValue(keepalive, sizeof(keepalive), false);
+      if (!ok) {
+        Serial.println("[BLE] Keepalive fallido, marcando desconectada");
+        printerReady = false;
+        lastBleRetryMs = millis();
+      }
     }
   }
 }

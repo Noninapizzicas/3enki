@@ -180,18 +180,6 @@ class CartaDigitalModule {
     }
   }
 
-  async onCartaGenerada(event) {
-    const data = event?.data || event?.payload || event;
-    const projectId = data?.project_id;
-    const cartaId = data?.meta?.id || data?.carta_id;
-    this.logger.info('carta-digital.carta.updated', {
-      project_id: projectId,
-      carta_id: cartaId,
-      productos: data?.productos?.length,
-      categorias: data?.categorias?.length
-    });
-  }
-
   // ==========================================
   // Config persistence
   // ==========================================
@@ -200,7 +188,7 @@ class CartaDigitalModule {
     const storagePath = this.projectPaths.get(project_id);
     if (!storagePath) throw new Error('No storage path for project');
 
-    const configPath = path.join(storagePath, 'carta-digital', 'config.json');
+    const configPath = path.join(storagePath, 'carta-digital.json');
     const raw = await fs.readFile(configPath, 'utf8');
     const config = JSON.parse(raw);
 
@@ -211,13 +199,12 @@ class CartaDigitalModule {
     const storagePath = this.projectPaths.get(project_id);
     if (!storagePath) return;
 
-    const cdDir = path.join(storagePath, 'carta-digital');
-    const configPath = path.join(cdDir, 'config.json');
+    const configPath = path.join(storagePath, 'carta-digital.json');
     const config = this.configPerProject.get(project_id);
     if (!config) return;
 
     try {
-      await fs.mkdir(cdDir, { recursive: true });
+      await fs.mkdir(storagePath, { recursive: true });
       await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
       this.logger.info('carta-digital.config.saved', { project_id });
     } catch (err) {
@@ -233,7 +220,7 @@ class CartaDigitalModule {
     const storagePath = this.projectPaths.get(project_id);
     if (!storagePath) throw new Error('No storage path for project');
 
-    const ofertasPath = path.join(storagePath, 'carta-digital', 'ofertas.json');
+    const ofertasPath = path.join(storagePath, 'carta-digital-ofertas.json');
     const raw = await fs.readFile(ofertasPath, 'utf8');
     const arr = JSON.parse(raw);
 
@@ -246,13 +233,12 @@ class CartaDigitalModule {
     const storagePath = this.projectPaths.get(project_id);
     if (!storagePath) return;
 
-    const cdDir = path.join(storagePath, 'carta-digital');
-    const ofertasPath = path.join(cdDir, 'ofertas.json');
+    const ofertasPath = path.join(storagePath, 'carta-digital-ofertas.json');
     const map = this.ofertasPerProject.get(project_id);
     if (!map) return;
 
     try {
-      await fs.mkdir(cdDir, { recursive: true });
+      await fs.mkdir(storagePath, { recursive: true });
       await fs.writeFile(ofertasPath, JSON.stringify(Array.from(map.values()), null, 2), 'utf-8');
       this.logger.info('carta-digital.ofertas.saved', { project_id });
     } catch (err) {
@@ -746,7 +732,7 @@ class CartaDigitalModule {
     const storagePath = this.projectPaths.get(project_id);
     if (!storagePath) throw new Error('No storage path for project');
 
-    const resenasPath = path.join(storagePath, 'carta-digital', 'resenas.json');
+    const resenasPath = path.join(storagePath, 'carta-digital-resenas.json');
     const raw = await fs.readFile(resenasPath, 'utf8');
     this.resenasPerProject.set(project_id, JSON.parse(raw));
   }
@@ -755,13 +741,12 @@ class CartaDigitalModule {
     const storagePath = this.projectPaths.get(project_id);
     if (!storagePath) return;
 
-    const cdDir = path.join(storagePath, 'carta-digital');
-    const resenasPath = path.join(cdDir, 'resenas.json');
+    const resenasPath = path.join(storagePath, 'carta-digital-resenas.json');
     const resenas = this.resenasPerProject.get(project_id);
     if (!resenas) return;
 
     try {
-      await fs.mkdir(cdDir, { recursive: true });
+      await fs.mkdir(storagePath, { recursive: true });
       await fs.writeFile(resenasPath, JSON.stringify(resenas, null, 2), 'utf-8');
       this.logger.info('carta-digital.resenas.saved', { project_id });
     } catch (err) {

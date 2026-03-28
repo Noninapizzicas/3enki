@@ -1509,6 +1509,12 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
    * pieza a pieza y llamar a esta tool para persistirla.
    */
   async toolSaveCarta({ carta, carta_id, project_id }) {
+    // Tolerar carta como string JSON (algunos LLMs la serializan)
+    if (typeof carta === 'string') {
+      try { carta = JSON.parse(carta); } catch (_) {
+        return { status: 400, error: 'El parámetro "carta" debe ser un objeto JSON válido' };
+      }
+    }
     if (!carta || typeof carta !== 'object') return { status: 400, error: 'Se requiere "carta" como objeto con meta, categorias y productos' };
 
     // Asegurar meta

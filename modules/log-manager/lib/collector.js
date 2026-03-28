@@ -34,6 +34,11 @@ class LogCollector {
       errors: 0
     };
 
+    // Tracking dispositivos (impresoras ESP32)
+    this.deviceStats = {};
+    // Tracking MQTT conexión
+    this.mqttEvents = [];
+
     this.subscriptions = [];
   }
 
@@ -96,6 +101,42 @@ class LogCollector {
           this.collectInternalEvent(event, data);
         });
       }
+
+      // =============================================
+      // Tracking MQTT conexión/desconexión
+      // =============================================
+      for (const mqttEvent of ['mqtt:connected', 'mqtt:disconnected', 'mqtt:reconnecting', 'mqtt:error']) {
+        this.eventBus.on(mqttEvent, (data) => {
+          const entry = {
+            ts: new Date().toISOString(),
+            level: mqttEvent === 'mqtt:connected' ? 'info' : 'warn',
+            source: 'backend',
+            module: 'mqtt',
+            msg: mqttEvent,
+            ctx: data || {}
+          };
+          this.mqttEvents.push({ ts: entry.ts, event: mqttEvent, ctx: data });
+          if (this.mqttEvents.length > 500) this.mqttEvents.shift();
+          this.storage?.write(entry);
+          if (this.session) this.session.write('mqtt', entry);
+          this.stats.collected++;
+        });
+      }
+
+      // =============================================
+      // Tracking impresora: resultados de impresión
+      // =============================================
+      this.eventBus.on('mqtt:message', (topic, message) => {
+        // impresion/{project}/printed/{device} — resultado de print job
+        if (typeof topic === 'string' && topic.includes('/printed/')) {
+          this._handlePrintResult(topic, message);
+        }
+        // impresion/{project}/status/{device} — status periódico ESP32
+        if (typeof topic === 'string' && topic.includes('/status/') &&
+            (topic.startsWith('impresion/') || topic.startsWith('enki/'))) {
+          this._handleDeviceStatus(topic, message);
+        }
+      });
 
       // Suscribir a eventos de ActivityLogger
       this.eventBus.on('activity.logged', (envelope) => {
@@ -306,6 +347,121 @@ class LogCollector {
    */
   getStats() {
     return { ...this.stats };
+  }
+
+  /**
+   * Resultado de impresión del ESP32
+   */
+  _handlePrintResult(topic, message) {
+    try {
+      const data = typeof message === 'string' ? JSON.parse(message) : message;
+      const parts = topic.split('/');
+      const deviceId = parts[parts.length - 1];
+
+      // Inicializar stats del dispositivo
+      if (!this.deviceStats[deviceId]) {
+        this.deviceStats[deviceId] = {
+          prints_ok: 0, prints_fail: 0, errors: [], last_seen: null,
+          printer_ready: null, wifi_rssi: null
+        };
+      }
+
+      const ds = this.deviceStats[deviceId];
+      ds.last_seen = new Date().toISOString();
+
+      if (data.success) {
+        ds.prints_ok++;
+      } else {
+        ds.prints_fail++;
+        ds.errors.push({
+          ts: ds.last_seen,
+          error: data.error || 'unknown',
+          job_id: data.job_id
+        });
+        if (ds.errors.length > 50) ds.errors.shift();
+      }
+
+      const entry = {
+        ts: ds.last_seen,
+        level: data.success ? 'info' : 'error',
+        source: 'device',
+        module: 'impresion',
+        msg: data.success ? 'print.ok' : 'print.fail',
+        ctx: {
+          device_id: deviceId,
+          job_id: data.job_id,
+          print_count: data.print_count,
+          ...(data.error && { error: data.error })
+        }
+      };
+
+      this.storage?.write(entry);
+      if (this.session) this.session.write('impresion', entry);
+      this.stats.collected++;
+    } catch (err) {
+      this.stats.errors++;
+    }
+  }
+
+  /**
+   * Status periódico del ESP32
+   */
+  _handleDeviceStatus(topic, message) {
+    try {
+      const data = typeof message === 'string' ? JSON.parse(message) : message;
+      const parts = topic.split('/');
+      const deviceId = parts[parts.length - 1];
+
+      if (!this.deviceStats[deviceId]) {
+        this.deviceStats[deviceId] = {
+          prints_ok: 0, prints_fail: 0, errors: [], last_seen: null,
+          printer_ready: null, wifi_rssi: null
+        };
+      }
+
+      const ds = this.deviceStats[deviceId];
+      const wasReady = ds.printer_ready;
+      ds.last_seen = new Date().toISOString();
+      ds.printer_ready = data.printer_ready || false;
+      ds.wifi_rssi = data.wifi_rssi || null;
+      ds.firmware = data.firmware || null;
+
+      // Registrar cambio de estado de impresora (conecta/desconecta)
+      if (wasReady !== null && wasReady !== ds.printer_ready) {
+        const entry = {
+          ts: ds.last_seen,
+          level: ds.printer_ready ? 'info' : 'warn',
+          source: 'device',
+          module: 'impresion',
+          msg: ds.printer_ready ? 'printer.connected' : 'printer.disconnected',
+          ctx: {
+            device_id: deviceId,
+            printer_name: data.printer_name,
+            wifi_rssi: data.wifi_rssi,
+            uptime_sec: data.uptime_sec
+          }
+        };
+        this.storage?.write(entry);
+        if (this.session) this.session.write('impresion', entry);
+        this.stats.collected++;
+      }
+    } catch (err) {
+      this.stats.errors++;
+    }
+  }
+
+  /**
+   * Stats de dispositivos para diagnóstico
+   */
+  getDeviceStats() {
+    return { ...this.deviceStats };
+  }
+
+  /**
+   * Timeline MQTT para diagnóstico
+   */
+  getMqttTimeline() {
+    return [...this.mqttEvents];
   }
 
   /**

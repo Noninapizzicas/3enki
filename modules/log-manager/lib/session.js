@@ -230,6 +230,49 @@ class SessionLogger {
   }
 
   /**
+   * Lee logs de TODOS los módulos de esta sesión, con filtros opcionales
+   * @param {Object} filters - Filtros opcionales (level, search)
+   * @returns {Array} Logs combinados de todos los módulos, ordenados por timestamp
+   */
+  readAllModules(filters = {}) {
+    const results = [];
+
+    try {
+      if (!fs.existsSync(this.modulesPath)) return results;
+
+      const files = fs.readdirSync(this.modulesPath).filter(f => f.endsWith('.jsonl'));
+
+      for (const file of files) {
+        const filePath = path.join(this.modulesPath, file);
+
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const lines = content.trim().split('\n').filter(Boolean);
+
+          for (const line of lines) {
+            try {
+              const entry = JSON.parse(line);
+              if (filters.level && entry.level !== filters.level) continue;
+              if (filters.search && !JSON.stringify(entry).includes(filters.search)) continue;
+              results.push(entry);
+            } catch (e) {
+              // Línea inválida
+            }
+          }
+        } catch (e) {
+          // Error leyendo archivo
+        }
+      }
+
+      results.sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+    } catch (error) {
+      console.error('[session-logger] readAllModules error:', error.message);
+    }
+
+    return results;
+  }
+
+  /**
    * Lista todos los módulos con logs en esta sesión
    * @returns {Array} Lista de módulos
    */

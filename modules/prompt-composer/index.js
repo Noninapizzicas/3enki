@@ -798,7 +798,13 @@ Fecha actual: {{date}}`,
         }
       }
 
-      toolsSection.push('\nCall tools proactively when they help answer the user accurately.');
+      toolsSection.push('');
+      toolsSection.push('INSTRUCCIONES DE USO DE HERRAMIENTAS:');
+      toolsSection.push('- EJECUTA las herramientas directamente cuando el usuario pide una acción — no pidas confirmación innecesaria.');
+      toolsSection.push('- Si el usuario pide crear, guardar, generar, exportar o modificar datos → USA la tool correspondiente INMEDIATAMENTE.');
+      toolsSection.push('- NUNCA respondas "puedo hacer X" o "¿quieres que haga X?" si tienes la tool para hacerlo — hazlo directamente.');
+      toolsSection.push('- Si una tool falla, informa del error y sugiere alternativas concretas.');
+      toolsSection.push('- Consulta la sección Page Context para saber qué tools son relevantes en la página actual.');
       sections.push(toolsSection.join('\n'));
     }
 

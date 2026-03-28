@@ -101,11 +101,23 @@
           },
           "color_palette": {
             "type": "object",
-            "description": "Colores: { primary, secondary, background, text, accent }"
+            "description": "Colores: { primary, secondary, background, text, accent }",
+            "properties": {
+              "primary": { "type": "string" },
+              "secondary": { "type": "string" },
+              "background": { "type": "string" },
+              "text": { "type": "string" },
+              "accent": { "type": "string" }
+            }
           },
           "fonts": {
             "type": "object",
-            "description": "Tipografía: { heading, body, accent }"
+            "description": "Tipografía: { heading, body, accent }",
+            "properties": {
+              "heading": { "type": "string" },
+              "body": { "type": "string" },
+              "accent": { "type": "string" }
+            }
           },
           "layout_type": {
             "type": "string",

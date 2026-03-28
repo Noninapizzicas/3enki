@@ -1509,7 +1509,6 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
    * pieza a pieza y llamar a esta tool para persistirla.
    */
   async toolSaveCarta({ carta, carta_id, project_id }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     if (!carta || typeof carta !== 'object') return { status: 400, error: 'Se requiere "carta" como objeto con meta, categorias y productos' };
 
     // Asegurar meta
@@ -1524,10 +1523,29 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     if (!Array.isArray(carta.categorias)) carta.categorias = [];
     if (!Array.isArray(carta.productos)) carta.productos = [];
 
-    // Guardar en memoria y disco
+    // Resolver project_id — fallback al primer proyecto activo o default
+    if (!project_id) {
+      const firstProject = this.projectPaths.keys().next().value;
+      project_id = firstProject || 'default';
+    }
+
+    // Guardar en memoria
     const cartas = this.getCartas(project_id);
     cartas.set(carta.meta.id, carta);
-    await this.saveCartaToDisk(carta, project_id);
+
+    // Guardar en disco — con fallback a ruta por defecto
+    const dir = this.cartasDirFor(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas');
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      const filePath = path.join(dir, `${carta.meta.id}.json`);
+
+      // Versionado antes de sobreescribir
+      await this.saveVersion(carta.meta.id, dir);
+
+      await fs.writeFile(filePath, JSON.stringify(carta, null, 2), 'utf-8');
+    } catch (err) {
+      return { status: 500, error: `Error guardando carta: ${err.message}` };
+    }
 
     // Notificar — payload completo igual que las demás tools
     await this.eventBus.publish('carta.generada', { ...carta, project_id });

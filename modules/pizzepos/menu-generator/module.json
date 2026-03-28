@@ -127,7 +127,8 @@
           },
           "precios": {
             "type": "object",
-            "description": "Objeto {producto_id: nuevo_precio} para precios individuales"
+            "description": "Objeto {producto_id: nuevo_precio} para precios individuales",
+            "additionalProperties": { "type": "number" }
           }
         },
         "required": ["carta_id"]
@@ -266,7 +267,8 @@
           },
           "precios": {
             "type": "object",
-            "description": "Objeto {nombre_ingrediente: nuevo_precio_extra} para precios individuales (ej: {\"Mozzarella\": 2.00, \"Bacon\": 2.50})"
+            "description": "Objeto {nombre_ingrediente: nuevo_precio_extra} para precios individuales (ej: {\"Mozzarella\": 2.00, \"Bacon\": 2.50})",
+            "additionalProperties": { "type": "number" }
           },
           "precio_extra": {
             "type": "number",
@@ -393,7 +395,12 @@
         "properties": {
           "carta": {
             "type": "object",
-            "description": "Objeto carta completo con meta (id, nombre), categorias[] y productos[]. Si no tiene meta.id se genera uno automático."
+            "description": "Objeto carta completo con meta (id, nombre), categorias[] y productos[]. Si no tiene meta.id se genera uno automático.",
+            "properties": {
+              "meta": { "type": "object", "properties": { "id": { "type": "string" }, "nombre": { "type": "string" } } },
+              "categorias": { "type": "array", "items": { "type": "object" } },
+              "productos": { "type": "array", "items": { "type": "object" } }
+            }
           },
           "carta_id": {
             "type": "string",

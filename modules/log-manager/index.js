@@ -281,6 +281,87 @@ class LogManagerModule {
   }
 
   // ===========================================================================
+  // API: RESUMEN DE SESIÓN (diagnóstico post-servicio)
+  // ===========================================================================
+
+  /**
+   * GET /session/resumen - Diagnóstico rápido de la sesión
+   *
+   * Devuelve: errores, reconexiones MQTT, estado impresora,
+   * módulos con más fallos, timeline de problemas
+   */
+  async getSessionResumen(req) {
+    const sessionInfo = this.session.getSessionInfo();
+    const collectorStats = this.collector.getStats();
+    const deviceStats = this.collector.getDeviceStats();
+    const mqttTimeline = this.collector.getMqttTimeline();
+
+    // Leer errores y warnings de TODOS los módulos de la sesión actual
+    const errores = this.session.readAllModules({ level: 'error' }) || [];
+    const warnings = this.session.readAllModules({ level: 'warn' }) || [];
+
+    // Errores de impresión
+    const printErrors = this.session.readModule('impresion', { level: 'error' }) || [];
+
+    // MQTT desconexiones
+    const mqttDesconexiones = mqttTimeline.filter(e => e.event === 'mqtt:disconnected');
+    const mqttReconexiones = mqttTimeline.filter(e => e.event === 'mqtt:connected');
+
+    // Agrupar errores por módulo
+    const erroresPorModulo = {};
+    for (const err of errores) {
+      const mod = err.module || 'unknown';
+      if (!erroresPorModulo[mod]) erroresPorModulo[mod] = 0;
+      erroresPorModulo[mod]++;
+    }
+
+    // Timeline de problemas (errores + MQTT + printer, cronológico)
+    const problemas = [];
+
+    for (const e of mqttDesconexiones) {
+      problemas.push({ ts: e.ts, tipo: 'mqtt_desconexion', detalle: e.ctx });
+    }
+    for (const e of printErrors) {
+      problemas.push({ ts: e.ts, tipo: 'print_error', detalle: e.ctx || e.msg });
+    }
+    for (const err of errores.slice(-50)) {
+      problemas.push({ ts: err.ts, tipo: 'error', modulo: err.module, msg: err.msg });
+    }
+
+    problemas.sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+
+    return {
+      success: true,
+      resumen: {
+        sesion: {
+          id: sessionInfo.id,
+          inicio: sessionInfo.startedAt,
+          uptime: sessionInfo.uptime,
+          total_logs: sessionInfo.stats?.totalEntries || 0
+        },
+        salud: {
+          errores_total: errores.length,
+          warnings_total: warnings.length,
+          errores_por_modulo: erroresPorModulo,
+          modulo_mas_problemas: Object.entries(erroresPorModulo)
+            .sort((a, b) => b[1] - a[1])[0] || null
+        },
+        mqtt: {
+          desconexiones: mqttDesconexiones.length,
+          reconexiones: mqttReconexiones.length,
+          timeline: mqttTimeline.slice(-20)
+        },
+        impresora: {
+          dispositivos: deviceStats,
+          errores_impresion: printErrors.length,
+          ultimos_errores: printErrors.slice(-10)
+        },
+        timeline_problemas: problemas.slice(-30)
+      }
+    };
+  }
+
+  // ===========================================================================
   // API: HISTORIAL DE SESIONES
   // ===========================================================================
 

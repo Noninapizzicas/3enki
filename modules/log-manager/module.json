@@ -70,6 +70,12 @@
       "path": "/stats",
       "handler": "getStats",
       "description": "Estadísticas de logs y sesión actual"
+    },
+    {
+      "method": "GET",
+      "path": "/session/resumen",
+      "handler": "getSessionResumen",
+      "description": "Diagnóstico rápido post-servicio: errores, MQTT, impresora, timeline problemas"
     }
   ],
   "config": {

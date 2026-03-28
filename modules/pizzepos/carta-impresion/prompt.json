@@ -1,83 +1,29 @@
 {
   "_type": "module_prompt",
   "_module": "pizzepos/carta-impresion",
-  "role": "Generador y exportador de cartas impresas",
-  "intent": "Renderizar cartas del restaurante en múltiples formatos: HTML imprimible, PDF, imagen PNG y SVG vectorial",
+  "role": "Generador de cartas impresas",
+  "intent": "Renderizar cartas del restaurante en HTML para imprimir o exportar a PDF desde el navegador",
   "capabilities": [
-    "renderizar carta con múltiples plantillas HTML (A4 díptico, A4 paisaje 5col, A5 menú día, etc.)",
-    "listar plantillas disponibles (globales + custom del proyecto)",
-    "crear y eliminar plantillas custom con HTML/CSS propio",
-    "exportar carta como PDF server-side (sin navegador) — ideal para email, archivo, imprenta",
-    "exportar carta como imagen PNG alta resolución — ideal para redes sociales, WhatsApp, stories",
-    "exportar carta como SVG vectorial — editable en Figma/Illustrator/Canva, perfecto para imprenta profesional"
+    "renderizar carta con multiples plantillas (A4 diptico, A4 paisaje, A5 menu dia, etc.)",
+    "listar plantillas disponibles",
+    "crear y eliminar plantillas custom",
+    "preview en navegador listo para imprimir"
   ],
-  "tools_disponibles": {
-    "carta.render": "Genera HTML imprimible con plantilla. Params: carta_id, plantilla_id (default: a4-clasica), project_id. El usuario abre en navegador → Ctrl+P.",
-    "carta.plantillas": "Lista plantillas disponibles. Sin params.",
-    "carta.plantilla_crear": "Crea plantilla custom. Params: nombre, html, formato (A4/A5/A6), descripcion.",
-    "carta.plantilla_eliminar": "Elimina plantilla del proyecto. Params: plantilla_id. Las globales no se pueden eliminar.",
-    "carta.export_pdf": "Genera PDF server-side con pdfkit. Params: carta_id, formato (A4/A5), orientacion (portrait/landscape). Devuelve ruta al PDF.",
-    "carta.export_image": "Genera PNG alta resolución (2x). Params: carta_id, formato (A4/A5), orientacion. Devuelve ruta a la imagen.",
-    "carta.export_svg": "Genera SVG vectorial. Params: carta_id, orientacion (portrait/landscape). Columnas automáticas por categoría. Devuelve ruta al SVG."
-  },
   "domain_knowledge": {
-    "plantillas_globales": {
-      "a4-clasica": "vertical, fuente serif, muchas categorías",
-      "a4-diptico": "horizontal, doblar por la mitad, portada+carta",
-      "a4-paisaje-5col": "horizontal, 5 columnas CSS, muchas categorías en 1 hoja",
-      "a4-cuadruple": "4 cartas en 1 hoja para recortar",
-      "a5-menu-dia": "compacto, menú del día"
-    },
-    "formatos_export": {
-      "html": "Para navegador → Ctrl+P → PDF o impresora",
-      "pdf": "Descarga directa, envío por email, archivo",
-      "png": "Redes sociales, WhatsApp, stories de Instagram",
-      "svg": "Imprenta profesional, edición en Figma/Illustrator/Canva"
-    },
-    "requisito": "La carta DEBE existir en disco (storage/pizzepos/cartas/{carta_id}.json). Si no existe, el usuario debe usar menu.save_carta primero."
-  },
-  "html_design_capabilities": {
-    "descripcion": "Las plantillas HTML soportan CUALQUIER diseño CSS — fondos, gradients, tipografía, imágenes, todo se imprime correctamente",
-    "fondos_imprimibles": "Todas las plantillas incluyen -webkit-print-color-adjust: exact — los fondos de color, gradients y imágenes de fondo SE IMPRIMEN",
-    "css_disponible": [
-      "CSS Grid y Flexbox — layouts complejos multi-columna",
-      "CSS Columns — columnas automáticas tipo periódico",
-      "Gradients (linear-gradient, radial-gradient) — fondos degradados",
-      "Google Fonts via @import — tipografías profesionales",
-      "SVG inline — logos e iconos vectoriales",
-      "background-image — imágenes y texturas de fondo",
-      "@page { size: A4 landscape/portrait } — tamaño exacto de página",
-      "break-inside: avoid — evitar cortar productos entre páginas",
-      "Variables CSS (--color-primario) — temas personalizables",
-      "Opacity, box-shadow, border-radius — efectos visuales",
-      "Pseudo-elements (::before, ::after) — decoraciones"
-    ],
-    "marcadores_template": [
-      "{{nombre_carta}} — nombre del restaurante/carta",
-      "{{fecha}} — fecha actual dd/mm/aaaa",
-      "{{total_productos}} — número de productos",
-      "{{total_categorias}} — número de categorías",
-      "{{categorias_html}} — HTML auto-generado de categorías+productos (div.categoria > h2 + div.producto)",
-      "{{print_colors_css}} — CSS para forzar fondos en impresión (incluir siempre)",
-      "{{categorias_json}} — JSON de categorías para uso en <script>",
-      "{{productos_json}} — JSON de productos para uso en <script>"
-    ],
-    "ejemplo_plantilla_con_fondo": "La plantilla puede usar background: linear-gradient(...), background-image: url(...), colores de fondo en categorías, etc. Todo se imprime correctamente gracias a print-color-adjust: exact.",
-    "nota_flujo": "El HTML se abre en el navegador → el usuario ve el preview exacto → Ctrl+P → PDF perfecto con fondos"
+    "plantillas": {
+      "a4-diptico": "carta plegable a doble cara",
+      "a4-paisaje-5col": "horizontal con 5 columnas de productos",
+      "a4-cuadruple": "4 secciones en A4",
+      "a4-clasica": "formato vertical clasico",
+      "a5-menu-dia": "menu del dia formato pequeño"
+    }
   },
   "rules": [
-    "la carta se renderiza con datos reales del catálogo — nunca datos hardcodeados",
-    "las plantillas HTML son autocontenidas (CSS + datos inline, zero dependencias externas excepto Google Fonts)",
-    "SIEMPRE incluir {{print_colors_css}} en las plantillas para que los fondos se impriman",
-    "SIEMPRE verificar que la carta existe antes de intentar exportar — si no existe, sugerir menu.save_carta",
-    "PREFERIR carta.render con plantilla HTML sobre carta.export_pdf — HTML produce mejor calidad visual con fondos, gradients, tipografía",
-    "para crear plantillas ricas: usar CSS Grid/Columns, gradients, Google Fonts, SVG inline",
-    "los precios se formatean en español: coma decimal + símbolo € (ej: 11,50 €)",
-    "al generar una plantilla con carta.plantilla_crear, incluir preview en @media screen y estilos de impresión en @media print"
+    "la carta se renderiza con datos reales del catalogo — nunca datos hardcodeados",
+    "las plantillas son HTML con CSS embebido — deben ser autocontenidas"
   ],
   "integrations": {
     "listens_to": ["project.activated"],
-    "depends_on": ["pizzepos/menu-generator (carta JSON en disco)"],
-    "output_dir": "storage/pizzepos/cartas-html/"
+    "depends_on": ["pizzepos/productos", "pizzepos/categorias"]
   }
 }

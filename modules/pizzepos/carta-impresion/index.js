@@ -154,12 +154,12 @@ class CartaImpresionModule {
 
   cartasHtmlDir(projectId) {
     const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'carta-impresion', 'exports') : null;
+    return p ? path.join(p.featurePath, 'cartas-html') : null;
   }
 
   cartaTemplatesDir(projectId) {
     const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'carta-impresion', 'templates') : null;
+    return p ? path.join(p.featurePath, 'carta-templates') : null;
   }
 
   // ==========================================
@@ -362,36 +362,21 @@ class CartaImpresionModule {
    * Sustituye marcadores en el HTML de la plantilla con datos reales de la carta.
    *
    * Marcadores disponibles:
-   *   {{nombre_carta}}        — nombre de la carta/restaurante
-   *   {{fecha}}               — fecha actual formateada (dd/mm/aaaa)
-   *   {{total_productos}}     — número total de productos
-   *   {{total_categorias}}    — número total de categorías
-   *   {{categorias_html}}     — bloque HTML completo de categorías + productos (generado)
-   *   {{print_colors_css}}    — CSS para forzar fondos/colores en impresión
-   *   {{categorias_json}}     — JSON de categorías (para uso en <script>)
-   *   {{productos_json}}      — JSON de productos (para uso en <script>)
+   *   {{nombre_carta}}      — nombre de la carta/restaurante
+   *   {{fecha}}             — fecha actual formateada (dd/mm/aaaa)
+   *   {{total_productos}}   — número total de productos
+   *   {{total_categorias}}  — número total de categorías
+   *   {{categorias_html}}   — bloque HTML completo de categorías + productos (generado)
    */
   render(templateHtml, carta) {
     const fecha = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-    // CSS para forzar fondos y colores en impresión
-    const printColorsCss = `
-    /* Forzar fondos y colores en impresión */
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      color-adjust: exact !important;
-    }`.trim();
 
     const vars = {
       '{{nombre_carta}}': carta.meta?.nombre || 'Carta',
       '{{fecha}}': fecha,
       '{{total_productos}}': String(carta.productos?.length || 0),
       '{{total_categorias}}': String(carta.categorias?.length || 0),
-      '{{categorias_html}}': this.renderCategoriasHtml(carta),
-      '{{print_colors_css}}': printColorsCss,
-      '{{categorias_json}}': JSON.stringify(carta.categorias || []),
-      '{{productos_json}}': JSON.stringify(carta.productos || [])
+      '{{categorias_html}}': this.renderCategoriasHtml(carta)
     };
 
     let html = templateHtml;
@@ -440,327 +425,6 @@ class CartaImpresionModule {
       })
       .filter(Boolean)
       .join('\n      ');
-  }
-
-  // ==========================================
-  // Export PDF — server-side con pdfkit
-  // ==========================================
-
-  async toolExportPdf({ carta_id, formato = 'A4', orientacion = 'portrait', project_id }) {
-    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
-
-    const carta = await this.loadCarta(carta_id, project_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada en disco. Usa menu.save_carta primero.` };
-
-    const PDFDocument = require('pdfkit');
-
-    const isLandscape = orientacion === 'landscape';
-    const size = formato === 'A5' ? 'A5' : 'A4';
-    const doc = new PDFDocument({ size, layout: isLandscape ? 'landscape' : 'portrait', margin: 40 });
-
-    // Collect chunks — registrar AMBOS listeners ANTES de escribir contenido
-    const chunks = [];
-    const bufferPromise = new Promise((resolve, reject) => {
-      doc.on('data', chunk => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
-    });
-
-    const cartaNombre = carta.meta?.nombre || 'Carta';
-    const categorias = (carta.categorias || []).sort((a, b) => (a.orden || 0) - (b.orden || 0));
-    const productos = carta.productos || [];
-    const pageW = doc.page.width;
-    const marginL = doc.page.margins.left;
-    const marginR = doc.page.margins.right;
-    const contentW = pageW - marginL - marginR;
-
-    // Header
-    doc.fontSize(20).font('Helvetica-Bold').fillColor('#1a1a1a')
-      .text(cartaNombre, { align: 'center' });
-    doc.moveDown(0.3);
-    doc.moveTo(marginL, doc.y).lineTo(pageW - marginR, doc.y).stroke('#b45309');
-    doc.moveDown(0.6);
-
-    // Categorias + productos
-    for (const cat of categorias) {
-      const catProds = productos.filter(p => p.categoria === cat.id);
-      if (catProds.length === 0) continue;
-
-      if (doc.y > doc.page.height - doc.page.margins.bottom - 80) {
-        doc.addPage();
-      }
-
-      const catLabel = `${cat.icon || ''} ${cat.nombre}`.trim();
-      doc.fontSize(13).font('Helvetica-Bold').fillColor('#b45309')
-        .text(catLabel, marginL, doc.y);
-      doc.moveDown(0.2);
-      doc.moveTo(marginL, doc.y).lineTo(marginL + contentW, doc.y).stroke('#e5e7eb');
-      doc.moveDown(0.3);
-
-      for (const prod of catProds) {
-        if (doc.y > doc.page.height - doc.page.margins.bottom - 40) {
-          doc.addPage();
-        }
-
-        const ings = (prod.ingredientes || []).map(i => i.nombre).join(', ');
-        const precio = `${prod.precio.toFixed(2).replace('.', ',')} \u20ac`;
-        const y = doc.y;
-
-        // Nombre del producto (izquierda)
-        doc.fontSize(10).font('Helvetica-Bold').fillColor('#1a1a1a')
-          .text(prod.nombre, marginL, y, { width: contentW - 70 });
-
-        // Precio (derecha, misma línea)
-        doc.fontSize(10).font('Helvetica-Bold').fillColor('#b45309')
-          .text(precio, marginL + contentW - 65, y, { width: 65, align: 'right' });
-
-        // Ingredientes (debajo)
-        if (ings) {
-          doc.fontSize(7.5).font('Helvetica').fillColor('#777')
-            .text(ings, marginL, doc.y, { width: contentW });
-        }
-        doc.moveDown(0.25);
-      }
-      doc.moveDown(0.5);
-    }
-
-    // Footer
-    const fecha = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    doc.fontSize(7).font('Helvetica').fillColor('#aaa')
-      .text(fecha, marginL, doc.page.height - doc.page.margins.bottom - 12, {
-        width: contentW, align: 'center'
-      });
-
-    doc.end();
-    const buffer = await bufferPromise;
-
-    // Guardar
-    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'carta-impresion', 'exports');
-    await fs.mkdir(dir, { recursive: true });
-
-    const filename = `${carta_id}_${formato}_${orientacion}.pdf`;
-    const absolutePath = path.join(dir, filename);
-    await fs.writeFile(absolutePath, buffer);
-
-    const paths = this.getPaths(project_id);
-    const storagePath = paths?.storagePath || path.join(process.cwd(), 'storage');
-    const relativePath = '/' + path.relative(storagePath, absolutePath).replace(/\\/g, '/');
-
-    this.metrics?.increment('carta.export_pdf.completed');
-    this.logger.info('carta.export_pdf.completed', { carta_id, project_id, formato, orientacion, size: buffer.length });
-
-    return {
-      status: 200,
-      data: {
-        carta_id,
-        formato,
-        orientacion,
-        path: relativePath,
-        size_bytes: buffer.length,
-        filename,
-        message: `PDF generado: ${filename} (${(buffer.length / 1024).toFixed(0)} KB)`
-      }
-    };
-  }
-
-  // ==========================================
-  // Export Image — PDF→PNG via pdf-to-png
-  // ==========================================
-
-  async toolExportImage({ carta_id, formato = 'A4', orientacion = 'landscape', project_id }) {
-    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
-
-    // Primero generar el PDF
-    const pdfResult = await this.toolExportPdf({ carta_id, formato, orientacion, project_id });
-    if (pdfResult.status !== 200) return pdfResult;
-
-    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'carta-impresion', 'exports');
-    const pdfPath = path.join(dir, pdfResult.data.filename);
-
-    try {
-      const { pdfToPng } = require('pdf-to-png-converter');
-      const pages = await pdfToPng(pdfPath, { viewportScale: 2.0 });
-
-      if (!pages || pages.length === 0) {
-        return { status: 500, error: 'No se pudo convertir el PDF a imagen' };
-      }
-
-      const pngFilename = `${carta_id}_${formato}_${orientacion}.png`;
-      const pngPath = path.join(dir, pngFilename);
-      await fs.writeFile(pngPath, pages[0].content);
-
-      const paths = this.getPaths(project_id);
-      const storagePath = paths?.storagePath || path.join(process.cwd(), 'storage');
-      const relativePath = '/' + path.relative(storagePath, pngPath).replace(/\\/g, '/');
-
-      this.metrics?.increment('carta.export_image.completed');
-      this.logger.info('carta.export_image.completed', { carta_id, project_id, size: pages[0].content.length });
-
-      return {
-        status: 200,
-        data: {
-          carta_id,
-          formato,
-          orientacion,
-          path: relativePath,
-          size_bytes: pages[0].content.length,
-          filename: pngFilename,
-          pages: pages.length,
-          message: `Imagen generada: ${pngFilename} (${(pages[0].content.length / 1024).toFixed(0)} KB, ${pages.length} página${pages.length > 1 ? 's' : ''})`
-        }
-      };
-    } catch (err) {
-      this.logger.warn('carta.export_image.error', { carta_id, error: err.message });
-      return { status: 500, error: `Error al generar imagen: ${err.message}. El PDF se generó correctamente en ${pdfResult.data.path}` };
-    }
-  }
-
-  // ==========================================
-  // Export SVG — vectorial puro
-  // ==========================================
-
-  async toolExportSvg({ carta_id, orientacion = 'landscape', project_id }) {
-    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
-
-    const carta = await this.loadCarta(carta_id, project_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
-
-    const isLandscape = orientacion === 'landscape';
-    const W = isLandscape ? 1190 : 842;
-    const H = isLandscape ? 842 : 1190;
-    const MARGIN = 40;
-    const COL_GAP = 24;
-
-    const cartaNombre = carta.meta?.nombre || 'Carta';
-    const categorias = (carta.categorias || []).sort((a, b) => a.orden - b.orden);
-    const productos = carta.productos || [];
-
-    // Build columns: one per category
-    const columns = categorias.map(cat => ({
-      cat,
-      prods: productos.filter(p => p.categoria === cat.id)
-    })).filter(c => c.prods.length > 0);
-
-    const numCols = columns.length || 1;
-    const colW = (W - 2 * MARGIN - (numCols - 1) * COL_GAP) / numCols;
-
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">\n`;
-
-    // Background
-    svg += `  <rect width="${W}" height="${H}" fill="#fff"/>\n`;
-
-    // Header
-    svg += `  <text x="${W / 2}" y="${MARGIN + 24}" text-anchor="middle" font-size="22" font-weight="bold" fill="#1a1a1a">${this.escapeHtml(cartaNombre)}</text>\n`;
-    const headerY = MARGIN + 40;
-    svg += `  <line x1="${MARGIN}" y1="${headerY}" x2="${W - MARGIN}" y2="${headerY}" stroke="#b45309" stroke-width="2"/>\n`;
-
-    const contentY = headerY + 20;
-
-    // Columns
-    columns.forEach((col, ci) => {
-      const x = MARGIN + ci * (colW + COL_GAP);
-      let y = contentY;
-
-      // Category name
-      svg += `  <text x="${x}" y="${y}" font-size="13" font-weight="bold" fill="#b45309">${col.cat.icon || ''} ${this.escapeHtml(col.cat.nombre)}</text>\n`;
-      y += 6;
-      svg += `  <line x1="${x}" y1="${y}" x2="${x + colW}" y2="${y}" stroke="#e5e7eb" stroke-width="0.5"/>\n`;
-      y += 14;
-
-      // Products
-      for (const prod of col.prods) {
-        if (y > H - MARGIN - 30) break; // overflow protection
-
-        const precio = `${prod.precio.toFixed(2)} €`;
-        const ings = (prod.ingredientes || []).map(i => i.nombre).join(', ');
-
-        // Product name + price on same line
-        svg += `  <text x="${x}" y="${y}" font-size="9.5" font-weight="bold" fill="#1a1a1a">${this.escapeHtml(prod.nombre)}</text>\n`;
-        svg += `  <text x="${x + colW}" y="${y}" text-anchor="end" font-size="9.5" font-weight="bold" fill="#b45309">${precio}</text>\n`;
-        y += 11;
-
-        // Ingredients
-        if (ings) {
-          // Truncate long ingredient lists
-          const maxLen = Math.floor(colW / 3.5);
-          const truncated = ings.length > maxLen ? ings.slice(0, maxLen) + '...' : ings;
-          svg += `  <text x="${x}" y="${y}" font-size="7" fill="#888">${this.escapeHtml(truncated)}</text>\n`;
-          y += 10;
-        }
-        y += 3;
-      }
-    });
-
-    // Footer
-    const fecha = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    svg += `  <text x="${W / 2}" y="${H - MARGIN + 10}" text-anchor="middle" font-size="7" fill="#aaa">${fecha}</text>\n`;
-
-    svg += '</svg>';
-
-    // Save
-    const dir = this.cartasHtmlDir(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'carta-impresion', 'exports');
-    await fs.mkdir(dir, { recursive: true });
-
-    const filename = `${carta_id}_${orientacion}.svg`;
-    const absolutePath = path.join(dir, filename);
-    await fs.writeFile(absolutePath, svg, 'utf-8');
-
-    const paths = this.getPaths(project_id);
-    const storagePath = paths?.storagePath || path.join(process.cwd(), 'storage');
-    const relativePath = '/' + path.relative(storagePath, absolutePath).replace(/\\/g, '/');
-
-    this.metrics?.increment('carta.export_svg.completed');
-    this.logger.info('carta.export_svg.completed', { carta_id, project_id, orientacion, size: svg.length });
-
-    return {
-      status: 200,
-      data: {
-        carta_id,
-        orientacion,
-        path: relativePath,
-        size_bytes: svg.length,
-        filename,
-        columns: columns.length,
-        message: `SVG vectorial generado: ${filename} (${(svg.length / 1024).toFixed(0)} KB, ${columns.length} columnas). Editable en Figma, Illustrator, Canva.`
-      }
-    };
-  }
-
-  // ==========================================
-  // Helper: cargar carta desde disco
-  // ==========================================
-
-  async loadCarta(cartaId, projectId) {
-    // Intentar ruta del proyecto activado
-    const dir = this.cartasDir(projectId);
-    if (dir) {
-      try {
-        const raw = await fs.readFile(path.join(dir, `${cartaId}.json`), 'utf-8');
-        return JSON.parse(raw);
-      } catch (_) {}
-    }
-
-    // Fallback: buscar en todas las rutas de proyectos registrados
-    for (const [pid, paths] of this.projectPaths) {
-      if (pid === projectId) continue;
-      try {
-        const fallbackDir = path.join(paths.featurePath, 'cartas');
-        const raw = await fs.readFile(path.join(fallbackDir, `${cartaId}.json`), 'utf-8');
-        return JSON.parse(raw);
-      } catch (_) {}
-    }
-
-    // Último fallback: ruta por defecto (storage/pizzepos/cartas/)
-    try {
-      const defaultPath = path.join(process.cwd(), 'storage', 'pizzepos', 'cartas', `${cartaId}.json`);
-      const raw = await fs.readFile(defaultPath, 'utf-8');
-      return JSON.parse(raw);
-    } catch (_) {
-      return null;
-    }
   }
 
   // ==========================================

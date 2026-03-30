@@ -29,6 +29,7 @@ class ClaudeCliProvider extends BaseProvider {
     this.name = 'claude-cli';
     this.cliPath = config.cli_path || 'claude';
     this.cliAvailable = false;
+    this.supportsBare = false;
   }
 
   // ==========================================
@@ -65,7 +66,18 @@ class ClaudeCliProvider extends BaseProvider {
 
       proc.on('close', (code) => {
         if (code === 0 && output.includes('Claude Code')) {
-          this.logger.info('claude-cli.version', { version: output.trim() });
+          const version = output.trim();
+          this.logger.info('claude-cli.version', { version });
+
+          // Detectar si soporta --bare (disponible desde ~2.1.x)
+          const versionMatch = version.match(/(\d+\.\d+\.\d+)/);
+          if (versionMatch) {
+            const [major, minor] = versionMatch[1].split('.').map(Number);
+            this.supportsBare = major > 2 || (major === 2 && minor >= 1);
+          } else {
+            this.supportsBare = false;
+          }
+
           resolve(true);
         } else {
           resolve(false);
@@ -290,9 +302,14 @@ class ClaudeCliProvider extends BaseProvider {
   buildCliArgs(options, outputFormat) {
     const args = [
       '--print',
-      '--output-format', outputFormat,
-      '--bare'  // Sin hooks, LSP, ni auto-discovery
+      '--output-format', outputFormat
     ];
+
+    // --bare minimiza overhead (sin hooks, LSP, auto-discovery)
+    // Solo disponible en versiones recientes del CLI
+    if (this.supportsBare) {
+      args.push('--bare');
+    }
 
     // Modelo
     const model = options.model || this.config.default_model;

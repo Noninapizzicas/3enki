@@ -4,6 +4,7 @@ const OpenAIProvider = require('./providers/openai-provider');
 const OllamaProvider = require('./providers/ollama-provider');
 const GroqProvider = require('./providers/groq-provider');
 const GeminiProvider = require('./providers/gemini-provider');
+const ClaudeCliProvider = require('./providers/claude-cli-provider');
 
 const { EVENTS } = require('../../core/constants');
 
@@ -492,7 +493,8 @@ class AIGatewayModule {
       openai: OpenAIProvider,
       ollama: OllamaProvider,
       groq: GroqProvider,
-      gemini: GeminiProvider
+      gemini: GeminiProvider,
+      'claude-cli': ClaudeCliProvider
     };
 
     // Create credential resolver bound to this gateway

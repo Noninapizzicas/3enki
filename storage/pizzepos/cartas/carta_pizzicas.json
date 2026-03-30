@@ -13,7 +13,7 @@
     { "id": "bebidas", "nombre": "Bebidas", "orden": 3 },
     { "id": "pancitos", "nombre": "Pancitos", "orden": 4 },
     { "id": "hot_dog_music", "nombre": "Hot Dog Music", "orden": 5 },
-    { "id": "porciones", "nombre": "Porciones", "orden": 6 }
+    { "id": "porciones", "nombre": "Porciones", "orden": 6, "activa": false, "_nota": "Porciones se gestiona con boton especial en comandero, no como categoria" }
   ],
   "productos": [
     {
@@ -418,13 +418,6 @@
         { "nombre": "Sésamo", "emoji": "🌰", "tipo": "otro" },
         { "nombre": "Albahaca", "emoji": "🌿", "tipo": "verdura" }
       ]
-    },
-    {
-      "id": "pizzicas_porcion",
-      "nombre": "Porción",
-      "categoria": "pizzicas",
-      "precio": 3.00,
-      "ingredientes": []
     },
     {
       "id": "entrantes_huevos_salseros",

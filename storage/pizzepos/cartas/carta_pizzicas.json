@@ -13,7 +13,7 @@
     { "id": "bebidas", "nombre": "Bebidas", "orden": 3 },
     { "id": "pancitos", "nombre": "Pancitos", "orden": 4 },
     { "id": "hot_dog_music", "nombre": "Hot Dog Music", "orden": 5 },
-    { "id": "porciones", "nombre": "Porciones", "orden": 6, "activa": false, "_nota": "Porciones se gestiona con boton especial en comandero, no como categoria" }
+    { "id": "porciones", "nombre": "Porciones", "orden": 6 }
   ],
   "productos": [
     {
@@ -517,6 +517,17 @@
       "ingredientes": [
         { "nombre": "Salchicha", "emoji": "🌭", "tipo": "carne" },
         { "nombre": "Pan", "emoji": "🍞", "tipo": "masa" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" }
+      ]
+    },
+    {
+      "id": "porciones_porcion_de_pizza",
+      "nombre": "Porción de Pizza",
+      "categoria": "porciones",
+      "precio": 3.00,
+      "ingredientes": [
+        { "nombre": "Masa de pizza", "emoji": "🍕", "tipo": "masa" },
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
         { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" }
       ]
     }

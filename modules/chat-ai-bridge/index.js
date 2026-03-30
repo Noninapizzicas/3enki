@@ -121,6 +121,7 @@ class ChatAiBridgeModule {
       user_id,
       attachments,
       use_tools,
+      provider,
       page_context,
       correlation_id
     } = data;
@@ -143,6 +144,7 @@ class ChatAiBridgeModule {
       user_id,
       attachments: attachments || [],
       use_tools: use_tools !== false,
+      provider: provider || 'auto',
       page_context: page_context || null,
       correlation_id,
       startTime: Date.now(),
@@ -564,7 +566,7 @@ class ChatAiBridgeModule {
       tools: use_tools ? true : false,       // true = load from moduleLoader
       execute_tools: use_tools ? true : false,
       max_tool_iterations: this.config.maxToolIterations || 10,
-      provider: 'auto',
+      provider: flowState.provider || 'auto',
       stream: canStream,
       project_id: this.activeProjectId || null,
       correlation_id

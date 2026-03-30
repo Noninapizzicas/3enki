@@ -224,6 +224,26 @@
           "input": 0,
           "output": 0
         }
+      },
+      "claude-cli": {
+        "enabled": true,
+        "priority": 0,
+        "cli_path": "claude",
+        "models": [
+          "sonnet",
+          "opus",
+          "haiku"
+        ],
+        "default_model": "sonnet",
+        "allowed_tools": ["Read", "Edit", "Write", "Bash", "Glob", "Grep"],
+        "rate_limit": {
+          "requests_per_minute": 20,
+          "tokens_per_minute": 200000
+        },
+        "cost_per_1k_tokens": {
+          "input": 0,
+          "output": 0
+        }
       }
     },
     "retry": {

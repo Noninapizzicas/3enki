@@ -455,6 +455,21 @@
         },
         "required": ["carta_id", "version_file"]
       }
+    },
+    {
+      "name": "menu.delete_carta",
+      "description": "Elimina una carta. Guarda la última versión en el historial antes de borrar, por si necesitas restaurarla después.",
+      "handler": "toolDeleteCarta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta a eliminar"
+          }
+        },
+        "required": ["carta_id"]
+      }
     }
   ],
 

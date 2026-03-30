@@ -340,6 +340,44 @@ class MenuGeneratorModule {
     };
   }
 
+  async toolDeleteCarta({ carta_id, project_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+
+    // Sanitizar
+    if (carta_id.includes('..') || carta_id.includes('/')) return { status: 400, error: 'carta_id inválido' };
+
+    const cartas = this.getCartas(project_id);
+    const carta = cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const nombre = carta.meta?.nombre || carta_id;
+
+    // Guardar última versión antes de eliminar
+    const dir = this.cartasDirFor(project_id);
+    if (dir) {
+      await this.saveVersion(carta_id, dir);
+      // Eliminar fichero de disco
+      try {
+        await fs.unlink(path.join(dir, `${carta_id}.json`));
+      } catch (_) {}
+    }
+
+    // Eliminar de memoria
+    cartas.delete(carta_id);
+
+    this.logger.info('menu-generator.carta.deleted', { carta_id, project_id, nombre });
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        nombre,
+        message: `Carta "${nombre}" eliminada. La última versión se guardó en el historial por si necesitas restaurarla.`
+      }
+    };
+  }
+
   async loadCartasFromDisk(projectId) {
     const dir = this.cartasDirFor(projectId);
     if (!dir) return;

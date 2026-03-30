@@ -5,7 +5,7 @@
     "generado_desde": "texto",
     "created_at": "2026-02-18T12:00:00.000Z",
     "updated_at": "2026-03-30T00:00:00.000Z",
-    "notas_revision": "Normalizado ingredientes: Queso->Mozzarella, Carne/Carne de ternera->Ternera, Peperoni->Pepperoni, Champiñones->Champiñón. Añadido tipo+emoji a todos."
+    "notas_revision": "Normalizado ingredientes: Queso->Mozzarella, Carne/Carne de ternera->Ternera, Peperoni->Pepperoni, Champiñones->Champiñón. Añadido tipo+emoji a todos. Pizzas en orden alfabético."
   },
   "categorias": [
     { "id": "pizzicas", "nombre": "Pizzicas", "orden": 1, "estaciones": ["horno"] },
@@ -15,167 +15,6 @@
     { "id": "hot_dog_music", "nombre": "Hot Dog Music", "orden": 5 }
   ],
   "productos": [
-    {
-      "id": "pizzicas_country",
-      "nombre": "Country",
-      "categoria": "pizzicas",
-      "precio": 11.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Salsa BBQ", "emoji": "🥫", "tipo": "salsa" },
-        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" },
-        { "nombre": "Pollo", "emoji": "🍗", "tipo": "carne" },
-        { "nombre": "Mezcla de quesos", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" }
-      ]
-    },
-    {
-      "id": "pizzicas_rb_rhythm_and_blues",
-      "nombre": "R&B (Rhythm and Blues)",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Ternera", "emoji": "🥩", "tipo": "carne" },
-        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Salsa BBQ", "emoji": "🥫", "tipo": "salsa" }
-      ]
-    },
-    {
-      "id": "pizzicas_hip_hop",
-      "nombre": "Hip-Hop",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Ternera", "emoji": "🥩", "tipo": "carne" },
-        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" },
-        { "nombre": "Salsa Vitorino", "emoji": "🥫", "tipo": "salsa" }
-      ]
-    },
-    {
-      "id": "pizzicas_cumbia",
-      "nombre": "Cumbia",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Ternera", "emoji": "🥩", "tipo": "carne" },
-        { "nombre": "Mezcla de quesos", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Piña", "emoji": "🍍", "tipo": "otro" },
-        { "nombre": "Salsa Vitorino", "emoji": "🥫", "tipo": "salsa" }
-      ]
-    },
-    {
-      "id": "pizzicas_merengue",
-      "nombre": "Merengue",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" }
-      ]
-    },
-    {
-      "id": "pizzicas_soul",
-      "nombre": "Soul",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" },
-        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" }
-      ]
-    },
-    {
-      "id": "pizzicas_bossa_nova",
-      "nombre": "Bossa Nova",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
-        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" },
-        { "nombre": "Pimiento verde", "emoji": "🫑", "tipo": "verdura" }
-      ]
-    },
-    {
-      "id": "pizzicas_blues",
-      "nombre": "Blues",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Salsa de mostaza", "emoji": "🥫", "tipo": "salsa" }
-      ]
-    },
-    {
-      "id": "pizzicas_tango",
-      "nombre": "Tango",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Olivas", "emoji": "🫒", "tipo": "verdura" }
-      ]
-    },
-    {
-      "id": "pizzicas_chillout",
-      "nombre": "Chillout",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" }
-      ]
-    },
-    {
-      "id": "pizzicas_punk",
-      "nombre": "Punk",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
-        { "nombre": "Olivas negras", "emoji": "🫒", "tipo": "verdura" },
-        { "nombre": "Maíz", "emoji": "🌽", "tipo": "verdura" }
-      ]
-    },
-    {
-      "id": "pizzicas_folk",
-      "nombre": "Folk",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Tomate seco", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" },
-        { "nombre": "Salsa de ajo asado y trufa", "emoji": "🧄", "tipo": "salsa" },
-        { "nombre": "Anchoas", "emoji": "🐟", "tipo": "marisco" }
-      ]
-    },
     {
       "id": "pizzicas_bachata",
       "nombre": "Bachata",
@@ -204,57 +43,71 @@
       ]
     },
     {
-      "id": "pizzicas_the_veggie_symphony",
-      "nombre": "The Veggie Symphony",
+      "id": "pizzicas_blues",
+      "nombre": "Blues",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
+        { "nombre": "Salsa de mostaza", "emoji": "🥫", "tipo": "salsa" }
+      ]
+    },
+    {
+      "id": "pizzicas_bossa_nova",
+      "nombre": "Bossa Nova",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
+        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" },
+        { "nombre": "Pimiento verde", "emoji": "🫑", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_chillout",
+      "nombre": "Chillout",
       "categoria": "pizzicas",
       "precio": 10.50,
       "ingredientes": [
         { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
         { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_country",
+      "nombre": "Country",
+      "categoria": "pizzicas",
+      "precio": 11.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Salsa BBQ", "emoji": "🥫", "tipo": "salsa" },
+        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" },
+        { "nombre": "Pollo", "emoji": "🍗", "tipo": "carne" },
+        { "nombre": "Mezcla de quesos", "emoji": "🧀", "tipo": "queso" },
         { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" },
-        { "nombre": "Calabacín", "emoji": "🥒", "tipo": "verdura" },
-        { "nombre": "Espárragos", "emoji": "🌱", "tipo": "verdura" },
-        { "nombre": "Pimiento verde", "emoji": "🫑", "tipo": "verdura" }
+        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" }
       ]
     },
     {
-      "id": "pizzicas_swing",
-      "nombre": "Swing",
-      "categoria": "pizzicas",
-      "precio": 11.00,
-      "ingredientes": [
-        { "nombre": "Crema de champiñones", "emoji": "🍄", "tipo": "salsa" },
-        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" },
-        { "nombre": "Pimienta", "emoji": "🌶️", "tipo": "otro" },
-        { "nombre": "Queso azul", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Mezcla de quesos", "emoji": "🧀", "tipo": "queso" }
-      ]
-    },
-    {
-      "id": "pizzicas_trap",
-      "nombre": "Trap",
+      "id": "pizzicas_cumbia",
+      "nombre": "Cumbia",
       "categoria": "pizzicas",
       "precio": 11.00,
       "ingredientes": [
         { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
         { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" },
-        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" },
-        { "nombre": "Maíz", "emoji": "🌽", "tipo": "verdura" },
-        { "nombre": "Pimiento verde", "emoji": "🫑", "tipo": "verdura" }
-      ]
-    },
-    {
-      "id": "pizzicas_samba",
-      "nombre": "Samba",
-      "categoria": "pizzicas",
-      "precio": 9.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Albahaca", "emoji": "🌿", "tipo": "verdura" }
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
+        { "nombre": "Ternera", "emoji": "🥩", "tipo": "carne" },
+        { "nombre": "Mezcla de quesos", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Piña", "emoji": "🍍", "tipo": "otro" },
+        { "nombre": "Salsa Vitorino", "emoji": "🥫", "tipo": "salsa" }
       ]
     },
     {
@@ -266,79 +119,6 @@
         { "nombre": "Ajo", "emoji": "🧄", "tipo": "verdura" },
         { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
         { "nombre": "Queso azul", "emoji": "🧀", "tipo": "queso" }
-      ]
-    },
-    {
-      "id": "pizzicas_milonga",
-      "nombre": "Milonga",
-      "categoria": "pizzicas",
-      "precio": 10.00,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" }
-      ]
-    },
-    {
-      "id": "pizzicas_ranchera",
-      "nombre": "Ranchera",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Salsa BBQ", "emoji": "🥫", "tipo": "salsa" }
-      ]
-    },
-    {
-      "id": "pizzicas_rockabilly",
-      "nombre": "Rockabilly",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
-        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" }
-      ]
-    },
-    {
-      "id": "pizzicas_vallenato",
-      "nombre": "Vallenato",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Piña", "emoji": "🍍", "tipo": "otro" }
-      ]
-    },
-    {
-      "id": "pizzicas_indie",
-      "nombre": "Indie",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" }
-      ]
-    },
-    {
-      "id": "pizzicas_k_pop",
-      "nombre": "K-Pop",
-      "categoria": "pizzicas",
-      "precio": 10.50,
-      "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Huevo", "emoji": "🥚", "tipo": "otro" }
       ]
     },
     {
@@ -356,15 +136,17 @@
       ]
     },
     {
-      "id": "pizzicas_jazz",
-      "nombre": "Jazz",
+      "id": "pizzicas_folk",
+      "nombre": "Folk",
       "categoria": "pizzicas",
-      "precio": 10.50,
+      "precio": 11.00,
       "ingredientes": [
-        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Tomate seco", "emoji": "🍅", "tipo": "verdura" },
         { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
-        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" }
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
+        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" },
+        { "nombre": "Salsa de ajo asado y trufa", "emoji": "🧄", "tipo": "salsa" },
+        { "nombre": "Anchoas", "emoji": "🐟", "tipo": "marisco" }
       ]
     },
     {
@@ -379,16 +161,90 @@
       ]
     },
     {
-      "id": "pizzicas_rap",
-      "nombre": "Rap",
+      "id": "pizzicas_hip_hop",
+      "nombre": "Hip-Hop",
       "categoria": "pizzicas",
       "precio": 11.00,
       "ingredientes": [
         { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
         { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Plátano maduro", "emoji": "🍌", "tipo": "otro" },
-        { "nombre": "Maíz", "emoji": "🌽", "tipo": "verdura" },
+        { "nombre": "Ternera", "emoji": "🥩", "tipo": "carne" },
+        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" },
+        { "nombre": "Salsa Vitorino", "emoji": "🥫", "tipo": "salsa" }
+      ]
+    },
+    {
+      "id": "pizzicas_indie",
+      "nombre": "Indie",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" }
+      ]
+    },
+    {
+      "id": "pizzicas_jazz",
+      "nombre": "Jazz",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_k_pop",
+      "nombre": "K-Pop",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Huevo", "emoji": "🥚", "tipo": "otro" }
+      ]
+    },
+    {
+      "id": "pizzicas_merengue",
+      "nombre": "Merengue",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
         { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" }
+      ]
+    },
+    {
+      "id": "pizzicas_milonga",
+      "nombre": "Milonga",
+      "categoria": "pizzicas",
+      "precio": 10.00,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" }
+      ]
+    },
+    {
+      "id": "pizzicas_opera",
+      "nombre": "Ópera",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate cherry", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mantequilla de ajo", "emoji": "🧈", "tipo": "salsa" },
+        { "nombre": "Salami", "emoji": "🍖", "tipo": "carne" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Sésamo", "emoji": "🌰", "tipo": "otro" },
+        { "nombre": "Albahaca", "emoji": "🌿", "tipo": "verdura" }
       ]
     },
     {
@@ -405,17 +261,161 @@
       ]
     },
     {
-      "id": "pizzicas_opera",
-      "nombre": "Ópera",
+      "id": "pizzicas_punk",
+      "nombre": "Punk",
       "categoria": "pizzicas",
       "precio": 11.00,
       "ingredientes": [
-        { "nombre": "Tomate cherry", "emoji": "🍅", "tipo": "verdura" },
-        { "nombre": "Mantequilla de ajo", "emoji": "🧈", "tipo": "salsa" },
-        { "nombre": "Salami", "emoji": "🍖", "tipo": "carne" },
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
         { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
-        { "nombre": "Sésamo", "emoji": "🌰", "tipo": "otro" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
+        { "nombre": "Olivas negras", "emoji": "🫒", "tipo": "verdura" },
+        { "nombre": "Maíz", "emoji": "🌽", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_rb_rhythm_and_blues",
+      "nombre": "R&B (Rhythm and Blues)",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Ternera", "emoji": "🥩", "tipo": "carne" },
+        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Salsa BBQ", "emoji": "🥫", "tipo": "salsa" }
+      ]
+    },
+    {
+      "id": "pizzicas_ranchera",
+      "nombre": "Ranchera",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
+        { "nombre": "Salsa BBQ", "emoji": "🥫", "tipo": "salsa" }
+      ]
+    },
+    {
+      "id": "pizzicas_rap",
+      "nombre": "Rap",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Plátano maduro", "emoji": "🍌", "tipo": "otro" },
+        { "nombre": "Maíz", "emoji": "🌽", "tipo": "verdura" },
+        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" }
+      ]
+    },
+    {
+      "id": "pizzicas_rockabilly",
+      "nombre": "Rockabilly",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
+        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" }
+      ]
+    },
+    {
+      "id": "pizzicas_samba",
+      "nombre": "Samba",
+      "categoria": "pizzicas",
+      "precio": 9.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
         { "nombre": "Albahaca", "emoji": "🌿", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_soul",
+      "nombre": "Soul",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" },
+        { "nombre": "Bacon", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_swing",
+      "nombre": "Swing",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Crema de champiñones", "emoji": "🍄", "tipo": "salsa" },
+        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" },
+        { "nombre": "Pimienta", "emoji": "🌶️", "tipo": "otro" },
+        { "nombre": "Queso azul", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Mezcla de quesos", "emoji": "🧀", "tipo": "queso" }
+      ]
+    },
+    {
+      "id": "pizzicas_tango",
+      "nombre": "Tango",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Atún", "emoji": "🐟", "tipo": "marisco" },
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
+        { "nombre": "Olivas", "emoji": "🫒", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_the_veggie_symphony",
+      "nombre": "The Veggie Symphony",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Cebolla", "emoji": "🧅", "tipo": "verdura" },
+        { "nombre": "Champiñón", "emoji": "🍄", "tipo": "verdura" },
+        { "nombre": "Calabacín", "emoji": "🥒", "tipo": "verdura" },
+        { "nombre": "Espárragos", "emoji": "🌱", "tipo": "verdura" },
+        { "nombre": "Pimiento verde", "emoji": "🫑", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_trap",
+      "nombre": "Trap",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Pepperoni", "emoji": "🍖", "tipo": "carne" },
+        { "nombre": "Nata", "emoji": "🥛", "tipo": "salsa" },
+        { "nombre": "Maíz", "emoji": "🌽", "tipo": "verdura" },
+        { "nombre": "Pimiento verde", "emoji": "🫑", "tipo": "verdura" }
+      ]
+    },
+    {
+      "id": "pizzicas_vallenato",
+      "nombre": "Vallenato",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate", "emoji": "🍅", "tipo": "verdura" },
+        { "nombre": "Mozzarella", "emoji": "🧀", "tipo": "queso" },
+        { "nombre": "Jamón York", "emoji": "🥓", "tipo": "carne" },
+        { "nombre": "Piña", "emoji": "🍍", "tipo": "otro" }
       ]
     },
     {
